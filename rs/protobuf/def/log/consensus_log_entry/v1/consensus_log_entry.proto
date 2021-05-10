@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package log.consensus_log_entry.v1;
+
+import "google/protobuf/wrappers.proto";
+
+message ConsensusLogEntry {
+  google.protobuf.UInt64Value height = 1;
+  google.protobuf.StringValue hash = 2;
+}

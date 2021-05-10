@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package state.sync.v1;
+
+message FileInfo {
+    string relative_path = 1;
+    uint64 size_bytes = 2;
+    bytes hash = 3;
+}
+
+message ChunkInfo {
+    uint32 file_index = 1;
+    uint32 size_bytes = 2;
+    uint64 offset = 3;
+    bytes hash = 4;
+}
+
+message Manifest {
+    uint32 version = 1;
+    repeated FileInfo file_table = 2;
+    repeated ChunkInfo chunk_table = 3;
+}

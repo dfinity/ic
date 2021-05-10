@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package log.crypto_log_entry.v1;
+
+import "google/protobuf/wrappers.proto";
+
+// A crypto component log entry.
+message CryptoLogEntry {
+  google.protobuf.StringValue trait_name = 1;
+  google.protobuf.StringValue dkg_id = 2;
+  google.protobuf.StringValue request_id = 3;
+  google.protobuf.StringValue public_key = 4;
+  google.protobuf.UInt64Value registry_version = 5;
+  google.protobuf.StringValue method_name = 6;
+  google.protobuf.StringValue description = 7;
+  google.protobuf.BoolValue is_ok = 8;
+  google.protobuf.StringValue error = 9;
+  google.protobuf.StringValue subnet_id = 10;
+  google.protobuf.StringValue dkg_config = 11;
+  google.protobuf.StringValue dkg_dealing = 12;
+  google.protobuf.StringValue dkg_dealer = 13;
+  google.protobuf.StringValue dkg_transcript = 14;
+  google.protobuf.StringValue signed_bytes = 15;
+  google.protobuf.StringValue allowed_tls_clients = 16;
+  google.protobuf.StringValue tls_server = 17;
+  google.protobuf.UInt32Value dkg_epoch = 18;
+}

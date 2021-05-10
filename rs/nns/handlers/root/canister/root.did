@@ -1,0 +1,38 @@
+type MethodAuthzChange = record {
+  canister : principal;
+  method_name : text;
+  "principal" : opt principal;
+  operation : variant { Authorize : record { add_self : bool }; Deauthorize; };
+};
+
+type ChangeNnsCanisterProposalPayload = record {
+  arg : vec nat8;
+  wasm_module : vec nat8;
+  authz_changes : vec MethodAuthzChange;
+  stop_before_installing : bool;
+  mode : variant { reinstall; upgrade };
+  canister_id : principal;
+  query_allocation : opt nat;
+  memory_allocation : opt nat;
+  compute_allocation : opt nat;
+};
+type CanisterIdRecord = record { canister_id : principal };
+
+type CanisterStatusResult = record {
+  controller : principal;
+  status : variant { stopped; stopping; running };
+  memory_size : nat;
+  module_hash : opt vec nat8;
+};
+
+type ProposalId = nat64;
+
+type Result_ProposalId_String = variant { Ok : ProposalId; Err : text };
+
+service : {
+  submit_change_nns_canister_proposal : (ChangeNnsCanisterProposalPayload) -> (Result_ProposalId_String);
+  canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
+
+  // "change_nns_canister" and "add_nns_canister" methods are explicitly not listed here, because they are
+  // not useful in the Web UI: only the proposals canister is allowed to call them.
+}

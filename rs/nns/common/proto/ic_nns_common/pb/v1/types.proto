@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package ic_nns_common.pb.v1;
+
+import "ic_base_types/pb/v1/types.proto";
+
+// A PB container for a CanisterId, which uniquely identifies
+// a principal.
+message CanisterId {
+  bytes serialized_id = 1;
+}
+
+// A container for a NeuronId blob, which uniquely identifies
+// a Neuron.
+message NeuronId {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+//  bytes serialized_id = 1;
+  reserved 1;
+  reserved 'serialized_id';
+  uint64 id = 2    [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+}
+
+// The id of a specific proposal.
+message ProposalId {
+  uint64 id = 1;
+}
+
+// A descriptor of the authorization of a single method.
+// Any of the principals in the list are authorized to execute
+// the method.
+message MethodAuthzInfo {
+  string method_name = 1;
+  repeated bytes principal_ids = 2;
+}
+
+// A descriptor of the authorization of all the update methods in a
+// canister that require authorization.
+// Methods that should be accessible to anyone should not appear in this list
+message CanisterAuthzInfo {
+  repeated MethodAuthzInfo methods_authz = 1;
+}

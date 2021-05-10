@@ -1,0 +1,192 @@
+
+= The Internet Computer Protocol (ICP)
+:toc: macro
+
+
+ifdef::env-github[]
+++++
+<p align="center">
+  <img width="800" src="/readme-icp3.png">
+</p>
+++++
+endif::[]
+
+
+The Internet Computer is the world’s first blockchain that runs at web speed and can increase its capacity without bound. Like the Internet (which is composed of many machines adhering to TCP/IP protocol) and blockchain protocols (such as Bitcoin and Ethereum).
+
+:toc-title:
+toc::[]
+
+== Resources on the Internet Computer
+
+=== R&D documentation
+
+You can learn more about the Internet Computer's Protocol, features, and designs here, here are some helpful resources:
+
+Protocol Documentation:
+
+- https://medium.com/dfinity/a-technical-overview-of-the-internet-computer-f57c62abc20f[A Technical Overview of the Internet Computer (blog post)]
+- https://medium.com/dfinity/software-canisters-an-evolution-of-smart-contracts-internet-computer-f1f92f1bfffb[Canisters, an Evolution of Smart Contracts]
+- https://medium.com/dfinity/applied-crypto-one-public-key-for-the-internet-computer-ni-dkg-4af800db869d[Noninteractive Distributed Key Generation]
+- https://medium.com/dfinity/the-internet-computers-token-economics-an-overview-29e238bd1d83[The Internet Computer’s Token Economics: An Overview]
+- https://medium.com/dfinity/understanding-the-internet-computers-network-nervous-system-neurons-and-icp-utility-tokens-730dab65cae8[Understanding the Internet Computer’s Network Nervous System, Neurons, and ICP Utility Tokens]
+- https://github.com/dfinity/nns-proposals[List of NNS Proposals]
+
+Engineering
+
+- https://sdk.dfinity.org/docs/developers-guide/concepts/what-is-ic[What is the Internet Computer?]
+- https://sdk.dfinity.org/docs/quickstart/quickstart-intro.html[Tutorials, SDKs, and sample apps to get started]
+- https://docs.dfinity.org/[Rust Cargo docs for the replica]
+
+
+
+
+=== Network Dashboards from the community
+
+You can observe the state of the Internet Computer's infrastructure (Nodes, data centers, subnets) and traditional blockchain metrics (blocks/second, Token Supply, etc)
+
+- https://dashboard.internetcomputer.org Network dashboard by the Internet Computer Association
+- https://www.dfinityexplorer.org/# by https://github.com/dylancm4[Dylan Miller]
+
+
+To interact with the community, check out the developer forum: https://forum.dfinity.org/
+
+=== Rust implementation of the ICP
+
+This repo contains many different pieces (including testing and other infrastructure components), but the most important one is the source code for the Rust implementation of the "*replica*" (read: "client" in some blockchains) that is compiled and run by the machines that together make up the Internet Computer.
+
+=== DFINITY Foundation
+
+The https://dfinity.org/[DFINITY Foundation] is a Swiss not-for-profit organization based in Zurich, Switzerland, which oversees research centers in Palo Alto, San Francisco, and Zurich. Its goal is to further the design, development, and adoption of the Internet Computer Protocol.
+
+== Getting Started
+
+=== Who should be using this code
+
+- *If you are an app developer*, and your intent is to build apps so you want a local Internet Computer replica in your machine to deploy to, you are better off using the https://sdk.dfinity.org/docs/quickstart/quickstart-intro.html[Canister SDK] written by the DFINITY Foundation. It is optimized for this and much more lightweight (less than 2 minutes to get started). It will build and run a local replica and you do not need to get into systems code to run it.
+
+- *If you are a blockchain enthusiast*, and your intent is to understand the protocol (not an implementation), you may be better off going to the https://sdk.dfinity.org/docs/interface-spec/index.html[IC Interface Specification]. This content (by the DFINITY research team) is tailor made for understanding the protocol and design.
+
+- *If you are a blockchain miner*, you should know that the Internet Computer Protocol (while it is a blockchain) does not have the traditional mining or validating you may come to expect from blockchain projects. The Interet Computer Protocol is designed using new and novel cryptography that does not require "mining"... but it does require independent node providers, which may include yourself. You can of course check out the source code in this repo, but a better resource may be this: https://support.internetcomputer.org/hc/en-us/categories/360005114372-Node-Provider[Being a node provider on the Internet Computer]
+
+- *If you are an engineer looking to build a new SDK, oracle, wallet or any part that enables and improves the Internet Computer ecosystem*, you should take a look at the https://sdk.dfinity.org/docs/interface-spec/index.html[Interface Specification] which is for low-level interaction with the Internet Computer.
+
+- *If you are a systems engineer, security engineer or cryptographer*, and your intent is to see what is going on under the hood by digging through source and building this locally, *_then you are in the right place_*.
+
+== Prerequisites
+*For all environments*
+
+- https://www.docker.com/[Docker].
+
+*Please note: The default memory assigned to the docker image may be less (2GB by default on MacOS). We recommend this should be increased to 10 GB avoid build failures within the Docker container.*
+
+ifdef::env-github[]
+++++
+<p align="center">
+  <img width="400" src="docker_memory.png">
+</p>
+++++
+endif::[]
+
+*MacOS*
+
+- https://brew.sh/[Homebrew]
+- Xcode command line tools
+- coreutils (tip: once you have homebrew, you can run `$ brew install coreutils` if you do not have them)
+
+
+Note: You do not need to install the Rust package manager https://doc.rust-lang.org/cargo/[Cargo] or a lot of the toolchain used to build the repo. That all comes for you with the Docker image.
+
+== Building the code
+
+Note: we have observed that to build all the pieces it takes around 30-50 minutes, depending on your machine.
+
+=== 1. Build a Docker image
+
+Run the bash script in the repo to build a docker image that includes:
+
+  - The repo you have cloned
+  - Third-party binary dependencies (e.g. rustup, ubuntu, etc). For the purpose of transparency and security, you can look at the https://github.com/dfinity-lab/dfinity/blob/master/gitlab-ci/docker/Dockerfile[dockerfile] file to see what these binaries are
+
+
+----
+$ gitlab-ci/docker/docker-build-local-image.sh
+----
+
+=== 2. Enter Docker shell
+
+Execute this command to run the docker image you just built:
+
+----
+$ gitlab-ci/tools/docker-run
+----
+
+Your shell may look something like this
+
+=== 3. Build the three main components within Docker shell
+
+This will put you in a shell inside the Docker container. Within the Docker container, you will need to navigate to the Rust directory (`/rs`):
+
+----
+ubuntu@c4cdffddc7d6:/builds/dfinity/ic$ cd rs
+ubuntu@c4cdffddc7d6:/builds/dfinity/ic/rs$
+----
+
+==== 4. Use regular Cargo commands to build the three main pieces (replica, nodemanager, NNS Canisters):
+
+*a. Build the replica.*
+The *replica* is a collection of protocol components that are necessary for a node to participate in a subnet.
+
+
+----
+ubuntu@c4cdffddc7d6:/builds/dfinity/ic/rs$ cargo build -p ic-replica
+----
+
+*b. Build the nodemanager:*
+The *nodemanager* is a component of the Internet Computer that manages the *replica*. Among other things, it continuously determines the correct *replica* binary to run for this node at any point in time, runs this binary, and monitors this process (e.g. restarting it if it exits unexpectedly). This may take an hour if it is being built inside an VM.
+
+
+----
+ubuntu@c4cdffddc7d6:/builds/dfinity/ic/rs$ cargo build -p nodemanager
+----
+
+Note: You can build both a. *replica* and b. *nodemanager* together:
+
+
+----
+ubuntu@c4cdffddc7d6:/builds/dfinity/ic/rs$ cargo build -p ic-replica -p nodemanager
+----
+
+*c. Build the NNS (Network Nervous System) canisters*
+Once you have *replica* and *nodemanager* built, you need to install NNS Canisters. NNS canisters have a special Cargo command because they are written in Rust but compiled to Wasm, so you need to tell Cargo to target Wasm.
+
+
+----
+$ gitlab-ci/tools/docker-run gitlab-ci/tools/cargo-build-canisters
+----
+
+== Contributing
+
+=== The Network Nervous System
+Thank you for taking the time to learn more about the Internet Computer Protocol. You can contribute to either, but it is important to note that the Internet Computer is governed by a decentralized system called the Network Nervous System (NNS). You can learn more here:
+
+- https://medium.com/dfinity/understanding-the-internet-computers-network-nervous-system-neurons-and-icp-utility-tokens-730dab65cae8[Understanding the Internet Computer’s Network Nervous System, Neurons, and ICP Utility Tokens]
+- https://github.com/dfinity/nns-proposals[List of NNS Proposals]
+
+=== Open Source Policy
+
+The DFINITY Foundation makes the code of the Internet Computer available to
+the public.
+
+This is important so that the community can review the code that defines the
+behaviour of the Internet Computer. Furthermore, the community will be able to build the code
+and verify that it derives from the same binary image that is referenced in
+upgrade proposals published via the Network Nervous System (NNS).
+
+Now that the Internet Computer is launched, the source code of the three primary components of the Internet Computer are published: the replica, nodemanager, and the NNS canisters. The build systems, testing infrastructure and the code that defines the Internet Computer Operating System (IC-OS) will be published at a later time.
+
+All code of the Internet Computer is be licensed under the Apache 2.0 license, except for a
+few components licensed under the http://dfinity.org/licenses/IC-1.0[Internet Computer Community
+Source License] and http://dfinity.org/licenses/IC-shared-1.0[Internet Computer Shared Community Source License] which are more restrictive than the Apache 2.0 license to protect the Intellectual Property (IP) of the DFINITY Foundation.
+
+While we adapt our development processes and security reviews for a world of developing with our code in the open, we are not accepting any pull requests at this time. For now, please join our developer community at https://forum.dfinity.org. If you discover any bugs and vulnerabilities, alert us by email at bugs@dfinity.org. Please do not submit any third party code - only textual descriptions. Any comments, suggestions and recommendations you submit to us will be assigned to the DFINITY Foundation.

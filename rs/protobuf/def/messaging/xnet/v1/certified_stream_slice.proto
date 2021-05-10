@@ -1,0 +1,19 @@
+// Protocol buffer mirror of `ic_types::xnet::CertifiedStreamSlice` for use as
+// backwards- and forwards-compatible XNet wire format.
+
+syntax = "proto3";
+package messaging.xnet.v1;
+
+import "messaging/xnet/v1/certification.proto";
+
+// XNet stream slice with certification and matching Merkle proof.
+message CertifiedStreamSlice {
+  // Serialized part of the state tree containing the stream data.
+  bytes payload = 1;
+
+  // Witness that can be used to recompute the root hash from the payload.
+  bytes merkle_proof = 2;
+
+  // Certification of the root hash.
+  Certification certification = 3;
+}

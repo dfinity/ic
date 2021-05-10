@@ -1,0 +1,4 @@
+neuron_id;owner_id;created_ts_ns;duration_to_dissolution_ns;staked_icpt;earnings;follows;not_for_profit
+25;zcwir-6stv5-xj4ap-gsl5i-r7dg5-w5prz-fedwa-knbyj-o4tlv-5sbo7-6qe;0;0;1000000000;C;42;true
+42;2q5kv-5vcol-eh2je-udy6s-j74gx-djqza-siucy-2jxyq-u5kw6-imugq-uae;1;1;10000000000;D;;false
+100;sma3p-ivkif-hz7nu-ngmvq-ibnjg-nubke-zf6gh-wbnfc-2dlng-l3die-zqe;1;1;0;D;25,42;false

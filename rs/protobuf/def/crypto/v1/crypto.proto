@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package crypto.v1;
+
+import "registry/crypto/v1/crypto.proto";
+
+// Public keys corresponding to the given node.
+message NodePublicKeys {
+    uint32 version = 1;
+    registry.crypto.v1.PublicKey node_signing_pk = 2;
+    registry.crypto.v1.PublicKey committee_signing_pk = 3;
+    registry.crypto.v1.X509PublicKeyCert tls_certificate = 4;
+    registry.crypto.v1.PublicKey dkg_dealing_encryption_pk = 5;
+}

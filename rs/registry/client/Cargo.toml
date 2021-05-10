@@ -1,0 +1,31 @@
+[package]
+name = "ic-registry-client"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-base-thread = { path = "../../base/thread" }
+ic-config = { path = "../../config" }
+ic-interfaces = { path = "../../interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-common = { path = "../common" }
+ic-registry-provisional-whitelist = { path = "../provisional_whitelist" }
+ic-registry-routing-table = { path = "../routing_table" }
+ic-registry-transport = { path = "../transport" }
+ic-registry-keys = { path = "../keys" }
+ic-types = { path = "../../types/types" }
+prometheus = { version = "0.9.0", features = ["process"] }
+prost = "0.7.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_cbor = "0.11.1"
+slog = { version = "2.5.2", features = [
+    "nested-values",
+    "max_level_trace",
+    "release_max_level_debug",
+] }
+tokio = { version = "0.2.23", features = ["full"] }
+url = { version = "2.1.1", features = ["serde"] }
+
+[dev-dependencies]

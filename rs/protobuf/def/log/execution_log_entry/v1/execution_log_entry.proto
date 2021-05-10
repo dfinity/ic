@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package log.execution_log_entry.v1;
+
+import "google/protobuf/wrappers.proto";
+
+message ExecutionLogEntry {
+    google.protobuf.StringValue canister_id = 1;
+    enum MessageType {
+      MESSAGE_TYPE_UNSPECIFIED = 0;
+      MESSAGE_TYPE_INGRESS = 1;
+      MESSAGE_TYPE_CANISTER_REQUEST = 2;
+      MESSAGE_TYPE_CANISTER_RESPONSE = 3;
+    }
+    MessageType message_type = 2;
+}

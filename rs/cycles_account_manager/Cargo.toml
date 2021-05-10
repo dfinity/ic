@@ -1,0 +1,16 @@
+[package]
+name = "ic-cycles-account-manager"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-base-types = { path = "../types/base_types" }
+ic-config = { path = "../config" }
+ic-logger = { path = "../monitoring/logger" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-types = { path = "../types/types" }
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+
+[dev-dependencies]
+ic-wasm-types = { path = "../types/wasm_types" }

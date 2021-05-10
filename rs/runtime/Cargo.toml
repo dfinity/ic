@@ -1,0 +1,35 @@
+[package]
+name = "runtime"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+crossbeam-channel = "0.5.0"
+rand = "0.7.3"
+ic-embedders = { path = "../embedders" }
+ic-system-api = { path = "../system_api" }
+ic-config = { path = "../config" }
+ic-interfaces = { path = "../interfaces" }
+ic-logger = { path = "../monitoring/logger" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-utils = { path = "../utils" }
+ic-types = { path = "../types/types" }
+ic-wasm-types = { path = "../types/wasm_types" }
+
+[dev-dependencies]
+ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-registry-routing-table = { path = "../registry/routing_table" }
+ic-wasm-utils = { path = "../wasm_utils" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+lazy_static = "1.4.0"
+maplit = "1.0.2"
+parity-wasm = { version = "0.42.1", features = [ "std", "multi_value" ] }
+proptest = "0.9.4"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog-async = "2.5.0"
+slog-term = "2.6.0"
+tempfile = "3.1.0"
+# TODO(EXC-220)
+wabt = { git = "https://github.com/dfinity-lab/wabt-rs", rev = "b4d778802976f10494411388e48a784d4d015bbb" }

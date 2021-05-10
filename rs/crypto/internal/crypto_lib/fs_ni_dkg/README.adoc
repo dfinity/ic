@@ -1,0 +1,9 @@
+= Non-interactive DKG =
+
+We always build in release mode, otherwise the binary is unbearably slow.
+
+Also, the `miracl_core` crypto library (i.e. https://crates.io/crates/miracl_core_bls12381[`miracl_core_bls12381`])
+must be built with the highest `opt-level`, or else NiDKG tests take 4 hours.
+
+  [profile.dev.package.miracl_core_bls12381]
+  opt-level = 3

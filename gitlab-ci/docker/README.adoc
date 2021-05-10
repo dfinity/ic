@@ -1,0 +1,14 @@
+# How-To Update the GitLab CI Docker Image
+
+. Obtain a personal GitLab token https://gitlab.com/-/profile/personal_access_tokens
+. Login to GitLab Docker Registry
+.. docker login registry.gitlab.com
+.. Use your personal access token as password
+. Edit ./gitlab-ci/docker/Dockerfile
+. [IMPORTANT] git commit -a -m "your commit message"
+. ./gitlab-ci/docker/docker-build-ci-image.sh
+. git commit -a -m "update ci docker image"
+. git push
+
+This will run GitLab CI pipeline against your new docker image. If merged into master
+your new image will be used on future PRs.

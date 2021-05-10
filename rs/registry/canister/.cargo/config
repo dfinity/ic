@@ -1,0 +1,4 @@
+[build]
+target = "wasm32-unknown-unknown"
+# Enables nightly compiler features which are used by rocket
+#rustflags = ["-Z", "unstable-options"]

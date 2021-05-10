@@ -1,0 +1,14 @@
+[package]
+name = "ic-crypto-internal-test-vectors"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# NO ic-* dependencies are allowed here
+base64 = "0.13.0"
+hex = "0.4.2"
+strum = "0.18.0"
+strum_macros = "0.18.0"

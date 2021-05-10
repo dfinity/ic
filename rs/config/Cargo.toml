@@ -1,0 +1,21 @@
+[package]
+name = "ic-config"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+base64 = "0.11.0"
+ic-base-types = { path = "../types/base_types" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-protobuf = { path = "../protobuf" }
+ic-types = { path = "../types/types" }
+json5 = "0.2.7"
+serde = { version = "1.0.99", features = ["derive"] }
+slog = "2.5.2"
+strum = "0.18.0"
+tempfile = "3.1.0"
+url = { version = "2.1.1", features = ["serde"] }
+
+[dev-dependencies]
+proptest = "0.9.4"
+proptest-derive = "0.1.0"

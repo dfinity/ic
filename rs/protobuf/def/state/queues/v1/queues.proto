@@ -1,0 +1,83 @@
+syntax = "proto3";
+package state.queues.v1;
+import "types/v1/types.proto";
+import "state/ingress/v1/ingress.proto";
+
+message Cycles {
+    reserved 1;
+    reserved "raw"; // Originally was defined as a uint64
+    bytes raw_cycles = 2;
+}
+
+message Funds {
+    reserved 1;
+    reserved "cycles";
+    uint64 icp = 2;
+    Cycles cycles_struct = 3;
+}
+
+message Stream {
+    uint64 messages_begin = 1;
+    repeated RequestOrResponse messages = 2;
+    reserved 3, 4;
+    reserved "signals_begin", "signals";
+    uint64 signals_end = 5;
+}
+
+message StreamEntry {
+    types.v1.SubnetId subnet_id = 1;
+    Stream subnet_stream = 2;
+}
+
+message Request {
+    types.v1.CanisterId receiver = 1;
+    types.v1.CanisterId sender = 2;
+    uint64 sender_reply_callback = 3;
+    Funds payment = 4;
+    string method_name = 5;
+    bytes method_payload = 6;
+}
+
+message RejectContext {
+    uint64 reject_code = 1;
+    string reject_message = 2;
+};
+
+message Response {
+    types.v1.CanisterId originator = 1;
+    types.v1.CanisterId respondent = 2;
+    uint64 originator_reply_callback = 3;
+    Funds refund = 4;
+    oneof response_payload {
+        bytes data = 5;
+        RejectContext reject = 6;
+    }
+}
+
+message RequestOrResponse {
+    oneof r {
+        Request request = 1;
+        Response response = 2;
+    }
+}
+
+message InputOutputQueue {
+    repeated RequestOrResponse queue = 1;
+    uint64 ind = 2;
+    uint64 capacity = 3;
+    uint64 num_slots_reserved = 4;
+}
+
+message QueueEntry {
+    types.v1.CanisterId canister_id = 1;
+    InputOutputQueue queue = 2;
+}
+
+message CanisterQueues {
+    reserved 1; // this is from canisterId
+    reserved "canister_id";
+    repeated ingress.v1.Ingress ingress_queue = 2;
+    repeated QueueEntry input_queues = 3;
+    repeated types.v1.CanisterId input_schedule = 4;
+    repeated QueueEntry output_queues = 5;
+}

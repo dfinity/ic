@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package ic_registry_canister.pb.v1;
+
+import "ic_registry_transport/pb/v1/transport.proto";
+import "ic_nns_common/pb/v1/types.proto";
+
+message ChangelogEntry {
+    // The version that this mutation produced.
+    uint64 version = 1;
+    // Serialized value of
+    // ic_registry_transport.pb.v1.RegistryAtomicMutateRequest, with all
+    // preconditions removed (as they had been checked already).
+    //
+    // We use bytes instead of actual value to make sure that the hash
+    // of a changelog entry never changes. If we stored the protobuf
+    // type, this might not be the case. E.g., if some field that was
+    // present in old entries is removed from the proto schema.
+    bytes encoded_mutation = 2;
+}
+
+// Just a container for a set of RegistryDelta that can be used to
+// serialize/deserialize the content of the registry.
+message RegistryStableStorage {
+    // Difference between stable versions
+    // ==================================
+    //
+    // The original representation (VERSION_UNSPECIFIED) is based on
+    // RegistryDelta structure, which is indexed by key:
+    //
+    // ```text
+    //     [key1] => { (v1, value11), (v3, value12) }    // first delta
+    //     [key2] => { (v2, value21), (v3, value22) }    // second delta
+    // ```
+    //
+    // VERSION_1 representation is based on ChangelogEntry structure
+    // that is indexed by version and preserve the history of changes
+    // applied to the registry:
+    //
+    // ```text
+    //     [v1] => { (UPSERT, key1, value11) } // first changelog entry
+    //     [v2] => { (UPSERT, key2, value21) } // second changelog entry
+    //     [v3] => { (UPSERT, key1, value12)
+    //             , (UPSERT, key2, value22) } // third changelog entry
+    // ```
+    //
+    // Those representations are almost equivalent. It's easy to go
+    // from the new representation to the old one, but not so trivial
+    // to go into the opposite direction.
+    //
+    // In order to make the conversion unique, we normalize entries in the
+    // changelog:
+    //
+    //   * We sort keys in each mutation request.
+    //   * We replace INSERT/UPDATE/UPSERT with just UPSERT.
+    enum Version {
+        // The original representation that contains a list of
+        // RegistryDeltas (tag 1).
+        VERSION_UNSPECIFIED = 0;
+
+        // The representation based on changelog (tag 3).
+        VERSION_1 = 1;
+    }
+    // Version of the stable store representation.
+    //
+    // The fields below can be present / missing depending on the value
+    // of this field.  See comments for the Version enum above for more
+    // details.
+    Version version = 2;
+
+    // Only present if version == VERSION_UNSPECIFIED.
+    repeated ic_registry_transport.pb.v1.RegistryDelta deltas = 1;
+
+    // Only present if version == VERSION_1.
+    repeated ChangelogEntry changelog = 3;
+}
+
+// A container for the what gets written to stable storage,
+// from the registry canister.
+message RegistryCanisterStableStorage {
+  ic_nns_common.pb.v1.CanisterAuthzInfo authz = 1;
+  RegistryStableStorage registry = 2;
+}

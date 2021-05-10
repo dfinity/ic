@@ -1,0 +1,164 @@
+syntax = "proto3";
+package registry.subnet.v1;
+import "types/v1/types.proto";
+
+// A subnet: A logical group of nodes that run consensus
+message SubnetRecord {
+  // The the list of node_ids that represent the set of nodes
+  // that are part of this subnet.
+  reserved 1;      // this is from membership consisting of uint64
+  reserved 6;
+  reserved "ic_version_id";
+  repeated bytes membership = 3;
+  InitialDkgTranscriptRecord initial_dkg_transcript = 2;
+
+  // Ingress message params used by that subnet.
+  //
+  // Maximum amount of bytes per block. This is a soft cap, which means
+  // we stop adding messages once overall size grows above this limit. This
+  // allows big messages to still get into the block, because the size of
+  // a message can exceed this limit.
+  uint64 ingress_bytes_per_block_soft_cap = 4;
+
+  // Maximum amount of bytes per message. This is a hard cap, which means
+  // ingress messages greater than the limit will be dropped.
+  uint64 max_ingress_bytes_per_message = 5;
+
+  // Unit delay for blockmaker (in milliseconds).
+  uint64 unit_delay_millis = 7;
+
+  // Initial delay for notary (in milliseconds), to give time to rank-0 block
+  // propagation.
+  uint64 initial_notary_delay_millis = 8;
+
+  // ID of the Replica version to run
+  string replica_version_id = 9;
+
+  // The length of all DKG intervals. The DKG interval length is the number of rounds following the DKG summary.
+  uint64 dkg_interval_length = 10;
+
+  // Gossip Config
+  GossipConfig gossip_config = 13;
+
+  // If set to yes, the subnet starts as a (new) NNS
+  bool start_as_nns = 14;
+
+  // The type of subnet.
+  SubnetType subnet_type = 15;
+
+  // The upper bound for the number of dealings we allow in a block.
+  uint64 dkg_dealings_per_block = 16;
+
+  // If `true`, the subnet will be halted: it will no longer create or execute blocks.
+  bool is_halted = 17;
+
+  // Max number of ingress messages per block.
+  uint64 max_ingress_messages_per_block = 18;
+}
+
+// Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
+// a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
+// construct the genesis CUP or a recovery CUP in the event of a subnet stall.
+message CatchUpPackageContents {
+  // Initial non-interactive low-threshold DKG transcript
+  InitialNiDkgTranscriptRecord initial_ni_dkg_transcript_low_threshold = 1;
+
+  // Initial non-interactive high-threshold DKG transcript
+  InitialNiDkgTranscriptRecord initial_ni_dkg_transcript_high_threshold = 2;
+
+  // The blockchain height that the CUP should have
+  uint64 height = 3;
+
+  // Block time for the CUP's block
+  uint64 time = 4;
+
+  // The hash of the state that the subnet should use
+  bytes state_hash = 5;
+
+  // A uri from which data to replace the registry local store should be downloaded
+  RegistryStoreUri registry_store_uri = 6;
+}
+
+message RegistryStoreUri {
+	/// The uri at which the registry store data should be retrieved. The data
+	/// must be provided as gzipped tar archive
+	string uri = 1;
+	/// A SHA-265, hex encoded hash of the contents of the data stored at the
+	/// provided URI
+	string hash = 2;
+	/// The registry version that should be used for the catch up package contents
+	uint64 registry_version = 3;
+}
+
+// A list of subnet ids of all subnets present in this instance of the IC.
+message SubnetListRecord {
+  reserved 1;  // this is from subnet id being a uint64
+  repeated bytes subnets = 2;
+}
+
+message InitialDkgTranscriptRecord {
+  // the dkg id
+  DkgId id = 1;
+
+  // Node Ids of the nodes that originally participated in this subnet
+  repeated bytes committee = 4;
+  reserved 2;    // this is from committee consisting of uint64
+
+  // the transcript
+  bytes transcript_bytes = 3;
+}
+
+// The dkg id
+message DkgId {
+  uint64 instance_id = 1;
+  reserved 2;    // this is from subnet id being a uint64
+  bytes subnet_id = 3;
+}
+
+// Initial non-interactive DKG transcript record
+message InitialNiDkgTranscriptRecord {
+  types.v1.NiDkgId id = 1;
+  uint32 threshold = 2;
+  repeated bytes committee = 3;
+  uint64 registry_version = 4;
+  bytes internal_csp_transcript = 5;
+}
+
+// Per subnet P2P configuration
+// Note: protoc is mangling the name P2PConfig to P2pConfig
+message GossipConfig {
+  // max outstanding request per peer MIN/DEFAULT/MAX 1/20/200
+  uint32 max_artifact_streams_per_peer = 1;
+  // timeout for a outstanding request 3_000/15_000/180_000
+  uint32 max_chunk_wait_ms = 2 ;
+  // max duplicate requests in underutilized networks 1/28/6000
+  uint32 max_duplicity = 3;
+  // maximum chunk size supported on this subnet 1024/4096/131_072
+  uint32 max_chunk_size = 4;
+  // history size for receive check 1_000/5_000/30_000
+  uint32 receive_check_cache_size = 5;
+  // period for re evaluating the priority function. 1_000/3_000/30_000
+  uint32 pfn_evaluation_period_ms = 6;
+  // period for polling the registry for updates 1_000/3_000/30_000
+  uint32 registry_poll_period_ms = 7;
+  // period for sending a retransmission request    
+  uint32 retransmission_request_ms = 8;
+}
+
+// Represents the type of subnet. Subnets of different type might exhibit different
+// behavior, e.g. being more restrictive in what operations are allowed or privileged
+// compared to other subnet types.
+enum SubnetType {
+    SUBNET_TYPE_UNSPECIFIED = 0;
+    // A normal subnet where no restrictions are applied.
+    SUBNET_TYPE_APPLICATION = 1;
+    // A more privileged subnet where certain restrictions are applied,
+    // like not charging for cycles or restricting who can create and
+    // install canisters on it.
+    SUBNET_TYPE_SYSTEM = 2;
+    reserved 3;
+    reserved "SUBNET_TYPE_PREMIUM_APPLICATION";
+    // A subnet type that is like application subnets but can have some
+    // additional features.
+    SUBNET_TYPE_VERIFIED_APPLICATION = 4;
+}

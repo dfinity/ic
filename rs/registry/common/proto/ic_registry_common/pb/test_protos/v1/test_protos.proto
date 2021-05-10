@@ -1,0 +1,5 @@
+syntax = "proto3";
+
+package ic_registry_common.pb.test_protos.v1;
+
+message TestProto { uint64 test_value = 1; }

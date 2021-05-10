@@ -1,0 +1,9 @@
+[package]
+name = "ic-base-thread"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+futures = "0.3.13"
+prometheus = "0.9.0"
+tokio = { version = "0.2.23", features = ["full"] }

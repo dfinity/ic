@@ -1,0 +1,36 @@
+== DFN Core
++dfn_core+ is a wrapper around the canisters System API. This should have no non optional dependencies.
+
+=== Allocation
+You can optionally build this with +wee_alloc+ enabled, this should shave off about 10kb from your binary size but reduce the performance of the allocator.
+
+=== Printing
+The IC platform doesn't have a stdout or stderr, it has a function called debug_trace which will print text when run locally. When run on the network it will do nothing.
+
+This library wraps up that function so it has Rust-like behavior.
+
+If you're using a nightly version of this compiler simply write
+
+[source,rust]
+----
+fn main() {
+    dfn_core::printer::hook();
+    println!("Works fine");
+    ...
+}
+----
+and all subsequent calls to functions that print will now work correctly.
+
+If you're not using a nightly version of the compiler you need to manually call print functions from `dfn_print` whenever you want to print something.
+
+[source,rust]
+----
+fn main() {
+    let person = "World";
+    dfn_core::print!("Hello {}! ", person);
+    dfn_core::println!("Goodbye");
+    dfn_core::eprintln!("Error {}!", person);
+    ...
+}
+----
+`print` and `eprint` currently have the same behavior but that may change in the future.

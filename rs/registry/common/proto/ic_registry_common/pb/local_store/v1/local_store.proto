@@ -1,0 +1,39 @@
+// Protobuf message that are used in the local_store.
+
+syntax = "proto3";
+package ic_registry_common.pb.local_store.v1;
+import "google/protobuf/wrappers.proto";
+
+// Set of all mutations that, when applied to the registry at version v,
+// produce the registry at version v+1
+message ChangelogEntry {
+  // The default, an empty list, is _invalid_ here.
+  repeated KeyMutation key_mutations = 1;
+}
+
+// A mutation of a single key.
+message KeyMutation {
+  // Key.
+  string key = 1;
+
+  // Protobuf encoded value.
+  bytes value = 2;
+
+  // If this is `UNSET`, `value` must assume the default value.
+  MutationType mutation_type = 3;
+}
+
+enum MutationType {
+  // Illegal state.
+  INVALID_STATE = 0;
+  // The value was SET in this delta.
+  SET = 1;
+  // The value was UNSET in this delta.
+  UNSET = 2;
+}
+
+// The time when the last certified update was successfully received.
+message CertifiedTime {
+  // Number of nano seconds since UNIX EPOCH
+  uint64 unix_epoch_nanos = 1;
+}

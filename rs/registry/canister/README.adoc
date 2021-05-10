@@ -1,0 +1,31 @@
+/canister is where the registry code that gets compiled to a canister lives
+
+/server contains a binary that runs the canister, for test purposes.
+
+/tests contains integration tests that interact with the canister
+
+To compile the canister to wasm
+[source,bash]
+----
+cargo build --release
+----
+
+To compile the server (replace with linux if appropriate)
+[source,bash]
+----
+cargo build --target x86_64-apple-darwin 
+----
+
+To run the unit tests
+[source,bash]
+----
+cargo test --target x86_64-apple-darwin 
+----
+
+To run the integration tests (atm starting the server with the canister)
+[source,bash]
+----
+cargo test
+----
+
+

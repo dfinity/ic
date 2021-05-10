@@ -1,0 +1,75 @@
+= Implementation of Internet Computer Consensus Protocol
+
+== Build & Test
+
+1. Launch `nix-shell` from the parent `rs` directory.
+2. `cd consensus`
+3. `cargo build`
+4. `cargo test`
+
+== Multi-node test simulation with test framework
+
+We have built a simulated environment that runs consensus instances without real network to help debug consensus protocol and study its behavior.
+To run from command line and see debug output:
+
+....
+RUST_LOG=Debug cargo test --test integration multiple_nodes_are_live -- --nocapture
+....
+
+After the compilation, the beginning of the test log is something like below:
+
+....
+running 1 test
+ INFO ConsensusRunnerConfig { max_delta: 1000, random_seed: 0, num_nodes: 10, num_rounds: 12, degree: 9, execution: GlobalClock, delivery: Sequential }
+ DEBG finalized_height 0 expected_batch_height 0, Subcomponent: Finalizer, Application: Consensus, node_id: 0
+ DEBG finalized_height 0 expected_batch_height 0, Subcomponent: Finalizer, Application: Consensus, node_id: 1
+ DEBG Deliver RandomBeaconShare(Signed { content: RandomBeaconContent { height: 1, parent: CryptoHash(0xe3885881f2431daf22404d19a97d505feaa2fea5dcb82200c54ec7c0b836168a) }, signature: ThresholdSignatureShare { signature: ThresholdSigShare([]), signer: 1 } }), node_id: 1
+....
+
+The `INFO ConsensusRunnerConfig` line states the configuration under which this test was run.
+All configuration parameters can be specified from the commandline so that it is easy to deterministically reproduce the same run for debugging purpose.
+
+=== Setting parameters through environment variables
+
+Because `cargo test` has its own command line arguments, we choose to set parameters as environment variables (case insensitive):
+
+`RANDOM_SEED`:: An unsigned number that is used to seed all randomness used in the test, or `Random` which will choose a random seed. Useful for repeating a previous run. Default is 0.
+`NUM_NODES`:: Numbers of nodes in the simulation. An unsigned number or `Random` (chosen from [1,20]). Default is 10.
+`NUM_ROUNDS`:: Number of rounds the simulation should run. Default is to randomely choose between [10,100] based on `RANDOM_SEED`.
+`MAX_DELTA`:: Maximum latency (in milliseconds) of delivering a message to all nodes. Only applicable to the `RandomReceive` and `RandomGraph` delivery strategies. Default is 1000.
+`EXECUTION`:: One of `GlobalMessage`, `GlobalClock`, `RandomExecute`. Default is to randomly chose one of the three strategies based on `RANDOM_SEED`.
+`DELIVERY`:: One of `Sequential`, `RandomReceive`, `RandomGraph`. Default is to randomly choose one of the three strategies based on `RANDOM_SEED`.
+`DEGREE` :: Random graph degree (number of connections per node), only applicable to the `RandomGraph` strategy. Default is to randomly choose a suitable degree that is less than `NUM_NODES`.
+
+For example, the following command will set up a network of 6 nodes and run until 100 rounds of finalized blocks are observed for all of them:
+
+`NUM_NODES=6 NUM_ROUNDS=100 RUST_LOG=Debug cargo test --test integration multiple_nodes_are_live -- --nocapture`
+
+=== Log levels
+
+Besides the above, log levels can be specified using the `RUST_LOG` environment.
+For example, the following command will only print debug messages from `ConsensusDriver`, and choose random parameters:
+
+`RUST_LOG=integration::framework::driver=Debug ...`
+
+Please also note that in order to show `Trace` level log messages, setting `RUST_LOG=Trace` might not be enough. You might need to modify `Cargo.toml` and change `slog` setting to something like the following:
+
+`slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_warn" ] }`
+
+It is enough to set it for `[dev-dependencies]` only.
+As an example, the following shows trace level message for framework, but debug level messages for consensus sub-components:
+
+`RUST_LOG=integration::framework=Trace,ic_consensus=Debug ...`
+
+=== Stress test
+
+Lastly, it is always a good idea to grind your machine with random consensus tests that will only stop in case of a failure:
+
+....
+while true; do \
+  RUST_LOG=Info,ic_consensus::finalizer=Debug \
+  NUM_NODES=Random RANDOM_SEED=Random \
+  cargo test --test integration multiple_nodes_are_live -- --nocapture \
+    || break; \
+done
+....

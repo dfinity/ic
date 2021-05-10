@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package log.ingress_message_log_entry.v1;
+
+import "google/protobuf/wrappers.proto";
+
+message IngressMessageLogEntry {
+  google.protobuf.StringValue canister_id = 1;
+  google.protobuf.UInt64Value compute_allocation = 2;
+  google.protobuf.StringValue desired_id = 3;
+  google.protobuf.UInt64Value expiry_time = 4;
+  google.protobuf.UInt64Value memory_allocation = 5;
+  google.protobuf.StringValue message_id = 6;
+  google.protobuf.StringValue method_name = 7;
+  google.protobuf.StringValue mode = 8;
+  // Gives additional information about this log event
+  google.protobuf.StringValue reason = 9;
+  google.protobuf.StringValue request_type = 10;
+  google.protobuf.StringValue sender = 11;
+  google.protobuf.UInt64Value size = 12;
+  google.protobuf.UInt64Value batch_time = 13;
+  google.protobuf.UInt64Value batch_time_plus_ttl = 14;
+}

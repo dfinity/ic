@@ -1,0 +1,28 @@
+[package]
+name = "ic-canister-sandbox-common"
+version = "0.8.0"
+edition = "2018"
+
+[lib]
+name = "ic_canister_sandbox_common"
+path = "src/lib.rs"
+
+[[bin]]
+name = "test_controller"
+path = "src/test_controller.rs"
+
+[[bin]]
+name = "test_sandbox"
+path = "src/test_sandbox.rs"
+
+[dependencies]
+bytes = "1.0.1"
+serde_cbor = "0.11.1"
+ic-interfaces = { path = "../../interfaces" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-api = { path = "../../system_api" }
+ic-types = { path = "../../types/types" }
+serde = { version = "1.0.99", features = ["derive", "rc"] }
+nix = "0.20.0"
+libc = "0.2.91"

@@ -1,0 +1,22 @@
+[package]
+name = "ic-state-layout"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+hex = "0.4.2"
+ic-base-types = { path = "../types/base_types" }
+ic-logger = { path = "../monitoring/logger" }
+ic-protobuf = { path = "../protobuf" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-sys = { path = "../sys" }
+ic-types = { path = "../types/types" }
+ic-utils = { path = "../utils" }
+ic-wasm-types = { path = "../types/wasm_types" }
+libc = "0.2.91"
+prost = "0.7.0"
+serde = { version = "1.0.99", features = ["derive"] }
+serde_bytes = "0.11"
+serde_cbor = "0.11.1"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+tempfile = "3.1.0"

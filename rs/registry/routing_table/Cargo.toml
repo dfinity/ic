@@ -1,0 +1,16 @@
+[package]
+name = "ic-registry-routing-table"
+version = "0.8.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+candid = "0.6.15"
+ic-protobuf = { path = "../../protobuf" }
+ic-base-types = { path = "../../types/base_types" }
+ic-ic00-types = { path = "../../types/ic00_types" }
+serde = { version = "1.0.99", features = [ "derive", "rc" ] }
+
+[dev-dependencies]
+assert_matches = "1.3.0"

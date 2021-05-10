@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package state.v1;
+import "state/sync/v1/manifest.proto";
+
+message StateMetadata {
+    state.sync.v1.Manifest manifest = 1;
+}
+
+message StatesMetadata {
+    map<uint64, StateMetadata> by_height = 1;
+}

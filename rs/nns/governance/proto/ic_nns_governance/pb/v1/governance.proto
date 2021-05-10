@@ -1,0 +1,1210 @@
+syntax = "proto3";
+
+package ic_nns_governance.pb.v1;
+
+import "ic_nns_common/pb/v1/types.proto";
+import "ic_base_types/pb/v1/types.proto";
+import "ic_ledger/pb/v1/types.proto";
+
+// The entity that owns the nodes that run the network.
+//
+// Note that this is different from a node operator, the entity that
+// operates the nodes. In terms of responsibilities, the node operator
+// is responsible for adding/removing and generally making sure that
+// the nodes are working, while the NodeProvider is the entity that
+// is compensated.
+//
+// Note: The NodeOperatorRecord is defined in:
+// rs/protobuf/def/registry/node_operator/v1/node_operator.proto.
+message NodeProvider {
+    // The ID of the node provider.
+  ic_base_types.pb.v1.PrincipalId id = 1;
+}
+
+// Proposal types are organized into topics. Neurons can automatically
+// vote based on following other neurons, and these follow
+// relationships are defined per topic.
+enum Topic {
+  // The `Unspecified` topic is used as a fallback when
+  // following. That is, if no followees are specified for a given
+  // topic, the followees for this topic are used instead.
+  TOPIC_UNSPECIFIED = 0;
+  // A special topic by means of which a neuron can be managed by the
+  // followees for this topic (in this case, there is no fallback to
+  // 'unspecified'). Votes on this topic are not included in the
+  // voting history of the neuron (cf., `recent_ballots` in `Neuron`).
+  //
+  // For proposals on this topic, only followees on the 'neuron
+  // management' topic of the neuron that the proposals pertains to
+  // are allowed to vote.
+  //
+  // As the set of eligible voters on this topic is restricted,
+  // proposals on this topic have a *short voting period*.
+  TOPIC_NEURON_MANAGEMENT = 1;
+  // All proposals that provide “real time” information about the
+  // value of ICP, as measured by an IMF SDR, which allows the NNS to
+  // convert ICP to cycles (which power computation) at a rate which
+  // keeps their real world cost constant. Votes on this topic are not
+  // included in the voting history of the neuron (cf.,
+  // `recent_ballots` in `Neuron`).
+  //
+  // Proposals on this topic have a *short voting period* due to their
+  // frequency.
+  TOPIC_EXCHANGE_RATE = 2;
+  // All proposals that administer network economics, for example,
+  // determining what rewards should be paid to node operators.
+  TOPIC_NETWORK_ECONOMICS = 3;
+  // All proposals that administer governance, for example to freeze
+  // malicious canisters that are harming the network.
+  TOPIC_GOVERNANCE = 4;
+  // All proposals that administer node machines, including, but not
+  // limited to, upgrading or configuring the OS, upgrading or
+  // configuring the virtual machine framework and upgrading or
+  // configuring the node replica software.
+  TOPIC_NODE_ADMIN = 5;
+  // All proposals that administer network participants, for example,
+  // granting and revoking DCIDs (data center identities) or NOIDs
+  // (node operator identities).
+  TOPIC_PARTICIPANT_MANAGEMENT = 6;
+  // All proposals that administer network subnets, for example
+  // creating new subnets, adding and removing subnet nodes, and
+  // splitting subnets.
+  TOPIC_SUBNET_MANAGEMENT = 7;
+  // Installing and upgrading “system” canisters that belong to the network.
+  // For example, upgrading the NNS.
+  TOPIC_NETWORK_CANISTER_MANAGEMENT = 8;
+  // Proposals that update KYC information for regulatory purposes,
+  // for example during the initial Genesis distribution of ICP in the
+  // form of neurons.
+  TOPIC_KYC = 9;
+  // Topic for proposals to reward node providers.
+  TOPIC_NODE_PROVIDER_REWARDS = 10;
+}
+
+// Every neuron is in one of three states.
+//
+// Note that `Disbursed` is not a state of a neuron, as the neuron is
+// consumed throught the act disbursement (using the method
+// [Governance::disburse]).
+//
+// See [neuron::DissolveState] for detail on how the different states
+// are represented.
+enum NeuronState {
+  // Not a valid state. Required by Protobufs.
+  NEURON_STATE_UNSPECIFIED = 0;
+  // In this state, the neuron is locked with a specific
+  // `dissolve_delay`. It accrues `age` by the passge of time and it
+  // can vote if `dissolve_delay` is at least six months. The method
+  // [Neuron::start_dissolving] can be called to transfer the neuron
+  // to the `Dissolving` state. The method
+  // [Neuron::increase_dissolve_delay] can be used to increase the
+  // dissolve delay without affecting the state or the age of the
+  // neuron.
+  NEURON_STATE_LOCKED = 1;
+  // In this state, the neuron's `dissolve_delay` decreases with the
+  // passage of time. While dissolving, the neuron's age is considered
+  // zero. Eventually it will reach the `Dissolved` state. The method
+  // [Neuron::stop_dissolving] can be called to transfer the neuron to
+  // the `Locked` state, and the neuron will start aging again. The
+  // method [Neuron::increase_dissolve_delay] can be used to increase
+  // the dissolve delay, but this will not stop the timer or affect
+  // the age of the neuron.
+  NEURON_STATE_DISSOLVING = 2;
+  // In the dissolved state, the neuron's stake can be disbursed using
+  // the [Governance::disburse] method. It cannot vote as its
+  // `dissolve_delay` is considered to be zero.
+  //
+  // If the method [Neuron::increase_dissolve_delay] is called in this
+  // state, the neuron will become locked with the specified dissolve
+  // delay and start againg again.
+  //
+  // Neuron holders have an incentive not to keep neurons in the
+  // 'dissolved' state for a long time: if the holders wants to make
+  // their tokens liquid, they disburse the neuron's stake, and if
+  // they want to earn voting rewards, they increase the dissolve
+  // delay. If these incentives turn out to be insufficient, the NNS
+  // may decide to impose further restrictions on dissolved neurons.
+  NEURON_STATE_DISSOLVED = 3;
+}
+
+// How did a neuron vote in the recent past? This data is used by
+// other neurons to determine what neurons to follow.
+message BallotInfo {
+  ic_nns_common.pb.v1.ProposalId proposal_id = 1;
+  Vote vote = 2;
+}
+
+// The result of querying for the state of a single neuron.
+message NeuronInfo {
+  // The exact time at which this data was computed. This means, for
+  // example, that the exact time that this neuron will be unlocked,
+  // i.e., enter the dissolved state, assuming it is currently
+  // dissolving, is given by
+  // `retrieved_at_timestamp_seconds+dissolve_delay_seconds`.
+  uint64 retrieved_at_timestamp_seconds = 1;
+  // The current state of the neuron. See [NeuronState] for a
+  // description of the different states.
+  NeuronState state = 2;
+  // The current age of the neuron. See [Neuron::age_seconds]
+  // for details on how it is computed.
+  uint64 age_seconds = 3;
+  // The current dissolve delay of the neuron. See
+  // [Neuron::dissolve_delay_seconds] for details on how it is
+  // computed.
+  uint64 dissolve_delay_seconds = 4;
+  // See [Neuron::recent_ballots] for a description.
+  repeated BallotInfo recent_ballots = 5;
+  // Current voting power of the neuron.
+  uint64 voting_power = 6;
+  // When the Neuron was created. A neuron can only vote on proposals
+  // submitted after its creation date.
+  uint64 created_timestamp_seconds = 7;
+}
+
+// A transfer performed from some account to stake a new neuron.
+message NeuronStakeTransfer {
+  // When the transfer arrived at the governance canister.
+  uint64 transfer_timestamp = 1;
+  // The principal that made the transfer.
+  ic_base_types.pb.v1.PrincipalId from = 2;
+  // The (optional) subaccount from which the transfer was made.
+  bytes from_subaccount = 3;
+  // The subaccount to which the transfer was made.
+  bytes to_subaccount = 4;
+  // The amount of stake that was transfered.
+  uint64 neuron_stake_e8s = 5;
+  // The block height at which the transfer occurred.
+  uint64 block_height = 6;
+  // The memo sent with the transfer.
+  uint64 memo = 7;
+}
+
+// This structure represents a neuron "at rest" in governance system of
+// the Internet Computer IC.
+message Neuron {
+  // The id of the neuron.
+  //
+  // This is stored here temporarily, since its also stored on the map
+  // that contains neurons.
+  //
+  // Initialization uses ids for the following graph. We need neurons
+  // to come into existence at genesis with pre-chosen ids, so a
+  // neuron needs to have an id. We could alternatively choose a
+  // unique naming scheme instead and chose the ids on the
+  // initialization of the canister.
+  ic_nns_common.pb.v1.NeuronId id = 1;
+
+  // The principal of the ICP ledger account where the locked ICP
+  // balance resides. This principal is indistinguishable from one
+  // identifying a public key pair, such that those browsing the ICP
+  // ledger cannot tell which balances belong to neurons.
+  bytes account = 2;
+
+  // The principal that actually controls the neuron. The principal
+  // must identify a public key pair, which acts as a “master key”,
+  // such that the corresponding secret key should be kept very
+  // secure. The principal may control many neurons.
+  ic_base_types.pb.v1.PrincipalId controller = 3;
+
+  // Keys that can be used to perform actions with limited privileges
+  // without exposing the secret key corresponding to the principal
+  // e.g. could be a WebAuthn key.
+  repeated ic_base_types.pb.v1.PrincipalId hot_keys = 4;
+
+  // The amount of staked ICP tokens, measured in fractions of 10E-8
+  // of an ICP.
+  //
+  // Cached record of the locked ICP balance on the ICP ledger.
+  //
+  // For neuron creation: has to contain some minimum amount. A
+  // spawned neuron with less stake cannot increase its dissolve
+  // delay.
+  uint64 cached_neuron_stake_e8s = 5;
+
+  // The amount of ICP that this neuron has forfeited due to making
+  // proposals that were subsequently rejected or from using the
+  // 'manage neurons through proposals' functionality. Must be smaller
+  // than 'neuron_stake_e8s'. When a neuron is disbursed, these ICP
+  // will be burned.
+  uint64 neuron_fees_e8s = 6;
+
+  // When the Neuron was created. A neuron can only vote on proposals
+  // submitted after its creation date.
+  uint64 created_timestamp_seconds = 7;
+
+  // The timestamp, in seconds from the Unix epoch, corresponding to
+  // the time this neuron has started aging. This is either the
+  // creation time or the last time at which the neuron has stopped
+  // dissolving.
+  //
+  // This value is meaningless when the neuron is dissolving, since a
+  // dissolving neurons always has age zero. The canonical value of
+  // this field for a dissolving neuron is `u64::MAX`.
+  uint64 aging_since_timestamp_seconds = 8;
+
+  // At any time, at most one of `when_dissolved` and
+  // `dissolve_delay` are specified.
+  //
+  // `Locked`. This is represented by `dissolve_delay` being set to a
+  // non zero value.
+  //
+  // `Dissolving`. This is represented by `when_dissolved` being
+  // set, and this value is in the future.
+  //
+  // `Dissolved`. All other states represent the dissolved
+  // state. That is, (a) `when_dissolved` is set and in the past,
+  // (b) `dissolve_delay` is set to zero, (c) neither value is set.
+  //
+  // Cf. [Neuron::stop_dissolving] and [Neuron::start_dissolving].
+  oneof dissolve_state {
+    // When the dissolve timer is running, this stores the timestamp,
+    // in seconds from the Unix epoch, at which the neuron becomes
+    // dissolved.
+    //
+    // At any time while the neuron is dissolving, the neuron owner
+    // may pause dissolving, in which case `dissolve_delay_seconds`
+    // will get assigned to: `when_dissolved_timestamp_seconds -
+    // <timestamp when the action is taken>`.
+    uint64 when_dissolved_timestamp_seconds = 9;
+    // When the dissolve timer is stopped, this stores how much time,
+    // in seconds, the dissolve timer will be started with. Can be at
+    // most 8 years.
+    //
+    // At any time while in this state, the neuron owner may (re)start
+    // dissolving, in which case `when_dissolved_timestamp_seconds`
+    // will get assigned to: `<timestamp when the action is taken> +
+    // dissolve_delay_seconds`.
+    uint64 dissolve_delay_seconds = 10;
+  }
+
+  // Protobuf representing a list of followees of a neuron for a
+  // specific topic.
+  message Followees { repeated ic_nns_common.pb.v1.NeuronId followees = 1; }
+
+  // Map `Topic` to followees. The key is represented by an integer as
+  // Protobuf does not support enum keys in maps.
+  map<int32, Followees> followees = 11;
+
+  // Information about how this neuron voted in the recent past. It
+  // only contains proposals that the neuron voted yes or no on.
+  repeated BallotInfo recent_ballots = 12;
+
+  // `true` if this neuron has passed KYC, `false` otherwise
+  bool kyc_verified = 13;
+
+  // The record of the transfer that was made to create this neuron.
+  NeuronStakeTransfer transfer = 14;
+
+  // The accumulated maturity of the neuron, in "e8s equivalent".
+  //
+  // The unit is "e8s equivalent" to insist that, while this quantity is on
+  // the same scale as ICPs, maturity is not directly convertible to ICPs:
+  // conversion requires a minting event to spawn a new neuron.
+  uint64 maturity_e8s_equivalent = 15;
+
+  // Whether this neuron is "Not for profit", making it dissolvable
+  // by voting.
+  bool not_for_profit = 16;
+}
+
+// The types of votes the Neuron can issue.
+enum Vote {
+  // This exists because proto3 defaults to the 0 value on enums.
+  // This is not a valid choice, i.e., a vote with this choice will
+  // not be counted.
+  VOTE_UNSPECIFIED = 0;
+  // Vote for the proposal to be adopted.
+  VOTE_YES = 1;
+  // Vote for the proposal to be rejected.
+  VOTE_NO = 2;
+}
+
+// List of NNS functions that can be called by proposals.
+enum NnsFunction {
+  // This exists because proto3 defaults to the 0 value on enums.
+  NNS_FUNCTION_UNSPECIFIED = 0;
+  // Combine a specified set of nodes, typically drawn from data centers and
+  // operators in such a way as to guarantee their independence, into a new
+  // decentralized subnet.
+  // The execution of this NNS function first initiates a new instance of
+  // the distributed key generation protocol. The transcript of that protocol
+  // is written to a new subnet record in the registry, together with initial
+  // configuration information for the subnet, from where the nodes comprising
+  // the subnet pick it up.
+  NNS_FUNCTION_CREATE_SUBNET = 1;
+  // Add a new node to a subnet. The node cannot be currently assigned to a
+  // subnet.
+  // The execution of this proposal changes an existing subnet record to add
+  // a node. From the perspective of the NNS, this update is a simple update
+  // of the subnet record in the registry.
+  NNS_FUNCTION_ADD_NODE_TO_SUBNET = 2;
+  // A proposal to add a new canister to be installed and executed in the
+  // NNS subnetwork.
+  // The root canister, which controls all canisters on the NNS except for
+  // itself, handles this proposal type. The call also expects the Wasm module
+  // that shall be installed.
+  NNS_FUNCTION_NNS_CANISTER_INSTALL = 3;
+  // A proposal to upgrade an existing canister in the NNS subnetwork.
+  // This proposal type is executed by the root canister. Beyond upgrading
+  // the Wasm module of the target canister, the proposal can also set the
+  // authorization information and the allocations.
+  NNS_FUNCTION_NNS_CANISTER_UPGRADE = 4;
+  // A proposal to bless a new version to which the replicas can be
+  // upgraded.
+  // The proposal registers a replica version (identified by the hash of the
+  // installation image) in the registry. Besides creating a record for that
+  // version, the proposal also appends that version to the list of "blessed
+  // versions" that can be installed on a subnet. By itself, this proposal
+  // does not effect any upgrade.
+  NNS_FUNCTION_BLESS_REPLICA_VERSION = 5;
+  // Update a subnet's recovery CUP (used to recover subnets that have stalled).
+  // Nodes that find a recovery CUP for their subnet will load that CUP from
+  // the registry and restart the replica from that CUP.
+  NNS_FUNCTION_RECOVER_SUBNET = 6;
+  // Update a subnet's configuration.
+  // This proposal updates the subnet record in the registry, with the changes
+  // being picked up by the nodes on the subnet when they reference the
+  // respective registry version. Subnet configuration comprises protocol
+  // parameters that must be consistent across the subnet (e.g. message sizes).
+  NNS_FUNCTION_UPDATE_CONFIG_OF_SUBNET = 7;
+  // Assign an identity to a node operator, such as a funding partner,
+  // associating key information regarding its ownership, the jurisdiction
+  // in which it is located, and other information.
+  // The node operator is stored as a record in the registry. It contains
+  // the remaining node allowance for that node operator, that is the number
+  // of nodes the node operator can still add to the IC. When an additional
+  // node is added by the node operator, the remaining allowance is decreased.
+  NNS_FUNCTION_ASSIGN_NOID = 8;
+  // A proposal to upgrade the root canister in the NNS subnetwork.
+  // The proposal is processed by the Lifeline canister, which controls the
+  // root canister. The proposal updates the Wasm module as well as the
+  // authorization settings.
+  NNS_FUNCTION_NNS_ROOT_UPGRADE = 9;
+  // Update the ICP/XDR conversion rate.
+  // Changes the ICP-to-XDR conversion rate in the governance canister. This
+  // setting affects cycles pricing (as the value of cycles shall be constant
+  // with respect to IMF SDRs) as well as the rewards paid for nodes, which
+  // are expected to be specified in terms of IMF SDRs as well.
+  NNS_FUNCTION_ICP_XDR_CONVERSION_RATE = 10;
+  // Update the replica version running on a given subnet.
+  // The proposal changes the replica version that is used on the specified
+  // subnet. The version must be contained in the list of blessed replica
+  // versions. The upgrade is performed when the subnet creates the next
+  // regular CUP.
+  NNS_FUNCTION_UPDATE_SUBNET_REPLICA_VERSION = 11;
+  /// Clear the provisional whitelist.
+  /// The proposal changes the provisional whitelist to the empty list.
+  NNS_FUNCTION_CLEAR_PROVISIONAL_WHITELIST = 12;
+  // Removes a node from a subnet. The node must be currently assigned to a
+  // subnet.
+  // The execution of this proposal changes an existing subnet record to remove
+  // a node. From the perspective of the NNS, this update is a simple update
+  // of the subnet record in the registry.
+  NNS_FUNCTION_REMOVE_NODES_FROM_SUBNET = 13;
+  // Informs the cycles minting canister that a certain principal is
+  // authorized to use certain subnetworks (from a list). Can also be
+  // used to set the "default" list of subnetworks that principals
+  // without special authorization are allowed to use.
+  NNS_FUNCTION_SET_AUTHORIZED_SUBNETWORKS = 14;
+  // Change the Firewall configuration in the registry.
+  NNS_FUNCTION_SET_FIREWALL_CONFIG = 15;
+  // Change a Node Operator's allowance in the registry.
+  NNS_FUNCTION_UPDATE_NODE_OPERATOR_CONFIG = 16;
+  // Stop or start an NNS canister
+  NNS_FUNCTION_STOP_OR_START_NNS_CANISTER = 17;
+}
+
+// Payload of a proposal that calls a function on another NNS
+// canister. The canister and function to call is derived from the
+// `nns_function`.
+message ExecuteNnsFunction {
+  // This enum value determines what canister to call and what NNS
+  // function to call on that canister.
+  NnsFunction nns_function = 1;
+  // The payload of the NNS function.
+  bytes payload = 2;
+}
+
+// If adopted, a motion should guide the future strategy of the
+// Internet Computer ecosystem.
+message Motion {
+  // The text of the motion. Maximum 100kib.
+  string motion_text = 1;
+}
+
+// For all Neurons controlled by the given principals, set their
+// KYC status to `kyc_verified=true`.
+message ApproveGenesisKYC {
+  repeated ic_base_types.pb.v1.PrincipalId principals = 1;
+}
+
+// Adds and/or removes NodeProviders from the list of current
+// node providers.
+message AddOrRemoveNodeProvider {
+  oneof change {
+    NodeProvider to_add = 1;
+    NodeProvider to_remove = 2;
+  }
+}
+
+// This proposal payload is used to reward a node provider by minting
+// ICPTs directly to the node provider's ledger account, or into a new
+// neuron created on behalf of the node provider.
+message RewardNodeProvider {
+  // The NodeProvider to reward.
+  NodeProvider node_provider = 1;
+  // The amount of e8s to mint to reward the node provider.
+  uint64 amount_e8s = 2;
+  // This message specifies how to create a new neuron on behalf of
+  // the node provider.
+  //
+  // - The controller of the new neuron is the node provider's
+  //   principal.
+  //
+  // - The account is chosen at random.
+  //
+  // - The stake of the new neuron is `amount_e8s`.
+  //
+  // - `dissolve_delay_seconds` is as specified in the proto.
+  //
+  // - `kyc_verified` is set to true, as node providers are
+  //   (implicitly) KYC'ed.
+  //
+  // - `not_for_profit` is set to false.
+  //
+  // - All other values are set as for other neurons: timestamp is
+  //   now, following is set up per default, maturity is 0, neuron fee
+  //   is 0.
+  message CreateNeuron {
+    uint64 dissolve_delay_seconds = 1;
+  }
+  // If this is specified, executing this proposal will create a
+  // neuron instead of directly minting ICP into the node provider's
+  // account.
+  CreateNeuron create_neuron = 3;
+}
+
+// Changes the default followees to match the one provided.
+// This completely replaces the default followees so entries for all
+// Topics (except ManageNeuron) must be provided on each proposal.
+message SetDefaultFollowees {
+  map<int32, Neuron.Followees> default_followees = 1;
+}
+
+// A proposal is the immutable input of a proposal submission. This contains
+// all the information from the original proposal submission.
+//
+// Making a proposal implicitly votes yes.
+message Proposal {
+  // Text providing a short description of the proposal, composed
+  // using a maximum of 280 bytes of characters.
+  string summary = 1;
+
+  // The Web address of additional content required to evaluate the
+  // proposal, specified using HTTPS. For example, the address might
+  // describe content supporting the assignment of a DCID (data center
+  // id) to a new data center. The URL string must not be longer than
+  // 2000 bytes.
+  string url = 2;
+
+  // This section describes the action that the proposal proposes to
+  // take.
+  oneof action {
+    // This type of proposal calls a major function on a specified
+    // target neuron. Only the followees of the target neuron (on the
+    // topic [Topic::ManageNeuron]) may vote on these proposals,
+    // which effectively provides the followees with control over the
+    // target neuron. This can provide a convenient and highly secure
+    // means for a team of individuals to manage an important
+    // neuron. For example, a neuron might hold a large balance, or
+    // belong to an organization of high repute, and be publicized so
+    // that many other neurons can follow its vote. In both cases,
+    // managing the private key of the principal securely could be
+    // problematic (either a single copy is held, which is very
+    // insecure and provides for a single party to take control, or a
+    // group of individuals must divide responsibility, for example
+    // using threshold cryptography, which is complex and time
+    // consuming). To address this, using this proposal type, the
+    // important neuron can be configured to follow the neurons
+    // controlled by individual members of a team. Now they can submit
+    // proposals to make the important neuron perform actions, which
+    // are adopted if and only if a majority of them vote to
+    // adopt. Nearly any command on the target neuron can be executed,
+    // including commands that change the follow rules, allowing the
+    // set of team members to be dynamic. Only the final step of
+    // dissolving the neuron once its dissolve delay reaches zero
+    // cannot be performed using this type of proposal (since this
+    // would allow control/“ownership” over the locked balances to be
+    // transferred). To prevent a neuron falling under the malign
+    // control of the principal’s private key by accident, the private
+    // key can be destroyed so that the neuron can only be controlled
+    // by its followees, although this makes it impossible to
+    // subsequently unlock the balance.
+    ManageNeuron manage_neuron = 10;
+    // Propose a change to some network parameters of network
+    // economics.
+    NetworkEconomics manage_network_economics = 12;
+    // See [Motion]
+    Motion motion = 13;
+    // A update affecting something outside of the Governance
+    // canister.
+    ExecuteNnsFunction execute_nns_function = 14;
+    // Approve Genesis KYC for a given list of principals.
+    ApproveGenesisKYC approve_genesis_kyc = 15;
+    // Add/remove NodeProvider from the list of NodeProviders
+    AddOrRemoveNodeProvider add_or_remove_node_provider = 16;
+    // Reward a NodeProvider
+    RewardNodeProvider reward_node_provider = 17;
+    // Set the default following
+    SetDefaultFollowees set_default_followees = 18;
+  }
+}
+
+// All operations that modify the state of an existing neuron are
+// represented by instances of `ManageNeuron`.
+//
+// All commands are available to the `controller` of the neuron. In
+// addition, commands related to voting, i.g., [manage_neuron::Follow]
+// and [manage_neuron::RegisterVote], are also available to the
+// registered hot keys of the neuron.
+message ManageNeuron {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+  // The ID of the neuron to manage.
+  ic_nns_common.pb.v1.NeuronId id = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  // The dissolve delay of a neuron can be increased up to a maximum
+  // of 8 years.
+  message IncreaseDissolveDelay {
+    uint32 additional_dissolve_delay_seconds = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  }
+  message StartDissolving {}
+  message StopDissolving {}
+  // Add a new hot key that can be used to manage the neuron. This
+  // provides an alternative to using the controller principal’s cold key to
+  // manage the neuron, which might be onerous and difficult to keep
+  // secure, especially if it is used regularly. A hot key might be a
+  // WebAuthn key that is maintained inside a user device, such as a
+  // smartphone.
+  message AddHotKey {
+    ic_base_types.pb.v1.PrincipalId new_hot_key = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  }
+  // Remove a hot key that has been previously assigned to the neuron.
+  message RemoveHotKey {
+    ic_base_types.pb.v1.PrincipalId hot_key_to_remove = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  }
+  // Commands that only configure a given neuron, but do not interact
+  // with the outside world. They all require the caller to be the
+  // controller of the neuron.
+  message Configure {
+    oneof operation {
+      IncreaseDissolveDelay increase_dissolve_delay = 1;
+      StartDissolving start_dissolving = 2;
+      StopDissolving stop_dissolving = 3;
+      AddHotKey add_hot_key = 4;
+      RemoveHotKey remove_hot_key = 5;
+    }
+  }
+  // Disburse this neuron's stake: transfer the staked ICP to the
+  // specified account.
+  message Disburse {
+    option (ic_base_types.pb.v1.tui_signed_message) = true;
+    message Amount {
+      option (ic_base_types.pb.v1.tui_signed_message) = true;
+      uint64 e8s = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+    }
+    // The (optional) amount to transfer. If not specified the cached
+    // stake is used.
+    Amount amount = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+    // The principal to which to transfer the stake.
+    ic_ledger.pb.v1.AccountIdentifier to_account = 2 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  }
+
+  // Split this neuron into two neurons.
+  //
+  // The child neuron retains the parent neuron's properties.
+  message Split {
+    // The amount to split to the child neuron.
+    uint64 amount_e8s = 1;
+  }
+
+  // When the maturity of a neuron has risen above a threshold, it can
+  // be instructed to spawn a new neuron. This creates a new neuron
+  // that locks a new balance of ICP on the ledger. The new neuron can
+  // remain controlled by the same principal as its parent, or be
+  // assigned to a new principal.
+  message Spawn {
+    // If not set, the spawned neuron will have the same controller as
+    // this neuron.
+    ic_base_types.pb.v1.PrincipalId new_controller = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  }
+
+  // Disburse a portion of this neuron's stake into another neuron.
+  // This allows to split a neuron but with a new dissolve delay
+  // and owned by someone else.
+  message DisburseToNeuron {
+    // The controller of the new neuron (must be set).
+    ic_base_types.pb.v1.PrincipalId new_controller = 1;
+    // The amount to disburse.
+    uint64 amount_e8s = 2;
+    // The dissolve delay of the new neuron.
+    uint64 dissolve_delay_seconds = 3;
+    // Whether the new neuron has been kyc verified.
+    bool kyc_verified = 4;
+    // The nonce with whitch to create the subaccount.
+    uint64 nonce = 5;
+  }
+
+
+  // Add a rule that enables the neuron to vote automatically on
+  // proposals that belong to a specific topic, by specifying a group
+  // of followee neurons whose majority vote is followed. The
+  // configuration of such follow rules can be used to a) distribute
+  // control over voting power amongst multiple entities, b) have a
+  // neuron vote automatically when its owner lacks time to evaluate
+  // newly submitted proposals, c) have a neuron vote automatically
+  // when its own lacks the expertise to evaluate newly submitted
+  // proposals, and d) for other purposes. A follow rule specifies a
+  // set of followees. Once a majority of the followees votes to adopt
+  // or reject a proposal belonging to the specified topic, the neuron
+  // votes the same way. If it becomes impossible for a majority of
+  // the followees to adopt (for example, because they are split 50-50
+  // between adopt and reject), then the neuron votes to reject. If a
+  // rule is specified where the proposal topic is UNSPECIFIED, then it
+  // becomes a catch-all follow rule, which will be used to vote
+  // automatically on proposals belonging to topics for which no
+  // specific rule has been specified.
+  //
+  // If the list 'followees' is empty, this removes following for a
+  // specific topic.
+  message Follow {
+    // Topic UNSPECIFIED means add following for the 'catch all'.
+    Topic topic = 1;
+    repeated ic_nns_common.pb.v1.NeuronId followees = 2;
+  }
+  // Have the neuron vote to either adopt or reject a proposal with a specified
+  // id.
+  message RegisterVote {
+    ic_nns_common.pb.v1.ProposalId proposal = 1;
+    Vote vote = 2;
+  }
+  oneof command {
+    Configure configure = 2;
+    Disburse disburse = 3;
+    Spawn spawn = 4;
+    Follow follow = 5;
+    Proposal make_proposal = 6;
+    RegisterVote register_vote = 7;
+    Split split = 8;
+    DisburseToNeuron disburse_to_neuron = 9;
+  }
+}
+
+// The response of the ManageNeuron command
+//
+// There is a dedicated response type for each `ManageNeuron.command` field
+message ManageNeuronResponse {
+  message ConfigureResponse {}
+
+  message DisburseResponse {
+    // The block height at which the disburse transfer happened
+    uint64 transfer_block_height = 1;
+  }
+
+  message SpawnResponse {
+    // The ID of the Neuron created from spawning a Neuron
+    ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
+  }
+
+  message FollowResponse {}
+
+  message MakeProposalResponse {
+    // The ID of the created proposal
+    ic_nns_common.pb.v1.ProposalId proposal_id = 1;
+  }
+
+  message RegisterVoteResponse {}
+
+  message SplitResponse {
+    // The ID of the Neuron created from splitting another Neuron
+    ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
+  }
+
+  message DisburseToNeuronResponse {
+    // The ID of the Neuron created from disbursing a Neuron
+    ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
+  }
+
+  oneof command {
+    GovernanceError error = 1;
+    ConfigureResponse configure = 2;
+    DisburseResponse disburse = 3;
+    SpawnResponse spawn = 4;
+    FollowResponse follow = 5;
+    MakeProposalResponse make_proposal = 6;
+    RegisterVoteResponse register_vote = 7;
+    SplitResponse split = 8;
+    DisburseToNeuronResponse disburse_to_neuron = 9;
+  }
+}
+
+message GovernanceError {
+  enum ErrorType {
+     ERROR_TYPE_UNSPECIFIED = 0;
+     // The operation was successfully completed.
+     ERROR_TYPE_OK = 1;
+     // This operation is not available, e.g., not implemented.
+     ERROR_TYPE_UNAVAILABLE = 2;
+     // The caller is not authorized to perform this operation.
+     ERROR_TYPE_NOT_AUTHORIZED = 3;
+     // The specified neuron was not found.
+     ERROR_TYPE_NOT_FOUND = 4;
+     // The command was missing or invalid. This is a permanent error.
+     ERROR_TYPE_INVALID_COMMAND = 5;
+     // The neuron is not locked and the operation requires it to be
+     // locked.
+     ERROR_TYPE_REQUIRES_LOCKED = 6;
+     // The neuron is not dissolving and the operation requires it to be
+     // dissolving.
+     ERROR_TYPE_REQUIRES_DISSOLVING = 7;
+     // The neuron is not dissolved and the operation requires it to be
+     // dissolved.
+     ERROR_TYPE_REQUIRES_DISSOLVED = 8;
+     // When adding or removing a hot key: the key to add was already
+     // present or the key to remove was not present or the key to add
+     // was invalid or adding another hot key would bring the total
+     // number of the maximum number of allowed hot keys per neuron.
+     ERROR_TYPE_HOT_KEY = 9;
+     // Some canister side resource is exhausted, so this operation cannot be
+     // performed.
+     ERROR_TYPE_RESOURCE_EXHAUSTED = 10;
+     // Some precondition for executing this method was not met.
+     ERROR_TYPE_PRECONDITION_FAILED = 11;
+     // Executing this method failed for some reason external to the
+     // governance canister.
+     ERROR_TYPE_EXTERNAL = 12;
+     // A neuron has an ongoing ledger update and thus can't be
+     // changed.
+     ERROR_TYPE_LEDGER_UPDATE_ONGOING = 13;
+     // There wasn't enough funds to perform the operation.
+     ERROR_TYPE_INSUFFICIENT_FUNDS = 14;
+     // The principal provided was invalid.
+     ERROR_TYPE_INVALID_PRINCIPAL = 15;
+     // The proposal's parameters violate size restrictions.
+     ERROR_TYPE_INVALID_PROPOSAL = 16;
+  }
+
+  ErrorType error_type = 1;
+  string error_message = 2;
+}
+
+message Ballot {
+  Vote vote = 1;
+  uint64 voting_power = 2;
+}
+
+// The proposal status, with respect to decision making and execution.
+// See also ProposalRewardStatus.
+enum ProposalStatus {
+  PROPOSAL_STATUS_UNKNOWN = 0;
+
+  // A decision (adopt/reject) has yet to be made.
+  PROPOSAL_STATUS_OPEN = 1;
+
+  // The proposal has been rejected.
+  PROPOSAL_STATUS_REJECTED = 2;
+
+  // The proposal has been adopted (sometimes also called
+  // "accepted"). At this time, either execution as not yet started,
+  // or it has but the outcome is not yet known.
+  PROPOSAL_STATUS_ADOPTED = 3;
+
+  // The proposal was adopted and successfully executed.
+  PROPOSAL_STATUS_EXECUTED = 4;
+
+  // The proposal was adopted, but execution failed.
+  PROPOSAL_STATUS_FAILED = 5;
+}
+
+// The proposal status, with respect to reward distribution.
+// See also ProposalStatus.
+enum ProposalRewardStatus {
+  PROPOSAL_REWARD_STATUS_UNKNOWN = 0;
+
+  // The proposal still accept votes, for the purpose of
+  // vote rewards. This implies nothing on the ProposalStatus.
+  PROPOSAL_REWARD_STATUS_ACCEPT_VOTES = 1;
+
+  // The proposal no longer accepts votes. It is due to settle
+  // at the next reward event.
+  PROPOSAL_REWARD_STATUS_READY_TO_SETTLE = 2;
+
+  // The proposal has been taken into account in a reward event.
+  PROPOSAL_REWARD_STATUS_SETTLED = 3;
+
+  // The proposal is not eligible to be taken into account in a reward event.
+  PROPOSAL_REWARD_STATUS_INELIGIBLE = 4;
+}
+
+// A tally of votes.
+message Tally {
+  // When was this tally made
+  uint64 timestamp_seconds = 1;
+
+  // Yeses, in voting power unit.
+  uint64 yes = 2;
+
+  // Noes, in voting power unit.
+  uint64 no = 3;
+
+  // Total voting power unit of eligible neurons.
+  // Should always be greater than or equal to yes + no.
+  uint64 total = 4;
+}
+
+// A ProposalData contains everything related to an open proposal:
+// the proposal itself (immutable), as well as mutable data such as
+// ballots.
+message ProposalData {
+  // This is stored here temporarily. It is also stored on the map
+  // that contains proposals.
+  //
+  // Immutable: The unique id for this proposal.
+  ic_nns_common.pb.v1.ProposalId id = 1;
+
+  // Immutable: The ID of the neuron that made this proposal.
+  ic_nns_common.pb.v1.NeuronId proposer = 2;
+
+  // Immutable: The amount of ICP in E8s to be charged to the proposer if the
+  // proposal is rejected.
+  uint64 reject_cost_e8s = 3;
+
+  // Immutable: The proposal originally submitted.
+  Proposal proposal = 4;
+
+  // Immutable: The timestamp, in seconds from the Unix epoch, when this proposal
+  // was made.
+  uint64 proposal_timestamp_seconds = 5;
+
+  // Map neuron ID to to the neuron's vote and voting power. Only
+  // present for as long as the proposal is not yet settled with
+  // respect to rewards.
+  map<fixed64, Ballot> ballots = 6;
+
+  // Latest tally. Recomputed for open proposals, when proposals are
+  // processed. If the proposal is decided (not open), then the tally
+  // will never change again. (But the ballots may still change as
+  // neurons may vote after the proposal has been decided.)
+  Tally latest_tally = 7;
+
+  // If specified: the timestamp when this proposal was adopted or
+  // rejected. If not specified, this proposal is still 'open'.
+  uint64 decided_timestamp_seconds = 8;
+
+  // When an adopted proposal has been executed, this is set to
+  // current timestamp.
+  uint64 executed_timestamp_seconds = 12;
+
+  // When an adopted proposal has failed to be executed, this is set
+  // to the current timestamp.
+  uint64 failed_timestamp_seconds = 13;
+
+  // The reward event round at which rewards for votes on this proposal
+  // was distributed.
+  //
+  // Rounds do not have to be consecutive.
+  //
+  // Rounds start at one: a value of zero indicates that
+  // no reward event taking this proposal into consideration happened yet.
+  //
+  // This field matches field day_after_genesis in RewardEvent.
+  uint64 reward_event_round = 14;
+}
+
+// This is a view of the ProposalData returned by API queries and is NOT used
+// for storage. The ballots are restricted to those of the caller's neurons and
+// additionally it has the computed fields, topic, status, and reward_status.
+message ProposalInfo {
+  // The unique id for this proposal.
+  ic_nns_common.pb.v1.ProposalId id = 1;
+
+  // The ID of the neuron that made this proposal.
+  ic_nns_common.pb.v1.NeuronId proposer = 2;
+
+  // The amount of ICP in E8s to be charged to the proposer if the proposal is
+  // rejected.
+  uint64 reject_cost_e8s = 3;
+
+  // The proposal originally submitted.
+  Proposal proposal = 4;
+
+  // The timestamp, in seconds from the Unix epoch, when this proposal was made.
+  uint64 proposal_timestamp_seconds = 5;
+
+  // See [PropopsalData::ballots].
+  map<fixed64, Ballot> ballots = 6;
+
+  // See [PropopsalData::latest_tally].
+  Tally latest_tally = 7;
+
+  // See [PropopsalData::decided_timestamp_seconds].
+  uint64 decided_timestamp_seconds = 8;
+
+  // See [PropopsalData::executed_timestamp_seconds].
+  uint64 executed_timestamp_seconds = 12;
+
+  // See [PropopsalData::failed_timestamp_seconds].
+  uint64 failed_timestamp_seconds = 13;
+
+  // See [PropopsalData::reward_event_round].
+  uint64 reward_event_round = 14;
+
+  // Derived - see [Topic] for more information
+  Topic topic = 15;
+
+  // Derived - see [ProposalStatus] for more information
+  ProposalStatus status = 16;
+
+  // Derived - see [ProposalRewardStatus] for more information
+  ProposalRewardStatus reward_status = 17;
+}
+
+// Network economics contains the parameters for several operations related
+// to the economy of the network. When submitting a NetworkEconomics proposal
+// default values (0) are considered unchanged, so a valid proposal only needs
+// to set the parameters that it wishes to change.
+// In other words, it's not possible to set any of the values of
+// NetworkEconomics to 0.
+//
+// NOTE: If adding a value to this proto, make sure there is a corresponding
+// `if` in Governance::perform_action().
+message NetworkEconomics {
+  reserved 3, 7;
+  // The number of E8s (10E-8 of an ICP token) that a rejected
+  // proposal will cost.
+  //
+  // This fee should be controlled by an #Economic proposal type.
+  // The fee does not apply for ManageNeuron proposals.
+  uint64 reject_cost_e8s = 1;
+
+  // The minium number of E8s that can be staked in a neuron.
+  uint64 neuron_minimum_stake_e8s = 2;
+
+  // The number of E8s (10E-8 of an ICP token) that it costs to
+  // employ the 'manage neuron' functionality through proposals. The
+  // cost is incurred by the neuron that makes the 'manage neuron'
+  // proposal and is applied regardless of whether the proposal is
+  // adopted or rejected.
+  uint64 neuron_management_fee_per_proposal_e8s = 4;
+
+  // The minimum number that the ICP/XDR conversion rate can be set to.
+  //
+  // Measured in XDR (the currency code of IMF SDR) to two decimal
+  // places.
+  //
+  // See /rs/protobuf/def/registry/conversion_rate/v1/conversion_rate.proto
+  // for more information on the rate itself.
+  uint64 minimum_icp_xdr_rate = 5;
+
+  // The dissolve delay of a neuron spawned from the maturity of an
+  // existing neuron.
+  uint64 neuron_spawn_dissolve_delay_seconds = 6;
+
+  // The maximum rewards to be distributed to NodeProviders in a single
+  // distribution event, in e8s.
+  uint64 maximum_node_provider_rewards_e8s = 8;
+
+  // The transaction fee that must be paid for each ledger transaction.
+  uint64 transaction_fee_e8s = 9;
+
+  // The maximum number of proposals to keep, per topic. When the
+  // total number of proposals for a given topic is greater than this
+  // number, the oldest proposals that have reached a "final" state
+  // may be deleted.
+  //
+  // If unspecified or zero, all proposals are kept.
+  uint32 max_proposals_to_keep_per_topic = 10;
+}
+
+// A reward event is an event at which neuron maturity is increased
+message RewardEvent {
+  // This reward event correspond to a time interval that ends at the end of
+  // genesis + day_after_genesis days.
+  //
+  // For instance: when this is 0, this is for a period that ends at genesis -- there can
+  // never be a reward for this.
+  //
+  // When this is 1, this is for the first day after genesis.
+  //
+  // On rare occasions, the reward event may cover several days ending at genesis + day_after_genesis days,
+  // when it was not possible to proceed to a reward event for a while. This makes that day_after_genesis
+  // does not have to be consecutive.
+  uint64 day_after_genesis = 1;
+
+  // The timestamp at which this reward event took place, in seconds since the unix epoch.
+  //
+  // This does not match the date taken into account for reward computation, which
+  // should always be an integer number of days after genesis.
+  uint64 actual_timestamp_seconds = 2;
+
+  // The list of proposals that were taken into account during
+  // this reward event.
+  repeated ic_nns_common.pb.v1.ProposalId settled_proposals = 3;
+
+  // The total amount of reward that was distributed during this reward event.
+  //
+  // The unit is "e8s equivalent" to insist that, while this quantity is on
+  // the same scale as ICPs, maturity is not directly convertible to ICPs:
+  // conversion requires a minting event to spawn a new neuron.
+  uint64 distributed_e8s_equivalent = 4;
+}
+
+// This represents the whole NNS governance system. It contains all
+// information about the NNS governance system that must be kept
+// across upgrades of the NNS governance system.
+message Governance {
+  // Current set of neurons.
+  map<fixed64, Neuron> neurons = 1;
+  // Proposals.
+  map<uint64, ProposalData> proposals = 2;
+  // The transfers that have been made to stake new neurons, but
+  // haven't been claimed by the user, yet.
+  repeated NeuronStakeTransfer to_claim_transfers = 3;
+  // Also known as the 'normal voting period'. The maximum time a
+  // proposal (of a topic with "normal" voting period) is open for
+  // voting. If a proposal has not been decided (adopted or rejected)
+  // within this time since the proposal was made, the proposal is
+  // rejected.
+  //
+  // See also `short_voting_period_seconds`.
+  uint64 wait_for_quiet_threshold_seconds = 5;
+  // The authz information for the governance canister.
+  ic_nns_common.pb.v1.CanisterAuthzInfo authz = 6;
+  // The network economics configuration parameters.
+  NetworkEconomics economics = 8;
+  // The last reward event. Should never be missing.
+  RewardEvent latest_reward_event = 9;
+
+  // The possible commands that require interaction with the ledger.
+  message NeuronInFlightCommand {
+    // The timestamp at which the command was issued, for debugging
+    // purposes.
+    uint64 timestamp = 1;
+    oneof command {
+      ManageNeuron.Disburse disburse = 2;
+      ManageNeuron.Split split = 3;
+      ManageNeuron.Spawn spawn = 4;
+      ManageNeuron.DisburseToNeuron disburse_to_neuron = 5;
+    }
+  }
+
+  // Set of in-flight neuron ledger commands.
+  //
+  // Whenever we issue a ledger transfer (for disburse, split, spawn etc)
+  // we store it in this map, keyed by the id of the neuron being changed
+  // and remove the entry when it completes.
+  //
+  // An entry being present in this map acts like a "lock" on the neuron
+  // and thus prevents concurrent changes that might happen due to the
+  // interleaving of user requests and callback execution.
+  //
+  // If there are no ongoing requests, this map should be empty.
+  //
+  // If something goes fundamentally wrong (say we trap at some point
+  // after issueing a transfer call) the neuron(s) involved are left in a
+  // "locked" state, meaning new operations can't be applied without
+  // reconciling the state.
+  //
+  // Because we know exactly what was going on, we should have the
+  // information necessary to reconcile the state, using custom code
+  // added on upgrade, if necessary.
+  map<fixed64, NeuronInFlightCommand> in_flight_commands = 10;
+
+  // The timestamp, in seconds since the unix epoch, at which `canister_init` was run for
+  // the governance canister, considered
+  // the genesis of the IC for reward purposes.
+  uint64 genesis_timestamp_seconds = 11;
+
+  // The entities that own the nodes running the IC.
+  repeated NodeProvider node_providers = 12;
+
+  // Default followees
+  //
+  // A map of Topic (as i32) to Neuron id that is set as the default
+  // following for all neurons created post-genesis.
+  //
+  // On initialization it's required that the Neurons present in this
+  // map are present in the initial set of neurons.
+  //
+  // Default following can be changed via proposal.
+  map<int32, Neuron.Followees> default_followees = 13;
+
+  // The maximum time a proposal of a topic with *short voting period*
+  // is open for voting. If a proposal on a topic with short voting
+  // period has not been decided (adopted or rejected) within this
+  // time since the proposal was made, the proposal is rejected.
+  uint64 short_voting_period_seconds = 14;
+}
+
+// Proposals with restricted voting are not included unless the caller
+// is allowed to vote on them.
+//
+// The actual ballots of the proposal are restricted to ballots cast
+// by the caller.
+message ListProposalInfo {
+  // Limit on the number of [ProposalInfo] to return. If no value is
+  // specified, or if a value greater than 100 is specified, 100
+  // will be used.
+  uint32 limit = 1;
+  // If specified, only return proposals that are stricty earlier than
+  // the specified proposal according to the proposal ID. If not
+  // specified, start with the most recent proposal.
+  ic_nns_common.pb.v1.ProposalId before_proposal = 2;
+  // Exclude proposals with a topic in this list. This is particularly
+  // useful to exclude proposals on the topics TOPIC_EXCHANGE_RATE and
+  // TOPIC_KYC which most users are not likely to be interested in
+  // seeing.
+  repeated Topic exclude_topic = 3;
+  // Include proposals that have a reward status in this list (see
+  // [ProposalRewardStatus] for more information). If this list is
+  // empty, no restriction is applied. For example, many users listing
+  // proposals will only be interested in proposals for which they can
+  // receive voting rewards, i.e., with reward status
+  // PROPOSAL_REWARD_STATUS_ACCEPT_VOTES.
+  repeated ProposalRewardStatus include_reward_status = 4;
+  // Include proposals that have a status in this list (see
+  // [ProposalStatus] for more information). If this list is empty, no
+  // restriction is applied.
+  repeated ProposalStatus include_status = 5;
+}
+
+message ListProposalInfoResponse {
+  repeated ProposalInfo proposal_info = 1;
+}
+
+// A request to list neurons. The "requested list", i.e., the list of
+// neuron IDs to retrieve information about, is the union of the list
+// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
+// the list of neuron IDs of neurons for which the caller is the
+// controller or one of the hot keys.
+message ListNeurons {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+  // The neurons to get information about. The "requested list"
+  // contains all of these neuron IDs.
+  repeated fixed64 neuron_ids = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  // If true, the "requested list" also contains the neuron ID of the
+  // neurons that the calling principal is authorized to read.
+  bool include_neurons_readable_by_caller = 2 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+}
+
+// A response to a `ListNeurons` request.
+//
+// The "requested list" is described in `ListNeurons`.
+message ListNeuronsResponse {
+  // For each neuron ID in the "requested list", if this neuron exists,
+  // its `NeuronInfo` at the time of the call will be in this map.
+  map<fixed64, NeuronInfo> neuron_infos = 1;
+  // For each neuron ID in the "requested list", if the neuron exists,
+  // and the caller is authorized to read the full neuron (controller,
+  // hot key, or controller or hot key of some followee on the
+  // `ManageNeuron` topic).
+  repeated Neuron full_neurons = 2;
+}

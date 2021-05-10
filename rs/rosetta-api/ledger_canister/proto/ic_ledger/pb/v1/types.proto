@@ -1,0 +1,292 @@
+syntax = "proto3";
+
+package ic_ledger.pb.v1;
+
+import "ic_base_types/pb/v1/types.proto";
+
+// Annotations related to the use of hardware wallets. The annotated messages are
+// parsed on hardware wallets and marked fields are displayed in a trusted user
+// interface (TUI). We must not, for instance, add fields that would change the
+// semantics of the message such that old hardware wallets would not display
+// appropriate information to users.
+
+// ** LEDGER CANISTER ENDPOINTS
+
+// Initialise the ledger canister
+message LedgerInit {
+  AccountIdentifier minting_account = 1;
+  repeated Account initial_values = 2;
+  ic_base_types.pb.v1.PrincipalId archive_canister = 3;
+  uint32 max_message_size_bytes = 4;
+}
+
+
+// The format of values serialized to/from the stable memory during and upgrade
+message LedgerUpgrade {
+}
+
+
+// Make a payment
+message SendRequest {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+  Memo memo = 1                  [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Payment payment = 2            [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  ICPTs max_fee = 3              [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Subaccount from_subaccount = 4 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  AccountIdentifier to = 5       [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  BlockHeight created_at = 6;
+  TimeStamp created_at_time = 7;
+}
+
+message SendResponse {
+  BlockHeight resulting_height = 1;
+}
+
+// Notify a canister that it has recieved a payment
+message NotifyRequest {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+  BlockHeight block_height = 1                    [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  ICPTs max_fee = 2                               [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Subaccount from_subaccount = 3                  [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  ic_base_types.pb.v1.PrincipalId to_canister = 4 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Subaccount to_subaccount = 5                    [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+}
+
+message NotifyResponse {
+}
+
+message TransactionNotificationRequest {
+  ic_base_types.pb.v1.PrincipalId from = 1;
+  Subaccount from_subaccount = 2;
+  ic_base_types.pb.v1.PrincipalId to = 3;
+  Subaccount to_subaccount = 4;
+  BlockHeight block_height = 5;
+  ICPTs amount = 6;
+  Memo memo = 7;
+}
+
+message TransactionNotificationResponse {
+  bytes response = 1;
+}
+
+message CyclesNotificationResponse {
+  oneof response {
+    ic_base_types.pb.v1.PrincipalId created_canister_id = 1;
+    Refund refund = 2;
+    ToppedUp topped_up = 3;
+  }
+}
+
+// Get the balance of an account
+message AccountBalanceRequest  {
+  AccountIdentifier account = 1;
+}
+
+message AccountBalanceResponse {
+  ICPTs balance = 1;
+}
+
+// Get the length of the chain with a certification
+message TipOfChainRequest {
+}
+
+message TipOfChainResponse {
+  Certification certification = 1;
+  BlockHeight chain_length = 2;
+}
+
+// How many ICPTs are there not in the minting account
+message TotalSupplyRequest {
+}
+
+message TotalSupplyResponse {
+  ICPTs total_supply = 1;
+}
+
+// Archive any blocks older than this
+message LedgerArchiveRequest {
+  TimeStamp timestamp = 1;
+}
+
+// * Shared Endpoints *
+
+// Get a single block
+message BlockRequest {
+  uint64 block_height = 1;
+}
+
+message EncodedBlock {
+  bytes block = 1;
+}
+
+message BlockResponse {
+  oneof block_content {
+    EncodedBlock block = 1;
+    ic_base_types.pb.v1.PrincipalId canister_id = 2;
+  }
+}
+
+// Get a set of blocks
+message GetBlocksRequest {
+  uint64 start = 1;
+  uint64 length = 2;
+}
+
+message Refund {
+  BlockHeight refund = 2;
+  string error = 3;
+}
+
+message ToppedUp {
+}
+
+message EncodedBlocks {
+    repeated EncodedBlock blocks = 1;
+}
+
+message GetBlocksResponse {
+  oneof get_blocks_content {
+    EncodedBlocks blocks = 1;
+    string error = 2;
+  }
+}
+
+// Iterate through blocks
+message IterBlocksRequest {
+  uint64 start = 1;
+  uint64 length = 2;
+}
+
+message IterBlocksResponse {
+  repeated EncodedBlock blocks = 1;
+}
+
+message ArchiveIndexEntry {
+  uint64 height_from = 1;
+  uint64 height_to = 2;
+  ic_base_types.pb.v1.PrincipalId canister_id = 3;
+}
+
+message ArchiveIndexResponse {
+  repeated ArchiveIndexEntry entries = 1;
+}
+
+
+// ** ARCHIVE CANISTER ENDPOINTS **
+
+// * Archive canister *
+// Init the archive canister
+message ArchiveInit {
+  uint32 node_max_memory_size_bytes = 1;
+  uint32 max_message_size_bytes = 2;
+}
+
+
+// Add blocks to the archive canister
+message ArchiveAddRequest {
+  repeated Block blocks = 1;
+}
+
+message ArchiveAddResponse {
+}
+
+
+// Fetch a list of all of the archive nodes
+message GetNodesRequest {
+}
+
+message GetNodesResponse {
+  repeated ic_base_types.pb.v1.PrincipalId nodes = 1;
+}
+
+
+// ** BASIC TYPES **
+message ICPTs {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+  uint64 e8s = 1       [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+
+}
+
+message Payment {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+  ICPTs receiver_gets = 1      [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+
+}
+
+message BlockHeight {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+  uint64 height = 1      [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+}
+
+
+// This is the
+message Block {
+  Hash parent_hash = 1;
+  TimeStamp timestamp = 2;
+  Transaction transaction = 3;
+}
+
+message Hash {
+  bytes hash = 1;
+}
+
+message Account {
+  AccountIdentifier identifier = 1;
+  ICPTs balance = 2;
+}
+
+message Transaction {
+  oneof transfer {
+    Burn burn = 1;
+    Mint mint = 2;
+    Send send = 3;
+  }
+  Memo memo = 4;
+  BlockHeight created_at = 5; // obsolete
+  TimeStamp created_at_time = 6;
+}
+
+message Send {
+  AccountIdentifier from = 1;
+  AccountIdentifier to = 2;
+  ICPTs amount = 3;
+  ICPTs max_fee = 4;
+}
+
+message Mint {
+  AccountIdentifier to = 2;
+  ICPTs amount = 3;
+}
+
+message Burn {
+  AccountIdentifier from = 1;
+  ICPTs amount = 3;
+}
+
+
+message AccountIdentifier {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+  bytes hash = 1        [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+
+}
+
+message Subaccount {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+  bytes sub_account = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+
+}
+
+message Memo {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+  uint64 memo = 1       [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+
+}
+
+message TimeStamp {
+  uint64 timestamp_nanos = 1;
+}
+
+message Certification {
+  bytes certification = 1;
+}
+

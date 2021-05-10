@@ -1,0 +1,32 @@
+[package]
+name = "memory_tracker"
+version = "0.8.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bit-vec = "0.5"
+byteorder = "1.3.4"
+ic-logger = { path = "../monitoring/logger" }
+ic-sys = { path = "../sys" }
+ic-utils = { path = "../utils" }
+libc = "0.2.91"
+nix = "0.20.0"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog-scope = "4.1.2"
+lazy_static = "1.4.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+mach = "0.3.2"
+
+[features]
+default = []
+sigsegv_handler_debug = []
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "traps"
+harness = false

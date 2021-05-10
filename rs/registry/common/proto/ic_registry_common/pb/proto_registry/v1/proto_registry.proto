@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+import "google/protobuf/wrappers.proto";
+
+package ic_registry_common.pb.proto_registry.v1;
+
+message ProtoRegistry { repeated ProtoRegistryRecord records = 1; }
+
+message ProtoRegistryRecord {
+  string key = 1;
+  uint64 version = 2;
+  google.protobuf.BytesValue value = 3;
+}

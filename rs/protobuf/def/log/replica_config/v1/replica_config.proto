@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package log.replica_config.v1;
+
+message ReplicaConfig {
+  bytes node_id = 1;
+  reserved 2;    // this is from subnet_id being a uint64
+  bytes subnet_id = 3;
+}

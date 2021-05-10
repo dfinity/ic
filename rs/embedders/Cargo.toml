@@ -1,0 +1,50 @@
+[package]
+name = "ic-embedders"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.31"
+clap = "2.33.3"
+crossbeam-channel = "0.5.0"
+ic-config = { path = "../config" }
+ic-cow-state = { path = "../cow_state" }
+ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-interfaces = { path = "../interfaces" }
+ic-logger = { path = "../monitoring/logger" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-sys = { path = "../sys" }
+ic-system-api = { path = "../system_api" }
+ic-types = { path = "../types/types" }
+ic-utils = { path = "../utils" }
+ic-wasm-types = { path = "../types/wasm_types" }
+ic-wasm-utils = { path = "../wasm_utils" }
+ipc-channel = "0.14.1"
+lazy_static = "1.4.0"
+libc = "0.2.91"
+memory_tracker = { path = "../memory_tracker" }
+nix = "0.20.0"
+rand = "0.7.3"
+regex = "1.3.9"
+serde = { version = "1.0.99", features = [ "derive" ] }
+serde_json = "1.0.40"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+target-lexicon = { version = "0.10.0", default-features = false }
+tempfile = "3.1.0"
+wasmtime = "0.22.0"
+wasmtime-environ = "0.22.0"
+wasmtime-runtime = "0.22.0"
+
+[dev-dependencies]
+ic-registry-routing-table = { path = "../registry/routing_table" }
+ic-system-api = { path = "../system_api" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-wasm-utils = { path = "../wasm_utils" }
+maplit = "1.0.2"
+parity-wasm = { version = "0.42.1", features = [ "std", "multi_value" ] }
+proptest = "0.9.4"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog-async = "2.5.0"
+slog-term = "2.6.0"
+# TODO(EXC-220)
+wabt = { git = "https://github.com/dfinity-lab/wabt-rs", rev = "b4d778802976f10494411388e48a784d4d015bbb" }

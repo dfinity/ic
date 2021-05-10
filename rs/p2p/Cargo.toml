@@ -1,0 +1,48 @@
+[package]
+name = "ic-p2p"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+futures = "0.3.10"
+async-trait = "0.1.36"
+actix = "0.10.0"
+tokio = { version = "0.2.22", features = ["full"] }
+enum-map = "0.6.2"
+lru = { version = "0.6.0", default-features = false }
+ic-base-thread = { path = "../base/thread" }
+ic-config = { path = "../config" }
+ic-crypto = { path = "../crypto" }
+ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-ingress-manager = { path = "../ingress_manager" }
+ic-interfaces = { path = "../interfaces" }
+ic-types = { path = "../types/types" }
+ic-protobuf = { path = "../protobuf" }
+ic-artifact-pool = { path = "../artifact_pool" }
+ic-artifact-manager = { path = "../artifact_manager" }
+ic-logger = { path = "../monitoring/logger" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-consensus = { path = "../consensus" }
+ic-registry-client = { path = "../registry/client" }
+ic-state-manager = { path = "../state_manager" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+bincode = "1.2.1"
+crossbeam-channel = "0.5.0"
+linked-hash-map = "0.5.3"
+prometheus = { version = "0.9.0", features = [ "process" ] }
+serde = { version = "1.0.99", features = [ "derive" ] }
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+strum = "0.18.0"
+strum_macros = "0.18.0"
+
+[dev-dependencies]
+ic-consensus-message = { path = "../consensus/message" }
+ic-execution-environment = { path = "../execution_environment" }
+ic-registry-common = { path = "../registry/common" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-logger = { path = "../monitoring/logger" }
+ic-transport = { path = "../transport" }
+mockall = "0.7.2"
+tempfile = "3.1.0"
+proptest = "0.9.4"

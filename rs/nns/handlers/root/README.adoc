@@ -1,0 +1,4 @@
+This is the handler for NNS canister Upgrades proposals.
+
+It is called the _root_ because, since it must be able to upgrade NNS canisters, it must control them.
+However, the root does not control itself: it is intended that the root controls the _lifeline_, which in turns controls the root.

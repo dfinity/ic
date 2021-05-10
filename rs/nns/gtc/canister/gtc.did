@@ -1,0 +1,28 @@
+type AccountState = record {
+  authenticated_principal_id : opt principal;
+  successfully_transferred_neurons : vec TransferredNeuron;
+  has_donated : bool;
+  failed_transferred_neurons : vec TransferredNeuron;
+  neuron_ids : vec NeuronId;
+  has_claimed : bool;
+  has_forwarded : bool;
+  icpts : nat32;
+};
+type NeuronId = record { id : nat64 };
+type Result = variant { Ok : vec NeuronId; Err : text };
+type Result_1 = variant { Ok; Err : text };
+type Result_2 = variant { Ok : AccountState; Err : text };
+type TransferredNeuron = record {
+  error : opt text;
+  timestamp_seconds : nat64;
+  neuron_id : opt NeuronId;
+};
+service : {
+  balance : (text) -> (nat32) query;
+  claim_neurons : (text) -> (Result);
+  donate_account : (text) -> (Result_1);
+  forward_all_unclaimed_accounts : (null) -> (Result_1);
+  get_account : (text) -> (Result_2) query;
+  len : () -> (nat16) query;
+  total : () -> (nat32) query;
+}

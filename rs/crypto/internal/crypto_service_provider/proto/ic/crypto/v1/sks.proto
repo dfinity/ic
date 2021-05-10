@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package ic.crypto.v1;
+
+message SecretKeyV1 {
+  // CBOR serialization of `CspSecretKey`
+  bytes csp_secret_key = 1;
+
+  // Rust's `to_string()` of `Scope`
+  string scope = 2;
+}
+// SecretKeyStore stores secret keys.
+message SecretKeyStore {
+  // Mapping from KeyId to serialised CspSecretKey.
+  map<string, bytes> key_id_to_csp_secret_key = 1;
+
+  // Version of SecretKeyStore
+  uint32 version = 2;
+
+  // Mapping from KeyId to SecretKeyV1.
+  // `KeyId` is represented as a hex-string (32 bytes).
+  map<string, SecretKeyV1> key_id_to_secret_key_v1 = 3;
+}

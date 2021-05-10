@@ -1,0 +1,46 @@
+syntax = "proto3";
+import "google/protobuf/wrappers.proto";
+
+package types.v1;
+
+message PrincipalId {
+	bytes raw = 1;
+}
+
+message CanisterId {
+	PrincipalId principal_id = 1;
+}
+
+message SubnetId {
+	PrincipalId principal_id = 1;
+}
+
+message UserId {
+	PrincipalId principal_id = 1;
+}
+
+message NodeId {
+	PrincipalId principal_id = 1;
+}
+
+// A non-interactive distributed key generation (NI-DKG) ID.
+message NiDkgId {
+	reserved "receiver_subnet";
+	reserved 3; // this is from receiver_subnet consisting of bytes
+	uint64 start_block_height = 1;
+	bytes dealer_subnet = 2;
+	NiDkgTag dkg_tag = 4;
+	google.protobuf.BytesValue remote_target_id = 5;
+}
+
+// A non-interactive distributed key generation (NI-DKG) tag.
+enum NiDkgTag {
+	NI_DKG_TAG_UNSPECIFIED = 0;
+	NI_DKG_TAG_LOW_THRESHOLD = 1;
+	NI_DKG_TAG_HIGH_THRESHOLD = 2;
+}
+
+message NominalCycles {
+    uint64 high = 1;
+    uint64 low = 2;
+}

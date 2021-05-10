@@ -1,0 +1,22 @@
+type NeuronId = nat64;
+
+service : {
+  canister_status: (record {canister_id: principal;}) ->
+   (record {
+      controller: principal;
+      memory_size: nat;
+      module_hash: opt blob;
+      status: variant {
+                running;
+                stopped;
+                stopping;
+              };
+    });
+  submit_upgrade_root_proposal:
+   (neuron_id: NeuronId,
+    proposal: record {
+      module_arg: blob;
+      stop_upgrade_start: bool;
+      wasm_module: blob;
+    }) -> (nat64);
+}

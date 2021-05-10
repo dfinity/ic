@@ -1,0 +1,15 @@
+[package]
+name = "xnet-test"
+version = "0.8.0"
+edition = "2018"
+
+[[bin]]
+name = "xnet-test-canister"
+path = "src/main.rs"
+
+[dependencies]
+candid = "0.6.15"
+dfn_core = { path = "../dfn_core" }
+rand = "0.7.3"
+rand_pcg = "0.2.1"
+serde = "1.0"

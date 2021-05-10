@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Starts the Docker container and mounts some local folders as volumes for caching purposes.
+# The purpose of this script is to replicate the CI environment.
+#
+# Example usage:
+# REPO_ROOT $ ./gitlab-ci/tools/docker-run
+
+set -eEuo pipefail
+
+REPO_ROOT="$(
+    cd "$(dirname "$0")"
+    git rev-parse --show-toplevel
+)"
+
+source "$REPO_ROOT/gitlab-ci/docker/docker-run-include"
+
+if $DEBUG; then set -x; fi
+
+docker run --rm -it "${DOCKER_RUN_ARGS[@]}" "$IMAGE" "${@:-bash}"

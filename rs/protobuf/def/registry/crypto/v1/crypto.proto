@@ -1,0 +1,35 @@
+// Protobuf definitions describing all value types stored in the registry.
+syntax = "proto3";
+package registry.crypto.v1;
+import "google/protobuf/wrappers.proto";
+
+// An algorithm ID. This is used to specify the signature algorithm associated with a public key.
+enum AlgorithmId {
+  ALGORITHM_ID_UNSPECIFIED = 0;
+  ALGORITHM_ID_MULTI_BLS12_381 = 1;
+  ALGORITHM_ID_THRES_BLS12_381 = 2;
+  ALGORITHM_ID_SCHNORR_SECP256K1 = 3;
+  ALGORITHM_ID_STATIC_DH_SECP256K1 = 4;
+  ALGORITHM_ID_HASH_SHA256 = 5;
+  ALGORITHM_ID_TLS = 6;
+  ALGORITHM_ID_ED25519 = 7;
+  ALGORITHM_ID_SECP256K1 = 8;
+  ALGORITHM_ID_GROTH20_BLS12_381 = 9;
+  ALGORITHM_ID_NIDKG_GROTH20_BLS12_381 = 10;
+  ALGORITHM_ID_ECDSA_P256 = 11;
+  ALGORITHM_ID_ECDSA_SECP_256K1 = 12;
+  ALGORITHM_ID_IC_CANISTER_SIGNATURE = 13;
+}
+
+// A public key. Described by its `AlgorithmId`, the key's value and proof data holding, e.g., a proof of possession (PoP).
+message PublicKey {
+  uint32 version = 1;
+  AlgorithmId algorithm = 2;
+  bytes key_value = 3;
+  google.protobuf.BytesValue proof_data = 4;
+}
+
+// DER-encoded X509 public key certificate
+message X509PublicKeyCert {
+  bytes certificate_der = 1;
+}

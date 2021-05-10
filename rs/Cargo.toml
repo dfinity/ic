@@ -1,0 +1,123 @@
+[workspace]
+
+members = [
+  "artifact_manager",
+  "artifact_pool",
+  "base/server",
+  "base/thread",
+  "canister_client",
+  "cycles_account_manager",
+  "canonical_state",
+  "certified_vars",
+  "config",
+  "consensus",
+  "consensus/message",
+  "cow_state",
+  "crypto",
+  "crypto/internal/crypto_lib/basic_sig/der_utils",
+  "crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
+  "crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
+  "crypto/internal/crypto_lib/basic_sig/ecdsa_secp256_wycheproof_tests",
+  "crypto/internal/crypto_lib/basic_sig/ed25519",
+  "crypto/internal/crypto_lib/basic_sig/iccsa",
+  "crypto/internal/crypto_lib/bls12_381/serde/miracl",
+  "crypto/internal/crypto_lib/bls12_381/common",
+  "crypto/internal/crypto_lib/fs_ni_dkg",
+  "crypto/internal/crypto_lib/multi_sig/bls12_381",
+  "crypto/internal/crypto_lib/threshold_sig/bls12_381",
+  "crypto/internal/crypto_lib/tls",
+  "crypto/internal/crypto_lib/types",
+  "crypto/internal/crypto_service_provider",
+  "crypto/internal/logmon",
+  "crypto/internal/test_vectors",
+  "crypto/key_validation",
+  "crypto/sha256",
+  "crypto/tls_interfaces",
+  "crypto/tls",
+  "crypto/tree_hash",
+  "crypto/utils/basic_sig",
+  "crypto/utils/threshold_sig",
+  "embedders",
+  "execution_environment",
+  "http_handler",
+  "http_utils",
+  "ingress_manager",
+  "interfaces",
+  "memory_tracker",
+  "messaging",
+  "monitoring/context_logger",
+  "monitoring/logger",
+  "monitoring/metrics",
+  "monitoring/metrics_exporter",
+  "nns/constants",
+  "nns/common",
+  "nns/handlers/lifeline",
+  "nns/handlers/root",
+  "nns/identity",
+  "nns/governance",
+  "nns/nns-ui",
+  "nns/gtc",
+  "nns/gtc_accounts",
+  "nodemanager",
+  "p2p",
+  "phantom_newtype",
+  "protobuf",
+  "registry/canister",
+  "registry/client",
+  "registry/common",
+  "registry/keys",
+  "registry/provisional_whitelist",
+  "registry/routing_table",
+  "registry/subnet_type",
+  "registry/transport",
+  "release",
+  "replica",
+  "replicated_state",
+  "rosetta-api/ledger_canister",
+  "rosetta-api/cycles_minting_canister",
+  "runtime",
+  "rust_canisters/dfn_core",
+  "rust_canisters/dfn_candid",
+  "rust_canisters/dfn_http",
+  "rust_canisters/dfn_macro",
+  "rust_canisters/dfn_protobuf",
+  "rust_canisters/on_wire",
+  "rust_canisters/xnet_test",
+  "state_manager",
+  "state_layout",
+  "sys",
+  "system_api",
+  "transport",
+  "tree_deserializer",
+  "types/types",
+  "types/base_types",
+  "types/error_types",
+  "types/ic00_types",
+  "types/wasm_types",
+  "utils",
+  "validator",
+  "wasm_utils",
+]
+
+exclude = [
+  "universal_canister/impl",
+]
+
+[profile.release]
+# Add debug information to the release build (does NOT reduce the level of optimization!)
+# Makes flamegraphs more readable.
+# https://doc.rust-lang.org/cargo/reference/manifest.html#the-profile-sections
+debug = true
+
+[profile.dev.package.miracl_core_bls12381]
+# Optimise the miracl_core_bls12381 cryptographic library, or else NiDKG tests take 4 hours.
+opt-level = 3
+
+[patch.crates-io.ic-types]
+version = "0.1.2"
+git = "https://github.com/dfinity/agent-rs.git"
+rev = "6652a800969e7e09ecdf40ed16a2d78abecde7d3"
+
+
+[patch.crates-io]
+raw-cpuid812 = { package="raw-cpuid", version="8.1.2", git = "https://github.com/dfinity-lab/rust-cpuid.git", rev = "03c258337c387dbf559778ba3cb886d45ed46b24"}

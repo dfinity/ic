@@ -1,0 +1,9 @@
+[package]
+name = "ic-base-server"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+tokio = { version = "0.2.23", features = ["macros", "signal"] }
+slog = "2.5.2"
+

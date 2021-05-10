@@ -1,0 +1,22 @@
+syntax = "proto3";
+package registry.node_operator.v1;
+
+// A record for a node operator. Each node operator is associated with a
+// unique principal id, a.k.a. NOID.
+//
+// Note that while a node operator might host nodes for more than
+// one funding parter, its principal ID must be unique.
+message NodeOperatorRecord {
+  // The principal id of the node operator. This principal is the entity that
+  // is able to add and remove nodes.
+  //
+  // This must be unique across NodeOperatorRecords.
+  bytes node_operator_principal_id = 1;
+  
+  // The remaining number of nodes that could be added by this node operator.
+  // This number should never go below 0.
+  uint64 node_allowance = 2;
+
+  // The principal id of this node operator's provider.
+  bytes node_provider_principal_id = 3;
+}

@@ -1,0 +1,9 @@
+This is a collection of types that are used by both the http_handler and Canisters, to send and receive messages from the http gateway.
+
+This allows you to build canisters which act like regular web servers and communicate over almost unadulterated HTTP.
+
+Currently this significantly deviates from the public spec in that the HTTP requests are structured, where in the spec they are simply the received byte arrays.
+
+The reason for this is that the requests often arrive in a number of chunks, working out whether all of the chunks have arrived is not simple and putting them back together in correctly is also difficult. The server also often has to send messages to keep the chunks flowing, doing this on though consensus is impractically slow and impossible on stateless query calls.
+
+I'm not completely happy with this as a solution, so it may change dramatically in the not too distant future.

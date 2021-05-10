@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package log.p2p_log_entry.v1;
+
+import "google/protobuf/wrappers.proto";
+
+message P2PLogEntry {
+  google.protobuf.StringValue event = 1;
+  google.protobuf.UInt64Value src = 2;
+  google.protobuf.UInt64Value dest = 3;
+  google.protobuf.StringValue artifact_id = 4;
+  google.protobuf.StringValue chunk_id = 5;
+  google.protobuf.StringValue advert = 6;
+  google.protobuf.StringValue request = 7;
+  google.protobuf.StringValue artifact = 8;
+  google.protobuf.UInt64Value height = 9;
+  google.protobuf.UInt64Value disconnect_elapsed = 10;
+}

@@ -1,0 +1,22 @@
+syntax = "proto3";
+package registry.nns.v1;
+import "types/v1/types.proto";
+
+// Information about an NNS canister.
+//
+// Corresponding mutations are handled by the `root` handler:
+// See /rs/nns/handlers/root
+message NnsCanisterRecord {
+    types.v1.CanisterId id = 1;
+}
+
+// All of the post-genesis NNS canisters.
+//
+// There is a number of NNS canisters that exist at genesis. Those are not installed through
+// proposals, and are not reflected in the registry. After genesis, new NNS canisters can only
+// be added through proposals (see AddNnsCanisterProposalPayload in particular). NNS canisters
+// added post-genesis are registered in this record.
+message NnsCanisterRecords {
+    // Mapping name (arbitrary string) -> canister id.
+    map<string, NnsCanisterRecord> canisters = 1;
+}

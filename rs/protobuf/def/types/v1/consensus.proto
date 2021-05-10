@@ -1,0 +1,96 @@
+// Protocol buffer wrapper for catch up packages to allow forward compatible signature verification.
+
+syntax = "proto3";
+package types.v1;
+
+import "types/v1/types.proto";
+import "types/v1/dkg.proto";
+import "messaging/xnet/v1/certified_stream_slice.proto";
+
+message CatchUpPackage {
+	bytes content = 1;
+	bytes signature = 2;
+	NiDkgId signer = 3;
+}
+
+message CatchUpContent {
+	Block block = 1;
+	RandomBeacon random_beacon = 2;
+	bytes state_hash = 3;
+	bytes block_hash = 4;
+	bytes random_beacon_hash = 5;
+}
+
+message Block {
+	string version = 1;
+	bytes parent = 2;
+	DkgPayload dkg_payload = 3;
+	uint64 height = 4;
+	uint64 rank = 5;
+	// ValidationContext
+	uint64 time = 6;
+	uint64 registry_version = 7;
+	uint64 certified_height = 8;
+	// Payloads
+	IngressPayload ingress_payload = 9;
+	XNetPayload xnet_payload = 10;
+	bytes payload_hash = 11;
+}
+
+message BlockProposal {
+	bytes hash = 1;
+	Block value = 2;
+	bytes signature = 3;
+	bytes signer = 4;
+}
+
+message RandomBeacon {
+	string version = 1;
+	uint64 height = 2;
+	bytes parent = 3;
+	bytes signature = 4;
+	NiDkgId signer = 5;
+}
+
+message RandomTape {
+	string version = 1;
+	uint64 height = 2;
+	bytes signature = 3;
+	NiDkgId signer = 4;
+}
+
+message Finalization {
+	string version = 1;
+	uint64 height = 2;
+	bytes block = 3;
+	bytes signature = 4;
+	repeated bytes signers = 5;
+}
+
+message Notarization {
+	string version = 1;
+	uint64 height = 2;
+	bytes block = 3;
+	bytes signature = 4;
+	repeated bytes signers = 5;
+}
+
+message SubnetStreamSlice {
+	SubnetId subnet_id = 1;
+	messaging.xnet.v1.CertifiedStreamSlice stream_slice = 2;
+}
+
+message XNetPayload {
+	repeated SubnetStreamSlice stream_slices = 1;
+}
+
+message IngressIdOffset {
+	uint64 expiry = 1;
+	bytes message_id = 2;
+	uint64 offset = 3;
+}
+
+message IngressPayload {
+	repeated IngressIdOffset id_and_pos = 1;
+	bytes buffer = 2;
+}

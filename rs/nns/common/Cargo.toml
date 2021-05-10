@@ -1,0 +1,34 @@
+[package]
+name = "ic-nns-common"
+version = "0.8.0"
+edition = "2018"
+
+[lib]
+name = "ic_nns_common"
+path = "src/lib.rs"
+
+[dependencies]
+candid = "0.6.15"
+dfn_core = { path = "../../rust_canisters/dfn_core" }
+ic-base-types = { path = "../../types/base_types" }
+ic-crypto-sha256 = {path = "../../crypto/sha256/"}
+ic-nns-constants = { path = "../constants" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-transport = { path = "../../registry/transport" }
+ic-types = { path = "../../types/types" }
+lazy_static = "1.4.0"
+on_wire = { path = "../../rust_canisters/on_wire" }
+prost = "0.7.0"
+prost-types = "0.7.0"
+serde = { version = "1.0", features = ["derive"] }
+sha2 = "0.9.1"
+
+[dev-dependencies]
+serial_test = "0.5.0"
+
+[build-dependencies]
+ic-base-types = { path = "../../types/base_types" }
+ic-nns-constants = { path = "../constants" }
+ic-types = { path = "../../types/types" }
+prost-build = "0.7.0"

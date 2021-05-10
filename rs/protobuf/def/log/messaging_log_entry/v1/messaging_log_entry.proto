@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package log.messaging_log_entry.v1;
+
+import "google/protobuf/wrappers.proto";
+
+message MessagingLogEntry {
+  google.protobuf.UInt64Value round = 1;
+  google.protobuf.UInt64Value core = 2;
+  google.protobuf.StringValue canister_id = 3;
+  google.protobuf.StringValue message_id = 4;
+}

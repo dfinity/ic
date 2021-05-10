@@ -1,0 +1,27 @@
+// Protocol buffer mirror of `ic_types::consensus::certification::Certification`
+// for use as backwards- and forwards-compatible XNet wire format.
+
+syntax = "proto3";
+package messaging.xnet.v1;
+import "types/v1/types.proto";
+
+// Combined threshold signature.
+message ThresholdSignature {
+  bytes signature = 1;
+  types.v1.NiDkgId signer = 2;
+}
+
+// State tree root hash.
+message CertificationContent {
+  reserved 1;
+  reserved "version";
+
+  bytes hash = 2;
+}
+
+// Certification of state tree root hash.
+message Certification {
+  uint64 height = 1;
+  CertificationContent content = 2;
+  ThresholdSignature signature = 3;
+}

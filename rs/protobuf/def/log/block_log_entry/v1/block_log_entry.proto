@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package log.block_log_entry.v1;
+
+import "google/protobuf/wrappers.proto";
+
+message BlockLogEntry {
+  google.protobuf.UInt64Value byte_size = 1;
+  google.protobuf.UInt64Value certified_height = 2;
+  google.protobuf.StringValue dkg_payload_type = 3;
+  google.protobuf.StringValue hash = 4;
+  google.protobuf.UInt64Value height = 5;
+  google.protobuf.StringValue parent_hash = 6;
+  google.protobuf.UInt64Value rank = 7;
+  google.protobuf.UInt64Value registry_version = 8;
+  google.protobuf.UInt64Value time = 9;
+  google.protobuf.StringValue version = 10;
+}

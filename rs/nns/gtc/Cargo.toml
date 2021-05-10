@@ -1,0 +1,40 @@
+[package]
+name = "ic-nns-gtc"
+version = "0.8.0"
+edition = "2018"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "genesis-token-canister"
+path = "canister/canister.rs"
+
+[dependencies]
+candid = "0.6.15"
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_core = { path = "../../rust_canisters/dfn_core" }
+hex = "0.4.2"
+hex-literal = "0.3.1"
+ic-base-types = { path = "../../types/base_types" }
+ic-crypto-sha256 = {path = "../../crypto/sha256/"}
+ic-nns-governance = { path = "../governance" }
+ic-nns-common = { path = "../common" }
+ic-nns-constants = { path = "../constants" }
+lazy_static = "1.4.0"
+ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+libsecp256k1 = "0.3.5"
+num-bigint = "0.3.1"
+prost = "0.7.0"
+rand = "0.7.3"
+rand_core = "0.5.1"
+serde = { version = "1.0", features = ["derive"] }
+sha3 = "0.9.1"
+simple_asn1 = "0.5.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+ic-nns-gtc-accounts = { path = "../gtc_accounts" }
+
+[build-dependencies]
+ic-base-types = { path = "../../types/base_types" }
+prost-build = "0.7.0"

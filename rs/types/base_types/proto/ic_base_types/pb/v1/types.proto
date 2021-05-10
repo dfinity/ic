@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package ic_base_types.pb.v1;
+
+import "google/protobuf/descriptor.proto";
+
+// The annotated message is supported by hardware wallet signing.
+// The numbering was chosen as the range 19000-19999 is anyway reserved in protobuf.
+extend google.protobuf.MessageOptions {
+  bool tui_signed_message = 20000;
+}
+// The annotated field is displayed on the hardware wallet in the specification
+// used by launch of the Internet Computer.
+extend google.protobuf.FieldOptions {
+  bool tui_signed_display_q2_2021 = 20001;
+}
+
+// A PB container for a PrincipalId, which uniquely identifies
+// a principal.
+message PrincipalId {
+  option (tui_signed_message) = true;
+  bytes serialized_id = 1      [(tui_signed_display_q2_2021) = true];
+}

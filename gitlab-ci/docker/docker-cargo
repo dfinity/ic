@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Runs a `cargo $*` command within nix-shell, in a Docker container.
+#
+# Example usage:
+# REPO_ROOT $ ./gitlab-ci/docker/docker-cargo --version
+# or
+# REPO_ROOT/rs $ ../gitlab-ci/docker/docker-cargo build
+#
+# It is also possible to add $REPO_ROOT/gitlab-ci/docker to the PATH and then run
+# export PATH=$PATH:$REPO_ROOT/gitlab-ci/docker
+# REPO_ROOT/rs $ docker-cargo build
+
+set -euo pipefail
+
+BASEDIR="$(
+    cd "$(dirname "$0")"
+    git rev-parse --show-toplevel
+)"
+
+CARGO_HOME=$HOME/.cache/docker/cargo
+# Allows using the $CARGO_HOME mapped from the host, for caching across calls
+export DOCKER_RUN_ARGS_EXTRA="-v $CARGO_HOME:/cargo"
+
+"$(dirname "$0")/docker-run" /bin/bash -c "nix-shell --run \"cargo $*\""

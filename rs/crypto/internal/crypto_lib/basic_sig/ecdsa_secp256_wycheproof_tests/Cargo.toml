@@ -1,0 +1,13 @@
+[package]
+name = "ic-crypto-internal-basic-sig-ecdsa-wycheproof"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+openssl = "0.10.29"
+serde = { version = "1.0.99", features = [ "derive" ] }
+ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../ecdsa_secp256r1" }
+ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../ecdsa_secp256k1" }
+hex = "0.4.2"
+serde_json = "1.0.40"
+

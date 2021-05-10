@@ -1,0 +1,15 @@
+[package]
+name = "ic-http-utils"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+flate2 = "1.0.17"
+hex = "0.4.2"
+http = "0.2.1"
+hyper = "0.13.10"
+hyper-tls = "0.4.3"
+ic-crypto-sha256 = { path = "../crypto/sha256" }
+ic-logger = { path = "../monitoring/logger" }
+slog = "2.5.2"
+tar = "0.4.30"

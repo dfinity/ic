@@ -1,0 +1,15 @@
+syntax = "proto3";
+package registry.provisional_whitelist.v1;
+
+import "types/v1/types.proto";
+
+message ProvisionalWhitelist {
+  enum ListType {
+    LIST_TYPE_UNSPECIFIED = 0;
+    LIST_TYPE_ALL = 1;
+    LIST_TYPE_SET = 2;
+  }
+  ListType list_type = 1;
+  // This must be empty if list_type is of variant ALL.
+  repeated types.v1.PrincipalId set = 2;
+}

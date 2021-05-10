@@ -1,0 +1,16 @@
+[package]
+name = "ic-metrics-exporter"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-config = { path = "../../config" }
+ic-metrics = { path = "../metrics" }
+hyper = "0.13.10"
+prometheus = { version = "0.9.0", features = [ "process" ] }
+serde = { version = "1.0.99", features = [ "derive" ] }
+tokio = "0.2.22"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
+ic-interfaces = { path = "../../interfaces" }
+ic-types = { path = "../../types/types" }

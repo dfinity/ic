@@ -1,0 +1,12 @@
+[package]
+name = "ic-crypto-internal-bls12381-serde-miracl"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+miracl_core = { version = "4.1.0", package = "miracl_core_bls12381" }
+ic-crypto-internal-types = { path = "../../../types" }
+
+[dev-dependencies]
+hex = "0.4.2"

@@ -1,0 +1,220 @@
+syntax = "proto3";
+
+// Set of messages used to interact with the registry canister.
+//
+// The registry canister implements the following three methods:
+//
+// get_latest_version(RegistryGetLatestVersionRequest) ->
+// RegistryGetLatestVersionResponse
+//
+// get_value(RegistryGetValueRequest) -> RegistryGetValueResponse
+//
+// atomic_mutate(RegistryAtomicMutateRequest) -> RegistryAtomicMutateResponse
+//
+// get_latest_version() returns the latest version of the registry, i.e. the
+// version of the last update made to the registry.
+//
+// get_value() returns the a value for specified version of a specified key from
+// the registry, or the latest version if a version was not specified.
+// get_value() returns a RegistryError if the key was not present.
+//
+// atomic_mutate() inserts, updates or deletes a set of keys in the registry.
+// Mutations are atomic, meaning either all mutations are applied, or none
+// are applied.
+//
+// Note that registry versions are always strictly >= 0, a -1 value is used
+// to signal that no version was assigned.
+package ic_registry_transport.pb.v1;
+
+import "google/protobuf/wrappers.proto";
+import "messaging/xnet/v1/mixed_hash_tree.proto";
+
+// Message corresponding to an error while performing
+// an operation on the registry.
+message RegistryError {
+  enum Code {
+    // The message had a problem like a missing field
+    // or a field that was set when it shouldn't.
+    MALFORMED_MESSAGE = 0;
+    // The 'key' specified on the request was not present
+    // in the registry.
+    KEY_NOT_PRESENT = 1;
+    // The 'key' specified on the request was already present.
+    KEY_ALREADY_PRESENT = 2;
+    // The 'version' specified in a precondition for a mutation
+    // was not the lastest version.
+    VERSION_NOT_LATEST = 3;
+    // The 'version' specified in a precondition for a mutation
+    // is beyond the latest version in the registry.
+    VERSION_BEYOND_LATEST = 4;
+
+    // A generic internal error occurred in the registry.
+    INTERNAL_ERROR = 999;
+  }
+
+  Code code = 1;
+
+  // The reason for the error.
+  // This is optional.
+  string reason = 2;
+
+  // The key on which the error occurred.
+  // This is optional and only present for by-key errors.
+  bytes key = 3;
+}
+
+// A single change made to a key in the registry.
+message RegistryValue {
+  // The value that was set in this mutation. If the
+  // mutation is a deletion, the field has no meaning.
+  bytes value = 1;
+
+  // The version at which this mutation happened.
+  uint64 version = 2;
+
+  // If true, this change represents a deletion.
+  bool deletion_marker = 3;
+}
+
+// A sequence of changes made to a key in the registry.
+message RegistryDelta {
+  bytes key = 1;
+  repeated RegistryValue values = 2;
+}
+
+// Message to retrieve all the changes from the registry
+// since 'version'.
+message RegistryGetChangesSinceRequest { uint64 version = 1; }
+
+// Message corresponding to the response from the registry
+// canister to a get_latest_version() request.
+message RegistryGetChangesSinceResponse {
+  // If anything went wrong, the registry canister
+  // will set this error.
+  RegistryError error = 1;
+  // The last version of the registry.
+  uint64 version = 2;
+  // A list of all the keys and all the values that change
+  // and all the intermediate changes since the version
+  // requested.
+  repeated RegistryDelta deltas = 3;
+}
+
+// Message to retrieve a version of some registry key
+// from the registry canister.
+message RegistryGetValueRequest {
+  // The version of the registry key to retrieve.
+  // Optional: If not set (or set to the default value, 0), the method
+  // will return the last version.
+  google.protobuf.UInt64Value version = 1;
+  // The byte array corresponding to the key to retrieve
+  // from the registry.
+  // Required.
+  bytes key = 2;
+}
+
+// Message corresponding to the response from the canister
+// to a get_value() request.
+//
+// Both 'version' and 'value' are mandatorily set if 'error'
+// is not set.
+message RegistryGetValueResponse {
+  // If anything went wrong, the registry canister
+  // will set this error.
+  RegistryError error = 1;
+  // the version at which the value corresponding to the queried
+  // key was last mutated (inserted, updated, or deleted)
+  // before at or at the version specified
+  // in the RegistryGetValueRequest.
+  uint64 version = 2;
+  // The value retrieved from the registry.
+  bytes value = 3;
+}
+
+// Message corresponding to the response from the canister
+// to a get_latest_version() request.
+message RegistryGetLatestVersionResponse {
+  // the latest registry version
+  uint64 version = 1;
+}
+
+// A single mutation in the registry.
+message RegistryMutation {
+  enum Type {
+    // Key is expected to not exist in the registry at the current version.
+    // (This includes the case of a key that has existed in the past and
+    // later got deleted).
+    // The mutation will fail otherwise.
+    INSERT = 0;
+    // Key is expected to exist in the registry at the current version.
+    // The mutation will fail otherwise.
+    UPDATE = 1;
+    // Key is expected to exist in the registry at the current version.
+    // The mutation will fail otherwise.
+    DELETE = 2;
+    // If the key does not exist at the current version, it will be created.
+    // Otherwise, the value will be updated. The name is common in the
+    // database world, and means Update or Insert.
+    UPSERT = 4;
+  }
+
+  // The type of the mutation to apply to the registry.
+  // Always required.
+  Type mutation_type = 1;
+
+  // The key of the entry to mutate in the registry.
+  // Always required.
+  bytes key = 2;
+
+  // The value to mutate in the registry.
+  // Required for insert, update, but not for delete.
+  bytes value = 3;
+}
+
+// A precondition on the version at which the value of a given key was
+// last mutated.
+message Precondition {
+  bytes key = 1;
+
+  // The precondition is satisfied if and only is the version in the
+  // RegistryValue for the key is equal to this.
+  uint64 expected_version = 2;
+}
+
+// Message corresponding to a list of mutations to apply, atomically, to the
+// registry canister. If any of the mutations fails, the whole operation will fail.
+message RegistryAtomicMutateRequest {
+  // The set of mutations to apply to the registry.
+  repeated RegistryMutation mutations = 1;
+
+  // Preconditions at the key level.
+  repeated Precondition preconditions = 5;
+
+  reserved 4;
+}
+
+// Message corresponding to the response of an atomic_mutate request. If any of
+// mutations failed the corresponding errors will be reflected in 'errors'.
+// Otherwise 'version' will contain the version under which all the mutations
+// were applied.
+message RegistryAtomicMutateResponse {
+  // If anything went wrong, the registry canister
+  // will set this error.
+  repeated RegistryError errors = 1;
+  // The last version of the registry.
+  uint64 version = 2;
+}
+
+// Message encoding a response to any *_certified method call.
+message CertifiedResponse {
+  // The hash tree encoding both the response and the intermediate
+  // nodes required to recompute the root hash stored in
+  // "certified_data" of the canister.
+  //
+  // Note that the contents of the tree depends on the type of request
+  // issued.
+  messaging.xnet.v1.MixedHashTree hash_tree = 1;
+  // The certificate obtained from the system using
+  // ic0.data_certificate_copy.
+  bytes certificate = 2;
+}

@@ -1,0 +1,20 @@
+[package]
+name = "ic-crypto-internal-csp-test-utils"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+ic-crypto-internal-csp = { path = "../crypto_service_provider" }
+ic-crypto-internal-test-vectors = { path = "../test_vectors" }
+ic-crypto-internal-types = { path = "../crypto_lib/types" }
+ic-types = { path = "../../../types/types" } # Would like to get rid of this but as long as the CSP depends on ic-types we can't really.
+serde = { version = "1.0.99", features = ["derive", "rc"] }
+serde_bytes = "0.11"
+# No other ic-dependencies are allowed.
+
+mockall = "0.7.2"
+proptest = "0.9.4"
+rand = "0.7.3"
+rand_chacha = "0.2.2"
+tempfile = "3.1.0"

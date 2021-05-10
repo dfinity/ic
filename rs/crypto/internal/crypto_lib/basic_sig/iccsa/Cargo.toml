@@ -1,0 +1,24 @@
+[package]
+name = "ic-crypto-internal-basic-sig-iccsa"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+hex = "0.4.2"
+ic-certified-vars = { path = "../../../../../certified_vars" }
+ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
+ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
+ic-crypto-tree-hash = { path = "../../../../tree_hash" }
+ic-crypto-sha256 = { path = "../../../../sha256" }
+ic-types = { path = "../../../../../types/types" }
+serde = { version = "1.0.99", features = [ "derive" ] }
+serde_bytes = "0.11"
+serde_cbor = "0.11"
+simple_asn1 = "0.4.1"
+
+[dev-dependencies]
+base64 = "0.13.0"
+# TODO (CRP-912) Replace ic-crypto with ic-crypto-utils-threshold-sig
+ic-crypto = { path = "../../../../../crypto" }
+ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
+ic-interfaces = { path = "../../../../../interfaces" }

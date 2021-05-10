@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package ic_nns_handler_root.pb.v1;
+
+import "ic_nns_common/pb/v1/types.proto";
+
+// A container for the what gets written to stable storage,
+// from the root canister.
+message RootCanisterStableStorage {
+  ic_nns_common.pb.v1.CanisterAuthzInfo authz = 1;
+}

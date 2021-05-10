@@ -1,0 +1,40 @@
+[package]
+name = "ic-ingress-manager"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-crypto = { path = "../crypto" }
+ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-interfaces = { path = "../interfaces" }
+ic-logger = { path = "../monitoring/logger" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-keys = { path = "../registry/keys" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-types = { path = "../types/types" }
+ic-validator = { path = "../validator" }
+bincode = "1.2.1"
+prometheus = { version = "0.9.0", features = [ "process" ] }
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+
+[dev-dependencies]
+assert_matches = "1.3.0"
+criterion = "0.3"
+ed25519-dalek = "1.0.1"
+ic-artifact-pool = { path = "../artifact_pool" }
+ic-config = { path = "../config" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-common = { path = "../registry/common" }
+rand = "0.7.3"
+tokio = { version = "0.2.23", features = ["full"] }
+
+[[bench]]
+name = "build_payload"
+harness = false
+
+[[bench]]
+name = "handle_ingress"
+harness = false

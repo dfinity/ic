@@ -1,0 +1,31 @@
+# The GTC for Mercury I
+
+See the candid file (canister/gtc.did) for method overview.
+
+## Run
+
+The GTC can be deployed locally (unlike the other canisters that are part of the NNS). To do so switch to the directory `rs/nns` and run:
+
+----
+dfx start --clean --background
+dfx deploy tokens
+----
+
+## Examples for all methods:
+
+There are a total of 504 entries with a total of 219,213,542 tokens.
+
+----
+> dfx canister call gtc_rs len
+(503)
+
+> dfx canister call gtc_rs total
+(219213542)
+----
+
+The balance of an address is:
+
+----
+> dfx canister call gtc_rs balance "006b572cd1af263c1f6c7c4d74f9260cd308c937"
+(756)
+----

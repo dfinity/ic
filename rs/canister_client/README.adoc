@@ -1,0 +1,10 @@
+= Client Library
+
+A collection of functions to communicate, through the http interface, with the Internet Computer and with Canisters on the internet computer.
+
+The main struct is `ic_canister_client::Agent`. Users should instantiate an agent, and then various calls to the ICs can be made.
+
+The calls fall into two categories:
+
+* Calls to a specific canister, given as argument. Those are defined in `lib.rs`.
+* Canister management calls, where the recipient is implicit -- it's the Management Canister, aka ic00. Those are defined in `canister_management.rs`.

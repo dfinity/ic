@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package types.v1;
+import "types/v1/types.proto";
+
+message DkgMessage {
+	NodeId signer = 5;
+	bytes signature = 1;
+	string replica_version = 2;
+	NiDkgId dkg_id = 3;
+	bytes dealing = 4;
+}
+
+message DkgPayload {
+	oneof val {
+		Summary summary = 1;
+		Dealings dealings = 2;
+	}
+}
+
+message Dealings {
+	repeated DkgMessage dealings = 1;
+	uint64 summary_height = 2;
+}
+
+message Summary {
+	uint64 registry_version = 1;
+	uint64 interval_length = 2;
+	uint64 next_interval_length = 3;
+	uint64 height = 4;
+	repeated TaggedNiDkgTranscript current_transcripts = 5;
+	repeated TaggedNiDkgTranscript next_transcripts = 6;
+	repeated NiDkgConfig configs = 7;
+	repeated IdedNiDkgTranscript transcripts_for_new_subnets = 8;
+}
+
+message TaggedNiDkgTranscript {
+	NiDkgTranscript transcript = 1;
+	NiDkgTag tag = 2;
+}
+
+message IdedNiDkgTranscript {
+	NiDkgId dkg_id = 1;
+	NiDkgTranscriptResult transcript_result = 2;
+}
+
+message NiDkgTranscriptResult {
+	oneof val {
+		NiDkgTranscript transcript = 1;
+		bytes error_string = 2;
+	}
+}
+
+// A transcript for non-interactive Distributed Key Generation (NI-DKG).
+message NiDkgTranscript {
+	NiDkgId dkg_id = 1;
+	uint32 threshold = 2;
+	repeated NodeId committee = 3;
+	uint64 registry_version = 4;
+	bytes internal_csp_transcript = 5;
+}
+
+// A configuration for non-interactive Distributed Key Generation (NI-DKG).
+message NiDkgConfig {
+	NiDkgId dkg_id = 1;
+	uint32 max_corrupt_dealers = 2;
+	repeated NodeId dealers = 3;
+	uint32 max_corrupt_receivers = 4;
+	repeated NodeId receivers = 5;
+	uint32 threshold = 6;
+	uint64 registry_version = 7;
+	NiDkgTranscript resharing_transcript = 8;
+}

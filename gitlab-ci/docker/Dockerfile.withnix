@@ -1,0 +1,41 @@
+# Add a Nix layer on top of the dfinity/ic-build:latest image
+FROM dfinity/ic-build:latest
+
+# Another Nix version can be provided when building the image, e.g.:
+# docker build --build-arg nix_version=${NIX_VERSION} [...]
+ARG nix_version=2.3.10
+
+# Pulls the dependencies necessary for installing and using a Nix shell later on.
+
+# In addition to the volumes stated in Dockerfile, the following volumes should also be mount from the host for optimal performance:
+# /nix - to cache the Nix store
+
+USER 0
+
+RUN mkdir -p /etc/nix/ /nix && \
+    echo 'trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= cache.dfinity.systems-1:IcOn/2SVyPGOi8i3hKhQOlyiSQotiOBKwTFmyPX5YNw=\n\
+substituters = https://cache.nixos.org https://nix.dfinity.systems\n\
+builders-use-substitutes = true' > /etc/nix/nix.conf
+
+# Add Nix folders
+RUN mkdir -p /nix && chown -R 1000.1000 /nix
+
+ENV NIX_VERSION=${nix_version} \
+    CARGO_HOME=/cargo \
+    CARGO_TARGET_DIR=/cargo_target \
+    PATH=/home/ubuntu/.nix-profile/bin:/cargo/bin:$PATH \
+    NIX_PATH=/home/ubuntu/.nix-defexpr/channels \
+    NIX_PROFILES="/nix/var/nix/profiles/default /home/ubuntu/.nix-profile" \
+    NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    MANPATH="/home/ubuntu/.nix-profile/share/man:$MANPATH"
+
+RUN echo 'curl --fail -L https://releases.nixos.org/nix/nix-${NIX_VERSION}/install | sh\n' \
+        > /usr/bin/nix-install && \
+    chmod 0755 /usr/bin/nix-install
+
+USER 1000
+
+# Ensure that nix-shell is available in the docker container.
+RUN /usr/bin/nix-install
+
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]

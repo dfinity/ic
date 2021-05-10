@@ -1,0 +1,60 @@
+[package]
+name = "ic-state-manager"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+crossbeam-channel = "0.5.0"
+hex = "0.4.2"
+ic-base-types = { path = "../types/base_types" }
+ic-canonical-state = { path = "../canonical_state" }
+ic-config = { path = "../config" }
+ic-cow-state = { path = "../cow_state" }
+ic-crypto = { path = "../crypto" }
+ic-crypto-sha256 = { path = "../crypto/sha256" }
+ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-interfaces = { path = "../interfaces" }
+ic-logger = { path = "../monitoring/logger" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-state-layout = { path = "../state_layout" }
+ic-sys = { path = "../sys" }
+ic-types = { path = "../types/types" }
+ic-utils = { path = "../utils" }
+parking_lot = "0.11.1"
+prometheus = { version = "0.9.0", features = [ "process" ] }
+prost = "0.7.0"
+serde = { version = "1.0.99", features = [ "derive" ] }
+serde_bytes = "0.11"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+tree-deserializer = { path = "../tree_deserializer" }
+
+
+[lib]
+bench = false
+
+[dev-dependencies]
+assert_matches = "1.3.0"
+criterion = "0.3"
+ic-crypto = { path = "../crypto" }
+ic-sys = { path = "../sys" }
+ic-wasm-types = { path = "../types/wasm_types" }
+maplit = "1.0.2"
+proptest = "0.9.4"
+proptest-derive = "0.1.0"
+tempfile = "3.1.0"
+rand = "0.7.3"
+
+[[bench]]
+name = "checkpoint"
+harness = false
+
+[[bench]]
+name = "bench_traversal"
+harness = false
+
+[features]
+default = []
+malicious_code = []

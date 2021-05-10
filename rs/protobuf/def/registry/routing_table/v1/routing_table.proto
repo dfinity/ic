@@ -1,0 +1,30 @@
+syntax = "proto3";
+package registry.routing_table.v1;
+
+import "types/v1/types.proto";
+
+// Represents a closed range of canister ids.
+message CanisterIdRange {
+  reserved 1;
+  reserved "start"; // Originally was defined as a uint64
+  reserved 2;
+  reserved "end"; // Originally was defined as a uint64
+  types.v1.CanisterId start_canister_id = 3;
+  types.v1.CanisterId end_canister_id = 4;
+}
+
+// A list of closed ranges of canister Ids.
+message CanisterIdRanges {
+  repeated CanisterIdRange ranges = 1;
+}
+
+// Maps a closed range of canister Ids to a subnet id.
+message RoutingTable {
+  message Entry {
+    CanisterIdRange range = 1;
+    types.v1.SubnetId subnet_id = 2;
+  }
+
+  // Defined as `repeated` instead of `map` in order to preserve ordering.
+  repeated Entry entries = 1;
+}

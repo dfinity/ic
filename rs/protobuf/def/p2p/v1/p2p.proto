@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package p2p.v1;
+
+message GossipMessage {
+  oneof body {
+    GossipAdvert advert = 1;
+    GossipChunkRequest chunk_request = 2;
+    GossipChunk chunk = 3;
+    GossipRetransmissionRequest retransmission_request = 4;
+  }
+}
+
+message GossipAdvert {
+  bytes attribute = 1;
+  uint64 size = 2;
+  bytes artifact_id = 3;
+  bytes integrity_hash = 4;
+}
+
+message GossipChunkRequest {
+  bytes artifact_id = 1;
+  uint32 chunk_id = 2;
+}
+
+message ArtifactFilter {
+  ConsensusMessageFilter consensus_filter = 1;
+  IngressMessageFilter ingress_filter = 2;
+  CertificationMessageFilter certification_message_filter = 3;
+  StateSyncFilter state_sync_filter = 4;
+};
+
+message ConsensusMessageFilter {
+  uint64 height = 1;
+}
+
+message IngressMessageFilter {
+  uint64 time = 1;
+}
+
+message CertificationMessageFilter {
+  uint64 height = 1;
+}
+
+message StateSyncFilter {
+  uint64 height = 1;
+}
+
+message GossipRetransmissionRequest {
+  ArtifactFilter filter = 1;
+}
+
+message GossipChunk {
+  bytes artifact_id = 1;
+  uint32 chunk_id = 2;
+  oneof response {
+    ArtifactChunk chunk = 3;
+    P2PError error = 4;
+  }
+}
+
+message ArtifactChunk {
+  repeated bytes witnesses = 1;
+  oneof data {
+    bytes artifact = 2;  // TODO(P2P-483): bincode-encoded Artifact to proto-encoding
+    bytes chunk = 3;
+  }
+}
+
+enum P2PError {
+  P2P_ERROR_UNSPECIFIED = 0;
+  P2P_ERROR_NOT_FOUND = 1;
+};

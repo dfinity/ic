@@ -1,0 +1,82 @@
+[package]
+name = "ic-replica"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+actix = "0.10.0"
+anymap = "0.12.1"
+base64 = "0.11.0"
+hex = "0.4.2"
+ic-base-server = { path = "../base/server" }
+ic-config = { path = "../config" }
+ic-consensus = { path = "../consensus" }
+ic-consensus-message = { path = "../consensus/message" }
+ic-crypto = { path = "../crypto" }
+ic-crypto-sha256 = { path = "../crypto/sha256" }
+ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
+ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
+ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-execution-environment = { path = "../execution_environment" }
+ic-http-handler = { path = "../http_handler" }
+ic-ingress-manager = { path = "../ingress_manager" }
+ic-interfaces = { path = "../interfaces" }
+ic-logger = { path = "../monitoring/logger" }
+ic-messaging = { path = "../messaging" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }
+ic-nns-constants = { path = "../nns/constants" }
+ic-p2p = { path = "../p2p" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-common = { path = "../registry/common" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-state-manager = { path = "../state_manager" }
+ic-transport = { path = "../transport" }
+ic-types = { path = "../types/types" }
+ic-utils = { path = "../utils" }
+jemallocator = "0.3.2"
+json5 = "0.2.7"
+libc = "0.2.91"
+nix = "0.20.0"
+pprof = { version= "0.3.16" , features = ["flamegraph", "protobuf"], optional = true }
+prost = "0.7.0"
+rand = "0.7.3"
+regex = "1.3.9"
+serde = { version = "1.0.99", features = [ "derive" ] }
+serde_cbor = "0.11.1"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog-async = "2.5.0"
+slog-term = "2.6.0"
+static_assertions = "0.3.4"
+structopt = "0.3"
+tempfile = "3.1.0"
+thread_profiler = { version = "0.3", optional = true }
+tokio = { version = "0.2", features = ["full"] }
+tracing = "0.1.13"
+
+[dev-dependencies]
+assert_cmd = "0.12"
+criterion = "0.3"
+predicates = "1.0.1"
+# TODO(EXC-220)
+wabt = { git = "https://github.com/dfinity-lab/wabt-rs", rev = "b4d778802976f10494411388e48a784d4d015bbb" }
+
+[[bench]]
+name = "calls"
+harness = false
+
+# TODO(RPL-268)
+# [[bench]]
+# name = "execution_only_update"
+# harness = false
+
+[[bin]]
+name = "replica"
+path = "src/main.rs"
+
+[features]
+profiler = ["thread_profiler/thread_profiler", "pprof"]
+malicious_code = ["ic-consensus/malicious_code", "ic-state-manager/malicious_code"]

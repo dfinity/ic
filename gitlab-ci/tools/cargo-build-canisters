@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+set -exuo pipefail
+
+# Remove ~/.nix-profile/bin from the PATH to use native cargo
+PATH=$(
+    p=$(echo "$PATH" | tr ":" "\n" | grep -v "/.nix-profile/" | tr "\n" ":")
+    echo "${p%:}"
+)
+export PATH=/opt/cargo/bin:$PATH
+
+# When invoked locally we set CI_RUST_BUILD_DIR to the current directory
+# since in docker the current working directory is the repository.
+CI_RUST_BUILD_DIR="${CI_RUST_BUILD_DIR:-$(pwd)}"
+
+rm -rf "$CI_RUST_BUILD_DIR/artifacts/canisters"
+mkdir -p "$CI_RUST_BUILD_DIR/artifacts/canisters"
+cd "$CI_RUST_BUILD_DIR/rs" || exit 1
+
+wasm_canister_list=(
+    registry-canister
+    governance-canister
+    root-canister
+    genesis-token-canister
+    ledger-canister
+    cycles-minting-canister
+    identity-canister
+    nns-ui-canister
+    xnet-test-canister
+    statesync-test-canister
+)
+function wasm_canisters_cargo_args() {
+    # returns a list of wasm_canisters prefixed with "--bin"
+    for c in "${wasm_canister_list[@]}"; do
+        echo -n " --bin $c"
+    done
+}
+
+# shellcheck disable=SC2046  # Intended splitting of $(wasm_canisters_cargo_args)
+cargo build --target wasm32-unknown-unknown --release $(wasm_canisters_cargo_args)
+
+# Lifeline canister needs special handling:
+cd "$CI_RUST_BUILD_DIR/rs/nns/handlers/lifeline" || exit 1
+cargo build --target wasm32-unknown-unknown
+ic-cdk-optimizer -o "$CI_RUST_BUILD_DIR/artifacts/canisters/lifeline.wasm" gen/lifeline.wasm
+
+echo "Building of Wasm canisters finished"
+
+cd "$CI_RUST_BUILD_DIR" || exit 1
+
+for tgt in "${wasm_canister_list[@]}"; do
+    tgt_filename="$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/$tgt.wasm"
+    if [[ -r "$tgt_filename" ]]; then
+        ic-cdk-optimizer -o "artifacts/canisters/$tgt.wasm" "$tgt_filename"
+    else
+        echo "ERROR: target canister Wasm binary does not exist: ${tgt_filename}"
+        exit 1
+    fi
+done
+
+sha256sum artifacts/canisters/*
+
+gzip -f artifacts/canisters/*

@@ -1,0 +1,14 @@
+[package]
+name = "tree-deserializer"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+leb128 = "0.2.4"
+serde = { version = "1.0.99", features = [ "derive" ] }
+
+[dev-dependencies]
+maplit = "1.0.2"
+proptest = "0.9.4"
+proptest-derive = "0.1.0"

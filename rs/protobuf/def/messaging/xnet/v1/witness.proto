@@ -1,0 +1,33 @@
+// Protocol buffer mirror of `ic_crypto_tree_hash::Witness` for use
+// as backwards- and forwards-compatible XNet wire format.
+
+syntax = "proto3";
+package messaging.xnet.v1;
+
+// Merkle proof - a subset of a `HashTree`.
+message Witness {
+  // Binary fork.
+  message Fork {
+    Witness left_tree = 1;
+    Witness right_tree = 2;
+  }
+
+  // Labeled leaf or subtree.
+  message Node {
+    bytes label = 3;
+    Witness sub_witness = 4;
+  }
+
+  // Pruned leaf or subtree.
+  message Pruned { bytes digest = 5; }
+
+  // Marker for provided data (leaf or subtree).
+  message Known {}
+
+  oneof witness_enum {
+    Fork fork = 1;
+    Node node = 2;
+    Pruned pruned = 3;
+    Known known = 4;
+  }
+}

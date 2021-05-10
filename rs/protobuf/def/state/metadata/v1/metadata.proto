@@ -1,0 +1,88 @@
+syntax = "proto3";
+package state.metadata.v1;
+import "types/v1/types.proto";
+import "state/ingress/v1/ingress.proto";
+import "state/queues/v1/queues.proto";
+import "registry/routing_table/v1/routing_table.proto";
+import "registry/subnet/v1/subnet.proto";
+import "google/protobuf/wrappers.proto";
+
+message NodeTopology {
+    string ip_address = 1;
+    uint32 http_port = 2;
+}
+
+message SubnetTopologyEntry {
+    types.v1.NodeId node_id = 1;
+    NodeTopology node_topology = 2;
+}
+
+message SubnetTopology {
+    repeated SubnetTopologyEntry nodes = 1;
+    // The public key of the subnet (a DER-encoded BLS key, see
+    // https://sdk.dfinity.org/docs/interface-spec/index.html#certification)
+    bytes public_key = 2;
+    registry.subnet.v1.SubnetType subnet_type = 3;
+}
+
+message SubnetsEntry {
+    types.v1.SubnetId subnet_id = 1;
+    SubnetTopology subnet_topology = 2;
+}
+
+message NetworkTopology {
+    repeated SubnetsEntry subnets = 1;
+    registry.routing_table.v1.RoutingTable routing_table = 2;
+    types.v1.SubnetId nns_subnet_id = 3;
+}
+
+message SetupInitialDkgContext {
+    state.queues.v1.Request request = 1;
+    repeated types.v1.NodeId nodes_in_subnet = 2;
+    reserved 3;
+    reserved "subnet_id";
+    bytes target_id = 4;
+    uint64 registry_version = 5;
+}
+
+message SubnetCallContext {
+    SetupInitialDkgContext setup_initial_dkg_context = 1;
+}
+
+message SubnetCallContextTree {
+    uint64 callback_id = 1;
+    SubnetCallContext context = 2;
+}
+
+message SubnetCallContextManager {
+    uint64 next_callback_id = 1;
+    repeated SubnetCallContextTree contexts = 2;
+}
+
+message SystemMetadata {
+    uint64 generated_id_counter = 1;
+    google.protobuf.BytesValue prev_state_hash = 2;
+    uint64 batch_time_nanos = 3;
+    ingress.v1.IngressHistoryState ingress_history = 4;
+    repeated queues.v1.StreamEntry streams = 5;
+    NetworkTopology network_topology = 6;
+    types.v1.SubnetId own_subnet_id = 7;
+    SubnetCallContextManager subnet_call_context_manager = 8;
+
+    // Version of the StateSync protocol that should be used to compute
+    // checkpoint manifests and transmit state.
+    uint32 state_sync_version = 9;
+
+    // Version of the certification protocol that should be used to
+    // certify this state.
+    uint32 certification_version = 10;
+
+    uint64 heap_delta_estimate = 11;
+
+    reserved 12;
+    reserved "stable_memory_delta_estimate";
+}
+
+message StableMemory {
+    bytes memory = 1;
+}

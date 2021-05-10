@@ -1,0 +1,19 @@
+[package]
+name = "ic-crypto-internal-types"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+arrayvec = "0.5.1"
+base64 = "0.11.0"
+hex = "0.4.2"
+ic-protobuf = { path = "../../../../protobuf" }
+phantom_newtype = { path = "../../../../phantom_newtype" }
+serde = { version = "1.0.99", features = [ "derive" ] }
+serde_cbor = "0.11.1"
+strum = "0.18.0"
+strum_macros = "0.18.0"
+thiserror = "1.0"
+zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
+
+[dev-dependencies]

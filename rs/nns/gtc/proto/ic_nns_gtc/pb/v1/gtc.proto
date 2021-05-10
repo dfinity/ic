@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package ic_nns_gtc.pb.v1;
+
+import "google/protobuf/wrappers.proto";
+import "google/protobuf/empty.proto";
+import "ic_base_types/pb/v1/types.proto";
+import "ic_nns_common/pb/v1/types.proto";
+
+// The internal state of the Genesis Token Canister
+message Gtc {
+  // Maps account addresses to the state of the account
+  map<string, AccountState> accounts = 1;
+
+  // The total amount of ICP allocated by the GTC
+  uint32 total_alloc = 2;
+
+  // The timestamp, in seconds since the unix epoch, at which `canister_init` was run for
+  // the GTC, considered the genesis of the IC.
+  uint64 genesis_timestamp_seconds = 3;
+
+  // The ID of the Neuron that GTC account owners will have their funds donated
+  // to when they call the GTC's `donate_account` method.
+  ic_nns_common.pb.v1.NeuronId donate_account_recipient_neuron_id = 4;
+
+  /// The ID of the Neuron that the funds of all unclaimed GTC accounts will be
+  /// transferred to when the `forward_all_unclaimed_accounts` GTC method is called.
+  ic_nns_common.pb.v1.NeuronId forward_all_unclaimed_accounts_recipient_neuron_id = 5;
+}
+
+// The state of a GTC account
+message AccountState {
+  // The neuron IDs of the neurons that exist in the Governance canister that
+  // were created on behalf of this account. These neurons, which initially
+  // have the GTC as the controller, can be claimed by the owner of this
+  // account, after which ownership of these neurons will be transferred from
+  // the GTC to the owner of this account.
+  repeated ic_nns_common.pb.v1.NeuronId neuron_ids = 1;
+
+  // The account value, in ICPTs. The sum of the stake of all neurons
+  // corresponding to `neuron_ids` must add up to `icpts`.
+  uint32 icpts = 2;
+
+  // If `true`, the neurons in `neuron_ids` have been claimed by this account
+  // owner.
+  bool has_claimed = 3;
+
+  reserved 4;
+  reserved 5;
+
+  // If `true`, the neurons in `neuron_ids` have been donated.
+  bool has_donated = 6;
+
+  // If `true`, the neurons in `neuron_ids` have been forwarded.
+  bool has_forwarded = 7;
+
+  // The `PrincipalId` that has been authenticated as the owner of this
+  // account.
+  //
+  // Both GTC methods `claim_neurons` and `donate_account` authenticate that
+  // the caller is the owner of this account, and either method may set this
+  // value.
+  ic_base_types.pb.v1.PrincipalId authenticated_principal_id = 8;
+
+  // The neurons that have been successfully transferred
+  repeated TransferredNeuron successfully_transferred_neurons = 9;
+
+  // The neurons that failed to be transferred
+  repeated TransferredNeuron failed_transferred_neurons = 10;
+}
+
+message TransferredNeuron {
+  // The ID of the transferred neuron
+  ic_nns_common.pb.v1.NeuronId neuron_id = 1;
+
+  // The UNIX timestamp (in seconds) at which the neuron was transferred
+  uint64 timestamp_seconds = 2;
+
+  // The failure encountered when transferring the neuron, if any
+  google.protobuf.StringValue error = 3;
+}

@@ -1,0 +1,17 @@
+[package]
+name = "ic-logger"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+chrono = "0.4.19"
+ic-config = { path = "../../config" }
+ic-context-logger = { path = "../context_logger" }
+ic-protobuf = { path = "../../protobuf" }
+ic-types = { path = "../../types/types" }
+serde = { version = "1.0.99", features = [ "derive" ] }
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog-async = { version = "2.5", features = ["nested-values"] }
+slog-json = { version = "2.3", features = ["nested-values"] }
+slog-scope = "4.1.2"
+slog-term = "2.6.0"

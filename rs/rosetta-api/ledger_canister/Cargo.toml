@@ -1,0 +1,56 @@
+[package]
+name = "ledger-canister"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+description = "Like an accountant, but on the blockchain!"
+edition = "2018"
+
+[dependencies]
+dfn_core = {path = "../../rust_canisters/dfn_core"}
+dfn_candid = {path = "../../rust_canisters/dfn_candid"}
+dfn_http = {path = "../../rust_canisters/dfn_http"}
+dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
+candid = "0.6.21"
+lazy_static = "1.4.0"
+serde = "1.0"
+ic-crypto-sha256 = {path = "../../crypto/sha256/"}
+ic-types = { path = "../../types/types" }
+hex = {version = "0.4.2", features = ["serde"] }
+digest = "0.9.0"
+phantom_newtype = { path = "../../phantom_newtype" }
+byteorder = "1.4"
+serde_bytes = "0.11"
+serde_cbor = "0.11"
+ic-base-types = {path="../../types/base_types"}
+yansi = "0.5.0"
+on_wire = {path = "../../rust_canisters/on_wire"}
+intmap = "0.7.0"
+crc32fast = "1.2.0"
+prost = "0.7.0"
+prost-derive = "0.7.0"
+ic-nns-constants = {path = "../../nns/constants" }
+
+[[bin]]
+name = "ledger-canister"
+path = "src/main.rs"
+
+[[bin]]
+name = "ledger-archive-node-canister"
+path = "src/archive_node.rs"
+
+[dev-dependencies]
+ed25519-dalek = "1.0.1"
+ic-canister-client = {path = "../../canister_client/"}
+rand_chacha = "0.2.2"
+rand_core = "0.5.1"
+
+[[test]]
+name = "test"
+path = "test/test.rs"
+
+[[bin]]
+name = "test-notified"
+path = "test/notified.rs"
+
+[build-dependencies]
+prost-build = "0.7.0"

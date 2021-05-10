@@ -1,0 +1,26 @@
+[package]
+name = "ic-crypto-internal-multi-sig-bls12381"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+base64 = "0.11.0"
+ff = "0.5.0"
+group = "0.2.0"
+hex = "0.4.2"
+ic-crypto-internal-bls12381-common = { path = "../../bls12_381/common"}
+ic-crypto-internal-types = { path = "../../types" }
+ic-protobuf = { path = "../../../../../protobuf" }
+ic-types = { path = "../../../../../types/types" }
+pairing = "0.15.0"
+rand = "0.7.3"
+rand_chacha = "0.2.2"
+rand_core = "0.5.1"
+serde = { version = "1.0.99", features = [ "derive" ] }
+zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
+
+[dev-dependencies]
+ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
+proptest = "0.9.4"
+proptest-derive = "0.1.0"
+rand_core = "0.5.1"

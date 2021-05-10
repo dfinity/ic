@@ -1,0 +1,19 @@
+[package]
+name = "ic-crypto-tls"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+async-trait = "0.1.41"
+ic-types = { path = "../../types/types" }
+ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
+ic-crypto-internal-tls = { path = "../internal/crypto_lib/tls" }
+openssl = "0.10.29"
+tokio = { version = "0.2", features = ["net", "io-util"] }
+tokio-openssl = "0.4.0"
+rand = "0.7.3"
+thiserror = "1"
+
+[dev-dependencies]
+maplit = "1.0"
+ic-protobuf = { path = "../../protobuf" }

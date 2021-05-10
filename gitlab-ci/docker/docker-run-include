@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Initialize the args for starting the docker container.
+
+set -eEuo pipefail
+
+REPO_ROOT="$(
+    cd "$(dirname "$0")"
+    git rev-parse --show-toplevel
+)"
+
+IMAGE_TAG=${IMAGE_TAG:-$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")}
+IMAGE="${IMAGE:-dfinity/ic-build:$IMAGE_TAG}"
+SUBDIR=$(realpath --relative-to="$REPO_ROOT" "$PWD")
+SSL_DIR=$HOME/.cache/dfinity/openssl
+
+mkdir -p $HOME/.cache/dfinity/sccache
+mkdir -p $HOME/.cache/dfinity/cargo
+mkdir -p $HOME/.cache/dfinity/cargo_target
+mkdir -p $HOME/.cache/dfinity/home
+mkdir -p "$SSL_DIR"
+
+DOCKER_RUN_ARGS=()
+
+DOCKER_RUN_ARGS+=(-v $REPO_ROOT:/builds/dfinity-lab/dfinity)
+DOCKER_RUN_ARGS+=(-w "/builds/dfinity-lab/dfinity/$SUBDIR")
+DOCKER_RUN_ARGS+=(${DOCKER_RUN_ARGS_EXTRA:-})
+
+if uname -s | grep Darwin; then
+    # On Mac in the docker container the USER is ubuntu (uid 1000) which most likely does not match the USER on the host.
+    DOCKER_USER="ubuntu"
+    DOCKER_HOME="/home/$DOCKER_USER"
+else
+    DOCKER_USER=$USER
+    DOCKER_HOME=$HOME
+    DOCKER_RUN_ARGS+=(-v /etc/passwd:/etc/passwd)
+    DOCKER_RUN_ARGS+=(-v /etc/group:/etc/group)
+    DOCKER_RUN_ARGS+=(-u $(id -u):$(id -g))
+fi
+
+if [[ ! -r "$SSL_DIR/private.pem" ]]; then
+    openssl genrsa -out "$SSL_DIR/private.pem" 4096
+    openssl rsa -in "$SSL_DIR/private.pem" -out "$SSL_DIR/public.pem" -pubout
+fi
+
+DOCKER_RUN_ARGS+=(-e USER=$DOCKER_USER)
+DOCKER_RUN_ARGS+=(-e BASH_ENV=$DOCKER_HOME/.profile)
+DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/home:$DOCKER_HOME)
+DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/sccache:/cache)
+DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/cargo:/cargo)
+DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/cargo_target:/cargo_target)
+DOCKER_RUN_ARGS+=(-v $SSL_DIR:/openssl)
+DOCKER_RUN_ARGS+=(-e CI_PROJECT_DIR=/builds/dfinity-lab/dfinity)
+DOCKER_RUN_ARGS+=(-e CI_RUST_BUILD_DIR=/builds/dfinity-lab/dfinity)
+DOCKER_RUN_ARGS+=(-e CI_COMMIT_SHA=$(git rev-parse HEAD))
+DOCKER_RUN_ARGS+=(-e CARGO_TEST_TIMEOUT=3600)
+# sccache does not play well with incremental compilation
+DOCKER_RUN_ARGS+=(-e CARGO_INCREMENTAL=0)
+DOCKER_RUN_ARGS+=(-e CARGO_BUILD_INCREMENTAL=false)
+DOCKER_RUN_ARGS+=(-e CI_JOB_NAME=custom-job-$USER)
+DOCKER_RUN_ARGS+=(-e RUSTC_WRAPPER=/usr/bin/sccache)
+DOCKER_RUN_ARGS+=(-e SHELL_WRAPPER=${SHELL_WRAPPER:-/usr/bin/time})
+
+DEBUG=false
+# Check if the first argument is "--verbose"
+if [[ "${1:-}" == "--verbose" ]]; then
+    DEBUG=true
+    shift
+fi

@@ -1,0 +1,28 @@
+// Protocol buffer mirror of `ic_crypto_tree_hash::MixedHashTree`.
+
+syntax = "proto3";
+
+package messaging.xnet.v1;
+
+import "google/protobuf/empty.proto";
+
+// A tree containing both data and merkle proofs.
+message MixedHashTree {
+  message Fork {
+    MixedHashTree left_tree = 1;
+    MixedHashTree right_tree = 2;
+  }
+
+  message Labeled {
+    bytes label = 1;
+    MixedHashTree subtree = 2;
+  }
+
+  oneof tree_enum {
+    google.protobuf.Empty empty = 1;
+    Fork fork = 2;
+    Labeled labeled = 3;
+    bytes leaf_data = 4;
+    bytes pruned_digest = 5;
+  }
+}

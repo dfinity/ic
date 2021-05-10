@@ -1,0 +1,20 @@
+[package]
+name = "dfn_macro"
+version = "0.8.0"
+edition = "2018"
+build = "build.rs"
+
+[lib]
+proc-macro = true
+test = false
+
+[dependencies]
+syn = { version = "1.0", features = ["fold", "full"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+
+[features]
+nightly_compiler = []
+
+[build-dependencies]
+rustversion = "1.0"

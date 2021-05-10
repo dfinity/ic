@@ -1,0 +1,10 @@
+[package]
+name = "ic-consensus-message"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-crypto = { path = "../../crypto" }
+ic-interfaces = { path = "../../interfaces" }
+ic-types = { path = "../../types/types" }
+phantom_newtype = { path = "../../phantom_newtype" }

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Internet Computer Replica Dashboard</title>
+    <style>
+        div {
+            margin: 6px;
+        }
+
+        h3 {
+            margin-block-end: 0;
+        }
+
+        .debug {
+            background-color: #eef;
+            font-family: monospace;
+            border: 1px solid #aaf;
+        }
+
+        span.debug {
+            padding: 4px;
+        }
+
+        div.debug {
+            display: block;
+            padding: 10px;
+        }
+
+        td, th {
+            padding: 0 10px 2px 0;
+            vertical-align: text-top;
+        }
+
+        .number {
+            text-align: right;
+        }
+
+        .text {
+            text-align: left;
+        }
+
+        .row-separator {
+            background-color: #aaf;
+            height: 2px;
+            padding: 0px;
+        }
+
+        .verbose {
+            position: absolute;
+            font-family: monospace;
+            background-color: #ffa;
+            border: 1px solid #ff0;
+            padding: 4px;
+        }
+    </style>
+</head>
+<body>
+<h1>Internet Computer Replica Dashboard</h1>
+
+<h2>Subnet Type</h2>
+<div class="debug">
+    <pre>{{ format!("{:?}", self.subnet_type) }}</pre>
+</div>
+<h2>Http Server Config</h2>
+<div class="debug">
+    <pre>{{ format!("{:?}", self.http_config) }}</pre>
+</div>
+<h2>Canisters</h2>
+<div>Info at height <span class="debug">{{ height }}</span></div>
+<div class="debug">
+<table>
+    <tr>
+        <th class="text">Canister id</th>
+        <th class="text">Status</th>
+        <th class="number">Memory allocation</th>
+        <th class="number">Last Execution Round</th>
+    </tr>
+    <tr class="row-separator">
+        <td colspan="100%"></td>
+    </tr>
+    {% for c in canisters %}
+    <tr>
+        <td class="text">
+            <details>
+                <summary>{{ c.canister_id() }}</summary>
+                <div class="verbose">
+                    <h3>System state</h3>
+                    <table>
+                        <tr><td>controller</td><td>{{ c.system_state.controller }}</td></tr>
+                        <tr><td>stable_memory_size</td><td>{{ c.system_state.stable_memory_size }} pages</td></tr>
+                        <tr><td>certified_data length</td><td>{{ c.system_state.certified_data.len() }} bytes</td></tr>
+                    </table>
+                    <h3>Execution state</h3>
+                    {% match c.execution_state.as_ref() %}
+                    {% when Some with (exec_state) %}
+                    <table>
+                        <tr><td>canister_root</td><td>{{ exec_state.canister_root.to_string_lossy() }}</td></tr>
+                        <tr><td>wasm_binary size</td><td>{{ exec_state.wasm_binary.len() }} bytes</td></tr>
+                        <tr><td>wasm_binary sha256</td><td>{{ hex::encode(exec_state.wasm_binary.hash_sha256()) }}</td></tr>
+                        <tr><td>heap_size</td><td>{{ exec_state.heap_size }} pages</td></tr>
+                        <tr><td>exports</td><td>
+                            {% let dbg = format!("{:?}",  exec_state.exports) %}
+                            {% if dbg.len() > 5000 %}
+                              Exports' debug string is too large: {{  dbg.len() }} bytes!
+                            {% else %}
+                              {{ dbg }}
+                            {% endif %}
+                        </td></tr>
+                    </table>
+                    {% when None %}
+                    <div>No execution state</div>
+                    {% endmatch %}
+                    <h3>Scheduler state</h3>
+                    <table>
+                        <tr><td>last_full_execution_round</td><td>{{ c.scheduler_state.last_full_execution_round }}</td></tr>
+                        <tr><td>compute_allocation</td><td>{{ c.scheduler_state.compute_allocation }}</td></tr>
+                        <tr><td>freeze_threshold (seconds)</td><td>{{ c.system_state.freeze_threshold }}</td></tr>
+                        <tr><td>memory_usage</td><td>{{ c.memory_usage() }}</td></tr>
+                        <tr><td>accumulated_priority</td><td>{{ c.scheduler_state.accumulated_priority.value() }} </td></tr>
+                        <tr><td>query_allocation</td><td>{{ c.scheduler_state.query_allocation }}</td></tr>
+                        <tr><td>Cycles balance</td><td>{{ c.system_state.cycles_account.cycles_balance() }}</td></tr>
+                    </table>
+                </div>
+            </details>
+        </td>
+        <td class="text">{{ c.system_state.status_string() }}</td>
+        <td class="number">
+        {% match c.memory_allocation() %}
+          {% when Some with (memory_allocation) %}
+	    {{ memory_allocation.display() }}
+          {% when None %}
+        None
+        {% endmatch %}
+        </td>
+        <td class="number">{{ c.scheduler_state.last_full_execution_round }}</td>
+    </tr>
+    {% endfor %}
+</table>
+</div>
+<div>Total compute allocation <span class="debug">{{ replicated_state.total_compute_allocation() }} %</span></div>
+<div>Cow Memory Manager Enabled <span class="debug">{{ cow_memory_manager_enabled }} </span></div>
+</body>
+</html>

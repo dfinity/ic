@@ -1,0 +1,8 @@
+[package]
+name = "nns-ui-canister"
+version = "0.8.0"
+edition = "2018"
+
+[[bin]]
+name = "nns-ui-canister"
+path = "canister/canister.rs"

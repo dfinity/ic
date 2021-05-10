@@ -1,0 +1,536 @@
+//! Public interface for a TLS-secured stream
+#![forbid(unsafe_code)]
+#![deny(clippy::unwrap_used)]
+
+use async_trait::async_trait;
+use core::fmt;
+use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
+use ic_types::registry::RegistryClientError;
+use ic_types::{NodeId, RegistryVersion};
+use std::collections::BTreeSet;
+use std::fmt::{Display, Formatter};
+use std::io;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use tokio::io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf};
+use tokio::net::TcpStream;
+use tokio_openssl::SslStream;
+
+#[cfg(test)]
+mod tests;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// Errors from a TLS handshake performed as the server. Please refer to the
+/// `TlsHandshake` method for detailed error variant descriptions.
+pub enum TlsServerHandshakeError {
+    RegistryError(RegistryClientError),
+    CertificateNotInRegistry {
+        node_id: NodeId,
+        registry_version: RegistryVersion,
+    },
+    MalformedSelfCertificate {
+        internal_error: String,
+    },
+    MalformedClientCertificate(MalformedPeerCertificateError),
+    CreateAcceptorError {
+        description: String,
+        cert_der: Option<Vec<u8>>,
+        internal_error: Option<String>,
+    },
+    HandshakeError {
+        internal_error: String,
+    },
+    ClientNotAllowed(PeerNotAllowedError),
+    UnauthenticatedClient,
+}
+
+impl Display for TlsServerHandshakeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for TlsServerHandshakeError {}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// The certificate offered by the peer is malformed.
+pub struct MalformedPeerCertificateError {
+    pub internal_error: String,
+}
+
+impl MalformedPeerCertificateError {
+    pub fn new(internal_error: &str) -> Self {
+        Self {
+            internal_error: internal_error.to_string(),
+        }
+    }
+}
+
+impl From<MalformedPeerCertificateError> for TlsServerHandshakeError {
+    fn from(malformed_peer_cert_error: MalformedPeerCertificateError) -> Self {
+        TlsServerHandshakeError::MalformedClientCertificate(malformed_peer_cert_error)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// Errors from a TLS handshake due to an unauthorized peer
+pub enum PeerNotAllowedError {
+    /// Validation of claimed identity against authorized identities failed.
+    HandshakeCertificateNodeIdNotAllowed,
+    /// Failed to DER encode the peer's certificate
+    /// offered during the handshake.
+    CannotDerEncodePeerCertFromHandshake { internal_error: String },
+    /// Peer's certificate offered during the handshake
+    /// doesn't match the trusted certificate.
+    CertificatesDiffer,
+}
+
+impl From<PeerNotAllowedError> for TlsServerHandshakeError {
+    fn from(peer_not_allowed_error: PeerNotAllowedError) -> Self {
+        TlsServerHandshakeError::ClientNotAllowed(peer_not_allowed_error)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// Errors from a TLS handshake performed as the client. Please refer to the
+/// `TlsHandshake` method for detailed error variant descriptions.
+pub enum TlsClientHandshakeError {
+    RegistryError(RegistryClientError),
+    CertificateNotInRegistry {
+        node_id: NodeId,
+        registry_version: RegistryVersion,
+    },
+    MalformedSelfCertificate {
+        internal_error: String,
+    },
+    MalformedServerCertificate(MalformedPeerCertificateError),
+    CreateConnectorError {
+        description: String,
+        client_cert_der: Option<Vec<u8>>,
+        server_cert_der: Option<Vec<u8>>,
+        internal_error: String,
+    },
+    HandshakeError {
+        internal_error: String,
+    },
+    ServerNotAllowed(PeerNotAllowedError),
+}
+
+impl Display for TlsClientHandshakeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for TlsClientHandshakeError {}
+
+impl From<MalformedPeerCertificateError> for TlsClientHandshakeError {
+    fn from(malformed_peer_cert_error: MalformedPeerCertificateError) -> Self {
+        TlsClientHandshakeError::MalformedServerCertificate(malformed_peer_cert_error)
+    }
+}
+
+impl From<PeerNotAllowedError> for TlsClientHandshakeError {
+    fn from(peer_not_allowed_error: PeerNotAllowedError) -> Self {
+        TlsClientHandshakeError::ServerNotAllowed(peer_not_allowed_error)
+    }
+}
+
+/// A stream over a secure connection protected by TLS.
+pub struct TlsStream {
+    ssl_stream: SslStream<TcpStream>,
+}
+
+impl TlsStream {
+    pub fn new(ssl_stream: SslStream<TcpStream>) -> Self {
+        Self { ssl_stream }
+    }
+
+    /// Use this method to split a `TlsStream`, as it returns `TlsReadHalf`
+    /// and `TlsWriteHalf` that are guaranteed to be protected by TLS by the
+    /// type system.
+    pub fn split(self) -> (TlsReadHalf, TlsWriteHalf) {
+        let (read_half, write_half) = tokio::io::split(self.ssl_stream);
+        (TlsReadHalf::new(read_half), TlsWriteHalf::new(write_half))
+    }
+}
+
+impl AsyncRead for TlsStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<tokio::io::Result<usize>> {
+        Pin::new(&mut self.ssl_stream).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for TlsStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.ssl_stream).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.ssl_stream).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.ssl_stream).poll_shutdown(cx)
+    }
+}
+
+/// The read half of a stream over a secure connection protected by TLS.
+pub struct TlsReadHalf {
+    read_half: ReadHalf<SslStream<TcpStream>>,
+}
+
+impl TlsReadHalf {
+    pub fn new(read_half: ReadHalf<SslStream<TcpStream>>) -> Self {
+        Self { read_half }
+    }
+}
+
+impl AsyncRead for TlsReadHalf {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<tokio::io::Result<usize>> {
+        Pin::new(&mut self.read_half).poll_read(cx, buf)
+    }
+}
+
+/// The write half of a stream over a secure connection protected by TLS.
+pub struct TlsWriteHalf {
+    write_half: WriteHalf<SslStream<TcpStream>>,
+}
+
+impl TlsWriteHalf {
+    pub fn new(write_half: WriteHalf<SslStream<TcpStream>>) -> Self {
+        Self { write_half }
+    }
+}
+
+impl AsyncWrite for TlsWriteHalf {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.write_half).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.write_half).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.write_half).poll_shutdown(cx)
+    }
+}
+
+#[async_trait]
+/// Implementors provide methods for transforming TCP streams into TLS stream.
+///
+/// The TLS streams are returned as trait objects over a trait that does not
+/// allow for extracting the secret keys of the underlying TLS session. This
+/// is done because directly returning the underlying structs may allow for
+/// extraction of the secret session keys.
+pub trait TlsHandshake {
+    /// Transforms a TCP stream into a TLS stream by first performing a TLS
+    /// server handshake and then verifying that the authenticated peer is an
+    /// allowed client.
+    ///
+    /// For the handshake, the server uses the following configuration:
+    /// * Minimum protocol version: TLS 1.3
+    /// * Supported signature algorithms: ed25519
+    /// * Allowed cipher suites: TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384
+    /// * Client authentication: mandatory, with ed25519 certificate
+    /// * Maximum number of intermediate CA certificates: 1
+    ///
+    /// To determine whether the peer (that successfully performed the
+    /// handshake) is an allowed client, the following steps are taken:
+    /// 1. Determine the peer's node ID N_claimed from the _subject name_ of
+    ///    the certificate C_handshake that the peer presented during the
+    ///    handshake (and for which the peer therefore knows the private key).
+    ///    If N_claimed is contained in the nodes in `allowed_clients`,
+    ///    determine the certificate C_registry by querying the registry for the
+    ///    TLS certificate of node with ID N_claimed, and if C_registry is equal
+    ///    to C_handshake, then the peer successfully authenticated as node
+    ///    N_claimed. Otherwise, step 2 is taken.
+    /// 2. Compare the root of the certificate chain that the peer presented
+    ///    during the handshake (and for which the peer therefore knows the
+    ///    private key of the chain's leaf certificate) to all the (explicitly
+    ///    allowed) certificates in `allowed_clients`. If there is a match,
+    ///    then the peer represented by the chain's leaf certificate
+    ///    successfully authenticated.
+    ///
+    /// The given `tcp_stream` is consumed. If an error is returned, the TCP
+    /// connection is therefore dropped.
+    ///
+    /// Returns the TLS stream together with the peer that successfully
+    /// authenticated.
+    ///
+    /// # Errors
+    /// * TlsServerHandshakeError::RegistryError if the registry cannot be
+    ///   accessed.
+    /// * TlsServerHandshakeError::CertificateNotInRegistry if a certificate
+    ///   that is expected to be in the registry is not found.
+    /// * TlsServerHandshakeError::MalformedSelfCertificate if the node's own
+    ///   server certificate is malformed.
+    /// * TlsServerHandshakeError::MalformedClientCertificate if a client
+    ///   certificate corresponding to an client in `allowed_clients` is
+    ///   malformed.
+    /// * TlsServerHandshakeError::CreateAcceptorError if there is a problem
+    ///   configuring the server for accepting connections from clients.
+    /// * TlsServerHandshakeError::HandshakeError if there is an error during
+    ///   the TLS handshake, or the handshake fails.
+    /// * TlsServerHandshakeError::ClientNotAllowed if the node_id in the
+    ///   subject CN of the client's certificate presented in the handshake is
+    ///   not in `allowed_clients`, or if the client's certificate presented in
+    ///   the handshake does not exactly match the client's certificate in the
+    ///   registry.
+    /// * TlsServerHandshakeError::UnauthenticatedClient if the client did not
+    ///   authenticate using a client certificate.
+    ///
+    /// # Panics
+    /// * If the secret key corresponding to the server certificate cannot be
+    ///   found or is malformed in the server's secret key store. Note that this
+    ///   is an error in the setup of the node and registry.
+    async fn perform_tls_server_handshake(
+        &self,
+        tcp_stream: TcpStream,
+        allowed_clients: AllowedClients,
+        registry_version: RegistryVersion,
+    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError>;
+
+    /// IMPORTANT NODE: This method is temporary. It will be replaced by
+    /// `perform_tls_server_handshake` and a new method
+    /// `perform_tls_server_handshake_without_client_auth` soon. This method is
+    /// currently needed to allow connections without knowing if a client
+    /// performs client authentication.
+    ///
+    /// SECURITY WARNING: The caller of this method is responsible to check if
+    /// the peer authenticated or not. Only if this method returns
+    /// `Peer::Authenticated` it is guaranteed that the client is an allowed
+    /// client wrt. `allowed__authenticating_clients`, see below.
+    ///
+    /// Transforms a TCP stream into a TLS stream by performing a TLS server
+    /// handshake.
+    ///
+    /// For the handshake, the server uses the following configuration:
+    /// * Minimum protocol version: TLS 1.3
+    /// * Supported signature algorithms: ed25519
+    /// * Allowed cipher suites: TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384
+    /// * Client authentication: optional, with ed25519 certificate
+    /// * Maximum number of intermediate CA certificates: 1
+    ///
+    /// Whenever the TLS handshake fails, this method returns an error.
+    ///
+    /// The given `tcp_stream` is consumed. If an error is returned, the TCP
+    /// connection is therefore dropped.
+    ///
+    /// # Connections without client authentcation
+    /// The client may present a client certificate to authenticate. If it
+    /// doesn't, `Peer:Unauthenticated` is returned.
+    ///
+    /// # Connections with client authentication
+    /// If the client presents a certificate, the TLS handshake only succeeds if
+    /// the certificate is valid and trusted given the
+    /// `allowed_authenticating_clients`. Additionally, after the handshake, to
+    /// determine whether the peer (that successfully performed the handshake)
+    /// is an allowed client, the following steps are taken:
+    /// 1. Determine the peer's node ID N_claimed from the _subject name_ of
+    ///    the certificate C_handshake that the peer presented during the
+    ///    handshake (and for which the peer therefore knows the private key).
+    ///    If N_claimed is contained in the nodes in
+    ///    `allowed_authenticating_clients`, determine the certificate
+    ///    C_registry by querying the registry for the TLS certificate of node
+    ///    with ID N_claimed, and if C_registry is equal to C_handshake,
+    ///    then the peer successfully authenticated as node N_claimed.
+    ///    Otherwise, step 2 is taken.
+    /// 2. Compare the root of the certificate chain that the peer presented
+    ///    during the handshake (and for which the peer therefore knows the
+    ///    private key of the chain's leaf certificate) to all the (explicitly
+    ///    allowed) certificates in `allowed_authenticating_clients`. If there
+    ///    is a match, then the peer represented by the chain's leaf certificate
+    ///    successfully authenticated.
+    ///
+    /// If client authentication is successful, the TLS stream together with the
+    /// peer (`Peer::Authenticated`) that successfully authenticated is
+    /// returned.
+    ///
+    /// # Errors
+    /// * TlsServerHandshakeError::RegistryError if the registry cannot be
+    ///   accessed.
+    /// * TlsServerHandshakeError::CertificateNotInRegistry if a certificate
+    ///   that is expected to be in the registry is not found.
+    /// * TlsServerHandshakeError::MalformedSelfCertificate if the node's own
+    ///   server certificate is malformed.
+    /// * TlsServerHandshakeError::MalformedClientCertificate if a client
+    ///   certificate corresponding to an client in
+    ///   `allowed_authenticating_clients` is malformed.
+    /// * TlsServerHandshakeError::CreateAcceptorError if there is a problem
+    ///   configuring the server for accepting connections from clients.
+    /// * TlsServerHandshakeError::HandshakeError if there is an error during
+    ///   the TLS handshake, or the handshake fails.
+    /// * TlsServerHandshakeError::ClientNotAllowed if the node_id in the
+    ///   subject CN of the client's certificate presented in the handshake is
+    ///   not in `allowed_authenticating_clients`, or if the client's
+    ///   certificate presented in the handshake does not exactly match the
+    ///   client's certificate in the registry.
+    ///
+    /// # Panics
+    /// * If the secret key corresponding to the server certificate cannot be
+    ///   found or is malformed in the server's secret key store. Note that this
+    ///   is an error in the setup of the node and registry.
+    async fn perform_tls_server_handshake_temp_with_optional_client_auth(
+        &self,
+        tcp_stream: TcpStream,
+        allowed_authenticating_clients: AllowedClients,
+        registry_version: RegistryVersion,
+    ) -> Result<(TlsStream, Peer), TlsServerHandshakeError>;
+
+    /// Transforms a TCP stream into a TLS stream by first performing a TLS
+    /// client handshake and then verifying that the peer is the given `server`.
+    ///
+    /// For the handshake, the client uses the following configuration:
+    /// * Minimum protocol version: TLS 1.3
+    /// * Supported signature algorithms: ed25519
+    /// * Allowed cipher suites: TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384
+    /// * Server authentication: mandatory, with ed25519 certificate
+    ///
+    /// To determine whether the peer (that successfully performed the
+    /// handshake) is the `server`, the following steps are taken:
+    /// 1. Determine the peer's node ID N_claimed from the _subject name_ of
+    ///    the certificate C_handshake that the peer presented during the
+    ///    handshake (and for which the peer therefore knows the private key).
+    ///    Return an error if N_claimed is not the `server`.
+    /// 2. Determine the certificate C_registry by querying the registry for the
+    ///    TLS certificate of node with ID N_claimed. Return an error if the
+    ///    C_registry does not equal C_handshake.
+    ///
+    /// The given `tcp_stream` is consumed. If an error is returned, the TCP
+    /// connection is therefore dropped.
+    ///
+    /// # Errors
+    /// * TlsClientHandshakeError::RegistryError if the registry cannot be
+    ///   accessed.
+    /// * TlsClientHandshakeError::CertificateNotInRegistry if a certificate
+    ///   that is expected to be in the registry is not found.
+    /// * TlsClientHandshakeError::MalformedSelfCertificate if the node's own
+    ///   client certificate is malformed.
+    /// * TlsClientHandshakeError::MalformedServerCertificate if the server
+    ///   certificate obtained from the registry (as specified by `server)` is
+    ///   malformed.
+    /// * TlsClientHandshakeError::CreateConnectorError if there is a problem
+    ///   configuring the TLS client for connecting to the `server`.
+    /// * TlsServerHandshakeError::HandshakeError if there is an error during
+    ///   the TLS handshake, or the handshake fails.
+    /// * TlsClientHandshakeError::ServerNotAllowed if the node_id in the
+    ///   subject CN of the server's certificate presented in the handshake does
+    ///   not equal `server`, or if the server's certificate presented in the
+    ///   handshake does not exactly match the `server`'s certificate in the
+    ///   registry.
+    ///
+    /// # Panics
+    /// * If the secret key corresponding to the client certificate cannot be
+    ///   found or is malformed in the client's secret key store. Note that this
+    ///   is an error in the setup of the node and registry.
+    async fn perform_tls_client_handshake(
+        &self,
+        tcp_stream: TcpStream,
+        server: NodeId,
+        registry_version: RegistryVersion,
+    ) -> Result<TlsStream, TlsClientHandshakeError>;
+}
+
+#[derive(Clone, Debug)]
+/// A list of allowed TLS peers (and their trusted certificates),
+/// which can be `All` to allow any node to connect.
+pub struct AllowedClients {
+    nodes: SomeOrAllNodes,
+    // Using `Vec` rather than `BTreeSet` because the protobuf struct `X509PublicKeyCert` does not
+    // implement `Ord`. The use of protobuf structs will be cleaned up as follows:
+    // TODO (CRP-773): create a domain object for X509 certificates and use it here
+    certs: Vec<X509PublicKeyCert>,
+}
+
+impl AllowedClients {
+    pub fn new(
+        nodes: SomeOrAllNodes,
+        certs: Vec<X509PublicKeyCert>,
+    ) -> Result<Self, ClientsEmptyError> {
+        let allowed_clients = Self { nodes, certs };
+        Self::ensure_clients_not_empty(&allowed_clients)?;
+        Ok(allowed_clients)
+    }
+
+    /// Create an `AllowedClients` with a set of nodes, but no certificates.
+    pub fn new_with_nodes(node_ids: BTreeSet<NodeId>) -> Result<Self, ClientsEmptyError> {
+        Self::new(SomeOrAllNodes::Some(node_ids), vec![])
+    }
+
+    /// Access the allowed nodes.
+    pub fn nodes(&self) -> &SomeOrAllNodes {
+        &self.nodes
+    }
+
+    /// Access the allowed certificates.
+    pub fn certs(&self) -> &Vec<X509PublicKeyCert> {
+        &self.certs
+    }
+
+    fn ensure_clients_not_empty(candidate: &Self) -> Result<(), ClientsEmptyError> {
+        match &candidate.nodes {
+            SomeOrAllNodes::Some(node_ids) => {
+                if node_ids.is_empty() && candidate.certs.is_empty() {
+                    return Err(ClientsEmptyError {});
+                }
+            }
+            SomeOrAllNodes::All => { /* All is considered non-empty */ }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+/// Attempted to create an `AllowedClients` with `Some` clients
+/// but empty nodes and certificates lists.
+pub struct ClientsEmptyError {}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// A list of node IDs, or "all nodes"
+pub enum SomeOrAllNodes {
+    Some(BTreeSet<NodeId>),
+    All,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+/// A TLS peer, with identification information (if authenticated)
+pub enum Peer {
+    /// Peer hasn't been authenticated.
+    Unauthenticated,
+    /// Peer has been authenticated.
+    Authenticated(AuthenticatedPeer),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+/// An authenticated Node ID, or an authenticated certificate
+pub enum AuthenticatedPeer {
+    /// Authenticated Node ID
+    Node(NodeId),
+    // TODO (CRP-773): create a domain object for X509 certificates and use it here
+    /// Authenticated X.509 certificate
+    Cert(X509PublicKeyCert),
+}

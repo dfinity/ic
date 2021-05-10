@@ -1,0 +1,35 @@
+syntax = "proto3";
+package registry.replica_version.v1;
+
+// Information about a Replica version
+message ReplicaVersionRecord {
+    // The URL against which a HTTP GET request will return a replica binary
+    // that corresponds to this version
+    string binary_url = 1;
+
+    // The hex-formatted SHA-256 hash of the binary served by 'binary_url'
+    string sha256_hex = 2;
+
+    // The URL against which a HTTP GET request will return a node manager binary
+    // that corresponds to this version
+    string node_manager_binary_url = 3;
+
+    // The hex-formatted SHA-256 hash of the binary served by 'node_manager_binary_url'
+    string node_manager_sha256_hex = 4;
+
+    // The URL against which a HTTP GET request will return a release package
+    // that corresponds to this version
+    string release_package_url = 5;
+
+    // The hex-formatted SHA-256 hash of the archive file served by 'release_package_url'
+    string release_package_sha256_hex = 6;
+}
+
+// A list of blessed versions of the IC Replica
+//
+// New versions are added here after a vote has been accepted by token
+// holders. Subnetworks can then be upgraded to any of those version.
+message BlessedReplicaVersions {
+    // A list of version information ids.
+    repeated string blessed_version_ids = 1;
+}

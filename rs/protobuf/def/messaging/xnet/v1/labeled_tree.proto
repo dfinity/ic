@@ -1,0 +1,24 @@
+// Protocol buffer mirror of `ic_crypto_tree_hash::LabeledTree` for
+// use as backwards- and forwards-compatible XNet wire format.
+
+syntax = "proto3";
+package messaging.xnet.v1;
+
+// Tree with ordered, labeled edges.
+message LabeledTree {
+  // Inner node with zero or more ordered, labeled children.
+  message SubTree {
+    // Defined as `repeated` instead of `map` in order to preserve ordering.
+    repeated Child children = 1;
+  }
+  // A `SubTree`'s labeled child.
+  message Child {
+    bytes label = 1;
+    LabeledTree node = 2;
+  }
+
+  oneof node_enum {
+    bytes leaf = 1;
+    SubTree sub_tree = 2;
+  }
+}

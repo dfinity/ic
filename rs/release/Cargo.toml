@@ -1,0 +1,21 @@
+[package]
+name = "ic-release"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+flate2 = "1.0.18"
+hex = "0.4.2"
+ic-crypto-sha256 = { path = "../crypto/sha256" }
+ic-types = { path = "../types/types" }
+phantom_newtype = { path = "../phantom_newtype" }
+structopt = "0.3.20"
+tar = "0.4.30"
+serde = { version = "1.0.99", features = ["derive", "rc"] }
+serde_json = "1.0.40"
+url = { version = "2.1.1", features = ["serde"] }
+
+[dev-dependencies]
+assert_matches = "1.4.0"
+tempfile = "3.1.0"
+rand = "0.7.3"

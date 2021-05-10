@@ -1,0 +1,53 @@
+= Crypto Component of the IC, and related crates
+
+This directory contains the Crypto Component of the IC, and various smaller
+crates that offer selected crypto functionality.  The following table describes the
+contents of the subdirectories, and the available crates, where ^**[Wasm]**^ indicates that
+the corresponding crate can be compiled to https://webassembly.org/[WebAssembly] (Wasm).
+[cols="1,3,4",options="header"]
+|===============================================
+| Subdirectory | Crate(s) | Description / Notes
+
+3+^| **The main Crypto Component**
+
+|`src/..` |  `ic-crypto` |
+Crypto Component used by a replica.  It contains
+SecretKeyStore, which manages and protects the secret keys owned by a node.
+
+|`benches/..` |  - |
+benchmarks of the Crypto Component.
+
+|`tests/..` |  - |
+various tests of the Crypto Component.
+
+3+^| **Miscellaneous public crates**
+
+
+| `key_validation/..` | `ic-crypto-key-validation`^**[Wasm]**^ |
+validation utils for public keys of a node
+
+| `sha256/..` | `ic-crypto-sha256`^**[Wasm]**^ |
+hashing algorithms, incl. SHA256 and SHA224
+
+| `tls/..` | `ic-crypto-tls` |
+estabilishing & using TLS connections in a standalone setting, where the caller manages the keys
+(unlike TLS from `ic-crypto`, where Crypto Component manages the keys)
+
+| `tls_interfaces/..` | `ic-crypto-tls-interfaces` |
+interfaces of TLS functionality (used by both `ic-crypto` and  `ic-crypto-tls`)
+
+|`tree_hash/..` | `ic-crypto-tree-hash`^**[Wasm]**^|
+computation of hash trees and witnesses
+
+| `utils/..` | `ic-crypto-utils-basic-sig`^**[Wasm]**^, `ic-crypto-utils-threshold-sig`^**[Wasm]**^ |
+utils for basic signatures resp. threshold signatures
+
+| `test_utils/..` | `ic-crypto-test_utils` |
+miscellaneous utils for testing
+
+3+^| **Structures/crates for internal use only**
+
+| `internal/..` | (many crates) |
+the actual implementation of the functionalities offered
+via the public crates from other subdirectories
+(crates from this directory **should not be used directly** outside of `/crypto/..`)

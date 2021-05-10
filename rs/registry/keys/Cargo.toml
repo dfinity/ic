@@ -1,0 +1,11 @@
+[package]
+name = "ic-registry-keys"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-base-types = { path = "../../types/base_types" }
+ic-types = { path = "../../types/types" }
+
+[dev-dependencies]
+rand = "0.7.3"

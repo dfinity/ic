@@ -1,0 +1,26 @@
+[package]
+name = "ic-canonical-state"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-base-types = { path = "../types/base_types" }
+ic-cow-state = { path = "../cow_state" }
+ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-types = { path = "../types/types" }
+leb128 = "0.2.1"
+phantom_newtype = { path = "../phantom_newtype" }
+serde = "1.0.99"
+serde_bytes = "0.11"
+serde_cbor = "0.11.1"
+
+[dev-dependencies]
+ic-utils = { path = "../utils" }
+ic-wasm-types = { path = "../types/wasm_types" }
+ic-sys = {path = "../sys"}
+maplit = "1.0.2"
+proptest = "0.9.4"
+tempfile = "3.1.0"

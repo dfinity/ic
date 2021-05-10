@@ -1,0 +1,16 @@
+[package]
+name = "ic-ic00-types"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+candid = "0.6.15"
+ic-base-types = { path = "../base_types" }
+ic-error-types = { path = "../error_types" }
+ic-protobuf = { path = "../../protobuf" }
+num-traits = "0.2.12"
+serde = { version = "1.0.99", features = ["derive", "rc"] }
+serde_bytes = "0.11"
+serde_cbor = "0.11.1"
+strum = "0.18.0"
+strum_macros = "0.18.0"
