@@ -1279,6 +1279,7 @@ version = "0.8.0"
 dependencies = [
  "byteorder",
  "cfg-if 0.1.10",
+ "dfn_json",
  "futures",
  "hex",
  "ic-base-types",
@@ -1295,6 +1296,15 @@ dependencies = [
  "dfn_core",
  "serde",
  "serde_bytes",
+]
+
+[[package]]
+name = "dfn_json"
+version = "0.8.0"
+dependencies = [
+ "on_wire",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -4548,6 +4558,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mersenne_twister"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b85dbb2f68dfc026aac8f4c5196579896b10ee45e8b9a1a3b325fab3043d1cb0"
+dependencies = [
+ "rand 0.4.6",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6780,6 +6799,21 @@ name = "stable_deref_trait"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dba1a27d3efae4351c8051072d619e3ade2820635c3958d826bfea39d59b54c8"
+
+[[package]]
+name = "statesync-test"
+version = "0.8.0"
+dependencies = [
+ "dfn_core",
+ "dfn_json",
+ "dfn_macro",
+ "ic-types 0.8.0",
+ "lazy_static",
+ "mersenne_twister",
+ "rand 0.4.6",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "static_assertions"

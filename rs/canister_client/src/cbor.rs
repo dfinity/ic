@@ -43,10 +43,10 @@ impl RequestStatus {
 }
 
 #[derive(Debug)]
-pub struct CanisterCallResponse {
-    pub status: String,
-    pub arg: Option<Vec<u8>>,
-    pub reject_message: Option<String>,
+struct CanisterCallResponse {
+    status: String,
+    arg: Option<Vec<u8>>,
+    reject_message: Option<String>,
 }
 
 /// Given a CBOR response from a `read_state` and a `request_id` extracts
@@ -179,12 +179,12 @@ impl Agent {
     }
 
     /// Prepares and serializes a CBOR query request.
-    pub(crate) fn prepare_query_raw(
+    pub fn prepare_query(
         &self,
         canister_id: &CanisterId,
         method: &str,
         arguments: Vec<u8>,
-    ) -> Result<HttpRequestEnvelope<HttpReadContent>, Box<dyn Error>> {
+    ) -> Result<Vec<u8>, Box<dyn Error>> {
         let content = HttpReadContent::Query {
             query: HttpUserQuery {
                 canister_id: to_blob(canister_id),
@@ -196,17 +196,7 @@ impl Agent {
             },
         };
 
-        sign_read(content, &self.sender)
-    }
-
-    /// Prepares and serializes a CBOR query request.
-    pub fn prepare_query(
-        &self,
-        canister_id: &CanisterId,
-        method: &str,
-        arguments: Vec<u8>,
-    ) -> Result<Vec<u8>, Box<dyn Error>> {
-        let request = self.prepare_query_raw(canister_id, method, arguments)?;
+        let request = sign_read(content, &self.sender)?;
         Ok(SignedRequestBytes::try_from(request)?.into())
     }
 

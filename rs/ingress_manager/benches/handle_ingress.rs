@@ -208,10 +208,11 @@ where
                 ),
             ));
             let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+            let runtime = tokio::runtime::Runtime::new().unwrap();
             let mut ingress_manager = IngressManager::new(
                 Arc::new(consensus_pool_cache),
                 Box::new(ingress_hist_reader),
-                setup_registry(subnet_id),
+                setup_registry(subnet_id, runtime.handle().clone()),
                 ingress_signature_crypto,
                 MetricsRegistry::new(),
                 subnet_id,
@@ -340,7 +341,7 @@ fn handle_ingress(criterion: &mut Criterion) {
 }
 
 /// Sets up a registry client.
-fn setup_registry(subnet_id: SubnetId) -> Arc<dyn RegistryClient> {
+fn setup_registry(subnet_id: SubnetId, runtime: tokio::runtime::Handle) -> Arc<dyn RegistryClient> {
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let subnet_record = test_subnet_record();
     registry_data_provider
@@ -354,7 +355,7 @@ fn setup_registry(subnet_id: SubnetId) -> Arc<dyn RegistryClient> {
         Arc::clone(&registry_data_provider) as Arc<_>,
         None,
     ));
-    registry.fetch_and_start_polling().unwrap();
+    runtime.block_on(async { registry.as_ref().fetch_and_start_polling().unwrap() });
     registry
 }
 

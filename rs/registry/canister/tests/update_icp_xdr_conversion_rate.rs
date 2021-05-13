@@ -2,10 +2,10 @@ use candid::Encode;
 
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, get_value, local_test_on_nns_subnet,
-        set_up_registry_canister, set_up_universal_canister,
+        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        set_up_universal_canister,
     },
-    registry::invariant_compliant_mutation_as_atomic_req,
+    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::conversion_rate::v1::IcpXdrConversionRateRecord;
 use ic_registry_keys::XDR_PER_ICP_KEY;

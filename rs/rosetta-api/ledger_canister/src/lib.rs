@@ -976,7 +976,7 @@ impl Ledger {
 lazy_static! {
     pub static ref LEDGER: RwLock<Ledger> = RwLock::new(Ledger::default());
     // Maximum inter-canister message size in bytes
-    pub static ref MAX_MESSAGE_SIZE_BYTES: RwLock<usize> = RwLock::new(2 * (1024^2));
+    pub static ref MAX_MESSAGE_SIZE_BYTES: RwLock<usize> = RwLock::new(1024 * 1024);
 }
 
 pub fn add_payment(

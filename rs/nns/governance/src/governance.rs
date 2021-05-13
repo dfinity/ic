@@ -2164,11 +2164,12 @@ impl Governance {
             )
             .await?;
 
+        let to_deduct = disburse_amount_e8s + transaction_fee_e8s;
         // The transfer was successful we can change the stake of the neuron.
-        if disburse_amount_e8s >= neuron.cached_neuron_stake_e8s {
+        if to_deduct >= neuron.cached_neuron_stake_e8s {
             neuron.cached_neuron_stake_e8s = 0;
         } else {
-            neuron.cached_neuron_stake_e8s -= disburse_amount_e8s;
+            neuron.cached_neuron_stake_e8s -= to_deduct;
         }
 
         // Transfer 3 - Transfer the accumulated maturity by minting into the
@@ -3557,7 +3558,8 @@ impl Governance {
                 }
             }
             proposal::Action::ApproveGenesisKyc(proposal) => {
-                self.approve_genesis_kyc(&proposal.principals)
+                self.approve_genesis_kyc(&proposal.principals);
+                self.set_proposal_execution_status(pid, Ok(()));
             }
             proposal::Action::AddOrRemoveNodeProvider(ref proposal) => {
                 if let Some(change) = &proposal.change {
@@ -4646,8 +4648,7 @@ impl Governance {
                 LOG_PREFIX, supply
             );
 
-            self.distribute_rewards(supply.expect("Could not get the total ICPT supply."))
-                .await;
+            self.distribute_rewards(supply.expect("Could not get the total ICPT supply."));
         }
     }
 
@@ -4658,7 +4659,7 @@ impl Governance {
     /// can no longer accept votes for the purpose of rewards and that have
     /// not yet been considered in a reward event.
     /// * Associate those proposals to the new reward event
-    async fn distribute_rewards(&mut self, supply: ICPTs) {
+    fn distribute_rewards(&mut self, supply: ICPTs) {
         let day_after_genesis = (self.env.now() - self.proto.genesis_timestamp_seconds)
             / REWARD_DISTRIBUTION_PERIOD_SECONDS;
 
@@ -4708,44 +4709,64 @@ impl Governance {
         let total_voting_rights: f64 = voters_to_used_voting_right.values().sum();
 
         for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
-            let mut neuron = self.get_neuron_mut(&neuron_id).unwrap_or_else(|e| {
-                panic!(
-                    "Invariant failure: cannot find neuron {},\
-                despite having voted with power {} in the considered reward period. {:?}",
-                    neuron_id.id, used_voting_rights, e
-                )
-            });
-            // Note that "as" rounds toward zero; this is the desired
-            // behavior here. Also note that `total_voting_rights` has
-            // to be positive because (1) voters_to_used_voting_right
-            // is non-empty (otherwise we wouldn't be here in the
-            // first place) and (2) the voting power of all ballots is
-            // positive (non-zero).
-            let reward = (used_voting_rights * distributed_e8s_equivalent_float
-                / total_voting_rights) as u64;
-            neuron.maturity_e8s_equivalent += reward;
-            actually_distributed_e8s_equivalent += reward;
+            match self.get_neuron_mut(&neuron_id) {
+                Ok(mut neuron) => {
+                    // Note that "as" rounds toward zero; this is the desired
+                    // behavior here. Also note that `total_voting_rights` has
+                    // to be positive because (1) voters_to_used_voting_right
+                    // is non-empty (otherwise we wouldn't be here in the
+                    // first place) and (2) the voting power of all ballots is
+                    // positive (non-zero).
+                    let reward = (used_voting_rights * distributed_e8s_equivalent_float
+                        / total_voting_rights) as u64;
+                    neuron.maturity_e8s_equivalent += reward;
+                    actually_distributed_e8s_equivalent += reward;
+                }
+                Err(e) => println!(
+                    "{}Cannot find neuron {}, despite having voted with power {} \
+                        in the considered reward period. The reward that should have been \
+                        distributed to this neuron is simply skipped, so the total amount \
+                        of distributed reward for this period will be lower than the maximum \
+                        allowed. Underlying error: {:?}.",
+                    LOG_PREFIX, neuron_id.id, used_voting_rights, e
+                ),
+            }
         }
 
+        let now = self.env.now();
         for pid in considered_proposals.iter() {
             // Before considering a proposal for reward, it must be fully processed --
             // because we're about to clear the ballots, so no further processing will be
             // possible.
             self.process_proposal(pid.id);
 
-            let mut proposal = self.mut_proposal_data(*pid).unwrap_or_else(|| panic!(
-                "Cannot find proposal {}, despite it being considered for rewards distribution.", pid.id
-            ));
-            assert_ne!(proposal.status(), ProposalStatus::Open);
-
-            proposal.reward_event_round = day_after_genesis;
-            // Space optimization: we discard ballots at this point, because they are
-            // no longer needed
-            proposal.ballots.clear();
+            match self.mut_proposal_data(*pid) {
+                None =>  println!(
+                    "{}Cannot find proposal {}, despite it being considered for rewards distribution.",
+                    LOG_PREFIX, pid.id
+                ),
+                Some(p) => {
+                    if p.status() == ProposalStatus::Open {
+                        println!("{}Proposal {} was considered for reward distribution despite \
+                          being open. This code line is expected not to be reachable. We need to \
+                          clear the ballots here to avoid a risk of the memory getting too large. \
+                          In doubt, reject the proposal", LOG_PREFIX, pid.id);
+                        p.decided_timestamp_seconds = now;
+                        p.latest_tally = Some(Tally {
+                            timestamp_seconds: now,
+                            yes:0,
+                            no:0,
+                            total:0,
+                       })
+                    };
+                    p.reward_event_round = day_after_genesis;
+                    p.ballots.clear();
+                }
+            };
         }
         self.proto.latest_reward_event = Some(RewardEvent {
             day_after_genesis,
-            actual_timestamp_seconds: self.env.now(),
+            actual_timestamp_seconds: now,
             settled_proposals: considered_proposals,
             distributed_e8s_equivalent: actually_distributed_e8s_equivalent,
         })

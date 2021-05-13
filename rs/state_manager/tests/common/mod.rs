@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use ic_base_types::{NumSeconds, PrincipalId};
+use ic_base_types::NumSeconds;
 use ic_config::state_manager::Config;
 use ic_interfaces::validation::ValidationResult;
 use ic_interfaces::{
@@ -9,12 +9,12 @@ use ic_interfaces::{
 use ic_interfaces::{certified_stream_store::CertifiedStreamStore, state_manager::*};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterState, ReplicatedState, SchedulerState, Stream, SystemState};
+use ic_replicated_state::{ReplicatedState, Stream};
 use ic_state_layout::{CheckpointLayout, RwPolicy};
 use ic_state_manager::{stream_encoding, StateManagerImpl};
 use ic_test_utilities::{
     consensus::fake::{Fake, FakeVerifier},
-    state::initial_execution_state,
+    state::{initial_execution_state, new_canister_state},
     types::ids::{subnet_test_id, user_test_id},
     with_test_replica_logger,
 };
@@ -35,18 +35,6 @@ use ic_types::{
 use ic_wasm_types::BinaryEncodedWasm;
 use std::sync::Arc;
 use tempfile::Builder;
-
-fn new_canister_state(
-    canister_id: CanisterId,
-    controller: PrincipalId,
-    initial_cycles: Cycles,
-    freeze_threshold: NumSeconds,
-) -> CanisterState {
-    let scheduler_state = SchedulerState::default();
-    let system_state =
-        SystemState::new_running(canister_id, controller, initial_cycles, freeze_threshold);
-    CanisterState::new(system_state, None, scheduler_state)
-}
 
 pub fn empty_wasm() -> BinaryEncodedWasm {
     BinaryEncodedWasm::new(vec![

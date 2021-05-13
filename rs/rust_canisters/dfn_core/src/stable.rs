@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::io;
 
 use crate::api::ic0;
 
@@ -98,5 +99,122 @@ fn ensure_capacity(capacity_bytes: u32) {
         unsafe {
             ic0::stable_grow(difference);
         };
+    }
+}
+
+/// A writer to the stable memory. Will attempt to grow the memory as it
+/// writes, and keep offsets and total capacity.
+pub struct StableWriter {
+    /// The offset of the next write.
+    offset: usize,
+    /// The capacity, in pages.
+    capacity: u32,
+    /// The number of bytes written so far.
+    bytes_written: usize,
+}
+
+impl Default for StableWriter {
+    fn default() -> Self {
+        let capacity = unsafe { ic0::stable_size() };
+
+        Self {
+            offset: 4,
+            capacity,
+            bytes_written: 0,
+        }
+    }
+}
+
+impl StableWriter {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Attempt to grow the memory by adding new pages.
+    pub fn grow(&mut self, added_pages: u32) -> Result<(), io::Error> {
+        let old_page_count = unsafe { ic0::stable_grow(added_pages) };
+        if old_page_count < 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to grow stable memory",
+            ));
+        }
+        self.capacity = old_page_count as u32 + added_pages;
+        Ok(())
+    }
+}
+
+impl io::Write for StableWriter {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+        if self.offset.saturating_add(buf.len()) > ((self.capacity as usize) << 16) {
+            self.grow(((buf.len().saturating_add(65535)) >> 16) as u32)?;
+        }
+
+        unsafe {
+            ic0::stable_write(self.offset as u32, buf.as_ptr() as u32, buf.len() as u32);
+        }
+
+        self.offset += buf.len();
+        self.bytes_written += buf.len();
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<(), io::Error> {
+        if self.capacity > 0 {
+            set_length(self.bytes_written as u32);
+        }
+        Ok(())
+    }
+}
+
+impl Drop for StableWriter {
+    fn drop(&mut self) {
+        use std::io::Write;
+        self.flush().expect("failed to flush stable memory")
+    }
+}
+
+/// A reader to the stable memory. Keeps an offset and reads off stable memory
+/// consecutively up the size stored in the first 4 bytes of the stable memory.
+pub struct StableReader {
+    /// The offset of the next read.
+    offset: usize,
+    bytes_left: usize,
+}
+
+impl StableReader {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for StableReader {
+    fn default() -> Self {
+        let num_pages = unsafe { ic0::stable_size() };
+        if num_pages == 0 {
+            return Self {
+                offset: 0,
+                bytes_left: 0,
+            };
+        }
+
+        let bytes_left = length();
+        Self {
+            offset: 4,
+            bytes_left: bytes_left as usize,
+        }
+    }
+}
+
+impl io::Read for StableReader {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+        let to_read = buf.len().min(self.bytes_left);
+        unsafe {
+            ic0::stable_read(buf.as_mut_ptr() as u32, self.offset as u32, to_read as u32);
+        }
+        self.offset += to_read;
+        self.bytes_left -= to_read;
+        Ok(to_read)
     }
 }

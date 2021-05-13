@@ -8,10 +8,10 @@ use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_nns_common::registry::{encode_or_panic, SUBNET_LIST_KEY};
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, get_value, insert_value, local_test_on_nns_subnet,
-        set_up_registry_canister, set_up_universal_canister,
+        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        set_up_universal_canister,
     },
-    registry::invariant_compliant_mutation_as_atomic_req,
+    registry::{get_value, insert_value, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;

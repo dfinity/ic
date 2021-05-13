@@ -3169,7 +3169,7 @@ mod test {
         // Set cycles balance to max - 10.
         cycles_account_manager.add_cycles(&mut system_state, CYCLES_LIMIT_PER_CANISTER);
         cycles_account_manager
-            .withdraw_cycles(
+            .withdraw_cycles_for_transfer(
                 &mut system_state,
                 NumBytes::from(0),
                 ComputeAllocation::default(),
@@ -3228,7 +3228,7 @@ mod test {
         // Set cycles balance to max - 10.
         cycles_account_manager.add_cycles(&mut system_state, CYCLES_LIMIT_PER_CANISTER);
         cycles_account_manager
-            .withdraw_cycles(
+            .withdraw_cycles_for_transfer(
                 &mut system_state,
                 NumBytes::from(0),
                 ComputeAllocation::default(),
@@ -3302,7 +3302,7 @@ mod test {
         // Set cycles balance to max - 10.
         cycles_account_manager.add_cycles(&mut system_state, CYCLES_LIMIT_PER_CANISTER);
         cycles_account_manager
-            .withdraw_cycles(
+            .withdraw_cycles_for_transfer(
                 &mut system_state,
                 NumBytes::from(0),
                 ComputeAllocation::default(),

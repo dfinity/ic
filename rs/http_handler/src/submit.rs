@@ -117,23 +117,24 @@ pub(crate) fn handle(
     {
         Ok(Some(settings)) => settings.max_ingress_bytes_per_message,
         Ok(None) => {
-            warn!(
-                log,
+            let err_msg = format!(
                 "No subnet record found for the latest registry version and subnet_id={:?}",
-                subnet_id,
+                subnet_id
             );
+            warn!(log, "{}", err_msg);
             return (
-                common::make_response(StatusCode::SERVICE_UNAVAILABLE, "Service not available."),
+                common::make_response(StatusCode::PRECONDITION_FAILED, &err_msg),
                 Call,
             );
         }
         Err(err) => {
-            error!(
-                log,
-                "Couldn't retrieve max_ingress_bytes_per_message from the registry: {:?}", err
+            let err_msg = format!(
+                "Couldn't retrieve max_ingress_bytes_per_message from the registry: {:?}",
+                err
             );
+            error!(log, "{}", err_msg);
             return (
-                common::make_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error."),
+                common::make_response(StatusCode::INTERNAL_SERVER_ERROR, &err_msg),
                 Call,
             );
         }

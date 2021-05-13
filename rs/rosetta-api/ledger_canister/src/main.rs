@@ -411,9 +411,9 @@ fn main() {
 #[export_name = "canister_post_upgrade"]
 fn post_upgrade() {
     over_init(|_: BytesS| {
-        let bytes = stable::get();
         let mut ledger = LEDGER.write().unwrap();
-        *ledger = serde_cbor::from_slice(&bytes).expect("Decoding stable memory failed");
+        *ledger = serde_cbor::from_reader(&mut stable::StableReader::new())
+            .expect("Decoding stable memory failed");
 
         set_certified_data(
             &ledger
@@ -427,6 +427,8 @@ fn post_upgrade() {
 
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
+    use std::io::Write;
+
     setup::START.call_once(|| {
         printer::hook();
     });
@@ -435,8 +437,11 @@ fn pre_upgrade() {
         .read()
         // This should never happen, but it's better to be safe than sorry
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let bytes = serde_cbor::to_vec(&*ledger).unwrap();
-    stable::set(&bytes);
+    let mut writer = stable::StableWriter::new();
+    serde_cbor::to_writer(&mut writer, &*ledger).unwrap();
+    writer
+        .flush()
+        .expect("failed to flush stable memory writer");
 }
 
 /// Upon reaching a `trigger_threshold` we will archive `num_blocks`.
@@ -697,7 +702,7 @@ fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::
         "Maximum inter-canister message size in bytes.",
     )?;
     w.encode_gauge(
-        "archive_node_stable_memory_pages",
+        "ledger_stable_memory_pages",
         dfn_core::api::stable_memory_size_in_pages() as f64,
         "The size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;

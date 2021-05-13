@@ -388,3 +388,17 @@ fn can_validate_module_with_reserved_symbols() {
         );
     }
 }
+
+#[test]
+fn can_reject_wasm_with_invalid_global_access() {
+    // This wasm module defines one global but attempts to access global at index 1
+    // (which would be the instruction counter after instrumentation). This should
+    // fail validation.
+    let wasm = BinaryEncodedWasm::new(
+        include_bytes!("./instrumentation-test-data/in/invalid_global_access.wasm").to_vec(),
+    );
+    assert_matches!(
+        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        Err(WasmValidationError::WasmtimeValidation(_))
+    );
+}

@@ -114,8 +114,14 @@ pub const SAMPLE_CONFIG: &str = r#"
     artifact_pool: {
         // The directory that should be used to persist consensus artifacts.
         consensus_pool_path: "/tmp/ic_consensus_pool",
-        // The directory for the blockchain backup.
-        backup_spool_path: "/tmp/ic_backup/"
+        backup: {
+            // The directory for the blockchain backup.
+            spool_path: "/tmp/ic_backup/",
+            // How long the backup artifact stay on the disk before they get purged.
+            retention_time_secs: 3600,
+            // How often we purge.
+            purging_interval_secs: 3600
+        }
     },
     // ============================================
     // Consensus related config.

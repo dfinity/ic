@@ -30,7 +30,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         zip unzip rclone rsync bc csmith gcc lld-10 libc++-10-dev \
         qemu-system-x86 ovmf \
         iproute2 \
-        dosfstools mtools fakeroot policycoreutils \
+        dosfstools mtools fakeroot faketime android-sdk-ext4-utils policycoreutils \
         python3 python3-requests python3-pip python3-gflags \
         sudo sshpass
 

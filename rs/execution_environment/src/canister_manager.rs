@@ -817,9 +817,6 @@ impl CanisterManager {
         }
     }
 
-    // TODO: Add a test to validate that the instructions_limit is properly
-    // respected when executing the start and canister_init methods on the wasm
-    // module.
     #[allow(clippy::too_many_arguments)]
     fn install(
         &self,
@@ -901,7 +898,7 @@ impl CanisterManager {
         }
 
         // Run canister_init
-        let (new_canister, instructions_left, result) = self
+        let (new_canister, instructions_limit, result) = self
             .hypervisor
             .execute_system(
                 new_canister,
@@ -916,7 +913,7 @@ impl CanisterManager {
         match result {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
-                (instructions_left, Ok((total_heap_delta, new_canister)))
+                (instructions_limit, Ok((total_heap_delta, new_canister)))
             }
             Err(err) => (instructions_limit, Err((canister_id, err).into())),
         }
@@ -938,7 +935,7 @@ impl CanisterManager {
         let new_canister = old_canister.clone();
         let mut total_heap_delta = NumBytes::from(0);
         // Call pre-upgrade hook on the canister.
-        let (mut new_canister, num_instructions, res) = self
+        let (mut new_canister, instructions_limit, res) = self
             .hypervisor
             .execute_system(
                 new_canister,
@@ -954,7 +951,7 @@ impl CanisterManager {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
             }
-            Err(err) => return (num_instructions, Err((canister_id, err).into())),
+            Err(err) => return (instructions_limit, Err((canister_id, err).into())),
         }
 
         // Wipe the heap first
@@ -1009,11 +1006,11 @@ impl CanisterManager {
         }
 
         // Run (start)
-        let (new_canister, num_instructions, result) = self
+        let (new_canister, instructions_limit, result) = self
             .hypervisor
             .execute_canister_start(
                 new_canister,
-                num_instructions,
+                instructions_limit,
                 subnet_available_memory.clone(),
             )
             .get_no_pause();
@@ -1021,7 +1018,7 @@ impl CanisterManager {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
             }
-            Err(err) => return (num_instructions, Err((context.canister_id, err).into())),
+            Err(err) => return (instructions_limit, Err((context.canister_id, err).into())),
         }
 
         // Call post-upgrade hook on the upgraded canister.
@@ -1032,7 +1029,7 @@ impl CanisterManager {
                 SystemMethod::CanisterPostUpgrade,
                 context.sender,
                 context.arg.as_slice(),
-                num_instructions,
+                instructions_limit,
                 time,
                 subnet_available_memory,
             )
@@ -1041,7 +1038,7 @@ impl CanisterManager {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
             }
-            Err(err) => return (num_instructions, Err((canister_id, err).into())),
+            Err(err) => return (instructions_left, Err((canister_id, err).into())),
         }
 
         (instructions_left, Ok((total_heap_delta, new_canister)))

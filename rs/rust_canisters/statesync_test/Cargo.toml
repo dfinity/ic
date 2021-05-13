@@ -1,0 +1,25 @@
+[package]
+name = "statesync-test"
+version = "0.8.0"
+edition = "2018"
+
+[[bin]]
+name = "statesync-test-canister"
+path = "src/main.rs"
+
+[dependencies]
+dfn_core = { path = "../dfn_core" }
+dfn_json = { path = "../dfn_json" }
+dfn_macro = { path = "../dfn_macro" }
+lazy_static = "1.4.0"
+serde = "1.0"
+serde_json = "1.0.40"
+mersenne_twister = "1.1.1"
+rand = "0.4.6"
+
+[dev-dependencies]
+ic-types = { path = "../../types/types" }
+
+[[test]]
+name = "test"
+path = "test/test.rs"

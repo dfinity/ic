@@ -12,10 +12,11 @@ use ic_nns_handler_root::{
 };
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, get_value, local_test_on_nns_subnet,
+        forward_call_via_universal_canister, local_test_on_nns_subnet,
         registry_init_payload_allow_any_user_for_tests, set_up_registry_canister,
         set_up_root_canister, set_up_universal_canister,
     },
+    registry::get_value,
     registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_protobuf::registry::nns::v1::NnsCanisterRecords;

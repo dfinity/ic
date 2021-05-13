@@ -184,7 +184,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
     ) -> HypervisorResult<()> {
         let mut system_state = self.system_state.borrow_mut();
         self.cycles_account_manager
-            .withdraw_cycles(
+            .withdraw_cycles_for_transfer(
                 &mut system_state,
                 canister_current_memory_usage,
                 compute_allocation,

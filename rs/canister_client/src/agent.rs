@@ -30,10 +30,6 @@ const INGRESS_TIMEOUT: Duration = Duration::from_secs(60 * 6);
 /// from an 'execute_query' call.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Maximum time in seconds to wait for a result (successful or otherwise)
-/// from an 'install_canister' call.
-const INSTALL_TIMEOUT: Duration = INGRESS_TIMEOUT;
-
 /// The HTTP path for query calls on the replica.
 // TODO is this how v1 api works can we just change the URL?
 pub fn query_path(cid: CanisterId) -> String {
@@ -207,9 +203,6 @@ pub struct Agent {
     // How long to wait for queries.
     query_timeout: Duration,
 
-    // How long to wait for `install_canister` requests.
-    pub(crate) install_timeout: Duration,
-
     // Per reqwest document, cloning a client does not clone the actual connection pool inside.
     // Therefore directly owning a client as opposed to a reference is the standard way to go.
     http_client: Arc<HttpClient>,
@@ -227,7 +220,6 @@ impl fmt::Debug for Agent {
             .field("url", &self.url)
             .field("ingress_timeout", &self.ingress_timeout)
             .field("query_timeout", &self.query_timeout)
-            .field("install_timeout", &self.install_timeout)
             .field("sender", &self.sender_field)
             .finish()
     }
@@ -267,7 +259,6 @@ impl Agent {
             url,
             ingress_timeout: INGRESS_TIMEOUT,
             query_timeout: QUERY_TIMEOUT,
-            install_timeout: INSTALL_TIMEOUT,
             http_client,
             sender,
             sender_field,
@@ -283,12 +274,6 @@ impl Agent {
     /// Sets the timeout for queries.
     pub fn with_query_timeout(mut self, query_timeout: Duration) -> Self {
         self.query_timeout = query_timeout;
-        self
-    }
-
-    /// Sets the timeout for canister installation.
-    pub fn with_install_timeout(mut self, install_timeout: Duration) -> Self {
-        self.install_timeout = install_timeout;
         self
     }
 
@@ -367,26 +352,7 @@ impl Agent {
         arguments: Vec<u8>,
         nonce: Vec<u8>,
     ) -> Result<Option<Vec<u8>>, String> {
-        self.execute_update_with_deadline(
-            canister_id,
-            method,
-            arguments,
-            nonce,
-            Instant::now() + self.ingress_timeout,
-        )
-        .await
-    }
-
-    /// Calls the query method 'method' on the canister located at 'url',
-    /// optionally with 'arguments'.
-    pub(crate) async fn execute_update_with_deadline<S: ToString>(
-        &self,
-        canister_id: &CanisterId,
-        method: S,
-        arguments: Vec<u8>,
-        nonce: Vec<u8>,
-        deadline: Instant,
-    ) -> Result<Option<Vec<u8>>, String> {
+        let deadline = Instant::now() + self.ingress_timeout;
         let (http_body, request_id) = self
             .prepare_update(canister_id, method, arguments, nonce)
             .map_err(|err| format!("{}", err))?;
@@ -487,9 +453,7 @@ impl Agent {
         parse_read_state_response(&request_id, cbor)
     }
 
-    /// Requests the version of the public spec supported by this node by
-    /// querying /api/v1/status.
-    pub async fn ic_api_version(&self) -> Result<String, String> {
+    async fn get_status_with_response(&self) -> Result<HttpStatusResponse, String> {
         let bytes = self
             .http_client
             .get_with_response(
@@ -499,43 +463,27 @@ impl Agent {
             )
             .await?;
         let resp = bytes_to_cbor(bytes)?;
-        let response = serde_cbor::value::from_value::<HttpStatusResponse>(resp)
-            .map_err(|source| format!("decoding to HttpStatusResponse failed: {}", source))?;
+        serde_cbor::value::from_value::<HttpStatusResponse>(resp)
+            .map_err(|source| format!("decoding to HttpStatusResponse failed: {}", source))
+    }
 
+    /// Requests the version of the public spec supported by this node by
+    /// querying /api/v1/status.
+    pub async fn ic_api_version(&self) -> Result<String, String> {
+        let response = self.get_status_with_response().await?;
         Ok(response.ic_api_version)
     }
 
     /// Requests the Replica impl version of this node by querying
     /// /api/v1/status
     pub async fn impl_version(&self) -> Result<Option<String>, String> {
-        let bytes = self
-            .http_client
-            .get_with_response(
-                &self.url,
-                NODE_STATUS_PATH,
-                tokio::time::Instant::now() + self.query_timeout,
-            )
-            .await?;
-        let resp = bytes_to_cbor(bytes)?;
-        let response = serde_cbor::value::from_value::<HttpStatusResponse>(resp)
-            .map_err(|source| format!("decoding to HttpStatusResponse failed: {}", source))?;
-
+        let response = self.get_status_with_response().await?;
         Ok(response.impl_version)
     }
 
     /// Requests the root key of this node by querying /api/v1/status
     pub async fn root_key(&self) -> Result<Option<Blob>, String> {
-        let bytes = self
-            .http_client
-            .get_with_response(
-                &self.url,
-                NODE_STATUS_PATH,
-                tokio::time::Instant::now() + self.query_timeout,
-            )
-            .await?;
-        let resp = bytes_to_cbor(bytes)?;
-        let response = serde_cbor::value::from_value::<HttpStatusResponse>(resp)
-            .map_err(|source| format!("decoding to HttpStatusResponse failed: {}", source))?;
+        let response = self.get_status_with_response().await?;
 
         Ok(response.root_key)
     }

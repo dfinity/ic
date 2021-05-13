@@ -1,8 +1,11 @@
 use candid::Encode;
 use ic_nns_common::registry::SUBNET_LIST_KEY;
-use ic_nns_test_utils::itest_helpers::{
-    forward_call_via_universal_canister, get_value, local_test_on_nns_subnet_with_mutations,
-    set_up_registry_canister, set_up_universal_canister,
+use ic_nns_test_utils::{
+    itest_helpers::{
+        forward_call_via_universal_canister, local_test_on_nns_subnet_with_mutations,
+        set_up_registry_canister, set_up_universal_canister,
+    },
+    registry::{get_value, prepare_registry},
 };
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
@@ -10,8 +13,6 @@ use ic_registry_keys::{make_catch_up_package_contents_key, make_subnet_record_ke
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_recover_subnet::RecoverSubnetPayload,
 };
-
-mod common;
 
 /// Test that calling "recover_subnet" produces the expected Registry mutations,
 /// namely that a subnet's `CatchUpPackageContents` and node membership are
@@ -56,7 +57,7 @@ fn test_recover_subnet_with_replacement_nodes() {
     let num_nodes_in_subnet = 4 as usize;
     let num_unassigned_nodes = 5 as usize;
     let (init_mutate, subnet_id, unassigned_node_ids, node_mutations) =
-        common::prepare_registry(num_nodes_in_subnet, num_unassigned_nodes);
+        prepare_registry(num_nodes_in_subnet, num_unassigned_nodes);
 
     local_test_on_nns_subnet_with_mutations(node_mutations, move |runtime| {
         async move {

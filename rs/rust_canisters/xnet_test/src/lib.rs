@@ -18,11 +18,16 @@ pub struct Metrics {
     /// Number of requests sent.
     pub requests_sent: usize,
 
+    /// Number of times a call failed synchronously (e.g. due to a full canister
+    /// output queue or running out of cycles).
+    pub call_errors: usize,
+
+    /// Number of requests rejected by the remote subnet (e,g, due to a full
+    /// canister input queue).
+    pub reject_responses: usize,
+
     /// Number of sequence number errors.
     pub seq_errors: usize,
-
-    /// Number of times `call_raw` failed.
-    pub call_errors: usize,
 
     /// Observed message rountrip latencies.
     pub latency_distribution: LatencyDistribution,
@@ -35,8 +40,9 @@ impl Metrics {
     /// Adds the observations of `other` to `self`.
     pub fn merge(&mut self, other: &Metrics) {
         self.requests_sent += other.requests_sent;
-        self.seq_errors += other.seq_errors;
         self.call_errors += other.call_errors;
+        self.reject_responses += other.reject_responses;
+        self.seq_errors += other.seq_errors;
         self.latency_distribution.merge(&other.latency_distribution);
         self.log.push_str("-----\n");
         self.log.push_str(&other.log);

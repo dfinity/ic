@@ -11,6 +11,7 @@ REPO_ROOT="$(
 IMAGE_TAG=${IMAGE_TAG:-$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")}
 IMAGE="${IMAGE:-dfinity/ic-build:$IMAGE_TAG}"
 SUBDIR=$(realpath --relative-to="$REPO_ROOT" "$PWD")
+WORKDIR="/builds/dfinity/ic"
 SSL_DIR=$HOME/.cache/dfinity/openssl
 
 mkdir -p $HOME/.cache/dfinity/sccache
@@ -21,11 +22,11 @@ mkdir -p "$SSL_DIR"
 
 DOCKER_RUN_ARGS=()
 
-DOCKER_RUN_ARGS+=(-v $REPO_ROOT:/builds/dfinity-lab/dfinity)
-DOCKER_RUN_ARGS+=(-w "/builds/dfinity-lab/dfinity/$SUBDIR")
+DOCKER_RUN_ARGS+=(-v $REPO_ROOT:$WORKDIR)
+DOCKER_RUN_ARGS+=(-w "$WORKDIR/$SUBDIR")
 DOCKER_RUN_ARGS+=(${DOCKER_RUN_ARGS_EXTRA:-})
 
-if uname -s | grep Darwin; then
+if uname -s | grep -q Darwin; then
     # On Mac in the docker container the USER is ubuntu (uid 1000) which most likely does not match the USER on the host.
     DOCKER_USER="ubuntu"
     DOCKER_HOME="/home/$DOCKER_USER"
@@ -49,8 +50,8 @@ DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/sccache:/cache)
 DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/cargo:/cargo)
 DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/cargo_target:/cargo_target)
 DOCKER_RUN_ARGS+=(-v $SSL_DIR:/openssl)
-DOCKER_RUN_ARGS+=(-e CI_PROJECT_DIR=/builds/dfinity-lab/dfinity)
-DOCKER_RUN_ARGS+=(-e CI_RUST_BUILD_DIR=/builds/dfinity-lab/dfinity)
+DOCKER_RUN_ARGS+=(-e CI_PROJECT_DIR=$WORKDIR)
+DOCKER_RUN_ARGS+=(-e CI_RUST_BUILD_DIR=$WORKDIR)
 DOCKER_RUN_ARGS+=(-e CI_COMMIT_SHA=$(git rev-parse HEAD))
 DOCKER_RUN_ARGS+=(-e CARGO_TEST_TIMEOUT=3600)
 # sccache does not play well with incremental compilation

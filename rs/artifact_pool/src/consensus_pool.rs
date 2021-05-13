@@ -28,12 +28,6 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
-// The maximum age backup artifacts can reach before purging.
-const BACKUP_RETENTION_TIME_SECS: Duration = Duration::from_secs(24 * 60 * 60);
-
-// Time interval between purges.
-const BACKUP_PURGING_INTERVAL_SEC: Duration = Duration::from_secs(60 * 60);
-
 #[derive(Debug, Clone)]
 pub enum PoolSectionOp<T> {
     Insert(T),
@@ -294,14 +288,16 @@ impl ConsensusPoolImpl {
         let mut pool = Self::from_uncached(pool, registry.clone());
         // If the back up directory is set, instantiate the backup component
         // and create a subdirectory with the subnet id as directory name.
-        pool.backup = config.backup_spool_path.map(|path| {
+        pool.backup = config.backup_config.map(|config| {
             Backup::new(
                 &pool,
-                path.clone(),
-                path.join(subnet_id.to_string())
+                config.spool_path.clone(),
+                config
+                    .spool_path
+                    .join(subnet_id.to_string())
                     .join(ic_types::ReplicaVersion::default().to_string()),
-                BACKUP_RETENTION_TIME_SECS,
-                BACKUP_PURGING_INTERVAL_SEC,
+                Duration::from_secs(config.retention_time_secs),
+                Duration::from_secs(config.purging_interval_secs),
                 registry,
                 log,
             )

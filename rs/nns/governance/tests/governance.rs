@@ -23,15 +23,16 @@ use ic_nns_governance::{
         add_or_remove_node_provider::Change, governance_error::ErrorType,
         governance_error::ErrorType::InsufficientFunds,
         governance_error::ErrorType::PreconditionFailed, manage_neuron,
-        manage_neuron::configure::Operation, manage_neuron::Configure, manage_neuron::Disburse,
-        manage_neuron::DisburseToNeuron, manage_neuron::IncreaseDissolveDelay,
-        manage_neuron::Spawn, manage_neuron::Split, manage_neuron::StartDissolving,
-        manage_neuron_response, neuron, neuron::DissolveState, neuron::Followees, proposal,
-        reward_node_provider, AddOrRemoveNodeProvider, Ballot, BallotInfo, ExecuteNnsFunction,
-        Governance as GovernanceProto, GovernanceError, ListNeurons, ListNeuronsResponse,
-        ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron, NeuronStakeTransfer,
-        NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData, ProposalStatus,
-        RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
+        manage_neuron::configure::Operation, manage_neuron::disburse::Amount,
+        manage_neuron::Configure, manage_neuron::Disburse, manage_neuron::DisburseToNeuron,
+        manage_neuron::IncreaseDissolveDelay, manage_neuron::Spawn, manage_neuron::Split,
+        manage_neuron::StartDissolving, manage_neuron_response, neuron, neuron::DissolveState,
+        neuron::Followees, proposal, reward_node_provider, AddOrRemoveNodeProvider, Ballot,
+        BallotInfo, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
+        ListNeurons, ListNeuronsResponse, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics,
+        Neuron, NeuronStakeTransfer, NeuronState, NnsFunction, NodeProvider, Proposal,
+        ProposalData, ProposalStatus, RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally,
+        Topic, Vote,
     },
 };
 use ledger_canister::{AccountIdentifier, ICPTs};
@@ -56,7 +57,8 @@ use std::sync::Mutex;
 use ic_nns_governance::governance::{
     MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
 };
-use ic_nns_governance::pb::v1::governance_error::ErrorType::ResourceExhausted;
+use ic_nns_governance::pb::v1::governance_error::ErrorType::{NotFound, ResourceExhausted};
+use ic_nns_governance::pb::v1::proposal::Action;
 use ic_nns_governance::pb::v1::ProposalRewardStatus::{AcceptVotes, ReadyToSettle};
 use ic_nns_governance::pb::v1::ProposalStatus::Rejected;
 use ic_nns_governance::pb::v1::{ManageNeuronResponse, ProposalRewardStatus};
@@ -1918,6 +1920,103 @@ fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     }
 }
 
+#[test]
+fn test_reward_distribution_skips_deleted_neurons() {
+    let mut fixture = fixture_two_neurons_second_is_bigger();
+    fixture.proposals.insert(
+        1_u64,
+        ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            proposer: Some(NeuronId { id: 2 }),
+            reject_cost_e8s: 0,
+            proposal: Some(Proposal {
+                summary: "A proposal voted on by a now-gone neuron".to_string(),
+                url: "https://oops".to_string(),
+                action: Some(Action::Motion(Motion {
+                    motion_text: "a motion".to_string(),
+                })),
+            }),
+            proposal_timestamp_seconds: 2530,
+            ballots: [
+                (
+                    // This is a ballot by neuron 2, which still exists
+                    2,
+                    Ballot {
+                        vote: Vote::Yes as i32,
+                        voting_power: 250,
+                    },
+                ),
+                (
+                    // This is a ballot by neuron 999, which is not present in the neuron map.
+                    999,
+                    Ballot {
+                        vote: Vote::Yes as i32,
+                        voting_power: 750,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            latest_tally: None,
+            decided_timestamp_seconds: 0,
+            executed_timestamp_seconds: 0,
+            failed_timestamp_seconds: 0,
+            reward_event_round: 0,
+        },
+    );
+    let mut fake_driver = FakeDriver::default()
+        .at(2500) // Just a little before the proposal happened.
+        // To make assertion easy to sanity-check, the total supply of ICPs is chosen
+        // so that the reward supply for the first day is 100 (365_250 * 10% / 365.25 = 100).
+        .with_supply(ICPTs::from_e8s(365_250));
+    fixture.wait_for_quiet_threshold_seconds = 5;
+    // Let's set genesis
+    let genesis_timestamp_seconds = fake_driver.now();
+    fixture.genesis_timestamp_seconds = genesis_timestamp_seconds;
+    let mut gov = Governance::new(
+        fixture,
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+    );
+
+    // Make sure that the fixture function indeed did not create a neuron 999.
+    assert_matches!(gov.get_neuron(&NeuronId { id: 999 }), Err(e) if e.error_type == NotFound as i32);
+
+    // The proposal at genesis time is not ready to be settled
+    gov.run_periodic_tasks().now_or_never();
+    assert_eq!(
+        *gov.latest_reward_event(),
+        RewardEvent {
+            day_after_genesis: 0,
+            actual_timestamp_seconds: fake_driver.now(),
+            settled_proposals: vec![],
+            distributed_e8s_equivalent: 0,
+        }
+    );
+
+    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
+    gov.run_periodic_tasks().now_or_never();
+    assert_eq!(
+        *gov.latest_reward_event(),
+        RewardEvent {
+            day_after_genesis: 1,
+            actual_timestamp_seconds: fake_driver.now(),
+            settled_proposals: vec![ProposalId { id: 1 }],
+            // We should have distrubuted 100 e8 equivalent if all voters still existed.
+            // Since neuron 999 is gone and had a voting power 3x that of neuron 2,
+            // only 1/4 is actually distributed.
+            distributed_e8s_equivalent: 25,
+        }
+    );
+    assert_eq!(
+        25,
+        gov.get_full_neuron(&NeuronId { id: 2 }, &principal(2))
+            .unwrap()
+            .maturity_e8s_equivalent
+    );
+}
+
 /// In this test, genesis is set to happen 1.5 reward period later than when the
 /// governance canister is created.
 ///
@@ -2836,6 +2935,53 @@ fn test_disburse_to_subaccount() {
         // - transaction fees * 2.
         neuron_stake_e8s - neuron_fees_e8s + neuron_maturity
             - gov.proto.economics.as_ref().unwrap().transaction_fee_e8s * 2,
+    );
+}
+
+#[test]
+fn test_nns1_520() {
+    let (driver, mut gov, neuron) = create_mature_neuron();
+
+    let id = neuron.id.unwrap();
+    let from = neuron.controller.unwrap();
+    let neuron_stake_e8s = neuron.cached_neuron_stake_e8s;
+    let neuron_fees_e8s = neuron.neuron_fees_e8s;
+    let neuron_maturity = neuron.maturity_e8s_equivalent;
+
+    let to_subaccount = Subaccount({
+        let mut sha = Sha256::new();
+        sha.write(b"my_account");
+        sha.finish()
+    });
+
+    gov.disburse_neuron(
+        &id,
+        &from,
+        &Disburse {
+            amount: Some(Amount { e8s: 100000000 }),
+            to_account: Some(AccountIdentifier::new(from, Some(to_subaccount)).into()),
+        },
+    )
+    .now_or_never()
+    .unwrap()
+    .unwrap();
+
+    // The user's account should now have the amount
+    driver.assert_account_contains(
+        &AccountIdentifier::new(from, Some(to_subaccount)),
+        // In the end, the user's account should have the stake + rewards - fees
+        // - transaction fees * 2.
+        neuron_stake_e8s - neuron_fees_e8s + neuron_maturity
+            - gov.proto.economics.as_ref().unwrap().transaction_fee_e8s * 2,
+    );
+
+    assert_eq!(
+        gov.proto
+            .neurons
+            .get(&id.id)
+            .unwrap()
+            .cached_neuron_stake_e8s,
+        0
     );
 }
 

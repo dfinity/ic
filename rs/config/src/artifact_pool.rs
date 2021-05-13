@@ -28,19 +28,32 @@ pub struct ArtifactPoolTomlConfig {
 
     /// Path to a folder with write permissions, for consensus artifact backup.
     /// If no path was provided, no backup will be saved.
-    pub backup_spool_path: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup: Option<BackupConfig>,
 }
 
 impl ArtifactPoolTomlConfig {
     /// Create a ArtifactPoolTomlConfig from a given path to the consensus pool.
-    pub fn new(consensus_pool_path: PathBuf, backup_spool_path: Option<PathBuf>) -> Self {
+    pub fn new(consensus_pool_path: PathBuf, backup: Option<BackupConfig>) -> Self {
         Self {
             consensus_pool_path,
             ingress_pool_size_threshold: None,
             consensus_pool_backend: Some("lmdb".to_string()),
-            backup_spool_path,
+            backup,
         }
     }
+}
+
+/// Configuration of the consensus artifact backup.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BackupConfig {
+    /// Path to a folder with write permissions, for consensus artifact backup.
+    /// If no path was provided, no backup will be saved.
+    pub spool_path: PathBuf,
+    /// The maximum age backup artifacts can reach before purging.
+    pub retention_time_secs: u64,
+    /// Time interval between purges.
+    pub purging_interval_secs: u64,
 }
 
 /// The configuration for the ingress and consensus artifact pools, both the
@@ -66,9 +79,8 @@ pub struct ArtifactPoolConfig {
     pub persistent_pool_backend: PersistentPoolBackend,
     /// Whether the persistent pool should be opened as read-only
     pub persistent_pool_read_only: bool,
-    /// Path to a folder with write permissions, for consensus artifact backup.
-    /// If no path was provided, no backup will be saved.
-    pub backup_spool_path: Option<PathBuf>,
+    /// Contains all parameters for the consensus artifact backup.
+    pub backup_config: Option<BackupConfig>,
 }
 
 /// Choice of persistent pool database is either LMDB or RocksDB.
@@ -131,7 +143,7 @@ impl From<ArtifactPoolTomlConfig> for ArtifactPoolConfig {
             consensus_pool_validated_capacity: MAX_CONSENSUS_POOL_UNVALIDATED_CAPACITY_PER_PEER,
             persistent_pool_backend,
             persistent_pool_read_only: false,
-            backup_spool_path: toml_config.backup_spool_path,
+            backup_config: toml_config.backup,
         }
     }
 }

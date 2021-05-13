@@ -31,3 +31,38 @@ fn certification_api_test() {
         Ok(())
     })
 }
+
+#[test]
+fn stable_memory_read_write() {
+    local_test_e(|r| async move {
+        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+
+        let canister = proj.cargo_bin("wasm").install_(&r, Vec::new()).await?;
+
+        let contents_1 = vec![0xdeu8; 100];
+
+        let _ = canister
+            .update_("write_stable_memory_fn", bytes, contents_1.clone())
+            .await?;
+
+        let buf = canister
+            .update_("read_stable_memory_reader", bytes, vec![])
+            .await?;
+
+        assert_eq!(buf, contents_1);
+
+        let contents_2 = vec![0xadu8; 98];
+
+        let _ = canister
+            .update_("write_stable_memory_writer", bytes, contents_2.clone())
+            .await?;
+
+        let buf = canister
+            .update_("read_stable_memory_fn", bytes, vec![])
+            .await?;
+
+        assert_eq!(buf, contents_2);
+
+        Ok(())
+    })
+}

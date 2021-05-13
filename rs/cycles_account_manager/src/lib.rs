@@ -159,13 +159,17 @@ impl CyclesAccountManager {
         self.config.xnet_byte_transmission_fee * Cycles::from(payload_size.get())
     }
 
-    /// Subtracts `cycles` worth of cycles from the canister's balance.
+    /// Withdraws `cycles` worth of cycles from the canister's balance.
+    ///
+    /// NOTE: This method is intended for use in inter-canister transfers.
+    ///       It doesn't report these cycles as consumed. To withdraw cycles
+    ///       and have them reported as consumed, use `consume_cycles`.
     ///
     /// # Errors
     ///
     /// Returns a `CyclesAccountError::CanisterOutOfCycles` if the
     /// requested amount is greater than the currently available.
-    pub fn withdraw_cycles(
+    pub fn withdraw_cycles_for_transfer(
         &self,
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
@@ -185,6 +189,36 @@ impl CyclesAccountManager {
             .withdraw_with_threshold(cycles, threshold)
     }
 
+    /// Withdraws and consumes cycles from the canister's balance.
+    ///
+    /// NOTE: This method reports the cycles withdrawn as consumed (i.e. burnt).
+    ///       For withdrawals where cycles are not consumed, such as the case
+    ///       for inter-canister transfers, use `withdraw_cycles_for_transfer`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `CyclesAccountError::CanisterOutOfCycles` if the
+    /// requested amount is greater than the currently available.
+    pub fn consume_cycles(
+        &self,
+        system_state: &mut SystemState,
+        canister_current_memory_usage: NumBytes,
+        canister_compute_allocation: ComputeAllocation,
+        cycles: Cycles,
+    ) -> Result<(), CyclesAccountError> {
+        let threshold = freeze_threshold_cycles(
+            canister_current_memory_usage,
+            system_state.memory_allocation,
+            self.config.gib_storage_per_second_fee,
+            canister_compute_allocation,
+            self.config.compute_percent_allocated_per_second_fee,
+            system_state.freeze_threshold,
+        );
+        system_state
+            .cycles_account
+            .consume_with_threshold(cycles, threshold)
+    }
+
     /// Subtracts the corresponding cycles worth of the provided
     /// `num_instructions` from the canister's balance.
     ///
@@ -200,7 +234,7 @@ impl CyclesAccountManager {
         num_instructions: NumInstructions,
     ) -> Result<(), CyclesAccountError> {
         let cycles_to_withdraw = self.execution_cost(num_instructions);
-        system_state.cycles_account.withdraw_with_threshold(
+        system_state.cycles_account.consume_with_threshold(
             cycles_to_withdraw,
             freeze_threshold_cycles(
                 canister_current_memory_usage,

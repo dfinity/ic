@@ -2,9 +2,12 @@ use candid::Encode;
 use dfn_candid::candid;
 
 use ic_nns_common::registry::SUBNET_LIST_KEY;
-use ic_nns_test_utils::itest_helpers::{
-    forward_call_via_universal_canister, get_value, local_test_on_nns_subnet,
-    set_up_registry_canister, set_up_universal_canister,
+use ic_nns_test_utils::{
+    itest_helpers::{
+        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        set_up_universal_canister,
+    },
+    registry::{get_value, prepare_registry, prepare_registry_with_two_node_sets},
 };
 use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
 use ic_registry_keys::make_subnet_record_key;
@@ -15,15 +18,13 @@ use registry_canister::{
 
 use assert_matches::assert_matches;
 
-mod common;
-
 #[test]
 fn test_the_anonymous_user_cannot_add_nodes_to_subnet() {
     local_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 4 as usize;
             let (init_mutate, subnet_id, unassigned_node_ids, _) =
-                common::prepare_registry(num_nodes_in_subnet, 3);
+                prepare_registry(num_nodes_in_subnet, 3);
             let mut registry = set_up_registry_canister(
                 &runtime,
                 RegistryCanisterInitPayloadBuilder::new()
@@ -100,7 +101,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_add_nodes_to_subnet(
 
             let num_nodes_in_subnet = 5 as usize;
             let (init_mutate, subnet_id, unassigned_node_ids, _) =
-                common::prepare_registry(num_nodes_in_subnet, 2);
+                prepare_registry(num_nodes_in_subnet, 2);
             let registry = set_up_registry_canister(
                 &runtime,
                 RegistryCanisterInitPayloadBuilder::new()
@@ -151,7 +152,7 @@ fn test_add_nodes_to_subnet_succeeds() {
             let num_nodes_in_subnet = 4 as usize;
             let num_unassigned_nodes = 4 as usize;
             let (init_mutate, subnet_id, unassigned_node_ids, _) =
-                common::prepare_registry(num_nodes_in_subnet, num_unassigned_nodes);
+                prepare_registry(num_nodes_in_subnet, num_unassigned_nodes);
 
             // In order to correctly allow the subnet handler to call add_nodes_to_subnet,
             // we must first create canisters to get their IDs, and only then
@@ -234,12 +235,11 @@ fn test_adding_nodes_to_another_subnet_fails() {
         async move {
             let num_nodes_in_subnet = 2 as usize;
             let num_unassigned_nodes = 2 as usize;
-            let (init_mutate, subnet_id, subnet2_node_ids, _) =
-                common::prepare_registry_with_two_node_sets(
-                    num_nodes_in_subnet,
-                    num_unassigned_nodes,
-                    true,
-                );
+            let (init_mutate, subnet_id, subnet2_node_ids, _) = prepare_registry_with_two_node_sets(
+                num_nodes_in_subnet,
+                num_unassigned_nodes,
+                true,
+            );
 
             // In order to correctly allow the subnet handler to call atomic_mutate, we
             // must first create canisters to get their IDs, and only then install them.

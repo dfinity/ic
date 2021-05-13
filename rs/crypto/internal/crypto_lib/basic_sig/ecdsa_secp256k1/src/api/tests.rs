@@ -88,7 +88,7 @@ mod sign {
 
 mod verify {
     use crate::types::{PublicKeyBytes, SignatureBytes};
-    use crate::verify;
+    use crate::{new_keypair, sign, verify};
     use ic_crypto_internal_test_vectors::ecdsa_secp256k1;
     use openssl::bn::{BigNum, BigNumContext};
     use openssl::ec::{EcGroup, EcKey};
@@ -137,5 +137,40 @@ mod verify {
                 assert!(verify_result.unwrap_err().is_signature_verification_error());
             }
         }
+    }
+
+    #[test]
+    fn should_fail_to_verify_wrong_signature() {
+        let (sk, pk) = new_keypair().unwrap();
+        let msg = b"some message to sign";
+        let mut signature = sign(msg, &sk).unwrap();
+        // Zero the last byte of the signature.
+        assert_eq!(signature.0.len(), SignatureBytes::SIZE);
+        signature.0[SignatureBytes::SIZE - 1] = 0;
+        let result = verify(&signature, msg, &pk);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().is_signature_verification_error());
+    }
+
+    #[test]
+    fn should_fail_to_verify_wrong_message() {
+        let (sk, pk) = new_keypair().unwrap();
+        let msg = b"some message to sign";
+        let wrong_msg = b"a different message";
+        let signature = sign(msg, &sk).unwrap();
+        let result = verify(&signature, wrong_msg, &pk);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().is_signature_verification_error());
+    }
+
+    #[test]
+    fn should_fail_to_verify_wrong_key() {
+        let (sk, _) = new_keypair().unwrap();
+        let (_, another_pk) = new_keypair().unwrap();
+        let msg = b"some message to sign";
+        let signature = sign(msg, &sk).unwrap();
+        let result = verify(&signature, msg, &another_pk);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().is_signature_verification_error());
     }
 }

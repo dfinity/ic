@@ -60,6 +60,10 @@ pub struct StateManagerMetrics {
     checkpoint_op_duration: HistogramVec,
     api_call_duration: HistogramVec,
     last_diverged: IntGauge,
+    latest_certified_height: IntGauge,
+    max_resident_height: IntGauge,
+    min_resident_height: IntGauge,
+    resident_state_count: IntGauge,
     state_sync_size: IntCounterVec,
     state_sync_duration: HistogramVec,
 }
@@ -107,6 +111,26 @@ impl StateManagerMetrics {
             "The (UTC) timestamp of the last diverged state report.",
         );
 
+        let latest_certified_height = metrics_registry.int_gauge(
+            "state_manager_latest_certified_height",
+            "Height of the latest certified state.",
+        );
+
+        let min_resident_height = metrics_registry.int_gauge(
+            "state_manager_min_resident_height",
+            "Height of the oldest state resident in memory.",
+        );
+
+        let max_resident_height = metrics_registry.int_gauge(
+            "state_manager_max_resident_height",
+            "Height of the latest state resident in memory.",
+        );
+
+        let resident_state_count = metrics_registry.int_gauge(
+            "state_manager_resident_state_count",
+            "Total count of states loaded to memory by the state manager.",
+        );
+
         let state_sync_size = metrics_registry.int_counter_vec(
             "state_sync_size_bytes_total",
             "Size of chunks synchronized by different operations ('fetch', 'copy', 'preallocate') during all the state sync in bytes.",
@@ -136,6 +160,10 @@ impl StateManagerMetrics {
             api_call_duration,
             state_manager_error_count,
             last_diverged,
+            min_resident_height,
+            max_resident_height,
+            latest_certified_height,
+            resident_state_count,
             state_sync_size,
             state_sync_duration,
         }
@@ -607,6 +635,13 @@ impl StateManagerImpl {
         let snapshots: VecDeque<_> = std::iter::once(initial_snapshot)
             .chain(maybe_last_snapshot.into_iter())
             .collect();
+
+        let last_snapshot_height = snapshots.back().map(|s| s.height.get() as i64).unwrap_or(0);
+
+        metrics.resident_state_count.set(snapshots.len() as i64);
+
+        metrics.min_resident_height.set(last_snapshot_height);
+        metrics.max_resident_height.set(last_snapshot_height);
 
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
             certifications_metadata,
@@ -1219,6 +1254,10 @@ impl StateManagerImpl {
             state: Arc::new(state),
         });
 
+        self.metrics
+            .resident_state_count
+            .set(states.snapshots.len() as i64);
+
         states.certifications_metadata.insert(
             height,
             CertificationMetadata {
@@ -1236,7 +1275,10 @@ impl StateManagerImpl {
                 root_hash: Some(root_hash),
             },
         );
-        update_latest_height(&self.latest_state_height, height);
+
+        let latest_height = update_latest_height(&self.latest_state_height, height);
+        self.metrics.max_resident_height.set(latest_height as i64);
+
         self.persist_metadata_or_die(&states.states_metadata);
     }
 
@@ -1261,7 +1303,7 @@ fn crypto_hash_of_tree(t: &HashTree) -> CryptoHash {
     CryptoHash(t.digest().0.to_vec())
 }
 
-fn update_latest_height(cached: &AtomicU64, h: Height) {
+fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
     // Replace  with 'fetch_max'  after 'atomic_min_max'  is stable.   See issue
     // https://github.com/rust-lang/rust/issues/48655 for more information
 
@@ -1273,6 +1315,7 @@ fn update_latest_height(cached: &AtomicU64, h: Height) {
         }
         prev = updated;
     }
+    prev.max(h.get())
 }
 
 fn purge_cow_rounds_below(state: &mut ReplicatedState, height: Height) {
@@ -1494,7 +1537,13 @@ impl StateManager for StateManagerImpl {
                 hash,
                 certification.signed.content.hash
             );
-            update_latest_height(&self.latest_certified_height, certification.height);
+            let latest_certified =
+                update_latest_height(&self.latest_certified_height, certification.height);
+
+            self.metrics
+                .latest_certified_height
+                .set(latest_certified as i64);
+
             metadata.certification = Some(certification);
         }
 
@@ -1598,6 +1647,10 @@ impl StateManager for StateManagerImpl {
             .partition(|snapshot| heights_to_remove.contains(&snapshot.height));
         states.snapshots = retained;
 
+        self.metrics
+            .resident_state_count
+            .set(states.snapshots.len() as i64);
+
         let latest_height = states
             .snapshots
             .back()
@@ -1606,6 +1659,13 @@ impl StateManager for StateManagerImpl {
 
         self.latest_state_height
             .store(latest_height.get(), Ordering::Relaxed);
+
+        self.metrics
+            .min_resident_height
+            .set(last_height_to_keep.get() as i64);
+        self.metrics
+            .max_resident_height
+            .set(latest_height.get() as i64);
 
         // Send removed snapshot to deallocator thread
         deallocate(Box::new(removed));
@@ -1634,9 +1694,17 @@ impl StateManager for StateManagerImpl {
             .rev()
             .find_map(|(h, m)| m.certification.as_ref().map(|_| *h))
             .unwrap_or(Self::INITIAL_STATE_HEIGHT);
+
         self.latest_certified_height
             .store(latest_certified_height.get(), Ordering::Relaxed);
 
+        self.metrics
+            .latest_certified_height
+            .set(latest_certified_height.get() as i64);
+
+        // TODO: send states_metadata through deallocation channel too. But then
+        // checkpoint removal becomes asynchronous, which requires more careful
+        // handling.
         states.states_metadata = states.states_metadata.split_off(&last_height_to_keep);
 
         self.persist_metadata_or_die(&states.states_metadata);
@@ -1828,6 +1896,14 @@ impl StateManager for StateManagerImpl {
                 (height, state)
             }
         };
+
+        self.metrics
+            .resident_state_count
+            .set(states.snapshots.len() as i64);
+
+        self.metrics
+            .max_resident_height
+            .set(tip_height.get() as i64);
 
         states.tip = Some((tip_height, tip));
     }

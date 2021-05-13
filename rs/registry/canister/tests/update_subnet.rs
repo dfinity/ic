@@ -5,10 +5,10 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, get_value, local_test_on_nns_subnet,
-        set_up_registry_canister, set_up_universal_canister,
+        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        set_up_universal_canister,
     },
-    registry::invariant_compliant_mutation_as_atomic_req,
+    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::subnet::v1::{GossipConfig, SubnetRecord};
 use ic_registry_keys::make_subnet_record_key;

@@ -11,6 +11,7 @@ use crate::{
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::Config;
+use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -28,10 +29,11 @@ use ic_test_utilities::{
         get_running_canister, get_running_canister_with_args, get_stopped_canister,
         get_stopped_canister_with_controller, get_stopping_canister,
         get_stopping_canister_with_controller, CallContextBuilder, CanisterStateBuilder,
+        ReplicatedStateBuilder,
     },
     types::{
         ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-        messages::InstallCodeContextBuilder,
+        messages::{InstallCodeContextBuilder, RequestBuilder},
     },
     with_test_replica_logger,
 };
@@ -39,10 +41,10 @@ use ic_types::messages::StopCanisterContext;
 use ic_types::{
     funds::icp::Tap as ICPTap,
     ingress::{IngressStatus, WasmResult},
-    messages::{CallbackId, CanisterInstallMode},
+    messages::{CallbackId, CanisterInstallMode, RequestOrResponse},
     user_error::{ErrorCode, UserError},
-    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, Funds, MemoryAllocation, NumBytes,
-    NumInstructions, QueryAllocation, SubnetId, ICP,
+    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, Funds, InstallCodeContext,
+    MemoryAllocation, NumBytes, NumInstructions, QueryAllocation, SubnetId, ICP,
 };
 use ic_wasm_types::WasmValidationError;
 use lazy_static::lazy_static;
@@ -63,6 +65,62 @@ lazy_static! {
         SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX));
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
+}
+
+struct CanisterManagerBuilder {
+    cycles_account_manager: CyclesAccountManager,
+    subnet_id: SubnetId,
+}
+
+impl CanisterManagerBuilder {
+    fn with_subnet_id(mut self, subnet_id: SubnetId) -> Self {
+        self.subnet_id = subnet_id;
+        self
+    }
+
+    fn with_cycles_account_manager(mut self, cycles_account_manager: CyclesAccountManager) -> Self {
+        self.cycles_account_manager = cycles_account_manager;
+        self
+    }
+
+    fn build(self) -> CanisterManager {
+        let subnet_type = SubnetType::Application;
+        let metrics_registry = MetricsRegistry::new();
+        let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
+            no_op_logger(),
+            &metrics_registry,
+        ));
+        let cycles_account_manager = Arc::new(self.cycles_account_manager);
+        let hypervisor = Hypervisor::new(
+            Config::default(),
+            1,
+            &metrics_registry,
+            self.subnet_id,
+            subnet_type,
+            no_op_logger(),
+            Arc::clone(&cycles_account_manager),
+        );
+        let hypervisor = Arc::new(hypervisor);
+        CanisterManager::new(
+            hypervisor,
+            1,
+            self.subnet_id,
+            subnet_type,
+            no_op_logger(),
+            canister_manager_config(),
+            cycles_account_manager,
+            ingress_history_writer,
+        )
+    }
+}
+
+impl Default for CanisterManagerBuilder {
+    fn default() -> Self {
+        Self {
+            cycles_account_manager: CyclesAccountManagerBuilder::new().build(),
+            subnet_id: subnet_test_id(1),
+        }
+    }
 }
 
 fn canister_manager_config() -> CanisterMgrConfig {
@@ -91,42 +149,16 @@ fn with_setup<F>(f: F)
 where
     F: FnOnce(CanisterManager, ReplicatedState, SubnetId),
 {
-    with_test_replica_logger(|log| {
-        let subnet_id = subnet_test_id(1);
-        let subnet_type = SubnetType::Application;
-        let metrics_registry = MetricsRegistry::new();
-        let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
-            log.clone(),
-            &metrics_registry,
-        ));
-        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let hypervisor = Hypervisor::new(
-            Config::default(),
-            1,
-            &metrics_registry,
-            subnet_id,
-            subnet_type,
-            log.clone(),
-            Arc::clone(&cycles_account_manager),
-        );
-        let hypervisor = Arc::new(hypervisor);
-        let canister_manager = CanisterManager::new(
-            hypervisor,
-            1,
-            subnet_id,
-            subnet_type,
-            log,
-            canister_manager_config(),
-            cycles_account_manager,
-            ingress_history_writer,
-        );
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        f(
-            canister_manager,
-            initial_state(tmpdir.path(), subnet_id),
-            subnet_id,
-        )
-    });
+    let subnet_id = subnet_test_id(1);
+    let canister_manager = CanisterManagerBuilder::default()
+        .with_subnet_id(subnet_id)
+        .build();
+    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+    f(
+        canister_manager,
+        initial_state(tmpdir.path(), subnet_id),
+        subnet_id,
+    )
 }
 
 #[test]
@@ -2312,5 +2344,360 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
                 time: mock_time()
             }
         })
+    );
+}
+
+#[test]
+fn failed_upgrade_hooks_consume_instructions() {
+    fn run(initial_wasm: Vec<u8>, upgrade_wasm: Vec<u8>) {
+        with_test_replica_logger(|log| {
+            let subnet_id = subnet_test_id(1);
+            let subnet_type = SubnetType::Application;
+            let metrics_registry = MetricsRegistry::new();
+            let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+            let hypervisor = Arc::new(Hypervisor::new(
+                Config::default(),
+                1,
+                &metrics_registry,
+                subnet_id,
+                subnet_type,
+                log.clone(),
+                Arc::clone(&cycles_account_manager),
+            ));
+            let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
+                log.clone(),
+                &metrics_registry,
+            ));
+            let canister_manager = CanisterManager::new(
+                Arc::clone(&hypervisor) as Arc<_>,
+                1,
+                subnet_id,
+                subnet_type,
+                log,
+                canister_manager_config(),
+                cycles_account_manager,
+                ingress_history_writer,
+            );
+            let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+            let mut state = initial_state(tmpdir.path(), subnet_id);
+            let sender = canister_test_id(100).get();
+            let canister_id = canister_manager
+                .create_canister(
+                    sender,
+                    subnet_id,
+                    Funds::new(*INITIAL_CYCLES, ICP::zero()),
+                    CanisterSettings::default(),
+                    &mut state,
+                )
+                .0
+                .unwrap();
+
+            canister_manager
+                .install_code(
+                    InstallCodeContext {
+                        sender,
+                        canister_id,
+                        wasm_module: initial_wasm,
+                        arg: vec![],
+                        compute_allocation: None,
+                        memory_allocation: None,
+                        mode: CanisterInstallMode::Install,
+                        query_allocation: QueryAllocation::default(),
+                    },
+                    &mut state,
+                    MAX_NUM_INSTRUCTIONS,
+                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                )
+                .1
+                .unwrap();
+
+            let (instructions_left, result) = canister_manager.install_code(
+                InstallCodeContext {
+                    sender,
+                    canister_id,
+                    wasm_module: upgrade_wasm,
+                    arg: vec![],
+                    compute_allocation: None,
+                    memory_allocation: None,
+                    mode: CanisterInstallMode::Upgrade,
+                    query_allocation: QueryAllocation::default(),
+                },
+                &mut state,
+                MAX_NUM_INSTRUCTIONS,
+                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            );
+            assert!(
+                MAX_NUM_INSTRUCTIONS - instructions_left == NumInstructions::from(1),
+                "initial instructions {} left {} diff {}",
+                MAX_NUM_INSTRUCTIONS,
+                instructions_left,
+                MAX_NUM_INSTRUCTIONS - instructions_left
+            );
+            assert_matches!(result, Err(CanisterManagerError::Hypervisor(_, _)));
+        })
+    }
+    let initial_wasm = r#"
+    (module
+        (func $canister_pre_upgrade
+          unreachable
+        )
+        (memory $memory 1)
+        (export "canister_pre_upgrade" (func $canister_pre_upgrade))
+    )"#;
+    let initial_wasm = wabt::wat2wasm(initial_wasm).unwrap();
+    let upgrade_wasm = r#"
+    (module
+        (memory $memory 1)
+    )"#;
+    let upgrade_wasm = wabt::wat2wasm(upgrade_wasm).unwrap();
+    run(initial_wasm, upgrade_wasm);
+
+    let initial_wasm = r#"
+    (module
+        (memory $memory 1)
+    )"#;
+    let initial_wasm = wabt::wat2wasm(initial_wasm).unwrap();
+    let upgrade_wasm = r#"
+    (module
+        (func $canister_post_upgrade
+          unreachable
+        )
+        (memory $memory 1)
+        (export "canister_post_upgrade" (func $canister_post_upgrade))
+    )"#;
+    let upgrade_wasm = wabt::wat2wasm(upgrade_wasm).unwrap();
+    run(initial_wasm, upgrade_wasm);
+
+    let initial_wasm = r#"
+    (module
+        (memory $memory 1)
+    )"#;
+    let initial_wasm = wabt::wat2wasm(initial_wasm).unwrap();
+    let upgrade_wasm = r#"
+    (module
+        (func $start
+          unreachable
+        )
+        (memory $memory 1)
+        (start $start)
+    )"#;
+    let upgrade_wasm = wabt::wat2wasm(upgrade_wasm).unwrap();
+    run(initial_wasm, upgrade_wasm);
+}
+
+#[test]
+fn failed_install_hooks_consume_instructions() {
+    fn run(wasm: Vec<u8>) {
+        with_test_replica_logger(|log| {
+            let subnet_id = subnet_test_id(1);
+            let subnet_type = SubnetType::Application;
+            let metrics_registry = MetricsRegistry::new();
+            let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+            let hypervisor = Arc::new(Hypervisor::new(
+                Config::default(),
+                1,
+                &metrics_registry,
+                subnet_id,
+                subnet_type,
+                log.clone(),
+                Arc::clone(&cycles_account_manager),
+            ));
+            let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
+                log.clone(),
+                &metrics_registry,
+            ));
+            let canister_manager = CanisterManager::new(
+                Arc::clone(&hypervisor) as Arc<_>,
+                1,
+                subnet_id,
+                subnet_type,
+                log,
+                canister_manager_config(),
+                cycles_account_manager,
+                ingress_history_writer,
+            );
+            let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+            let mut state = initial_state(tmpdir.path(), subnet_id);
+            let sender = canister_test_id(100).get();
+            let canister_id = canister_manager
+                .create_canister(
+                    sender,
+                    subnet_id,
+                    Funds::new(*INITIAL_CYCLES, ICP::zero()),
+                    CanisterSettings::default(),
+                    &mut state,
+                )
+                .0
+                .unwrap();
+
+            let (instructions_left, result) = canister_manager.install_code(
+                InstallCodeContext {
+                    sender,
+                    canister_id,
+                    wasm_module: wasm,
+                    arg: vec![],
+                    compute_allocation: None,
+                    memory_allocation: None,
+                    mode: CanisterInstallMode::Install,
+                    query_allocation: QueryAllocation::default(),
+                },
+                &mut state,
+                MAX_NUM_INSTRUCTIONS,
+                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            );
+            assert_matches!(result, Err(CanisterManagerError::Hypervisor(_, _)));
+            assert!(
+                MAX_NUM_INSTRUCTIONS - instructions_left == NumInstructions::from(1),
+                "initial instructions {} left {} diff {}",
+                MAX_NUM_INSTRUCTIONS,
+                instructions_left,
+                MAX_NUM_INSTRUCTIONS - instructions_left
+            );
+        })
+    }
+
+    let wasm = r#"
+    (module
+        (func $start
+          unreachable
+        )
+        (memory $memory 1)
+        (start $start)
+    )"#;
+    let wasm = wabt::wat2wasm(wasm).unwrap();
+    run(wasm);
+    let wasm = r#"
+    (module
+        (func $canister_init
+          unreachable
+        )
+        (memory $memory 1)
+        (export "canister_init" (func $canister_init))
+    )"#;
+    let wasm = wabt::wat2wasm(wasm).unwrap();
+    run(wasm);
+}
+
+#[test]
+fn install_code_preserves_system_state_and_scheduler_state() {
+    let canister_manager = CanisterManagerBuilder::default()
+        .with_cycles_account_manager(
+            CyclesAccountManagerBuilder::new()
+                // Make it free so we don't have to worry about cycles when
+                // making assertions.
+                .with_update_message_execution_fee(Cycles::from(0))
+                .build(),
+        )
+        .build();
+
+    let controller = canister_test_id(123);
+    let canister_id = canister_test_id(456);
+
+    // Create a canister with various attributes to later ensure they are preserved.
+    let original_canister = CanisterStateBuilder::new()
+        .with_canister_id(canister_id)
+        .with_status(CanisterStatusType::Running)
+        .with_controller(controller)
+        .with_call_context(CallContextBuilder::new().build())
+        .with_input(RequestOrResponse::Request(
+            RequestBuilder::default().receiver(canister_id).build(),
+        ))
+        .build();
+
+    let mut state = ReplicatedStateBuilder::new()
+        .with_canister(original_canister.clone())
+        .build();
+
+    // 1. INSTALL
+
+    let (instructions_left, res) = canister_manager.install_code(
+        InstallCodeContextBuilder::default()
+            .mode(CanisterInstallMode::Install)
+            .sender(controller.into())
+            .canister_id(canister_id)
+            .build(),
+        &mut state,
+        MAX_NUM_INSTRUCTIONS,
+        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+    );
+
+    // Installation is free, since there is no `(start)` or `canister_init` to run.
+    assert!(instructions_left == MAX_NUM_INSTRUCTIONS);
+
+    // No heap delta.
+    assert_eq!(res.unwrap(), NumBytes::from(0));
+
+    // Verify the system state is preserved.
+    assert_eq!(
+        state.canister_state(&canister_id).unwrap().system_state,
+        original_canister.system_state
+    );
+
+    // Verify the scheduler state is preserved.
+    assert_eq!(
+        state.canister_state(&canister_id).unwrap().scheduler_state,
+        original_canister.scheduler_state
+    );
+
+    // 2. REINSTALL
+
+    let (instructions_left, res) = canister_manager.install_code(
+        InstallCodeContextBuilder::default()
+            .mode(CanisterInstallMode::Reinstall)
+            .sender(controller.into())
+            .canister_id(canister_id)
+            .build(),
+        &mut state,
+        MAX_NUM_INSTRUCTIONS,
+        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+    );
+
+    // Installation is free, since there is no `(start)` or `canister_init` to run.
+    assert!(instructions_left == MAX_NUM_INSTRUCTIONS);
+
+    // No heap delta.
+    assert_eq!(res.unwrap(), NumBytes::from(0));
+
+    // Verify the system state is preserved.
+    assert_eq!(
+        state.canister_state(&canister_id).unwrap().system_state,
+        original_canister.system_state
+    );
+
+    // Verify the scheduler state is preserved.
+    assert_eq!(
+        state.canister_state(&canister_id).unwrap().scheduler_state,
+        original_canister.scheduler_state
+    );
+
+    // 3. UPGRADE
+
+    let (instructions_left, res) = canister_manager.install_code(
+        InstallCodeContextBuilder::default()
+            .mode(CanisterInstallMode::Upgrade)
+            .sender(controller.into())
+            .canister_id(canister_id)
+            .build(),
+        &mut state,
+        MAX_NUM_INSTRUCTIONS,
+        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+    );
+
+    // Installation is free, since there is no `canister_pre/post_upgrade`
+    assert!(instructions_left == MAX_NUM_INSTRUCTIONS);
+
+    // No heap delta.
+    assert_eq!(res.unwrap(), NumBytes::from(0));
+
+    // Verify the system state is preserved.
+    assert_eq!(
+        state.canister_state(&canister_id).unwrap().system_state,
+        original_canister.system_state
+    );
+
+    // Verify the scheduler state is preserved.
+    assert_eq!(
+        state.canister_state(&canister_id).unwrap().scheduler_state,
+        original_canister.scheduler_state
     );
 }

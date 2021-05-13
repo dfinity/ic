@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 use crate::error::{NodeManagerError, NodeManagerResult};
 use candid::Encode;
-use ic_canister_client::agent::Sender;
-use ic_canister_client::Agent;
+use ic_canister_client::{Agent, Sender};
 use ic_config::{
     http_handler::Config as HttpConfig,
     message_routing::Config as MsgRoutingConfig,

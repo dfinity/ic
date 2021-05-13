@@ -1,8 +1,8 @@
 //! A client to interface with canisters via HTTP.
-pub mod agent;
+mod agent;
 mod canister_management;
 /// Asynchronous method to interact with canisters.
-pub mod cbor;
+mod cbor;
 mod http_client;
 
 pub use agent::{

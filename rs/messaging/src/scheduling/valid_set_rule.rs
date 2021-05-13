@@ -236,7 +236,7 @@ impl ValidSetRuleImpl {
                 // Withdraw cost of inducting the message.
                 let memory_usage = canister.memory_usage();
                 let compute_allocation = canister.scheduler_state.compute_allocation;
-                if let Err(err) = self.cycles_account_manager.withdraw_cycles(
+                if let Err(err) = self.cycles_account_manager.consume_cycles(
                     &mut canister.system_state,
                     memory_usage,
                     compute_allocation,

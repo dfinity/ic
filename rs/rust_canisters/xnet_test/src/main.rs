@@ -12,6 +12,7 @@ use rand_pcg::Lcg64Xsh32;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
+use std::str::FromStr;
 use std::time::Duration;
 use xnet_test::{CanisterId, Metrics, NetworkTopology};
 
@@ -125,7 +126,7 @@ fn on_reply(_env: *mut ()) {
 
 /// Callback for handling reject responses from "handle_request".
 fn on_reject(_env: *mut ()) {
-    METRICS.with(|m| m.borrow_mut().call_errors += 1);
+    METRICS.with(|m| m.borrow_mut().reject_responses += 1);
 }
 
 /// Returns true if this canister should continue generating traffic.
@@ -151,12 +152,12 @@ fn schedule_fanout() {
         api::Funds::zero(),
     );
     if err_code != 0 {
+        // This is a critical error (no more requests will be sent once this happens).
         log(&format!(
-            "{} fanout failed with {}\n",
+            "{} CRITICAL: fanout failed with {}\n",
             time_nanos() / 1_000_000,
             err_code
         ));
-        METRICS.with(|m| m.borrow_mut().call_errors += 1)
     }
 }
 
@@ -254,7 +255,7 @@ fn fanout() {
 
             if err_code != 0 {
                 log(&format!(
-                    "{} handle_request failed with {}",
+                    "{} call failed with {}",
                     time_nanos() / 1_000_000,
                     err_code
                 ));
@@ -289,6 +290,28 @@ fn handle_request() {
         time_nanos: req.time_nanos,
     });
     api::reply(&msg[..]);
+}
+
+/// Deposits the cycles this canister has minus 1T according to the given
+/// `DepositCyclesArgs`
+#[export_name = "canister_update return_cycles"]
+fn return_cycles() {
+    let cycle_refund = api::canister_cycle_balance().saturating_sub(1_000_000_000_000);
+    let noop = |_| ();
+    let _ = api::call_raw(
+        api::CanisterId::from_str("aaaaa-aa").unwrap(),
+        "deposit_cycles",
+        &api::arg_data(),
+        noop,
+        noop,
+        None,
+        std::ptr::null_mut(),
+        api::Funds {
+            cycles: cycle_refund,
+        },
+    );
+
+    candid_reply(&"ok");
 }
 
 /// Query call that serializes metrics as a candid message.

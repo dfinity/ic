@@ -57,7 +57,8 @@ where
         .expect_get_status_at_height()
         .returning(|_| Ok(Box::new(|_| IngressStatus::Unknown)));
     let subnet_id = subnet_test_id(0);
-    let registry = setup_registry(subnet_id);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let registry = setup_registry(subnet_id, runtime.handle().clone());
     let consensus_pool_cache = Arc::new(MockConsensusCache::new());
     let mut state_manager = MockStateManager::new();
     state_manager.expect_get_state_at().return_const(Ok(
@@ -112,6 +113,7 @@ fn prepare(
             rng.gen::<u64>() % (10 * (MAX_INGRESS_TTL.as_millis() as u64)),
         );
         let ingress = SignedIngressBuilder::new()
+            .method_name("provisional_create_canister_with_cycles")
             .method_payload(vec![0; ingress_size])
             .nonce(i as u64)
             .expiry_time(now + expiry)
@@ -181,7 +183,7 @@ fn build_payload(criterion: &mut Criterion) {
 }
 
 /// Sets up a registry client.
-fn setup_registry(subnet_id: SubnetId) -> Arc<dyn RegistryClient> {
+fn setup_registry(subnet_id: SubnetId, runtime: tokio::runtime::Handle) -> Arc<dyn RegistryClient> {
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let subnet_record = test_subnet_record();
     registry_data_provider
@@ -195,7 +197,7 @@ fn setup_registry(subnet_id: SubnetId) -> Arc<dyn RegistryClient> {
         Arc::clone(&registry_data_provider) as Arc<_>,
         None,
     ));
-    registry.fetch_and_start_polling().unwrap();
+    runtime.block_on(async { registry.as_ref().fetch_and_start_polling().unwrap() });
     registry
 }
 

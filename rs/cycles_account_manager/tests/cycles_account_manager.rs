@@ -17,6 +17,7 @@ use ic_test_utilities::{
 use ic_types::{
     ic00::{CanisterIdRecord, Payload, IC_00},
     messages::SignedIngressContent,
+    nominal_cycles::NominalCycles,
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 use std::{convert::TryFrom, time::Duration};
@@ -81,12 +82,14 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
         NumSeconds::from(0),
     );
     assert_eq!(
-        CyclesAccountManagerBuilder::new().build().withdraw_cycles(
-            &mut system_state,
-            NumBytes::from(0),
-            ComputeAllocation::default(),
-            Cycles::from(200),
-        ),
+        CyclesAccountManagerBuilder::new()
+            .build()
+            .withdraw_cycles_for_transfer(
+                &mut system_state,
+                NumBytes::from(0),
+                ComputeAllocation::default(),
+                Cycles::from(200),
+            ),
         Ok(())
     );
 
@@ -97,12 +100,14 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
         NumSeconds::from(60),
     );
     assert_eq!(
-        CyclesAccountManagerBuilder::new().build().withdraw_cycles(
-            &mut system_state,
-            NumBytes::from(0),
-            ComputeAllocation::default(),
-            Cycles::from(200),
-        ),
+        CyclesAccountManagerBuilder::new()
+            .build()
+            .withdraw_cycles_for_transfer(
+                &mut system_state,
+                NumBytes::from(0),
+                ComputeAllocation::default(),
+                Cycles::from(200),
+            ),
         Ok(())
     );
 
@@ -113,12 +118,14 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
         NumSeconds::from(0),
     );
     assert_eq!(
-        CyclesAccountManagerBuilder::new().build().withdraw_cycles(
-            &mut system_state,
-            NumBytes::from(4 << 30),
-            ComputeAllocation::default(),
-            Cycles::from(200),
-        ),
+        CyclesAccountManagerBuilder::new()
+            .build()
+            .withdraw_cycles_for_transfer(
+                &mut system_state,
+                NumBytes::from(4 << 30),
+                ComputeAllocation::default(),
+                Cycles::from(200),
+            ),
         Ok(())
     );
 
@@ -129,12 +136,14 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
         NumSeconds::from(30),
     );
     assert_eq!(
-        CyclesAccountManagerBuilder::new().build().withdraw_cycles(
-            &mut system_state,
-            NumBytes::from(4 << 30),
-            ComputeAllocation::default(),
-            Cycles::from(200),
-        ),
+        CyclesAccountManagerBuilder::new()
+            .build()
+            .withdraw_cycles_for_transfer(
+                &mut system_state,
+                NumBytes::from(4 << 30),
+                ComputeAllocation::default(),
+                Cycles::from(200),
+            ),
         Err(CyclesAccountError::CanisterOutOfCycles {
             available: Cycles::from(0),
             requested: Cycles::from(200)
@@ -555,14 +564,14 @@ fn cycles_withdraw_for_execution() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let amount = Cycles::from(initial_amount / 2);
     assert!(cycles_account_manager
-        .withdraw_cycles(&mut system_state, memory_usage, compute_allocation, amount)
+        .consume_cycles(&mut system_state, memory_usage, compute_allocation, amount)
         .is_ok());
     assert_eq!(
         system_state.cycles_account.cycles_balance(),
         initial_cycles - amount
     );
     assert!(cycles_account_manager
-        .withdraw_cycles(&mut system_state, memory_usage, compute_allocation, amount)
+        .consume_cycles(&mut system_state, memory_usage, compute_allocation, amount)
         .is_err());
 
     let exec_cycles_max = cycles_account_manager.cycles_balance_above_storage_reserve(
@@ -571,7 +580,7 @@ fn cycles_withdraw_for_execution() {
         compute_allocation,
     );
     assert!(cycles_account_manager
-        .withdraw_cycles(
+        .consume_cycles(
             &mut system_state,
             memory_usage,
             compute_allocation,
@@ -593,7 +602,7 @@ fn cycles_withdraw_for_execution() {
 
     // no more cycles can be withdrawn, the rest is reserved for storage
     assert!(cycles_account_manager
-        .withdraw_cycles(
+        .consume_cycles(
             &mut system_state,
             memory_usage,
             compute_allocation,
@@ -601,7 +610,7 @@ fn cycles_withdraw_for_execution() {
         )
         .is_err());
     assert!(cycles_account_manager
-        .withdraw_cycles(
+        .consume_cycles(
             &mut system_state,
             memory_usage,
             compute_allocation,
@@ -609,7 +618,7 @@ fn cycles_withdraw_for_execution() {
         )
         .is_err());
     assert!(cycles_account_manager
-        .withdraw_cycles(
+        .consume_cycles(
             &mut system_state,
             memory_usage,
             compute_allocation,
@@ -617,7 +626,7 @@ fn cycles_withdraw_for_execution() {
         )
         .is_err());
     assert!(cycles_account_manager
-        .withdraw_cycles(
+        .consume_cycles(
             &mut system_state,
             memory_usage,
             compute_allocation,
@@ -627,5 +636,83 @@ fn cycles_withdraw_for_execution() {
     assert_eq!(
         system_state.cycles_account.cycles_balance(),
         freeze_threshold_cycles
+    );
+}
+
+#[test]
+fn withdraw_execution_cycles_consumes_cycles() {
+    let mut system_state = SystemStateBuilder::new().build();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let consumed_cycles_before = system_state
+        .cycles_account
+        .consumed_cycles_since_replica_started;
+    cycles_account_manager
+        .withdraw_execution_cycles(
+            &mut system_state,
+            NumBytes::from(0),
+            ComputeAllocation::default(),
+            NumInstructions::from(1_000_000),
+        )
+        .unwrap();
+    let consumed_cycles_after = system_state
+        .cycles_account
+        .consumed_cycles_since_replica_started;
+    assert!(consumed_cycles_before < consumed_cycles_after);
+}
+
+#[test]
+fn withdraw_for_transfer_does_not_consume_cycles() {
+    let mut system_state = SystemStateBuilder::new().build();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let consumed_cycles_before = system_state
+        .cycles_account
+        .consumed_cycles_since_replica_started;
+    cycles_account_manager
+        .withdraw_cycles_for_transfer(
+            &mut system_state,
+            NumBytes::from(0),
+            ComputeAllocation::default(),
+            Cycles::from(1_000_000),
+        )
+        .unwrap();
+    let consumed_cycles_after = system_state
+        .cycles_account
+        .consumed_cycles_since_replica_started;
+
+    // Cycles are not consumed
+    assert_eq!(consumed_cycles_before, consumed_cycles_after);
+}
+
+#[test]
+fn consume_cycles_updates_consumed_cycles() {
+    let mut system_state = SystemStateBuilder::new().build();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let consumed_cycles_before = system_state
+        .cycles_account
+        .consumed_cycles_since_replica_started;
+    cycles_account_manager
+        .consume_cycles(
+            &mut system_state,
+            NumBytes::from(0),
+            ComputeAllocation::default(),
+            Cycles::from(1_000_000),
+        )
+        .unwrap();
+    let consumed_cycles_after = system_state
+        .cycles_account
+        .consumed_cycles_since_replica_started;
+
+    assert_eq!(
+        consumed_cycles_after - consumed_cycles_before,
+        NominalCycles::from(1_000_000)
     );
 }
