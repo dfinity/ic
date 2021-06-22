@@ -12,7 +12,7 @@ use ic_types::{
     consensus::catchup::CatchUpPackageParam,
     messages::{
         Blob, HttpReadContent, HttpRequestEnvelope, HttpStatusResponse, HttpSubmitContent,
-        MessageId,
+        MessageId, ReplicaHealthStatus,
     },
     CanisterId, PrincipalId,
 };
@@ -197,8 +197,10 @@ pub struct Agent {
     /// "/api/v1/submit".
     pub url: Url,
 
-    // How long to wait for ingress requests.
-    ingress_timeout: Duration,
+    // How long to wait and poll for ingress requests? This is independent from the expiry time
+    // send as part of the HTTP body.
+    // TODO(SCL-237): After the cleanup is complete, this method should be private.
+    pub ingress_timeout: Duration,
 
     // How long to wait for queries.
     query_timeout: Duration,
@@ -453,7 +455,7 @@ impl Agent {
         parse_read_state_response(&request_id, cbor)
     }
 
-    async fn get_status_with_response(&self) -> Result<HttpStatusResponse, String> {
+    async fn get_status(&self) -> Result<HttpStatusResponse, String> {
         let bytes = self
             .http_client
             .get_with_response(
@@ -467,25 +469,18 @@ impl Agent {
             .map_err(|source| format!("decoding to HttpStatusResponse failed: {}", source))
     }
 
-    /// Requests the version of the public spec supported by this node by
-    /// querying /api/v1/status.
-    pub async fn ic_api_version(&self) -> Result<String, String> {
-        let response = self.get_status_with_response().await?;
-        Ok(response.ic_api_version)
-    }
-
-    /// Requests the Replica impl version of this node by querying
-    /// /api/v1/status
-    pub async fn impl_version(&self) -> Result<Option<String>, String> {
-        let response = self.get_status_with_response().await?;
-        Ok(response.impl_version)
-    }
-
     /// Requests the root key of this node by querying /api/v1/status
     pub async fn root_key(&self) -> Result<Option<Blob>, String> {
-        let response = self.get_status_with_response().await?;
-
+        let response = self.get_status().await?;
         Ok(response.root_key)
+    }
+
+    /// Checks if the target replica is healthy.
+    pub async fn is_replica_healthy(&self) -> bool {
+        if let Ok(response) = self.get_status().await {
+            return response.replica_health_status == Some(ReplicaHealthStatus::Healthy);
+        }
+        false
     }
 
     pub fn http_client(&self) -> &HttpClient {

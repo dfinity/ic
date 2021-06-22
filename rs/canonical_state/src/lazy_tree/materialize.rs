@@ -1,7 +1,7 @@
 //! Support for materializing (part of) a [`LazyTree`] as a [`LabeledTree`].
 
 use super::LazyTree;
-use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree};
+use ic_crypto_tree_hash::{FlatMap, LabeledTree};
 use LazyTree::*;
 
 /// A pattern to be used for fitering the parts of a [`LazyTree`] to be
@@ -16,9 +16,9 @@ fn materialize(lazy_tree: &LazyTree<'_>) -> Option<LabeledTree<Vec<u8>>> {
             let children: Vec<_> = f
                 .labels()
                 .filter_map(|l| {
-                    let lazy_tree = f.edge(&l[..])?;
+                    let lazy_tree = f.edge(&l)?;
                     let t = materialize(&lazy_tree)?;
-                    Some((Label::from(l), t))
+                    Some((l, t))
                 })
                 .collect();
 
@@ -53,7 +53,7 @@ pub fn materialize_partial(
                 let subtrees: Vec<_> = children
                     .iter()
                     .filter_map(|(label, pattern)| {
-                        let lazy_tree = f.edge(label.as_bytes())?;
+                        let lazy_tree = f.edge(label)?;
                         let t = materialize_partial(&lazy_tree, pattern)?;
                         Some((label.clone(), t))
                     })

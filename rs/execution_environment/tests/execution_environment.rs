@@ -1120,8 +1120,8 @@ fn execute_stop_canister_writes_failure_to_ingress_history_when_called_with_inco
                 error: UserError::new(
                     ErrorCode::CanisterInvalidController,
                     format!(
-                        "Only the controller of canister {} can control it.\n\
-                        Canister's controller: {}\n\
+                        "Only the controllers of the canister {} can control it.\n\
+                        Canister's controllers: {}\n\
                         Sender's ID: {}",
                         canister_test_id(0),
                         user_test_id(1).get(),
@@ -1139,7 +1139,8 @@ fn test_canister_status_helper(
     expected_status_result: CanisterStatusResultV2,
 ) {
     with_setup(SubnetType::Application, |exec_env, mut state, _, _, _| {
-        let controller = CanisterId::new(canister.controller()).unwrap();
+        let controller_id = canister.system_state.controllers.iter().next().unwrap();
+        let controller = CanisterId::new(*controller_id).unwrap();
         let canister_id = canister.canister_id();
         let subnet_id = subnet_test_id(1);
         let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
@@ -1208,6 +1209,7 @@ fn get_running_canister_status_from_another_canister() {
             CanisterStatusType::Running,
             None,
             controller.get(),
+            vec![controller.get()],
             NumBytes::from(0),
             INITIAL_CYCLES.get(),
             ComputeAllocation::default().as_percent(),
@@ -1231,6 +1233,7 @@ fn get_stopped_canister_status_from_another_canister() {
             CanisterStatusType::Stopped,
             None,
             controller.get(),
+            vec![controller.get()],
             NumBytes::from(0),
             INITIAL_CYCLES.get(),
             ComputeAllocation::default().as_percent(),
@@ -1254,6 +1257,7 @@ fn get_stopping_canister_status_from_another_canister() {
             CanisterStatusType::Stopping,
             None,
             controller.get(),
+            vec![controller.get()],
             NumBytes::from(0),
             INITIAL_CYCLES.get(),
             ComputeAllocation::default().as_percent(),
@@ -2061,7 +2065,7 @@ fn install_code_fails_on_invalid_compute_allocation() {
                 user_id: sender,
                 error: UserError::new(
                     ErrorCode::CanisterContractViolation,
-                    "ComputeAllocation expected to be in the range [0..100], got 1000"
+                    "ComputeAllocation expected to be in the range [0..100], got 1_000"
                 ),
                 time: mock_time(),
             }
@@ -2107,7 +2111,7 @@ fn install_code_fails_on_invalid_memory_allocation() {
                        user_id: sender,
                        error: UserError::new(
                            ErrorCode::CanisterContractViolation,
-                           "MemoryAllocation expected to be in the range [0..8589934592], got 1125899906842624"
+                           "MemoryAllocation expected to be in the range [0..8589934592], got 1_125_899_906_842_624"
                        ),
                        time: mock_time(),
                    });
@@ -2247,7 +2251,7 @@ fn can_update_canisters_cycles_account_when_an_ingress_is_executed() {
         SubnetType::Application,
         |exec_env, _, _, routing_table, subnet_records| {
             let canister = get_running_canister(canister_test_id(0));
-            let initial_cycles_balance = canister.system_state.cycles_account.cycles_balance();
+            let initial_cycles_balance = canister.system_state.cycles_balance;
             let ingress = IngressBuilder::new().build();
 
             let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
@@ -2264,7 +2268,7 @@ fn can_update_canisters_cycles_account_when_an_ingress_is_executed() {
                 .get_no_pause();
 
             assert_eq!(
-                result.canister.system_state.cycles_account.cycles_balance(),
+                result.canister.system_state.cycles_balance,
                 initial_cycles_balance
                     - cycles_account_manager
                         .execution_cost(MAX_NUM_INSTRUCTIONS - result.num_instructions_left,),
@@ -2323,7 +2327,8 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
                 response_payload: Payload::Reject(RejectContext {
                     code: RejectCode::SysTransient,
                     message: format!(
-                        "Canister {} is out of cycles: Currently available cycles {}, but {} was requested",
+                        "Canister {} is out of cycles: Canister {} has currently {} available cycles, but {} was requested",
+                        canister_id,
                         canister_id,
                         available_cycles,
                         cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS),
@@ -2333,7 +2338,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
         );
             // Verify the canister's cycles balance is still the same.
             assert_eq!(
-                result.canister.system_state.cycles_account.cycles_balance(),
+                result.canister.system_state.cycles_balance,
                 Cycles::from(1000)
             );
         },
@@ -2373,7 +2378,8 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
                 error: UserError::new(
                     ErrorCode::CanisterOutOfCycles,
                     format!(
-                        "Canister {} is out of cycles: Currently available cycles {}, but {} was requested",
+                        "Canister {} is out of cycles: Canister {} has currently {} available cycles, but {} was requested",
+                        canister_id,
                         canister_id,
                         available_cycles,
                         cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS),
@@ -2384,7 +2390,7 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
         );
             // Verify the canister's cycles balance is still the same.
             assert_eq!(
-                result.canister.system_state.cycles_account.cycles_balance(),
+                result.canister.system_state.cycles_balance,
                 Cycles::from(1000)
             );
         },

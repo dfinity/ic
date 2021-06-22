@@ -1,5 +1,6 @@
 use ic_logger::{warn, ReplicaLogger};
 use ic_utils::fs::copy_file_sparse;
+use std::io::Error;
 use std::path::Path;
 
 /// Copies `src` into `dst`.
@@ -14,6 +15,18 @@ pub fn do_copy(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io::Result<(
     static ON_COW_FS: AtomicBool = AtomicBool::new(true);
     static SAME_FS: AtomicBool = AtomicBool::new(true);
 
+    let on_err = |e: Error| -> Error {
+        Error::new(
+            e.kind(),
+            format!(
+                "failed to copy {} -> {}: {}",
+                src.display(),
+                dst.display(),
+                e
+            ),
+        )
+    };
+
     if ON_COW_FS.load(Ordering::Relaxed) && SAME_FS.load(Ordering::Relaxed) {
         match ic_sys::fs::clone_file(src, dst) {
             Err(FileCloneError::DifferentFileSystems) => {
@@ -26,7 +39,7 @@ pub fn do_copy(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io::Result<(
                         dst.display()
                     );
                 }
-                copy_file_sparse(src, dst)?;
+                copy_file_sparse(src, dst).map_err(on_err)?;
                 Ok(())
             }
             Err(FileCloneError::OperationNotSupported) => {
@@ -39,14 +52,22 @@ pub fn do_copy(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io::Result<(
                         dst.display(),
                     );
                 }
-                copy_file_sparse(src, dst)?;
+                copy_file_sparse(src, dst).map_err(on_err)?;
                 Ok(())
             }
-            Err(FileCloneError::IoError(e)) => Err(e),
+            Err(FileCloneError::IoError(e)) => Err(Error::new(
+                e.kind(),
+                format!(
+                    "failed to clone {} -> {}: {}",
+                    src.display(),
+                    dst.display(),
+                    e
+                ),
+            )),
             Ok(()) => Ok(()),
         }
     } else {
-        copy_file_sparse(src, dst)?;
+        copy_file_sparse(src, dst).map_err(on_err)?;
         Ok(())
     }
 }

@@ -13,6 +13,7 @@ use strum_macros::{EnumIter, EnumString, ToString};
 
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
+pub const MAX_CONTROLLERS: usize = 10;
 
 /// Methods exported by ic:00.
 #[derive(Debug, EnumString, EnumIter, ToString, Copy, Clone)]
@@ -22,7 +23,6 @@ pub enum Method {
     CreateCanister,
     DeleteCanister,
     DepositCycles,
-    DepositFunds,
     InstallCode,
     RawRand,
     SetController,
@@ -83,6 +83,7 @@ impl From<CanisterId> for CanisterIdRecord {
 #[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
 pub struct DefiniteCanisterSettingsArgs {
     controller: PrincipalId,
+    controllers: Vec<PrincipalId>,
     compute_allocation: candid::Nat,
     memory_allocation: candid::Nat,
     freezing_threshold: candid::Nat,
@@ -91,6 +92,7 @@ pub struct DefiniteCanisterSettingsArgs {
 impl DefiniteCanisterSettingsArgs {
     pub fn new(
         controller: PrincipalId,
+        controllers: Vec<PrincipalId>,
         compute_allocation: u64,
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
@@ -101,10 +103,15 @@ impl DefiniteCanisterSettingsArgs {
         };
         Self {
             controller,
+            controllers,
             compute_allocation: candid::Nat::from(compute_allocation),
             memory_allocation,
             freezing_threshold: candid::Nat::from(freezing_threshold),
         }
+    }
+
+    pub fn controllers(&self) -> Vec<PrincipalId> {
+        self.controllers.clone()
     }
 }
 
@@ -194,6 +201,7 @@ impl CanisterStatusResultV2 {
         status: CanisterStatusType,
         module_hash: Option<Vec<u8>>,
         controller: PrincipalId,
+        controllers: Vec<PrincipalId>,
         memory_size: NumBytes,
         cycles: u128,
         compute_allocation: u64,
@@ -211,6 +219,7 @@ impl CanisterStatusResultV2 {
             balance: vec![(vec![0], candid::Nat::from(cycles))],
             settings: DefiniteCanisterSettingsArgs::new(
                 controller,
+                controllers,
                 compute_allocation,
                 memory_allocation,
                 freezing_threshold,
@@ -370,12 +379,14 @@ impl Payload<'_> for UpdateSettingsArgs {}
 /// Struct used for encoding/decoding
 /// `(record {
 ///     controller : opt principal;
+///     controllers: opt vec principal;
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug)]
 pub struct CanisterSettingsArgs {
     pub controller: Option<PrincipalId>,
+    pub controllers: Option<Vec<PrincipalId>>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,

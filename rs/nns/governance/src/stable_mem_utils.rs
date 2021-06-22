@@ -26,6 +26,9 @@ trait StableMemory {
     /// `dfn_core::stable` uses 4 bytes at the beginning of the stable memory
     /// for length)
     fn length(&self) -> u32;
+
+    /// Sets the size of the stable memory, in bytes
+    fn set_length(&mut self, len: u32);
 }
 
 struct StableMemoryImplementation;
@@ -42,6 +45,10 @@ impl StableMemory for StableMemoryImplementation {
     fn length(&self) -> u32 {
         stable::length()
     }
+
+    fn set_length(&mut self, len: u32) {
+        stable::set_length(len);
+    }
 }
 
 #[cfg(test)]
@@ -54,7 +61,9 @@ impl StableMemory for FakeStableMemory {
         let mut vec = self.0.lock().unwrap();
         let offset = offset as usize;
         let range_end = offset + content.len();
-        vec.resize(range_end, 0);
+        if range_end > vec.len() {
+            vec.resize(range_end, 0);
+        }
         (&mut vec[offset..range_end]).copy_from_slice(content)
     }
 
@@ -66,6 +75,10 @@ impl StableMemory for FakeStableMemory {
     fn length(&self) -> u32 {
         let vec = self.0.lock().unwrap();
         vec.len() as u32
+    }
+
+    fn set_length(&mut self, length: u32) {
+        self.0.lock().unwrap().resize(length as usize, 0);
     }
 }
 
@@ -108,15 +121,14 @@ impl BufferedStableMemWriter {
 
     /// Create a test instance that uses a vector as stable memory.
     #[cfg(test)]
-    fn new_test(buffer_size_bytes: u32) -> (Self, FakeStableMemory) {
-        let test_mem = FakeStableMemory(Arc::new(Mutex::new(vec![])));
-        let self_ = Self {
+    fn new_test(buffer_size_bytes: u32, memory: Arc<Mutex<Vec<u8>>>) -> Self {
+        let test_mem = FakeStableMemory(memory);
+        Self {
             buffer: vec![0; buffer_size_bytes as usize],
             buffer_offset: 0,
             stable_mem_offset: 0,
-            stable_mem: Box::new(test_mem.clone()),
-        };
-        (self_, test_mem)
+            stable_mem: Box::new(test_mem),
+        }
     }
 
     /// Write the buffer contents to stable memory.
@@ -125,6 +137,7 @@ impl BufferedStableMemWriter {
             .write(&self.buffer[0..self.buffer_offset], self.stable_mem_offset);
         self.stable_mem_offset += u32::try_from(self.buffer_offset).unwrap();
         self.buffer_offset = 0;
+        self.stable_mem.set_length(self.stable_mem_offset);
     }
 }
 
@@ -243,19 +256,17 @@ impl Buf for BufferedStableMemReader {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::pb::v1::{Governance, NetworkEconomics, Neuron};
-
-    use super::{BufferedStableMemReader, BufferedStableMemWriter};
-
     use prost::Message;
 
-    fn allocate_governance() -> Governance {
+    fn allocate_governance(num_neurons: u64) -> Governance {
         let mut gov = Governance {
             economics: Some(NetworkEconomics::with_default_values()),
             ..Default::default()
         };
 
-        for i in 0..10000 {
+        for i in 0..num_neurons {
             gov.neurons.insert(i, Neuron::default());
         }
 
@@ -264,24 +275,42 @@ mod test {
 
     #[test]
     fn test_buffered_stable_mem_writer() {
-        let gov = allocate_governance();
-
-        let (mut writer, mem) = BufferedStableMemWriter::new_test(1024);
+        let gov = allocate_governance(7821);
+        let memory = Arc::new(Mutex::new(vec![]));
+        let mut writer = BufferedStableMemWriter::new_test(1024, memory.clone());
 
         gov.encode(&mut writer).unwrap();
         writer.flush();
 
-        let mut mem_ = mem.0.lock().unwrap();
-        let serialized = std::mem::replace(&mut *mem_, vec![]);
-
-        let decoded = Governance::decode(serialized.as_slice()).unwrap();
+        let decoded: Governance = Governance::decode(memory.lock().unwrap().as_slice()).unwrap();
 
         assert_eq!(gov, decoded);
     }
 
     #[test]
+    fn test_write_large_then_small() {
+        let memory = Arc::new(Mutex::new(vec![]));
+
+        let gov1 = allocate_governance(1893);
+        {
+            let mut writer = BufferedStableMemWriter::new_test(40, memory.clone());
+            gov1.encode(&mut writer).unwrap();
+        }
+
+        let gov2 = allocate_governance(397);
+        {
+            let mut writer = BufferedStableMemWriter::new_test(40, memory.clone());
+            gov2.encode(&mut writer).unwrap();
+        }
+
+        let decoded: Governance = Governance::decode(memory.lock().unwrap().as_slice()).unwrap();
+
+        assert_eq!(gov2, decoded);
+    }
+
+    #[test]
     fn test_buffered_stable_mem_reader() {
-        let gov = allocate_governance();
+        let gov = allocate_governance(530);
 
         let mut serialized = Vec::new();
         gov.encode(&mut serialized).unwrap();
@@ -309,14 +338,13 @@ mod test {
         for buffer_size in 1..=TEST_DATA_SIZE + 1 {
             // Test writer correctness
             {
-                let (mut writer, mem) = BufferedStableMemWriter::new_test(buffer_size as u32);
+                let memory = Arc::new(Mutex::new(vec![]));
+                let mut writer =
+                    BufferedStableMemWriter::new_test(buffer_size as u32, memory.clone());
                 data.encode(&mut writer).unwrap();
                 writer.flush();
 
-                let mut mem_ = mem.0.lock().unwrap();
-                let serialized = std::mem::replace(&mut *mem_, vec![]);
-
-                let decoded: Vec<u8> = Vec::decode(serialized.as_slice()).unwrap();
+                let decoded: Vec<u8> = Vec::decode(memory.lock().unwrap().as_slice()).unwrap();
                 assert_eq!(decoded, data);
             }
 

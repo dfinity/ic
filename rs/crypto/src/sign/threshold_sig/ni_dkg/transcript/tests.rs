@@ -11,7 +11,7 @@ use crate::sign::threshold_sig::ni_dkg::transcript::create_transcript;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InvalidArgumentError;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript,
+    ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_test_utilities::crypto::basic_utilities::set_of;
@@ -635,6 +635,36 @@ mod load_transcript {
             transcript_data_from_store_option(&threshold_sig_data_store, NI_DKG_ID);
         assert!(transcript_data.is_none());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn should_insert_transcript_data_into_store_and_return_ok_if_csp_returns_epoch_too_old_error() {
+        let transcript = NiDkgTranscript {
+            dkg_id: NI_DKG_ID,
+            ..dummy_transcript()
+        };
+        let csp = csp_with_load_threshold_signing_key_returning(Err(epoch_too_old_error()));
+        let threshold_sig_data_store = LockableThresholdSigDataStore::new();
+
+        let result = load_transcript(
+            &NODE_1,
+            &threshold_sig_data_store,
+            &csp,
+            &transcript,
+            &no_op_logger(),
+        );
+
+        let transcript_data =
+            transcript_data_from_store_option(&threshold_sig_data_store, NI_DKG_ID);
+        assert!(transcript_data.is_some());
+        assert!(result.is_ok());
+    }
+
+    fn epoch_too_old_error() -> CspDkgLoadPrivateKeyError {
+        CspDkgLoadPrivateKeyError::EpochTooOldError {
+            ciphertext_epoch: Epoch::from(4),
+            secret_key_epoch: Epoch::from(3),
+        }
     }
 
     fn csp_with_load_threshold_signing_key_returning(

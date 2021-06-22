@@ -5,7 +5,7 @@ use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
 use crate::types::CspSecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::convert_keyset_to_keyset_with_pop;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
-use ic_logger::{replica_logger::no_op_logger, warn, ReplicaLogger};
+use ic_logger::{info, replica_logger::no_op_logger, ReplicaLogger};
 use ic_types::crypto::KeyId;
 use parking_lot::RwLock;
 use prost::Message;
@@ -318,9 +318,9 @@ impl SecretKeyStore for ProtoSecretKeyStore {
                 if maybe_scope != Some(scope) || filter(&key_id, &csp_key) {
                     keys.insert(key_id, (csp_key, maybe_scope));
                 } else {
-                    warn!(
+                    info!(
                         self.logger,
-                        "WARNING: deleting key with ID {} with scope {}", key_id, scope
+                        "Deleting key with ID {} with scope {}", key_id, scope
                     );
                 }
             }

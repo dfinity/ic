@@ -78,6 +78,22 @@ pub async fn perform_tls_server_handshake_temp_with_optional_client_auth<
     }
 }
 
+pub async fn perform_tls_server_handshake_without_client_auth<C: CspTlsServerHandshake>(
+    csp: &C,
+    self_node_id: NodeId,
+    registry_client: &Arc<dyn RegistryClient>,
+    tcp_stream: TcpStream,
+    registry_version: RegistryVersion,
+) -> Result<TlsStream, TlsServerHandshakeError> {
+    let self_tls_cert = tls_cert_from_registry(registry_client, self_node_id, registry_version)?;
+
+    let tls_stream = csp
+        .perform_tls_server_handshake_without_client_auth(tcp_stream, self_tls_cert)
+        .await?;
+
+    Ok(tls_stream)
+}
+
 fn tls_certs_from_registry(
     registry_client: &Arc<dyn RegistryClient>,
     nodes: &SomeOrAllNodes,

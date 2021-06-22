@@ -12,14 +12,16 @@ use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::types::ids::node_test_id;
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, UserPublicKey};
 use ic_types::messages::MessageId;
-use rand_core::OsRng;
 use std::sync::Arc;
 
+use crate::ed25519_utils::ed25519_signature_and_public_key;
 use openssl::ec::{EcGroup, EcKey};
 use openssl::ecdsa::EcdsaSig;
 use openssl::nid::Nid;
 use openssl::pkey::PKey;
 use openssl::sha::sha256;
+
+mod ed25519_utils;
 
 #[test]
 fn should_verify_request_id_ed25519_signature() {
@@ -337,31 +339,6 @@ fn new_pk_der(curve_name: Nid) -> Vec<u8> {
     let pkey = PKey::from_ec_key(ec_key).expect("unable to create PKey");
     pkey.public_key_to_der()
         .expect("unable to DER-encode public key")
-}
-
-fn ed25519_signature_and_public_key(
-    request_id: &MessageId,
-) -> (BasicSigOf<MessageId>, UserPublicKey) {
-    use ed25519_dalek::Signer;
-    let ed25519_keypair = {
-        let mut rng = OsRng::default(); // use `ChaChaRng::seed_from_u64` for deterministic keys
-        ed25519_dalek::Keypair::generate(&mut rng)
-    };
-    let signature: BasicSigOf<MessageId> = {
-        let bytes_to_sign = {
-            let mut buf = vec![];
-            buf.extend_from_slice(DOMAIN_IC_REQUEST);
-            buf.extend_from_slice(request_id.as_bytes());
-            buf
-        };
-        let signature_bytes = ed25519_keypair.sign(&bytes_to_sign).to_bytes();
-        BasicSigOf::new(BasicSig(signature_bytes.to_vec()))
-    };
-    let public_key = UserPublicKey {
-        key: ed25519_keypair.public.to_bytes().to_vec(),
-        algorithm_id: AlgorithmId::Ed25519,
-    };
-    (signature, public_key)
 }
 
 fn ecdsa_signature_and_public_key(

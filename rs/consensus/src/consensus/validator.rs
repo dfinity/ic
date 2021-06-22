@@ -33,7 +33,7 @@ use ic_types::{
     replica_config::ReplicaConfig,
     ReplicaVersion,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::{cmp::Ordering, hash::Hash};
 
@@ -73,6 +73,7 @@ enum PermanentError {
     MismatchedBlockInCatchUpPackageShare,
     MismatchedStateHashInCatchUpPackageShare,
     MismatchedRandomBeaconInCatchUpPackageShare,
+    RepeatedSigner,
 }
 
 impl From<CryptoError> for TransientError {
@@ -376,6 +377,10 @@ impl<T: NotaryIssued + Hash + HasHeight + ic_interfaces::crypto::CryptoHashDomai
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let threshold = membership.get_committee_threshold(height, Notarization::committee())?;
+        let unique_signers: HashSet<_> = self.signature.signers.iter().collect();
+        if unique_signers.len() < self.signature.signers.len() {
+            Err(PermanentError::RepeatedSigner)?
+        }
         if self.signature.signers.len() < threshold {
             Err(PermanentError::InsufficientSignatures)?
         }
@@ -2360,7 +2365,19 @@ pub mod test {
                 Arc::clone(&time_source) as Arc<_>,
             );
 
-            // The notarzation should be marked invalid
+            // The notarization should be marked invalid
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_changeset_matches_pattern!(
+                changeset,
+                ChangeAction::HandleInvalid(ConsensusMessage::Notarization(_), _)
+            );
+            pool.remove_unvalidated(notarization.clone());
+
+            // create a fake notarization that has one signer repeated, which should be
+            // marked as invalid
+            notarization.signature.signers =
+                vec![node_test_id(1), node_test_id(1), node_test_id(1)];
+            pool.insert_unvalidated(notarization.clone());
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_changeset_matches_pattern!(
                 changeset,
@@ -2368,6 +2385,7 @@ pub mod test {
             );
 
             pool.remove_unvalidated(notarization.clone());
+
             notarization.signature.signers =
                 vec![node_test_id(1), node_test_id(2), node_test_id(3)];
             pool.insert_unvalidated(notarization);

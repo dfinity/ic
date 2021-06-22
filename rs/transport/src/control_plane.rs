@@ -36,6 +36,9 @@ use tokio::time::delay_for;
 /// Time to wait before retrying an unsuccessful connection attempt
 const CONNECT_RETRY_SECONDS: u64 = 3;
 
+/// Time to wait for the TLS handshake (for both client/server sides)
+const TLS_HANDSHAKE_TIMEOUT_SECONDS: u64 = 30;
+
 /// Timeout for accept() poll
 const CANCEL_CHECK_PERIOD_MILLISECONDS: u64 = 100;
 
@@ -276,6 +279,7 @@ impl TransportImpl {
                         match result {
                             Ok((stream, _)) => {
                                 let metrics = metrics.clone();
+                                metrics.tcp_accepts.with_label_values(&[&flow_tag.to_string()]).inc();
                                 tokio_runtime.spawn(async move {
                                     // Errors are reported in set_sockopts
                                     let stream = match Self::set_send_sockopts(stream, &arc_self.log) {
@@ -349,6 +353,7 @@ impl TransportImpl {
                 // We currently retry forever, which is fine as we have per-connection
                 // async task. This loop will terminate when the peer is removed from
                 // valid set.
+                metrics.tcp_connects.with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()]).inc();
                 match Self::connect_to_server(&local_addr, &peer_addr, canceler.as_ref(), &arc_self.log)
                     .await
                 {
@@ -666,11 +671,29 @@ impl TransportImpl {
             }
         };
         let registry_version = *self.registry_version.read().unwrap();
-        let (tls_stream, authenticated_peer) = match self
-            .crypto
-            .perform_tls_server_handshake(stream, allowed_clients, registry_version)
-            .await
-        {
+        let ret = tokio::time::timeout(
+            Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
+            self.crypto
+                .perform_tls_server_handshake(stream, allowed_clients, registry_version),
+        )
+        .await;
+        if ret.is_err() {
+            self.control_plane_metrics
+                .tcp_server_handshake_failed
+                .with_label_values(&[&flow_tag.to_string()])
+                .inc();
+            warn!(
+                every_n_seconds => 30,
+                self.log,
+                    "ControlPlane::tls_server_handshake() timed out: \
+                      local_addr = {:?}, node_id = {:?}, peer_addr = {:?}",
+                     local_addr,
+                     self.node_id,
+                     peer_addr);
+            return Err(TransportErrorCode::TimeoutExpired);
+        }
+
+        let (tls_stream, authenticated_peer) = match ret.unwrap() {
             Ok((tls_stream, peer_id)) => (tls_stream.split(), peer_id),
             Err(e) => {
                 self.control_plane_metrics
@@ -735,12 +758,29 @@ impl TransportImpl {
         let registry_version = *self.registry_version.read().unwrap();
         let local_addr = Self::sock_addr(stream.local_addr())?;
         let peer_addr = Self::sock_addr(stream.peer_addr())?;
-        let (tls_reader, tls_writer) = self
-            .crypto
-            .perform_tls_client_handshake(stream, peer_id, registry_version)
-            .await
-            .map(|tls_stream| tls_stream.split())
-            .map_err(|e| {
+
+        let ret = tokio::time::timeout(
+            Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
+            self.crypto
+                .perform_tls_client_handshake(stream, peer_id, registry_version),
+        )
+        .await;
+        if ret.is_err() {
+            warn!(
+                every_n_seconds => 30,
+                self.log,
+                "ControlPlane::tls_client_handshake(): timed out \
+                 node_id = {:?} local_addr = {:?} peer_addr = {:?}, flow = {:?}",
+                self.node_id,
+                local_addr,
+                peer_addr,
+                flow_tag
+            );
+            return Err(TransportErrorCode::TimeoutExpired);
+        }
+
+        let (tls_reader, tls_writer) = ret.unwrap().map(|tls_stream| tls_stream.split()).map_err(
+            |e| {
                 self.control_plane_metrics
                     .tcp_client_handshake_failed
                     .with_label_values(&[&flow_tag.to_string()])
@@ -757,7 +797,8 @@ impl TransportImpl {
                     e
                 );
                 TransportErrorCode::PeerTlsInfoNotFound
-            })?;
+            },
+        )?;
 
         self.process_handshake_result(
             peer_id,

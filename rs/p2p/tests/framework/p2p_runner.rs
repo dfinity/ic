@@ -109,6 +109,7 @@ fn execute_test(
             )),
             cycles_account_manager,
             None,
+            0,
         )
         .expect("Failed to initialize P2P");
 
@@ -259,6 +260,7 @@ fn execute_test_chunking_pool(
             )),
             cycles_account_manager,
             None,
+            0,
         )
         .expect("Failed to initialize P2P");
 

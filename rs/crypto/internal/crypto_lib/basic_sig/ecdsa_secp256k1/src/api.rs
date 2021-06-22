@@ -133,6 +133,22 @@ pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes>
             key_bytes: Some(Vec::from(pk_der)),
             internal_error: e.to_string(),
         })?;
+    // Check pk_der is in canonical form (uncompressed).
+    let canon =
+        public_key_to_der(&types::PublicKeyBytes::from(pk_bytes.clone())).map_err(|_e| {
+            CryptoError::MalformedPublicKey {
+                algorithm: AlgorithmId::EcdsaSecp256k1,
+                key_bytes: Some(Vec::from(pk_der)),
+                internal_error: "cannot encode decoded key".to_string(),
+            }
+        })?;
+    if canon != pk_der {
+        return Err(CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::EcdsaSecp256k1,
+            key_bytes: Some(Vec::from(pk_der)),
+            internal_error: "non-canonical encoding".to_string(),
+        });
+    }
     Ok(types::PublicKeyBytes::from(pk_bytes))
 }
 

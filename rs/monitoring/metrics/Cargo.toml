@@ -4,4 +4,8 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-prometheus = { version = "0.9.0", features = [ "process" ] }
+libc = "0.2.91"
+prometheus = { version = "0.12.0", features = [ "process" ] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = { version = "^0.9", default-features = false }

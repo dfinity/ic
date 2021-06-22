@@ -74,6 +74,7 @@ pub struct CertBuilder {
     set_ca_key_usage_extension: bool,
     duplicate_subject_cn: bool,
     duplicate_issuer_cn: bool,
+    self_sign_with_wrong_secret_key: bool,
 }
 
 impl CertBuilder {
@@ -144,6 +145,11 @@ impl CertBuilder {
         self
     }
 
+    pub fn self_sign_with_wrong_secret_key(mut self) -> Self {
+        self.self_sign_with_wrong_secret_key = true;
+        self
+    }
+
     pub fn build_ed25519(self) -> CertWithPrivateKey {
         self.build(ed25519_key_pair(), MessageDigest::null())
     }
@@ -209,7 +215,14 @@ impl CertBuilder {
             builder
                 .set_issuer_name(&issuer_cn)
                 .expect("unable to set issuer cn");
-            builder.sign(&key_pair, digest).expect("unable to sign");
+            if self.self_sign_with_wrong_secret_key {
+                let wrong_signing_key_pair = ed25519_key_pair();
+                builder
+                    .sign(&wrong_signing_key_pair, digest)
+                    .expect("unable to sign");
+            } else {
+                builder.sign(&key_pair, digest).expect("unable to sign");
+            }
         }
         builder.build()
     }
@@ -265,6 +278,7 @@ impl CertWithPrivateKey {
             set_ca_key_usage_extension: false,
             duplicate_subject_cn: false,
             duplicate_issuer_cn: false,
+            self_sign_with_wrong_secret_key: false,
         }
     }
 

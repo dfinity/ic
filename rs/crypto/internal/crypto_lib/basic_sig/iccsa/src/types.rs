@@ -3,7 +3,6 @@ use ic_crypto_tree_hash::MixedHashTree;
 use ic_types::messages::Blob;
 use ic_types::CanisterId;
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
 
 mod conversions;
 
@@ -52,18 +51,5 @@ impl PublicKey {
     /// Return the seed, consuming self
     pub fn into_seed(self) -> Vec<u8> {
         self.seed
-    }
-}
-
-// Methods used for testing: they are not #[cfg(test)]
-// because they are used outside of the crate.
-impl PublicKey {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let canister_id_principal_bytes = self.signing_canister_id.get_ref().as_slice();
-        let mut buf = vec![];
-        buf.push(u8::try_from(canister_id_principal_bytes.len()).expect("u8 too small"));
-        buf.extend_from_slice(canister_id_principal_bytes);
-        buf.extend_from_slice(&self.seed);
-        buf
     }
 }

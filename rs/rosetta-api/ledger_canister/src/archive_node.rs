@@ -216,32 +216,38 @@ fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "archive_node_block_height_offset",
         state.block_height_offset as f64,
-        "The block height offset assigned to this instanced of the archive canister.",
+        "Block height offset assigned to this instance of the archive canister.",
     )?;
     w.encode_gauge(
         "archive_node_max_memory_size_bytes",
         state.max_memory_size_bytes as f64,
-        "The max amount of memory this canister is allowed to use for blocks.",
+        "Maximum amount of memory this canister is allowed to use for blocks.",
     )?;
+    // This value can increase/decrease in the current implementation.
     w.encode_gauge(
-        "archive_node_block_count",
+        "archive_node_blocks",
         state.blocks.len() as f64,
-        "The number of blocks stored by this canister.",
+        "Number of blocks stored by this canister.",
     )?;
     w.encode_gauge(
-        "archive_node_block_size_bytes_total",
+        "archive_node_blocks_bytes",
         state.total_block_size as f64,
-        "The total amount of memory consumed by the blocks stored by this canister.",
+        "Total amount of memory consumed by the blocks stored by this canister.",
     )?;
     w.encode_gauge(
         "archive_node_stable_memory_pages",
         stable_memory_size_in_pages() as f64,
-        "The size of the stable memory allocated by this canister measured in 64K Wasm pages.",
+        "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
-        "archive_node_last_upgrade_timestamp",
-        state.last_upgrade_timestamp as f64,
-        "The IC timestamp of the last upgrade performed on this canister in nanoseconds.",
+        "archive_node_stable_memory_bytes",
+        (stable_memory_size_in_pages() * 64 * 1024) as f64,
+        "Size of the stable memory allocated by this canister measured in bytes.",
+    )?;
+    w.encode_gauge(
+        "archive_node_last_upgrade_time_seconds",
+        state.last_upgrade_timestamp as f64 / 1_000_000_000.0,
+        "IC timestamp of the last upgrade performed on this canister.",
     )?;
     Ok(())
 }

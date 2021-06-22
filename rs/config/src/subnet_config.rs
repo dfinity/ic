@@ -11,6 +11,19 @@ use ic_types::{Cycles, NumInstructions};
 pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions =
     NumInstructions::new((1 << 30) * 5);
 
+// Limit per `install_code` message. It's bigger than the limit for a regular
+// update call to allow for canisters with bigger state to be upgraded.
+// This is a temporary measure until a longer term solution that alleviates the
+// limitations with the current upgrade process is implemented.
+//
+// The value is picked to allow roughly for 4GB of state to be stored to stable
+// memory during upgrade. We know that we hit `MAX_INSTRUCTIONS_PER_MESSAGE`
+// with roughly 100MB of state, so we set the limit to 40x.
+const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new((1 << 30) * 5 * 40);
+
+// The factor to bump the instruction limit for system subnets.
+const SYSTEM_SUBNET_INSTRUCTIONS_FACTOR: u64 = 10;
+
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone)]
 pub struct SchedulerConfig {
@@ -25,6 +38,9 @@ pub struct SchedulerConfig {
     /// Maximum amount of instructions a single message's execution can consume.
     /// This should be significantly smaller than `max_instructions_per_round`.
     pub max_instructions_per_message: NumInstructions,
+
+    /// Maximum number of instructions an `install_code` message can consume.
+    pub max_instructions_per_install_code: NumInstructions,
 
     /// This specifies the upper limit on how much heap delta all the canisters
     /// together on the subnet can produce in between checkpoints. This is a
@@ -47,11 +63,12 @@ impl SchedulerConfig {
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_MESSAGE * 5,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
+            max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
         }
     }
 
     pub fn system_subnet() -> Self {
-        let max_instructions_per_message = NumInstructions::from(1_000_000_000_000u64);
+        let max_instructions_per_install_code = NumInstructions::from(1_000_000_000_000u64);
         Self {
             // The gen 1 production machines should have 64 cores. We expect
             // that up to half might be needed for the IC protocol so we
@@ -60,8 +77,12 @@ impl SchedulerConfig {
             scheduler_cores: 32,
 
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            max_instructions_per_round: max_instructions_per_message * 5,
-            max_instructions_per_message,
+            max_instructions_per_round: MAX_INSTRUCTIONS_PER_MESSAGE
+                * SYSTEM_SUBNET_INSTRUCTIONS_FACTOR
+                * 5,
+            max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE
+                * SYSTEM_SUBNET_INSTRUCTIONS_FACTOR,
+            max_instructions_per_install_code,
         }
     }
 
@@ -76,6 +97,7 @@ impl SchedulerConfig {
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_MESSAGE * 5,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
+            max_instructions_per_install_code: NumInstructions::from(1_000_000_000_000u64),
         }
     }
 }

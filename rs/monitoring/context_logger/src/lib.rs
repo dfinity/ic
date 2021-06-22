@@ -367,15 +367,18 @@ mod tests {
         debug!(tag => "my_tag", logger, "message");
     }
 
-    /// Test the every_n_seconds not logged.
+    /// Test the every_n_seconds `info!` calls don't log if the `is_n_seconds`
+    /// condition is not satisfied.
     #[test]
-    fn test_every_nseconds_log() {
+    fn test_every_n_seconds_info_does_not_log() {
         let inner_logger = EveryNLogger {
             count: std::sync::Arc::new(std::sync::atomic::AtomicU32::default()),
         };
         let logger = ContextLogger::<TestContext, EveryNLogger>::new(inner_logger);
-        warn!(every_n_seconds => 1, logger, "Hello {} #{}{}", "world", 4, "!");
-        warn!(every_n_seconds => 1, logger, "message");
+        info!(every_n_seconds => 1, logger, "Hello {} #{}{}", "world", 4, "!");
+        info!(every_n_seconds => 1, logger, "message");
+        info!(every_n_seconds => 1, logger ; sub_context1.field_opt_i32 => 1i32);
+        info!(every_n_seconds => 1, logger, "message" ; sub_context1.field_opt_i32 => 1);
         assert!(
             logger
                 .inner_logger
@@ -385,21 +388,66 @@ mod tests {
         );
     }
 
-    /// Test the every_n_seconds logged.
+    /// Test the every_n_seconds `info!` calls log if the `is_n_seconds`
+    /// condition is satisfied.
     #[test]
-    fn test_every_nseconds_log_is_logged() {
+    fn test_every_n_seconds_info_logs() {
+        let inner_logger = EveryNLogger {
+            count: std::sync::Arc::new(std::sync::atomic::AtomicU32::default()),
+        };
+        let logger = ContextLogger::<TestContext, EveryNLogger>::new(inner_logger);
+        info!(every_n_seconds => 0, logger, "Hello {} #{}{}", "world", 4, "!");
+        info!(every_n_seconds => 0, logger, "message");
+        info!(every_n_seconds => 0, logger ; sub_context1.field_opt_i32 => 1i32);
+        info!(every_n_seconds => 0, logger, "message" ; sub_context1.field_opt_i32 => 1);
+        assert!(
+            logger
+                .inner_logger
+                .count
+                .load(std::sync::atomic::Ordering::SeqCst)
+                == 4
+        );
+    }
+
+    /// Test the every_n_seconds `warn!` calls don't log if the `is_n_seconds`
+    /// condition is not satisfied.
+    #[test]
+    fn test_every_n_seconds_warn_does_not_log() {
+        let inner_logger = EveryNLogger {
+            count: std::sync::Arc::new(std::sync::atomic::AtomicU32::default()),
+        };
+        let logger = ContextLogger::<TestContext, EveryNLogger>::new(inner_logger);
+        warn!(every_n_seconds => 1, logger, "Hello {} #{}{}", "world", 4, "!");
+        warn!(every_n_seconds => 1, logger, "message");
+        warn!(every_n_seconds => 1, logger ; sub_context1.field_opt_i32 => 1i32);
+        warn!(every_n_seconds => 1, logger, "message" ; sub_context1.field_opt_i32 => 1);
+        assert!(
+            logger
+                .inner_logger
+                .count
+                .load(std::sync::atomic::Ordering::SeqCst)
+                == 0
+        );
+    }
+
+    /// Test the every_n_seconds `warn!` calls log if the `is_n_seconds`
+    /// condition is satisfied.
+    #[test]
+    fn test_every_n_seconds_warn_logs() {
         let inner_logger = EveryNLogger {
             count: std::sync::Arc::new(std::sync::atomic::AtomicU32::default()),
         };
         let logger = ContextLogger::<TestContext, EveryNLogger>::new(inner_logger);
         warn!(every_n_seconds => 0, logger, "Hello {} #{}{}", "world", 4, "!");
         warn!(every_n_seconds => 0, logger, "message");
+        warn!(every_n_seconds => 0, logger ; sub_context1.field_opt_i32 => 1i32);
+        warn!(every_n_seconds => 0, logger, "message" ; sub_context1.field_opt_i32 => 1);
         assert!(
             logger
                 .inner_logger
                 .count
                 .load(std::sync::atomic::Ordering::SeqCst)
-                == 2
+                == 4
         );
     }
 

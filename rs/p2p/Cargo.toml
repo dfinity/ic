@@ -30,7 +30,7 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 bincode = "1.2.1"
 crossbeam-channel = "0.5.0"
 linked-hash-map = "0.5.3"
-prometheus = { version = "0.9.0", features = [ "process" ] }
+prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 strum = "0.18.0"

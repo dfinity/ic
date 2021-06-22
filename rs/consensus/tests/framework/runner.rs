@@ -135,6 +135,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.message_routing.clone(),
             deps.state_manager.clone(),
             Arc::clone(&self.time) as Arc<_>,
+            Duration::from_secs(0),
             MaliciousFlags::default(),
             deps.metrics_registry.clone(),
             replica_logger.clone(),

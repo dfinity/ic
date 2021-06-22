@@ -21,8 +21,6 @@ builders-use-substitutes = true' > /etc/nix/nix.conf
 RUN mkdir -p /nix && chown -R 1000.1000 /nix
 
 ENV NIX_VERSION=${nix_version} \
-    CARGO_HOME=/cargo \
-    CARGO_TARGET_DIR=/cargo_target \
     PATH=/home/ubuntu/.nix-profile/bin:/cargo/bin:$PATH \
     NIX_PATH=/home/ubuntu/.nix-defexpr/channels \
     NIX_PROFILES="/nix/var/nix/profiles/default /home/ubuntu/.nix-profile" \

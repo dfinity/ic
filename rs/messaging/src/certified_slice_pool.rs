@@ -215,7 +215,7 @@ impl Payload {
         cutoff: StreamIndex,
     ) -> CertifiedSliceResult<Option<PayloadTree>> {
         Ok(self
-            .take_messages_prefix(&Label::from(cutoff.to_label()))?
+            .take_messages_prefix(&cutoff.to_label())?
             .map(|pruned_messages| {
                 Payload::pack(self.subnet_id.clone(), None, Some(pruned_messages))
             }))

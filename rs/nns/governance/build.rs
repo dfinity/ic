@@ -281,6 +281,18 @@ fn main() {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
+        "ic_nns_governance.pb.v1.ClaimOrRefreshNeuronFromAccount",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ClaimOrRefreshNeuronFromAccountResponse",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ClaimOrRefreshNeuronFromAccountResponse.result",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.Governance.NeuronInFlightCommand.command",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );

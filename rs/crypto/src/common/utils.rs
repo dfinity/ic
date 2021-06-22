@@ -31,6 +31,7 @@ pub mod ni_dkg;
 mod temp_crypto;
 
 pub use crate::sign::utils::combined_threshold_signature_and_public_key;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 pub use temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 
 #[cfg(test)]
@@ -307,7 +308,7 @@ fn generate_tls_keys(crypto_root: &Path, node: NodeId) -> X509PublicKeyCert {
 pub(crate) fn csp_at_root(crypto_root: &Path) -> Csp<OsRng, ProtoSecretKeyStore> {
     let config = config_with_dir_and_permissions(crypto_root);
     // disable metrics
-    Csp::new(&config, None, None)
+    Csp::new(&config, None, Arc::new(CryptoMetrics::none()))
 }
 
 fn config_with_dir_and_permissions(crypto_root: &Path) -> CryptoConfig {

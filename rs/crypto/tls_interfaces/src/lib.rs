@@ -401,6 +401,42 @@ pub trait TlsHandshake {
         registry_version: RegistryVersion,
     ) -> Result<(TlsStream, Peer), TlsServerHandshakeError>;
 
+    /// Transforms a TCP stream into a TLS stream by performing a TLS server
+    /// handshake. No client authentication is performed.
+    ///
+    /// For the handshake, the server uses the following configuration:
+    /// * Minimum protocol version: TLS 1.3
+    /// * Supported signature algorithms: ed25519
+    /// * Allowed cipher suites: TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384
+    /// * Client authentication: no client authentication is performed
+    ///
+    /// Whenever the TLS handshake fails, this method returns an error.
+    ///
+    /// The given `tcp_stream` is consumed. If an error is returned, the TCP
+    /// connection is therefore dropped.
+    ///
+    /// # Errors
+    /// * TlsServerHandshakeError::RegistryError if the registry cannot be
+    ///   accessed.
+    /// * TlsServerHandshakeError::CertificateNotInRegistry if a certificate
+    ///   that is expected to be in the registry is not found.
+    /// * TlsServerHandshakeError::MalformedSelfCertificate if the node's own
+    ///   server certificate is malformed.
+    /// * TlsServerHandshakeError::CreateAcceptorError if there is a problem
+    ///   configuring the server for accepting connections from clients.
+    /// * TlsServerHandshakeError::HandshakeError if there is an error during
+    ///   the TLS handshake, or the handshake fails.
+    ///
+    /// # Panics
+    /// * If the secret key corresponding to the server certificate cannot be
+    ///   found or is malformed in the server's secret key store. Note that this
+    ///   is an error in the setup of the node and registry.
+    async fn perform_tls_server_handshake_without_client_auth(
+        &self,
+        tcp_stream: TcpStream,
+        registry_version: RegistryVersion,
+    ) -> Result<TlsStream, TlsServerHandshakeError>;
+
     /// Transforms a TCP stream into a TLS stream by first performing a TLS
     /// client handshake and then verifying that the peer is the given `server`.
     ///

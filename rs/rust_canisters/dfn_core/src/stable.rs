@@ -85,7 +85,8 @@ pub fn length() -> u32 {
     u32::from_le_bytes(len_bytes)
 }
 
-fn set_length(len: u32) {
+pub fn set_length(len: u32) {
+    ensure_capacity(LENGTH_BYTES);
     let len_bytes = len.to_le_bytes();
     unsafe { ic0::stable_write(0, len_bytes.as_ptr() as u32, LENGTH_BYTES) }
 }

@@ -100,12 +100,10 @@ pub(crate) fn handle(
     let targets =
         match get_authorized_canisters(&request, validator, current_time(), registry_version) {
             Ok(targets) => targets,
-            err => {
+            Err(err) => {
                 metrics.observe_forbidden_request(&RequestType::Read, "ReadReqAuthFailed");
-                // This unwrap is safe because `make_response_to_unauthentic_requests` always
-                // generates a response when given an error.
                 return (
-                    common::make_response_to_unauthentic_requests(request.id(), err, log).unwrap(),
+                    common::make_response_on_validation_error(request.id(), err, log),
                     Unknown,
                 );
             }
@@ -252,8 +250,10 @@ fn verify_paths(
         match path.as_slice() {
             [b"time"] => {}
             [b"canister", _canister_id, b"controller"] => {}
+            [b"canister", _canister_id, b"controllers"] => {}
             [b"canister", _canister_id, b"module_hash"] => {}
             [b"subnet", _subnet_id, b"public_key"] => {}
+            [b"subnet", _subnet_id, b"canister_ranges"] => {}
             [b"request_status", request_id] | [b"request_status", request_id, ..] => {
                 num_request_ids += 1;
 

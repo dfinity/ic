@@ -188,7 +188,7 @@ impl Certifier for CertifierImpl {
             &state_hashes_to_certify,
         );
         if !shares.is_empty() {
-            self.metrics.shares_created.inc_by(shares.len() as i64);
+            self.metrics.shares_created.inc_by(shares.len() as u64);
             trace!(
                 &self.log,
                 "Created {} certification shares in {:?}",
@@ -222,7 +222,7 @@ impl Certifier for CertifierImpl {
         if !certifications.is_empty() {
             self.metrics
                 .certifications_aggregated
-                .inc_by(certifications.len() as i64);
+                .inc_by(certifications.len() as u64);
             trace!(
                 &self.log,
                 "Aggregated {} threshold-signatures in {:?}",

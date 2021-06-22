@@ -1,4 +1,4 @@
-use dfn_candid::{candid_one, CandidOne};
+use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{
     api::{
         call_bytes_with_cleanup, call_with_cleanup, caller, data_certificate, set_certified_data,
@@ -544,7 +544,7 @@ fn send_dfx_() {
 #[export_name = "canister_update notify_pb"]
 fn notify_() {
     // we use over_init because it doesn't reply automatically so we can do explicit
-    // replys in the callback
+    // replies in the callback
     over_async_may_reject_explicit(
         |ProtoBuf(NotifyCanisterArgs {
              block_height,
@@ -569,7 +569,7 @@ fn notify_() {
 #[export_name = "canister_update notify_dfx"]
 fn notify_dfx_() {
     // we use over_init because it doesn't reply automatically so we can do explicit
-    // replys in the callback
+    // replies in the callback
     over_async_may_reject_explicit(
         |CandidOne(NotifyCanisterArgs {
              block_height,
@@ -674,7 +674,7 @@ fn get_blocks_() {
 
 #[export_name = "canister_query get_nodes"]
 fn get_nodes_() {
-    over(dfn_candid::candid, |()| -> Vec<CanisterId> {
+    over(candid, |()| -> Vec<CanisterId> {
         LEDGER
             .read()
             .unwrap()
@@ -704,53 +704,49 @@ fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::
     w.encode_gauge(
         "ledger_stable_memory_pages",
         dfn_core::api::stable_memory_size_in_pages() as f64,
-        "The size of the stable memory allocated by this canister measured in 64K Wasm pages.",
+        "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
-
     w.encode_gauge(
-        "ledger_transactions_by_hash_cache_size",
+        "ledger_stable_memory_bytes",
+        (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64,
+        "Size of the stable memory allocated by this canister.",
+    )?;
+    w.encode_gauge(
+        "ledger_transactions_by_hash_cache_entries",
         ledger.transactions_by_hash_len() as f64,
-        "The total number of entries in the transactions_by_hash cache.",
+        "Total number of entries in the transactions_by_hash cache.",
     )?;
     w.encode_gauge(
-        "ledger_transactions_by_height_size",
+        "ledger_transactions_by_height_entries",
         ledger.transactions_by_height_len() as f64,
-        "The total number of entries in the transaction_by_height queue.",
+        "Total number of entries in the transaction_by_height queue.",
     )?;
     w.encode_gauge(
-        "ledger_blocks_notified_total",
-        ledger.transactions_by_height_len() as f64,
-        "The total number of blockheights that have been notified.",
-    )?;
-    w.encode_gauge(
-        "ledger_blocks_count",
+        "ledger_blocks",
         ledger.blockchain.blocks.len() as f64,
-        "The total number of blocks stored in the main memory.",
+        "Total number of blocks stored in the main memory.",
     )?;
+    // This value can go down -- the number is increased before archiving, and if
+    // archiving fails it is decremented.
     w.encode_gauge(
-        "ledger_archived_blocks_count",
+        "ledger_archived_blocks",
         ledger.blockchain.num_archived_blocks as f64,
-        "The total number of blocks sent the archive.",
+        "Total number of blocks sent to the archive.",
     )?;
     w.encode_gauge(
-        "ledger_archive_locked",
-        ledger.blockchain.archive.try_read().map(|_| 0).unwrap_or(1) as f64,
-        "Whether the archiving is in process.",
-    )?;
-    w.encode_gauge(
-        "ledger_balances_icpt_pool_total",
+        "ledger_balances_icpt_pool",
         ledger.balances.icpt_pool.get_icpts() as f64,
-        "The total number of ICPTs in the pool.",
+        "Total number of ICPTs in the pool.",
     )?;
     w.encode_gauge(
-        "ledger_balance_store_size",
+        "ledger_balance_store_entries",
         ledger.balances.store.len() as f64,
-        "The total number of accounts in the balance store.",
+        "Total number of accounts in the balance store.",
     )?;
     w.encode_gauge(
-        "ledger_most_recent_block_timestamp",
-        ledger.blockchain.last_timestamp.timestamp_nanos as f64,
-        "The IC timestamp (in nanoseconds) of the most recent block.",
+        "ledger_most_recent_block_time_seconds",
+        ledger.blockchain.last_timestamp.timestamp_nanos as f64 / 1_000_000_000.0,
+        "IC timestamp of the most recent block.",
     )?;
     Ok(())
 }

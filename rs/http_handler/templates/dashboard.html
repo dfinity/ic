@@ -87,7 +87,7 @@
                 <div class="verbose">
                     <h3>System state</h3>
                     <table>
-                        <tr><td>controller</td><td>{{ c.system_state.controller }}</td></tr>
+                        <tr><td>controller</td><td>{{ c.system_state.collect_controllers_as_string() }}</td></tr>
                         <tr><td>stable_memory_size</td><td>{{ c.system_state.stable_memory_size }} pages</td></tr>
                         <tr><td>certified_data length</td><td>{{ c.system_state.certified_data.len() }} bytes</td></tr>
                     </table>
@@ -119,7 +119,7 @@
                         <tr><td>memory_usage</td><td>{{ c.memory_usage() }}</td></tr>
                         <tr><td>accumulated_priority</td><td>{{ c.scheduler_state.accumulated_priority.value() }} </td></tr>
                         <tr><td>query_allocation</td><td>{{ c.scheduler_state.query_allocation }}</td></tr>
-                        <tr><td>Cycles balance</td><td>{{ c.system_state.cycles_account.cycles_balance() }}</td></tr>
+                        <tr><td>Cycles balance</td><td>{{ c.system_state.cycles_balance }}</td></tr>
                     </table>
                 </div>
             </details>

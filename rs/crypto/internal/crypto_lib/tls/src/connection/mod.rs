@@ -8,7 +8,7 @@ use openssl::{
     x509::X509,
 };
 
-pub use acceptor::{tls_acceptor, CreateTlsAcceptorError};
+pub use acceptor::{tls_acceptor, ClientAuthentication, CreateTlsAcceptorError};
 pub use connector::{tls_connector, CreateTlsConnectorError};
 
 const MIN_PROTOCOL_VERSION: Option<SslVersion> = Some(SslVersion::TLS1_3);
@@ -21,6 +21,16 @@ mod tests;
 mod acceptor {
     use super::*;
 
+    pub enum ClientAuthentication {
+        /// No client authentication is performed. The server does not request a
+        /// certificate from the client.
+        NoAuthentication,
+        /// Client authentication is optional. If the client presents a
+        /// certificate, the handshake only succeeds if the client's certificate
+        /// can be verified against 'trusted_client_certs'.
+        OptionalAuthentication { trusted_client_certs: Vec<X509> },
+    }
+
     /// Builds a TLS acceptor to establish TLS connections on the server side.
     ///
     /// For the exact configuration details, see the documentation of the
@@ -31,15 +41,28 @@ mod acceptor {
     pub fn tls_acceptor(
         private_key: &PKey<Private>,
         server_cert: &X509,
-        trusted_client_certs: Vec<X509>,
+        client_auth: ClientAuthentication,
     ) -> Result<SslAcceptor, CreateTlsAcceptorError> {
-        ensure_trusted_client_certs_not_empty(&trusted_client_certs)?;
         let mut builder = SslAcceptor::mozilla_modern_v5(SslMethod::tls_server())
             .expect("Failed to initialize the acceptor.");
+
         restrict_tls_version_and_cipher_suites_and_sig_algs(&mut builder);
-        allow_but_dont_enforce_client_authentication(&mut builder);
-        set_peer_verification_cert_store(trusted_client_certs, &mut builder)?;
-        set_maximum_number_of_intermediate_ca_certificates(1, &mut builder);
+
+        match client_auth {
+            ClientAuthentication::NoAuthentication => {
+                prohibit_client_authentication(&mut builder);
+            }
+            ClientAuthentication::OptionalAuthentication {
+                trusted_client_certs,
+            } => {
+                ensure_root_self_signed_sigs_verified(&mut builder);
+                ensure_trusted_client_certs_not_empty(&trusted_client_certs)?;
+                allow_but_dont_enforce_client_authentication(&mut builder);
+                set_peer_verification_cert_store(trusted_client_certs, &mut builder)?;
+                set_maximum_number_of_intermediate_ca_certificates(1, &mut builder);
+            }
+        }
+
         set_private_key(private_key, server_cert, &mut builder)?;
         set_certificate(server_cert, &mut builder)?;
         check_private_key(server_cert, &mut builder)?;
@@ -63,6 +86,10 @@ mod acceptor {
         // We do not set the `FAIL_IF_NO_PEER_CERT` flag since client authentication
         // should be allowed, but not enforced.
         builder.set_verify(SslVerifyMode::PEER);
+    }
+
+    fn prohibit_client_authentication(builder: &mut SslAcceptorBuilder) {
+        builder.set_verify(SslVerifyMode::NONE);
     }
 
     /// A TLS acceptor couldn't be created.
@@ -102,6 +129,7 @@ mod connector {
         let mut builder = SslConnector::builder(SslMethod::tls_client())
             .expect("Failed to initialize connector.");
         restrict_tls_version_and_cipher_suites_and_sig_algs(&mut builder);
+        ensure_root_self_signed_sigs_verified(&mut builder);
         set_peer_verification_cert_store(vec![trusted_server_cert.clone()], &mut builder)?;
         set_most_restrictive_certificate_verification_depth(&mut builder);
         set_private_key(private_key, client_cert, &mut builder)?;
@@ -180,6 +208,21 @@ mod context {
         builder
             .set_sigalgs_list(ALLOWED_SIGNATURE_ALGORITHMS)
             .expect("Failed to set the sigalgs list.");
+    }
+
+    pub fn ensure_root_self_signed_sigs_verified(builder: &mut SslContextBuilder) {
+        // This instructs OpenSSL to check the signature on the peer's self-signed
+        // certificate. Cf. [the OpenSSL
+        // docs](https://www.openssl.org/docs/man1.1.1/man3/X509_VERIFY_PARAM_set_flags.html).
+        //
+        // Nb. this isn't strictly necessary, as ownership of the private key is already
+        // checked during the handshake (CertificateVerify message) and the
+        // self-signed cert is already part of our trust store.
+        // However, we do it here for completeness and surprise-minimization.
+        builder
+            .verify_param_mut()
+            .set_flags(openssl::x509::verify::X509VerifyFlags::CHECK_SS_SIGNATURE)
+            .expect("Failed to require checking of self-signed certificate signatures");
     }
 
     pub fn set_private_key(

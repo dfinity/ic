@@ -83,6 +83,10 @@ impl Ledger for MockLedger {
     async fn total_supply(&self) -> Result<ICPTs, GovernanceError> {
         unimplemented!()
     }
+
+    async fn account_balance(&self, _account: AccountIdentifier) -> Result<ICPTs, GovernanceError> {
+        unimplemented!()
+    }
 }
 
 // Make a proposal for neuron 0 and call proccess proposals. The

@@ -7,6 +7,7 @@ edition = "2018"
 ff = "0.5.0"
 group = "0.2.0"
 hex = "0.4.2"
+ic-crypto-internal-bls12381-serde-miracl = {path = "../serde/miracl"}
 ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-sha256 = { path = "../../../../sha256" }
 miracl_core = { version = "4.1.0", package = "miracl_core_bls12381" }
@@ -16,7 +17,6 @@ rand_chacha = "0.2.2"
 rand_core = "0.5.1"
 
 [dev-dependencies]
-ic-crypto-internal-bls12381-serde-miracl = {path = "../serde/miracl"}
 proptest = "0.9.4"
 proptest-derive = "0.1.0"
 rand_core = "0.5.1"

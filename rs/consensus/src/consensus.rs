@@ -33,8 +33,7 @@ use crate::consensus::{
     catchup_package_maker::CatchUpPackageMaker,
     dkg_key_manager::DkgKeyManager,
     finalizer::Finalizer,
-    metrics::ConsensusMetrics,
-    metrics::ValidatorMetrics,
+    metrics::{ConsensusGossipMetrics, ConsensusMetrics, ValidatorMetrics},
     notary::Notary,
     payload_builder::PayloadBuilderImpl,
     pool_reader::PoolReader,
@@ -48,7 +47,6 @@ use crate::consensus::{
     validator::Validator,
 };
 use ic_config::consensus::ConsensusConfig;
-use ic_interfaces::registry::LocalStoreCertifiedTimeReader;
 use ic_interfaces::{
     consensus::{Consensus, ConsensusGossip},
     consensus_pool::ConsensusPool,
@@ -56,7 +54,7 @@ use ic_interfaces::{
     ingress_manager::IngressSelector,
     ingress_pool::IngressPoolSelect,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    registry::RegistryClient,
+    registry::{self, LocalStoreCertifiedTimeReader, RegistryClient},
     state_manager::StateManager,
     time_source::TimeSource,
 };
@@ -136,6 +134,7 @@ impl ConsensusImpl {
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         time_source: Arc<dyn TimeSource>,
+        stable_registry_version_age: Duration,
         malicious_flags: MaliciousFlags,
         metrics_registry: MetricsRegistry,
         logger: ReplicaLogger,
@@ -216,6 +215,7 @@ impl ConsensusImpl {
                 payload_builder.clone(),
                 dkg_pool.clone(),
                 state_manager.clone(),
+                stable_registry_version_age,
                 metrics_registry.clone(),
                 logger.clone(),
             ),
@@ -448,26 +448,31 @@ impl Consensus for ConsensusImpl {
 
         let changeset = self.schedule.call_next(&calls);
 
-        if self.config.detect_starvation() {
-            // Check for starvation
-            if let Some(settings) = get_notarization_delay_settings(
-                &self.log,
-                &*self.registry_client,
-                self.subnet_id,
-                self.registry_client.get_latest_version(),
-            ) {
-                let initial_notary_delay = settings.initial_notary_delay;
-                let current_time = self.time_source.get_relative_time();
-                for (component, last_invoked_time) in self.last_invoked.borrow().iter() {
-                    let time_since_last_invoked = current_time - *last_invoked_time;
-                    if time_since_last_invoked > initial_notary_delay {
-                        warn!(
-                            self.log,
-                            "starvation detected: {:?} has not been invoked for {:?}",
-                            component,
-                            time_since_last_invoked
-                        );
-                    }
+        if let Some(settings) = get_notarization_delay_settings(
+            &self.log,
+            &*self.registry_client,
+            self.subnet_id,
+            self.registry_client.get_latest_version(),
+        ) {
+            let unit_delay = settings.unit_delay;
+            let current_time = self.time_source.get_relative_time();
+            for (component, last_invoked_time) in self.last_invoked.borrow().iter() {
+                let time_since_last_invoked = current_time - *last_invoked_time;
+                let component_name = component.as_ref();
+                self.metrics
+                    .time_since_last_invoked
+                    .with_label_values(&[component_name])
+                    .set(time_since_last_invoked.as_secs_f64());
+
+                // Log starvation if configured
+                if self.config.detect_starvation() && time_since_last_invoked > unit_delay {
+                    warn!(
+                        every_n_seconds => 5,
+                        self.log,
+                        "starvation detected: {:?} has not been invoked for {:?}",
+                        component,
+                        time_since_last_invoked
+                    );
                 }
             }
         }
@@ -508,12 +513,19 @@ fn add_to_validated<T: ConsensusMessageHashable>(msg: Option<T>) -> ChangeSet {
 /// Implement Consensus Gossip interface.
 pub struct ConsensusGossipImpl {
     message_routing: Arc<dyn MessageRouting>,
+    metrics: ConsensusGossipMetrics,
 }
 
 impl ConsensusGossipImpl {
     /// Create a new ConsensusGossipImpl.
-    pub fn new(message_routing: Arc<dyn MessageRouting>) -> Self {
-        ConsensusGossipImpl { message_routing }
+    pub fn new(
+        message_routing: Arc<dyn MessageRouting>,
+        metrics_registry: MetricsRegistry,
+    ) -> Self {
+        ConsensusGossipImpl {
+            message_routing,
+            metrics: ConsensusGossipMetrics::new(metrics_registry),
+        }
     }
 }
 
@@ -523,7 +535,11 @@ impl ConsensusGossip for ConsensusGossipImpl {
         &self,
         pool: &dyn ConsensusPool,
     ) -> PriorityFn<ConsensusMessageId, ConsensusMessageAttribute> {
-        get_priority_function(pool, self.message_routing.expected_batch_height())
+        get_priority_function(
+            pool,
+            self.message_routing.expected_batch_height(),
+            &self.metrics,
+        )
     }
 
     /// Return a filter that represents what artifacts are needed above the
@@ -559,7 +575,18 @@ pub fn setup(
     metrics_registry: MetricsRegistry,
     logger: ReplicaLogger,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
+    registry_poll_delay_duration_ms: u64,
 ) -> (ConsensusImpl, ConsensusGossipImpl) {
+    // Currently, the nodemanager polls the registry every
+    // `registry_poll_delay_duration_ms` and writes new updates into the
+    // registry local store. The registry client polls the local store
+    // for updates every `registry::POLLING_PERIOD`. These two polls are completelly
+    // async, so that every replica sees a new registry version at any time
+    // between >0 and the sum of both polling intervals. To accomodate for that,
+    // we use this sum as the minimal age of a registry version we consider as
+    // stable.
+    let stable_registry_version_age =
+        registry::POLLING_PERIOD + Duration::from_millis(registry_poll_delay_duration_ms);
     (
         ConsensusImpl::new(
             replica_config,
@@ -573,12 +600,13 @@ pub fn setup(
             message_routing.clone(),
             state_manager,
             time_source,
+            stable_registry_version_age,
             malicious_flags,
-            metrics_registry,
+            metrics_registry.clone(),
             logger,
             local_store_time_reader,
         ),
-        ConsensusGossipImpl { message_routing },
+        ConsensusGossipImpl::new(message_routing, metrics_registry),
     )
 }
 
@@ -645,6 +673,7 @@ mod tests {
             Arc::new(FakeMessageRouting::new()),
             state_manager,
             time_source.clone(),
+            Duration::from_secs(0),
             MaliciousFlags::default(),
             MetricsRegistry::new(),
             no_op_logger(),

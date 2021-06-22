@@ -244,13 +244,18 @@ pub fn compute_threshold_signing_key(
             .iter()
             .map(|(dealer_index, encrypted_shares)| {
                 let fs_plaintext = decrypt(encrypted_shares, fs_secret_key, receiver_index, epoch,&dealer_index.to_be_bytes())
-                    .map_err(|error| {
-                        let message = format!(
-                            "Dealing #{}: could not get share for receiver #{}.\n  {:#?}\n  Transcript: {}\n  Epoch: {}",
-                            dealer_index, receiver_index, error, serde_json::to_string(&transcript).expect("Could not serialise transcript."), epoch.get()
-                        );
-                        let error = InvalidArgumentError { message };
-                        ni_dkg_errors::CspDkgLoadPrivateKeyError::InvalidTranscriptError(error)
+                    .map_err(|error| match error {
+                        ni_dkg_errors::DecryptError::EpochTooOld { ciphertext_epoch, secret_key_epoch } => {
+                            ni_dkg_errors::CspDkgLoadPrivateKeyError::EpochTooOldError{ ciphertext_epoch, secret_key_epoch }
+                        },
+                        error => {
+                            let message = format!(
+                                "Dealing #{}: could not get share for receiver #{}.\n  {:#?}\n  Transcript: {}\n  Epoch: {}",
+                                dealer_index, receiver_index, error, serde_json::to_string(&transcript).expect("Could not serialise transcript."), epoch.get()
+                            );
+                            let error = InvalidArgumentError { message };
+                            ni_dkg_errors::CspDkgLoadPrivateKeyError::InvalidTranscriptError(error)
+                        }
                     })?;
                 let secret_key = FrBytes::from(&fs_plaintext);
                 let secret_key = Fr::from_repr(fr_from_bytes(&secret_key.0)).map_err(|_| {

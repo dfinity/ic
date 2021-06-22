@@ -15,7 +15,7 @@ pub use http::{
     HttpCanisterUpdate, HttpQueryResponse, HttpQueryResponseReply, HttpReadContent, HttpReadState,
     HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent, HttpRequestEnvelope,
     HttpResponseStatus, HttpStatusResponse, HttpSubmitContent, HttpUserQuery, RawHttpRequestVal,
-    ReadContent, SignedDelegation,
+    ReadContent, ReplicaHealthStatus, SignedDelegation,
 };
 pub use ic_base_types::CanisterInstallMode;
 use ic_base_types::{CanisterId, CanisterIdError, PrincipalId};

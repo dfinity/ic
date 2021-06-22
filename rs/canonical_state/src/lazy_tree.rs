@@ -8,6 +8,7 @@
 pub mod conversion;
 pub mod materialize;
 
+use ic_crypto_tree_hash::Label;
 use std::sync::Arc;
 
 /// A type alias for a ref-counted stateless function.
@@ -32,9 +33,9 @@ impl<'a, T: Clone> Lazy<'a, T> {
 /// The trait representing interface of a fork in the lazy tree.
 pub trait LazyFork<'a> {
     /// Retrieves a subtree with the specified `label`.
-    fn edge(&self, label: &[u8]) -> Option<LazyTree<'a>>;
+    fn edge(&self, label: &Label) -> Option<LazyTree<'a>>;
     /// Enumerates all the labels reachable from this fork.
-    fn labels(&self) -> Box<dyn Iterator<Item = Vec<u8>> + '_>;
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_>;
 }
 
 /// A tree that can lazily expand while it's being traversed.
@@ -86,7 +87,7 @@ pub fn follow_path<'a>(t: &LazyTree<'a>, path: &[&[u8]]) -> Option<LazyTree<'a>>
     }
     match t {
         LazyTree::LazyFork(f) => {
-            let node = f.edge(path[0])?;
+            let node = f.edge(&Label::from(path[0]))?;
             follow_path(&node, &path[1..])
         }
         _ => None,

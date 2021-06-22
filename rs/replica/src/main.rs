@@ -25,6 +25,9 @@ use std::time::Duration;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::{runtime, task};
 
+#[cfg(target_os = "linux")]
+mod jemalloc_metrics;
+
 // On mac jemalloc causes lmdb to segfault
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
@@ -147,6 +150,9 @@ async fn main() -> io::Result<()> {
     };
 
     let metrics_registry = MetricsRegistry::global();
+
+    #[cfg(target_os = "linux")]
+    metrics_registry.register(jemalloc_metrics::JemallocMetrics::new());
 
     let (registry, crypto) = setup::setup_crypto_registry(
         config.clone(),
@@ -301,34 +307,21 @@ async fn main() -> io::Result<()> {
             .malicious_flags
             .maliciously_disable_http_handler_ingress_validation;
 
-    let http_handler = task::spawn_blocking({
-        let logger = Arc::new(logger.clone());
-        let http_config = Arc::new(config.http_handler.clone());
-        // Does a blocking server initialization - reading state, etc.
-        move || {
-            ic_http_handler::init_server_blocking(
-                http_config,
-                p2p_event_handler,
-                query_handler,
-                state_manager,
-                registry,
-                crypto,
-                subnet_id,
-                root_subnet_id,
-                logger,
-                consensus_pool_cache,
-                exec_env,
-                maliciously_disable_ingress_validation,
-                subnet_type,
-            )
-        }
-    })
-    .await
-    .expect("Awaiting for server initialization failed.")
-    .expect("Failed to initialize HTTP server.");
     task::spawn(ic_http_handler::start_server(
         metrics_registry.clone(),
-        http_handler,
+        config.http_handler.clone(),
+        p2p_event_handler,
+        query_handler,
+        state_manager,
+        registry,
+        crypto,
+        subnet_id,
+        root_subnet_id,
+        logger.clone(),
+        consensus_pool_cache,
+        exec_env,
+        maliciously_disable_ingress_validation,
+        subnet_type,
     ));
 
     tokio::time::delay_for(Duration::from_millis(5000)).await;

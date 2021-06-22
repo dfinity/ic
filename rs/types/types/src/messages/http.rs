@@ -541,6 +541,17 @@ pub struct CertificateDelegation {
     pub certificate: Blob,
 }
 
+/// Different stages required for the full initialization of the HttpHandler.
+/// The fields are listed in order of execution.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReplicaHealthStatus {
+    Starting,
+    WaitingForCertifiedState,
+    WaitingForRootDelegation,
+    Healthy,
+}
+
 /// The response to `/api/v1/status`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -552,6 +563,8 @@ pub struct HttpStatusResponse {
     pub impl_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub impl_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replica_health_status: Option<ReplicaHealthStatus>,
 }
 
 #[cfg(test)]
@@ -690,10 +703,12 @@ mod test {
                 root_key: None,
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
+                replica_health_status: Some(ReplicaHealthStatus::Starting),
             },
             Value::Map(btreemap! {
                 text("ic_api_version") => text("foobar"),
-                text("impl_version") => text("0.0")
+                text("impl_version") => text("0.0"),
+                text("replica_health_status") => text("starting"),
             }),
         );
     }
@@ -706,11 +721,31 @@ mod test {
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
+                replica_health_status: Some(ReplicaHealthStatus::Healthy),
             },
             Value::Map(btreemap! {
                 text("ic_api_version") => text("foobar"),
                 text("root_key") => bytes(&[1, 2, 3]),
-                text("impl_version") => text("0.0")
+                text("impl_version") => text("0.0"),
+                text("replica_health_status") => text("healthy"),
+            }),
+        );
+    }
+
+    #[test]
+    fn encoding_status_without_health_status() {
+        assert_cbor_ser_equal(
+            &HttpStatusResponse {
+                ic_api_version: "foobar".to_string(),
+                root_key: Some(Blob(vec![1, 2, 3])),
+                impl_version: Some("0.0".to_string()),
+                impl_hash: None,
+                replica_health_status: None,
+            },
+            Value::Map(btreemap! {
+                text("ic_api_version") => text("foobar"),
+                text("root_key") => bytes(&[1, 2, 3]),
+                text("impl_version") => text("0.0"),
             }),
         );
     }

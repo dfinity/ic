@@ -387,6 +387,16 @@ mod create_dealing_error_conversions {
                 CspDkgLoadPrivateKeyError::KeyNotFoundError(error) => {
                     DkgCreateDealingError::FsDecryptionKeyNotInSecretKeyStore(error)
                 }
+                CspDkgLoadPrivateKeyError::EpochTooOldError {
+                    ciphertext_epoch,
+                    secret_key_epoch,
+                } => {
+                    let err = InvalidArgumentError {
+                        message: format!("Epoch of this transcript {} is too old to decrypt with a key with epoch {}",
+                                         ciphertext_epoch, secret_key_epoch)
+                    };
+                    DkgCreateDealingError::InvalidTranscript(err)
+                }
                 CspDkgLoadPrivateKeyError::UnsupportedAlgorithmId(algorithm_id) => {
                     // This would be an IDKM implementation error, so we panic:
                     panic!(

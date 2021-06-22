@@ -43,7 +43,7 @@ impl ToProto for AccountBalanceArgs {
     type Proto = protobuf::AccountBalanceRequest;
     fn from_proto(pb: Self::Proto) -> Result<Self, String> {
         pb.account
-            .ok_or_else(|| "Recieved an account balance request with no account".to_string())
+            .ok_or_else(|| "Received an account balance request with no account".to_string())
             .and_then(AccountIdentifier::from_proto)
             .map(AccountBalanceArgs::new)
     }
@@ -61,7 +61,7 @@ impl ToProto for TipOfChainRes {
     fn from_proto(pb: Self::Proto) -> Result<Self, String> {
         let chain_length = pb
             .chain_length
-            .ok_or("Didn't recieve a chain length")?
+            .ok_or("Didn't receive a chain length")?
             .height;
         Ok(TipOfChainRes {
             certification: pb.certification.map(|pb| pb.certification),

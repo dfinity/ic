@@ -12,6 +12,7 @@ use std::convert::TryFrom;
 #[derive(Default)]
 pub(crate) struct CanisterSettings {
     controller: Option<PrincipalId>,
+    controllers: Option<Vec<PrincipalId>>,
     compute_allocation: Option<ComputeAllocation>,
     memory_allocation: Option<MemoryAllocation>,
     freezing_threshold: Option<NumSeconds>,
@@ -20,12 +21,14 @@ pub(crate) struct CanisterSettings {
 impl CanisterSettings {
     pub fn new(
         controller: Option<PrincipalId>,
+        controllers: Option<Vec<PrincipalId>>,
         compute_allocation: Option<ComputeAllocation>,
         memory_allocation: Option<MemoryAllocation>,
         freezing_threshold: Option<NumSeconds>,
     ) -> Self {
         Self {
             controller,
+            controllers,
             compute_allocation,
             memory_allocation,
             freezing_threshold,
@@ -35,6 +38,11 @@ impl CanisterSettings {
     pub fn controller(&self) -> Option<PrincipalId> {
         self.controller
     }
+
+    pub fn controllers(&self) -> Option<Vec<PrincipalId>> {
+        self.controllers.clone()
+    }
+
     pub fn compute_allocation(&self) -> Option<ComputeAllocation> {
         self.compute_allocation
     }
@@ -75,6 +83,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
 
         Ok(CanisterSettings::new(
             input.controller,
+            input.controllers,
             compute_allocation,
             memory_allocation,
             freezing_threshold,

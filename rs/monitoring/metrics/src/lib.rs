@@ -1,4 +1,6 @@
 pub mod buckets;
+#[cfg(target_os = "linux")]
+pub mod process_collector;
 pub mod registry;
 
 pub use registry::MetricsRegistry;

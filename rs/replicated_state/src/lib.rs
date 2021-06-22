@@ -10,7 +10,7 @@ pub use canister_state::{
     num_bytes_from,
     system_state::{
         CallContext, CallContextAction, CallContextManager, CallOrigin, CanisterMetrics,
-        CanisterStatus, CyclesAccount, CyclesAccountError, SystemState,
+        CanisterStatus, SystemState,
     },
     CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, Global,
     NumWasmPages, SchedulerState,

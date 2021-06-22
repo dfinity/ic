@@ -125,6 +125,8 @@ message CanisterStatusStopping {
 message CanisterStatusStopped {}
 
 message CanisterStateBits {
+  // This field is now deprecated. Once all subnets in production contain the
+  // new version of this field, we can remove it (and mark it as reserved).
   types.v1.PrincipalId controller = 1;
   uint64 last_full_execution_round = 2;
   CallContextManager call_context_manager = 3;
@@ -133,6 +135,9 @@ message CanisterStateBits {
   uint64 query_allocation = 6;
   ExecutionStateBits execution_state_bits = 7;
   uint64 memory_allocation = 8;
+  // This field is now deprecated. Once all subnets in production contain the
+  // new version of this field, we can remove it (and mark it as reserved).
+  // (EXC-299) With this change, CyclesAccount can also be removed.
   CyclesAccount cycles_account = 9;
   uint64 icp_balance = 10;
   oneof canister_status {
@@ -155,4 +160,6 @@ message CanisterStateBits {
   types.v1.NominalCycles consumed_cycles_since_replica_started = 22;
   uint64 freeze_threshold = 23;
   uint32 stable_memory_size = 24;
+  repeated types.v1.PrincipalId controllers = 25;
+  state.queues.v1.Cycles cycles_balance = 26;
 }

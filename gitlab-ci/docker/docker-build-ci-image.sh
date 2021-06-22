@@ -27,10 +27,8 @@ else
 fi
 
 if grep -q "registry.gitlab.com" ~/.docker/config.json; then
-    docker push registry.gitlab.com/dfinity-lab/dfinity/ic-build:$NEWVERSION
-    docker push registry.gitlab.com/dfinity-lab/core/labrat/ic-build:$NEWVERSION
-    docker push registry.gitlab.com/dfinity-lab/dfinity/ic-build-nix:$NEWVERSION
-    docker push registry.gitlab.com/dfinity-lab/core/labrat/ic-build-nix:$NEWVERSION
+    docker push registry.gitlab.com/dfinity-lab/core/docker/ic-build:$NEWVERSION
+    docker push registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:$NEWVERSION
 else
     echo "WARNING: Not logged in to registry.gitlab.com, pushing to registry.gitlab.com skipped"
 fi

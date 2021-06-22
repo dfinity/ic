@@ -47,6 +47,20 @@ mod keygen {
         assert!(pk_result.is_err());
         assert!(pk_result.unwrap_err().is_malformed_public_key());
     }
+
+    // RFC 5480 allows compressed points but we insist on canonical representations.
+    // Test compressed key was generated with:
+    //   $ openssl ecparam -name secp256k1 -genkey -noout -out k1.pem
+    //   $ openssl ec -in k1.pem -pubout -outform DER -out k1-comp.der \
+    //     -conv_form compressed
+    #[test]
+    fn rejects_compressed_points() {
+        const COMPRESSED : &str = "3036301006072a8648ce3d020106052b8104000a032200026589a94a8dd58659c16aae75abceea86990a20b883a7ebfa1435a4e4cac5221a";
+        let pk_der = hex::decode(COMPRESSED).unwrap();
+        let pk_result = public_key_from_der(&pk_der);
+        assert!(pk_result.is_err());
+        assert!(pk_result.unwrap_err().is_malformed_public_key());
+    }
 }
 
 mod sign {
@@ -90,6 +104,7 @@ mod verify {
     use crate::types::{PublicKeyBytes, SignatureBytes};
     use crate::{new_keypair, sign, verify};
     use ic_crypto_internal_test_vectors::ecdsa_secp256k1;
+    use ic_types::crypto::{AlgorithmId, CryptoError};
     use openssl::bn::{BigNum, BigNumContext};
     use openssl::ec::{EcGroup, EcKey};
     use openssl::nid::Nid;
@@ -137,6 +152,58 @@ mod verify {
                 assert!(verify_result.unwrap_err().is_signature_verification_error());
             }
         }
+    }
+
+    #[test]
+    fn should_reject_truncated_ecdsa_pubkey() {
+        let (sk, pk) = new_keypair().unwrap();
+
+        let msg = b"abc";
+        let signature = sign(msg, &sk).unwrap();
+        assert!(verify(&signature, msg, &pk).is_ok());
+
+        let invalid_pk = PublicKeyBytes(pk.0[0..pk.0.len() - 1].to_vec());
+        let result = verify(&signature, msg, &invalid_pk);
+
+        assert!(
+            matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
+                     if algorithm == AlgorithmId::EcdsaSecp256k1
+                     && key_bytes == Some(invalid_pk.0)
+                     && internal_error.contains(
+                         ":elliptic curve routines:ec_GFp_simple_oct2point:invalid encoding:"
+                     )
+            )
+        );
+    }
+
+    #[test]
+    fn should_reject_modified_ecdsa_pubkey() {
+        let (sk, pk) = new_keypair().unwrap();
+
+        let msg = b"abc";
+        let signature = sign(msg, &sk).unwrap();
+        assert!(verify(&signature, msg, &pk).is_ok());
+
+        /*
+        We are encoding using uncompressed coordinates so the format is (h,x,y)
+        where h is a 1-byte header. The x that is valid wrt a y is unique,
+        so there is no possibility that this does not fail.
+         */
+        assert_eq!(pk.0.len(), 1 + 2 * crate::types::FIELD_SIZE);
+        let mut modified_key = pk.0;
+        modified_key[crate::types::FIELD_SIZE] ^= 0x01;
+        let invalid_pk = PublicKeyBytes(modified_key);
+
+        let result = verify(&signature, msg, &invalid_pk);
+        assert!(
+            matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
+                     if algorithm == AlgorithmId::EcdsaSecp256k1
+                     && key_bytes == Some(invalid_pk.0)
+                     && internal_error.contains(
+                         ":elliptic curve routines:EC_POINT_set_affine_coordinates:point is not on curve:"
+                     )
+            )
+        );
     }
 
     #[test]

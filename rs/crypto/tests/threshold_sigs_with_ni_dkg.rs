@@ -9,6 +9,7 @@ use ic_registry_keys::make_crypto_node_key;
 use ic_test_utilities::crypto::crypto_for;
 use ic_types::consensus::get_faults_tolerated;
 use ic_types::crypto::threshold_sig::ni_dkg::config::{NiDkgConfig, NiDkgConfigData};
+use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     DkgId, NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
 };
@@ -132,21 +133,20 @@ fn run_ni_dkg_and_load_transcript_for_receivers(
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
 ) {
     let transcript = run_ni_dkg_and_create_single_transcript(&config, &crypto_components);
-    load_transcript_for_each(
-        &Vec::from_iter(config.receivers().get().iter().copied()),
-        &transcript,
-        &crypto_components,
-    );
+    load_transcript_for_receivers(config, &transcript, &crypto_components);
 }
 
-fn load_transcript_for_each(
-    nodes: &[NodeId],
+fn load_transcript_for_receivers(
+    config: &NiDkgConfig,
     transcript: &NiDkgTranscript,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
 ) {
-    nodes
+    config
+        .receivers()
+        .get()
         .iter()
-        .for_each(|node_id| load_transcript(transcript, *node_id, crypto_components));
+        .copied()
+        .for_each(|node_id| load_transcript(transcript, node_id, crypto_components));
 }
 
 fn load_transcript(
@@ -272,10 +272,261 @@ mod non_interactive_distributed_key_generation {
             run_ni_dkg_and_create_single_transcript(&config.get(), &env.crypto_components);
 
         for _i in 1..=epochs {
-            config = RandomNiDkgConfig::reshare(transcript, max_subnet_size);
+            config = RandomNiDkgConfig::reshare(transcript, -2..=2, max_subnet_size);
             env.update_for_config(config.get());
             transcript =
                 run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
+        }
+    }
+
+    // Test different scenarios for FS key deletion
+    //
+    // First create 3 high threshold epochs, followed by a single low threshold
+    // epoch. The low threshold exists only to satisfy a check in
+    // retain_only_active_keys that at least one high and one low transcript are
+    // retained.
+    //
+    // Then, verify that nodes can sign in the epochs that they participated in, and
+    // that any node added to the subnet later cannot sign in that epoch.
+    //
+    // For this test to work we must have a new epoch each time, which we force by
+    // adding at least 1 node to the subnet with each reshare
+    #[test]
+    fn should_not_sign_after_resharing_and_pruning_old_keys() {
+        let max_subnet_size = 10;
+        let mut env = TestEnvironment::new();
+        let rng = &mut thread_rng();
+        let registry_version = RegistryVersion::from(rng.gen_range(1, u32::MAX - 10_000) as u64);
+
+        // epoch 0
+        let config0 = RandomNiDkgConfig::new_with_tag_and_registry_version(
+            3,
+            NiDkgTag::HighThreshold,
+            registry_version,
+        );
+        let (transcript0, dkg_id0, epoch0_nodes) = run_dkg_and_load_transcripts(&config0, &mut env);
+
+        // epoch 1
+        let config1 = RandomNiDkgConfig::reshare(transcript0.clone(), 1..=2, max_subnet_size);
+        let (transcript1, dkg_id1, epoch1_nodes) = run_dkg_and_load_transcripts(&config1, &mut env);
+        let new_in_epoch1: HashSet<_> = epoch1_nodes.difference(&epoch0_nodes).cloned().collect();
+
+        // epoch2
+        let config2 = RandomNiDkgConfig::reshare(transcript1.clone(), 1..=2, max_subnet_size);
+        let (transcript2, dkg_id2, epoch2_nodes) = run_dkg_and_load_transcripts(&config2, &mut env);
+        let new_in_epoch2: HashSet<_> = epoch2_nodes.difference(&epoch1_nodes).cloned().collect();
+
+        // A low threshhold transcript just to bypass a check in retain_only_active_keys
+        let config3 = config2.new_with_inverted_threshold();
+        let (transcript3, _dkg_id3, epoch3_nodes) =
+            run_dkg_and_load_transcripts(&config3, &mut env);
+
+        // Test that the subnets increased in size and without removing any nodes
+        assert!(!new_in_epoch1.is_empty());
+        assert!(!new_in_epoch2.is_empty());
+        assert_eq!(epoch0_nodes.difference(&epoch1_nodes).count(), 0);
+        assert_eq!(epoch1_nodes.difference(&epoch2_nodes).count(), 0);
+
+        // Test that all nodes can sign in their own epoch
+        assert!(nodes_can_sign_in_epoch(&epoch0_nodes, dkg_id0, &env));
+        assert!(nodes_can_sign_in_epoch(&epoch1_nodes, dkg_id1, &env));
+        assert!(nodes_can_sign_in_epoch(&epoch2_nodes, dkg_id2, &env));
+
+        // Test that nodes added later cannot sign in old epochs
+        assert!(
+            nodes_cannot_sign_in_epoch_due_to_missing_threshold_sig_data(
+                &new_in_epoch1,
+                dkg_id0,
+                &env
+            )
+        );
+        assert!(
+            nodes_cannot_sign_in_epoch_due_to_missing_threshold_sig_data(
+                &new_in_epoch2,
+                dkg_id0,
+                &env
+            )
+        );
+        assert!(
+            nodes_cannot_sign_in_epoch_due_to_missing_threshold_sig_data(
+                &new_in_epoch2,
+                dkg_id1,
+                &env
+            )
+        );
+
+        // Prune epoch0 keys
+        retain_only_active_keys_for_transcripts(
+            &[transcript1, transcript2, transcript3.clone()],
+            &mut env,
+        );
+
+        // Now nobody can sign in epoch0 since the keys have been removed
+        assert!(nodes_cannot_sign_in_epoch_due_to_missing_secret_key(
+            &epoch0_nodes,
+            dkg_id0,
+            &env
+        ));
+
+        // But the newer epochs can still be used by all nodes
+        assert!(nodes_can_sign_in_epoch(&epoch1_nodes, dkg_id1, &env));
+        assert!(nodes_can_sign_in_epoch(&epoch2_nodes, dkg_id2, &env));
+
+        // And all nodes can still load the old transcript (but not decrypt it)
+        load_transcript_for_receivers(&config3.get(), &transcript0, &env.crypto_components);
+
+        // Even after the transcript is loaded again, key is not available
+        assert!(nodes_cannot_sign_in_epoch_due_to_missing_secret_key(
+            &epoch3_nodes,
+            dkg_id0,
+            &env
+        ));
+
+        // Further DKGs can be run after removing an earlier key
+        let config4 = RandomNiDkgConfig::reshare(transcript3, 1..=2, max_subnet_size);
+        let (_transcript4, dkg_id4, epoch4_nodes) =
+            run_dkg_and_load_transcripts(&config4, &mut env);
+        assert!(nodes_can_sign_in_epoch(&epoch4_nodes, dkg_id4, &env));
+    }
+
+    #[test]
+    fn should_not_reshare_old_transcript_after_pruning_old_keys() {
+        let rng = &mut thread_rng();
+
+        let registry_version = RegistryVersion::from(rng.gen_range(1, u32::MAX - 10_000) as u64);
+
+        let mut env = TestEnvironment::new();
+
+        let max_subnet_size = 10;
+
+        // epoch 0
+        let config0 = RandomNiDkgConfig::new_with_tag_and_registry_version(
+            3,
+            NiDkgTag::HighThreshold,
+            registry_version,
+        );
+        let (transcript0, _dkg_id0, _epoch0_nodes) =
+            run_dkg_and_load_transcripts(&config0, &mut env);
+
+        // epoch 1
+        let config1 = RandomNiDkgConfig::reshare(transcript0.clone(), 1..=2, max_subnet_size);
+        let (transcript1, _dkg_id1, _epoch1_nodes) =
+            run_dkg_and_load_transcripts(&config1, &mut env);
+
+        // low threshold
+        let config_low = config1.new_with_inverted_threshold();
+        let (transcript_low, _dkg_id_low, _epochlow_nodes) =
+            run_dkg_and_load_transcripts(&config_low, &mut env);
+
+        retain_only_active_keys_for_transcripts(&[transcript1, transcript_low], &mut env);
+
+        // Now attempt to reshare off of transcript0, should fail in create_dealing:
+        let reshare_config = RandomNiDkgConfig::reshare(transcript0, 1..=2, max_subnet_size);
+
+        for dealer in reshare_config.get().dealers().get() {
+            let result =
+                crypto_for(*dealer, &env.crypto_components).create_dealing(reshare_config.get());
+
+            assert!(matches!(
+                result,
+                Err(DkgCreateDealingError::FsEncryptionPublicKeyNotInRegistry(_))
+            ));
+        }
+    }
+
+    fn run_dkg_and_load_transcripts(
+        config: &RandomNiDkgConfig,
+        env: &mut TestEnvironment,
+    ) -> (NiDkgTranscript, DkgId, HashSet<NodeId>) {
+        env.update_for_config(config.get());
+        let transcript =
+            run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
+
+        load_transcript_for_receivers(&config.get(), &transcript, &env.crypto_components);
+
+        let dkg_id = DkgId::NiDkgId(config.get().dkg_id());
+        let nodes = config.receiver_ids();
+
+        (transcript, dkg_id, nodes)
+    }
+
+    fn nodes_can_sign_in_epoch(
+        nodes: &HashSet<NodeId>,
+        dkg_id: DkgId,
+        env: &TestEnvironment,
+    ) -> bool {
+        let msg = message();
+
+        for node in nodes {
+            let sig = crypto_for(*node, &env.crypto_components).sign_threshold(&msg, dkg_id);
+            if sig.is_err() {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn nodes_cannot_sign_in_epoch_due_to_missing_secret_key(
+        nodes: &HashSet<NodeId>,
+        dkg_id: DkgId,
+        env: &TestEnvironment,
+    ) -> bool {
+        let msg = message();
+
+        for node in nodes {
+            let sig = crypto_for(*node, &env.crypto_components).sign_threshold(&msg, dkg_id);
+            match sig {
+                Ok(_) => return false,
+                Err(CryptoError::SecretKeyNotFound {
+                    algorithm: _,
+                    key_id: _,
+                }) => {}
+                Err(e) => {
+                    panic!("Unexpected error {}", e);
+                }
+            }
+        }
+
+        true
+    }
+
+    fn nodes_cannot_sign_in_epoch_due_to_missing_threshold_sig_data(
+        nodes: &HashSet<NodeId>,
+        dkg_id: DkgId,
+        env: &TestEnvironment,
+    ) -> bool {
+        let msg = message();
+
+        for node in nodes {
+            let sig = crypto_for(*node, &env.crypto_components).sign_threshold(&msg, dkg_id);
+            match sig {
+                Ok(_) => return false,
+                Err(CryptoError::ThresholdSigDataNotFound {
+                    dkg_id: missing_dkg_id,
+                }) => {
+                    assert_eq!(dkg_id, missing_dkg_id);
+                }
+                Err(e) => {
+                    panic!("Unexpected error {}", e);
+                }
+            }
+        }
+
+        true
+    }
+
+    fn retain_only_active_keys_for_transcripts(
+        transcripts: &[NiDkgTranscript],
+        env: &mut TestEnvironment,
+    ) {
+        let mut retained = HashSet::new();
+        for t in transcripts {
+            retained.insert(t.clone());
+        }
+
+        for c in env.crypto_components.values_mut() {
+            c.retain_only_active_keys(retained.clone()).unwrap();
         }
     }
 
@@ -516,14 +767,62 @@ mod random_ni_dkg_config {
             Self(NiDkgConfig::new(config_data).expect("invariant violated"))
         }
 
+        /// Create a random NI-DKG config that is a peer for another
+        /// configuration with the opposite threshold requirements so it
+        /// is possible to perform tests where a single subnet has both
+        /// high and low threshold transcripts
+        pub fn new_with_inverted_threshold(&self) -> Self {
+            let rng = &mut thread_rng();
+
+            let dkg_tag = match self.0.dkg_id().dkg_tag {
+                NiDkgTag::LowThreshold => NiDkgTag::HighThreshold,
+                NiDkgTag::HighThreshold => NiDkgTag::LowThreshold,
+            };
+
+            let subnet_size = self.0.receivers().get().len();
+            let receivers = self.0.receivers().get().clone();
+            let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
+            let dealers = {
+                let required_dealer_count = threshold;
+                let dealer_surplus = rng.gen_range(0, 3);
+                // Exclude receivers from being dealers because initial DKG is done by NNS for
+                // another (remote) subnet, which means the dealers and receivers are disjoint.
+                random_node_ids_excluding(&receivers, required_dealer_count + dealer_surplus)
+            };
+
+            let config_data = NiDkgConfigData {
+                dkg_id: NiDkgId {
+                    start_block_height: self.0.dkg_id().start_block_height,
+                    dealer_subnet: self.0.dkg_id().dealer_subnet,
+                    dkg_tag,
+                    target_subnet: self.0.dkg_id().target_subnet,
+                },
+                max_corrupt_dealers: number_of_nodes_from_usize(rng.gen_range(0, dealers.len())),
+                dealers,
+                max_corrupt_receivers: {
+                    number_of_nodes_from_usize(get_faults_tolerated(subnet_size))
+                },
+                receivers,
+                threshold: number_of_nodes_from_usize(threshold),
+                registry_version: self.0.registry_version() + ONE_REGISTRY_VERSION,
+                resharing_transcript: None,
+            };
+
+            Self(NiDkgConfig::new(config_data).expect("invariant violated"))
+        }
+
         /// Reshares the config into a new random NI-DKG config with the given
         /// `transcript`.
         ///
-        /// The subnet size is changed dynamically in the range [-2, +2] with
-        /// minimum of 1 and maximum of `max_subnet_size`. If new nodes
-        /// are added as part of the resizing, the registry version is
-        /// increased by 1.
-        pub fn reshare(transcript: NiDkgTranscript, max_subnet_size: usize) -> Self {
+        /// The subnet size is changed dynamically based on subnet_size_change
+        /// with minimum of 1 and maximum of `max_subnet_size`. If new nodes are
+        /// added as part of the resizing, the registry version is increased by
+        /// 1.
+        pub fn reshare(
+            transcript: NiDkgTranscript,
+            subnet_size_change: std::ops::RangeInclusive<isize>,
+            max_subnet_size: usize,
+        ) -> Self {
             let rng = &mut thread_rng();
 
             // let max_corrupt_dealers = self.0.max_corrupt_receivers();
@@ -545,12 +844,16 @@ mod random_ni_dkg_config {
                 dealers_vec.into_iter().collect()
             };
             let new_subnet_size = {
-                let transcript_committee_len_i32 =
-                    i32::try_from(transcript.committee.get().len()).expect("conversion error");
-                let new_subnet_size_i32 =
-                    cmp::max(1, transcript_committee_len_i32 + rng.gen_range(-2, 3));
+                let transcript_committee_len_isize =
+                    isize::try_from(transcript.committee.get().len()).expect("conversion error");
+
+                let change_in_subnet_size =
+                    rng.gen_range(subnet_size_change.start(), subnet_size_change.end() + 1);
+
+                let new_subnet_size_isize =
+                    cmp::max(1, transcript_committee_len_isize + change_in_subnet_size);
                 let new_subnet_size =
-                    usize::try_from(new_subnet_size_i32).expect("conversion error");
+                    usize::try_from(new_subnet_size_isize).expect("conversion error");
                 cmp::min(new_subnet_size, max_subnet_size)
             };
             let mut registry_version = transcript.registry_version;
@@ -602,6 +905,10 @@ mod random_ni_dkg_config {
                 resharing_transcript: Some(transcript),
             };
             Self(NiDkgConfig::new(config_data).expect("invariant violated"))
+        }
+
+        pub fn receiver_ids(&self) -> HashSet<NodeId> {
+            self.get().receivers().get().iter().cloned().collect()
         }
     }
 

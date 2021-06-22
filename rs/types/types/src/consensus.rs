@@ -335,7 +335,9 @@ impl TryFrom<pb::BlockProposal> for BlockProposal {
         Ok(Signed {
             content: Hashed {
                 value: Block::try_from(
-                    block_proposal.value.expect("No block serialization found."),
+                    block_proposal
+                        .value
+                        .ok_or_else(|| "No block proposal value found".to_string())?,
                 )?,
                 hash: CryptoHashOf::from(CryptoHash(block_proposal.hash)),
             },

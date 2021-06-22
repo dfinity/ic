@@ -4,7 +4,7 @@
 pub use ic_config::registry_client::DataProviderConfig;
 pub use ic_interfaces::registry::{
     empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
-    RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
+    RegistryDataProvider, RegistryTransportRecord, POLLING_PERIOD, ZERO_REGISTRY_VERSION,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_common::local_store::LocalStoreImpl;
@@ -17,16 +17,15 @@ use ic_registry_common::{
 pub use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     registry::{RegistryClientError, RegistryDataProviderError},
-    RegistryVersion,
+    time::current_time,
+    RegistryVersion, Time,
 };
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock, RwLockReadGuard};
-use std::time::Duration;
 use url::Url;
 
 use crate::metrics::Metrics;
-
-const POLLING_PERIOD: Duration = Duration::from_secs(10);
 
 #[derive(Clone)]
 pub struct RegistryClientImpl {
@@ -176,6 +175,7 @@ pub fn create_data_provider(
 #[derive(Clone)]
 struct CacheState {
     records: Vec<RegistryTransportRecord>,
+    timestamps: BTreeMap<RegistryVersion, Time>,
     latest_version: RegistryVersion,
 }
 
@@ -184,14 +184,16 @@ impl CacheState {
         Self {
             records: vec![],
             latest_version: ZERO_REGISTRY_VERSION,
+            timestamps: Default::default(),
         }
     }
 
     fn update(&mut self, records: Vec<RegistryTransportRecord>, new_version: RegistryVersion) {
         assert!(new_version > self.latest_version);
-
+        self.timestamps.insert(new_version, current_time());
         for record in records {
             assert!(record.version > self.latest_version);
+            self.timestamps.insert(record.version, current_time());
             let search_key = (&record.key, &record.version);
             match self
                 .records
@@ -296,6 +298,15 @@ impl RegistryClient for RegistryClientImpl {
     fn get_latest_version(&self) -> RegistryVersion {
         let cache_state = self.cache.read().unwrap();
         cache_state.latest_version
+    }
+
+    fn get_version_timestamp(&self, registry_version: RegistryVersion) -> Option<Time> {
+        self.cache
+            .read()
+            .unwrap()
+            .timestamps
+            .get(&registry_version)
+            .cloned()
     }
 }
 

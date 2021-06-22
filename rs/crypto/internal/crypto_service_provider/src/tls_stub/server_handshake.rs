@@ -25,7 +25,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore> CspTlsServerHandshake 
         self_cert: X509PublicKeyCert,
         trusted_client_certs: Vec<X509PublicKeyCert>,
     ) -> Result<(TlsStream, Option<CspCertificateChain>), CspTlsServerHandshakeError> {
-        let tls_acceptor = self.tls_acceptor(self_cert, trusted_client_certs.clone())?;
+        let tls_acceptor = self.tls_acceptor(self_cert, Some(trusted_client_certs.clone()))?;
 
         let tls_stream = tokio_openssl::accept(&tls_acceptor, tcp_stream)
             .await
@@ -36,22 +36,48 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore> CspTlsServerHandshake 
         let peer_cert_chain = peer_cert_chain_from_stream(&tls_stream)?;
         Ok((TlsStream::new(tls_stream), peer_cert_chain))
     }
+
+    async fn perform_tls_server_handshake_without_client_auth(
+        &self,
+        tcp_stream: TcpStream,
+        self_cert: X509PublicKeyCert,
+    ) -> Result<TlsStream, CspTlsServerHandshakeError> {
+        let tls_acceptor = self.tls_acceptor(self_cert, None)?;
+
+        let tls_stream = tokio_openssl::accept(&tls_acceptor, tcp_stream)
+            .await
+            .map_err(|e| CspTlsServerHandshakeError::HandshakeError {
+                internal_error: format!("Handshake failed in tokio_openssl:accept: {}", e),
+            })?;
+
+        Ok(TlsStream::new(tls_stream))
+    }
 }
 
 impl<R: Rng + CryptoRng, S: SecretKeyStore> Csp<R, S> {
     /// Creates an Acceptor for TLS. This allows to set up a TLS connection as a
     /// server. The `self_cert` is used as server certificate and the
-    /// corresponding private key must be in the secret key store. The
-    /// server will only allow TLS connections from clients that
-    /// authenticate with a client certificate in `trusted_client_certs`.
+    /// corresponding private key must be in the secret key store.
+
+    /// The server can be configured to require client authentication.
+    /// If trusted_client_certs is Some then the non-empty vector will
+    /// list the client certificates that will be accepted. If it is None,
+    /// then no client authentication will be performed.
     fn tls_acceptor(
         &self,
         self_cert: X509PublicKeyCert,
-        trusted_client_certs: Vec<X509PublicKeyCert>,
+        trusted_client_certs: Option<Vec<X509PublicKeyCert>>,
     ) -> Result<SslAcceptor, CspTlsServerHandshakeError> {
+        use ic_crypto_internal_tls::{tls_acceptor, ClientAuthentication};
+
         let self_cert_x509 = self_cert_x509(&self_cert)?;
-        let trusted_client_certs_x509 = trusted_client_certs_x509(trusted_client_certs)?;
-        Ok(ic_crypto_internal_tls::tls_acceptor(
+        let trusted_client_certs_x509 = match trusted_client_certs {
+            Some(c) => ClientAuthentication::OptionalAuthentication {
+                trusted_client_certs: trusted_client_certs_x509(c)?,
+            },
+            None => ClientAuthentication::NoAuthentication,
+        };
+        Ok(tls_acceptor(
             &key_from_secret_key_store(&*self.sks_read_lock(), &self_cert)?,
             &self_cert_x509,
             trusted_client_certs_x509,

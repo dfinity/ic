@@ -465,9 +465,7 @@ impl StreamHandlerImpl {
     /// stream indices.
     fn observe_gced_messages(&self, from: StreamIndex, to: StreamIndex) {
         assert!(from <= to);
-        self.metrics
-            .gced_xnet_messages
-            .inc_by((to - from).get() as i64);
+        self.metrics.gced_xnet_messages.inc_by((to - from).get());
     }
 }
 

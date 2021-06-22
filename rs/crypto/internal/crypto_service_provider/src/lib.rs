@@ -28,7 +28,7 @@ use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspPublicKey;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_logmon::metrics::Metrics;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_logger::{new_logger, replica_logger::no_op_logger, ReplicaLogger};
 use ic_protobuf::crypto::v1::NodePublicKeys;
@@ -39,7 +39,6 @@ use rand::{CryptoRng, Rng};
 use secret_key_store::proto_store::ProtoSecretKeyStore;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use std::time;
 use std::time::Instant;
 
 /// Describes the interface of the crypto service provider (CSP), e.g. for
@@ -128,23 +127,23 @@ pub struct Csp<R: Rng + CryptoRng, S: SecretKeyStore> {
 struct CspRwLock<T> {
     name: String,
     rw_lock: RwLock<T>,
-    metrics: Option<Arc<Metrics>>,
+    metrics: Arc<CryptoMetrics>,
 }
 
 impl<T> CspRwLock<T> {
-    pub fn new_for_rng(content: T, metrics: Option<Arc<Metrics>>) -> Self {
+    pub fn new_for_rng(content: T, metrics: Arc<CryptoMetrics>) -> Self {
         // Note: The name will appear on metric dashboards and may be used in alerts, do
         // not change this unless you are also updating the monitoring.
         Self::new(content, "csprng".to_string(), metrics)
     }
 
-    pub fn new_for_sks(content: T, metrics: Option<Arc<Metrics>>) -> Self {
+    pub fn new_for_sks(content: T, metrics: Arc<CryptoMetrics>) -> Self {
         // Note: The name will appear on metric dashboards and may be used in alerts, do
         // not change this unless you are also updating the monitoring.
         Self::new(content, "secret_key_store".to_string(), metrics)
     }
 
-    fn new(content: T, lock_name: String, metrics: Option<Arc<Metrics>>) -> Self {
+    fn new(content: T, lock_name: String, metrics: Arc<CryptoMetrics>) -> Self {
         Self {
             name: lock_name,
             rw_lock: RwLock::new(content),
@@ -153,30 +152,21 @@ impl<T> CspRwLock<T> {
     }
 
     pub fn write(&self) -> RwLockWriteGuard<'_, T> {
-        if let Some(metrics) = self.metrics.as_ref() {
-            let start_time = time::Instant::now();
-            let write_guard = self.rw_lock.write();
-            self.observe(metrics, "write", start_time);
-            return write_guard;
-        }
-        self.rw_lock.write()
+        let start_time = self.metrics.now();
+        let write_guard = self.rw_lock.write();
+        self.observe(&self.metrics, "write", start_time);
+        write_guard
     }
 
     pub fn read(&self) -> RwLockReadGuard<'_, T> {
-        if let Some(metrics) = self.metrics.as_ref() {
-            let start_time = time::Instant::now();
-            let read_guard = self.rw_lock.read();
-            self.observe(metrics, "read", start_time);
-            return read_guard;
-        }
-        self.rw_lock.read()
+        let start_time = self.metrics.now();
+        let read_guard = self.rw_lock.read();
+        self.observe(&self.metrics, "read", start_time);
+        read_guard
     }
 
-    fn observe(&self, metrics: &Metrics, access: &str, start_time: Instant) {
-        metrics
-            .ic_crypto_lock_acquisition_duration_seconds
-            .with_label_values(&[&self.name, access])
-            .observe(start_time.elapsed().as_secs_f64());
+    fn observe(&self, metrics: &CryptoMetrics, access: &str, start_time: Option<Instant>) {
+        metrics.observe_lock_acquisition_duration_seconds(&self.name, access, start_time);
     }
 }
 
@@ -202,7 +192,7 @@ impl Csp<OsRng, ProtoSecretKeyStore> {
     pub fn new(
         config: &CryptoConfig,
         logger: Option<ReplicaLogger>,
-        metrics: Option<Metrics>,
+        metrics: Arc<CryptoMetrics>,
     ) -> Self {
         let logger = logger.unwrap_or_else(no_op_logger);
         let secret_key_store =
@@ -213,11 +203,10 @@ impl Csp<OsRng, ProtoSecretKeyStore> {
         };
         let public_key_data = PublicKeyData::new(node_public_keys);
 
-        let metrics_arc = metrics.map(Arc::new);
         Csp {
-            csprng: CspRwLock::new_for_rng(OsRng::default(), metrics_arc.as_ref().map(Arc::clone)),
+            csprng: CspRwLock::new_for_rng(OsRng::default(), Arc::clone(&metrics)),
             public_key_data,
-            secret_key_store: CspRwLock::new_for_sks(secret_key_store, metrics_arc),
+            secret_key_store: CspRwLock::new_for_sks(secret_key_store, metrics),
             logger,
         }
     }
@@ -235,11 +224,11 @@ impl<R: Rng + CryptoRng> Csp<R, ProtoSecretKeyStore> {
         };
         let public_key_data = PublicKeyData::new(node_public_keys);
         Csp {
-            csprng: CspRwLock::new_for_rng(csprng, None),
+            csprng: CspRwLock::new_for_rng(csprng, Arc::new(CryptoMetrics::none())),
             public_key_data,
             secret_key_store: CspRwLock::new_for_sks(
                 ProtoSecretKeyStore::open(&config.crypto_root, None),
-                None,
+                Arc::new(CryptoMetrics::none()),
             ),
             logger: no_op_logger(),
         }
@@ -285,10 +274,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> Csp<R, S> {
     pub fn of(csprng: R, secret_key_store: S) -> Self {
         let node_public_keys = Default::default();
         let public_key_data = PublicKeyData::new(node_public_keys);
+        let metrics = Arc::new(CryptoMetrics::none());
         Csp {
-            csprng: CspRwLock::new_for_rng(csprng, None),
+            csprng: CspRwLock::new_for_rng(csprng, Arc::clone(&metrics)),
             public_key_data,
-            secret_key_store: CspRwLock::new_for_sks(secret_key_store, None),
+            secret_key_store: CspRwLock::new_for_sks(secret_key_store, metrics),
             logger: no_op_logger(),
         }
     }

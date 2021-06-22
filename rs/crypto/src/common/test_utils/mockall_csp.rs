@@ -346,6 +346,12 @@ mock! {
             self_cert: X509PublicKeyCert,
             trusted_client_certs: Vec<X509PublicKeyCert>,
         ) -> Result<(TlsStream, Option<CspCertificateChain>), CspTlsServerHandshakeError>;
+
+        async fn perform_tls_server_handshake_without_client_auth(
+            &self,
+            tcp_stream: TcpStream,
+            self_cert: X509PublicKeyCert,
+        ) -> Result<TlsStream, CspTlsServerHandshakeError>;
     }
 
     #[async_trait]

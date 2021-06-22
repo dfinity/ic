@@ -1,7 +1,7 @@
 use ic_canonical_state::{
     size_limit_visitor::{Matcher::*, SizeLimitVisitor},
     subtree_visitor::{Pattern, SubtreeVisitor},
-    traverse_partial, Control, LabelLike, Visitor,
+    traverse, Control, LabelLike, Visitor,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
@@ -84,7 +84,7 @@ proptest! {
             size_limit,
             SubtreeVisitor::new(&subtree_pattern, MessageSpyVisitor::default()),
         );
-        let (actual_size, actual_begin, actual_end) = traverse_partial(&state, visitor);
+        let (actual_size, actual_begin, actual_end) = traverse(&state, visitor);
 
         if let (Some(actual_begin), Some(actual_end)) = (actual_begin, actual_end) {
             // Non-empty slice.
@@ -115,7 +115,7 @@ fn compute_message_sizes(state: &ReplicatedState, begin: u64, end: u64) -> usize
     // Traverse the stream once to collect its messages' total byte size.
     let pattern = make_slice_pattern(begin, end);
     let visitor = SubtreeVisitor::new(&pattern, MessageSpyVisitor::default());
-    let (size, tbegin, tend) = traverse_partial(&state, visitor);
+    let (size, tbegin, tend) = traverse(&state, visitor);
 
     // Sanity check MessageSpyVisitor.
     if let (Some(tbegin), Some(tend)) = (tbegin, tend) {
@@ -148,7 +148,11 @@ fn make_slice_pattern(begin: u64, end: u64) -> Pattern {
                 ("header", P::all()),
                 (
                     "messages",
-                    P::match_range(begin.to_label(), end.to_label(), P::all()),
+                    P::match_range(
+                        begin.to_label().as_bytes(),
+                        end.to_label().as_bytes(),
+                        P::all(),
+                    ),
                 ),
             ]
             .into_iter(),

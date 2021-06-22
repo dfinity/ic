@@ -5,6 +5,10 @@ use ic_metrics::{
 };
 use prometheus::{HistogramVec, IntCounterVec, IntGauge};
 use std::sync::Arc;
+use tokio::time::Instant;
+
+const STATUS_SUCCESS: &str = "success";
+const STATUS_ERROR: &str = "error";
 
 // Struct holding only Prometheus metric objects. Hence, it is thread-safe iff
 // the data members are thread-safe.
@@ -13,7 +17,7 @@ pub(crate) struct HttpHandlerMetrics {
     pub(crate) inflight_requests: Arc<IntGauge>,
     requests_per_app_layer: Arc<IntCounterVec>,
     forbidden_requests: Arc<IntCounterVec>,
-    connection_errors: Arc<IntCounterVec>,
+    connection_setup_duration: Arc<HistogramVec>,
     internal_errors: Arc<IntCounterVec>,
 }
 
@@ -30,7 +34,7 @@ impl HttpHandlerMetrics {
                 // This metric will contain durations of HTTPS requests as well. The naming is
                 // unfortunate.
                 "replica_http_request_duration_seconds",
-                "The HTTP/HTTPS request latencies in seconds.",
+                "HTTP/HTTPS request latencies in seconds. These do not include connection errors, see `replica_connection_errors` for those.",
                 // We need more than what the default offers (max 10.0), so we
                 // could better check the acceptance of our scenario tests. In
                 // addition, this code uses decimal buckets just like all other
@@ -65,17 +69,18 @@ impl HttpHandlerMetrics {
                 metrics_registry
                     .int_gauge("replica_inflight_requests", "Number of inflight requests"),
             ),
-            connection_errors: Arc::new(metrics_registry.int_counter_vec(
-                "replica_connection_errors",
-                "The number of different connection errors.",
-                &["reason"],
+            connection_setup_duration: Arc::new(metrics_registry.histogram_vec(
+                "replica_connection_setup_duration_seconds",
+                "HTTP connection setup durations, by status and detail (protocol on status=\"success\", error type on status=\"error\").",
+                decimal_buckets(-3, 1),
+                &["status", "detail"],
             )),
         }
     }
 
     pub(crate) fn observe_forbidden_request(&self, request_type: &RequestType, reason: &str) {
         self.forbidden_requests
-            .with_label_values(&[&request_type.to_string(), reason])
+            .with_label_values(&[request_type.as_str(), reason])
             .inc();
     }
 
@@ -85,19 +90,28 @@ impl HttpHandlerMetrics {
         app_layer: &AppLayer,
     ) {
         self.requests_per_app_layer
-            .with_label_values(&[&request_type.to_string(), &app_layer.to_string()])
+            .with_label_values(&[request_type.as_str(), app_layer.as_str()])
             .inc();
     }
 
-    pub(crate) fn observe_connection_error(&self, error: ConnectionError) {
-        self.connection_errors
-            .with_label_values(&[&error.to_string()])
-            .inc();
+    /// Records the duration of a failed connection setup, by error.
+    pub(crate) fn observe_connection_error(&self, error: ConnectionError, start_time: Instant) {
+        self.connection_setup_duration
+            .with_label_values(&[STATUS_ERROR, error.as_str()])
+            .observe(start_time.elapsed().as_secs_f64());
+    }
+
+    /// Records the duration of a successful connection setup, by app layer
+    /// (protocol).
+    pub(crate) fn observe_connection_setup(&self, app_layer: AppLayer, start_time: Instant) {
+        self.connection_setup_duration
+            .with_label_values(&[STATUS_SUCCESS, app_layer.as_str()])
+            .observe(start_time.elapsed().as_secs_f64());
     }
 
     pub(crate) fn observe_internal_error(&self, request_type: &RequestType, error: InternalError) {
         self.internal_errors
-            .with_label_values(&[&request_type.to_string(), &error.to_string()])
+            .with_label_values(&[request_type.as_str(), error.as_str()])
             .inc();
     }
 }

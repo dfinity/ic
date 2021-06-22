@@ -371,25 +371,31 @@ impl ApiType {
             message_accepted: false,
         }
     }
+
+    /// Returns a string slice representation of the enum variant name for use
+    /// e.g. as a metric label.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ApiType::Start { .. } => "start",
+            ApiType::Init { .. } => "init",
+            ApiType::Heartbeat { .. } => "heartbeat",
+            ApiType::Update { .. } => "update",
+            ApiType::ReplicatedQuery { .. } => "replicated query",
+            ApiType::NonReplicatedQuery { .. } => "non replicated query",
+            ApiType::ReplyCallback { .. } => "reply callback",
+            ApiType::RejectCallback { .. } => "reject callback",
+            ApiType::PreUpgrade { .. } => "pre upgrade",
+            ApiType::InspectMessage { .. } => "inspect message",
+            ApiType::Cleanup { .. } => "cleanup",
+        }
+    }
 }
 
 // This type is potentially serialized and exposed to the external world.  We
 // use custom formatting to avoid exposing its internal details.
 impl std::fmt::Display for ApiType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ApiType::Start { .. } => write!(f, "start"),
-            ApiType::Init { .. } => write!(f, "init"),
-            ApiType::Heartbeat { .. } => write!(f, "heartbeat"),
-            ApiType::Update { .. } => write!(f, "update"),
-            ApiType::ReplicatedQuery { .. } => write!(f, "replicated query"),
-            ApiType::NonReplicatedQuery { .. } => write!(f, "non replicated query"),
-            ApiType::ReplyCallback { .. } => write!(f, "reply callback"),
-            ApiType::RejectCallback { .. } => write!(f, "reject callback"),
-            ApiType::PreUpgrade { .. } => write!(f, "pre upgrade"),
-            ApiType::InspectMessage { .. } => write!(f, "inspect message"),
-            ApiType::Cleanup { .. } => write!(f, "cleanup"),
-        }
+        f.write_str(self.as_str())
     }
 }
 
@@ -3272,7 +3278,7 @@ mod test {
         let call_context_manager = system_state.call_context_manager().unwrap();
         assert_eq!(call_context_manager.call_contexts().len(), 1);
         assert_eq!(call_context_manager.callbacks().len(), 0);
-        assert_eq!(system_state.cycles_account.cycles_balance(), initial_cycles);
+        assert_eq!(system_state.cycles_balance, initial_cycles);
     }
 
     #[test]

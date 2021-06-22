@@ -1228,7 +1228,7 @@ impl DownloadManagerImpl {
 
         self.metrics
             .artifact_timeouts
-            .inc_by(expired_downloads.len() as i64);
+            .inc_by(expired_downloads.len() as u64);
 
         // Add the timed-out adverts to the end of their respective
         // priority queue in the prioritizer.

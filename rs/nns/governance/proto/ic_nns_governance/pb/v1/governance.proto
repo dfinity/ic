@@ -410,8 +410,10 @@ enum NnsFunction {
   NNS_FUNCTION_SET_FIREWALL_CONFIG = 15;
   // Change a Node Operator's allowance in the registry.
   NNS_FUNCTION_UPDATE_NODE_OPERATOR_CONFIG = 16;
-  // Stop or start an NNS canister
+  // Stop or start an NNS canister.
   NNS_FUNCTION_STOP_OR_START_NNS_CANISTER = 17;
+  // Remove unassigned nodes from the registry.
+  NNS_FUNCTION_REMOVE_NODES = 18;
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -804,7 +806,7 @@ message Ballot {
 // The proposal status, with respect to decision making and execution.
 // See also ProposalRewardStatus.
 enum ProposalStatus {
-  PROPOSAL_STATUS_UNKNOWN = 0;
+  PROPOSAL_STATUS_UNSPECIFIED = 0;
 
   // A decision (adopt/reject) has yet to be made.
   PROPOSAL_STATUS_OPEN = 1;
@@ -827,7 +829,7 @@ enum ProposalStatus {
 // The proposal status, with respect to reward distribution.
 // See also ProposalStatus.
 enum ProposalRewardStatus {
-  PROPOSAL_REWARD_STATUS_UNKNOWN = 0;
+  PROPOSAL_REWARD_STATUS_UNSPECIFIED = 0;
 
   // The proposal still accept votes, for the purpose of
   // vote rewards. This implies nothing on the ProposalStatus.
@@ -1083,6 +1085,7 @@ message Governance {
   // The last reward event. Should never be missing.
   RewardEvent latest_reward_event = 9;
 
+
   // The possible commands that require interaction with the ledger.
   message NeuronInFlightCommand {
     // The timestamp at which the command was issued, for debugging
@@ -1093,6 +1096,7 @@ message Governance {
       ManageNeuron.Split split = 3;
       ManageNeuron.Spawn spawn = 4;
       ManageNeuron.DisburseToNeuron disburse_to_neuron = 5;
+      ClaimOrRefreshNeuronFromAccount claim_or_refresh = 6;
     }
   }
 
@@ -1207,4 +1211,23 @@ message ListNeuronsResponse {
   // hot key, or controller or hot key of some followee on the
   // `ManageNeuron` topic).
   repeated Neuron full_neurons = 2;
+}
+
+// The arguments to the method `claim_or_refresh_neuron_from_account`.
+message ClaimOrRefreshNeuronFromAccount {
+  // The principal for which to refresh the account. If not specified,
+  // defaults to the caller.
+  ic_base_types.pb.v1.PrincipalId controller = 1;
+  // The memo of the staking transaction.
+  uint64 memo = 2;
+}
+
+// Response to claim_or_refresh_neuron_from_account.
+message ClaimOrRefreshNeuronFromAccountResponse {
+  oneof result {
+    // Specified in case of error.
+    GovernanceError error = 1;
+    // The ID of the neuron that was created or empty in the case of error.
+    ic_nns_common.pb.v1.NeuronId neuron_id = 2;
+  }
 }

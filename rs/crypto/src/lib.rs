@@ -25,23 +25,29 @@ pub use sign::utils::{
     user_public_key_from_bytes, verify_combined_threshold_sig, KeyBytesContentType,
 };
 
-use crate::common::utils::derive_node_id;
+use crate::common::utils::{derive_node_id, TempCryptoComponent};
 use crate::sign::ThresholdSigDataStoreImpl;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::NodePublicKeyData;
 use ic_crypto_internal_csp::keygen::public_key_hash_as_key_id;
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
-use ic_crypto_internal_logmon::metrics::Metrics;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces::crypto::{KeyManager, ThresholdSigVerifierByPublicKey};
+use ic_interfaces::crypto::{
+    BasicSigVerifier, BasicSigVerifierByPublicKey, KeyManager, MultiSigVerifier,
+    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
+};
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_types::consensus::CatchUpContentProtobufBytes;
+use ic_types::consensus::{
+    Block, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
+};
 use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
-use ic_types::{NodeId, RegistryVersion};
+use ic_types::messages::MessageId;
+use ic_types::{NodeId, PrincipalId, RegistryVersion};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
@@ -91,6 +97,34 @@ impl<T> CryptoComponentForNonReplicaProcess for T where
 {
 }
 
+/// A crypto component that only allows signature verification. These operations
+/// do not require secret keys.
+pub trait CryptoComponentForVerificationOnly:
+    MultiSigVerifier<FinalizationContent>
+    + BasicSigVerifier<Block>
+    + BasicSigVerifierByPublicKey<MessageId>
+    + ThresholdSigVerifier<CatchUpContent>
+    + ThresholdSigVerifierByPublicKey<CatchUpContent>
+    + ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
+    + Send
+    + Sync
+{
+}
+
+// Blanket implementation of `CryptoComponentForVerificationOnly` for all types
+// that fulfill the requirements.
+impl<T> CryptoComponentForVerificationOnly for T where
+    T: MultiSigVerifier<FinalizationContent>
+        + BasicSigVerifier<Block>
+        + BasicSigVerifierByPublicKey<MessageId>
+        + ThresholdSigVerifier<CatchUpContent>
+        + ThresholdSigVerifierByPublicKey<CatchUpContent>
+        + ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
+        + Send
+        + Sync
+{
+}
+
 /// Allows Internet Computer nodes to perform crypto operations such as
 /// distributed key generation, signing, signature verification, and TLS
 /// handshakes.
@@ -101,6 +135,7 @@ pub struct CryptoComponentFatClient<C: CryptoServiceProvider> {
     // The node id of the node that instantiated this crypto component.
     node_id: NodeId,
     logger: ReplicaLogger,
+    metrics: Arc<CryptoMetrics>,
 }
 
 /// A `ThresholdSigDataStore` that is wrapped by a `RwLock`.
@@ -163,6 +198,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             registry_client,
             node_id,
             logger,
+            metrics: Arc::new(CryptoMetrics::none()),
         }
     }
 }
@@ -222,8 +258,8 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore>> {
         logger: ReplicaLogger,
         metrics_registry: Option<&MetricsRegistry>,
     ) -> Self {
-        let metrics = metrics_registry.map(Metrics::new);
-        let csp = Csp::new(&config, Some(new_logger!(&logger)), metrics);
+        let metrics = Arc::new(CryptoMetrics::new(metrics_registry));
+        let csp = Csp::new(&config, Some(new_logger!(&logger)), Arc::clone(&metrics));
         let node_pks = csp.node_public_keys();
         let node_signing_pk = node_pks
             .node_signing_pk
@@ -236,6 +272,7 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore>> {
             registry_client,
             node_id,
             logger,
+            metrics,
         }
     }
 
@@ -246,12 +283,14 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore>> {
         node_id: NodeId,
         logger: ReplicaLogger,
     ) -> Self {
+        let metrics = Arc::new(CryptoMetrics::none());
         CryptoComponentFatClient {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
-            csp: Csp::new(config, None, None),
+            csp: Csp::new(config, None, Arc::clone(&metrics)),
             registry_client,
             node_id,
             logger,
+            metrics,
         }
     }
 
@@ -267,6 +306,18 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore>> {
     ) -> impl CryptoComponentForNonReplicaProcess {
         // disable metrics for crypto in node manager:
         CryptoComponentFatClient::new(config, registry_client, logger, None)
+    }
+
+    /// Creates a crypto component that only allows signature verification.
+    /// Verification does not require secret keys.
+    pub fn new_for_verification_only(
+        registry_client: Arc<dyn RegistryClient>,
+    ) -> impl CryptoComponentForVerificationOnly {
+        // We use a dummy node id since it is irrelevant for verification.
+        let dummy_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        // Using the `TempCryptoComponent` with a temporary secret key file is fine
+        // since the secret keys are never used for verification.
+        TempCryptoComponent::new(registry_client, dummy_node_id)
     }
 
     /// Returns the `NodeId` of this crypto component.

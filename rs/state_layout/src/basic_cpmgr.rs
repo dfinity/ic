@@ -34,7 +34,45 @@ use std::{
 /// |
 /// └── fs_tmp
 /// ```
-
+///
+/// # Notes on FS syncing
+///
+/// For correctness reasons we need to make sure that checkpoints we create are
+/// internally consistent and only "publish" them in the `checkpoints` directory
+/// once they are fully synced to disk.
+///
+/// There are 2 ways to construct a checkpoint:
+///   1. Compute it locally by applying blocks to an older state.
+///   2. Fetch it from a peer using the state sync protocol.
+///
+/// Let's look at how each case is handled.
+///
+/// ## Promoting a TIP to a checkpoint
+///
+///   1. Dump the state to files and directories under "<state_root>/tip", sync
+///      all the files.  This sync is probably not required, but it makes
+///      it easier to reason about reflinking (see the next step).
+///
+///   2. Reflink/copy all the files from "<state_root>/tip" to
+///      "<state_root>/fs_tmp/scratchpad_<height>", sync both files and
+///      directories under the scratchpad directory, including the scratchpad
+///      directory itself.
+///
+///   3. Rename "<state_root>/fs_tmp/scratchpad_<height>" to
+///      "<state_root>/checkpoints/<height>", sync "<state_root>/checkpoints".
+///
+/// ## Promoting a State Sync artifact to a checkpoint
+///
+///   1. Create state files directly in
+///      "<state_root>/fs_tmp/state_sync_scratchpad_<height>".
+///
+///   2. When all the writes are complete, call sync_and_mark_files_readonly()
+///      on "<state_root>/fs_tmp/state_sync_scratchpad_<height>".  This function
+///      syncs all the files and directories under the scratchpad directory,
+///      including the scratchpad directory itself.
+///
+///   3. Rename "<state_root>/fs_tmp/state_sync_scratchpad_<height>" to
+///      "<state_root>/checkpoints/<height>", sync "<state_root>/checkpoints".
 #[derive(Clone)]
 pub struct BasicCheckpointManager {
     root: PathBuf,
@@ -131,9 +169,11 @@ impl CheckpointManager for BasicCheckpointManager {
 
     fn scratchpad_to_checkpoint(&self, scratchpad: &Path, name: &str) -> std::io::Result<PathBuf> {
         self.ensure_dir_exists(&self.checkpoints())?;
-        mark_files_readonly(scratchpad)?;
-        let cp_path = self.checkpoints().join(name);
+        sync_and_mark_files_readonly(scratchpad)?;
+        let checkpoints_path = self.checkpoints();
+        let cp_path = checkpoints_path.join(name);
         std::fs::rename(scratchpad, &cp_path)?;
+        sync_path(&checkpoints_path)?;
         Ok(cp_path)
     }
 
@@ -156,7 +196,8 @@ impl CheckpointManager for BasicCheckpointManager {
         let cp_path = self.checkpoints().join(cp_name);
         let tmp_path = self.tmp().join(cp_name);
 
-        self.atomically_remove_via_path(&cp_path, &tmp_path)
+        self.atomically_remove_via_path(&cp_path, &tmp_path)?;
+        sync_path(&self.checkpoints())
     }
 
     fn mark_checkpoint_diverged(&self, name: &str) -> std::io::Result<()> {
@@ -167,6 +208,7 @@ impl CheckpointManager for BasicCheckpointManager {
         let dst_path = diverged_checkpoints_dir.join(name);
 
         match std::fs::rename(&cp_path, &dst_path) {
+            Ok(()) => sync_path(&self.checkpoints()),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
             other => other,
         }
@@ -185,7 +227,7 @@ impl CheckpointManager for BasicCheckpointManager {
         self.ensure_dir_exists(&backups_dir)?;
         let dst = backups_dir.join(name);
         self.copy_checkpoint(name, cp_path.as_path(), dst.as_path())?;
-        Ok(())
+        sync_path(&backups_dir)
     }
 
     fn list_diverged_checkpoints(&self) -> std::io::Result<Vec<String>> {
@@ -292,6 +334,17 @@ fn copy_recursively_respecting_tombstones(
 
         let entries = src.read_dir()?;
 
+        // Note: all the files and directories below DST and DST itself will be
+        // synced after this function returns.  However, create_dir_all might
+        // create some parents that won't be synced. It's fine because
+        //
+        //   1. We only care about internal consistency of checkpoints, and the
+        //   parents create_dir_all might have created do not belong to a
+        //   checkpoint.
+        //
+        //   2. We only invoke this function with DST being a child of a
+        //   directory that is wiped out on replica start, so we don't care much
+        //   about this temporary directory being properly synced.
         fs::create_dir_all(&dst)?;
 
         for entry_result in entries {
@@ -317,12 +370,15 @@ fn copy_recursively_respecting_tombstones(
         }
         fs::set_permissions(dst, permissions)?;
     }
-    Ok(())
+
+    // Note that the directory is synced after all the files and directories in
+    // it had been recursively synced.
+    sync_path(dst)
 }
 
 /// Recursively set permissions to readonly for all files under the given
 /// `path`.
-fn mark_files_readonly(path: &Path) -> std::io::Result<()> {
+fn sync_and_mark_files_readonly(path: &Path) -> std::io::Result<()> {
     let metadata = path.metadata()?;
 
     if metadata.is_dir() {
@@ -330,14 +386,37 @@ fn mark_files_readonly(path: &Path) -> std::io::Result<()> {
 
         for entry_result in entries {
             let entry = entry_result?;
-            mark_files_readonly(&entry.path())?;
+            sync_and_mark_files_readonly(&entry.path())?;
         }
     } else {
         // We keep directories writable to be able to rename them or delete the
         // files.
         let mut permissions = metadata.permissions();
         permissions.set_readonly(true);
-        fs::set_permissions(path, permissions)?;
+        fs::set_permissions(path, permissions).map_err(|e| {
+            Error::new(
+                e.kind(),
+                format!(
+                    "failed to set readonly permissions for file {}: {}",
+                    path.display(),
+                    e
+                ),
+            )
+        })?;
     }
-    Ok(())
+    sync_path(path)
+}
+
+/// Invokes sync_all on the file or directory located at given path.
+fn sync_path(path: &Path) -> std::io::Result<()> {
+    // There is no special API for syncing directories, so we do the same thing
+    // for both files and directories. This works because directories are just
+    // files treated in a special way by the kernel.
+    let f = std::fs::File::open(path)?;
+    f.sync_all().map_err(|e| {
+        Error::new(
+            e.kind(),
+            format!("failed to sync path {}: {}", path.display(), e),
+        )
+    })
 }

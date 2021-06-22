@@ -1,7 +1,7 @@
 use ic_context_logger::{ContextLogger, LogMetadata, Logger};
 use ic_protobuf::log::log_entry::v1::LogEntry;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// A logger that logs `LogEntry`s using a `LogEntryLogger`
@@ -33,7 +33,7 @@ pub struct LogEntryLogger {
     pub debug_overrides: Vec<String>,
     pub sampling_rates: HashMap<String, u32>,
     pub enabled_tags: Vec<String>,
-    pub last_log: Arc<Mutex<HashMap<String, Instant>>>,
+    pub last_log: Mutex<HashMap<String, Instant>>,
 }
 
 impl LogEntryLogger {
@@ -50,7 +50,7 @@ impl LogEntryLogger {
             debug_overrides,
             sampling_rates,
             enabled_tags,
-            last_log: Arc::new(Mutex::new(HashMap::new())),
+            last_log: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -75,7 +75,11 @@ impl Clone for LogEntryLogger {
             debug_overrides: self.debug_overrides.clone(),
             sampling_rates: self.sampling_rates.clone(),
             enabled_tags: self.enabled_tags.clone(),
-            last_log: self.last_log.clone(),
+            // `last_log` is not cloned because different instances of this
+            // logger will log at disjoint module/line pairs, so these
+            // instances don't need to share the same mutex, or need to both
+            // update the same `HashMap`.
+            last_log: Mutex::new(HashMap::new()),
         }
     }
 }

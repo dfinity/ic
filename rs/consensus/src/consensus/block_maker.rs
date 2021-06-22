@@ -10,14 +10,15 @@ use ic_interfaces::{
     dkg::DkgPool, ingress_pool::IngressPoolSelect, messaging::XNetPayloadError,
     registry::RegistryClient, state_manager::StateManager, time_source::TimeSource,
 };
-use ic_logger::{debug, error, trace, warn, ReplicaLogger};
+use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{consensus::dkg, replica_config::ReplicaConfig, ReplicaVersion};
+use ic_types::{consensus::dkg, replica_config::ReplicaConfig, time::current_time, ReplicaVersion};
 use std::cmp::Ordering;
 use std::sync::Arc;
 use std::sync::{Mutex, RwLock};
+use std::time::Duration;
 
 // Wait for VALIDATED_DEALING_AGE_THRESHOLD_MSECS (from the time an entry was
 // added to the validated pool) before selecting it for inclusion in a block.
@@ -39,6 +40,10 @@ pub struct BlockMaker {
     metrics: BlockMakerMetrics,
     log: ReplicaLogger,
     payload_context_cache: Mutex<Option<(CryptoHashOf<Block>, ValidationContext)>>,
+    // The minimal age of the registry version we want to use for the validation context of a new
+    // block. The older is the version, the higher is the probability, that it's universally
+    // available across the subnet.
+    stable_registry_version_age: Duration,
 }
 
 impl BlockMaker {
@@ -53,6 +58,7 @@ impl BlockMaker {
         payload_builder: Arc<dyn PayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        stable_registry_version_age: Duration,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
@@ -68,6 +74,7 @@ impl BlockMaker {
             log,
             metrics: BlockMakerMetrics::new(metrics_registry),
             payload_context_cache: Mutex::new(None),
+            stable_registry_version_age,
         }
     }
 
@@ -156,7 +163,13 @@ impl BlockMaker {
 
         // Note that we will skip blockmaking if registry versions or replica_versions
         // are missing or temporarily not retrievable.
-        let registry_version = pool.registry_version(height)?;
+        let registry_version = pool.registry_version(height).or_else(|| {
+            warn!(
+                self.log,
+                "Couldn't determine the registry version for height {:?}.", height
+            );
+            None
+        })?;
         let replica_version = lookup_replica_version(
             self.registry_client.as_ref(),
             self.replica_config.subnet_id,
@@ -171,7 +184,12 @@ impl BlockMaker {
             Some((hash, context)) if hash == parent_hash => context,
             _ => ValidationContext {
                 certified_height,
-                registry_version: self.registry_client.get_latest_version(),
+                // To ensure that other replicas can validate our block proposal, we need to use a
+                // registry version that is present on most replicas. But since every registry
+                // version can become available to different replicas at different times, we should
+                // not use the latest one. Instead, we pick an older version we consider "stable",
+                // the one which has reached most replicas by now.
+                registry_version: self.get_stable_registry_version(&parent)?,
                 // Below we skip proposing the block if this context is behind the parent's context.
                 // We set the time so that block making is not skipped due to local time being
                 // behind the network time.
@@ -186,7 +204,9 @@ impl BlockMaker {
                 // invalid block, we simply do not propose a block now.
                 warn!(
                     self.log,
-                    "Cannot propose block as the locally available validation context is smaller than the parent validation context (locally available={:?}, parent context={:?})",
+                    "Cannot propose block as the locally available validation context is \
+                        smaller than the parent validation context \
+                        (locally available={:?}, parent context={:?})",
                     context,
                     &parent.context
                 );
@@ -241,6 +261,11 @@ impl BlockMaker {
                             .get_payload_calls
                             .with_label_values(&["pending"])
                             .inc();
+
+                        info!(
+                            self.log,
+                            "XNet payload builder has yet to finish. Blockmaker will try again later."
+                        );
                         return None;
                     }
                 }
@@ -359,6 +384,27 @@ impl BlockMaker {
                 block.hash => hash,
             );
         }
+    }
+
+    // Returns the registry version received from the NNS some specified amount of
+    // time ago. If the parent's context references higher version which is already
+    // available localy, we use that version.
+    fn get_stable_registry_version(&self, parent: &Block) -> Option<RegistryVersion> {
+        for v in (1..=self.registry_client.get_latest_version().get()).rev() {
+            let version = RegistryVersion::from(v);
+            let version_timestamp = self.registry_client.get_version_timestamp(version)?;
+            if version_timestamp + self.stable_registry_version_age <= current_time() {
+                let stable_version = std::cmp::max(
+                    version,
+                    std::cmp::min(
+                        parent.context.registry_version,
+                        self.registry_client.get_latest_version(),
+                    ),
+                );
+                return Some(stable_version);
+            }
+        }
+        None
     }
 
     /// Maliciously propose blocks irrespective of the rank, based on the flags
@@ -554,12 +600,13 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_artifact_pool::ingress_pool::TestIngressPool;
     use ic_test_utilities::{
-        registry::SubnetRecordBuilder,
+        registry::{add_subnet_record, SubnetRecordBuilder},
         types::ids::{node_test_id, subnet_test_id},
     };
     use ic_types::*;
     use ic_types::{batch::*, consensus::dkg};
     use std::sync::{Arc, RwLock};
+
     #[test]
     fn test_block_maker() {
         let subnet_id = subnet_test_id(0);
@@ -598,6 +645,7 @@ mod tests {
                     ),
                 ],
             );
+
             pool.advance_round_normal_operation_n(4);
 
             let payload_builder = MockPayloadBuilder::new();
@@ -619,6 +667,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
                 state_manager.clone(),
+                Duration::from_millis(0),
                 MetricsRegistry::new(),
                 no_op_logger(),
             );
@@ -695,6 +744,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 state_manager,
+                Duration::from_millis(0),
                 MetricsRegistry::new(),
                 no_op_logger(),
             );
@@ -814,6 +864,7 @@ mod tests {
                     MetricsRegistry::new(),
                 ))),
                 state_manager.clone(),
+                Duration::from_millis(0),
                 MetricsRegistry::new(),
                 no_op_logger(),
             );
@@ -856,6 +907,7 @@ mod tests {
                     MetricsRegistry::new(),
                 ))),
                 state_manager,
+                Duration::from_millis(0),
                 MetricsRegistry::new(),
                 no_op_logger(),
             );
@@ -893,6 +945,96 @@ mod tests {
             pool.insert_validated(catch_up_package);
             let proposal = block_maker.on_state_change(&PoolReader::new(&pool), &ingress_pool);
             assert!(proposal.is_none());
+        })
+    }
+
+    #[test]
+    fn test_stable_registry_version() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let dkg_interval_length = 3;
+            let node_ids = [node_test_id(0)];
+            let record = SubnetRecordBuilder::from(&node_ids)
+                .with_dkg_interval_length(dkg_interval_length)
+                .build();
+            let subnet_id = subnet_test_id(0);
+            let Dependencies {
+                registry,
+                crypto,
+                pool,
+                time_source,
+                replica_config,
+                state_manager,
+                registry_data_provider,
+                ..
+            } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record.clone())]);
+
+            let mut payload_builder = MockPayloadBuilder::new();
+            payload_builder
+                .expect_get_payload()
+                .return_const(Ok(BatchPayload::default()));
+            let membership = Arc::new(Membership::new(
+                pool.get_cache(),
+                registry.clone(),
+                replica_config.subnet_id,
+            ));
+
+            let mut block_maker = BlockMaker::new(
+                Arc::clone(&time_source) as Arc<_>,
+                replica_config,
+                Arc::clone(&registry) as Arc<dyn RegistryClient>,
+                membership,
+                crypto,
+                Arc::new(payload_builder),
+                Arc::new(RwLock::new(ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
+                    MetricsRegistry::new(),
+                ))),
+                state_manager,
+                Duration::from_millis(0),
+                MetricsRegistry::new(),
+                no_op_logger(),
+            );
+
+            let delay = Duration::from_millis(1000);
+
+            // We add a new version every `delay` ms.
+            std::thread::sleep(delay);
+            add_subnet_record(&registry_data_provider, 2, subnet_id, record.clone());
+            registry.update_to_latest_version();
+            std::thread::sleep(delay);
+            add_subnet_record(&registry_data_provider, 3, subnet_id, record.clone());
+            registry.update_to_latest_version();
+            std::thread::sleep(delay);
+            add_subnet_record(&registry_data_provider, 4, subnet_id, record);
+            registry.update_to_latest_version();
+
+            // Make sure the latest version is the highest we added.
+            assert_eq!(registry.get_latest_version(), RegistryVersion::from(4));
+
+            // Now we just request versions at every interval of the previously added
+            // version. To avoid hitting the boundaries, we use a little offset.
+            let offset = delay / 10 * 3;
+            let mut parent = pool.get_cache().finalized_block();
+            block_maker.stable_registry_version_age = offset;
+            assert_eq!(
+                block_maker.get_stable_registry_version(&parent).unwrap(),
+                RegistryVersion::from(3)
+            );
+            block_maker.stable_registry_version_age = offset + delay;
+            assert_eq!(
+                block_maker.get_stable_registry_version(&parent).unwrap(),
+                RegistryVersion::from(2)
+            );
+            block_maker.stable_registry_version_age = offset + delay * 2;
+            assert_eq!(
+                block_maker.get_stable_registry_version(&parent).unwrap(),
+                RegistryVersion::from(1)
+            );
+            // Now let's test if parent's version is used
+            parent.context.registry_version = RegistryVersion::from(2);
+            assert_eq!(
+                block_maker.get_stable_registry_version(&parent).unwrap(),
+                RegistryVersion::from(2)
+            );
         })
     }
 }

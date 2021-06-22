@@ -9,13 +9,9 @@ PATH=$(
 )
 export PATH=/opt/cargo/bin:$PATH
 
-# When invoked locally we set CI_RUST_BUILD_DIR to the current directory
-# since in docker the current working directory is the repository.
-CI_RUST_BUILD_DIR="${CI_RUST_BUILD_DIR:-$(pwd)}"
-
-rm -rf "$CI_RUST_BUILD_DIR/artifacts/canisters"
-mkdir -p "$CI_RUST_BUILD_DIR/artifacts/canisters"
-cd "$CI_RUST_BUILD_DIR/rs" || exit 1
+rm -rf "$CI_PROJECT_DIR/artifacts/canisters"
+mkdir -p "$CI_PROJECT_DIR/artifacts/canisters"
+cd "$CI_PROJECT_DIR/rs" || exit 1
 
 wasm_canister_list=(
     registry-canister
@@ -40,13 +36,13 @@ function wasm_canisters_cargo_args() {
 cargo build --target wasm32-unknown-unknown --release $(wasm_canisters_cargo_args)
 
 # Lifeline canister needs special handling:
-cd "$CI_RUST_BUILD_DIR/rs/nns/handlers/lifeline" || exit 1
+cd "$CI_PROJECT_DIR/rs/nns/handlers/lifeline" || exit 1
 cargo build --target wasm32-unknown-unknown
-ic-cdk-optimizer -o "$CI_RUST_BUILD_DIR/artifacts/canisters/lifeline.wasm" gen/lifeline.wasm
+ic-cdk-optimizer -o "$CI_PROJECT_DIR/artifacts/canisters/lifeline.wasm" gen/lifeline.wasm
 
 echo "Building of Wasm canisters finished"
 
-cd "$CI_RUST_BUILD_DIR" || exit 1
+cd "$CI_PROJECT_DIR" || exit 1
 
 for tgt in "${wasm_canister_list[@]}"; do
     tgt_filename="$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/$tgt.wasm"
@@ -60,4 +56,4 @@ done
 
 sha256sum artifacts/canisters/*
 
-gzip -f artifacts/canisters/*
+gzip -f --no-name artifacts/canisters/*

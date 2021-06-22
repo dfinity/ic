@@ -1,8 +1,8 @@
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::{
-    canister_state::system_state::CanisterStatus, page_map, CyclesAccountError, NumWasmPages,
-    StableMemoryError, StateError, SystemState,
+    canister_state::system_state::CanisterStatus, page_map, NumWasmPages, StableMemoryError,
+    StateError, SystemState,
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, Request},
@@ -58,7 +58,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
     }
 
     fn controller(&self) -> PrincipalId {
-        self.system_state.borrow().controller()
+        *self.system_state.borrow().controller()
     }
 
     fn mint_cycles(&self, amount_to_mint: Cycles) -> HypervisorResult<()> {
@@ -173,7 +173,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
     }
 
     fn canister_cycles_balance(&self) -> Cycles {
-        self.system_state.borrow().cycles_account.cycles_balance()
+        self.system_state.borrow().cycles_balance
     }
 
     fn canister_cycles_withdraw(
@@ -191,7 +191,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
                 amount,
             )
             .map_err(|_| HypervisorError::InsufficientCyclesBalance {
-                available: system_state.cycles_account.cycles_balance(),
+                available: system_state.cycles_balance,
                 requested: amount,
             })?;
         Ok(())
@@ -230,28 +230,20 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
         compute_allocation: ComputeAllocation,
         msg: Request,
     ) -> Result<(), (StateError, Request)> {
-        let canister_id = self.system_state.borrow().canister_id();
         if let Err(err) = self.cycles_account_manager.withdraw_request_cycles(
             self.system_state.borrow_mut().deref_mut(),
             canister_current_memory_usage,
             compute_allocation,
             &msg,
         ) {
-            match err {
-                CyclesAccountError::CanisterOutOfCycles {
-                    available,
-                    requested,
-                } => {
-                    return Err((
-                        StateError::CanisterOutOfCycles {
-                            canister_id,
-                            available,
-                            requested,
-                        },
-                        msg,
-                    ))
-                }
-            }
+            return Err((
+                StateError::CanisterOutOfCycles {
+                    canister_id: err.canister_id,
+                    available: err.available,
+                    requested: err.requested,
+                },
+                msg,
+            ));
         }
         self.system_state.borrow_mut().push_output_request(msg)
     }
@@ -427,7 +419,7 @@ mod test {
             NumSeconds::from(100_000),
         );
 
-        let initial_cycles_balance = system_state.cycles_account.cycles_balance();
+        let initial_cycles_balance = system_state.cycles_balance;
 
         let system_state_accessor =
             SystemStateAccessorDirect::new(system_state, Arc::clone(&cycles_account_manager));
@@ -473,7 +465,7 @@ mod test {
                 + cycles_account_manager.xnet_call_bytes_transmitted_fee(
                     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES - response.response_payload.size_of()
                 ),
-            system_state.cycles_account.cycles_balance()
+            system_state.cycles_balance
         );
     }
 }

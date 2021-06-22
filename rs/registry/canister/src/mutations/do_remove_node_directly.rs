@@ -23,7 +23,7 @@ impl Registry {
     /// Removes an existing node from the registry.
     ///
     /// This method is called directly by the node operator tied to the node.
-    pub fn do_remove_node(&mut self, payload: RemoveNodePayload) {
+    pub fn do_remove_node_directly(&mut self, payload: RemoveNodeDirectlyPayload) {
         println!("{}do_remove_node: {:?}", LOG_PREFIX, payload);
 
         // 1. Check that the specified node record exists
@@ -55,7 +55,7 @@ impl Registry {
             caller
         );
 
-        // 3. Retrieve the Subnet List and ensure no subnets conatain the node
+        // 3. Retrieve the Subnet List and ensure no subnets contain the node
         let RegistryValue {
             value: subnet_list_record_vec,
             version: _,
@@ -147,6 +147,6 @@ impl Registry {
 
 /// The payload of an update request to add a new node.
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct RemoveNodePayload {
+pub struct RemoveNodeDirectlyPayload {
     pub node_id: NodeId,
 }

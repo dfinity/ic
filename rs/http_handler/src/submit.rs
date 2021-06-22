@@ -153,9 +153,8 @@ pub(crate) fn handle(
     let registry_version = registry_client.get_latest_version();
     if !maliciously_disable_ingress_validation {
         let validity = validate_request(msg.as_ref(), validator, current_time(), registry_version);
-        if let Some(response) =
-            common::make_response_to_unauthentic_requests(message_id.clone(), validity, log)
-        {
+        if let Err(err) = validity {
+            let response = common::make_response_on_validation_error(message_id, err, log);
             metrics.observe_forbidden_request(&RequestType::Submit, "SubmitReqAuthFailed");
             return (response, Call);
         }

@@ -5,8 +5,8 @@ use ic_canister_client::Sender;
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_nns_constants::ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_test_utils::{
-    itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
-    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
+    itest_helpers::{get_value, local_test_on_nns_subnet, set_up_registry_canister},
+    registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
@@ -26,7 +26,7 @@ use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
         do_add_node::{connection_endpoint_from_string, flow_endpoint_from_string},
-        do_remove_node::RemoveNodePayload,
+        do_remove_node_directly::RemoveNodeDirectlyPayload,
     },
 };
 
@@ -69,7 +69,7 @@ fn node_is_removed_on_receiving_the_request() {
 
         let response: Result<(), String> = registry
             .update_from_sender(
-                "remove_node",
+                "remove_node_directly",
                 candid,
                 (prepare_payload(node_id),),
                 &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
@@ -130,7 +130,7 @@ fn node_cannot_be_removed_by_non_node_operator() {
 
         // Anonymous call fails
         let response: Result<(), String> = registry
-            .update_("remove_node", candid, (prepare_payload(node_id),))
+            .update_("remove_node_directly", candid, (prepare_payload(node_id),))
             .await;
         assert!(response.is_err());
 
@@ -201,7 +201,7 @@ fn node_cannot_be_removed_if_in_subnet() {
         // Call fails as the node is still in a subnet
         let response: Result<(), String> = registry
             .update_from_sender(
-                "remove_node",
+                "remove_node_directly",
                 candid,
                 (prepare_payload(node_id),),
                 &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
@@ -258,8 +258,8 @@ fn init_mutation(node_record: &NodeRecord) -> (NodeId, RegistryAtomicMutateReque
     )
 }
 
-fn prepare_payload(node_id: NodeId) -> RemoveNodePayload {
-    RemoveNodePayload { node_id }
+fn prepare_payload(node_id: NodeId) -> RemoveNodeDirectlyPayload {
+    RemoveNodeDirectlyPayload { node_id }
 }
 
 fn protobuf_to_vec<T: Message>(entry: &T) -> Vec<u8> {

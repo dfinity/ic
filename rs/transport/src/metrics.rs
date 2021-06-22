@@ -6,8 +6,10 @@ use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec}
 #[derive(Clone)]
 pub(crate) struct ControlPlaneMetrics {
     pub(crate) flow_state: IntGaugeVec,
+    pub(crate) tcp_accepts: IntCounterVec,
     pub(crate) tcp_accept_conn_err: IntCounterVec,
     pub(crate) tcp_accept_conn_success: IntCounterVec,
+    pub(crate) tcp_connects: IntCounterVec,
     pub(crate) tcp_conn_to_server_err: IntCounterVec,
     pub(crate) tcp_conn_to_server_success: IntCounterVec,
     pub(crate) tcp_server_handshake_failed: IntCounterVec,
@@ -25,6 +27,11 @@ impl ControlPlaneMetrics {
                 "Current state of the flow",
                 &["flow_peer_id", "flow_tag"],
             ),
+            tcp_accepts: metrics_registry.int_counter_vec(
+                "transport_tcp_accepts",
+                "Total incoming TcpStream in server mode",
+                &["flow_tag"],
+            ),
             tcp_accept_conn_err: metrics_registry.int_counter_vec(
                 "transport_tcp_accept_conn_error",
                 "Error connecting to incoming TcpStream in server mode",
@@ -34,6 +41,11 @@ impl ControlPlaneMetrics {
                 "transport_tcp_accept_conn_success",
                 "Successfully connected to incoming TcpStream in server mode",
                 &["flow_tag"],
+            ),
+            tcp_connects: metrics_registry.int_counter_vec(
+                "transport_tcp_connects",
+                "Total outgoing connects in client mode",
+                &["peer_id", "flow_tag"],
             ),
             tcp_conn_to_server_err: metrics_registry.int_counter_vec(
                 "transport_conn_to_server_error",

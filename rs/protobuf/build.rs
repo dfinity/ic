@@ -1,4 +1,6 @@
 use prost_build::Config;
+use std::env;
+use std::path::PathBuf;
 
 /// Creates a base Config, which should always be used in lieu of Config::new(),
 /// to avoid any risk of non-determinism. Indeed, with Config::new(), the
@@ -8,6 +10,12 @@ fn base_config() -> Config {
     let mut config = Config::new();
     // Use BTreeMap for all proto map fields.
     config.btree_map(&["."]);
+    config.file_descriptor_set_path(
+        // OUT_DIR is set by cargo
+        // https://doc.rust-lang.org/cargo/reference/environment-variables.html
+        PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR environment variable not set"))
+            .join("protoc_file_descriptor_set.bin"),
+    );
     config
 }
 

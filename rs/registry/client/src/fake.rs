@@ -6,11 +6,15 @@ use ic_interfaces::registry::{
     empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
 };
-use ic_types::registry::RegistryClientError;
-use ic_types::RegistryVersion;
+use ic_types::{registry::RegistryClientError, time::current_time, RegistryVersion, Time};
+use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 
-type CacheState = (RegistryVersion, Vec<RegistryTransportRecord>);
+type CacheState = (
+    RegistryVersion,
+    BTreeMap<RegistryVersion, Time>,
+    Vec<RegistryTransportRecord>,
+);
 
 pub struct FakeRegistryClient {
     data_provider: Arc<dyn RegistryDataProvider>,
@@ -45,20 +49,22 @@ impl FakeRegistryClient {
 
         // perform update
         assert!(new_version > latest_version);
+        let mut timestamps = cache.1.clone();
+        timestamps.insert(new_version, current_time());
         for record in new_records {
             assert!(record.version > latest_version);
             let search_key = (&record.key, &record.version);
             match cache
-                .1
+                .2
                 .binary_search_by_key(&search_key, |r| (&r.key, &r.version))
             {
                 Ok(_) => (),
                 Err(i) => {
-                    cache.1.insert(i, record);
+                    cache.2.insert(i, record);
                 }
             };
         }
-        *cache = (new_version, cache.1.clone())
+        *cache = (new_version, timestamps, cache.2.clone())
     }
 
     /// Resets the registry to version 0 and reloads all data from the attached
@@ -80,7 +86,7 @@ impl FakeRegistryClient {
         version: RegistryVersion,
     ) -> Result<RwLockReadGuard<CacheState>, RegistryClientError> {
         let cache_state = self.cache.read().unwrap();
-        let (latest_version, _) = &*cache_state;
+        let (latest_version, _, _) = &*cache_state;
         if &version > latest_version {
             return Err(RegistryClientError::VersionNotAvailable { version });
         }
@@ -98,7 +104,7 @@ impl RegistryClient for FakeRegistryClient {
             return Ok(empty_zero_registry_record(key));
         }
         let cache_state = self.check_version(version)?;
-        let (_, records) = &*cache_state;
+        let (_, _, records) = &*cache_state;
 
         let search_key = &(key, &version);
         let record = match records.binary_search_by_key(search_key, |r| (&r.key, &r.version)) {
@@ -122,7 +128,7 @@ impl RegistryClient for FakeRegistryClient {
             return Ok(vec![]);
         }
         let cache_state = self.check_version(version)?;
-        let (_, records) = &*cache_state;
+        let (_, _, records) = &*cache_state;
 
         let first_registry_version = RegistryVersion::from(1);
         // The pair (k, version) is unique and no entry exists with version 0. Thus, the
@@ -158,5 +164,9 @@ impl RegistryClient for FakeRegistryClient {
 
     fn get_latest_version(&self) -> RegistryVersion {
         self.cache.read().unwrap().0
+    }
+
+    fn get_version_timestamp(&self, registry_version: RegistryVersion) -> Option<Time> {
+        self.cache.read().unwrap().1.get(&registry_version).cloned()
     }
 }

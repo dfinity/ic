@@ -181,6 +181,7 @@ impl P2P {
         catch_up_package: CUPWithOriginalProtobuf,
         cycles_account_manager: Arc<CyclesAccountManager>,
         local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
+        registry_poll_delay_duration_ms: u64,
     ) -> Result<
         (
             Arc<dyn IngressEventHandler>,
@@ -223,6 +224,7 @@ impl P2P {
                 malicious_flags.clone(),
                 cycles_account_manager,
                 local_store_time_reader,
+                registry_poll_delay_duration_ms,
             )
             .unwrap();
 
@@ -335,6 +337,7 @@ fn setup_artifact_manager(
     malicious_flags: MaliciousFlags,
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
+    registry_poll_delay_duration_ms: u64,
 ) -> std::io::Result<(
     Arc<dyn ArtifactManager>,
     Arc<dyn ConsensusPoolCache>,
@@ -440,6 +443,7 @@ fn setup_artifact_manager(
                     metrics_registry.clone(),
                     replica_logger.clone(),
                     local_store_time_reader,
+                    registry_poll_delay_duration_ms,
                 )
             },
             Arc::clone(&time_source) as Arc<_>,

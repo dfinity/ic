@@ -1900,7 +1900,7 @@ fn test_call_add_cycles_deducts_cycles() {
                 - amount_cycles
                 - cycles_account_manager.execution_cost(instructions_executed)
                 - messaging_fee,
-            canister.system_state.cycles_account.cycles_balance(),
+            canister.system_state.cycles_balance,
             BALANCE_EPSILON,
         );
     });
@@ -1949,7 +1949,7 @@ fn test_call_add_cycles_no_effect_when_perform_not_called() {
         //Call `ic0.call_perform` never called.
         assert_balance_equals(
             INITIAL_CYCLES,
-            canister.system_state.cycles_account.cycles_balance(),
+            canister.system_state.cycles_balance,
             BALANCE_EPSILON,
         );
     });
@@ -2003,7 +2003,7 @@ fn test_mint_cycles_non_nns_canister() {
         //Not on NNS subnet -> balance remains unchanged
         assert_balance_equals(
             INITIAL_CYCLES,
-            canister.system_state.cycles_account.cycles_balance(),
+            canister.system_state.cycles_balance,
             BALANCE_EPSILON,
         );
     });
@@ -2040,7 +2040,7 @@ fn test_mint_cycles_nns_canister() {
         assert_eq!(canister.system_state.queues.output_queues_len(), 0);
         assert_balance_equals(
             INITIAL_CYCLES + Cycles::new(10_000_000_000),
-            canister.system_state.cycles_account.cycles_balance(),
+            canister.system_state.cycles_balance,
             BALANCE_EPSILON,
         );
     });

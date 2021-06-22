@@ -84,7 +84,6 @@ pub struct ValidNodePublicKeys {
 }
 
 impl ValidNodePublicKeys {
-    // TODO (CRP-657): check version?
     /// Determines if the given node public key material is valid.
     ///
     /// Returns `ValidNodePublicKeys` iff the `keys` are valid and iff they

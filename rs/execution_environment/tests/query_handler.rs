@@ -49,6 +49,7 @@ fn query_non_existent() {
             subnet_id,
             subnet_type,
             NumBytes::from(std::u64::MAX),
+            &metrics_registry,
         );
         match query_handler.query(
             UserQuery {

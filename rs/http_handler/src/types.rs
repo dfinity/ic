@@ -14,8 +14,8 @@ pub(crate) enum ApiReqType {
     Unknown,
 }
 
-impl std::string::ToString for ApiReqType {
-    fn to_string(&self) -> String {
+impl ApiReqType {
+    pub(crate) fn as_str(&self) -> &str {
         use ApiReqType::*;
         match self {
             ReadState => "read_state",
@@ -23,7 +23,6 @@ impl std::string::ToString for ApiReqType {
             Query => "query",
             Unknown => "unknown",
         }
-        .to_string()
     }
 }
 
@@ -33,14 +32,13 @@ pub(crate) enum AppLayer {
     HTTPS,
 }
 
-impl std::string::ToString for AppLayer {
-    fn to_string(&self) -> String {
+impl AppLayer {
+    pub(crate) fn as_str(&self) -> &str {
         use AppLayer::*;
         match self {
             HTTP => "http",
             HTTPS => "https",
         }
-        .to_string()
     }
 }
 
@@ -63,8 +61,8 @@ pub(crate) enum RequestType {
     CatchUpPackage,
 }
 
-impl std::string::ToString for RequestType {
-    fn to_string(&self) -> String {
+impl RequestType {
+    pub(crate) fn as_str(&self) -> &str {
         use RequestType::*;
         match self {
             Status => "status",
@@ -75,7 +73,6 @@ impl std::string::ToString for RequestType {
             Dashboard => "dashboard",
             CatchUpPackage => "catch-up-package",
         }
-        .to_string()
     }
 }
 
@@ -87,8 +84,8 @@ pub(crate) enum ConnectionError {
     ClientAuthentication,
 }
 
-impl std::string::ToString for ConnectionError {
-    fn to_string(&self) -> String {
+impl ConnectionError {
+    pub(crate) fn as_str(&self) -> &str {
         use ConnectionError::*;
         match self {
             TlsHandshake => "tls_handshake",
@@ -97,22 +94,18 @@ impl std::string::ToString for ConnectionError {
             Accept => "accept",
             ClientAuthentication => "client_authentication",
         }
-        .to_string()
     }
 }
 
 pub(crate) enum InternalError {
-    Routing,
     ConcurrentTaskExecution,
 }
 
-impl std::string::ToString for InternalError {
-    fn to_string(&self) -> String {
+impl InternalError {
+    pub(crate) fn as_str(&self) -> &str {
         use InternalError::*;
         match self {
-            Routing => "routing",
             ConcurrentTaskExecution => "concurrent_task_execution",
         }
-        .to_string()
     }
 }

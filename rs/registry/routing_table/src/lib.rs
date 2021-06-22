@@ -69,7 +69,6 @@ pub fn resolve_destination(
         | Ok(Ic00Method::StartCanister)
         | Ok(Ic00Method::StopCanister)
         | Ok(Ic00Method::DeleteCanister)
-        | Ok(Ic00Method::DepositFunds)
         | Ok(Ic00Method::UninstallCode)
         | Ok(Ic00Method::DepositCycles) => {
             let args = Decode!(payload, CanisterIdRecord)?;

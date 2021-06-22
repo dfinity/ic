@@ -96,7 +96,7 @@ actor class (auth : Any) { // auth is unused, kept for interface  compatibility
         balance : [(Blob, Nat)]
     };
 
-    public shared ({caller}) func canister_status(id : CanisterIdRecord) : async CanisterStatusResult {
+    public shared func canister_status(id : CanisterIdRecord) : async CanisterStatusResult {
       await ic00.canister_status(id);
     }
 }

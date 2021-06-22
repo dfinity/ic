@@ -11,9 +11,17 @@ pub struct MetricsRegistry {
 impl MetricsRegistry {
     /// Get the registry that is global to this process.
     pub fn global() -> Self {
-        Self {
-            registry: prometheus::default_registry().clone(),
-        }
+        let registry = prometheus::default_registry().clone();
+
+        // Remove this when the `prometheus` crate exports the `process_threads` metric.
+        #[cfg(target_os = "linux")]
+        registry
+            .register(Box::new(crate::process_collector::ProcessCollector::new()))
+            // Don't `unwrap()`: this may be called repeatedly and we only want to register the
+            // collector once.
+            .ok();
+
+        Self { registry }
     }
 
     /// Create a new, empty registry.

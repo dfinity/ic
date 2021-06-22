@@ -293,7 +293,7 @@ proptest! {
                         let mut messages_vec: Vec<_> =
                             messages_tree.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
                         messages_vec.insert(0, (
-                            Label::from(from.decrement().to_label()),
+                            from.decrement().to_label(),
                             LabeledTree::Leaf(vec![])
                         ));
                         std::mem::swap(messages_tree, &mut FlatMap::from_key_values(messages_vec));

@@ -5,7 +5,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{metadata_state::Stream, ReplicatedState};
-use ic_state_manager::{stream_encoding::encode_stream_slice, tree_hash::hash_partial_state};
+use ic_state_manager::{stream_encoding::encode_stream_slice, tree_hash::hash_state};
 use ic_test_utilities::{
     mock_time,
     types::{
@@ -104,7 +104,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     }
 
     c.bench_function("traverse/hash_tree", |b| {
-        b.iter(|| black_box(hash_partial_state(&state)));
+        b.iter(|| black_box(hash_state(&state)));
     });
 
     c.bench_function("traverse/encode_streams", |b| {
@@ -120,7 +120,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     c.bench_function("traverse/build_witness_gen", |b| {
-        let hash_tree = hash_partial_state(&state);
+        let hash_tree = hash_state(&state);
         b.iter(|| {
             black_box(WitnessGeneratorImpl::try_from(hash_tree.clone()).unwrap());
         })
@@ -128,7 +128,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
 
     c.bench_function("traverse/certify_response/1", |b| {
         use LabeledTree::*;
-        let hash_tree = hash_partial_state(&state);
+        let hash_tree = hash_state(&state);
         let witness_gen = WitnessGeneratorImpl::try_from(hash_tree).unwrap();
 
         let data_tree = SubTree(flatmap! {
@@ -148,7 +148,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     c.bench_function("traverse/certify_response/100", |b| {
         use LabeledTree::*;
 
-        let hash_tree = hash_partial_state(&state);
+        let hash_tree = hash_state(&state);
         let witness_gen = WitnessGeneratorImpl::try_from(hash_tree).unwrap();
 
         let replied_tree = SubTree(flatmap! {

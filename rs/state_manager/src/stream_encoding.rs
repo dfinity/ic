@@ -102,7 +102,11 @@ pub fn encode_stream_slice(
                     (LABEL_HEADER, P::all()),
                     (
                         LABEL_MESSAGES,
-                        P::match_range(from.to_label(), to.to_label(), P::all()),
+                        P::match_range(
+                            from.to_label().as_bytes(),
+                            to.to_label().as_bytes(),
+                            P::all(),
+                        ),
                     ),
                 ]
                 .into_iter(),
@@ -144,7 +148,7 @@ pub fn stream_slice_partial_tree(
         // Non-empty messages.
         let mut messages = Vec::with_capacity((to - from).get() as usize);
         for i in from.get()..to.get() {
-            messages.push((Label::from(i.to_label()), empty_leaf.clone()));
+            messages.push((i.to_label(), empty_leaf.clone()));
         }
         let messages = FlatMap::from_key_values(messages);
 

@@ -110,10 +110,11 @@ pub trait NiDkgAlgorithm {
     /// * the individual nodes' public threshold signing keys are available for
     ///   the methods of the `ThresholdSigVerifier` trait, and
     /// * if the node is a receiver and the node's forward secure decryption key
-    ///   is present in the secret key store, the node's secret threshold
-    ///   signing key is available for the methods of the `ThresholdSigner`
-    ///   trait for the DKG instance identified by the DKG ID contained in the
-    ///   transcript.
+    ///   is present in the secret key store, and the epoch of the forward
+    ///   secure decryption key is able to decrypt the ciphertext included in
+    ///   the transcript, then the node's secret threshold signing key is
+    ///   available for the methods of the `ThresholdSigner` trait for the DKG
+    ///   instance identified by the DKG ID contained in the transcript.
     ///
     /// # Errors
     /// * `DkgLoadTranscriptError::FsEncryptionPublicKeyNotInRegistry` if a

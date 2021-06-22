@@ -96,6 +96,7 @@ pub fn setup_execution(
         own_subnet_id,
         own_subnet_type,
         config.subnet_memory_capacity,
+        &metrics_registry,
     ));
 
     (exec_env, ingress_history_writer, http_query_handler)

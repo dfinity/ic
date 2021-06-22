@@ -156,7 +156,7 @@ impl SendQueue for SendQueueImpl {
         self.metrics
             .add_bytes
             .with_label_values(&[&self.flow_label, &self.flow_tag])
-            .inc_by(message.0.len() as i64);
+            .inc_by(message.0.len() as u64);
 
         let mut channel_ends = self.channel_ends.lock().unwrap();
         match channel_ends.0.try_send((Instant::now(), message)) {
@@ -296,11 +296,11 @@ impl SendQueueReader for SendQueueReaderImpl {
         self.metrics
             .remove_count
             .with_label_values(&[&self.flow_label, &self.flow_tag])
-            .inc_by(removed as i64);
+            .inc_by(removed as u64);
         self.metrics
             .remove_bytes
             .with_label_values(&[&self.flow_label, &self.flow_tag])
-            .inc_by(removed_bytes as i64);
+            .inc_by(removed_bytes as u64);
         result
     }
 }

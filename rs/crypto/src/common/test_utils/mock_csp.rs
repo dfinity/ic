@@ -514,6 +514,14 @@ impl CspTlsServerHandshake for MockCryptoServiceProvider {
     ) -> Result<(TlsStream, Option<CspCertificateChain>), CspTlsServerHandshakeError> {
         unimplemented!()
     }
+
+    async fn perform_tls_server_handshake_without_client_auth(
+        &self,
+        _tcp_stream: TcpStream,
+        _self_cert: X509PublicKeyCert,
+    ) -> Result<TlsStream, CspTlsServerHandshakeError> {
+        unimplemented!()
+    }
 }
 
 #[async_trait]

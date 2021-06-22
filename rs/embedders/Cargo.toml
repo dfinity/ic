@@ -46,5 +46,4 @@ proptest = "0.9.4"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 slog-async = "2.5.0"
 slog-term = "2.6.0"
-# TODO(EXC-220)
-wabt = { git = "https://github.com/dfinity-lab/wabt-rs", rev = "b4d778802976f10494411388e48a784d4d015bbb" }
+wabt = "0.10.0"

@@ -3,6 +3,7 @@ use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::ExecSelect;
 use ic_execution_environment::{uninstall_canister, util::process_responses};
+use ic_ic00_types::Method as Ic00Method;
 use ic_interfaces::{
     execution_environment::{
         EarlyResult, ExecResult, ExecResultVariant, ExecuteMessageResult, ExecutionEnvironment,
@@ -21,19 +22,24 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, CanisterStatus, ReplicatedState};
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
-    ic00::{EmptyBlob, IC_00},
+    ic00::{EmptyBlob, InstallCodeArgs, Payload as _, IC_00},
     ingress::{IngressStatus, WasmResult},
     messages::{Ingress, MessageId, Payload, Response, StopCanisterContext},
     user_error::{ErrorCode, UserError},
     AccumulatedPriority, CanisterId, CanisterStatusType, ComputeAllocation, ExecutionRound,
-    NumBytes, NumInstructions, Randomness, SubnetId, Time,
+    InstallCodeContext, NumBytes, NumInstructions, Randomness, SubnetId, Time,
 };
 #[cfg(test)]
 use mockall::automock;
 use num_rational::Ratio;
 use prometheus::{Gauge, Histogram, IntCounter, IntGauge, IntGaugeVec};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::{mem, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    convert::TryFrom,
+    mem,
+    str::FromStr,
+    sync::Arc,
+};
 
 #[cfg(test)]
 pub(crate) mod tests;
@@ -800,10 +806,11 @@ impl Scheduler for SchedulerImpl {
             );
         }
         while let Some(msg) = state.subnet_queues.pop_input() {
+            let instructions_limit = get_instructions_limit_for_subnet_message(&self.config, &msg);
             state = self.exec_env.execute_subnet_message(
                 msg,
                 state,
-                self.config.max_instructions_per_message,
+                instructions_limit,
                 &mut csprng,
                 &provisional_whitelist,
                 subnet_available_memory.clone(),
@@ -1160,7 +1167,7 @@ fn observe_replicated_state_metrics(state: &ReplicatedState, metrics: &Scheduler
         }
         consumed_cycles_total += canister
             .system_state
-            .cycles_account
+            .canister_metrics
             .consumed_cycles_since_replica_started;
     });
 
@@ -1180,4 +1187,55 @@ fn observe_replicated_state_metrics(state: &ReplicatedState, metrics: &Scheduler
     metrics
         .ingress_history_length
         .set(state.metadata.ingress_history.len() as i64);
+}
+
+/// Based on the type of the subnet message to execute, figure out its
+/// instruction limit.
+///
+/// This is primarily done because upgrading a canister might need to
+/// (de)-serialize a large state and thus consume a lot of instructions.
+fn get_instructions_limit_for_subnet_message(
+    config: &SchedulerConfig,
+    msg: &CanisterInputMessage,
+) -> NumInstructions {
+    let (method_name, payload, sender) = match &msg {
+        CanisterInputMessage::Response(_) => return config.max_instructions_per_message,
+        CanisterInputMessage::Ingress(ingress) => (
+            &ingress.method_name,
+            &ingress.method_payload,
+            ingress.source.get(),
+        ),
+        CanisterInputMessage::Request(request) => (
+            &request.method_name,
+            &request.method_payload,
+            request.sender.get(),
+        ),
+    };
+
+    use Ic00Method::*;
+    match Ic00Method::from_str(&method_name) {
+        Ok(method) => match method {
+            CanisterStatus
+            | CreateCanister
+            | DeleteCanister
+            | DepositCycles
+            | RawRand
+            | SetController
+            | SetupInitialDKG
+            | StartCanister
+            | StopCanister
+            | UninstallCode
+            | UpdateSettings
+            | ProvisionalCreateCanisterWithCycles
+            | ProvisionalTopUpCanister => config.max_instructions_per_message,
+            InstallCode => match InstallCodeArgs::decode(payload) {
+                Err(_) => config.max_instructions_per_message,
+                Ok(args) => match InstallCodeContext::try_from((sender, args)) {
+                    Err(_) => config.max_instructions_per_message,
+                    Ok(_) => config.max_instructions_per_install_code,
+                },
+            },
+        },
+        Err(_) => config.max_instructions_per_message,
+    }
 }

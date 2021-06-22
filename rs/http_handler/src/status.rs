@@ -3,11 +3,10 @@ use crate::common;
 use hyper::{Body, Response};
 use ic_config::http_handler::Config;
 use ic_interfaces::state_manager::StateReader;
-use ic_logger::ReplicaLogger;
-use ic_logger::{trace, warn};
+use ic_logger::{trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    messages::{Blob, HttpStatusResponse},
+    messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     replica_version::REPLICA_BINARY_HASH,
     ReplicaVersion, SubnetId,
 };
@@ -18,6 +17,7 @@ pub(crate) fn handle(
     config: &Config,
     nns_subnet_id: SubnetId,
     state_reader: &dyn StateReader<State = ReplicatedState>,
+    replica_health_status: ReplicaHealthStatus,
 ) -> Response<Body> {
     trace!(log, "in handle status");
 
@@ -53,10 +53,11 @@ pub(crate) fn handle(
     };
 
     let response = HttpStatusResponse {
-        ic_api_version: "0.17.0".to_string(),
+        ic_api_version: "0.18.0".to_string(),
         root_key,
         impl_version: Some(ReplicaVersion::default().to_string()),
         impl_hash: REPLICA_BINARY_HASH.get().map(|s| s.to_string()),
+        replica_health_status: Some(replica_health_status),
     };
     common::cbor_response(&response)
 }

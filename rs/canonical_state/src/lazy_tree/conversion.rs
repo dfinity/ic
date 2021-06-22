@@ -1,11 +1,15 @@
 //! Conversion from `ReplicatedState` to `LazyTree`.
 
 use super::{blob, fork, num, string, Lazy, LazyFork, LazyTree};
-use crate::encoding::{encode_message, encode_metadata, encode_stream_header};
+use crate::encoding::{
+    encode_controllers, encode_message, encode_metadata, encode_stream_header,
+    encode_subnet_canister_ranges,
+};
+use ic_crypto_tree_hash::Label;
+use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
-    canister_state::{CanisterState, Global},
+    canister_state::CanisterState,
     metadata_state::{IngressHistoryState, Streams, SubnetTopology, SystemMetadata},
-    page_map::{PageIndex, PageMap},
     ReplicatedState,
 };
 use ic_types::{
@@ -20,15 +24,10 @@ use std::convert::{AsRef, TryInto};
 use std::sync::Arc;
 use LazyTree::Blob;
 
-/// Converts a value into a byte vector.
-fn to_blob<B: AsRef<[u8]>>(b: B) -> Vec<u8> {
-    b.as_ref().to_vec()
-}
-
 /// A simple map from a label to a tree. It should be mostly used for static
 /// subtrees where all the labels are known in advance.
 #[derive(Default)]
-struct FiniteMap<'a>(BTreeMap<Vec<u8>, Lazy<'a, LazyTree<'a>>>);
+struct FiniteMap<'a>(BTreeMap<Label, Lazy<'a, LazyTree<'a>>>);
 
 impl<'a> FiniteMap<'a> {
     pub fn with<B, T>(mut self, blob: B, func: T) -> Self
@@ -36,46 +35,50 @@ impl<'a> FiniteMap<'a> {
         B: AsRef<[u8]>,
         T: Fn() -> LazyTree<'a> + 'a,
     {
-        self.0.insert(to_blob(blob), Lazy::Func(Arc::new(func)));
+        self.0.insert(Label::from(blob), Lazy::Func(Arc::new(func)));
         self
     }
 
-    pub fn with_tree<B: AsRef<[u8]>>(mut self, blob: B, tree: LazyTree<'a>) -> Self {
-        self.0.insert(to_blob(blob), Lazy::Value(tree));
+    /// Adds a subtree with the specified label to this map.
+    pub fn with_tree<B: AsRef<[u8]>>(mut self, label: B, tree: LazyTree<'a>) -> Self {
+        self.0.insert(Label::from(label), Lazy::Value(tree));
+        self
+    }
+
+    /// If condition is true, adds a new subtree to this map.
+    /// Otherwise does nothing.
+    pub fn with_tree_if<B: AsRef<[u8]>>(
+        mut self,
+        condition: bool,
+        label: B,
+        tree: LazyTree<'a>,
+    ) -> Self {
+        if condition {
+            self.0.insert(Label::from(label), Lazy::Value(tree));
+        }
         self
     }
 }
 
 impl<'a> LazyFork<'a> for FiniteMap<'a> {
-    fn edge(&self, label: &[u8]) -> Option<LazyTree<'a>> {
+    fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         self.0.get(label).map(|lazy| lazy.force())
     }
 
-    fn labels(&self) -> Box<dyn Iterator<Item = Vec<u8>> + '_> {
-        Box::new(self.0.keys().map(|l| l.to_vec()))
-    }
-}
-
-/// A special type of fork that doesn't have any children.
-struct EmptyFork;
-impl<'a> LazyFork<'a> for EmptyFork {
-    fn edge(&self, _label: &[u8]) -> Option<LazyTree<'a>> {
-        None
-    }
-    fn labels(&self) -> Box<dyn Iterator<Item = Vec<u8>> + '_> {
-        Box::new(std::iter::empty::<Vec<u8>>())
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
+        Box::new(self.0.keys().cloned())
     }
 }
 
 /// LabelLike defines a (partial) conversion between a type and a label.
 pub trait LabelLike: Sized {
-    fn to_label(&self) -> Vec<u8>;
+    fn to_label(&self) -> Label;
     fn from_label(label: &[u8]) -> Option<Self>;
 }
 
 impl LabelLike for u64 {
-    fn to_label(&self) -> Vec<u8> {
-        self.to_be_bytes().to_vec()
+    fn to_label(&self) -> Label {
+        Label::from(self.to_be_bytes())
     }
 
     fn from_label(label: &[u8]) -> Option<Self> {
@@ -88,7 +91,7 @@ impl LabelLike for u64 {
 }
 
 impl<T: LabelLike, Tag> LabelLike for phantom_newtype::Id<Tag, T> {
-    fn to_label(&self) -> Vec<u8> {
+    fn to_label(&self) -> Label {
         self.get_ref().to_label()
     }
     fn from_label(label: &[u8]) -> Option<Self> {
@@ -97,7 +100,7 @@ impl<T: LabelLike, Tag> LabelLike for phantom_newtype::Id<Tag, T> {
 }
 
 impl<T: LabelLike + Copy, Tag> LabelLike for phantom_newtype::AmountOf<Tag, T> {
-    fn to_label(&self) -> Vec<u8> {
+    fn to_label(&self) -> Label {
         self.get().to_label()
     }
     fn from_label(label: &[u8]) -> Option<Self> {
@@ -106,8 +109,8 @@ impl<T: LabelLike + Copy, Tag> LabelLike for phantom_newtype::AmountOf<Tag, T> {
 }
 
 impl LabelLike for PrincipalId {
-    fn to_label(&self) -> Vec<u8> {
-        self.as_slice().to_vec()
+    fn to_label(&self) -> Label {
+        Label::from(self.as_slice())
     }
 
     fn from_label(label: &[u8]) -> Option<Self> {
@@ -117,7 +120,7 @@ impl LabelLike for PrincipalId {
 }
 
 impl LabelLike for CanisterId {
-    fn to_label(&self) -> Vec<u8> {
+    fn to_label(&self) -> Label {
         self.get_ref().to_label()
     }
 
@@ -129,24 +132,28 @@ impl LabelLike for CanisterId {
 /// A type of fork that constructs a lazy tree view of a typed Map without
 /// copying the underlying data.
 #[derive(Clone)]
-struct MapTransformFork<'a, K, V> {
+struct MapTransformFork<'a, K, V, F>
+where
+    F: Fn(K, &'a V, u32) -> LazyTree<'a>,
+{
     map: &'a BTreeMap<K, V>,
     certification_version: u32,
-    mk_tree: fn(K, &'a V, u32) -> LazyTree<'a>,
+    mk_tree: F,
 }
 
-impl<'a, K, V> LazyFork<'a> for MapTransformFork<'a, K, V>
+impl<'a, K, V, F> LazyFork<'a> for MapTransformFork<'a, K, V, F>
 where
     K: Ord + LabelLike,
+    F: Fn(K, &'a V, u32) -> LazyTree<'a>,
 {
-    fn edge(&self, label: &[u8]) -> Option<LazyTree<'a>> {
-        let k = K::from_label(label)?;
+    fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
+        let k = K::from_label(label.as_bytes())?;
         self.map
             .get(&k)
             .map(move |v| (self.mk_tree)(k, v, self.certification_version))
     }
 
-    fn labels(&self) -> Box<dyn Iterator<Item = Vec<u8>> + '_> {
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
         Box::new(self.map.keys().map(|l| l.to_label()))
     }
 }
@@ -159,33 +166,13 @@ struct StreamQueueFork<'a, T> {
 }
 
 impl<'a, T> LazyFork<'a> for StreamQueueFork<'a, T> {
-    fn edge(&self, label: &[u8]) -> Option<LazyTree<'a>> {
-        let idx = StreamIndex::from_label(label)?;
+    fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
+        let idx = StreamIndex::from_label(label.as_bytes())?;
         self.queue.get(idx).map(move |v| (self.mk_tree)(idx, v))
     }
 
-    fn labels(&self) -> Box<dyn Iterator<Item = Vec<u8>> + '_> {
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
         Box::new((self.queue.begin().get()..self.queue.end().get()).map(|i| i.to_label()))
-    }
-}
-
-/// A special type of fork that describes a page map, i.e. memory pages of a
-/// canister.
-struct PageMapFork<'a> {
-    map: &'a PageMap,
-}
-
-impl<'a> LazyFork<'a> for PageMapFork<'a> {
-    fn edge(&self, label: &[u8]) -> Option<LazyTree<'a>> {
-        let idx = u64::from_label(label)?;
-        if self.map.num_host_pages() < idx as usize {
-            return None;
-        }
-        Some(Blob(self.map.get_page(PageIndex::from(idx))))
-    }
-
-    fn labels(&self) -> Box<dyn Iterator<Item = Vec<u8>> + '_> {
-        Box::new((0..self.map.num_host_pages()).map(|n| (n as u64).to_label()))
     }
 }
 
@@ -193,6 +180,19 @@ impl<'a> From<&'a ReplicatedState> for LazyTree<'a> {
     fn from(state: &'a ReplicatedState) -> LazyTree<'a> {
         state_as_tree(state)
     }
+}
+
+fn invert_routing_table(
+    routing_table: &RoutingTable,
+) -> BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>> {
+    let mut inverse_map: BTreeMap<SubnetId, Vec<_>> = BTreeMap::new();
+    for (range, subnet_id) in routing_table.0.iter() {
+        inverse_map
+            .entry(*subnet_id)
+            .or_default()
+            .push((range.start.get(), range.end.get()));
+    }
+    inverse_map
 }
 
 /// Converts replicated state into a lazy tree.
@@ -212,8 +212,12 @@ fn state_as_tree(state: &ReplicatedState) -> LazyTree<'_> {
                 fork(IngressHistoryFork(&state.metadata.ingress_history)),
             )
             .with("subnet", move || {
+                let inverted_routing_table = Arc::new(invert_routing_table(
+                    &state.metadata.network_topology.routing_table,
+                ));
                 subnets_as_tree(
                     &state.metadata.network_topology.subnets,
+                    inverted_routing_table,
                     certification_version,
                 )
             })
@@ -257,14 +261,14 @@ fn metadata_as_tree(m: &SystemMetadata) -> LazyTree<'_> {
 struct IngressHistoryFork<'a>(&'a IngressHistoryState);
 
 impl<'a> LazyFork<'a> for IngressHistoryFork<'a> {
-    fn edge(&self, label: &[u8]) -> Option<LazyTree<'a>> {
-        let byte_array: [u8; EXPECTED_MESSAGE_ID_LENGTH] = label.try_into().ok()?;
+    fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
+        let byte_array: [u8; EXPECTED_MESSAGE_ID_LENGTH] = label.as_bytes().try_into().ok()?;
         let id = MessageId::from(byte_array);
         self.0.get(&id).map(status_to_tree)
     }
 
-    fn labels(&self) -> Box<dyn Iterator<Item = Vec<u8>> + '_> {
-        Box::new(self.0.statuses().map(|(id, _)| id.as_bytes().to_vec()))
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
+        Box::new(self.0.statuses().map(|(id, _)| Label::from(id.as_bytes())))
     }
 }
 
@@ -301,98 +305,70 @@ fn canisters_as_tree(
         map: canisters,
         certification_version,
         mk_tree: |_canister_id, canister, certification_version| match &canister.execution_state {
-            Some(execution_state) => {
-                let mut map = FiniteMap::default()
+            Some(execution_state) => fork(
+                FiniteMap::default()
                     .with_tree(
                         "certified_data",
                         Blob(&canister.system_state.certified_data[..]),
                     )
-                    .with_tree(
-                        "wasm_state",
-                        fork(
-                            FiniteMap::default()
-                                .with_tree(
-                                    "globals",
-                                    blob(move || {
-                                        raw_globals(&execution_state.exported_globals[..])
-                                    }),
-                                )
-                                .with_tree("module", Blob(execution_state.wasm_binary.as_slice()))
-                                .with("memory", move || {
-                                    fork(FiniteMap::default().with("0", move || {
-                                        fork(
-                                            FiniteMap::default()
-                                                .with_tree(
-                                                    "usage",
-                                                    num(execution_state.heap_size.get() as u64),
-                                                )
-                                                .with_tree(
-                                                    "pages",
-                                                    fork(PageMapFork {
-                                                        map: &execution_state.page_map,
-                                                    }),
-                                                ),
-                                        )
-                                    }))
-                                }),
-                        ),
-                    );
-
-                if certification_version > 0 {
-                    map = map
-                        .with_tree(
-                            "controller",
-                            Blob(canister.system_state.controller.as_slice()),
-                        )
-                        .with_tree(
-                            "module_hash",
-                            blob(move || execution_state.wasm_binary.hash_sha256().to_vec()),
-                        );
-                }
-
-                fork(map)
-            }
-            None => {
-                if certification_version > 0 {
-                    fork(FiniteMap::default().with_tree(
+                    .with_tree_if(
+                        certification_version > 0,
                         "controller",
-                        Blob(&canister.system_state.controller.as_slice()[..]),
-                    ))
-                } else {
-                    fork(EmptyFork)
-                }
-            }
+                        Blob(canister.system_state.controller().as_slice()),
+                    )
+                    .with_tree_if(
+                        certification_version > 0,
+                        "module_hash",
+                        blob(move || execution_state.wasm_binary.hash_sha256().to_vec()),
+                    )
+                    .with_tree_if(
+                        certification_version > 1,
+                        "controllers",
+                        blob(move || encode_controllers(&canister.system_state.controllers)),
+                    ),
+            ),
+            None => fork(
+                FiniteMap::default()
+                    .with_tree_if(
+                        certification_version > 0,
+                        "controller",
+                        Blob(canister.system_state.controller().as_slice()),
+                    )
+                    .with_tree_if(
+                        certification_version > 1,
+                        "controllers",
+                        blob(move || encode_controllers(&canister.system_state.controllers)),
+                    ),
+            ),
         },
     })
 }
 
 fn subnets_as_tree(
     subnets: &BTreeMap<SubnetId, SubnetTopology>,
+    inverted_routing_table: Arc<BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>>>,
     certification_version: u32,
 ) -> LazyTree<'_> {
     fork(MapTransformFork {
         map: subnets,
         certification_version,
-        mk_tree: |_subnet_id, subnet_topology, _certification_version| {
+        mk_tree: move |subnet_id, subnet_topology, certification_version| {
             fork(
-                FiniteMap::default().with_tree("public_key", Blob(&subnet_topology.public_key[..])),
+                FiniteMap::default()
+                    .with_tree("public_key", Blob(&subnet_topology.public_key[..]))
+                    .with_tree_if(
+                        certification_version > 2,
+                        "canister_ranges",
+                        blob({
+                            let inverted_routing_table = Arc::clone(&inverted_routing_table);
+                            move || {
+                                encode_subnet_canister_ranges(
+                                    inverted_routing_table.get(&subnet_id),
+                                )
+                            }
+                        }),
+                    ),
             )
         },
     })
-}
-
-/// Serializes globals into a flat byte array.  All globals are
-/// converted into u64 and encoded using Little-Endian encoding because
-/// it's more natural for Wasm than Big-Endian.
-fn raw_globals(typed_globals: &[Global]) -> Vec<u8> {
-    let mut raw = Vec::with_capacity(typed_globals.len() * std::mem::size_of::<u64>());
-    for g in typed_globals.iter() {
-        match g {
-            Global::I32(n) => raw.extend_from_slice(&((*n as u64).to_le_bytes())[..]),
-            Global::I64(n) => raw.extend_from_slice(&((*n as u64).to_le_bytes())[..]),
-            Global::F32(n) => raw.extend_from_slice(&((*n as f64).to_le_bytes())[..]),
-            Global::F64(n) => raw.extend_from_slice(&((*n as f64).to_le_bytes())[..]),
-        }
-    }
-    raw
 }

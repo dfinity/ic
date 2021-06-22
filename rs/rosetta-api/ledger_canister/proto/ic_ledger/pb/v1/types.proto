@@ -42,7 +42,7 @@ message SendResponse {
   BlockHeight resulting_height = 1;
 }
 
-// Notify a canister that it has recieved a payment
+// Notify a canister that it has received a payment
 message NotifyRequest {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
   BlockHeight block_height = 1                    [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];

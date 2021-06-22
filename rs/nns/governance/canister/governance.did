@@ -21,6 +21,11 @@ type Ballot = record { vote : int32; voting_power : nat64 };
 type BallotInfo = record { vote : int32; proposal_id : opt NeuronId };
 type CanisterAuthzInfo = record { methods_authz : vec MethodAuthzInfo };
 type Change = variant { ToRemove : NodeProvider; ToAdd : NodeProvider };
+type ClaimOrRefreshNeuronFromAccount = record {
+  controller : opt principal;
+  memo : nat64;
+};
+type ClaimOrRefreshNeuronFromAccountResponse = record { result : opt Result_1 };
 type Command = variant {
   Spawn : Spawn;
   Split : Split;
@@ -45,6 +50,7 @@ type Command_1 = variant {
 type Command_2 = variant {
   Spawn : Spawn;
   Split : Split;
+  ClaimOrRefresh : ClaimOrRefreshNeuronFromAccount;
   DisburseToNeuron : DisburseToNeuron;
   Disburse : Disburse;
 };
@@ -208,8 +214,9 @@ type ProposalInfo = record {
 type RegisterVote = record { vote : int32; proposal : opt NeuronId };
 type RemoveHotKey = record { hot_key_to_remove : opt principal };
 type Result = variant { Ok; Err : GovernanceError };
-type Result_1 = variant { Ok : Neuron; Err : GovernanceError };
-type Result_2 = variant { Ok : NeuronInfo; Err : GovernanceError };
+type Result_1 = variant { Error : GovernanceError; NeuronId : NeuronId };
+type Result_2 = variant { Ok : Neuron; Err : GovernanceError };
+type Result_3 = variant { Ok : NeuronInfo; Err : GovernanceError };
 type RewardEvent = record {
   day_after_genesis : nat64;
   actual_timestamp_seconds : nat64;
@@ -235,10 +242,13 @@ type Tally = record {
 };
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
+  claim_or_refresh_neuron_from_account : (ClaimOrRefreshNeuronFromAccount) -> (
+      ClaimOrRefreshNeuronFromAccountResponse,
+    );
   current_authz : () -> (CanisterAuthzInfo) query;
-  get_full_neuron : (nat64) -> (Result_1) query;
+  get_full_neuron : (nat64) -> (Result_2) query;
   get_neuron_ids : () -> (vec nat64) query;
-  get_neuron_info : (nat64) -> (Result_2) query;
+  get_neuron_info : (nat64) -> (Result_3) query;
   get_pending_proposals : () -> (vec ProposalInfo) query;
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;

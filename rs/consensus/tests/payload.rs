@@ -118,6 +118,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&time) as Arc<_>,
+            Duration::from_secs(0),
             MaliciousFlags::default(),
             metrics_registry.clone(),
             no_op_logger(),

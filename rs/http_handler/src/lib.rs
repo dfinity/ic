@@ -31,13 +31,16 @@ use ic_interfaces::{
     registry::RegistryClient,
     state_manager::StateReader,
 };
-use ic_logger::{debug, error, fatal, info, trace, ReplicaLogger};
+use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, NodeTopology, ReplicatedState};
 use ic_types::{
     messages::CertificateDelegation,
-    messages::{Blob, HttpReadContent, HttpReadState, HttpReadStateResponse, HttpRequestEnvelope},
+    messages::{
+        Blob, HttpReadContent, HttpReadState, HttpReadStateResponse, HttpRequestEnvelope,
+        ReplicaHealthStatus,
+    },
     time::current_time_and_expiry_time,
     SubnetId,
 };
@@ -48,9 +51,10 @@ use std::io::{Error, ErrorKind, Write};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
 use tempfile::NamedTempFile;
-use tokio::{net::TcpListener, net::TcpStream, sync::Mutex, time::timeout_at, time::Instant};
+use tokio::{net::TcpListener, net::TcpStream, time::timeout_at, time::Instant};
 
 // Constants defining the limits of the HttpHandler.
 
@@ -60,7 +64,7 @@ use tokio::{net::TcpListener, net::TcpStream, sync::Mutex, time::timeout_at, tim
 // We choose to use the number of outstanding requests instead of
 // outstanding connections or tokio tasks, because ingress of downstream
 // systems is measured by number of requests.
-const MAX_OUTSTANDING_REQUESTS: usize = 1000;
+const MAX_OUTSTANDING_REQUESTS: usize = 30000;
 
 // Request with body size bigger than 'MAX_REQUEST_SIZE_BYTES' will be rejected
 // and appropriate error code will be returned to the user.
@@ -78,14 +82,13 @@ const HTTP_DASHBOARD_URL_PATH: &str = "/_/dashboard";
 
 /// The struct that handles incoming HTTP requests for the IC replica.
 /// This is collection of thread-safe data members.
-pub struct HttpHandler {
-    config: Arc<Config>,
+struct HttpHandler {
+    config: Config,
     registry_client: Arc<dyn RegistryClient>,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
-    log: Arc<ReplicaLogger>,
-    delegation_from_nns: Option<CertificateDelegation>,
+    log: ReplicaLogger,
     maliciously_disable_ingress_validation: bool,
     ingress_sender: Arc<dyn IngressEventHandler>,
     query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
@@ -94,72 +97,58 @@ pub struct HttpHandler {
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     execution_environment:
         Arc<dyn ExecutionEnvironment<State = ReplicatedState, CanisterState = CanisterState>>,
+    subnet_type: SubnetType,
+
+    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    health_status: Arc<RwLock<ReplicaHealthStatus>>,
     // Introduction of concurrent request processing caused a regression in FR.
     // This lock restores the serial processing(as a temporary measure) until the
     // regression is investigated further.
-    request_processing_lock: Arc<Mutex<()>>,
-    subnet_type: SubnetType,
+    request_processing_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
-// Prepares the server for startup (reading required state, etc).
-// Blocks until completion.
-#[allow(clippy::too_many_arguments)]
-pub fn init_server_blocking(
-    config: Arc<Config>,
-    ingress_sender: Arc<dyn IngressEventHandler>,
-    query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
+// Crates a detached tokio blocking task that initializes the server (reading
+// required state, etc).
+fn start_server_initialization(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    registry_client: Arc<dyn RegistryClient>,
-    crypto: Arc<CryptoComponent>,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
-    log: Arc<ReplicaLogger>,
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    execution_environment: Arc<
-        dyn ExecutionEnvironment<State = ReplicatedState, CanisterState = CanisterState>,
-    >,
-    maliciously_disable_ingress_validation: bool,
-    subnet_type: SubnetType,
-) -> Result<HttpHandler, Error> {
-    info!(log, "Initializing HTTP server...");
-    let mut check_count: i32 = 0;
-    // Sleep one second between retries, only log every 10th round.
-    info!(log, "Waiting for certified state...");
-    while common::get_latest_certified_state(state_reader.as_ref()).is_none() {
-        check_count += 1;
-        if check_count % 10 == 0 {
-            info!(log, "Certified state is not yet available...");
+    log: ReplicaLogger,
+    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    health_status: Arc<RwLock<ReplicaHealthStatus>>,
+) {
+    tokio::task::spawn_blocking(move || {
+        info!(log, "Initializing HTTP server...");
+        let mut check_count: i32 = 0;
+        // Sleep one second between retries, only log every 10th round.
+        info!(log, "Waiting for certified state...");
+        *health_status.write().unwrap() = ReplicaHealthStatus::WaitingForCertifiedState;
+        while common::get_latest_certified_state(state_reader.as_ref()).is_none() {
+            check_count += 1;
+            if check_count % 10 == 0 {
+                info!(log, "Certified state is not yet available...");
+            }
+            std::thread::sleep(Duration::from_secs(1));
         }
-        std::thread::sleep(Duration::from_secs(1));
-    }
-    info!(log, "Certified state is now available.");
-
-    // Fetch the delegation from the NNS for this subnet to be
-    // able to issue certificates.
-    let delegation_from_nns = load_delegation_from_nns_subnet(
-        state_reader.as_ref(),
-        subnet_id,
-        nns_subnet_id,
-        log.as_ref(),
-    )?;
-
-    Ok(HttpHandler::new(
-        config,
-        registry_client,
-        Arc::clone(&crypto) as Arc<dyn TlsHandshake + Send + Sync>,
-        subnet_id,
-        subnet_type,
-        nns_subnet_id,
-        log,
-        delegation_from_nns,
-        maliciously_disable_ingress_validation,
-        ingress_sender,
-        query_handler,
-        state_reader,
-        Arc::clone(&crypto) as Arc<dyn IngressSigVerifier + Send + Sync>,
-        consensus_pool_cache,
-        execution_environment,
-    ))
+        info!(log, "Certified state is now available.");
+        // Fetch the delegation from the NNS for this subnet to be
+        // able to issue certificates.
+        *health_status.write().unwrap() = ReplicaHealthStatus::WaitingForRootDelegation;
+        match load_root_delegation(state_reader.as_ref(), subnet_id, nns_subnet_id, &log) {
+            Err(err) => {
+                error!(log, "Could not load nns delegation: {}", err);
+            }
+            Ok(loaded_delegation) => {
+                *delegation_from_nns.write().unwrap() = loaded_delegation;
+                *health_status.write().unwrap() = ReplicaHealthStatus::Healthy;
+                // IMPORTANT: The system-tests relies on this log message to understand when it
+                // can start interacting with the replica. In the future, we plan to
+                // have a dedicated instrumentation channel to communicate between the
+                // replica and the testing framework, but for now, this is the best we can do.
+                info!(log, "Ready for interaction.");
+            }
+        }
+    });
 }
 
 fn create_port_file(path: PathBuf, port: u16) {
@@ -206,13 +195,44 @@ fn create_port_file(path: PathBuf, port: u16) {
 /// This ***async*** function ***never*** returns unless binding to the HTTP
 /// port fails.
 /// The function spawns a tokio task per connection.
+#[allow(clippy::too_many_arguments)]
 pub async fn start_server(
     metrics_registry: MetricsRegistry,
-    http_handler_owned: HttpHandler,
+    config: Config,
+    ingress_sender: Arc<dyn IngressEventHandler>,
+    query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    registry_client: Arc<dyn RegistryClient>,
+    crypto: Arc<CryptoComponent>,
+    subnet_id: SubnetId,
+    nns_subnet_id: SubnetId,
+    log: ReplicaLogger,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    execution_environment: Arc<
+        dyn ExecutionEnvironment<State = ReplicatedState, CanisterState = CanisterState>,
+    >,
+    maliciously_disable_ingress_validation: bool,
+    subnet_type: SubnetType,
 ) -> Result<(), Error> {
     let metrics = Arc::new(HttpHandlerMetrics::new(&metrics_registry));
-    let http_handler = Arc::new(http_handler_owned);
-    let log = http_handler.log.as_ref().clone();
+
+    let http_handler = Arc::new(HttpHandler::new(
+        config,
+        registry_client,
+        Arc::clone(&crypto) as Arc<dyn TlsHandshake + Send + Sync>,
+        subnet_id,
+        subnet_type,
+        nns_subnet_id,
+        log.clone(),
+        maliciously_disable_ingress_validation,
+        ingress_sender,
+        query_handler,
+        state_reader,
+        Arc::clone(&crypto) as Arc<dyn IngressSigVerifier + Send + Sync>,
+        consensus_pool_cache,
+        execution_environment,
+    ));
+
     info!(log, "Starting HTTP server...");
 
     let listen_addr = http_handler.config.listen_addr;
@@ -233,11 +253,14 @@ pub async fn start_server(
         create_port_file(path, local_addr.port());
     }
 
-    // IMPORTANT: The system-tests relies on this log message to understand when it
-    // can start interacting with the replica. In the future, we plan to
-    // have a dedicate instrumentation channel to communicate between the
-    // replica and the testing framework, but for now, this is the best we can do.
-    info!(log, "Ready for interaction.");
+    start_server_initialization(
+        Arc::clone(&http_handler.state_reader),
+        http_handler.subnet_id,
+        http_handler.nns_subnet_id,
+        http_handler.log.clone(),
+        Arc::clone(&http_handler.delegation_from_nns),
+        Arc::clone(&http_handler.health_status),
+    );
 
     let http = Http::new();
     let outstanding_requests = ObservableCountingSemaphore::new(
@@ -252,25 +275,43 @@ pub async fn start_server(
         let request_permit = outstanding_requests.acquire().await;
         match tcp_listener.accept().await {
             Ok((mut tcp_stream, _)) => {
+                // Start recording connection setup duration.
+                let connection_start_time = Instant::now();
+
                 tokio::task::spawn(async move {
                     // Do a move of the permit so it gets dropped at the end of the scope.
                     let _request_permit_deleter = request_permit;
                     let mut b = [0 as u8; 1];
                     if tcp_stream.peek(&mut b).await.is_ok() && b[0] == 22 {
-                        serve_secure_connection(metrics, http_handler, http, tcp_stream, log).await;
+                        serve_secure_connection(
+                            metrics,
+                            http_handler,
+                            http,
+                            tcp_stream,
+                            connection_start_time,
+                            log,
+                        )
+                        .await;
                     } else {
                         // Either peeking failed or the first byte is not 22, then
                         // fallback to HTTP.
-                        serve_unsecure_connection(metrics, http_handler, http, tcp_stream, log)
-                            .await;
+                        serve_unsecure_connection(
+                            metrics,
+                            http_handler,
+                            http,
+                            tcp_stream,
+                            connection_start_time,
+                            log,
+                        )
+                        .await;
                     }
                 });
             }
             // Don't exit the loop on a connection error. We will want to
             // continue serving.
             Err(err) => {
-                metrics.observe_connection_error(ConnectionError::Accept);
-                trace!(log, "Connection error(can't accept) {}", err);
+                metrics.observe_connection_error(ConnectionError::Accept, Instant::now());
+                warn!(log, "Connection error (can't accept) {}", err);
             }
         }
     }
@@ -279,14 +320,13 @@ pub async fn start_server(
 impl HttpHandler {
     #[allow(clippy::too_many_arguments)]
     fn new(
-        config: Arc<Config>,
+        config: Config,
         registry_client: Arc<dyn RegistryClient>,
         tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
         subnet_id: SubnetId,
         subnet_type: SubnetType,
         nns_subnet_id: SubnetId,
-        log: Arc<ReplicaLogger>,
-        delegation_from_nns: Option<CertificateDelegation>,
+        log: ReplicaLogger,
         maliciously_disable_ingress_validation: bool,
         ingress_sender: Arc<dyn IngressEventHandler>,
         query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
@@ -305,7 +345,6 @@ impl HttpHandler {
             subnet_type,
             nns_subnet_id,
             log,
-            delegation_from_nns,
             maliciously_disable_ingress_validation,
             ingress_sender,
             query_handler,
@@ -313,7 +352,9 @@ impl HttpHandler {
             validator,
             consensus_pool_cache,
             execution_environment,
-            request_processing_lock: Arc::new(Mutex::new(())),
+            delegation_from_nns: Arc::new(RwLock::new(None)),
+            health_status: Arc::new(RwLock::new(ReplicaHealthStatus::Starting)),
+            request_processing_lock: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 }
@@ -323,34 +364,28 @@ async fn serve_unsecure_connection(
     http_handler: Arc<HttpHandler>,
     http: Http,
     tcp_stream: TcpStream,
+    connection_start_time: Instant,
     log: ReplicaLogger,
 ) {
     let metrics_svc = Arc::clone(&metrics);
     let aservice_fn = service_fn(move |request| {
         let http_handler = Arc::clone(&http_handler);
         let metrics_svc = Arc::clone(&metrics_svc);
-        // start recording overall latency per request
-        let request_start_time = Instant::now();
         async move {
-            Ok::<_, Infallible>(
-                route(
-                    metrics_svc,
-                    request_start_time,
-                    http_handler,
-                    AppLayer::HTTP,
-                    request,
-                )
-                .await,
-            )
+            Ok::<_, Infallible>(route(metrics_svc, http_handler, AppLayer::HTTP, request).await)
         }
     });
     if let Err(err) = http.serve_connection(tcp_stream, aservice_fn).await {
-        metrics.observe_connection_error(ConnectionError::ServingHttpConnection);
-        trace!(
-            log,
-            "Connection error(can't serve HTTP connection): {}",
-            err
+        metrics.observe_connection_error(
+            ConnectionError::ServingHttpConnection,
+            connection_start_time,
         );
+        warn!(
+            log,
+            "Connection error (can't serve HTTP connection): {}", err
+        );
+    } else {
+        metrics.observe_connection_setup(AppLayer::HTTP, connection_start_time)
     }
 }
 
@@ -359,6 +394,7 @@ async fn serve_secure_connection(
     http_handler: Arc<HttpHandler>,
     http: Http,
     tcp_stream: TcpStream,
+    connection_start_time: Instant,
     log: ReplicaLogger,
 ) {
     let http_handler_svc = Arc::clone(&http_handler);
@@ -366,18 +402,9 @@ async fn serve_secure_connection(
     let aservice_fn = service_fn(move |request| {
         let http_handler_svc = Arc::clone(&http_handler_svc);
         let metrics_svc = Arc::clone(&metrics_svc);
-        // start recording overall latency per request
-        let request_start_time = Instant::now();
         async move {
             Ok::<_, Infallible>(
-                route(
-                    metrics_svc,
-                    request_start_time,
-                    http_handler_svc,
-                    AppLayer::HTTPS,
-                    request,
-                )
-                .await,
+                route(metrics_svc, http_handler_svc, AppLayer::HTTPS, request).await,
             )
         }
     });
@@ -388,35 +415,40 @@ async fn serve_secure_connection(
         clients_certs.push(http_handler_clients_x509_cert);
         clients_certs_exist = true;
     }
-    let tls_handshake_result = {
-        let allowed_clients = AllowedClients::new(SomeOrAllNodes::All, clients_certs)
-            .expect("invalid allowed clients");
-        let registry_version = http_handler.registry_client.get_latest_version();
-        http_handler
-            .tls_handshake
-            .perform_tls_server_handshake_temp_with_optional_client_auth(
-                tcp_stream,
-                allowed_clients,
-                registry_version,
-            )
-            .await
-    };
-    match tls_handshake_result {
+    let allowed_clients =
+        AllowedClients::new(SomeOrAllNodes::All, clients_certs).expect("invalid allowed clients");
+    let registry_version = http_handler.registry_client.get_latest_version();
+    match http_handler
+        .tls_handshake
+        .perform_tls_server_handshake_temp_with_optional_client_auth(
+            tcp_stream,
+            allowed_clients,
+            registry_version,
+        )
+        .await
+    {
         Err(err) => {
-            metrics.observe_connection_error(ConnectionError::TlsHandshake);
-            trace!(log, "Connection error(tls handshake): {}", err);
+            metrics.observe_connection_error(ConnectionError::TlsHandshake, connection_start_time);
+            warn!(log, "Connection error (TLS handshake): {}", err);
         }
         Ok((tls_stream, peer)) => {
             if clients_certs_exist && peer == ic_crypto_tls_interfaces::Peer::Unauthenticated {
-                metrics.observe_connection_error(ConnectionError::ClientAuthentication);
-                trace!(log, "Connection error(unauthenticated client).");
-            } else if let Err(err) = http.serve_connection(tls_stream, aservice_fn).await {
-                metrics.observe_connection_error(ConnectionError::ServingHttpsConnection);
-                trace!(
-                    log,
-                    "Connection error(can't serve HTTPs connection): {}",
-                    err
+                metrics.observe_connection_error(
+                    ConnectionError::ClientAuthentication,
+                    connection_start_time,
                 );
+                warn!(log, "Connection error (unauthenticated client).");
+            } else if let Err(err) = http.serve_connection(tls_stream, aservice_fn).await {
+                metrics.observe_connection_error(
+                    ConnectionError::ServingHttpsConnection,
+                    connection_start_time,
+                );
+                warn!(
+                    log,
+                    "Connection error (can't serve HTTPS connection): {}", err
+                );
+            } else {
+                metrics.observe_connection_setup(AppLayer::HTTPS, connection_start_time)
             }
         }
     };
@@ -424,23 +456,48 @@ async fn serve_secure_connection(
 
 fn is_blocking_request(request_type: &RequestType) -> bool {
     match request_type {
-        RequestType::CatchUpPackage | RequestType::Options | RequestType::RedirectToDashboard => {
-            false
-        }
+        RequestType::CatchUpPackage
+        | RequestType::Options
+        | RequestType::RedirectToDashboard
+        | RequestType::Dashboard
+        | RequestType::Status => false,
+        _ => true,
+    }
+}
+
+fn needs_all_preconditions(request_type: &RequestType) -> bool {
+    match request_type {
+        RequestType::CatchUpPackage
+        | RequestType::Options
+        | RequestType::RedirectToDashboard
+        | RequestType::Dashboard
+        | RequestType::Status => false,
         _ => true,
     }
 }
 
 async fn route(
     metrics: Arc<HttpHandlerMetrics>,
-    request_start_time: Instant,
     http_handler: Arc<HttpHandler>,
     app_layer: AppLayer,
     request: Request<Body>,
 ) -> Response<Body> {
+    // Start recording request duration.
+    let request_start_time = Instant::now();
+
     let (parts, body) = request.into_parts();
     match validate_parts(parts) {
         Ok(req_type) => {
+            // Don't process requests for which preconditions are not met.
+            if needs_all_preconditions(&req_type)
+                && *http_handler.health_status.read().unwrap() != ReplicaHealthStatus::Healthy
+            {
+                return common::make_response(
+                    StatusCode::PRECONDITION_FAILED,
+                    "Replica is starting. Check the /api/v2/status for more information.",
+                );
+            }
+
             metrics.observe_requests_per_app_layer(&req_type, &app_layer);
             match parse_body(
                 &req_type,
@@ -458,7 +515,7 @@ async fn route(
                             let metrics = Arc::clone(&metrics);
                             let request_type = req_type;
                             move || {
-                                route_blocking(
+                                route_to_handlers(
                                     metrics,
                                     request_start_time,
                                     http_handler,
@@ -479,7 +536,7 @@ async fn route(
                             Ok(response) => response,
                         }
                     } else {
-                        route_non_blocking(
+                        route_to_handlers(
                             metrics,
                             request_start_time,
                             http_handler,
@@ -495,7 +552,7 @@ async fn route(
     }
 }
 
-fn route_blocking(
+fn route_to_handlers(
     metrics: Arc<HttpHandlerMetrics>,
     request_start_time: Instant,
     http_handler: Arc<HttpHandler>,
@@ -504,8 +561,8 @@ fn route_blocking(
 ) -> Response<Body> {
     let (http_resp, api_req_type) = match request_type {
         RequestType::Read => read::handle(
-            http_handler.log.as_ref(),
-            http_handler.delegation_from_nns.clone(),
+            &http_handler.log,
+            http_handler.delegation_from_nns.read().unwrap().clone(),
             http_handler.query_handler.as_ref(),
             http_handler.state_reader.as_ref(),
             http_handler.validator.as_ref(),
@@ -514,7 +571,7 @@ fn route_blocking(
             metrics.as_ref(),
         ),
         RequestType::Submit => submit::handle(
-            http_handler.log.as_ref(),
+            &http_handler.log,
             http_handler.subnet_id,
             http_handler.registry_client.as_ref(),
             http_handler.maliciously_disable_ingress_validation,
@@ -527,47 +584,22 @@ fn route_blocking(
         ),
         RequestType::Status => (
             status::handle(
-                http_handler.log.as_ref(),
-                http_handler.config.as_ref(),
+                &http_handler.log,
+                &http_handler.config,
                 http_handler.nns_subnet_id,
                 http_handler.state_reader.as_ref(),
+                http_handler.health_status.read().unwrap().clone(),
             ),
             ApiReqType::Unknown,
         ),
         RequestType::Dashboard => (
             dashboard::handle(
-                http_handler.config.as_ref(),
+                &http_handler.config,
                 http_handler.state_reader.as_ref(),
                 http_handler.subnet_type,
             ),
             ApiReqType::Unknown,
         ),
-        _ => {
-            metrics.observe_internal_error(&request_type, InternalError::Routing);
-            (common::empty_response(), ApiReqType::Unknown)
-        }
-    };
-    // record request latency along dimensions (request type, status code, api
-    // request type)
-    metrics
-        .requests
-        .with_label_values(&[
-            &request_type.to_string(),
-            &http_resp.status().to_string(),
-            &api_req_type.to_string(),
-        ])
-        .observe(request_start_time.elapsed().as_secs_f64());
-    http_resp
-}
-
-fn route_non_blocking(
-    metrics: Arc<HttpHandlerMetrics>,
-    request_start_time: Instant,
-    http_handler: Arc<HttpHandler>,
-    parsed_body: Vec<u8>,
-    request_type: RequestType,
-) -> Response<Body> {
-    let (http_resp, api_req_type) = match request_type {
         RequestType::CatchUpPackage => (
             catch_up_package::handle(http_handler.consensus_pool_cache.as_ref(), parsed_body),
             ApiReqType::Unknown,
@@ -577,19 +609,15 @@ fn route_non_blocking(
             common::make_response(StatusCode::NO_CONTENT, ""),
             ApiReqType::Unknown,
         ),
-        _ => {
-            metrics.observe_internal_error(&request_type, InternalError::Routing);
-            (common::empty_response(), ApiReqType::Unknown)
-        }
     };
     // record request latency along dimensions (request type, status code, api
     // request type)
     metrics
         .requests
         .with_label_values(&[
-            &request_type.to_string(),
+            request_type.as_str(),
             &http_resp.status().to_string(),
-            &api_req_type.to_string(),
+            api_req_type.as_str(),
         ])
         .observe(request_start_time.elapsed().as_secs_f64());
     http_resp
@@ -597,7 +625,7 @@ fn route_non_blocking(
 
 // Fetches a delegation from the NNS subnet to allow this subnet to issue
 // certificates on its behalf. On the NNS subnet this method is a no-op.
-fn load_delegation_from_nns_subnet(
+fn load_root_delegation(
     state_reader: &dyn StateReader<State = ReplicatedState>,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
@@ -669,7 +697,7 @@ fn load_delegation_from_nns_subnet(
         );
         let raw_response_res = match http_client
             .post(&address)
-            .header("Content-Type", "application/cbor")
+            .header(hyper::header::CONTENT_TYPE, "application/cbor")
             .body(body)
             .send()
         {
@@ -783,13 +811,12 @@ async fn parse_body(
                         }
                     },
                     Err(_err) => {
-                        return Err(Response::builder()
-                            .status(StatusCode::REQUEST_TIMEOUT)
-                            .body(Body::from(format!(
-                                "The request was not received within {} seconds.",
-                                MAX_REQUEST_TIMEOUT_SECS
-                            )))
-                            .unwrap());
+                        let mut response = Response::new(Body::from(format!(
+                            "The request was not received within {} seconds.",
+                            MAX_REQUEST_TIMEOUT_SECS
+                        )));
+                        *response.status_mut() = StatusCode::REQUEST_TIMEOUT;
+                        return Err(response);
                     }
                 }
             }
@@ -849,11 +876,13 @@ fn validate_parts(parts: http::request::Parts) -> Result<RequestType, Response<B
 fn redirect_to_dashboard() -> Response<Body> {
     // The empty string is simply to uniformize the return type with the cases where
     // the response is not empty.
-    Response::builder()
-        .status(StatusCode::FOUND)
-        .header(hyper::header::LOCATION, HTTP_DASHBOARD_URL_PATH)
-        .body(Body::from(""))
-        .unwrap()
+    let mut response = Response::new(Body::from(""));
+    *response.status_mut() = StatusCode::FOUND;
+    response.headers_mut().insert(
+        hyper::header::LOCATION,
+        hyper::header::HeaderValue::from_static(HTTP_DASHBOARD_URL_PATH),
+    );
+    response
 }
 
 #[cfg(test)]

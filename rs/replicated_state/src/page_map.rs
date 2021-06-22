@@ -167,7 +167,7 @@ impl PageDelta {
     }
 
     /// Persists this delta to the specified destination and flushes it.
-    pub fn persist_and_flush(&self, dst: &Path) -> Result<(), PersistenceError> {
+    pub fn persist_and_sync(&self, dst: &Path) -> Result<(), PersistenceError> {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -181,7 +181,7 @@ impl PageDelta {
         file.sync_all()
             .map_err(|err| PersistenceError::FileSystemError {
                 path: dst.display().to_string(),
-                context: "Failed to flush".to_string(),
+                context: "Failed to sync file".to_string(),
                 internal_error: err.to_string(),
             })?;
         Ok(())
@@ -355,9 +355,9 @@ impl PageMap {
     }
 
     /// Persists the heap delta contained in this page map to the specified
-    /// destination and flushes it to disk.
-    pub fn persist_and_flush_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.page_delta.persist_and_flush(dst)
+    /// destination and fsync the file to disk.
+    pub fn persist_and_sync_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
+        self.page_delta.persist_and_sync(dst)
     }
 
     /// Extracts the delta accumulated since the beginning of the execution

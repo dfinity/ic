@@ -22,7 +22,7 @@ mkdir -p "$SSL_DIR"
 
 DOCKER_RUN_ARGS=()
 
-DOCKER_RUN_ARGS+=(-v $REPO_ROOT:$WORKDIR)
+DOCKER_RUN_ARGS+=(-v "$REPO_ROOT:$WORKDIR")
 DOCKER_RUN_ARGS+=(-w "$WORKDIR/$SUBDIR")
 DOCKER_RUN_ARGS+=(${DOCKER_RUN_ARGS_EXTRA:-})
 
@@ -51,7 +51,6 @@ DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/cargo:/cargo)
 DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/cargo_target:/cargo_target)
 DOCKER_RUN_ARGS+=(-v $SSL_DIR:/openssl)
 DOCKER_RUN_ARGS+=(-e CI_PROJECT_DIR=$WORKDIR)
-DOCKER_RUN_ARGS+=(-e CI_RUST_BUILD_DIR=$WORKDIR)
 DOCKER_RUN_ARGS+=(-e CI_COMMIT_SHA=$(git rev-parse HEAD))
 DOCKER_RUN_ARGS+=(-e CARGO_TEST_TIMEOUT=3600)
 # sccache does not play well with incremental compilation

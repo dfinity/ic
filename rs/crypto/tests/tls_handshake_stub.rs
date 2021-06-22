@@ -235,6 +235,26 @@ mod server_with_certs {
 
         assert_malformed_client_cert_server_error_containing(&server_result, "asn1 encoding");
     }
+
+    #[tokio::test]
+    async fn should_return_error_if_allowed_client_cert_has_bad_sig() {
+        let registry = TlsRegistry::new();
+        let allowed_cert = CertWithPrivateKey::builder()
+            .self_sign_with_wrong_secret_key()
+            .build_ed25519();
+        let allowed_cert_proto = x509_public_key_cert(&allowed_cert.x509());
+        let server = Server::builder(SERVER_ID_1)
+            .add_allowed_client_cert(allowed_cert_proto.clone())
+            .build(registry.get());
+        let client = CustomClient::builder()
+            .with_client_auth(allowed_cert)
+            .build(server.cert());
+        registry.add_cert(SERVER_ID_1, server.cert()).update();
+
+        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+
+        assert_handshake_server_error_containing(&server_result, "certificate signature failure");
+    }
 }
 
 mod server_allowing_all_nodes {
@@ -920,7 +940,7 @@ mod server_with_optional_client_auth {
     }
 
     #[tokio::test]
-    async fn should_perform_tls_handshake_without_client_auth() {
+    async fn should_perform_tls_handshake_without_client_sending_cert() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -970,6 +990,45 @@ mod server_with_optional_client_auth {
         );
 
         assert_eq!(peer.unwrap(), Peer::Unauthenticated);
+    }
+}
+
+mod server_without_client_auth {
+    use crate::tls_utils::registry::TlsRegistry;
+    use crate::tls_utils::test_server::Server;
+    use crate::{matching_server_and_client, CLIENT_ID_1, SERVER_ID_1};
+    use ic_crypto_test_utils::tls::custom_client::CustomClient;
+
+    #[tokio::test]
+    async fn should_perform_tls_handshake_without_server_asking_for_cert() {
+        let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
+        registry
+            .add_cert(SERVER_ID_1, server.cert())
+            .add_cert(CLIENT_ID_1, client.cert())
+            .update();
+
+        let (client_result, server_result) =
+            tokio::join!(client.run(server.port()), server.run_without_client_auth());
+
+        assert!(client_result.is_ok());
+        assert!(server_result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn should_perform_tls_handshake_without_client_cert_and_without_server_asking_for_cert() {
+        let registry = TlsRegistry::new();
+        let server = Server::builder(SERVER_ID_1)
+            .add_allowed_client(CLIENT_ID_1)
+            .build(registry.get());
+        let client = CustomClient::builder()
+            .without_client_auth()
+            .build(server.cert());
+        registry.add_cert(SERVER_ID_1, server.cert()).update();
+
+        let (_, server_result) =
+            tokio::join!(client.run(server.port()), server.run_without_client_auth());
+
+        assert!(server_result.is_ok());
     }
 }
 
@@ -1391,6 +1450,28 @@ mod client {
         let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
 
         assert_handshake_client_error_containing(&client_result, "certificate is not yet valid");
+    }
+
+    #[tokio::test]
+    async fn should_return_error_if_allowed_server_cert_has_bad_sig() {
+        let registry = TlsRegistry::new();
+        let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
+        let server = CustomServer::builder()
+            .expect_error("tlsv1 alert decrypt error")
+            .build(
+                CertWithPrivateKey::builder()
+                    .self_sign_with_wrong_secret_key()
+                    .build_ed25519(),
+                vec![client.cert()],
+            );
+        registry
+            .add_cert(SERVER_ID_1, server.cert())
+            .add_cert(CLIENT_ID_1, client.cert())
+            .update();
+
+        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+
+        assert_handshake_client_error_containing(&client_result, "certificate signature failure");
     }
 }
 

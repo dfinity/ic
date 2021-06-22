@@ -20,8 +20,7 @@ DOCKER_BUILDKIT=1 docker build \
     --tag ic-build:$VERSION \
     --tag dfinity/ic-build:$VERSION \
     --tag dfinity/ic-build:latest \
-    --tag registry.gitlab.com/dfinity-lab/dfinity/ic-build:$VERSION \
-    --tag registry.gitlab.com/dfinity-lab/core/labrat/ic-build:$VERSION \
+    --tag registry.gitlab.com/dfinity-lab/core/docker/ic-build:$VERSION \
     -f gitlab-ci/docker/Dockerfile .
 
 # Build the container image with support for nix
@@ -29,6 +28,5 @@ DOCKER_BUILDKIT=1 docker build \
     --tag ic-build-nix:$VERSION \
     --tag dfinity/ic-build-nix:$VERSION \
     --tag dfinity/ic-build-nix:latest \
-    --tag registry.gitlab.com/dfinity-lab/dfinity/ic-build-nix:$VERSION \
-    --tag registry.gitlab.com/dfinity-lab/core/labrat/ic-build-nix:$VERSION \
+    --tag registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:$VERSION \
     -f gitlab-ci/docker/Dockerfile.withnix .

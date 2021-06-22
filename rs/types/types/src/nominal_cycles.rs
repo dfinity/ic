@@ -58,6 +58,12 @@ impl From<u128> for NominalCycles {
     }
 }
 
+impl From<Cycles> for NominalCycles {
+    fn from(input: Cycles) -> Self {
+        Self::new(input.get())
+    }
+}
+
 impl Add for NominalCycles {
     type Output = Self;
 

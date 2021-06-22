@@ -352,7 +352,7 @@ pub fn call_bytes(
     fn callback(future_ptr: *mut ()) {
         let ref_counted = unsafe { RefCounted::from_raw(future_ptr as *const RefCell<CallFuture>) };
         let top_level_future = ref_counted.borrow_mut().top_level_future;
-        let waker = {
+        let maybe_waker = {
             let mut future = ref_counted.borrow_mut();
             future.result = Some(match reject_code() {
                 0 => Ok(arg_data()),
@@ -360,7 +360,9 @@ pub fn call_bytes(
             });
             future.waker.take()
         };
-        waker.expect("there is no waker").wake();
+        if let Some(waker) = maybe_waker {
+            waker.wake();
+        }
         std::mem::drop(ref_counted);
         if !top_level_future.is_null() {
             unsafe {
@@ -402,7 +404,7 @@ pub fn call_bytes_with_cleanup(
     fn callback(future_ptr: *mut ()) {
         let ref_counted = unsafe { RefCounted::from_raw(future_ptr as *const RefCell<CallFuture>) };
         let top_level_future = ref_counted.borrow_mut().top_level_future;
-        let waker = {
+        let maybe_waker = {
             let mut future = ref_counted.borrow_mut();
             future.result = Some(match reject_code() {
                 0 => Ok(arg_data()),
@@ -410,7 +412,9 @@ pub fn call_bytes_with_cleanup(
             });
             future.waker.take()
         };
-        waker.expect("there is no waker").wake();
+        if let Some(waker) = maybe_waker {
+            waker.wake();
+        }
         std::mem::drop(ref_counted);
         if !top_level_future.is_null() {
             unsafe {

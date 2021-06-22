@@ -290,4 +290,29 @@ impl HypervisorError {
             }
         }
     }
+
+    /// Returns a string slice representation of the enum variant name for use
+    /// e.g. as a metric label.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            HypervisorError::FunctionNotFound(..) => "FunctionNotFound",
+            HypervisorError::MethodNotFound(_) => "MethodNotFound",
+            HypervisorError::ContractViolation(_) => "ContractViolation",
+            HypervisorError::OutOfInstructions => "OutOfInstructions",
+            HypervisorError::InvalidWasm(_) => "InvalidWasm",
+            HypervisorError::InstrumentationFailed(_) => "InstrumentationFailed",
+            HypervisorError::Trapped(_) => "Trapped",
+            HypervisorError::CalledTrap(_) => "CalledTrap",
+            HypervisorError::WasmModuleNotFound => "WasmModuleNotFound",
+            HypervisorError::OutOfMemory => "OutOfMemory",
+            HypervisorError::CanisterStopped => "CanisterStopped",
+            HypervisorError::CanisterExec(..) => "CanisterExec",
+            HypervisorError::InsufficientCyclesInCall { .. } => "InsufficientCyclesInCall",
+            HypervisorError::InvalidPrincipalId(_) => "InvalidPrincipalId",
+            HypervisorError::InvalidCanisterId(_) => "InvalidCanisterId",
+            HypervisorError::MessageRejected => "MessageRejected",
+            HypervisorError::InsufficientCyclesBalance { .. } => "InsufficientCyclesBalance",
+            HypervisorError::Cleanup { .. } => "Cleanup",
+        }
+    }
 }

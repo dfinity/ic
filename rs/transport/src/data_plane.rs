@@ -193,7 +193,7 @@ impl TransportImpl {
                 .data_plane_metrics
                 .socket_write_bytes
                 .with_label_values(&[&flow_label, &flow_tag])
-                .inc_by(to_send.len() as i64);
+                .inc_by(to_send.len() as u64);
             state
                 .data_plane_metrics
                 .socket_write_size
@@ -272,7 +272,7 @@ impl TransportImpl {
             metrics
                 .socket_read_bytes
                 .with_label_values(&[&flow_label, &flow_tag])
-                .inc_by(payload.0.len() as i64);
+                .inc_by(payload.0.len() as u64);
             let start_time = Instant::now();
             let _ = event_handler.send_message(flow_id, payload).await;
             metrics

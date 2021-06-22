@@ -31,6 +31,7 @@ Protocol Documentation:
 - https://medium.com/dfinity/the-internet-computers-token-economics-an-overview-29e238bd1d83[The Internet Computer’s Token Economics: An Overview]
 - https://medium.com/dfinity/understanding-the-internet-computers-network-nervous-system-neurons-and-icp-utility-tokens-730dab65cae8[Understanding the Internet Computer’s Network Nervous System, Neurons, and ICP Utility Tokens]
 - https://github.com/dfinity/nns-proposals[List of NNS Proposals]
+- https://medium.com/dfinity/achieving-consensus-on-the-internet-computer-ee9fbfbafcbc[Consensus protocol]
 
 Engineering
 
@@ -65,7 +66,7 @@ The https://dfinity.org/[DFINITY Foundation] is a Swiss not-for-profit organizat
 
 - *If you are an app developer*, and your intent is to build apps so you want a local Internet Computer replica in your machine to deploy to, you are better off using the https://sdk.dfinity.org/docs/quickstart/quickstart-intro.html[Canister SDK] written by the DFINITY Foundation. It is optimized for this and much more lightweight (less than 2 minutes to get started). It will build and run a local replica and you do not need to get into systems code to run it.
 
-- *If you are a blockchain enthusiast*, and your intent is to understand the protocol (not an implementation), you may be better off going to the https://sdk.dfinity.org/docs/interface-spec/index.html[IC Interface Specification]. This content (by the DFINITY research team) is tailor made for understanding the protocol and design.
+- *If you are a blockchain enthusiast*, and your intent is to understand the protocol (not an implementation), you may be better off going to the https://medium.com/dfinity/achieving-consensus-on-the-internet-computer-ee9fbfbafcbc[Consensus protocol] and https://sdk.dfinity.org/docs/interface-spec/index.html[IC Interface Specification]. This content (by the DFINITY research team) is tailor made for understanding the protocol and design.
 
 - *If you are a blockchain miner*, you should know that the Internet Computer Protocol (while it is a blockchain) does not have the traditional mining or validating you may come to expect from blockchain projects. The Interet Computer Protocol is designed using new and novel cryptography that does not require "mining"... but it does require independent node providers, which may include yourself. You can of course check out the source code in this repo, but a better resource may be this: https://support.internetcomputer.org/hc/en-us/categories/360005114372-Node-Provider[Being a node provider on the Internet Computer]
 

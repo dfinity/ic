@@ -1,9 +1,10 @@
 //! This module provides two public interfaces, compute_attribute and
 //! get_priority_function.
 
-use crate::consensus::{pool_reader::PoolReader, prelude::*};
+use crate::consensus::{metrics::ConsensusGossipMetrics, pool_reader::PoolReader, prelude::*};
 use ic_interfaces::consensus_pool::{ConsensusPool, HeightIndexedPool, HeightRange};
 use ic_types::artifact::{ConsensusMessageId, Priority, Priority::*, PriorityFn};
+use prometheus::Histogram;
 use std::collections::BTreeSet;
 
 /// A cache remembering which notarized/finalized blocks exist in which pool.
@@ -25,6 +26,7 @@ type BlockSet = BTreeSet<CryptoHashOf<Block>>;
 pub fn get_priority_function(
     pool: &dyn ConsensusPool,
     expected_batch_height: Height,
+    metrics: &ConsensusGossipMetrics,
 ) -> PriorityFn<ConsensusMessageId, ConsensusMessageAttribute> {
     let pool_reader = PoolReader::new(pool);
     let catch_up_height = pool_reader.get_catch_up_height();
@@ -39,20 +41,25 @@ pub fn get_priority_function(
     let mut block_sets = BlockSets::default();
     block_sets.notarized_validated.insert(catchup_block_hash);
     // Update block_sets with what is in the consensus pool.
+
+    let histograms = &metrics.get_priority_update_block_duration;
     update_block_set(
         &mut block_sets.notarized_validated,
         finalized_height,
         pool.validated().notarization(),
+        &histograms.with_label_values(&["notarized_validated"]),
     );
     update_block_set(
         &mut block_sets.finalized_unvalidated,
         finalized_height,
         pool.unvalidated().finalization(),
+        &histograms.with_label_values(&["finalized_validated"]),
     );
     update_block_set(
         &mut block_sets.notarized_unvalidated,
         finalized_height,
         pool.unvalidated().notarization(),
+        &histograms.with_label_values(&["notarized_unvalidated"]),
     );
 
     Box::new(move |_, attr: &'_ ConsensusMessageAttribute| {
@@ -78,7 +85,9 @@ fn update_block_set<T: HasHeight + HasBlockHash>(
     block_set: &mut BlockSet,
     finalized_height: Height,
     pool_section: &dyn HeightIndexedPool<T>,
+    histogram: &Histogram,
 ) {
+    let _timer = histogram.start_timer();
     if let Some(max_height) = pool_section.max_height() {
         let range = HeightRange::new(finalized_height.increment(), max_height);
         for obj in pool_section.get_by_height_range(range) {
@@ -194,7 +203,13 @@ fn compute_priority(
 mod tests {
     use super::*;
     use crate::consensus::mocks::{dependencies, Dependencies};
+    use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{consensus::fake::*, types::ids::node_test_id};
+
+    /// Create dummy test metrics to pass into get_priority_function
+    fn test_metrics() -> ConsensusGossipMetrics {
+        ConsensusGossipMetrics::new(MetricsRegistry::new())
+    }
 
     #[test]
     fn test_priority_function() {
@@ -203,7 +218,7 @@ mod tests {
             pool.advance_round_normal_operation_n(2);
 
             let expected_batch_height = Height::from(1);
-            let priority = get_priority_function(&pool, expected_batch_height);
+            let priority = get_priority_function(&pool, expected_batch_height, &test_metrics());
             // New block ==> Fetch
             let block = pool.make_next_block();
             assert_eq!(
@@ -246,13 +261,13 @@ mod tests {
             // Move block back to unvalidated after attribute is computed
             pool.remove_validated(block.clone());
             pool.insert_unvalidated(block.clone());
-            let priority = get_priority_function(&pool, expected_batch_height);
+            let priority = get_priority_function(&pool, expected_batch_height, &test_metrics());
             assert_eq!(priority(&dup_notarization_id, &attr), Later);
 
             // Moving block to validated does not affect result
             pool.remove_unvalidated(block.clone());
             pool.insert_validated(block.clone());
-            let priority = get_priority_function(&pool, expected_batch_height);
+            let priority = get_priority_function(&pool, expected_batch_height, &test_metrics());
             assert_eq!(
                 priority(
                     &dup_notarization_id,
@@ -264,7 +279,7 @@ mod tests {
             // Definite duplicate notarization ==> Drop
             pool.insert_validated(notarization.clone());
             pool.remove_unvalidated(notarization);
-            let priority = get_priority_function(&pool, expected_batch_height);
+            let priority = get_priority_function(&pool, expected_batch_height, &test_metrics());
             assert_eq!(
                 priority(
                     &dup_notarization_id,
@@ -285,7 +300,7 @@ mod tests {
             let dup_finalization_id = dup_finalization.get_id();
             dup_finalization.signature.signers = vec![node_test_id(42)];
             let dup_msg = dup_finalization.to_message();
-            let priority = get_priority_function(&pool, expected_batch_height);
+            let priority = get_priority_function(&pool, expected_batch_height, &test_metrics());
             assert_eq!(
                 priority(
                     &dup_finalization_id,
@@ -297,7 +312,7 @@ mod tests {
             // Once finalized, possible duplicate finalization ==> Drop
             pool.insert_validated(finalization.clone());
             pool.remove_unvalidated(finalization);
-            let priority = get_priority_function(&pool, expected_batch_height);
+            let priority = get_priority_function(&pool, expected_batch_height, &test_metrics());
             assert_eq!(
                 priority(
                     &dup_finalization_id,

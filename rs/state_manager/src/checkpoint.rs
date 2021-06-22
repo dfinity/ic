@@ -10,7 +10,7 @@ use ic_state_layout::{
     CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadPolicy, ReadWritePolicy,
     StateLayout,
 };
-use ic_types::{Height, ICP};
+use ic_types::Height;
 use ic_utils::ic_features::*;
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom};
@@ -45,7 +45,7 @@ pub fn make_checkpoint(
         canister_state
             .system_state
             .stable_memory
-            .persist_and_flush_delta(&canister_layout.stable_memory_blob())?;
+            .persist_and_sync_delta(&canister_layout.stable_memory_blob())?;
 
         let execution_state_bits = match &canister_state.execution_state {
             Some(execution_state) => {
@@ -54,7 +54,7 @@ pub fn make_checkpoint(
                     .serialize(&execution_state.wasm_binary)?;
                 execution_state
                     .page_map
-                    .persist_and_flush_delta(&canister_layout.vmemory_0())?;
+                    .persist_and_sync_delta(&canister_layout.vmemory_0())?;
 
                 execution_state.cow_mem_mgr.checkpoint();
 
@@ -69,7 +69,7 @@ pub fn make_checkpoint(
         };
         canister_layout.canister().serialize(
             CanisterStateBits {
-                controller: canister_state.system_state.controller(),
+                controllers: canister_state.system_state.controllers.clone(),
                 last_full_execution_round: canister_state.scheduler_state.last_full_execution_round,
                 call_context_manager: canister_state.system_state.call_context_manager().cloned(),
                 compute_allocation: canister_state.scheduler_state.compute_allocation,
@@ -77,8 +77,8 @@ pub fn make_checkpoint(
                 query_allocation: canister_state.scheduler_state.query_allocation,
                 memory_allocation: canister_state.system_state.memory_allocation,
                 freeze_threshold: canister_state.system_state.freeze_threshold,
-                cycles_account: canister_state.system_state.cycles_account.clone(),
-                icp_balance: ICP::zero(),
+                cycles_balance: canister_state.system_state.cycles_balance,
+                icp_balance: 0,
                 execution_state_bits,
                 status: canister_state.system_state.status.clone(),
                 scheduled_as_first: canister_state
@@ -95,11 +95,9 @@ pub fn make_checkpoint(
                     .canister_metrics
                     .interruped_during_execution,
                 certified_data: canister_state.system_state.certified_data.clone(),
-                // TODO(EXC-173): Refactoring the cycles account.
-                // Use metric from canister_state.
                 consumed_cycles_since_replica_started: canister_state
                     .system_state
-                    .cycles_account
+                    .canister_metrics
                     .consumed_cycles_since_replica_started,
                 stable_memory_size: canister_state.system_state.stable_memory_size,
             }
@@ -175,7 +173,6 @@ pub fn load_checkpoint<P: ReadPolicy>(
             None => None,
         };
 
-        assert_eq!(canister_state_bits.icp_balance, ICP::zero());
         let stable_memory_bin_file = canister_layout.stable_memory_blob();
         let (stable_memory, stable_memory_size) = if stable_memory_bin_file.exists() {
             (
@@ -200,44 +197,36 @@ pub fn load_checkpoint<P: ReadPolicy>(
                 NumWasmPages::from(stable_mem.page_count()),
             )
         };
-        let mut system_state = SystemState {
+
+        let queues =
+            ic_replicated_state::CanisterQueues::try_from(canister_layout.queues().deserialize()?)
+                .map_err(|err| {
+                    into_checkpoint_error(
+                        format!("canister_states[{}]::system_state::queues", canister_id),
+                        err,
+                    )
+                })?;
+        let canister_metrics = CanisterMetrics {
+            scheduled_as_first: canister_state_bits.scheduled_as_first,
+            skipped_round_due_to_no_messages: canister_state_bits.skipped_round_due_to_no_messages,
+            executed: canister_state_bits.executed,
+            interruped_during_execution: canister_state_bits.interruped_during_execution,
+            consumed_cycles_since_replica_started: canister_state_bits
+                .consumed_cycles_since_replica_started,
+        };
+        let system_state = SystemState {
             canister_id: *canister_id,
-            controller: canister_state_bits.controller,
-            queues: ic_replicated_state::CanisterQueues::try_from(
-                canister_layout.queues().deserialize()?,
-            )
-            .map_err(|err| {
-                into_checkpoint_error(
-                    format!("canister_states[{}]::system_state::queues", canister_id),
-                    err,
-                )
-            })?,
+            controllers: canister_state_bits.controllers,
+            queues,
             stable_memory,
             stable_memory_size,
-            cycles_account: canister_state_bits.cycles_account,
             memory_allocation: canister_state_bits.memory_allocation,
             freeze_threshold: canister_state_bits.freeze_threshold,
             status: canister_state_bits.status,
             certified_data: canister_state_bits.certified_data,
-            canister_metrics: CanisterMetrics {
-                scheduled_as_first: canister_state_bits.scheduled_as_first,
-                skipped_round_due_to_no_messages: canister_state_bits
-                    .skipped_round_due_to_no_messages,
-                executed: canister_state_bits.executed,
-                interruped_during_execution: canister_state_bits.interruped_during_execution,
-                consumed_cycles_since_replica_started: canister_state_bits
-                    .consumed_cycles_since_replica_started,
-            },
+            canister_metrics,
+            cycles_balance: canister_state_bits.cycles_balance,
         };
-
-        // TODO(EXC-173): Refactoring the cycles account.
-        // Assign used here because we do not want to checkpoint this field
-        // with CyclesAccount since it belongs to CanisterState after the refactor.
-        // Should be removed one business logic is moved out of CyclesAccount.
-        system_state
-            .cycles_account
-            .consumed_cycles_since_replica_started =
-            canister_state_bits.consumed_cycles_since_replica_started;
 
         canister_states.insert(
             system_state.canister_id(),

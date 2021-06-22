@@ -49,13 +49,6 @@ where
     }
 }
 
-/// Compute the hash tree corresponding to the partial state.
-pub fn hash_partial_state(state: &ReplicatedState) -> HashTree {
-    ic_canonical_state::traverse_partial(state, HashingVisitor::<HashTreeBuilderImpl>::default())
-        .into_hash_tree()
-        .unwrap()
-}
-
 /// Compute the hash tree corresponding to the full replicated state.
 pub fn hash_state(state: &ReplicatedState) -> HashTree {
     ic_canonical_state::traverse(state, HashingVisitor::<HashTreeBuilderImpl>::default())
@@ -101,7 +94,7 @@ mod tests {
             "NOT_USED".into(),
         );
 
-        let hash_of_empty_state = hash_partial_state(&state);
+        let hash_of_empty_state = hash_state(&state);
 
         let mut streams = state.take_streams();
         streams.insert(
@@ -113,7 +106,7 @@ mod tests {
         );
         state.put_streams(streams);
 
-        let hash_of_state_with_streams = hash_partial_state(&state);
+        let hash_of_state_with_streams = hash_state(&state);
 
         assert!(
             hash_of_empty_state != hash_of_state_with_streams,
@@ -142,7 +135,7 @@ mod tests {
         streams.insert(subnet_test_id(5), stream);
         state.put_streams(streams);
 
-        let hash_of_state_one = hash_partial_state(&state);
+        let hash_of_state_one = hash_state(&state);
 
         let stream = Stream {
             messages: StreamIndexedQueue::with_begin(StreamIndex::from(14)),
@@ -152,7 +145,7 @@ mod tests {
         streams.insert(subnet_test_id(6), stream);
         state.put_streams(streams);
 
-        let hash_of_state_two = hash_partial_state(&state);
+        let hash_of_state_two = hash_state(&state);
 
         assert!(
             hash_of_state_one != hash_of_state_two,
@@ -229,7 +222,7 @@ mod tests {
             let state = state_fixture(certification_version);
 
             assert_eq!(
-                hash_partial_state(&state).digest(),
+                hash_state(&state).digest(),
                 &Digest::from(<[u8; 32]>::from_hex(expected_hash,).unwrap()),
                 "Mismatched partial state hash computed according to certification version {}. \
                 Perhaps you made a change that requires writing backward compatibility code?",
@@ -253,6 +246,13 @@ mod tests {
             1,
             // expected_hash
             "00315DC9D438336FDA0E4C3FB496736E89351B08B5B2103E0827720E1020A3DF",
+        );
+
+        assert_partial_state_hash_matches(
+            // certification_version
+            2,
+            // expected_hash
+            "B4F0381DFA7C7B3800E6F066FC9614D8D60637C5BF6B212CEA1CAB9B94CEF540",
         );
     }
 }

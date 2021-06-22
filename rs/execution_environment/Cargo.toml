@@ -29,7 +29,7 @@ ic-utils = { path = "../utils" }
 ic-wasm-utils = { path = "../wasm_utils" }
 nix = "0.20.0"
 num-traits = "0.2.12"
-prometheus = { version = "0.9.0", features = [ "process" ] }
+prometheus = { version = "0.12.0", features = [ "process" ] }
 rand = "0.7.3"
 reqwest = "0.10.10"
 runtime = { path = "../runtime" }
@@ -47,8 +47,7 @@ maplit = "1.0.2"
 mockall = "0.7.2"
 proptest = "0.9.4"
 tempfile = "3.1.0"
-# TODO(EXC-220)
-wabt = { git = "https://github.com/dfinity-lab/wabt-rs", rev = "b4d778802976f10494411388e48a784d4d015bbb" }
+wabt = "0.10.0"
 
 [build-dependencies]
 escargot = "0.5"

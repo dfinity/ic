@@ -106,7 +106,7 @@ impl TryFrom<PrincipalId> for CanisterId {
 
 /// Represents an error that can occur when parsing a blob into a
 /// [`CanisterId`].
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub enum CanisterIdBlobParseError {
     PrincipalIdBlobParseError(PrincipalIdBlobParseError),
     CanisterIdError(CanisterIdError),

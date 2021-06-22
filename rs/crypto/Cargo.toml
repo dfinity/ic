@@ -40,7 +40,7 @@ openssl = "0.10.29"
 pairing = "0.15.0"
 parking_lot = "0.11.1"
 phantom_newtype = { path = "../phantom_newtype" }
-prometheus = { version = "0.9.0", features = [ "process" ] }
+prometheus = { version = "0.12.0", features = [ "process" ] }
 prost = "0.7.0"
 prost-types = "0.7.0"
 rand = "0.7.3"

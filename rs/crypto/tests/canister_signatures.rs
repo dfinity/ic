@@ -4,9 +4,9 @@ use ic_crypto::{
     threshold_sig_public_key_from_der, user_public_key_from_bytes, KeyBytesContentType,
 };
 use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
-use ic_crypto_internal_basic_sig_iccsa::types::PublicKey;
 use ic_crypto_internal_test_vectors::iccsa;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
+use ic_crypto_test_utils::canister_signatures::canister_sig_pub_key_to_bytes;
 use ic_interfaces::crypto::CanisterSigVerifier;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
@@ -29,14 +29,14 @@ pub const ROOT_SUBNET_ID: SubnetId = SUBNET_1;
 
 #[test]
 fn should_correctly_parse_der_encoded_iccsa_pubkey() {
-    let pubkey = PublicKey::new(CanisterId::from_u64(42), b"seed".to_vec()).to_bytes();
+    let pubkey_bytes = canister_sig_pub_key_to_bytes(CanisterId::from_u64(42), b"seed");
     let pubkey_der =
-        subject_public_key_info_der(oid!(1, 3, 6, 1, 4, 1, 56387, 1, 2), &pubkey).unwrap();
+        subject_public_key_info_der(oid!(1, 3, 6, 1, 4, 1, 56387, 1, 2), &pubkey_bytes).unwrap();
 
     let (parsed_pubkey, content_type) = user_public_key_from_bytes(&pubkey_der).unwrap();
 
     assert_eq!(parsed_pubkey.algorithm_id, AlgorithmId::IcCanisterSignature);
-    assert_eq!(parsed_pubkey.key, pubkey);
+    assert_eq!(parsed_pubkey.key, pubkey_bytes);
     assert_eq!(
         content_type,
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer
@@ -155,7 +155,8 @@ fn test_vec(
     let signature = CanisterSigOf::new(CanisterSig(test_vec.signature));
     let user_public_key = {
         let canister_id = CanisterId::from_str(&test_vec.canister_id).unwrap();
-        let public_key_bytes = PublicKey::new(canister_id, test_vec.seed).to_bytes();
+        let public_key_bytes = canister_sig_pub_key_to_bytes(canister_id, &test_vec.seed);
+
         UserPublicKey {
             key: public_key_bytes,
             algorithm_id: AlgorithmId::IcCanisterSignature,

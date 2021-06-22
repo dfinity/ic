@@ -15,7 +15,7 @@ use ic_replicated_state::{
         LABEL_VALUE_CANISTER_STOPPED, LABEL_VALUE_CANISTER_STOPPING,
         LABEL_VALUE_INVALID_SUBNET_PAYLOAD, LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
     },
-    CyclesAccountError, ReplicatedState, StateError,
+    ReplicatedState, StateError,
 };
 use ic_types::messages::HttpRequestContent;
 use ic_types::{
@@ -242,18 +242,11 @@ impl ValidSetRuleImpl {
                     compute_allocation,
                     cost,
                 ) {
-                    match err {
-                        CyclesAccountError::CanisterOutOfCycles {
-                            available,
-                            requested,
-                        } => {
-                            return Err(StateError::CanisterOutOfCycles {
-                                canister_id: payer,
-                                available,
-                                requested,
-                            });
-                        }
-                    }
+                    return Err(StateError::CanisterOutOfCycles {
+                        canister_id: err.canister_id,
+                        available: err.available,
+                        requested: err.requested,
+                    });
                 }
 
                 // Add message to the appropriate queue.

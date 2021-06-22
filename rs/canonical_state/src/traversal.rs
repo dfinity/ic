@@ -13,7 +13,7 @@ fn traverse_lazy_tree<'a, V: Visitor>(t: &LazyTree<'a>, v: &mut V) -> Result<(),
         LazyTree::LazyFork(f) => {
             v.start_subtree()?;
             for l in f.labels() {
-                match v.enter_edge(&l[..])? {
+                match v.enter_edge(l.as_bytes())? {
                     Control::Skip => continue,
                     Control::Continue => {
                         let t = f.edge(&l).expect("fork edge disappeared");
@@ -39,57 +39,29 @@ pub fn traverse<V: Visitor>(state: &ReplicatedState, mut v: V) -> V::Output {
     }
 }
 
-/// Traverses `state` partially (Wasm state excluded).
-/// It's used for quick certification that can be done every round.
-pub fn traverse_partial<V: Visitor>(state: &ReplicatedState, v: V) -> V::Output {
-    use crate::subtree_visitor::{Pattern as P, SubtreeVisitor};
-
-    let pattern = P::match_any(
-        vec![
-            (
-                "canister",
-                P::any(P::match_any(
-                    vec![
-                        ("certified_data", P::all()),
-                        ("controller", P::all()),
-                        ("module_hash", P::all()),
-                    ]
-                    .into_iter(),
-                )),
-            ),
-            ("metadata", P::all()),
-            ("request_status", P::all()),
-            ("subnet", P::all()),
-            ("streams", P::all()),
-            ("time", P::all()),
-        ]
-        .into_iter(),
-    );
-    let subtree_visitor = SubtreeVisitor::new(&pattern, v);
-    traverse(state, subtree_visitor)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
         encoding::{encode_stream_header, types::SystemMetadata, CborProxyEncoder},
+        subtree_visitor::{Pattern, SubtreeVisitor},
         test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
     };
     use ic_base_types::NumSeconds;
     use ic_cow_state::CowMemoryManagerImpl;
+    use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::{ExecutionState, ExportedFunctions, Global, NumWasmPages},
         metadata_state::SubnetTopology,
-        page_map::{PageDelta, PageIndex, PageMap, PAGE_SIZE},
+        page_map::PageMap,
     };
     use ic_test_utilities::{
         mock_time,
         state::new_canister_state,
         types::ids::{canister_test_id, subnet_test_id, user_test_id},
     };
-    use ic_types::{Cycles, ExecutionRound};
+    use ic_types::{CanisterId, Cycles, ExecutionRound};
     use ic_wasm_types::BinaryEncodedWasm;
     use maplit::btreemap;
     use std::collections::BTreeSet;
@@ -153,247 +125,11 @@ mod tests {
     fn test_traverse_canister_empty_execution_state() {
         let canister_id = canister_test_id(2);
         let controller = user_test_id(24);
-        let canister_state = new_canister_state(
-            canister_id,
-            controller.get(),
-            INITIAL_CYCLES,
-            NumSeconds::from(100_000),
-        );
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            tmpdir.path().into(),
-        );
-        state.put_canister_state(canister_state);
-
-        let visitor = TracingVisitor::new(NoopVisitor);
-        assert_eq!(
-            vec![
-                E::StartSubtree, // global
-                edge("canister"),
-                E::StartSubtree,
-                E::EnterEdge(canister_id.get().into_vec()),
-                E::StartSubtree,
-                E::EndSubtree, // canister
-                E::EndSubtree, // canisters
-                edge("metadata"),
-                E::VisitBlob(encode_metadata(SystemMetadata {
-                    id_counter: 0,
-                    prev_state_hash: None
-                })),
-                edge("request_status"),
-                E::StartSubtree,
-                E::EndSubtree, // request_status
-                edge("streams"),
-                E::StartSubtree,
-                E::EndSubtree, // streams
-                edge("subnet"),
-                E::StartSubtree,
-                E::EndSubtree, // subnets
-                edge("time"),
-                leb_num(0),
-                E::EndSubtree, // global
-            ],
-            traverse(&state, visitor).0
-        );
-
-        // Test new certification version.
-        state.metadata.certification_version = 1;
-        let visitor = TracingVisitor::new(NoopVisitor);
-        assert_eq!(
-            vec![
-                E::StartSubtree, // global
-                edge("canister"),
-                E::StartSubtree,
-                E::EnterEdge(canister_id.get().into_vec()),
-                E::StartSubtree,
-                edge("controller"),
-                E::VisitBlob(controller.get().to_vec()),
-                E::EndSubtree, // canister
-                E::EndSubtree, // canisters
-                edge("metadata"),
-                E::VisitBlob(encode_metadata(SystemMetadata {
-                    id_counter: 0,
-                    prev_state_hash: None
-                })),
-                edge("request_status"),
-                E::StartSubtree,
-                E::EndSubtree, // request_status
-                edge("streams"),
-                E::StartSubtree,
-                E::EndSubtree, // streams
-                edge("subnet"),
-                E::StartSubtree,
-                E::EndSubtree, // subnets
-                edge("time"),
-                leb_num(0),
-                E::EndSubtree, // global
-            ],
-            traverse(&state, visitor).0
-        );
-    }
-
-    #[test]
-    fn test_traverse_canister_with_pages() {
-        let page0 = vec![0u8; *PAGE_SIZE];
-        let page1 = vec![1u8; *PAGE_SIZE];
-        let canister_id = canister_test_id(2);
-        let controller = user_test_id(24);
-        let mut canister_state = new_canister_state(
-            canister_id,
-            controller.get(),
-            INITIAL_CYCLES,
-            NumSeconds::from(100_000),
-        );
-        let mut page_map = PageMap::default();
-        page_map.update(PageDelta::from(&[(PageIndex::from(1), &page1[..])][..]));
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let wasm_binary = BinaryEncodedWasm::new(vec![]);
-        let wasm_binary_hash = wasm_binary.hash_sha256();
-        let execution_state = ExecutionState {
-            canister_root: "NOT_USED".into(),
-            session_nonce: None,
-            wasm_binary,
-            page_map,
-            exported_globals: vec![Global::I32(1)],
-            heap_size: NumWasmPages::from(2),
-            exports: ExportedFunctions::new(BTreeSet::new()),
-            embedder_cache: None,
-            last_executed_round: ExecutionRound::from(0),
-            cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(tmpdir.path().into())),
-            mapped_state: None,
+        let controllers_cbor = {
+            let mut cbor = vec![217, 217, 247, 129, 74];
+            cbor.extend(controller.get().to_vec());
+            cbor
         };
-        canister_state.execution_state = Some(execution_state);
-
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            tmpdir.path().into(),
-        );
-        state.put_canister_state(canister_state);
-
-        let visitor = TracingVisitor::new(NoopVisitor);
-        assert_eq!(
-            vec![
-                E::StartSubtree,
-                edge("canister"),
-                E::StartSubtree,
-                E::EnterEdge(canister_id.get().into_vec()),
-                E::StartSubtree,
-                edge("certified_data"),
-                E::VisitBlob(vec![]),
-                edge("wasm_state"),
-                E::StartSubtree,
-                edge("globals"),
-                E::VisitBlob(vec![1, 0, 0, 0, 0, 0, 0, 0]),
-                edge("memory"),
-                E::StartSubtree,
-                edge("0"),
-                E::StartSubtree,
-                edge("pages"),
-                E::StartSubtree,
-                edge(&[0, 0, 0, 0, 0, 0, 0, 0]),
-                E::VisitBlob(page0.clone()),
-                edge(&[0, 0, 0, 0, 0, 0, 0, 1]),
-                E::VisitBlob(page1.clone()),
-                E::EndSubtree, // pages
-                edge("usage"),
-                leb_num(2),
-                E::EndSubtree, // 0
-                E::EndSubtree, // memory
-                edge("module"),
-                E::VisitBlob(vec![]),
-                E::EndSubtree, // wasm_state
-                E::EndSubtree, // canister
-                E::EndSubtree, // canisters
-                edge("metadata"),
-                E::VisitBlob(encode_metadata(SystemMetadata {
-                    id_counter: 0,
-                    prev_state_hash: None
-                })),
-                edge("request_status"),
-                E::StartSubtree,
-                E::EndSubtree, // request_status
-                edge("streams"),
-                E::StartSubtree,
-                E::EndSubtree, // streams
-                edge("subnet"),
-                E::StartSubtree,
-                E::EndSubtree, // subnets
-                edge("time"),
-                leb_num(0),
-                E::EndSubtree, //global
-            ],
-            traverse(&state, visitor).0
-        );
-
-        // Test new certification version
-        state.metadata.certification_version = 1;
-        let visitor = TracingVisitor::new(NoopVisitor);
-        assert_eq!(
-            vec![
-                E::StartSubtree,
-                edge("canister"),
-                E::StartSubtree,
-                E::EnterEdge(canister_id.get().into_vec()),
-                E::StartSubtree,
-                edge("certified_data"),
-                E::VisitBlob(vec![]),
-                edge("controller"),
-                E::VisitBlob(controller.get().to_vec()),
-                edge("module_hash"),
-                E::VisitBlob(wasm_binary_hash.to_vec()),
-                edge("wasm_state"),
-                E::StartSubtree,
-                edge("globals"),
-                E::VisitBlob(vec![1, 0, 0, 0, 0, 0, 0, 0]),
-                edge("memory"),
-                E::StartSubtree,
-                edge("0"),
-                E::StartSubtree,
-                edge("pages"),
-                E::StartSubtree,
-                edge(&[0, 0, 0, 0, 0, 0, 0, 0]),
-                E::VisitBlob(page0),
-                edge(&[0, 0, 0, 0, 0, 0, 0, 1]),
-                E::VisitBlob(page1),
-                E::EndSubtree, // pages
-                edge("usage"),
-                leb_num(2),
-                E::EndSubtree, // 0
-                E::EndSubtree, // memory
-                edge("module"),
-                E::VisitBlob(vec![]),
-                E::EndSubtree, // wasm_state
-                E::EndSubtree, // canister
-                E::EndSubtree, // canisters
-                edge("metadata"),
-                E::VisitBlob(encode_metadata(SystemMetadata {
-                    id_counter: 0,
-                    prev_state_hash: None
-                })),
-                edge("request_status"),
-                E::StartSubtree,
-                E::EndSubtree, // request_status
-                edge("streams"),
-                E::StartSubtree,
-                E::EndSubtree, // streams
-                edge("subnet"),
-                E::StartSubtree,
-                E::EndSubtree, // subnets
-                edge("time"),
-                leb_num(0),
-                E::EndSubtree, //global
-            ],
-            traverse(&state, visitor).0
-        );
-    }
-
-    #[test]
-    fn test_traverse_partial_canister_empty_execution_state() {
-        let canister_id = canister_test_id(2);
-        let controller = user_test_id(24);
         let canister_state = new_canister_state(
             canister_id,
             controller.get(),
@@ -436,11 +172,11 @@ mod tests {
                 leb_num(0),
                 E::EndSubtree, // global
             ],
-            traverse_partial(&state, visitor).0
+            traverse(&state, visitor).0
         );
 
         // Test new certification version.
-        state.metadata.certification_version = 1;
+        state.metadata.certification_version = 2;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
             vec![
@@ -451,6 +187,8 @@ mod tests {
                 E::StartSubtree,
                 edge("controller"),
                 E::VisitBlob(controller.get().to_vec()),
+                edge("controllers"),
+                E::VisitBlob(controllers_cbor),
                 E::EndSubtree, // canister
                 E::EndSubtree, // canisters
                 edge("metadata"),
@@ -471,14 +209,19 @@ mod tests {
                 leb_num(0),
                 E::EndSubtree, // global
             ],
-            traverse_partial(&state, visitor).0
+            traverse(&state, visitor).0
         );
     }
 
     #[test]
-    fn test_traverse_partial_canister_with_execution_state() {
+    fn test_traverse_canister_with_execution_state() {
         let canister_id = canister_test_id(2);
         let controller = user_test_id(24);
+        let controllers_cbor = {
+            let mut cbor = vec![217, 217, 247, 129, 74];
+            cbor.extend(controller.get().to_vec());
+            cbor
+        };
         let mut canister_state = new_canister_state(
             canister_id,
             controller.get(),
@@ -540,11 +283,11 @@ mod tests {
                 leb_num(0),
                 E::EndSubtree, //global
             ],
-            traverse_partial(&state, visitor).0
+            traverse(&state, visitor).0
         );
 
         // Test new certification version.
-        state.metadata.certification_version = 1;
+        state.metadata.certification_version = 2;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
             vec![
@@ -557,6 +300,8 @@ mod tests {
                 E::VisitBlob(vec![]),
                 edge("controller"),
                 E::VisitBlob(controller.get().to_vec()),
+                edge("controllers"),
+                E::VisitBlob(controllers_cbor),
                 edge("module_hash"),
                 E::VisitBlob(wasm_binary_hash.to_vec()),
                 E::EndSubtree, // canister
@@ -579,7 +324,7 @@ mod tests {
                 leb_num(0),
                 E::EndSubtree, //global
             ],
-            traverse_partial(&state, visitor).0
+            traverse(&state, visitor).0
         );
     }
 
@@ -830,8 +575,20 @@ mod tests {
                 subnet_type: SubnetType::Application,
             }
         };
+        fn id_range(from: u64, to: u64) -> CanisterIdRange {
+            CanisterIdRange {
+                start: CanisterId::from_u64(from),
+                end: CanisterId::from_u64(to),
+            }
+        }
+        state.metadata.network_topology.routing_table = RoutingTable(btreemap! {
+            id_range(0, 10) => subnet_test_id(0),
+            id_range(11, 20) => subnet_test_id(1),
+            id_range(21, 30) => subnet_test_id(0),
+        });
 
         let visitor = TracingVisitor::new(NoopVisitor);
+        state.metadata.certification_version = 2;
         assert_eq!(
             vec![
                 E::StartSubtree,
@@ -864,6 +621,53 @@ mod tests {
                 E::EndSubtree, // subnets
                 edge("time"),
                 leb_num(0),
+                E::EndSubtree, // global
+            ],
+            traverse(&state, visitor).0
+        );
+
+        let patter = Pattern::match_only("subnet", Pattern::all());
+        let visitor = SubtreeVisitor::new(&patter, TracingVisitor::new(NoopVisitor));
+        state.metadata.certification_version = 3;
+        assert_eq!(
+            vec![
+                E::StartSubtree,
+                edge("subnet"),
+                E::StartSubtree,
+                E::EnterEdge(subnet_test_id(0).get().into_vec()),
+                E::StartSubtree,
+                edge("canister_ranges"),
+                //D9 D9F7                          # tag(55799)
+                //   82                            # array(2)
+                //      82                         # array(2)
+                //         4A                      # bytes(10)
+                //            00000000000000000101 # "\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01"
+                //         4A                      # bytes(10)
+                //            000000000000000A0101 # "\x00\x00\x00\x00\x00\x00\x00\n\x01\x01"
+                //      82                         # array(2)
+                //         4A                      # bytes(10)
+                //            00000000000000150101 # "\x00\x00\x00\x00\x00\x00\x00\x15\x01\x01"
+                //         4A                      # bytes(10)
+                //            000000000000001E0101 # "\x00\x00\x00\x00\x00\x00\x00\x1E\x01\x01"
+                E::VisitBlob(hex::decode("d9d9f782824a000000000000000001014a000000000000000a0101824a000000000000001501014a000000000000001e0101").unwrap()),
+                edge("public_key"),
+                E::VisitBlob(vec![1, 2, 3, 4]),
+                E::EndSubtree, // subnet
+                E::EnterEdge(subnet_test_id(1).get().into_vec()),
+                E::StartSubtree,
+                edge("canister_ranges"),
+                // D9 D9F7                          # tag(55799)
+                //    81                            # array(1)
+                //       82                         # array(2)
+                //          4A                      # bytes(10)
+                //             000000000000000B0101 # "\x00\x00\x00\x00\x00\x00\x00\v\x01\x01"
+                //          4A                      # bytes(10)
+                //             00000000000000140101 # "\x00\x00\x00\x00\x00\x00\x00\x14\x01\x01"
+                E::VisitBlob(hex::decode("d9d9f781824a000000000000000b01014a00000000000000140101").unwrap()),
+                edge("public_key"),
+                E::VisitBlob(vec![5, 6, 7, 8]),
+                E::EndSubtree, // subnet
+                E::EndSubtree, // subnets
                 E::EndSubtree, // global
             ],
             traverse(&state, visitor).0

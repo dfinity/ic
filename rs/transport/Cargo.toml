@@ -29,7 +29,7 @@ nix = "0.20.0"
 notify = "4.0.12"
 openssl = "0.10.29"
 phantom_newtype = { path = "../phantom_newtype" }
-prometheus = { version = "0.9.0", features = [ "process" ] }
+prometheus = { version = "0.12.0", features = [ "process" ] }
 rand = "0.7.3"
 ratelimit = "0.4.4"
 serde = { version = "1.0.99", features = [ "derive", "rc" ] }

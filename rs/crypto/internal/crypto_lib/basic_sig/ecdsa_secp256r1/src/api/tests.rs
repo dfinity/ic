@@ -130,7 +130,7 @@ mod verify {
     use crate::types::{PublicKeyBytes, SignatureBytes};
     use crate::{public_key_from_cose, signature_from_der, verify};
     use ic_crypto_internal_test_vectors::test_data;
-    use ic_types::crypto::CryptoResult;
+    use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
     use openssl::bn::{BigNum, BigNumContext};
     use openssl::ec::{EcGroup, EcKey};
     use openssl::nid::Nid;
@@ -202,6 +202,59 @@ mod verify {
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().is_signature_verification_error());
+    }
+
+    #[test]
+    fn should_reject_truncated_ecdsa_pubkey() {
+        let (sk, pk) = crate::new_keypair().unwrap();
+
+        let msg = b"abc";
+        let signature = crate::sign(msg, &sk).unwrap();
+        assert!(crate::verify(&signature, msg, &pk).is_ok());
+
+        let invalid_pk = PublicKeyBytes(pk.0[0..pk.0.len() - 1].to_vec());
+        let result = verify(&signature, msg, &invalid_pk);
+
+        assert!(
+            matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
+                     if algorithm == AlgorithmId::EcdsaP256
+                     && key_bytes == Some(invalid_pk.0)
+                     && internal_error.contains(
+                         ":elliptic curve routines:ec_GFp_simple_oct2point:invalid encoding:"
+                     )
+            )
+        );
+    }
+
+    #[test]
+    fn should_reject_modified_ecdsa_pubkey() {
+        let (sk, pk) = crate::new_keypair().unwrap();
+
+        let msg = b"abc";
+        let signature = crate::sign(msg, &sk).unwrap();
+        assert!(crate::verify(&signature, msg, &pk).is_ok());
+
+        /*
+        We are encoding using uncompressed coordinates so the format is (h,x,y)
+        where h is a 1-byte header. The x that is valid wrt a y is unique,
+        so there is no possibility that this does not fail when we modify
+        the final byte of x
+         */
+        assert_eq!(pk.0.len(), 1 + 2 * crate::types::FIELD_SIZE);
+        let mut modified_key = pk.0;
+        modified_key[crate::types::FIELD_SIZE] ^= 0x01;
+        let invalid_pk = PublicKeyBytes(modified_key);
+
+        let result = verify(&signature, msg, &invalid_pk);
+        assert!(
+            matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
+                     if algorithm == AlgorithmId::EcdsaP256
+                     && key_bytes == Some(invalid_pk.0)
+                     && internal_error.contains(
+                         ":elliptic curve routines:EC_POINT_set_affine_coordinates:point is not on curve:"
+                     )
+            )
+        );
     }
 
     #[test]

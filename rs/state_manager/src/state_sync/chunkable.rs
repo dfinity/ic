@@ -638,11 +638,10 @@ impl Chunkable for IncompleteState {
                         let preallocate_bytes =
                             diff_script.zeros_chunks * crate::manifest::DEFAULT_CHUNK_SIZE;
 
-                        state_sync_size_fetch.inc_by(diff_bytes as i64);
-                        state_sync_size_preallocate.inc_by(preallocate_bytes as i64);
-                        state_sync_size_copy.inc_by(
-                            total_bytes as i64 - diff_bytes as i64 - preallocate_bytes as i64,
-                        );
+                        state_sync_size_fetch.inc_by(diff_bytes);
+                        state_sync_size_preallocate.inc_by(preallocate_bytes as u64);
+                        state_sync_size_copy
+                            .inc_by(total_bytes - diff_bytes - preallocate_bytes as u64);
 
                         fetch_chunks = diff_script.fetch_chunks.iter().map(|i| *i + 1).collect();
                     } else {
@@ -651,8 +650,8 @@ impl Chunkable for IncompleteState {
                             .iter()
                             .map(|i| manifest.chunk_table[*i].size_bytes as u64)
                             .sum();
-                        state_sync_size_fetch.inc_by(diff_bytes as i64);
-                        state_sync_size_preallocate.inc_by(total_bytes as i64 - diff_bytes as i64);
+                        state_sync_size_fetch.inc_by(diff_bytes);
+                        state_sync_size_preallocate.inc_by(total_bytes - diff_bytes);
 
                         fetch_chunks = non_zero_chunks.iter().map(|i| *i + 1).collect();
                     }

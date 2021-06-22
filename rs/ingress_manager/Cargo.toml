@@ -16,7 +16,7 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-types = { path = "../types/types" }
 ic-validator = { path = "../validator" }
 bincode = "1.2.1"
-prometheus = { version = "0.9.0", features = [ "process" ] }
+prometheus = { version = "0.12.0", features = [ "process" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 
 [dev-dependencies]

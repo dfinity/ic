@@ -147,6 +147,21 @@ impl Server {
         Ok(peer)
     }
 
+    pub async fn run_without_client_auth(self) -> Result<(), TlsServerHandshakeError> {
+        let tcp_stream = self.accept_connection_on_listener().await;
+
+        let tls_stream = self
+            .crypto
+            .perform_tls_server_handshake_without_client_auth(tcp_stream, REG_V1)
+            .await?;
+        let (tls_read_half, tls_write_half) = tls_stream.split();
+
+        self.send_msg_to_client_if_configured(tls_write_half).await;
+        self.expect_msg_from_client_if_configured(tls_read_half)
+            .await;
+        Ok(())
+    }
+
     async fn accept_connection_on_listener(&self) -> TcpStream {
         let mut tokio_tcp_listener = TcpListener::from_std(self.listener.try_clone().unwrap())
             .expect("failed to create tokio TcpListener");

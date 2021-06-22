@@ -251,9 +251,10 @@ mod loading {
                 self_index_in_committee,
             )
             .or_else(|error|
-                // If the decryption key was not found, the threshold signing key was not loaded.
+                // If the decryption key was not found, or if the decryption key's epoch is newer than
+                // the ciphertext in the transcript, then the threshold signing key was not loaded.
                 // This is legal, but this node will not be able to threshold sign.
-                map_decryption_key_not_found_error_to_ok_and_log(error, logger))?;
+                map_decryption_key_not_usable_error_to_ok_and_log(error, logger))?;
         }
         insert_transcript_data_into_store(
             lockable_threshold_sig_data_store,
@@ -302,20 +303,37 @@ mod loading {
         indices
     }
 
-    fn map_decryption_key_not_found_error_to_ok_and_log(
+    fn map_decryption_key_not_usable_error_to_ok_and_log(
         load_private_key_error: CspDkgLoadPrivateKeyError,
         logger: &ReplicaLogger,
     ) -> Result<(), CspDkgLoadPrivateKeyError> {
-        if let CspDkgLoadPrivateKeyError::KeyNotFoundError(_) = load_private_key_error {
-            info!(logger;
-                crypto.error => "Warning: unable to load the threshold signing key because the
-                decryption key was not found in the secret key store. Still proceeding to insert
-                the transcript data into the threshold signature data store. Verifying signature
-                shares, combining shares and verifying combined signatures is still possible, but
-                signing is not.",
-            );
-            return Ok(());
+        match load_private_key_error {
+            CspDkgLoadPrivateKeyError::KeyNotFoundError(_) => {
+                info!(logger;
+                      crypto.error =>
+                      "Warning: unable to load the threshold signing key because the
+                       decryption key was not found in the secret key store. Still proceeding to insert
+                       the transcript data into the threshold signature data store. Verifying signature
+                       shares, combining shares and verifying combined signatures is still possible, but
+                       signing is not.",
+                );
+                Ok(())
+            }
+            CspDkgLoadPrivateKeyError::EpochTooOldError {
+                ciphertext_epoch,
+                secret_key_epoch,
+            } => {
+                info!(logger;
+                      crypto.error =>
+                      format!(
+                          "Warning: threshold signing key was found but is for a newer epoch <{}> than this transcript <{}>.
+                       Still proceeding to insert the transcript data into the threshold signature data store.
+                       Verifying signature shares, combining shares and verifying combined signatures is still
+                       possible, but signing is not.", secret_key_epoch, ciphertext_epoch),
+                );
+                Ok(())
+            }
+            e => Err(e),
         }
-        Err(load_private_key_error)
     }
 }

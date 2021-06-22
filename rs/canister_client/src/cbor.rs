@@ -3,20 +3,21 @@ use crate::{
     sign_submit,
 };
 use ic_crypto_tree_hash::{LabeledTree, Path};
+use ic_types::Time;
 use ic_types::{
     messages::{
         Blob, Certificate, HttpCanisterUpdate, HttpReadContent, HttpReadState,
         HttpReadStateResponse, HttpRequestEnvelope, HttpSubmitContent, HttpUserQuery, MessageId,
         SignedRequestBytes,
     },
+    time::current_time_and_expiry_time,
     CanisterId,
 };
-use ic_types::{time::current_time, Time};
 use serde::Deserialize;
 use serde_cbor::value::Value as CBOR;
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::error::Error;
-use std::{collections::BTreeMap, time::Duration};
 
 // An auxiliary structure that mirrors the request statuses
 // encoded in a certificate, starting from the root of the tree.
@@ -172,8 +173,13 @@ impl Agent {
         arguments: Vec<u8>,
         nonce: Vec<u8>,
     ) -> Result<(Vec<u8>, MessageId), Box<dyn Error>> {
-        let (submit_request, request_id) =
-            self.prepare_update_raw(canister_id, method, arguments, nonce, self.expiry_time())?;
+        let (submit_request, request_id) = self.prepare_update_raw(
+            canister_id,
+            method,
+            arguments,
+            nonce,
+            current_time_and_expiry_time().1,
+        )?;
         let http_body = SignedRequestBytes::try_from(submit_request)?;
         Ok((http_body.into(), request_id))
     }
@@ -192,7 +198,7 @@ impl Agent {
                 arg: Blob(arguments),
                 sender: self.sender_field.clone(),
                 nonce: None,
-                ingress_expiry: self.expiry_time().as_nanos_since_unix_epoch(),
+                ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
             },
         };
 
@@ -207,16 +213,12 @@ impl Agent {
                 sender: self.sender_field.clone(),
                 paths: paths.to_vec(),
                 nonce: None,
-                ingress_expiry: self.expiry_time().as_nanos_since_unix_epoch(),
+                ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
             },
         };
 
         let request = sign_read(content, &self.sender)?;
         Ok(SignedRequestBytes::try_from(request)?.into())
-    }
-
-    fn expiry_time(&self) -> Time {
-        current_time() + Duration::from_secs(4 * 60)
     }
 }
 

@@ -1,10 +1,11 @@
 //! Hashing to BLS12-381 primitives
 
+use crate::serde::pairing::g1_from_bytes;
 use ff::Field;
-use group::{CurveAffine, EncodedPoint};
+use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_to_bytes;
 use ic_crypto_sha256::Sha256;
 use miracl_core::bls12381::ecp::ECP;
-use pairing::bls12_381::{Fr, G1Affine, G1};
+use pairing::bls12_381::{Fr, G1};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 
@@ -24,7 +25,8 @@ mod tests;
 /// The G1 point as a zkgroup/pairing object
 pub fn hash_to_g1(domain: &[u8], msg: &[u8]) -> G1 {
     let hash = hash_to_miracl_g1(domain, msg);
-    g1_from_miracl(&hash)
+    g1_from_bytes(&miracl_g1_to_bytes(&hash).0)
+        .expect("unreachable: conversion error from Miracl G1 to pairing::G1")
 }
 
 // Based on MIRACL's TestHTP.rs.
@@ -94,26 +96,6 @@ pub fn hash_to_miracl_g1(dst: &[u8], msg: &[u8]) -> MiraclG1 {
     p.affine();
 
     p
-}
-
-// Conversions to and from Miracl
-// TODO(CRP-811): Switch to using the now standardized MIRACL serde.
-fn g1_from_miracl(p: &MiraclG1) -> G1 {
-    // MIRACL: 1-byte tag <> 48-byte x-coord <> 48-byte y-coord
-    // Serialize without compression.
-    let mut buf: [u8; 97] = [0; 97];
-    p.tobytes(&mut buf, false);
-
-    // pairing: 3-bit tag <> x-coord <> y-coord
-    // A tag of 000 means an uncompressed, finite point.
-    // Thus to convert, we simply ignore MIRACL's 1-byte tag and read the rest.
-    // Thankfully both libraries encode in big-endian.
-    let mut pairing_p: <G1Affine as CurveAffine>::Uncompressed = EncodedPoint::empty();
-    pairing_p.as_mut().copy_from_slice(&buf[1..97]);
-    pairing_p
-        .into_affine()
-        .expect("MIRACL returned an invalid point")
-        .into_projective()
 }
 
 /// Deterministically create a BLS12-381 field element from a hash

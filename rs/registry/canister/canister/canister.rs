@@ -35,7 +35,7 @@ use registry_canister::{
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_bless_replica_version::BlessReplicaVersionPayload,
         do_create_subnet::CreateSubnetPayload, do_recover_subnet::RecoverSubnetPayload,
-        do_remove_node::RemoveNodePayload,
+        do_remove_node_directly::RemoveNodeDirectlyPayload, do_remove_nodes::RemoveNodesPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_update_icp_xdr_conversion_rate::UpdateIcpXdrConversionRatePayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
@@ -55,6 +55,8 @@ fn main() {}
 
 static mut REGISTRY: Option<Registry> = None;
 static mut WITNESS_GENERATOR: Option<WitnessGeneratorImpl> = None;
+
+const MAX_VERSIONS_PER_QUERY: usize = 1000;
 
 fn registry() -> &'static Registry {
     registry_mut()
@@ -232,7 +234,8 @@ fn get_changes_since_certified() {
         let deltas = registry
             .changelog()
             .iter()
-            .skip_while(|(v, _)| *v <= since_version);
+            .skip_while(|(v, _)| *v <= since_version)
+            .take(MAX_VERSIONS_PER_QUERY);
 
         let data_tree = if latest_version <= since_version {
             singleton("current_version", num_leaf(latest_version))
@@ -428,17 +431,26 @@ fn remove_nodes_from_subnet() {
     });
 }
 
-#[export_name = "canister_update remove_node"]
-fn remove_node() {
+#[export_name = "canister_update remove_nodes"]
+fn remove_nodes() {
+    check_caller_is_governance_and_log("remove_nodes");
+    over(candid_one, |payload: RemoveNodesPayload| {
+        registry_mut().do_remove_nodes(payload);
+        recertify_registry();
+    });
+}
+
+#[export_name = "canister_update remove_node_directly"]
+fn remove_node_directly() {
     // This method can be called by anyone
     println!(
         "{}call: {} from: {}",
         LOG_PREFIX,
-        "remove_node".to_string(),
+        "remove_node_directly".to_string(),
         dfn_core::api::caller()
     );
-    over(candid_one, |payload: RemoveNodePayload| {
-        registry_mut().do_remove_node(payload);
+    over(candid_one, |payload: RemoveNodeDirectlyPayload| {
+        registry_mut().do_remove_node_directly(payload);
         recertify_registry();
     });
 }

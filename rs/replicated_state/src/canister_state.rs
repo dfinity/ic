@@ -15,6 +15,7 @@ use ic_types::{
 };
 use phantom_newtype::AmountOf;
 pub use queues::{CanisterQueues, QUEUE_INDEX_NONE};
+use std::collections::BTreeSet;
 use std::convert::From;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -85,8 +86,8 @@ impl CanisterState {
         self.system_state.canister_id()
     }
 
-    pub fn controller(&self) -> PrincipalId {
-        self.system_state.controller()
+    pub fn controllers(&self) -> &BTreeSet<PrincipalId> {
+        &self.system_state.controllers
     }
 
     /// See `SystemState::push_input` for documentation.

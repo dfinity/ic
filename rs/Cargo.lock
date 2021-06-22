@@ -92,12 +92,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccc9a9dd069569f212bc4330af9f17c4afb5e8ce185e83dbb14f1349dda18b10"
 
 [[package]]
-name = "adler32"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d2e7343e7fc9de883d1b0341e0b13970f764c14101234857d2ddafa1cb1cac2"
-
-[[package]]
 name = "ahash"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -546,7 +540,7 @@ dependencies = [
  "num-bigint 0.3.1",
  "num-traits",
  "num_enum",
- "paste",
+ "paste 1.0.0",
  "pretty",
  "serde",
  "serde_bytes",
@@ -2338,10 +2332,12 @@ dependencies = [
 name = "ic-canonical-state"
 version = "0.8.0"
 dependencies = [
+ "hex",
  "ic-base-types",
  "ic-cow-state",
  "ic-crypto-tree-hash",
  "ic-protobuf",
+ "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-sys",
@@ -3246,6 +3242,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-execution-environment",
+ "ic-ic00-types",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
@@ -3284,6 +3281,8 @@ dependencies = [
 name = "ic-metrics"
 version = "0.8.0"
 dependencies = [
+ "libc",
+ "procfs",
  "prometheus",
 ]
 
@@ -3431,7 +3430,6 @@ dependencies = [
  "prost-build 0.7.0",
  "serde",
  "serde_bytes",
- "wabt",
 ]
 
 [[package]]
@@ -3665,12 +3663,14 @@ dependencies = [
  "ic-transport",
  "ic-types 0.8.0",
  "ic-utils",
+ "jemalloc-ctl",
  "jemallocator",
  "json5",
  "libc",
  "nix 0.20.0",
  "pprof",
  "predicates",
+ "prometheus",
  "prost 0.7.0",
  "rand 0.7.3",
  "regex",
@@ -4135,6 +4135,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8b7a7c0c47db5545ed3fef7468ee7bb5b74691498139e4b3f6a20685dc6dd8e"
 
 [[package]]
+name = "jemalloc-ctl"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c502a5ff9dd2924f1ed32ba96e3b65735d837b4bfd978d3161b1702e66aca4b7"
+dependencies = [
+ "jemalloc-sys",
+ "libc",
+ "paste 0.1.18",
+]
+
+[[package]]
 name = "jemalloc-sys"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4303,24 +4314,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8916b1f6ca17130ec6568feccee27c156ad12037880833a3b842a823236502e7"
 
 [[package]]
-name = "libflate"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "784f4ec5908a9d7f4e53658906386667e8b02e9389a47cfebf45d324ba9e8d25"
-dependencies = [
- "adler32",
- "crc32fast",
- "libflate_lz77",
- "rle-decode-fast",
-]
-
-[[package]]
-name = "libflate_lz77"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3286f09f7d4926fc486334f28d8d2e6ebe4f7f9994494b6dab27ddfad2c9b11b"
-
-[[package]]
 name = "libloading"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4387,7 +4380,7 @@ checksum = "8dd5a6d5999d9907cda8ed67bbd137d3af8085216c2ac62de5be860bd41f304a"
 [[package]]
 name = "lmdb-rkv"
 version = "0.14.99"
-source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=e45bfaaa9055178ab55f8f31bfece50ebd94f901#e45bfaaa9055178ab55f8f31bfece50ebd94f901"
+source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=1cf86b5cc09947e94a787065cadd163a42ef7f18#1cf86b5cc09947e94a787065cadd163a42ef7f18"
 dependencies = [
  "bitflags",
  "byteorder",
@@ -4398,7 +4391,7 @@ dependencies = [
 [[package]]
 name = "lmdb-rkv-sys"
 version = "0.11.99"
-source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=e45bfaaa9055178ab55f8f31bfece50ebd94f901#e45bfaaa9055178ab55f8f31bfece50ebd94f901"
+source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=1cf86b5cc09947e94a787065cadd163a42ef7f18#1cf86b5cc09947e94a787065cadd163a42ef7f18"
 dependencies = [
  "bindgen 0.53.3",
  "cc",
@@ -5200,9 +5193,28 @@ dependencies = [
 
 [[package]]
 name = "paste"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45ca20c77d80be666aef2b45486da86238fabe33e38306bd3118fe4af33fa880"
+dependencies = [
+ "paste-impl",
+ "proc-macro-hack",
+]
+
+[[package]]
+name = "paste"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6ddc8e145de01d9180ac7b78b9676f95a9c2447f6a88b2c2a04702211bc5d71"
+
+[[package]]
+name = "paste-impl"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d95a7db200b97ef370c8e6de0088252f7e0dfff7d047a28528e47456c0fc98b6"
+dependencies = [
+ "proc-macro-hack",
+]
 
 [[package]]
 name = "peeking_take_while"
@@ -5528,31 +5540,32 @@ dependencies = [
 
 [[package]]
 name = "procfs"
-version = "0.7.9"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c434e93ef69c216e68e4f417c927b4f31502c3560b72cfdb6827e2321c5c6b3e"
+checksum = "ab8809e0c18450a2db0f236d2a44ec0b4c1412d0eb936233579f0990faa5d5cd"
 dependencies = [
  "bitflags",
  "byteorder",
+ "flate2",
  "hex",
  "lazy_static",
  "libc",
- "libflate",
 ]
 
 [[package]]
 name = "prometheus"
-version = "0.9.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd0ced56dee39a6e960c15c74dc48849d614586db2eaada6497477af7c7811cd"
+checksum = "5986aa8d62380092d2f50f8b1cdba9cb9b6731ffd4b25b51fd126b6c3e05b99c"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "fnv",
  "lazy_static",
  "libc",
+ "memchr",
+ "parking_lot 0.11.1",
  "procfs",
  "protobuf",
- "spin",
  "thiserror",
 ]
 
@@ -6231,12 +6244,6 @@ name = "rgb"
 version = "0.8.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6714061b32e0b0527005d5874c28a57d905559fecfacd361462ad0b01e701996"
-
-[[package]]
-name = "rle-decode-fast"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cabe4fa914dec5870285fa7f71f602645da47c486e68486d2b4ceb4a343e90ac"
 
 [[package]]
 name = "rocksdb"
@@ -7477,9 +7484,9 @@ checksum = "826e7639553986605ec5979c7dd957c7895e93eabed50ab2ffa7f6128a75097c"
 
 [[package]]
 name = "url"
-version = "2.2.1"
+version = "2.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ccd964113622c8e9322cfac19eb1004a07e636c545f325da085d5cdde6f1f8b"
+checksum = "a507c383b2d33b5fc35d1861e77e6b383d158b2da5e14fe51b83dfedf6fd578c"
 dependencies = [
  "form_urlencoded",
  "idna",
@@ -7536,7 +7543,8 @@ checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 [[package]]
 name = "wabt"
 version = "0.10.0"
-source = "git+https://github.com/dfinity-lab/wabt-rs?rev=b4d778802976f10494411388e48a784d4d015bbb#b4d778802976f10494411388e48a784d4d015bbb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00bef93d5e6c81a293bccf107cf43aa47239382f455ba14869d36695d8963b9c"
 dependencies = [
  "serde",
  "serde_derive",
@@ -7547,7 +7555,8 @@ dependencies = [
 [[package]]
 name = "wabt-sys"
 version = "0.8.0"
-source = "git+https://github.com/dfinity-lab/wabt-rs?rev=b4d778802976f10494411388e48a784d4d015bbb#b4d778802976f10494411388e48a784d4d015bbb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a4e043159f63e16986e713e9b5e1c06043df4848565bf672e27c523864c7791"
 dependencies = [
  "cc",
  "cmake",

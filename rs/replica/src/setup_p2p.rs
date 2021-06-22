@@ -178,6 +178,7 @@ pub fn construct_p2p_stack(
         catch_up_package,
         cycles_account_manager,
         local_store_time_reader,
+        config.nns_registry_replicator.poll_delay_duration_ms,
     )
     .expect("Failed to construct p2p");
 

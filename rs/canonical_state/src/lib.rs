@@ -14,8 +14,16 @@ mod test_visitors;
 pub type Label = Vec<u8>;
 
 pub use lazy_tree::conversion::LabelLike;
-pub use traversal::{traverse, traverse_partial};
+pub use traversal::traverse;
 pub use visitor::{Control, Visitor};
 
-/// The Canonical State certification version produced by this crate.
-pub const CURRENT_CERTIFICATION_VERSION: u32 = 1;
+/// The Canonical State certification version that should be used for newly
+/// computed states.
+///
+/// Version history:
+///
+///   0. Initial version.
+///   1. Added canister module hash and controller.
+///   2. Added support for multiple canister controllers.
+///   3. Added subnet to canister ID ranges routing tables.
+pub const CURRENT_CERTIFICATION_VERSION: u32 = 3;

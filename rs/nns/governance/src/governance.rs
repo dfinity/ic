@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::convert::TryInto;
@@ -7,10 +8,12 @@ use std::string::ToString;
 
 use crate::pb::v1::{
     add_or_remove_node_provider::Change,
+    claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
     governance::neuron_in_flight_command::Command as InFlightCommand,
     governance::NeuronInFlightCommand, governance_error::ErrorType, manage_neuron,
     manage_neuron::Command, manage_neuron_response, neuron::DissolveState, neuron::Followees,
-    proposal, Ballot, BallotInfo, ExecuteNnsFunction, Governance as GovernanceProto,
+    proposal, Ballot, BallotInfo, ClaimOrRefreshNeuronFromAccount,
+    ClaimOrRefreshNeuronFromAccountResponse, ExecuteNnsFunction, Governance as GovernanceProto,
     GovernanceError, ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse,
     ManageNeuron, ManageNeuronResponse, NetworkEconomics, Neuron, NeuronInfo, NeuronStakeTransfer,
     NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData, ProposalInfo,
@@ -24,7 +27,7 @@ use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ledger_canister::{AccountIdentifier, Subaccount, TRANSACTION_FEE};
+use ledger_canister::{AccountIdentifier, Memo, Subaccount, TRANSACTION_FEE};
 use registry_canister::mutations::{
     do_add_node_operator::AddNodeOperatorPayload,
     do_update_icp_xdr_conversion_rate::UpdateIcpXdrConversionRatePayload,
@@ -67,10 +70,10 @@ pub const MAX_NEURON_AGE_FOR_AGE_BONUS: u64 = 4 * ONE_YEAR_SECONDS;
 /// The minimum dissolve delay so that a neuron may vote.
 pub const MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
 
-/// The maximum amount of followees each neuron can establish for each topic.
+/// The maximum number of followees each neuron can establish for each topic.
 pub const MAX_FOLLOWEES_PER_TOPIC: usize = 15;
 
-/// The maximum amount of recent ballots to keep, per neuron.
+/// The maximum number of recent ballots to keep, per neuron.
 pub const MAX_NEURON_RECENT_BALLOTS: usize = 100;
 
 /// The desired period for reward distribution events.
@@ -337,6 +340,7 @@ impl NnsFunction {
             }
             NnsFunction::SetFirewallConfig => (REGISTRY_CANISTER_ID, "set_firewall_config"),
             NnsFunction::StopOrStartNnsCanister => (ROOT_CANISTER_ID, "stop_or_start_nns_canister"),
+            NnsFunction::RemoveNodes => (REGISTRY_CANISTER_ID, "remove_nodes"),
         };
         Ok((canister_id, method))
     }
@@ -344,24 +348,6 @@ impl NnsFunction {
 
 impl Neuron {
     // --- Utility methods on neurons: mostly not for public consumption.
-
-    /// Return the age of this neuron.
-    ///
-    /// A dissolving neuron has age zero.
-    ///
-    /// Technically, each neuron has an internal `aging_since`
-    /// field that is set to the current time when a neuron is
-    /// created in a locked state and reset when a neuron is
-    /// locked again after a call to `stop_dissolve`. While a
-    /// neuron is dissolving, `aging_since` is a value in the far
-    /// future, effectively making its age zero.
-    fn age_seconds(&self, now_seconds: u64) -> u64 {
-        if self.aging_since_timestamp_seconds <= now_seconds {
-            now_seconds - self.aging_since_timestamp_seconds
-        } else {
-            0
-        }
-    }
 
     /// Returns the state the neuron would be in a time
     /// `now_seconds`. See [NeuronState] for details.
@@ -692,6 +678,24 @@ impl Neuron {
 
     // --- Public interface of a neuron.
 
+    /// Return the age of this neuron.
+    ///
+    /// A dissolving neuron has age zero.
+    ///
+    /// Technically, each neuron has an internal `aging_since`
+    /// field that is set to the current time when a neuron is
+    /// created in a locked state and reset when a neuron is
+    /// locked again after a call to `stop_dissolve`. While a
+    /// neuron is dissolving, `aging_since` is a value in the far
+    /// future, effectively making its age zero.
+    pub fn age_seconds(&self, now_seconds: u64) -> u64 {
+        if self.aging_since_timestamp_seconds <= now_seconds {
+            now_seconds - self.aging_since_timestamp_seconds
+        } else {
+            0
+        }
+    }
+
     /// Returns the dissolve delay of this neuron. For a locked
     /// neuron, this is just the recorded dissolve delay; for a
     /// dissolving neuron, this is the the time left (from
@@ -822,8 +826,9 @@ impl Proposal {
                     if let Some(mt) = NnsFunction::from_i32(m.nns_function) {
                         match mt {
                             NnsFunction::Unspecified => Topic::Unspecified,
-                            NnsFunction::AssignNoid => Topic::NodeAdmin,
-                            NnsFunction::UpdateNodeOperatorConfig => Topic::NodeAdmin,
+                            NnsFunction::AssignNoid
+                            | NnsFunction::UpdateNodeOperatorConfig
+                            | NnsFunction::RemoveNodes => Topic::NodeAdmin,
                             NnsFunction::CreateSubnet
                             | NnsFunction::AddNodeToSubnet
                             | NnsFunction::RecoverSubnet
@@ -1260,6 +1265,8 @@ pub trait Ledger: Send + Sync {
     ) -> Result<u64, GovernanceError>;
 
     async fn total_supply(&self) -> Result<ICPTs, GovernanceError>;
+
+    async fn account_balance(&self, account: AccountIdentifier) -> Result<ICPTs, GovernanceError>;
 }
 
 /// A single ongoing update for a single neuron.
@@ -1276,7 +1283,7 @@ impl Drop for LedgerUpdateLock {
         // &self always remains alive. The 'mut' is not an issue, because
         // 'unlock_neuron' will verify that the lock exists.
         let gov: &mut Governance = unsafe { &mut *self.gov };
-        gov.unlock_neuron(self.nid).expect("Neuron was not locked");
+        gov.unlock_neuron(self.nid);
     }
 }
 
@@ -1499,15 +1506,17 @@ impl Governance {
     }
 
     /// Unlocks a given neuron.
-    fn unlock_neuron(&mut self, id: u64) -> Result<(), GovernanceError> {
-        if self.proto.in_flight_commands.contains_key(&id) {
-            self.proto.in_flight_commands.remove(&id);
-            return Ok(());
+    fn unlock_neuron(&mut self, id: u64) {
+        match self.proto.in_flight_commands.remove(&id) {
+            None => {
+                println!(
+                    "Unexpected condition when unlocking neuron {}: the neuron was not registred as 'in flight'",
+                    id
+                );
+            }
+            // This is the expected case...
+            Some(_) => (),
         }
-        Err(GovernanceError::new_with_message(
-            ErrorType::PreconditionFailed,
-            "Tried to release a ledger update lock that was not acquired",
-        ))
     }
 
     /// Add a neuron to the list of neurons and update
@@ -1540,7 +1549,7 @@ impl Governance {
         if self.proto.neurons.len() + 1 > MAX_NUMBER_OF_NEURONS {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "Cannot add neuron. Max amount of neurons reached.",
+                "Cannot add neuron. Max number of neurons reached.",
             ));
         }
         if self.proto.neurons.contains_key(&neuron_id) {
@@ -1608,12 +1617,31 @@ impl Governance {
     }
 
     /// Return the Neuron IDs of all Neurons that have `principal` as their
-    /// controller or as one of their hot keys
+    /// controller or as one of their hot keys.
     pub fn get_neuron_ids_by_principal(&self, principal: &PrincipalId) -> Vec<u64> {
         self.principal_to_neuron_ids_index
             .get(principal)
             .map(|ids| ids.iter().copied().collect())
-            .unwrap_or_else(Vec::new)
+            .unwrap_or_default()
+    }
+
+    /// Return the union of `followees` with the set of Neuron IDs of all
+    /// Neurons that directly follow the `followees` w.r.t. the
+    /// topic `NeuronManagement`.
+    pub fn get_managed_neuron_ids_for(&self, followees: &[u64]) -> Vec<u64> {
+        // Tap into the `topic_followee_index` for followers of level zero neurons.
+        let mut managed: HashSet<u64> = followees.iter().copied().collect();
+        for followee in followees {
+            if let Some(followers) = self
+                .topic_followee_index
+                .get(&Topic::NeuronManagement)
+                .and_then(|m| m.get(&followee))
+            {
+                managed.extend(followers)
+            }
+        }
+
+        managed.iter().copied().collect()
     }
 
     /// See `ListNeurons`.
@@ -1652,7 +1680,7 @@ impl Governance {
     ///
     /// Currently we just do linear search on the neurons. We tried an index at
     /// some point, but the index was too big, took too long to build and
-    /// ultimately lowered our max possible amount of neurons, so we
+    /// ultimately lowered our max possible number of neurons, so we
     /// "downgraded" to linear search.
     ///
     /// Consider changing this if getting a neuron by subaccount ever gets in a
@@ -1716,7 +1744,7 @@ impl Governance {
     }
 
     /// Creates a new neuron or refreshes the stake of an existing one from
-    /// a ledger transfer.
+    /// a ledger transfer notification.
     ///
     /// Since this is meant to be called by the ledger, we're limited in what
     /// we can do/return. We expect to be provided all the information about
@@ -1747,7 +1775,7 @@ impl Governance {
     ///   stake of an existing neuron is updated.
     /// - If one of more of the pre-conditions do not apply, the stake is
     ///   transferred back to the source account.
-    pub async fn create_or_refresh_neuron(
+    pub async fn claim_or_top_up_neuron_from_notification(
         &mut self,
         transfer: NeuronStakeTransfer,
     ) -> Result<NeuronId, GovernanceError> {
@@ -1761,17 +1789,7 @@ impl Governance {
         // First things first, let's rebuild the account hash from the sender
         // and the nonce and make sure they match the subaccount the funds were
         // transferred to.
-        let gov_subaccount_computed = Subaccount::try_from(
-            &{
-                let mut state = Sha256::new();
-                state.write(&[0x0c]);
-                state.write(b"neuron-stake");
-                state.write(&controller.as_slice());
-                state.write(&nonce.to_be_bytes());
-                state.finish()
-            }[..],
-        )
-        .expect("Couldn't build subaccount from hash.");
+        let gov_subaccount_computed = compute_neuron_staking_subaccount(controller, nonce);
 
         // Preconditons 1 and 2. The subaccount can't be computed from the
         // controller and the nonce, meaning the hash has been miscomputed.
@@ -1828,7 +1846,7 @@ impl Governance {
                     .await;
                 return Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
-                    format!("Maximum amount of neurons reached. {}", return_msg),
+                    format!("Maximum number of neurons reached. {}", return_msg),
                 ));
             }
 
@@ -1836,14 +1854,7 @@ impl Governance {
             // the transaction fee.
 
             // Check that there's enough stake.
-            if stake_e8s
-                < self
-                    .proto
-                    .economics
-                    .as_ref()
-                    .expect("Neuron economics must be present")
-                    .neuron_minimum_stake_e8s
-            {
+            if stake_e8s < self.economics().neuron_minimum_stake_e8s {
                 self.return_funds(
                     gov_subaccount,
                     controller,
@@ -1884,6 +1895,215 @@ impl Governance {
             self.add_neuron(nid.id, neuron)
                 .expect("Expected the neuron to be added.");
             Ok(nid)
+        }
+    }
+
+    /// Creates a new neuron or refreshes the stake of an existing
+    /// neuron from a ledger account.
+    ///
+    /// Pre-conditions:
+    /// - The memo must match the nonce of the subaccount.
+    ///
+    /// For new neurons, i.e. if the subaccount of the transfer is a new one:
+    /// - The new neuron won't take us above the `MAX_NUMBER_OF_NEURONS`.
+    /// - The amount transfered was greater than or equal to
+    ///   `self.enconomics.neuron_minimum_stake_e8s`.
+    ///
+    /// Post-conditions:
+    /// - If all the pre-conditions apply, either a new neuron is created or the
+    ///   stake of an existing neuron is updated.
+    pub async fn claim_or_refresh_neuron_from_account(
+        &mut self,
+        caller: &PrincipalId,
+        claim_or_refresh: &ClaimOrRefreshNeuronFromAccount,
+    ) -> ClaimOrRefreshNeuronFromAccountResponse {
+        let controller = claim_or_refresh.controller.unwrap_or(*caller);
+        let result = self
+            .claim_or_refresh_neuron_from_account_internal(Memo(claim_or_refresh.memo), controller)
+            .await;
+        match result {
+            Ok(neuron_id) => ClaimOrRefreshNeuronFromAccountResponse {
+                result: Some(ClaimOrRefreshResult::NeuronId(neuron_id)),
+            },
+            Err(err) => ClaimOrRefreshNeuronFromAccountResponse {
+                result: Some(ClaimOrRefreshResult::Error(err)),
+            },
+        }
+    }
+
+    async fn claim_or_refresh_neuron_from_account_internal(
+        &mut self,
+        memo: Memo,
+        controller: PrincipalId,
+    ) -> Result<NeuronId, GovernanceError> {
+        // Compute the subaccount we expect the transfer to have been made to.
+        let gov_subaccount = compute_neuron_staking_subaccount(controller, memo.0);
+        let account = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(gov_subaccount));
+        let now = self.env.now();
+
+        // See if there is already a neuron with this subaccount, if there is
+        // one refresh the stake of that neuron, if the stake is different from
+        // the balance.
+        if let Some(neuron) = self.get_neuron_by_subaccount(&gov_subaccount) {
+            let nid = neuron.id.as_ref().expect("Neuron must have an id").clone();
+            // We need to lock the neuron to make sure it doesn't undergo
+            // concurrent changes while we're checking the balance and
+            // refreshing the stake.
+            let _neuron_lock = self.lock_neuron_for_command(
+                nid.id,
+                NeuronInFlightCommand {
+                    timestamp: self.env.now(),
+                    command: Some(InFlightCommand::ClaimOrRefresh(
+                        ClaimOrRefreshNeuronFromAccount {
+                            controller: Some(controller),
+                            memo: memo.0,
+                        },
+                    )),
+                },
+            )?;
+
+            // Get the balance of the neuron ledger canister.
+            let balance = self.ledger.account_balance(account).await?;
+            let neuron = self.get_neuron_mut(&nid)?;
+            match neuron.cached_neuron_stake_e8s.cmp(&balance.get_e8s()) {
+                Ordering::Greater => {
+                    println!(
+                        "{}ERROR. Neuron cached stake was inconsistent.\
+                          Neuron account: {} has less e8s: {} than the cached neuron stake: {}.\
+                          Stake adjusted.",
+                        LOG_PREFIX,
+                        account,
+                        balance.get_e8s(),
+                        neuron.cached_neuron_stake_e8s
+                    );
+                    neuron.cached_neuron_stake_e8s = balance.get_e8s();
+                }
+                Ordering::Less => {
+                    // If the neuron has an age, adjust it.
+                    if neuron.aging_since_timestamp_seconds != u64::MAX {
+                        // Note that old_stake < new_stake
+                        let old_stake = neuron.cached_neuron_stake_e8s as u128;
+                        let new_stake = balance.get_e8s() as u128;
+                        let old_age =
+                            now.saturating_sub(neuron.aging_since_timestamp_seconds) as u128;
+                        let new_age = (old_age * old_stake) / new_stake;
+                        // This means new_age * new_stake is equal to
+                        // old_age * old_stake. That is, the age is
+                        // adjusted in proportion to the stake. Thus,
+                        // the age bonus, which is a constant times
+                        // age times stake, remains constant.
+                        neuron.aging_since_timestamp_seconds = now.saturating_sub(new_age as u64);
+                        // Note that if new_stake == old_stake, then
+                        // new_age == old_age, and
+                        // now - new_age =
+                        // now-(now-neuron.aging_since_timestamp_seconds)
+                        // = neuron.aging_since_timestamp_seconds.
+                    }
+                    // Update the cached stake - after the age has been adjusted.
+                    neuron.cached_neuron_stake_e8s = balance.get_e8s();
+                }
+                // If the stake is the same as the account balance,
+                // just return the neuron id (this way this method
+                // also serves the purpose of allowing to discover the
+                // neuron id based on the memo and the controller).
+                Ordering::Equal => (),
+            };
+
+            Ok(nid)
+        }
+        // If there isn't a neuron already we create one, unless the account
+        // doesn't have enough to stake a neuron or we've reached the maximum number
+        // of neurons, in which case we return an error.
+        // We can't return the funds without more information about the
+        // source account, so as a workaround for insufficient stake we can ask the
+        // user to transfer however much is missing to stake a neuron and they can
+        // then disburse if they so choose. We need to do something more involved
+        // if we've reached the max, TODO.
+        //
+        // Note that we need to create the neuron before checking the balance
+        // so that we record the neuron and avoid a race where a user calls
+        // this method a second time before the first time responds. If we store
+        // the neuron and lock it before we make the call, we know that any
+        // competing call will need to wait for this one to finish before
+        // proceeding.
+        else {
+            let nid = self.new_neuron_id();
+            let neuron = Neuron {
+                id: Some(nid.clone()),
+                account: gov_subaccount.to_vec(),
+                controller: Some(controller),
+                cached_neuron_stake_e8s: 0,
+                created_timestamp_seconds: self.env.now(),
+                aging_since_timestamp_seconds: self.env.now(),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
+                transfer: None,
+                kyc_verified: true,
+                followees: self.proto.default_followees.clone(),
+                hot_keys: vec![],
+                maturity_e8s_equivalent: 0,
+                neuron_fees_e8s: 0,
+                not_for_profit: false,
+                recent_ballots: vec![],
+            };
+
+            // This also verifies that there are not too many neurons already.
+            self.add_neuron(nid.id, neuron.clone())?;
+
+            let _neuron_lock = self.lock_neuron_for_command(
+                nid.id,
+                NeuronInFlightCommand {
+                    timestamp: self.env.now(),
+                    command: Some(InFlightCommand::ClaimOrRefresh(
+                        ClaimOrRefreshNeuronFromAccount {
+                            controller: Some(controller),
+                            memo: memo.0,
+                        },
+                    )),
+                },
+            )?;
+
+            // Get the balance of the neuron ledger canister.
+            let balance = self.ledger.account_balance(account).await?;
+            let min_stake = self.economics().neuron_minimum_stake_e8s;
+            if balance.get_e8s() < min_stake {
+                // To prevent this method from creating non-staked
+                // neurons, we must also remove the neuron that was
+                // previously created.
+                self.remove_neuron(nid.id, neuron)?;
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InsufficientFunds,
+                    format!(
+                        "Account does not have enough funds to stake a neuron. \
+                         Please make sure that account has at least {:?} e8s (was {:?} e8s)",
+                        min_stake,
+                        balance.get_e8s()
+                    ),
+                ));
+            }
+
+            // Ok, we were able to stake the neuron.
+            match self.get_neuron_mut(&nid) {
+                Ok(mut neuron) => {
+                    // Adjust the stake.
+                    neuron.cached_neuron_stake_e8s = balance.get_e8s();
+                    Ok(nid)
+                }
+                Err(err) => {
+                    // This should not be possible, but let's be
+                    // defensive and provide a reasonable error message.
+                    Err(GovernanceError::new_with_message(
+                        ErrorType::NotFound,
+                        format!(
+                            "When attempting to stake a neuron with ID {:?} and stake {:?},\
+			     the neuron disappeared while the operation was in flight.\
+			     Please try again: {:?}",
+                            nid,
+                            balance.get_e8s(),
+                            err
+                        ),
+                    ))
+                }
+            }
         }
     }
 
@@ -2411,7 +2631,7 @@ impl Governance {
     /// - The caller is the controller of the neuron.
     /// - The parent neuron is not already undergoing ledger updates.
     /// - The parent neuron has accumulated maturity that would generate more
-    ///   than Networkeconomics::neuron_minimum_spawn_stake_e8s staked in the
+    ///   than NetworkEconomics::neuron_minimum_spawn_stake_e8s staked in the
     ///   child neuron.
     pub async fn spawn_neuron(
         &mut self,
@@ -3198,6 +3418,10 @@ impl Governance {
                     == ProposalRewardStatus::ReadyToSettle
             })
             .map(|(k, _)| ProposalId { id: *k })
+    }
+
+    pub fn num_ready_to_be_settled_proposals(&self) -> usize {
+        self.ready_to_be_settled_proposal_ids().count()
     }
 
     /// This method attempts to move a proposal forward in the process,
@@ -4774,7 +4998,7 @@ impl Governance {
 
     /// Return the effective _voting period_ of a given topic.
     ///
-    /// This function is "curried" to aleviate lifetime issues on the
+    /// This function is "curried" to alleviate lifetime issues on the
     /// `self` parameter.
     fn voting_period_seconds(&self) -> impl Fn(Topic) -> u64 {
         let short = self.proto.short_voting_period_seconds;
@@ -4787,4 +5011,19 @@ impl Governance {
             }
         }
     }
+}
+
+/// Computes the subaccount to which neuron staking transfers are made. This
+/// function must be kept in sync with the NNS UI equivalent.
+fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
+    // The equivalent function in the UI is
+    // https://github.com/dfinity/dfinity_wallet/blob/351e07d3e6d007b090117161a94ce8ec9d5a6b49/js-agent/src/canisters/createNeuron.ts#L63
+    Subaccount({
+        let mut state = Sha256::new();
+        state.write(&[0x0c]);
+        state.write(b"neuron-stake");
+        state.write(&controller.as_slice());
+        state.write(&nonce.to_be_bytes());
+        state.finish()
+    })
 }

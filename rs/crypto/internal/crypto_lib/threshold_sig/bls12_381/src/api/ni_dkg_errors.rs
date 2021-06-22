@@ -451,6 +451,12 @@ pub enum CspDkgLoadPrivateKeyError {
     MalformedTranscriptError(MalformedDataError),
     /// The transcript cannot be used to generate the desired private key.
     InvalidTranscriptError(InvalidArgumentError),
+    /// The transcript's forward-secure epoch is too old and can no longer be
+    /// decrypted
+    EpochTooOldError {
+        ciphertext_epoch: Epoch,
+        secret_key_epoch: Epoch,
+    },
 }
 
 impl CspDkgVerifyReshareDealingError {

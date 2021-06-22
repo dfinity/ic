@@ -1,21 +1,35 @@
 #![allow(clippy::unwrap_used)]
+use crate::ClientAuthentication;
 use ic_crypto_test_utils::tls::x509_certificates::{
     ed25519_key_pair, generate_cert, generate_ed25519_cert, prime256v1_key_pair,
 };
 use openssl::hash::MessageDigest;
 use openssl::ssl::{SslAcceptor, SslVerifyMode};
-use openssl::x509::X509;
 
 mod acceptor {
     use super::*;
     use crate::tls_acceptor;
 
     #[test]
-    fn should_allow_client_authentication() {
+    fn should_allow_client_authentication_if_enabled() {
         let acceptor = default_acceptor();
 
         let verify_mode = acceptor.context().verify_mode();
         assert_eq!(verify_mode, SslVerifyMode::PEER);
+    }
+
+    #[test]
+    fn should_not_authenticate_client_if_client_auth_disabled() {
+        let (key_pair, server_cert) = generate_ed25519_cert();
+        let acceptor = tls_acceptor(
+            &key_pair,
+            &server_cert,
+            ClientAuthentication::NoAuthentication,
+        )
+        .unwrap();
+
+        let verify_mode = acceptor.context().verify_mode();
+        assert_eq!(verify_mode, SslVerifyMode::NONE);
     }
 
     #[test]
@@ -72,9 +86,15 @@ mod acceptor {
         let empty_trusted_client_certs = vec![];
         let (cert_key_pair, server_cert) = generate_ed25519_cert();
 
-        let error = tls_acceptor(&cert_key_pair, &server_cert, empty_trusted_client_certs)
-            .err()
-            .unwrap();
+        let error = tls_acceptor(
+            &cert_key_pair,
+            &server_cert,
+            ClientAuthentication::OptionalAuthentication {
+                trusted_client_certs: empty_trusted_client_certs,
+            },
+        )
+        .err()
+        .unwrap();
 
         assert_eq!(
             error.description,
@@ -133,10 +153,12 @@ mod acceptor {
         tls_acceptor(&key_pair, &server_cert, dummy_trusted_client_certs()).unwrap()
     }
 
-    fn dummy_trusted_client_certs() -> Vec<X509> {
+    fn dummy_trusted_client_certs() -> ClientAuthentication {
         let key_pair = ed25519_key_pair();
         let some_cert = generate_cert(&key_pair, MessageDigest::null());
-        vec![some_cert]
+        ClientAuthentication::OptionalAuthentication {
+            trusted_client_certs: vec![some_cert],
+        }
     }
 }
 

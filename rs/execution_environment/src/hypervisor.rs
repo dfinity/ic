@@ -4,8 +4,8 @@ use ic_cow_state::{error::CowError, CowMemoryManager};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{WasmExecutionInput, WasmExecutionOutput};
 use ic_interfaces::execution_environment::{
-    EarlyResult, ExecResult, HypervisorError, HypervisorResult, InstanceStats,
-    MessageAcceptanceError, SubnetAvailableMemory,
+    EarlyResult, ExecResult, HypervisorError, HypervisorResult, MessageAcceptanceError,
+    SubnetAvailableMemory,
 };
 use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::{debug, fatal, ReplicaLogger};
@@ -25,7 +25,7 @@ use ic_types::{
     CanisterStatusType, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
     SubnetId, Time,
 };
-use prometheus::{Histogram, IntGauge};
+use prometheus::{Histogram, IntCounterVec, IntGauge};
 use runtime::WasmExecutionDispatcher;
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -34,6 +34,8 @@ pub struct HypervisorMetrics {
     accessed_pages: Histogram,
     dirty_pages: Histogram,
     allocated_pages: IntGauge,
+    executed_messages: IntCounterVec,
+    out_of_instruction_failures: IntGauge,
 }
 
 impl HypervisorMetrics {
@@ -55,14 +57,38 @@ impl HypervisorMetrics {
                 "hypervisor_allocated_pages",
                 "Total number of currently allocated pages.",
             ),
+            executed_messages: metrics_registry.int_counter_vec(
+                "hypervisor_executed_messages_total",
+                "Number of messages executed, by type and status.",
+                &["api_type", "status"],
+            ),
+            out_of_instruction_failures: metrics_registry.int_gauge(
+                "hypervisor_out_of_instruction_errors",
+                "Number of messages failed due to running out of instructions ",
+            ),
         }
     }
 
-    fn update(&self, instance_stats: &InstanceStats) {
+    fn observe(&self, api_type: &str, result: &WasmExecutionOutput) {
         self.accessed_pages
-            .observe(instance_stats.accessed_pages as f64);
-        self.dirty_pages.observe(instance_stats.dirty_pages as f64);
+            .observe(result.instance_stats.accessed_pages as f64);
+        self.dirty_pages
+            .observe(result.instance_stats.dirty_pages as f64);
         self.allocated_pages.set(allocated_pages_count() as i64);
+
+        let status = match &result.wasm_result {
+            Ok(Some(WasmResult::Reply(_))) => "success",
+            Ok(Some(WasmResult::Reject(_))) => "Reject",
+            Ok(None) => "NoResponse",
+            Err(e) => {
+                if let HypervisorError::OutOfInstructions = e {
+                    self.out_of_instruction_failures.inc();
+                }
+                e.as_str()
+            }
+        };
+        self.executed_messages
+            .with_label_values(&[api_type, status]);
     }
 }
 
@@ -991,6 +1017,7 @@ pub fn execute(
     metrics: Arc<HypervisorMetrics>,
     wasm_executor: Arc<WasmExecutionDispatcher>,
 ) -> ExecResult<WasmExecutionOutput> {
+    let api_type_str = api_type.as_str();
     let result = ExecResult::new(Box::new(wasm_executor.execute(WasmExecutionInput {
         api_type,
         system_state,
@@ -1005,7 +1032,7 @@ pub fn execute(
     })));
 
     result.and_then(move |result| {
-        metrics.update(&result.instance_stats);
+        metrics.observe(api_type_str, &result);
         result
     })
 }

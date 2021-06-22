@@ -57,6 +57,17 @@ impl From<CspDkgLoadPrivateKeyError> for DkgLoadTranscriptError {
                 // malformed:
                 panic!("{}MalformedSecretKeyError: {:?}", panic_prefix, error);
             }
+            CspDkgLoadPrivateKeyError::EpochTooOldError {
+                ciphertext_epoch,
+                secret_key_epoch,
+            } => {
+                // This would be an IDKM implementation error, since EpochTooOldError is mapped
+                // to `Ok(())` and ignored in load_transcript
+                panic!(
+                    "{}EpochTooOldError: {}/{}",
+                    panic_prefix, ciphertext_epoch, secret_key_epoch
+                );
+            }
         }
     }
 }

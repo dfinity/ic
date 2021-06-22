@@ -1,13 +1,15 @@
 use crate::keygen::keygen_internal::KeyGenInternal;
 use crate::{key_from_registry, CryptoComponentFatClient};
 use ic_crypto_internal_csp::keygen::{forward_secure_key_id, public_key_hash_as_key_id};
-use ic_crypto_internal_csp::types::CspPublicKey;
+use ic_crypto_internal_csp::types::conversions::CspPopFromPublicKeyProtoError;
+use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
 use ic_interfaces::crypto::{KeyManager, Keygen};
 use ic_protobuf::crypto::v1::NodePublicKeys;
+use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client::helper::crypto::CryptoRegistry;
 use ic_types::crypto::{
     AlgorithmId, CommitteeMemberPublicKey, CryptoError, CryptoResult, KeyId, KeyPurpose,
@@ -93,6 +95,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                 registry_version,
             });
         }
+        Self::ensure_committe_signing_key_pop_is_well_formed(&pk_proto)?;
         let csp_key = CspPublicKey::try_from(pk_proto)?;
         let key_id = public_key_hash_as_key_id(&csp_key);
         if !self.csp.sks_contains(&key_id) {
@@ -161,6 +164,35 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                 certificate_der: x509_public_key_cert.certificate_der,
             });
         }
+        Ok(())
+    }
+
+    fn ensure_committe_signing_key_pop_is_well_formed(
+        pk_proto: &PublicKeyProto,
+    ) -> CryptoResult<()> {
+        CspPop::try_from(pk_proto).map_err(|e| match e {
+            CspPopFromPublicKeyProtoError::NoPopForAlgorithm { algorithm } => {
+                CryptoError::MalformedPop {
+                    algorithm,
+                    pop_bytes: vec![],
+                    internal_error: format!("{:?}", e),
+                }
+            }
+            CspPopFromPublicKeyProtoError::MissingProofData => CryptoError::MalformedPop {
+                algorithm: AlgorithmId::MultiBls12_381,
+                pop_bytes: vec![],
+                internal_error: format!("{:?}", e),
+            },
+            CspPopFromPublicKeyProtoError::MalformedPop {
+                pop_bytes,
+                internal_error,
+            } => CryptoError::MalformedPop {
+                algorithm: AlgorithmId::MultiBls12_381,
+                pop_bytes,
+                internal_error,
+            },
+        })?;
+
         Ok(())
     }
 }

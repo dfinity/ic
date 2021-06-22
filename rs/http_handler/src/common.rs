@@ -6,7 +6,7 @@ use ic_crypto_tree_hash::{
     flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, LabeledTree::SubTree,
 };
 use ic_interfaces::state_manager::StateReader;
-use ic_logger::{debug, info, ReplicaLogger};
+use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     messages::{Blob, Certificate, CertificateDelegation, MessageId},
@@ -96,31 +96,25 @@ pub(crate) fn protobuf_response<R: Message>(r: &R) -> Response<Body> {
     response
 }
 
-// TODO(EXC-205): Refactor `make_response_to_unauthentic_requests` to return a
-// Response, so we don't need to call unwrap.
-pub(crate) fn make_response_to_unauthentic_requests<T>(
+pub(crate) fn make_response_on_validation_error(
     message_id: MessageId,
-    validity: Result<T, RequestValidationError>,
+    err: RequestValidationError,
     log: &ReplicaLogger,
-) -> Option<Response<Body>> {
-    match validity {
-        Err(RequestValidationError::InvalidIngressExpiry(msg))
-        | Err(RequestValidationError::InvalidDelegationExpiry(msg)) => {
-            return Some(make_response(StatusCode::BAD_REQUEST, &msg));
+) -> Response<Body> {
+    match err {
+        RequestValidationError::InvalidIngressExpiry(msg)
+        | RequestValidationError::InvalidDelegationExpiry(msg) => {
+            make_response(StatusCode::BAD_REQUEST, &msg)
         }
-        Err(err) => {
+        _ => {
             let message = format!(
                 "Failed to authenticate request {} due to: {}",
                 message_id, err
             );
             info!(log, "{}", message);
-            return Some(make_response(StatusCode::FORBIDDEN, message.as_str()));
+            make_response(StatusCode::FORBIDDEN, message.as_str())
         }
-        Ok(_) => {
-            debug!(log, "Request {} is correctly authenticated.", message_id);
-        }
-    };
-    None
+    }
 }
 
 pub(crate) fn get_latest_certified_state(
@@ -182,18 +176,12 @@ pub(crate) mod test {
     use serde_cbor::Value;
 
     fn check_cors_headers(hm: &HeaderMap) {
-        let mut acl_headers = hm.get_all(header::ACCESS_CONTROL_ALLOW_HEADERS).iter();
-        assert_eq!(
-            acl_headers.next().unwrap().to_str().unwrap(),
-            "Accept, Authorization, Content-Type"
-        );
-        assert_eq!(acl_headers.next(), None);
-        let mut acl_methods = hm.get_all(header::ACCESS_CONTROL_ALLOW_METHODS).iter();
-        assert_eq!(acl_methods.next().unwrap().to_str().unwrap(), "POST, GET");
-        assert_eq!(acl_methods.next(), None);
-        let mut acl_origin = hm.get_all(header::ACCESS_CONTROL_ALLOW_ORIGIN).iter();
-        assert_eq!(acl_origin.next().unwrap().to_str().unwrap(), "*");
-        assert_eq!(acl_origin.next(), None);
+        let acl_headers = hm.get_all(header::ACCESS_CONTROL_ALLOW_HEADERS).iter();
+        assert!(acl_headers.eq(["Accept, Authorization, Content-Type"].iter()));
+        let acl_methods = hm.get_all(header::ACCESS_CONTROL_ALLOW_METHODS).iter();
+        assert!(acl_methods.eq(["POST, GET"].iter()));
+        let acl_origin = hm.get_all(header::ACCESS_CONTROL_ALLOW_ORIGIN).iter();
+        assert!(acl_origin.eq(["*"].iter()));
     }
 
     #[test]

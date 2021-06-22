@@ -63,9 +63,11 @@ pub struct StateManagerMetrics {
     latest_certified_height: IntGauge,
     max_resident_height: IntGauge,
     min_resident_height: IntGauge,
+    last_computed_manifest_height: IntGauge,
     resident_state_count: IntGauge,
     state_sync_size: IntCounterVec,
     state_sync_duration: HistogramVec,
+    state_size: IntGauge,
 }
 
 // Note [Metrics preallocation]
@@ -131,6 +133,11 @@ impl StateManagerMetrics {
             "Total count of states loaded to memory by the state manager.",
         );
 
+        let last_computed_manifest_height = metrics_registry.int_gauge(
+            "state_manager_last_computed_manifest_height",
+            "Height of the last checkpoint we computed manifest for.",
+        );
+
         let state_sync_size = metrics_registry.int_counter_vec(
             "state_sync_size_bytes_total",
             "Size of chunks synchronized by different operations ('fetch', 'copy', 'preallocate') during all the state sync in bytes.",
@@ -141,6 +148,11 @@ impl StateManagerMetrics {
         for op in &["fetch", "copy"] {
             state_sync_size.with_label_values(&[*op]);
         }
+
+        let state_size = metrics_registry.int_gauge(
+            "state_manager_state_size_bytes",
+            "Total size of the state on disk in bytes.",
+        );
 
         let state_sync_duration = metrics_registry.histogram_vec(
             "state_sync_duration_seconds",
@@ -163,9 +175,11 @@ impl StateManagerMetrics {
             min_resident_height,
             max_resident_height,
             latest_certified_height,
+            last_computed_manifest_height,
             resident_state_count,
             state_sync_size,
             state_sync_duration,
+            state_size,
         }
     }
 }
@@ -918,6 +932,17 @@ impl StateManagerImpl {
             "Computed manifest of state @{} in {:?}", height, elapsed
         );
 
+        let state_size_bytes: i64 = manifest
+            .file_table
+            .iter()
+            .map(|f| f.size_bytes as i64)
+            .sum();
+
+        metrics.state_size.set(state_size_bytes);
+        metrics
+            .last_computed_manifest_height
+            .set(height.get() as i64);
+
         #[cfg(not(feature = "malicious_code"))]
         let root_hash = CryptoHashOfState::from(CryptoHash(
             crate::manifest::manifest_hash(&manifest).to_vec(),
@@ -980,7 +1005,7 @@ impl StateManagerImpl {
         state: &ReplicatedState,
     ) -> CertificationMetadata {
         let started_hashing_at = Instant::now();
-        let hash_tree = tree_hash::hash_partial_state(&state);
+        let hash_tree = tree_hash::hash_state(&state);
         let elapsed = started_hashing_at.elapsed();
         debug!(log, "Computed hash tree in {:?}", elapsed);
 
@@ -1080,7 +1105,7 @@ impl StateManagerImpl {
         if prev_height == Self::INITIAL_STATE_HEIGHT {
             // This code is executed at most once per subnet, no need to
             // optimize this.
-            let hash_tree = tree_hash::hash_partial_state(
+            let hash_tree = tree_hash::hash_state(
                 initial_state(self.own_subnet_id, self.own_subnet_type).get_ref(),
             );
             state.metadata.prev_state_hash = Some(CryptoHashOfPartialState::from(
@@ -1247,7 +1272,7 @@ impl StateManagerImpl {
             }
         }
 
-        let hash_tree = crate::tree_hash::hash_partial_state(&state);
+        let hash_tree = crate::tree_hash::hash_state(&state);
 
         states.snapshots.push_back(Snapshot {
             height,

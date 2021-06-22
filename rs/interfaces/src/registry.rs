@@ -1,13 +1,16 @@
 //! The registry public interface.
 use ic_types::{
-    registry::RegistryClientError, registry::RegistryDataProviderError, RegistryVersion,
+    registry::RegistryClientError, registry::RegistryDataProviderError, time::Time, RegistryVersion,
 };
 pub use prost::Message as RegistryValue;
 use serde::{Deserialize, Serialize};
-use std::{cmp::Eq, fmt::Debug, hash::Hash};
+use std::{cmp::Eq, fmt::Debug, hash::Hash, time::Duration};
 
 /// The registry at version `0` is the empty registry.
 pub const ZERO_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(0);
+
+/// How often we poll the local store.
+pub const POLLING_PERIOD: Duration = Duration::from_secs(10);
 
 pub fn empty_zero_registry_record(key: &str) -> RegistryTransportRecord {
     RegistryTransportRecord {
@@ -90,6 +93,10 @@ pub trait RegistryClient: Send + Sync {
     /// of the registry is `t`, then this method should eventually return a
     /// value no less than `t`.
     fn get_latest_version(&self) -> RegistryVersion;
+
+    /// Returns the time at which the given version became available locally or
+    /// None if the version is not available locally,
+    fn get_version_timestamp(&self, registry_version: RegistryVersion) -> Option<Time>;
 }
 
 /// A versioned (Key, Value) pair returned from the registry.

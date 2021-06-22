@@ -18,8 +18,8 @@ use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallOrigin, CanisterState, CanisterStatus, CyclesAccountError, ExecutionState, ReplicatedState,
-    SchedulerState, SystemState,
+    CallOrigin, CanisterState, CanisterStatus, ExecutionState, ReplicatedState, SchedulerState,
+    SystemState,
 };
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_types::{
@@ -37,7 +37,12 @@ use ic_utils::ic_features::cow_state_feature;
 use ic_wasm_utils::validation::WasmValidationLimits;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::{convert::TryFrom, mem, str::FromStr, sync::Arc};
+use std::{collections::BTreeSet, convert::TryFrom, mem, str::FromStr, sync::Arc};
+
+// TODO(EXC-282)
+// Maximum number of controllers allowed in a request (specified in the public
+// Spec).
+pub const MAX_CONTROLLERS: usize = 10;
 
 /// The different return types from `stop_canister()` function below.
 #[derive(Debug, PartialEq, Eq)]
@@ -142,7 +147,7 @@ impl CanisterManager {
         ) -> Result<(), MessageAcceptanceError> {
             match state.canister_state(&canister_id) {
                 Some(canister) => {
-                    if sender.get() != canister.controller() {
+                    if !canister.controllers().contains(&sender.get()) {
                         Err(MessageAcceptanceError::CanisterRejected)
                     } else {
                         Ok(())
@@ -152,7 +157,7 @@ impl CanisterManager {
             }
         }
 
-        // The message is targetted towards the management canister. The
+        // The message is targeted towards the management canister. The
         // actual type of the method will determine if the message should be
         // accepted or not.
         match Ic00Method::from_str(method_name) {
@@ -161,8 +166,6 @@ impl CanisterManager {
             Err(_)
             | Ok(Ic00Method::CreateCanister)
                 | Ok(Ic00Method::SetupInitialDKG)
-                // This method is deprecated
-                | Ok(Ic00Method::DepositFunds)
                 // This can be called by anyone however as ingress message
                 // cannot carry cycles, it does not make sense to allow them from users.
             | Ok(Ic00Method::DepositCycles) => Err(MessageAcceptanceError::CanisterRejected),
@@ -233,7 +236,7 @@ impl CanisterManager {
             }
         }
 
-        Ok(ValidatedCanisterSettings::from(settings))
+        ValidatedCanisterSettings::try_from(settings)
     }
 
     /// Applies the requested settings on the canister.
@@ -243,8 +246,17 @@ impl CanisterManager {
         settings: ValidatedCanisterSettings,
         canister: &mut CanisterState,
     ) {
-        if let Some(controller_id) = settings.controller {
-            canister.system_state.controller = controller_id;
+        // Note: At this point, the settings are validated.
+        if let Some(controller) = settings.controller {
+            // Remove all the other controllers and add the new one.
+            canister.system_state.controllers.clear();
+            canister.system_state.controllers.insert(controller);
+        }
+        if let Some(controllers) = settings.controllers {
+            canister.system_state.controllers.clear();
+            for principal in controllers {
+                canister.system_state.controllers.insert(principal);
+            }
         }
         if let Some(compute_allocation) = settings.compute_allocation {
             canister.scheduler_state.compute_allocation = compute_allocation;
@@ -285,7 +297,7 @@ impl CanisterManager {
             settings.memory_allocation(),
         )?;
 
-        let validated_settings = ValidatedCanisterSettings::from(settings);
+        let validated_settings = ValidatedCanisterSettings::try_from(settings)?;
         self.do_update_settings(validated_settings, canister);
 
         Ok(())
@@ -330,14 +342,16 @@ impl CanisterManager {
         match self.validate_settings(settings, state) {
             Err(err) => (Err(err), funds),
             Ok(validate_settings) => {
-                // Take the fee out of the cycles that are going to be added as the canister's
-                // initial balance.
-                let cycles = funds.cycles() - self.cycles_account_manager.canister_creation_fee();
-                let canister_id =
-                    match self.create_canister_helper(sender, cycles, validate_settings, state) {
-                        Ok(canister_id) => canister_id,
-                        Err(err) => return (Err(err), funds),
-                    };
+                let canister_id = match self.create_canister_helper(
+                    sender,
+                    funds.cycles(),
+                    self.cycles_account_manager.canister_creation_fee(),
+                    validate_settings,
+                    state,
+                ) {
+                    Ok(canister_id) => canister_id,
+                    Err(err) => return (Err(err), funds),
+                };
                 (Ok(canister_id), Funds::zero())
             }
         }
@@ -402,15 +416,8 @@ impl CanisterManager {
         ) {
             return (instructions_limit, Err(err));
         }
-        if old_canister.system_state.controller != context.sender {
-            return (
-                instructions_limit,
-                Err(CanisterManagerError::CanisterInvalidController {
-                    canister_id: context.canister_id,
-                    controller_expected: old_canister.system_state.controller,
-                    controller_provided: context.sender,
-                }),
-            );
+        if let Err(err) = self.validate_controller(&old_canister, &context.sender) {
+            return (instructions_limit, Err(err));
         }
         match context.mode {
             CanisterInstallMode::Install => {
@@ -435,7 +442,14 @@ impl CanisterManager {
             compute_allocation,
             instructions_limit,
         ) {
-            return (instructions_limit, Err((context.canister_id, err).into()));
+            return (
+                instructions_limit,
+                Err(CanisterManagerError::CanisterOutOfCycles {
+                    canister_id: err.canister_id,
+                    available: err.available,
+                    required: err.requested,
+                }),
+            );
         }
 
         // Copy bits out of context as the calls below are going to consume it.
@@ -507,12 +521,8 @@ impl CanisterManager {
             None => return Err(CanisterManagerError::CanisterNotFound(canister_id)),
         };
 
-        if canister.controller() != sender {
-            return Err(CanisterManagerError::CanisterInvalidController {
-                canister_id,
-                controller_expected: canister.controller(),
-                controller_provided: sender,
-            });
+        if let Err(err) = self.validate_controller(&canister, &sender) {
+            return Err(err);
         }
 
         let rejects = uninstall_canister(&self.log, canister, &path, time);
@@ -651,15 +661,23 @@ impl CanisterManager {
 
         self.validate_controller(&canister, &sender)?;
 
+        let controller = canister.system_state.controller();
+        let controllers = canister
+            .controllers()
+            .iter()
+            .copied()
+            .collect::<Vec<PrincipalId>>();
+
         Ok(CanisterStatusResultV2::new(
             canister.status(),
             canister
                 .execution_state
                 .as_ref()
                 .map(|es| es.wasm_binary.hash_sha256().to_vec()),
-            canister.controller(),
+            *controller,
+            controllers,
             canister.memory_usage(),
-            canister.system_state.cycles_account.cycles_balance().get(),
+            canister.system_state.cycles_balance.get(),
             canister.scheduler_state.compute_allocation.as_percent(),
             canister
                 .system_state
@@ -678,7 +696,7 @@ impl CanisterManager {
         new_controller: PrincipalId,
         state: &mut ReplicatedState,
     ) -> Result<(), CanisterManagerError> {
-        let settings = CanisterSettings::new(Some(new_controller), None, None, None);
+        let settings = CanisterSettings::new(Some(new_controller), None, None, None, None);
         self.update_settings(sender, canister_id, settings, state)
     }
 
@@ -761,35 +779,6 @@ impl CanisterManager {
         Ok(())
     }
 
-    /// Deposits the amount of funds specified from the sender to the target
-    /// `canister_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns a `CanisterManagerError` in case the canister does not exist or
-    /// this was invoked not by the controller or the receiving canister did not
-    /// have enough cycles to cover the cost.
-    pub(crate) fn deposit_funds(
-        &self,
-        sender: PrincipalId,
-        canister_id: CanisterId,
-        mut funds: Funds,
-        state: &mut ReplicatedState,
-    ) -> (Funds, Result<(), CanisterManagerError>) {
-        match self.validate_canister_exists(state, canister_id) {
-            Err(err) => (funds, Err(err)),
-            Ok(canister) => {
-                if let Err(err) = self.validate_controller(&canister, &sender) {
-                    return (funds, Err(err));
-                }
-                let canister = state.canister_state_mut(&canister_id).unwrap();
-                self.cycles_account_manager
-                    .add_cycles(&mut canister.system_state, funds.take_cycles());
-                (Funds::zero(), Ok(()))
-            }
-        }
-    }
-
     /// Deposits the amount of cycles specified from the sender to the target
     /// `canister_id`.
     ///
@@ -850,8 +839,13 @@ impl CanisterManager {
         // According to spec, we must clear stable memory on install and reinstall.
         system_state.clear_stable_memory();
         let scheduler_state = old_canister.scheduler_state.clone();
-        let new_canister = CanisterState::new(system_state, execution_state, scheduler_state);
+        let mut new_canister = CanisterState::new(system_state, execution_state, scheduler_state);
 
+        // set memory allocation to None so that we can safely create the new
+        // execution state without worries of overruning the memory allocation
+        // of the old canister. We will be updating the memory allocation after
+        // execution state is created.
+        new_canister.system_state.memory_allocation = None;
         let (mut new_canister, result) = self.hypervisor.execute_empty(new_canister).get_no_pause();
         match result {
             Ok(()) => (),
@@ -964,6 +958,12 @@ impl CanisterManager {
                 .upgrade();
         }
 
+        // set memory allocation to None so that we can safely create the new
+        // execution state without worries of overruning the memory allocation
+        // of the old canister. We will be updating the memory allocation after
+        // execution state is created.
+        new_canister.system_state.memory_allocation = None;
+
         // Replace the execution state of the canister with a new execution state.
         let layout = canister_layout(&canister_layout_path, &canister_id);
         new_canister.execution_state = match ExecutionState::new(
@@ -1070,11 +1070,16 @@ impl CanisterManager {
         };
 
         // Validate settings before `create_canister_helper` applies them
+        // No creation fee applied.
         match self.validate_settings(settings, state) {
             Err(err) => Err(err),
-            Ok(validated_settings) => {
-                self.create_canister_helper(sender, cycles, validated_settings, state)
-            }
+            Ok(validated_settings) => self.create_canister_helper(
+                sender,
+                cycles,
+                Cycles::new(0),
+                validated_settings,
+                state,
+            ),
         }
     }
 
@@ -1082,13 +1087,18 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         cycles: Cycles,
+        creation_fee: Cycles,
         settings: ValidatedCanisterSettings,
         state: &mut ReplicatedState,
     ) -> Result<CanisterId, CanisterManagerError> {
         let new_canister_id = self.generate_new_canister_id(state)?;
         self.validate_canister_id_available(&state, &new_canister_id)?;
 
-        let cycles = match self.own_subnet_type {
+        // Take the fee out of the cycles that are going to be added as the canister's
+        // initial balance.
+        let mut cycles = cycles - creation_fee;
+
+        cycles = match self.own_subnet_type {
             // Canisters on the System subnet can hold any amount of cycles
             SubnetType::System => cycles,
             SubnetType::Application | SubnetType::VerifiedApplication => {
@@ -1113,12 +1123,14 @@ impl CanisterManager {
         };
 
         // Canister id available. Create the new canister.
-        let system_state = SystemState::new_running(
+        let mut system_state = SystemState::new_running(
             new_canister_id,
             sender,
             cycles,
             self.config.default_freeze_threshold,
         );
+        self.cycles_account_manager
+            .observe_consumed_cycles(&mut system_state, creation_fee);
         let scheduler_state = SchedulerState::default();
         let mut new_canister = CanisterState::new(system_state, None, scheduler_state);
 
@@ -1168,10 +1180,10 @@ impl CanisterManager {
         canister: &CanisterState,
         controller: &PrincipalId,
     ) -> Result<(), CanisterManagerError> {
-        if canister.controller() != *controller {
+        if !canister.controllers().contains(controller) {
             return Err(CanisterManagerError::CanisterInvalidController {
                 canister_id: canister.canister_id(),
-                controller_expected: canister.controller(),
+                controllers_expected: canister.system_state.controllers.clone(),
                 controller_provided: *controller,
             });
         }
@@ -1231,6 +1243,13 @@ impl CanisterManager {
             let canister_current_allocation = canister
                 .memory_allocation()
                 .unwrap_or_else(|| canister.memory_usage());
+            if requested_allocation < canister.memory_usage() {
+                return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
+                    canister_id: canister.canister_id(),
+                    memory_allocation_given: memory_allocation,
+                    memory_usage_needed: canister.memory_usage(),
+                });
+            }
             if requested_allocation + memory_allocation_used - canister_current_allocation
                 > self.config.subnet_memory_capacity
             {
@@ -1310,7 +1329,7 @@ pub(crate) fn canister_layout(
 pub(crate) enum CanisterManagerError {
     CanisterInvalidController {
         canister_id: CanisterId,
-        controller_expected: PrincipalId,
+        controllers_expected: BTreeSet<PrincipalId>,
         controller_provided: PrincipalId,
     },
     CanisterAlreadyExists(CanisterId),
@@ -1346,22 +1365,10 @@ pub(crate) enum CanisterManagerError {
     SubnetOutOfCanisterIds {
         allowed: u128,
     },
-}
 
-impl From<(CanisterId, CyclesAccountError)> for CanisterManagerError {
-    fn from(input: (CanisterId, CyclesAccountError)) -> Self {
-        let (canister_id, err) = input;
-        match err {
-            CyclesAccountError::CanisterOutOfCycles {
-                available,
-                requested,
-            } => Self::CanisterOutOfCycles {
-                canister_id,
-                available,
-                required: requested,
-            },
-        }
-    }
+    InvalidSettings {
+        message: String,
+    },
 }
 
 impl From<CanisterManagerError> for UserError {
@@ -1409,15 +1416,16 @@ impl From<CanisterManagerError> for UserError {
             }
             CanisterInvalidController {
                 canister_id,
-                controller_expected,
+                controllers_expected,
                 controller_provided } => {
+                let controllers_expected = controllers_expected.iter().map(|id| format!("{}", id)).collect::<Vec<String>>().join(" ");
                 Self::new(
                     ErrorCode::CanisterInvalidController,
                     format!(
-                        "Only the controller of canister {} can control it.\n\
-                        Canister's controller: {}\n\
+                        "Only the controllers of the canister {} can control it.\n\
+                        Canister's controllers: {}\n\
                         Sender's ID: {}",
-                        canister_id, controller_expected, controller_provided
+                        canister_id, controllers_expected, controller_provided
                     )
                 )
             }
@@ -1488,6 +1496,11 @@ impl From<CanisterManagerError> for UserError {
                         "Could not create canister.  Subnet has surpassed its limit {} of canister ids",
                         allowed,
                     ),
+                )
+            }
+            InvalidSettings { message } => {
+                Self::new(ErrorCode::CanisterContractViolation,
+                          format!("Could not validate the settings: {} ", message),
                 )
             }
         }
@@ -1635,19 +1648,45 @@ pub fn uninstall_canister(
 
 struct ValidatedCanisterSettings {
     pub controller: Option<PrincipalId>,
+    pub controllers: Option<Vec<PrincipalId>>,
     pub compute_allocation: Option<ComputeAllocation>,
     pub memory_allocation: Option<MemoryAllocation>,
     pub freezing_threshold: Option<NumSeconds>,
 }
 
-impl From<CanisterSettings> for ValidatedCanisterSettings {
-    fn from(settings: CanisterSettings) -> Self {
-        Self {
+impl TryFrom<CanisterSettings> for ValidatedCanisterSettings {
+    type Error = CanisterManagerError;
+
+    fn try_from(settings: CanisterSettings) -> Result<Self, Self::Error> {
+        // Field `controller` is kept for backward compatibility. However, specifying
+        // both `controller` and `controllers` fields in the same request results in an
+        // error.
+        let controllers = settings.controllers();
+        if let (Some(_), Some(_)) = (settings.controller(), &controllers) {
+            return Err(CanisterManagerError::InvalidSettings {
+                message: "Invalid settings: 'controller' and 'controllers' fields cannot be set simultaneously".to_string(),
+            });
+        }
+        match &controllers {
+            Some(controllers) => {
+                if controllers.len() > MAX_CONTROLLERS {
+                    return Err(CanisterManagerError::InvalidSettings {
+                        message:
+                            "Invalid settings: 'controllers' length exceeds maximum size allowed"
+                                .to_string(),
+                    });
+                }
+            }
+            None => {}
+        }
+
+        Ok(Self {
             controller: settings.controller(),
+            controllers: settings.controllers(),
             compute_allocation: settings.compute_allocation(),
             memory_allocation: settings.memory_allocation(),
             freezing_threshold: settings.freezing_threshold(),
-        }
+        })
     }
 }
 

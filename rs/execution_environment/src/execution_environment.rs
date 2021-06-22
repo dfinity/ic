@@ -327,22 +327,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 Some((res, msg.take_funds()))
             }
 
-            Ok(Ic00Method::DepositFunds) => match CanisterIdRecord::decode(payload) {
-                Err(err) => Some((Err(err.into()), msg.take_funds())),
-                Ok(args) => {
-                    let (funds_to_return, res) = self.canister_manager.deposit_funds(
-                        *msg.sender(),
-                        args.get_canister_id(),
-                        msg.take_funds(),
-                        &mut state,
-                    );
-                    Some((
-                        res.map(|()| EmptyBlob::encode()).map_err(|err| err.into()),
-                        funds_to_return,
-                    ))
-                }
-            },
-
             Ok(Ic00Method::DepositCycles) => match CanisterIdRecord::decode(payload) {
                 Err(err) => Some((Err(err.into()), msg.take_funds())),
                 Ok(args) => {

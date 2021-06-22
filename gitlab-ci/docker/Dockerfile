@@ -25,14 +25,14 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     apt -yq update && \
     apt -yqq install git openssh-client curl xz-utils time parallel net-tools && \
     apt -yqq install --no-install-recommends \
-        build-essential pkg-config libssl-dev llvm-10-dev liblmdb-dev clang-10 cmake libbz2-dev \
+        build-essential pkg-config libssl-dev llvm-10-dev llvm-dev liblmdb-dev clang-10 cmake libbz2-dev \
         lldb libclang-10-dev liblz4-dev librocksdb-dev libsnappy-dev libzstd-dev vim emacs nano jq \
-        zip unzip rclone rsync bc csmith gcc lld-10 libc++-10-dev \
+        zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev protobuf-compiler libprotobuf-dev \
         qemu-system-x86 ovmf \
         iproute2 \
         dosfstools mtools fakeroot faketime android-sdk-ext4-utils policycoreutils \
-        python3 python3-requests python3-pip python3-gflags \
-        sudo sshpass
+        python3 python3-requests python3-pip python3-gflags python3-cbor \
+        shellcheck sudo
 
 RUN apt -y install apt-transport-https ca-certificates curl gnupg lsb-release && \
       curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg  && \
@@ -68,8 +68,10 @@ RUN cd /tmp; \
 # Install Rust and Cargo in /opt
 ENV RUSTUP_HOME=/opt/rustup \
     CARGO_HOME=/opt/cargo \
-    ZSTD_LIB_DIR=/usr/lib \
     CARGO_TARGET_DIR=/cargo_target \
+    ZSTD_LIB_DIR=/usr/lib \
+    PROTOC=/usr/bin/protoc \
+    PROTOC_INCLUDE=/usr/include \
     PATH=/opt/cargo/bin:$PATH
 
 RUN curl --fail https://sh.rustup.rs -sSf \
@@ -98,6 +100,11 @@ RUN curl --fail -sL https://download.dfinity.systems/cdk-rs/5807d2f7b523f630eddd
     gunzip /opt/cargo/bin/ic-cdk-optimizer.gz && \
     chmod 0755 /opt/cargo/bin/ic-cdk-optimizer
 
+# Install IDL2json: https://github.com/dfinity-lab/idl2json
+RUN curl --fail -sL https://download.dfinity.systems/idl2json/bcb27ac567eba7a7c14c9d70aedd3fb777af281b/idl2json-linux-amd64.gz -o - \
+    | gunzip > /usr/bin/idl2json && \
+    chmod 0755 /usr/bin/idl2json
+
 # dumb-init takes care to properly handle and forward signals as they are received (e.g. Ctrl+C or SIGSEGV)
 # ENTRYPOINT with dumb-init is set further down in the Dockerfile
 RUN curl --fail -L -o /usr/bin/dumb-init \
@@ -108,7 +115,7 @@ RUN curl --fail -L -o /usr/bin/dumb-init \
 RUN V=v1.0.27; curl --fail -L https://github.com/go-jira/jira/releases/download/$V/jira-linux-amd64 -o /usr/bin/jira && \
     chmod +x /usr/bin/jira
 
-RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline
+RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline junit-xml
 
 USER 1000
 

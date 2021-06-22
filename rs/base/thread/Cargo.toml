@@ -5,5 +5,5 @@ edition = "2018"
 
 [dependencies]
 futures = "0.3.13"
-prometheus = "0.9.0"
+prometheus = { version = "0.12.0", features = [ "process" ] }
 tokio = { version = "0.2.23", features = ["full"] }

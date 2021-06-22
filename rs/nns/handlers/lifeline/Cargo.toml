@@ -13,8 +13,7 @@ ic-nns-constants = { path = "../../constants" }
 ic-base-types = { path = "../../../types/base_types" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-# TODO(EXC-220)
-wabt = { git = "https://github.com/dfinity-lab/wabt-rs", rev = "b4d778802976f10494411388e48a784d4d015bbb" }
+wabt = "0.10.0"
 candid = "0.6.15"
 dfn_candid = {path="../../../rust_canisters/dfn_candid"}
 ic-ic00-types = {path="../../../types/ic00_types"}

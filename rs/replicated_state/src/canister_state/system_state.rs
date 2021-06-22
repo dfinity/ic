@@ -1,9 +1,7 @@
 mod call_context_manager;
-mod cycles_account;
 
 use crate::{CanisterQueues, NumWasmPages, PageMap, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
-pub use cycles_account::{CyclesAccount, CyclesAccountError};
 use ic_base_types::NumSeconds;
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_protobuf::{
@@ -15,9 +13,19 @@ use ic_types::{
     nominal_cycles::NominalCycles,
     CanisterId, Cycles, MemoryAllocation, NumBytes, PrincipalId, QueueIndex,
 };
+use lazy_static::lazy_static;
+use maplit::btreeset;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
-use std::sync::Arc;
+use std::str::FromStr;
+use std::{collections::BTreeSet, sync::Arc};
+
+lazy_static! {
+    static ref DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS: PrincipalId =
+        PrincipalId::from_str("ifxlm-aqaaa-multi-pleco-ntrol-lersa-h3ae").unwrap();
+    static ref DEFAULT_PRINCIPAL_ZERO_CONTROLLERS: PrincipalId =
+        PrincipalId::from_str("zrl4w-cqaaa-nocon-troll-eraaa-d5qc").unwrap();
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Canister-specific metrics on scheduling, maintained by the scheduler.
@@ -39,13 +47,12 @@ pub struct CanisterMetrics {
 /// canister but can be indirectly via the SystemApi interface.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SystemState {
-    pub controller: PrincipalId,
+    pub controllers: BTreeSet<PrincipalId>,
     pub canister_id: CanisterId,
     // EXE-92: This should be private
     pub queues: CanisterQueues,
     pub stable_memory_size: NumWasmPages,
     pub stable_memory: PageMap,
-    pub cycles_account: CyclesAccount,
     /// The canister's memory allocation. A canister is allowed to grow its
     /// memory usage up to this value.
     pub memory_allocation: Option<MemoryAllocation>,
@@ -64,8 +71,20 @@ pub struct SystemState {
     /// See also:
     ///   * https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-certified-data
     pub certified_data: Vec<u8>,
-
     pub canister_metrics: CanisterMetrics,
+
+    /// A canister's state has an associated cycles balance, and may `send` a
+    /// part of this cycles balance to another canister.
+    /// In addition to sending cycles to another canister, a canister `spend`s
+    /// cycles in the following three ways:
+    ///     a) executing messages,
+    ///     b) sending messages to other canisters,
+    ///     c) storing data over time/rounds
+    /// Each of the above spending is done in three phases:
+    ///     1. reserving maximum cycles the operation can require
+    ///     2. executing the operation and return `cycles_spent`
+    ///     3. reimburse the canister with `cycles_reserved` - `cycles_spent`
+    pub cycles_balance: Cycles,
 }
 
 /// A wrapper around the different canister statuses.
@@ -207,11 +226,11 @@ impl SystemState {
     ) -> Self {
         Self {
             canister_id,
-            controller,
+            controllers: btreeset! {controller},
             queues: CanisterQueues::default(),
             stable_memory_size: NumWasmPages::new(0),
             stable_memory: PageMap::default(),
-            cycles_account: CyclesAccount::new(initial_cycles),
+            cycles_balance: initial_cycles,
             memory_allocation: None,
             freeze_threshold,
             status,
@@ -245,8 +264,21 @@ impl SystemState {
         self.canister_id = canister_id;
     }
 
-    pub fn controller(&self) -> PrincipalId {
-        self.controller
+    /// This method is used for maintaining the backwards compatibility.
+    /// Returns:
+    /// - controller id as-is, if there is only one controller.
+    /// - DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS, if there are multiple
+    ///   controllers.
+    /// - DEFAULT_PRINCIPAL_ZERO_CONTROLLERS, if there is no controller.
+    pub fn controller(&self) -> &PrincipalId {
+        if self.controllers.len() < 2 {
+            match self.controllers.iter().next() {
+                None => &DEFAULT_PRINCIPAL_ZERO_CONTROLLERS,
+                Some(controller) => controller,
+            }
+        } else {
+            &DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS
+        }
     }
 
     pub fn call_context_manager(&self) -> Option<&CallContextManager> {
@@ -445,5 +477,14 @@ impl SystemState {
     pub fn clear_stable_memory(&mut self) {
         self.stable_memory = PageMap::default();
         self.stable_memory_size = NumWasmPages::new(0);
+    }
+
+    /// Method used only by the dashboard.
+    pub fn collect_controllers_as_string(&self) -> String {
+        self.controllers
+            .iter()
+            .map(|id| format!("{}", id))
+            .collect::<Vec<String>>()
+            .join(" ")
     }
 }
