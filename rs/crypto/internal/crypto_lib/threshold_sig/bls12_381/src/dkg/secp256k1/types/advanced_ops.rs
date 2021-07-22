@@ -13,7 +13,7 @@ impl CLibTranscriptBytes {
         &self,
         key: EphemeralPublicKeyBytes,
     ) -> Option<(NodeIndex, EncryptedShareBytes)> {
-        (0 as NodeIndex..)
+        (0_u32..)
             .zip(&self.receiver_data)
             .filter_map(|(index, record)| record.map(|record| (index, record))) // Discard None
             .filter_map(|(index, (public_key_bytes, encrypted_share_bytes))| {

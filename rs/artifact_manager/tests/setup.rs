@@ -1,4 +1,3 @@
-use actix::prelude::*;
 use ic_artifact_manager::{actors, manager};
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
 use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -13,9 +12,10 @@ use ic_test_utilities::{
 };
 use std::sync::{Arc, RwLock};
 
-fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactManager> {
-    let system = System::current();
-    let arbiter = system.arbiter();
+fn setup_manager(
+    artifact_pool_config: ArtifactPoolConfig,
+    rt_handle: tokio::runtime::Handle,
+) -> Arc<dyn ArtifactManager> {
     let time_source = Arc::new(SysTimeSource::new());
     let metrics_registry = MetricsRegistry::new();
     let replica_logger = no_op_logger();
@@ -29,8 +29,7 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
     );
 
     // Create consensus client
-    let (consensus_client, addr) = actors::ConsensusClient::run(
-        &arbiter,
+    let (consensus_client, actor) = actors::ConsensusProcessor::build(
         |_| {},
         || {
             let mut consensus = MockConsensus::new();
@@ -41,10 +40,11 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
         Arc::clone(&time_source) as Arc<_>,
         Arc::clone(&consensus_pool),
         Arc::clone(&ingress_pool),
+        rt_handle,
         replica_logger,
         metrics_registry,
     );
-    artifact_manager_maker.add_client(consensus_client, addr);
+    artifact_manager_maker.add_client(consensus_client, actor);
     artifact_manager_maker.finish()
 }
 
@@ -75,7 +75,7 @@ fn init_artifact_pools(
 /// ingress pool, consensus pool and consensus client (using MockConsensus).
 pub fn run_test<F: Fn(Arc<dyn ArtifactManager>)>(test: F) {
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-        let manager = setup_manager(pool_config);
+        let manager = setup_manager(pool_config, tokio::runtime::Handle::current());
         test(manager)
     })
 }

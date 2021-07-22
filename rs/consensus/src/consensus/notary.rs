@@ -206,7 +206,7 @@ impl Notary {
         for proposal in proposals {
             if !self.is_proposal_already_notarized_by_me(pool, &proposal) {
                 let block = proposal.as_ref();
-                if let Some(share) = self.notarize_block(pool, block).map(|share| share) {
+                if let Some(share) = self.notarize_block(pool, block) {
                     notarization_shares.push(share);
                 }
             }

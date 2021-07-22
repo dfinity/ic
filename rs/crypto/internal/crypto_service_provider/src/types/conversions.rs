@@ -7,6 +7,7 @@ use super::{
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1::types as ecdsa_secp256k1_types;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types as ecdsa_secp256r1_types;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
+use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1::types::EphemeralKeySetBytes;
@@ -50,6 +51,7 @@ impl From<&CspPublicKey> for AlgorithmId {
             CspPublicKey::EcdsaSecp256k1(_) => AlgorithmId::EcdsaSecp256k1,
             CspPublicKey::Ed25519(_) => AlgorithmId::Ed25519,
             CspPublicKey::MultiBls12_381(_) => AlgorithmId::MultiBls12_381,
+            CspPublicKey::RsaSha256(_) => AlgorithmId::RsaSha256,
         }
     }
 }
@@ -178,6 +180,7 @@ impl AsRef<[u8]> for CspPublicKey {
             CspPublicKey::EcdsaSecp256k1(bytes) => &bytes.0,
             CspPublicKey::Ed25519(bytes) => &bytes.0,
             CspPublicKey::MultiBls12_381(public_key_bytes) => &public_key_bytes.0,
+            CspPublicKey::RsaSha256(public_key_bytes) => &public_key_bytes.as_der(),
         }
     }
 }
@@ -215,6 +218,7 @@ impl AsRef<[u8]> for CspSignature {
                 ThresBls12_381_Signature::Individual(sig_bytes) => &sig_bytes.0,
                 ThresBls12_381_Signature::Combined(sig_bytes) => &sig_bytes.0,
             },
+            CspSignature::RsaSha256(bytes) => &bytes,
         }
     }
 }
@@ -248,9 +252,12 @@ impl TryFrom<&UserPublicKey> for CspPublicKey {
             AlgorithmId::EcdsaSecp256k1 => Ok(CspPublicKey::EcdsaSecp256k1(
                 ecdsa_secp256k1_types::PublicKeyBytes(user_public_key.key.to_owned()),
             )),
+            AlgorithmId::RsaSha256 => Ok(CspPublicKey::RsaSha256(
+                rsa::RsaPublicKey::from_der_spki(&user_public_key.key)?,
+            )),
             algorithm => Err(CryptoError::AlgorithmNotSupported {
                 algorithm,
-                reason: "Expecting Ed25519 key".to_string(),
+                reason: "Could not convert UserPublicKey to CspPublicKey".to_string(),
             }),
         }
     }

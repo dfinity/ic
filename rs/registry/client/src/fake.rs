@@ -36,23 +36,23 @@ impl FakeRegistryClient {
         let mut cache = self.cache.write().unwrap();
         let latest_version = cache.0;
 
-        let (new_records, new_version) = match self
+        let new_records = match self
             .data_provider
             .get_updates_since(latest_version)
         {
-            Ok((records, version)) if version > latest_version => {
-                (records, version)
-            }
+            Ok(records) if !records.is_empty() => records,
             Ok(_) /*if version == cache_state.latest_version*/ => return,
-            Err(e) => panic!(format!("Failed to query data provider: {}", e)),
+            Err(e) => panic!("Failed to query data provider: {}", e),
         };
 
         // perform update
-        assert!(new_version > latest_version);
+        assert!(!new_records.is_empty());
         let mut timestamps = cache.1.clone();
-        timestamps.insert(new_version, current_time());
+        let mut new_version = ZERO_REGISTRY_VERSION;
         for record in new_records {
             assert!(record.version > latest_version);
+            new_version = new_version.max(record.version);
+            timestamps.insert(new_version, current_time());
             let search_key = (&record.key, &record.version);
             match cache
                 .2

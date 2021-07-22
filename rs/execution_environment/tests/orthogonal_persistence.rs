@@ -85,36 +85,30 @@ impl HypervisorTest {
             .source(user_test_id(24))
             .build();
 
-        let (canister, _, action, _) = self
-            .hypervisor
-            .execute_update(
-                self.canister.clone(),
-                RequestOrIngress::Ingress(ingress),
-                MAX_NUM_INSTRUCTIONS,
-                mock_time(),
-                self.routing_table.clone(),
-                self.subnet_records.clone(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
-            .get_no_pause();
+        let (canister, _, action, _) = self.hypervisor.execute_update(
+            self.canister.clone(),
+            RequestOrIngress::Ingress(ingress),
+            MAX_NUM_INSTRUCTIONS,
+            mock_time(),
+            self.routing_table.clone(),
+            self.subnet_records.clone(),
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
         self.canister = canister;
         action
     }
 
     fn query(&mut self, method_name: &str, method_payload: Vec<u8>) -> Option<WasmResult> {
-        let (canister, _, result) = self
-            .hypervisor
-            .execute_query(
-                QueryExecutionType::Replicated,
-                method_name,
-                method_payload.as_slice(),
-                user_test_id(24).get(),
-                MAX_NUM_INSTRUCTIONS,
-                self.canister.clone(),
-                None,
-                mock_time(),
-            )
-            .get_no_pause();
+        let (canister, _, result) = self.hypervisor.execute_query(
+            QueryExecutionType::Replicated,
+            method_name,
+            method_payload.as_slice(),
+            user_test_id(24).get(),
+            MAX_NUM_INSTRUCTIONS,
+            self.canister.clone(),
+            None,
+            mock_time(),
+        );
 
         self.canister = canister;
         result.unwrap()

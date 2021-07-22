@@ -8,7 +8,7 @@ use ic_cycles_account_manager::{
 };
 use ic_interfaces::execution_environment::IngressHistoryWriter;
 use ic_logger::{debug, error, trace, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
 use ic_replicated_state::{
     replicated_state::{
         LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
@@ -21,21 +21,29 @@ use ic_types::messages::HttpRequestContent;
 use ic_types::{
     ingress::IngressStatus,
     messages::{is_subnet_message, SignedIngressContent},
+    time::current_time_and_expiry_time,
     user_error::{ErrorCode, UserError},
-    CanisterStatusType, SubnetId,
+    CanisterStatusType, SubnetId, Time,
 };
-use prometheus::{Histogram, IntCounterVec};
+use prometheus::{Histogram, HistogramVec, IntCounterVec};
 use std::sync::Arc;
+use std::time::Duration;
 
 struct VsrMetrics {
     /// Counts of ingress message induction attempts, by status.
     inducted_ingress_messages: IntCounterVec,
     /// Successfully inducted ingress message payload sizes.
     inducted_ingress_payload_sizes: Histogram,
+    /// Latency of inducting an ingress message, by induction status.
+    /// The latency metric is unreliable because we assume expiry time
+    /// was set by 'current_time_and_expiry_time'.
+    unreliable_induct_ingress_message_duration: HistogramVec,
 }
 
 const METRIC_INDUCTED_INGRESS_MESSAGES: &str = "mr_inducted_ingress_message_count";
 const METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES: &str = "mr_inducted_ingress_payload_size_bytes";
+const METRIC_UNRELIABLE_INDUCT_INGRESS_MESSAGE_DURATION: &str =
+    "mr_unreliable_induct_ingress_message_duration_seconds";
 
 const LABEL_STATUS: &str = "status";
 
@@ -54,6 +62,12 @@ impl VsrMetrics {
             "Successfully inducted ingress message payload sizes.",
             // 10 B - 5 MB
             decimal_buckets(1, 6),
+        );
+        let unreliable_induct_ingress_message_duration = metrics_registry.histogram_vec(
+            METRIC_UNRELIABLE_INDUCT_INGRESS_MESSAGE_DURATION,
+            "Latency of inducting an ingress message, by induction status.",
+            linear_buckets(0.0, 0.5, 20),
+            &[LABEL_STATUS],
         );
 
         // Initialize all `inducted_ingress_messages` counters with zero, so they are
@@ -74,6 +88,7 @@ impl VsrMetrics {
         Self {
             inducted_ingress_messages,
             inducted_ingress_payload_sizes,
+            unreliable_induct_ingress_message_duration,
         }
     }
 }
@@ -118,10 +133,10 @@ impl ValidSetRuleImpl {
         let receiver = msg.canister_id();
         let payload_bytes = msg.arg().len();
         let time = state.time();
+        let ingress_expiry = msg.ingress_expiry();
 
-        match self.enqueue(state, msg) {
+        let status = match self.enqueue(state, msg) {
             Ok(()) => {
-                self.observe_inducted_ingress_status(LABEL_VALUE_SUCCESS);
                 self.observe_inducted_ingress_payload_size(payload_bytes);
                 self.ingress_history_writer.set_status(
                     &mut state,
@@ -132,8 +147,8 @@ impl ValidSetRuleImpl {
                         time,
                     },
                 );
+                LABEL_VALUE_SUCCESS
             }
-
             Err(err) => {
                 let error_code = match err {
                     StateError::CanisterNotFound(canister_id) => {
@@ -152,8 +167,6 @@ impl ValidSetRuleImpl {
                     StateError::InvalidSubnetPayload => ErrorCode::CanisterOutOfCycles,
                     StateError::QueueFull { .. } => unreachable!("Unexpected error: {}", err),
                 };
-                self.observe_inducted_ingress_status(err.to_label_value());
-
                 self.ingress_history_writer.set_status(
                     &mut state,
                     message_id,
@@ -164,8 +177,11 @@ impl ValidSetRuleImpl {
                         time,
                     },
                 );
+                err.to_label_value()
             }
-        }
+        };
+        self.observe_inducted_ingress_status(status);
+        self.observe_unreliable_induct_ingress_message_duration(status, ingress_expiry);
     }
 
     /// Checks whether the given message has already been inducted.
@@ -186,6 +202,25 @@ impl ValidSetRuleImpl {
         self.metrics
             .inducted_ingress_payload_sizes
             .observe(bytes as f64);
+    }
+
+    /// Records the (unreliably) estimated duration to induct one ingress
+    /// message.
+    fn observe_unreliable_induct_ingress_message_duration(
+        &self,
+        status: &str,
+        ingress_expiry: Time,
+    ) {
+        let current_expiry_time = current_time_and_expiry_time().1;
+        let delta_in_nanos = if current_expiry_time <= ingress_expiry {
+            Duration::from_secs(0)
+        } else {
+            current_expiry_time - ingress_expiry
+        };
+        self.metrics
+            .unreliable_induct_ingress_message_duration
+            .with_label_values(&[status])
+            .observe(delta_in_nanos.as_secs_f64());
     }
 
     // Enqueues an ingress message into input queues.

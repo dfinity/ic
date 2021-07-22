@@ -220,7 +220,7 @@ impl TestClient {
                 self.log,
                 "Flows up: {}/{}, to wait ...", num_flows, expected_flows
             );
-            tokio::time::delay_for(Duration::from_secs(3)).await;
+            tokio::time::sleep(Duration::from_secs(3)).await;
         }
 
         warn!(self.log, "All flows not up, exiting");
@@ -580,11 +580,13 @@ async fn task_main(
     let node_id = to_node_id(node_id_val);
     let node_number = node_id_val as usize;
 
-    let mut logger_config: LoggerConfig = Default::default();
-    logger_config.target = LogTarget::File(PathBuf::from(format!(
-        "./transport_test_{}.log",
-        node_id_val
-    )));
+    let logger_config = LoggerConfig {
+        target: LogTarget::File(PathBuf::from(format!(
+            "./transport_test_{}.log",
+            node_id_val
+        ))),
+        ..Default::default()
+    };
     let logger = LoggerImpl::new(
         &logger_config,
         format!("transport_test_client [node {}]", node_id_val),
@@ -601,7 +603,9 @@ async fn task_main(
 
     println!("creating crypto... [Node: {}]", node_id_val);
     let registry_version = REG_V1;
-    let crypto = match create_crypto(node_number, 3, node_id, registry_version) {
+    let crypto = match tokio::task::block_in_place(|| {
+        create_crypto(node_number, 3, node_id, registry_version)
+    }) {
         Ok(crypto) => crypto,
         Err(_) => {
             panic!("unable to create crypto");
@@ -683,7 +687,7 @@ const TEST_NODE_COUNT: u8 = 3;
 #[cfg(test)]
 const TEST_MESSAGE_COUNT: usize = 10;
 
-#[tokio::test(threaded_scheduler)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_transport_spawn_tasks() {
     let active_flag = Arc::new(AtomicBool::new(true));
     let mut handles = Vec::new();

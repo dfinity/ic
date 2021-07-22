@@ -343,7 +343,7 @@ impl CertifierImpl {
                 {
                     Ok(signature) => Some(CertificationShare {
                         height,
-                        signed: Signed { signature, content },
+                        signed: Signed { content, signature },
                     }),
                     Err(err) => {
                         error!(self.log, "Couldn't create a signature: {:?}", err);
@@ -647,7 +647,7 @@ mod tests {
         signature.signer = dkg_id;
         CertificationMessage::Certification(Certification {
             height,
-            signed: Signed { signature, content },
+            signed: Signed { content, signature },
         })
     }
 
@@ -1256,11 +1256,7 @@ mod tests {
                 assert!(
                     change_set
                         .iter()
-                        .all(|x| if let ChangeAction::RemoveFromUnvalidated(_) = x {
-                            true
-                        } else {
-                            false
-                        }),
+                        .all(|x| matches!(x, ChangeAction::RemoveFromUnvalidated(_))),
                     "Both items should be RemoveFromUnvalidated"
                 );
 

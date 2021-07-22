@@ -12,7 +12,6 @@ mod wasmtime_embedder_tests;
 use super::InstanceRunResult;
 use crate::cow_memory_creator::{CowMemoryCreator, CowMemoryCreatorProxy};
 
-use crate::{Embedder, Instance};
 use ic_config::embedders::{Config, PersistenceType};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
@@ -74,10 +73,8 @@ impl WasmtimeEmbedder {
             max_wasm_stack_size,
         }
     }
-}
 
-impl Embedder for WasmtimeEmbedder {
-    fn compile(
+    pub fn compile(
         &self,
         persistence_type: PersistenceType,
         wasm_binary: &BinaryEncodedWasm,
@@ -113,14 +110,14 @@ impl Embedder for WasmtimeEmbedder {
         Ok(EmbedderCache::new((module, cached_mem_creator)))
     }
 
-    fn new_instance(
+    pub fn new_instance(
         &self,
         cache: &EmbedderCache,
         exported_globals: &[Global],
         heap_size: NumWasmPages,
         memory_creator: Option<Arc<CowMemoryCreator>>,
         memory_initializer: Option<PageMap>,
-    ) -> Box<dyn Instance> {
+    ) -> WasmtimeInstance {
         let (module, memory_creator_proxy) = cache
             .downcast::<(wasmtime::Module, Option<CowMemoryCreatorProxy>)>()
             .expect("incompatible embedder cache, expected BinaryEncodedWasm");
@@ -136,10 +133,10 @@ impl Embedder for WasmtimeEmbedder {
         let system_api_handle = SystemApiHandle::new();
         let canister_num_instructions_global = Rc::new(RefCell::new(None));
 
-        // We need to pass a weak pointer to the cycles_global, because wasmtime::Global
-        // internally references Store and it would create a cyclic reference.
-        // Since Store holds both the global and our syscalls, syscalls won't outlive
-        // the global
+        // We need to pass a weak pointer to the canister_num_instructions_global,
+        // because wasmtime::Global internally references Store and it would
+        // create a cyclic reference. Since Store holds both the global and our
+        // syscalls, syscalls won't outlive the global
         let linker: wasmtime::Linker = system_api::syscalls(
             &store,
             system_api_handle.clone(),
@@ -260,7 +257,7 @@ impl Embedder for WasmtimeEmbedder {
         *canister_num_instructions_global.borrow_mut() =
             instance.get_global("canister counter_instructions");
 
-        let instance_impl = WasmtimeInstance {
+        WasmtimeInstance {
             system_api_handle,
             instance,
             instance_memory,
@@ -268,9 +265,7 @@ impl Embedder for WasmtimeEmbedder {
             signal_stack,
             canister_num_instructions_global,
             log: self.log.clone(),
-        };
-
-        Box::new(instance_impl)
+        }
     }
 }
 
@@ -330,7 +325,8 @@ fn sigsegv_memory_tracker(
     sigsegv_memory_tracker as std::rc::Rc<SigsegvMemoryTracker>
 }
 
-struct WasmtimeInstance {
+/// Encapsulates a Wasmtime instance on the Internet Computer.
+pub struct WasmtimeInstance {
     system_api_handle: SystemApiHandle,
     instance: wasmtime::Instance,
     // if instance memory exists we need to keep the Arc alive as long as the
@@ -394,10 +390,10 @@ impl WasmtimeInstance {
             )),
         }
     }
-}
 
-impl Instance for WasmtimeInstance {
-    fn run(
+    /// Executes first exported method on an embedder instance, whose name
+    /// consists of one of the prefixes and method_name.
+    pub fn run(
         &mut self,
         system_api: &mut (dyn SystemApi + 'static),
         func_ref: FuncRef,
@@ -440,7 +436,8 @@ impl Instance for WasmtimeInstance {
         })
     }
 
-    fn set_num_instructions(&mut self, num_instructions: NumInstructions) {
+    /// Sets the number of instructions for a method execution.
+    pub fn set_num_instructions(&mut self, num_instructions: NumInstructions) {
         match &*self.canister_num_instructions_global.borrow_mut() {
             Some(num_instructions_global) => {
                 match num_instructions_global.set(Val::I64(num_instructions.get() as i64)) {
@@ -452,7 +449,8 @@ impl Instance for WasmtimeInstance {
         }
     }
 
-    fn get_num_instructions(&self) -> NumInstructions {
+    /// Returns the number of instructions left.
+    pub fn get_num_instructions(&self) -> NumInstructions {
         match &*self.canister_num_instructions_global.borrow() {
             Some(num_instructions) => match num_instructions.get() {
                 Val::I64(num_instructions_i64) => {
@@ -464,11 +462,13 @@ impl Instance for WasmtimeInstance {
         }
     }
 
-    fn heap_size(&self) -> NumWasmPages {
+    /// Returns the heap size.
+    pub fn heap_size(&self) -> NumWasmPages {
         NumWasmPages::from(self.memory().map_or(0, |mem| mem.size()))
     }
 
-    fn get_exported_globals(&self) -> Vec<Global> {
+    /// Returns a list of exported globals.
+    pub fn get_exported_globals(&self) -> Vec<Global> {
         self.instance
             .exports()
             .filter_map(|e| e.into_global())
@@ -482,13 +482,22 @@ impl Instance for WasmtimeInstance {
             .collect()
     }
 
-    unsafe fn heap_addr(&self) -> *const u8 {
+    /// Return the heap address. If the Instance does not contain any memory,
+    /// the pointer is null.
+    ///
+    /// # Safety
+    /// This function returns a pointer to Instance's memory. The pointer is
+    /// only valid while the Instance object is kept alive.
+    pub unsafe fn heap_addr(&self) -> *const u8 {
         self.memory()
             .map(|mem| mem.data_unchecked().as_ptr())
             .unwrap_or_else(|_| std::ptr::null())
     }
 
-    fn get_stats(&self) -> InstanceStats {
+    /// Returns execution statistics for this instance.
+    ///
+    /// Note that stats must be available even if this instance trapped.
+    pub fn get_stats(&self) -> InstanceStats {
         InstanceStats {
             accessed_pages: self
                 .memory_tracker

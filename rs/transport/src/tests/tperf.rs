@@ -284,7 +284,7 @@ impl TestClient {
         match receiver.recv() {
             Ok(msg) => msg,
             Err(e) => {
-                panic!(format!("Failed to receive message: {:?}", e));
+                panic!("Failed to receive message: {:?}", e);
             }
         }
     }

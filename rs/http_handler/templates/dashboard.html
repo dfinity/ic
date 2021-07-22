@@ -58,10 +58,25 @@
 <body>
 <h1>Internet Computer Replica Dashboard</h1>
 
-<h2>Subnet Type</h2>
-<div class="debug">
-    <pre>{{ format!("{:?}", self.subnet_type) }}</pre>
-</div>
+<h2>Subnet Settings & Parameters</h2>
+<table>
+    <tr>
+        <td>Replica Version</td>
+        <td class="debug">{{ self.replica_version.to_string() }}</td>
+    </tr>
+    <tr>
+        <td>Subnet Type</td>
+        <td class="debug">{{ format!("{:?}", self.subnet_type) }}</td>
+    </tr>
+    <tr>
+        <td>Total Compute Allocation</td>
+        <td class="debug">{{ replicated_state.total_compute_allocation() }} %</td>
+    </tr>
+    <tr>
+        <td>Cow Memory Manager Enabled</td>
+        <td class="debug">{{ cow_memory_manager_enabled  }}</td>
+    </tr>
+</table>
 <h2>Http Server Config</h2>
 <div class="debug">
     <pre>{{ format!("{:?}", self.http_config) }}</pre>
@@ -87,7 +102,7 @@
                 <div class="verbose">
                     <h3>System state</h3>
                     <table>
-                        <tr><td>controller</td><td>{{ c.system_state.collect_controllers_as_string() }}</td></tr>
+                        <tr><td>controllers</td><td>{{ c.system_state.collect_controllers_as_string() }}</td></tr>
                         <tr><td>stable_memory_size</td><td>{{ c.system_state.stable_memory_size }} pages</td></tr>
                         <tr><td>certified_data length</td><td>{{ c.system_state.certified_data.len() }} bytes</td></tr>
                     </table>
@@ -118,7 +133,6 @@
                         <tr><td>freeze_threshold (seconds)</td><td>{{ c.system_state.freeze_threshold }}</td></tr>
                         <tr><td>memory_usage</td><td>{{ c.memory_usage() }}</td></tr>
                         <tr><td>accumulated_priority</td><td>{{ c.scheduler_state.accumulated_priority.value() }} </td></tr>
-                        <tr><td>query_allocation</td><td>{{ c.scheduler_state.query_allocation }}</td></tr>
                         <tr><td>Cycles balance</td><td>{{ c.system_state.cycles_balance }}</td></tr>
                     </table>
                 </div>
@@ -138,7 +152,5 @@
     {% endfor %}
 </table>
 </div>
-<div>Total compute allocation <span class="debug">{{ replicated_state.total_compute_allocation() }} %</span></div>
-<div>Cow Memory Manager Enabled <span class="debug">{{ cow_memory_manager_enabled }} </span></div>
 </body>
 </html>

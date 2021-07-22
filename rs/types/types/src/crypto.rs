@@ -124,6 +124,7 @@ pub enum AlgorithmId {
     EcdsaP256 = 11,
     EcdsaSecp256k1 = 12,
     IcCanisterSignature = 13,
+    RsaSha256 = 14,
 }
 
 impl From<CspThresholdSigPublicKey> for AlgorithmId {
@@ -378,87 +379,51 @@ impl From<ThresholdSigPublicKeyBytesConversionError> for CryptoError {
 
 impl CryptoError {
     pub fn is_public_key_not_found(&self) -> bool {
-        match self {
-            CryptoError::PublicKeyNotFound { .. } => true,
-            _ => false,
-        }
+        matches!(self, CryptoError::PublicKeyNotFound { .. })
     }
 
     pub fn is_secret_key_not_found(&self) -> bool {
-        match self {
-            CryptoError::SecretKeyNotFound { .. } => true,
-            _ => false,
-        }
+        matches!(self, CryptoError::SecretKeyNotFound { .. })
     }
 
     pub fn is_malformed_secret_key(&self) -> bool {
-        match self {
-            CryptoError::MalformedSecretKey { .. } => true,
-            _ => false,
-        }
+        matches!(self, CryptoError::MalformedSecretKey { .. })
     }
 
     pub fn is_malformed_public_key(&self) -> bool {
-        match self {
-            CryptoError::MalformedPublicKey { .. } => true,
-            _ => false,
-        }
+        matches!(self, CryptoError::MalformedPublicKey { .. })
     }
 
     pub fn is_malformed_signature(&self) -> bool {
-        match self {
-            CryptoError::MalformedSignature { .. } => true,
-            _ => false,
-        }
+        matches!(self, CryptoError::MalformedSignature { .. })
     }
 
     pub fn is_signature_verification_error(&self) -> bool {
-        match self {
-            CryptoError::SignatureVerification { .. } => true,
-            _ => false,
-        }
+        matches!(self, CryptoError::SignatureVerification { .. })
     }
 
     pub fn is_pop_verification_error(&self) -> bool {
-        match self {
-            CryptoError::PopVerification { .. } => true,
-            _ => false,
-        }
+        matches!(self, CryptoError::PopVerification { .. })
     }
 
     pub fn is_inconsistent_algorithms(&self) -> bool {
-        match self {
-            CryptoError::InconsistentAlgorithms { .. } => true,
-            _ => false,
-        }
+        matches!(self, CryptoError::InconsistentAlgorithms { .. })
     }
 
     pub fn is_algorithm_not_supported(&self) -> bool {
-        match self {
-            CryptoError::AlgorithmNotSupported { .. } => true,
-            _ => false,
-        }
+        matches!(self, CryptoError::AlgorithmNotSupported { .. })
     }
 
     pub fn is_registry_client_error(&self) -> bool {
-        match self {
-            CryptoError::RegistryClient(_) => true,
-            _ => false,
-        }
+        matches!(self, CryptoError::RegistryClient(_))
     }
 
     pub fn is_threshold_sig_data_not_found(&self) -> bool {
-        match self {
-            CryptoError::ThresholdSigDataNotFound { .. } => true,
-            _ => false,
-        }
+        matches!(self, CryptoError::ThresholdSigDataNotFound { .. })
     }
 
     pub fn is_dkg_transcript_not_found(&self) -> bool {
-        match self {
-            CryptoError::DkgTranscriptNotFound { .. } => true,
-            _ => false,
-        }
+        matches!(self, CryptoError::DkgTranscriptNotFound { .. })
     }
 }
 

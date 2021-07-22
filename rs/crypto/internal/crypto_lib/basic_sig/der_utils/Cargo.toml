@@ -5,7 +5,8 @@ edition = "2018"
 
 [dependencies]
 hex = "0.4.2"
-simple_asn1 = "0.4.1"
+simple_asn1 = "0.5.4"
+ic-types = { path = "../../../../../types/types" }
 
 [dev-dependencies]
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }

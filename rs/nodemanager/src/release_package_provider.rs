@@ -8,7 +8,7 @@ use ic_release::release::ReleaseContent;
 use ic_types::ReplicaVersion;
 use std::convert::TryFrom;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::tempdir;
@@ -141,7 +141,7 @@ impl ReleasePackageProvider {
         binary_name: &str,
         url: &str,
         sha256_hex: &str,
-        target_dir: &PathBuf,
+        target_dir: &Path,
     ) -> NodeManagerResult<()> {
         if binary_name == utils::REPLICA_BINARY_NAME && self.force_replica_binary.is_some() {
             return Ok(());
@@ -175,9 +175,9 @@ impl ReleasePackageProvider {
             NodeManagerError::IoError("Failed to create temporary directory".to_string(), e)
         })?;
 
-        let binary_path = if url.starts_with("file://") {
+        let binary_path = if let Some(path) = url.strip_prefix("file://") {
             // We already have the file locally, don't need to download
-            PathBuf::from(&url["file://".len()..])
+            PathBuf::from(path)
         } else {
             // Download to temporary file
             let temp_dir = temp_dir.path().to_path_buf();

@@ -28,16 +28,16 @@ impl ApiReqType {
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum AppLayer {
-    HTTP,
-    HTTPS,
+    Http,
+    Https,
 }
 
 impl AppLayer {
     pub(crate) fn as_str(&self) -> &str {
         use AppLayer::*;
         match self {
-            HTTP => "http",
-            HTTPS => "https",
+            Http => "http",
+            Https => "https",
         }
     }
 }
@@ -82,6 +82,8 @@ pub(crate) enum ConnectionError {
     ServingHttpsConnection,
     Accept,
     ClientAuthentication,
+    Peek,
+    PeekTimeout,
 }
 
 impl ConnectionError {
@@ -93,6 +95,8 @@ impl ConnectionError {
             ServingHttpsConnection => "serving_https_connection",
             Accept => "accept",
             ClientAuthentication => "client_authentication",
+            Peek => "peek",
+            PeekTimeout => "peek_timeout",
         }
     }
 }

@@ -21,6 +21,7 @@ use ic_types::{
         HasVersion,
     },
     ingress::MAX_INGRESS_TTL,
+    malicious_flags::MaliciousFlags,
     messages::{SignedIngress, SignedRequestBytes},
     NodeId, ReplicaVersion,
 };
@@ -110,7 +111,7 @@ impl<Pool: ConsensusPool + ConsensusGossipPool + Send + Sync> ArtifactClient<Con
             .read()
             .unwrap()
             .get_all_validated_by_filter(filter.height)
-            .map(|msg| ConsensusArtifact::to_advert(&msg))
+            .map(|msg| ConsensusArtifact::message_to_advert(&msg))
             .collect()
     }
 
@@ -138,6 +139,9 @@ pub struct IngressClient<Pool> {
     ingress_pool: Arc<RwLock<Pool>>,
     /// The logger.
     log: ReplicaLogger,
+
+    #[allow(dead_code)]
+    malicious_flags: MaliciousFlags,
 }
 
 impl<Pool> IngressClient<Pool> {
@@ -146,11 +150,13 @@ impl<Pool> IngressClient<Pool> {
         time_source: Arc<dyn TimeSource>,
         ingress_pool: Arc<RwLock<Pool>>,
         log: ReplicaLogger,
+        malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
             time_source,
             ingress_pool,
             log,
+            malicious_flags,
         }
     }
 }
@@ -178,6 +184,14 @@ impl<Pool: IngressPool + IngressGossipPool + Send + Sync> ArtifactClient<Ingress
         let msg: SignedIngress = bytes
             .try_into()
             .map_err(|err| ArtifactPoolError::ArtifactRejected(Box::new(err)))?;
+
+        #[cfg(feature = "malicious_code")]
+        {
+            if self.malicious_flags.maliciously_disable_ingress_validation {
+                return Ok(ArtifactAcceptance::AcceptedForProcessing(msg));
+            }
+        }
+
         let time_now = self.time_source.get_relative_time();
         let time_plus_ttl = time_now + MAX_INGRESS_TTL + permitted_drift;
         let msg_expiry_time = msg.expiry_time();
@@ -325,7 +339,7 @@ impl<PoolCertification: CertificationPool + CertificationGossipPool + Send + Syn
             .read()
             .unwrap()
             .get_all_validated_by_filter(filter.height)
-            .map(|msg| CertificationArtifact::to_advert(&msg))
+            .map(|msg| CertificationArtifact::message_to_advert(&msg))
             .collect()
     }
 

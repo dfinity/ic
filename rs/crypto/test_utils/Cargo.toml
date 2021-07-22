@@ -4,6 +4,8 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
+ic-crypto-internal-csp-test-utils = { path = "../internal/csp_test_utils" }
+ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
 openssl = "0.10.29"
@@ -11,5 +13,5 @@ phantom_newtype = { path = "../../phantom_newtype" }
 rand = "0.7.3"
 serde = { version = "1.0.99", features = [ "derive" ] }
 strum_macros = "0.18.0"
-tokio = { version = "0.2", features = ["net"] }
-tokio-openssl = "0.4.0"
+tokio = { version = "1.2.0", features = ["net"] }
+tokio-openssl = "0.6.0"

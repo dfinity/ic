@@ -192,8 +192,7 @@ impl CanisterIdRanges {
     pub fn total_count(&self) -> u128 {
         let mut sum = 0;
         for range in self.0.iter() {
-            sum +=
-                1 as u128 + canister_id_into_u128(range.end) - canister_id_into_u128(range.start);
+            sum += 1_u128 + canister_id_into_u128(range.end) - canister_id_into_u128(range.start);
         }
         sum
     }
@@ -205,7 +204,7 @@ impl CanisterIdRanges {
         assert!(loc < self.total_count());
         for range in self.0.iter() {
             let len =
-                1 as u128 + canister_id_into_u128(range.end) - canister_id_into_u128(range.start);
+                1_u128 + canister_id_into_u128(range.end) - canister_id_into_u128(range.start);
             if loc < len {
                 return CanisterId::from(canister_id_into_u64(range.start) + loc as u64);
             }

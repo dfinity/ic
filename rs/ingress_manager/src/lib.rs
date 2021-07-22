@@ -11,12 +11,13 @@ use ic_interfaces::{
     execution_environment::IngressHistoryReader, registry::RegistryClient,
     state_manager::StateManager,
 };
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{error, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_client::helper::subnet::{IngressMessageSettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::IngressMessageId,
+    malicious_flags::MaliciousFlags,
     time::{Time, UNIX_EPOCH},
     RegistryVersion, SubnetId,
 };
@@ -69,6 +70,7 @@ pub struct IngressManager {
     pub(crate) last_purge_time: std::sync::RwLock<Time>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    malicious_flags: MaliciousFlags,
 }
 
 impl IngressManager {
@@ -84,6 +86,7 @@ impl IngressManager {
         log: ReplicaLogger,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         cycles_account_manager: Arc<CyclesAccountManager>,
+        malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
             consensus_pool_cache,
@@ -97,6 +100,7 @@ impl IngressManager {
             messages_to_purge: RwLock::new(Vec::new()),
             state_manager,
             cycles_account_manager,
+            malicious_flags,
         }
     }
 
@@ -109,7 +113,7 @@ impl IngressManager {
             .get_ingress_message_settings(self.subnet_id, registry_version)
         {
             Ok(None) => {
-                warn!(
+                error!(
                     self.log,
                     "No subnet record found for registry version={:?} and subnet_id={:?}",
                     registry_version,
@@ -233,6 +237,7 @@ mod tests {
                         log.clone(),
                         Arc::new(state_manager),
                         cycles_account_manager,
+                        MaliciousFlags::default(),
                     ),
                     IngressPoolImpl::new(pool_config, metrics_registry, log),
                 )

@@ -68,8 +68,8 @@ proptest! {
 
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.signals_end.inc_assign();
-            let signals_end = stream.signals_end;
+            stream.increment_signals_end();
+            let signals_end = stream.signals_end();
 
             let fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream);
             let certified_slice = fixture.get_slice(DST_SUBNET, from, msg_count);
@@ -334,17 +334,11 @@ proptest! {
     ) {
         /// Asserts that the pool has a cached stream position for the given subnet.
         fn has_stream_position(subnet_id: SubnetId, pool: &CertifiedSlicePool) -> bool {
-            match pool.slice_stats(subnet_id) {
-                (None, _, _, _) => false,
-                _ => true
-            }
+            !matches!(pool.slice_stats(subnet_id), (None, _, _, _))
         }
         /// Asserts that the pool contains a slice from the given subnet.
         fn has_slice(subnet_id: SubnetId, pool: &CertifiedSlicePool) -> bool {
-            match pool.slice_stats(subnet_id) {
-                (_, None, 0, 0) => false,
-                _ => true
-            }
+            !matches!(pool.slice_stats(subnet_id), (_, None, 0, 0))
         }
         /// Takes the full pooled slice from the given subnet. Panics if no such slice exists.
         fn take_slice(subnet_id: SubnetId, pool: &mut CertifiedSlicePool) -> Option<CertifiedStreamSlice> {
@@ -367,12 +361,12 @@ proptest! {
 
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.signals_end.inc_assign();
+            stream.increment_signals_end();
 
             // Indices just before the slice. Garbage collecting these should be a no-op.
             let indices_before = ExpectedIndices{
                 message_index: from,
-                signal_index: stream.signals_end.decrement(),
+                signal_index: stream.signals_end().decrement(),
             };
             let zero_indices = ExpectedIndices::default();
 
@@ -549,7 +543,7 @@ proptest! {
         let to = from + (msg_count as u64).into();
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.signals_end.inc_assign();
+            stream.increment_signals_end();
 
             let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
             let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
@@ -558,7 +552,7 @@ proptest! {
             // Stream position guaranteed to yield a slice, even if empty.
             let stream_position = ExpectedIndices{
                 message_index: from,
-                signal_index: stream.signals_end.decrement(),
+                signal_index: stream.signals_end().decrement(),
             };
 
             let mut pool = CertifiedSlicePool::new(&fixture.metrics);
@@ -575,7 +569,7 @@ proptest! {
             pool.append(SRC_SUBNET, slice).unwrap();
             let mut stream_position = ExpectedIndices{
                 message_index: to,
-                signal_index: stream.signals_end,
+                signal_index: stream.signals_end(),
             };
             assert_eq!(
                 (Some(stream_position.clone()), None, 0, 0),
@@ -584,7 +578,7 @@ proptest! {
 
             // But appending the same slice with a higher `signals_end` should result in an empty
             // slice (with the new `signals_end`).
-            stream.signals_end.inc_assign();
+            stream.increment_signals_end();
             let new_fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream.clone());
             let new_slice = new_fixture.get_slice(DST_SUBNET, from, msg_count);
 
@@ -596,7 +590,7 @@ proptest! {
                 Some(empty_slice),
                 pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None).unwrap(),
             );
-            stream_position.signal_index = stream.signals_end;
+            stream_position.signal_index = stream.signals_end();
             assert_eq!(
                 (Some(stream_position), None, 0, 0),
                 pool.slice_stats(SRC_SUBNET)
@@ -645,7 +639,7 @@ proptest! {
     ) {
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.signals_end.inc_assign();
+            stream.increment_signals_end();
 
             let fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream.clone());
             let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
@@ -653,7 +647,7 @@ proptest! {
             // Stream position matching slice begin.
             let stream_position = ExpectedIndices{
                 message_index: from,
-                signal_index: stream.signals_end,
+                signal_index: stream.signals_end(),
             };
 
             let mut pool = CertifiedSlicePool::new(&fixture.metrics);
@@ -688,7 +682,7 @@ proptest! {
     ) {
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.signals_end.inc_assign();
+            stream.increment_signals_end();
 
             let fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream.clone());
             let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
@@ -696,7 +690,7 @@ proptest! {
             // Stream position matching slice begin.
             let stream_position = ExpectedIndices{
                 message_index: from,
-                signal_index: stream.signals_end,
+                signal_index: stream.signals_end(),
             };
 
             let mut pool = CertifiedSlicePool::new(&fixture.metrics);

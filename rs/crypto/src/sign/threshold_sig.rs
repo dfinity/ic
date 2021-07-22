@@ -50,7 +50,7 @@ fn pub_coeffs_from_store(
         .read()
         .transcript_data(dkg_id)
         .map(|data| data.public_coefficients().clone())
-        .ok_or_else(|| ThresholdSigDataNotFoundError::ThresholdSigDataNotFound { dkg_id })
+        .ok_or(ThresholdSigDataNotFoundError::ThresholdSigDataNotFound { dkg_id })
 }
 
 fn transcript_data_from_store(

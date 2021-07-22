@@ -198,14 +198,16 @@ pub fn spawn<F: 'static + Future<Output = ()>>(future: F) {
     let top_level_future_ptr = Box::into_raw(top_level_future);
     let _guard = TopLevelFutureGuard::new(top_level_future_ptr);
 
-    if let Poll::Ready(_) = unsafe {
+    if unsafe {
         (*top_level_future_ptr)
             .future
             .as_mut()
             .poll(&mut Context::from_waker(&waker::waker(
                 top_level_future_ptr as *const (),
             )))
-    } {
+    }
+    .is_ready()
+    {
         unsafe {
             TopLevelFuture::release(top_level_future_ptr);
         }
@@ -238,10 +240,11 @@ mod waker {
         let future_ptr = ptr as *mut TopLevelFuture;
         let _guard = TopLevelFutureGuard::new(future_ptr);
 
-        if let Poll::Ready(_) = (*future_ptr)
+        if (*future_ptr)
             .future
             .as_mut()
             .poll(&mut Context::from_waker(&waker::waker(ptr)))
+            .is_ready()
         {
             TopLevelFuture::release(future_ptr);
         }

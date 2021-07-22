@@ -339,10 +339,10 @@ mod tests {
             signals_end: StreamIndex::new(11),
         };
 
-        let stream = Stream {
-            messages: StreamIndexedQueue::with_begin(StreamIndex::from(4)),
-            signals_end: StreamIndex::new(11),
-        };
+        let stream = Stream::new(
+            StreamIndexedQueue::with_begin(StreamIndex::from(4)),
+            StreamIndex::new(11),
+        );
 
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         let mut state = ReplicatedState::new_rooted_at(

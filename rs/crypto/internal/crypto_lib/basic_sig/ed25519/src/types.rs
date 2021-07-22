@@ -1,15 +1,15 @@
 //! Types for Ed25519 basic signatures
 #![allow(clippy::unit_arg)] // Arbitrary is a unit arg in: derive(proptest_derive::Arbitrary)
+use ic_crypto_secrets_containers::SecretArray;
+use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
 mod conversions;
 mod generic_traits;
 
 /// A wrapper for Ed25519 secret key bytes.
-#[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct SecretKeyBytes(pub [u8; SecretKeyBytes::SIZE]);
-ic_crypto_internal_types::derive_serde!(SecretKeyBytes, SecretKeyBytes::SIZE);
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Zeroize)]
+pub struct SecretKeyBytes(pub SecretArray<{ SecretKeyBytes::SIZE }>);
 impl SecretKeyBytes {
     pub const SIZE: usize = 32;
 }

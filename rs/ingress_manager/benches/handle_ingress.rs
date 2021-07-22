@@ -44,6 +44,7 @@ use ic_test_utilities::{
 };
 use ic_types::{
     ingress::{IngressStatus, MAX_INGRESS_TTL},
+    malicious_flags::MaliciousFlags,
     messages::{MessageId, SignedIngress},
     Height, RegistryVersion, SubnetId, Time,
 };
@@ -219,6 +220,7 @@ where
                 log.clone(),
                 Arc::new(state_manager),
                 cycles_account_manager,
+                MaliciousFlags::default(),
             );
             test(
                 time_source,

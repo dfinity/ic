@@ -1,0 +1,18 @@
+[package]
+name = "ic-crypto-internal-basic-sig-cose"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+ic-types = { path = "../../../../../types/types" }
+ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
+ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../ecdsa_secp256r1" }
+ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../rsa_pkcs1" }
+serde = { version = "1.0.99", features = [ "derive" ] }
+serde_cbor = "0.11.1"
+simple_asn1 = "0.5.4"
+
+[dev-dependencies]
+ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
+hex = "0.4.2"
+openssl = "0.10.29"

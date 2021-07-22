@@ -66,7 +66,11 @@ impl<P: Atomic> ObservableCountingSemaphore<P> {
         // ObservableCountingSemaphore object before the permit, although not
         // recommended.
         let sem_for_permit = Arc::clone(&self.semaphore);
-        let permit = sem_for_permit.acquire_owned().await;
+        // Can't panic because the semaphore is never closed before this call.
+        let permit = sem_for_permit
+            .acquire_owned()
+            .await
+            .expect("Acquiring a permit on closed semaphore. This can't happen.");
         self.gauge.inc();
         SemaphorePermit {
             gauge: Arc::clone(&self.gauge),
@@ -105,7 +109,7 @@ mod tests {
                     assert!(gauge.get() > 0);
                     assert!(gauge.get() <= 2);
                     let _permit_deleter = permit;
-                    tokio::time::delay_for(std::time::Duration::from_millis(10)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                 }
             }));
         }

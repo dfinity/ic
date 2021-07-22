@@ -10,7 +10,6 @@ use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conve
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_interfaces::crypto::DkgAlgorithm;
-use ic_protobuf::registry::subnet::v1::InitialDkgTranscriptRecord;
 use ic_types::consensus::Threshold;
 use ic_types::crypto::dkg;
 use ic_types::crypto::dkg::EncryptionPublicKeyWithPop;
@@ -116,8 +115,7 @@ pub fn initial_dkg_transcript(
 fn first_dealer(dkg_config: &dkg::Config) -> NodeId {
     *dkg_config
         .dealers
-        .iter()
-        .next()
+        .get(0)
         .expect("internal error: expected the initial DKG config to contain dealers")
 }
 
@@ -131,26 +129,6 @@ fn ensure_matching_node_ids(
         receivers_from_keys, receivers_from_config,
         "the config's receivers must match the keys' receivers"
     );
-}
-
-/// Converts a DKG transcript into the corresponding protobuf representation.
-pub fn initial_dkg_transcript_record_from_transcript(
-    transcript: dkg::Transcript,
-) -> InitialDkgTranscriptRecord {
-    use ic_protobuf::registry::subnet::v1::DkgId;
-
-    InitialDkgTranscriptRecord {
-        id: Some(DkgId {
-            subnet_id: transcript.dkg_id.subnet_id.get().into_vec(),
-            instance_id: transcript.dkg_id.instance_id.get(),
-        }),
-        committee: transcript
-            .committee
-            .into_iter()
-            .map(|x| x.expect("invalid initial DKG transcript").get().into_vec())
-            .collect(),
-        transcript_bytes: transcript.transcript_bytes.0,
-    }
 }
 
 /// Extracts the threshold signature public key from a DKG transcript

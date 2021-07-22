@@ -43,7 +43,7 @@ proptest! {
         })]
 
         #[test]
-        fn proptest_select_n(seed: [u8;32], size in 0 as NodeIndex..10, items in proptest::collection::vec(any::<NodeIndex>(), 10..20)) {
+        fn proptest_select_n(seed: [u8;32], size in 0_u32..10, items in proptest::collection::vec(any::<NodeIndex>(), 10..20)) {
             test_select_n(Randomness::from(seed), NumberOfNodes::from(size), &items);
         }
 }

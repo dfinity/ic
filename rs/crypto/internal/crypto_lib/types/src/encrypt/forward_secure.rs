@@ -231,7 +231,7 @@ pub mod groth20_bls12_381 {
             self.ciphertext_chunks.is_empty()
         }
         pub fn iter(&self) -> impl Iterator<Item = (NodeIndex, &[G1Bytes; NUM_CHUNKS])> + '_ {
-            (0 as NodeIndex..).zip(&self.ciphertext_chunks)
+            (0_u32..).zip(&self.ciphertext_chunks)
         }
         pub fn get(&self, node_index: NodeIndex) -> Option<&[G1Bytes; NUM_CHUNKS]> {
             usize::try_from(node_index)

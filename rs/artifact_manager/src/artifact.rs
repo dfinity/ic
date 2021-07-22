@@ -22,7 +22,7 @@ impl ArtifactKind for ConsensusArtifact {
 
     /// The function converts a `ConsensusMessage` into an advert for a
     /// `ConsensusArtifact`.
-    fn to_advert(msg: &ConsensusMessage) -> Advert<ConsensusArtifact> {
+    fn message_to_advert(msg: &ConsensusMessage) -> Advert<ConsensusArtifact> {
         let binary_data = bincode::serialize(msg).unwrap();
         let attribute = ConsensusMessageAttribute::from(msg);
         let size = binary_data.len();
@@ -50,7 +50,7 @@ impl ArtifactKind for IngressArtifact {
 
     /// The function converts a `SignedIngress` into an advert for an
     /// `IngressArtifact`.
-    fn to_advert(msg: &SignedIngress) -> Advert<IngressArtifact> {
+    fn message_to_advert(msg: &SignedIngress) -> Advert<IngressArtifact> {
         Advert {
             id: IngressMessageId::from(msg),
             attribute: IngressMessageAttribute::new(msg),
@@ -75,7 +75,7 @@ impl ArtifactKind for CertificationArtifact {
 
     /// The function converts a `CertificationMessage` into an advert for a
     /// `CertificationArtifact`.
-    fn to_advert(msg: &CertificationMessage) -> Advert<CertificationArtifact> {
+    fn message_to_advert(msg: &CertificationMessage) -> Advert<CertificationArtifact> {
         use CertificationMessage::*;
         let (attribute, id) = match msg {
             Certification(cert) => (
@@ -121,7 +121,7 @@ impl ArtifactKind for DkgArtifact {
 
     /// The function converts a `DkgMessage` into an advert for a
     /// `DkgArtifact`.
-    fn to_advert(msg: &DkgMessage) -> Advert<DkgArtifact> {
+    fn message_to_advert(msg: &DkgMessage) -> Advert<DkgArtifact> {
         let size = bincode::serialize(msg).unwrap().len();
         let attribute = DkgMessageAttribute {
             interval_start_height: msg.content.dkg_id.start_block_height,

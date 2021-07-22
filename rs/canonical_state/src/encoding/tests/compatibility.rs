@@ -17,7 +17,6 @@ use ic_test_utilities::types::{
 };
 use ic_types::{
     crypto::CryptoHash,
-    funds::icp::{Tap, ICP},
     messages::{CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response},
     user_error::RejectCode,
     xnet::StreamHeader,
@@ -73,7 +72,7 @@ fn canonical_encoding_stream_header() {
 ///         receiver: canister_test_id(1),
 ///         sender: canister_test_id(2),
 ///         sender_reply_callback: CallbackId::from(3),
-///         payment: Funds::new(Cycles::new(3), icp::Tap::mint(2)),
+///         payment: Funds::new(Cycles::new(3)),
 ///         method_name: "test".to_string(),
 ///         method_payload: vec![6],
 ///     }
@@ -95,19 +94,18 @@ fn canonical_encoding_stream_header() {
 ///       02                      # field_index(Request::sender_reply_callback)
 ///       03                      # unsigned(3)
 ///       03                      # field_index(Request::payment)
-///       A2                      # map(2)
+///       A1                      # map(1)
 ///          00                   # field_index(Funds::cycles)
 ///          A1                   # map(1)
 ///             00                # field_index(Cycles::raw)
 ///             04                # unsigned(3)
-///          01                   # field_index(Funds::icp)
-///          05                   # unsigned(2)
 ///       04                      # field_index(Request::method_name)
 ///       64                      # text(4)
 ///          74657374             # "test"
 ///       05                      # field_index(Request::method_payload)
 ///       41                      # bytes(1)
 ///          06                   # "\x06"
+/// Used http://cbor.me/ for printing the human friendly output.
 /// ```
 #[test]
 fn canonical_encoding_request() {
@@ -116,14 +114,78 @@ fn canonical_encoding_request() {
             .receiver(canister_test_id(1))
             .sender(canister_test_id(2))
             .sender_reply_callback(CallbackId::from(3))
-            .payment(Funds::new(Cycles::new(4), Tap::mint(5)))
+            .payment(Funds::new(Cycles::new(4)))
             .method_name("test".to_string())
             .method_payload(vec![6])
             .build(),
     );
 
     assert_eq!(
-        "A1 00 A6 00 4A 00 00 00 00 00 00 00 01 01 01 01 4A 00 00 00 00 00 00 00 02 01 01 02 03 03 A2 00 A1 00 04 01 05 04 64 74 65 73 74 05 41 06",
+        "A1 00 A6 00 4A 00 00 00 00 00 00 00 01 01 01 01 4A 00 00 00 00 00 00 00 02 01 01 02 03 03 A1 00 A1 00 04 04 64 74 65 73 74 05 41 06",
+        as_hex(&encode_message(&request))
+    );
+}
+
+/// Canonical CBOR encoding of:
+///
+/// ```no_run
+/// RequestOrResponse::Request(
+///     Request {
+///         receiver: canister_test_id(1),
+///         sender: canister_test_id(2),
+///         sender_reply_callback: CallbackId::from(3),
+///         payment: Funds::new(Cycles::new(123456789012345678901234567890)),
+///         method_name: "test".to_string(),
+///         method_payload: vec![6],
+///     }
+/// )
+/// ```
+///
+/// Expected:
+///
+/// ```text
+/// A1                            # map(1)
+///    00                         # field_index(RequestOrResponse::request)
+///    A6                         # map(6)
+///       00                      # field_index(Request::receiver)
+///       4A                      # bytes(10)
+///          00000000000000010101 # "\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01"
+///       01                      # field_index(Request::sender)
+///       4A                      # bytes(10)
+///          00000000000000020101 # "\x00\x00\x00\x00\x00\x00\x00\x02\x01\x01"
+///       02                      # field_index(Request::sender_reply_callback)
+///       03                      # unsigned(3)
+///       03                      # field_index(Request::payment)
+///       A1                      # map(1)
+///          00                   # field_index(Funds::cycles)
+///          A2                   # map(2)
+///             00                # field_index(Cycles::raw)
+///             1B C373E0EE4E3F0AD2  # unsigned(14083847773837265618)
+///             01                # field_index(Cycles::upper_raw)
+///             1B 000000018EE09FF6  # unsigned(61672207766)
+///       04                      # field_index(Request::method_name)
+///       64                      # text(4)
+///          74657374             # "test"
+///       05                      # field_index(Request::method_payload)
+///       41                      # bytes(1)
+///          06                   # "\x06"
+/// Used http://cbor.me/ for printing the human friendly output.
+/// ```
+#[test]
+fn canonical_encoding_request_u128() {
+    let request = RequestOrResponse::Request(
+        RequestBuilder::new()
+            .receiver(canister_test_id(1))
+            .sender(canister_test_id(2))
+            .sender_reply_callback(CallbackId::from(3))
+            .payment(Funds::new(Cycles::new(123456789012345678901234567890)))
+            .method_name("test".to_string())
+            .method_payload(vec![6])
+            .build(),
+    );
+
+    assert_eq!(
+        "A1 00 A6 00 4A 00 00 00 00 00 00 00 01 01 01 01 4A 00 00 00 00 00 00 00 02 01 01 02 03 03 A1 00 A2 00 1B C3 73 E0 EE 4E 3F 0A D2 01 1B 00 00 00 01 8E E9 0F F6 04 64 74 65 73 74 05 41 06",
         as_hex(&encode_message(&request))
     );
 }
@@ -136,7 +198,7 @@ fn canonical_encoding_request() {
 ///         originator: canister_test_id(5),
 ///         respondent: canister_test_id(4),
 ///         originator_reply_callback: CallbackId::from(3),
-///         refund: Funds::new(Cycles::new(2), icp::ICP::zero()),
+///         refund: Funds::new(Cycles::new(2)),
 ///         response_payload: Payload::Data(vec![1]),
 ///     }
 /// )
@@ -167,6 +229,7 @@ fn canonical_encoding_request() {
 ///          00                   # field_index(Payload::data)
 ///          41                   # bytes(1)
 ///             01                # "\x01"
+/// Used http://cbor.me/ for printing the human friendly output.
 /// ```
 #[test]
 fn canonical_encoding_response() {
@@ -175,13 +238,75 @@ fn canonical_encoding_response() {
             .originator(canister_test_id(5))
             .respondent(canister_test_id(4))
             .originator_reply_callback(CallbackId::from(3))
-            .refund(Funds::new(Cycles::new(2), ICP::zero()))
+            .refund(Funds::new(Cycles::new(2)))
             .response_payload(Payload::Data(vec![1]))
             .build(),
     );
 
     assert_eq!(
         "A1 01 A5 00 4A 00 00 00 00 00 00 00 05 01 01 01 4A 00 00 00 00 00 00 00 04 01 01 02 03 03 A1 00 A1 00 02 04 A1 00 41 01",
+        as_hex(&encode_message(&response))
+    );
+}
+
+///
+/// Canonical CBOR encoding of:
+///
+/// ```no_run
+/// RequestOrResponse::Response(
+///     Response {
+///         originator: canister_test_id(5),
+///         respondent: canister_test_id(4),
+///         originator_reply_callback: CallbackId::from(3),
+///         refund: Funds::new(Cycles::new(123456789012345678901234567890)),
+///         response_payload: Payload::Data(vec![1]),
+///     }
+/// )
+/// ```
+///
+/// Expected:
+///
+/// ```text
+/// A1                            # map(1)
+///    01                         # field_index(RequestOrResponse::response)
+///    A5                         # map(5)
+///       00                      # field_index(Response::originator)
+///       4A                      # bytes(10)
+///          00000000000000050101 # "\x00\x00\x00\x00\x00\x00\x00\x06\x01\x01"
+///       01                      # field_index(Response::respondent)
+///       4A                      # bytes(10)
+///          00000000000000040101 # "\x00\x00\x00\x00\x00\x00\x00\x05\x01\x01"
+///       02                      # field_index(Response::originator_reply_callback)
+///       03                      # unsigned(3)
+///       03                      # field_index(Response::refund)
+///       A1                      # map(1)
+///          00                   # field_index(Funds::cycles)
+///          A2                   # map(2)
+///             00                # field_index(Cycles::raw)
+///             1B C373E0EE4E3F0AD2  # unsigned(14083847773837265618)
+///             01                # field_index(Cycles::upper_raw)
+///             1B 000000018EE09FF6  # unsigned(61672207766)
+///       04                      # field_index(Response::response_payload)
+///       A1                      # map(1)
+///          00                   # field_index(Payload::data)
+///          41                   # bytes(1)
+///             01                # "\x01"
+/// Used http://cbor.me/ for printing the human friendly output.
+/// ```
+#[test]
+fn canonical_encoding_response_u128() {
+    let response = RequestOrResponse::Response(
+        ResponseBuilder::new()
+            .originator(canister_test_id(5))
+            .respondent(canister_test_id(4))
+            .originator_reply_callback(CallbackId::from(3))
+            .refund(Funds::new(Cycles::new(123456789012345678901234567890)))
+            .response_payload(Payload::Data(vec![1]))
+            .build(),
+    );
+
+    assert_eq!(
+        "A1 01 A5 00 4A 00 00 00 00 00 00 00 05 01 01 01 4A 00 00 00 00 00 00 00 04 01 01 02 03 03 A1 00 A2 00 1B C3 73 E0 EE 4E 3F 0A D2 01 1B 00 00 00 01 8E E9 0F F6 04 A1 00 41 01",
         as_hex(&encode_message(&response))
     );
 }
@@ -194,7 +319,7 @@ fn canonical_encoding_response() {
 ///         originator: canister_test_id(6),
 ///         respondent: canister_test_id(5),
 ///         originator_reply_callback: CallbackId::from(4),
-///         refund: Funds::new(Cycles::new(3), icp::Tap::mint(2)),
+///         refund: Funds::new(Cycles::new(3)),
 ///         response_payload: Payload::Reject(RejectContext {
 ///             code: RejectCode::SysFatal,
 ///             message: "Oops".into(),
@@ -218,13 +343,11 @@ fn canonical_encoding_response() {
 ///       02                      # field_index(Response::originator_reply_callback)
 ///       04                      # unsigned(4)
 ///       03                      # field_index(Response::refund)
-///       A2                      # map(2)
+///       A1                      # map(1)
 ///          00                   # field_index(Funds::cycles)
 ///          A1                   # map(1)
 ///             00                # field_index(Cycles::raw)
 ///             03                # unsigned(3)
-///          01                   # field_index(Funds::icp)
-///          02                   # unsigned(2)
 ///       04                      # field_index(Response::response_payload)
 ///       A1                      # map(1)
 ///          01                   # field_index(Payload::reject)
@@ -242,7 +365,7 @@ fn canonical_encoding_reject_response() {
             .originator(canister_test_id(6))
             .respondent(canister_test_id(5))
             .originator_reply_callback(CallbackId::from(4))
-            .refund(Funds::new(Cycles::new(3), Tap::mint(2)))
+            .refund(Funds::new(Cycles::new(3)))
             .response_payload(Payload::Reject(RejectContext {
                 code: RejectCode::SysFatal,
                 message: "Oops".into(),
@@ -251,7 +374,7 @@ fn canonical_encoding_reject_response() {
     );
 
     assert_eq!(
-        "A1 01 A5 00 4A 00 00 00 00 00 00 00 06 01 01 01 4A 00 00 00 00 00 00 00 05 01 01 02 04 03 A2 00 A1 00 03 01 02 04 A1 01 A2 00 01 01 64 4F 6F 70 73",
+        "A1 01 A5 00 4A 00 00 00 00 00 00 00 06 01 01 01 4A 00 00 00 00 00 00 00 05 01 01 02 04 03 A1 00 A1 00 03 04 A1 01 A2 00 01 01 64 4F 6F 70 73",
         as_hex(&encode_message(&reject_response))
     );
 }
@@ -464,17 +587,6 @@ fn invalid_funds_missing_cycles() {
     let _: Funds = types::Funds::proxy_decode(&bytes).unwrap();
 }
 
-#[test]
-fn valid_funds_missing_icp() {
-    let funds = funds();
-    let bytes = types::Funds::encode_without_field(&funds, 1).unwrap();
-
-    assert_eq!(
-        Funds::new(funds.cycles(), ICP::zero()),
-        types::Funds::proxy_decode(&bytes).unwrap()
-    );
-}
-
 //
 // `Payload` decoding
 //
@@ -654,7 +766,7 @@ fn response() -> Response {
 }
 
 fn funds() -> Funds {
-    Funds::new(Cycles::new(3), Tap::mint(2))
+    Funds::new(Cycles::new(3))
 }
 
 fn data_payload() -> Payload {

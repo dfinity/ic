@@ -1,16 +1,15 @@
 use super::*;
 use async_trait::async_trait;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, MalformedPeerCertificateError, Peer, PeerNotAllowedError,
+    AllowedClients, AuthenticatedPeer, MalformedPeerCertificateError, Peer,
     TlsClientHandshakeError, TlsHandshake, TlsServerHandshakeError, TlsStream,
 };
 use ic_logger::{debug, new_logger};
-use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, PrincipalId, RegistryVersion};
 use openssl::nid::Nid;
 use openssl::string::OpensslString;
-use openssl::x509::X509;
 use openssl::x509::{X509NameEntries, X509NameEntryRef};
 use std::str::FromStr;
 use tokio::net::TcpStream;
@@ -143,7 +142,7 @@ where
 }
 
 fn node_id_from_cert_subject_common_name(
-    cert: &X509,
+    cert: &TlsPublicKeyCert,
 ) -> Result<NodeId, MalformedPeerCertificateError> {
     let common_name_entry = ensure_exactly_one_subject_common_name_entry(cert)?;
     let common_name = common_name_entry_as_string(common_name_entry)?;
@@ -152,7 +151,7 @@ fn node_id_from_cert_subject_common_name(
 }
 
 fn ensure_exactly_one_subject_common_name_entry(
-    cert: &X509,
+    cert: &TlsPublicKeyCert,
 ) -> Result<&X509NameEntryRef, MalformedPeerCertificateError> {
     if common_name_entries(cert).count() > 1 {
         return Err(MalformedPeerCertificateError::new(
@@ -180,37 +179,36 @@ fn parse_principal_id(
     })
 }
 
-fn common_name_entries(cert: &X509) -> X509NameEntries {
-    cert.subject_name().entries_by_nid(Nid::COMMONNAME)
-}
-
-fn ensure_certificates_equal(
-    peer_cert_from_handshake: &X509,
-    trusted_cert_from_registry: X509PublicKeyCert,
-) -> Result<(), PeerNotAllowedError> {
-    let client_cert_from_handshake_der = peer_cert_from_handshake.to_der().map_err(|e| {
-        PeerNotAllowedError::CannotDerEncodePeerCertFromHandshake {
-            internal_error: format!("{}", e),
-        }
-    })?;
-    if trusted_cert_from_registry.certificate_der != client_cert_from_handshake_der {
-        return Err(PeerNotAllowedError::CertificatesDiffer);
-    }
-    Ok(())
+fn common_name_entries(cert: &TlsPublicKeyCert) -> X509NameEntries {
+    cert.as_x509()
+        .subject_name()
+        .entries_by_nid(Nid::COMMONNAME)
 }
 
 fn tls_cert_from_registry(
     registry: &Arc<dyn RegistryClient>,
     node_id: NodeId,
     registry_version: RegistryVersion,
-) -> Result<X509PublicKeyCert, TlsCertFromRegistryError> {
+) -> Result<TlsPublicKeyCert, TlsCertFromRegistryError> {
     use ic_registry_client::helper::crypto::CryptoRegistry;
     registry
         .get_tls_certificate(node_id, registry_version)?
-        .ok_or_else(|| TlsCertFromRegistryError::CertificateNotInRegistry {
-            node_id,
-            registry_version,
-        })
+        .map_or_else(
+            || {
+                Err(TlsCertFromRegistryError::CertificateNotInRegistry {
+                    node_id,
+                    registry_version,
+                })
+            },
+            |cert| {
+                let cert = TlsPublicKeyCert::new_from_der(cert.certificate_der).map_err(|e| {
+                    TlsCertFromRegistryError::CertificateMalformed {
+                        internal_error: e.internal_error,
+                    }
+                })?;
+                Ok(cert)
+            },
+        )
 }
 
 #[derive(Debug)]
@@ -219,6 +217,9 @@ enum TlsCertFromRegistryError {
     CertificateNotInRegistry {
         node_id: NodeId,
         registry_version: RegistryVersion,
+    },
+    CertificateMalformed {
+        internal_error: String,
     },
 }
 

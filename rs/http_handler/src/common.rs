@@ -127,8 +127,8 @@ pub(crate) fn get_latest_certified_state(
         .map(|r| r.0)
 }
 
-pub(crate) fn get_latest_certified_state_and_data_certificate<'a>(
-    state_reader: &'a dyn StateReader<State = ReplicatedState>,
+pub(crate) fn get_latest_certified_state_and_data_certificate(
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     delegation_from_nns: &Option<CertificateDelegation>,
     canister_id: CanisterId,
 ) -> Option<(Arc<ReplicatedState>, Vec<u8>)> {

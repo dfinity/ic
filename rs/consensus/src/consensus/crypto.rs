@@ -193,7 +193,7 @@ impl<Message: Signable, C: MultiSigner<Message> + MultiSigVerifier<Message>>
             .collect();
         let signature = self.combine_multi_sig_individuals(signer_share_map, selector)?;
         let signers = shares.iter().map(|share| share.signer).collect();
-        Ok(MultiSignature { signers, signature })
+        Ok(MultiSignature { signature, signers })
     }
 
     fn verify_aggregate(

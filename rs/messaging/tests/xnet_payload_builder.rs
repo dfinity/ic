@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use hyper::Uri;
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
     messaging::{XNetPayloadBuilder, XNetPayloadError},
@@ -19,7 +18,7 @@ use ic_registry_client::{
     helper::node::{ConnectionEndpoint, NodeRecord},
 };
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
-use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_LIST_KEY};
+use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::Stream;
 use ic_state_manager::StateManagerImpl;
@@ -221,7 +220,11 @@ fn get_registry_for_test(runtime_handle: Handle) -> Arc<dyn RegistryClient> {
         ],
     };
     data_provider
-        .add(SUBNET_LIST_KEY, REGISTRY_VERSION, Some(subnet_list_record))
+        .add(
+            make_subnet_list_record_key().as_str(),
+            REGISTRY_VERSION,
+            Some(subnet_list_record),
+        )
         .unwrap();
 
     let registry_client = RegistryClientImpl::new(Arc::new(data_provider), None);
@@ -246,10 +249,10 @@ fn in_slice(
 /// Creates a matching outgoing stream for the given stream and slice begin
 /// index.
 fn out_stream(in_stream: &Stream, messages_begin: StreamIndex) -> Stream {
-    Stream {
-        messages: StreamIndexedQueue::with_begin(in_stream.signals_end),
-        signals_end: messages_begin,
-    }
+    Stream::new(
+        StreamIndexedQueue::with_begin(in_stream.signals_end()),
+        messages_begin,
+    )
 }
 
 proptest! {
@@ -306,9 +309,9 @@ proptest! {
             );
             // ...from SUBNET_2...
             if let Some(slice) = payload.get(&SUBNET_2) {
-                assert_eq!(stream.messages.begin(), slice.header().begin);
-                assert_eq!(stream.messages.end(), slice.header().end);
-                assert_eq!(stream.signals_end, slice.header().signals_end);
+                assert_eq!(stream.messages_begin(), slice.header().begin);
+                assert_eq!(stream.messages_end(), slice.header().end);
+                assert_eq!(stream.signals_end(), slice.header().signals_end);
 
                 // ...with non-empty messages...
                 if let Some(messages) = slice.messages() {
@@ -401,11 +404,11 @@ proptest! {
         out_stream in arb_stream(1, 1),
     ) {
         // Empty incoming stream.
-        let from = out_stream.signals_end;
-        let stream = Stream {
-            messages: StreamIndexedQueue::with_begin(from),
-            signals_end: out_stream.header().begin,
-        };
+        let from = out_stream.signals_end();
+        let stream = Stream::new(
+            StreamIndexedQueue::with_begin(from),
+            out_stream.header().begin,
+        );
 
         with_test_replica_logger(|log| {
             let mut state_manager =
@@ -428,7 +431,7 @@ proptest! {
 
             // Bump `stream.signals_end` and pool an empty slice again.
             let mut updated_stream = stream.clone();
-            updated_stream.signals_end.inc_assign();
+            updated_stream.increment_signals_end();
             xnet_payload_builder.pool_slice(REMOTE_SUBNET, &updated_stream, from, 0, &log);
 
             // Build a payload again.
@@ -444,9 +447,9 @@ proptest! {
                 payload.len()
             );
             if let Some(slice) = payload.get(&REMOTE_SUBNET) {
-                assert_eq!(stream.messages.begin(), slice.header().begin);
-                assert_eq!(stream.messages.end(), slice.header().end);
-                assert_eq!(updated_stream.signals_end, slice.header().signals_end);
+                assert_eq!(stream.messages_begin(), slice.header().begin);
+                assert_eq!(stream.messages_end(), slice.header().end);
+                assert_eq!(updated_stream.signals_end(), slice.header().signals_end);
                 assert!(slice.messages().is_none());
             } else {
                 panic!(
@@ -475,14 +478,14 @@ proptest! {
     /// stream throttling limit.
     #[test]
     fn system_subnet_stream_throttling(
-        mut out_stream in arb_stream(SYSTEM_SUBNET_STREAM_MSG_LIMIT / 2 + 1, SYSTEM_SUBNET_STREAM_MSG_LIMIT + 10),
-        (mut stream, from, msg_count) in arb_stream_slice(SYSTEM_SUBNET_STREAM_MSG_LIMIT / 2 + 1, SYSTEM_SUBNET_STREAM_MSG_LIMIT),
+        out_stream in arb_stream(SYSTEM_SUBNET_STREAM_MSG_LIMIT / 2 + 1, SYSTEM_SUBNET_STREAM_MSG_LIMIT + 10),
+        (stream, from, msg_count) in arb_stream_slice(SYSTEM_SUBNET_STREAM_MSG_LIMIT / 2 + 1, SYSTEM_SUBNET_STREAM_MSG_LIMIT),
     ) {
         // Set the outgoing stream's signals_end to the slice begin.
-        out_stream.signals_end = from;
+        let out_stream = Stream::new(out_stream.messages().clone(), from);
         // And the incoming stream's signals_end just beyond the outgoing stream's
         // start, so we always get a slice, even empty.
-        stream.signals_end = out_stream.messages.begin().increment();
+        let stream = Stream::new(stream.messages().clone(), out_stream.messages_begin().increment());
 
         with_test_replica_logger(|log| {
             // Fixtures.
@@ -506,7 +509,7 @@ proptest! {
             assert_eq!(1, payload.len());
             if let Some(slice) = payload.get(&REMOTE_SUBNET) {
                 let max_slice_len =
-                    SYSTEM_SUBNET_STREAM_MSG_LIMIT.saturating_sub(out_stream.messages.len());
+                    SYSTEM_SUBNET_STREAM_MSG_LIMIT.saturating_sub(out_stream.messages().len());
                 let expected_slice_len = msg_count.min(max_slice_len);
 
                 if expected_slice_len == 0 {
@@ -560,8 +563,11 @@ struct FakeXNetClient {
 
 #[async_trait]
 impl XNetClient for FakeXNetClient {
-    async fn query(&self, uri: Uri) -> Result<CertifiedStreamSlice, XNetClientError> {
-        let url = url::Url::parse(&uri.to_string()).unwrap();
+    async fn query(
+        &self,
+        endpoint: &EndpointLocator,
+    ) -> Result<CertifiedStreamSlice, XNetClientError> {
+        let url = url::Url::parse(&endpoint.url.to_string()).unwrap();
 
         self.results
             .get(url.as_str())
@@ -597,11 +603,11 @@ proptest! {
         (stream, from, msg_count) in arb_stream_slice(10, 15),
     ) {
         with_test_replica_logger(|log| {
-            let mut runtime = tokio::runtime::Runtime::new().unwrap();
+            let runtime = tokio::runtime::Runtime::new().unwrap();
 
             let stream_position = ExpectedIndices {
                 message_index: from,
-                signal_index: stream.signals_end,
+                signal_index: stream.signals_end(),
             };
 
             let metrics_registry = MetricsRegistry::new();
@@ -611,8 +617,9 @@ proptest! {
                 .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
 
             let registry = get_registry_for_test(runtime.handle().clone());
+            let proximity_map = Arc::new(ProximityMap::new(OWN_NODE, registry.clone(), &metrics_registry, log.clone()));
             let endpoint_resolver =
-                XNetEndpointResolver::new(registry, OWN_NODE, OWN_SUBNET, log.clone());
+                XNetEndpointResolver::new(registry, OWN_NODE, OWN_SUBNET, proximity_map, log.clone());
             let byte_limit = (POOL_SLICE_BYTE_SIZE_MAX - 350) * 98 / 100;
             let url = endpoint_resolver
                 .xnet_endpoint_url(REMOTE_SUBNET, from, from, byte_limit)
@@ -650,7 +657,7 @@ proptest! {
                     if count > 50 {
                         panic!("refill task failed to complete within 5 seconds");
                     }
-                    tokio::time::delay_for(Duration::from_millis(100)).await;
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             });
 
@@ -675,12 +682,12 @@ proptest! {
         let msg_count = msg_count - 1;
 
         with_test_replica_logger(|log| {
-            let mut runtime = tokio::runtime::Runtime::new().unwrap();
+            let runtime = tokio::runtime::Runtime::new().unwrap();
 
-            let stream_begin = stream.messages.begin();
+            let stream_begin = stream.messages_begin();
             let stream_position = ExpectedIndices {
                 message_index: stream_begin,
-                signal_index: stream.signals_end,
+                signal_index: stream.signals_end(),
             };
 
             let remote_state_manager =
@@ -706,8 +713,9 @@ proptest! {
             }
 
             let registry = get_registry_for_test(runtime.handle().clone());
+            let proximity_map = Arc::new(ProximityMap::new(OWN_NODE, registry.clone(), &metrics_registry, log.clone()));
             let endpoint_resolver =
-                XNetEndpointResolver::new(registry, OWN_NODE, OWN_SUBNET, log.clone());
+                XNetEndpointResolver::new(registry, OWN_NODE, OWN_SUBNET, proximity_map, log.clone());
             let byte_limit = (POOL_SLICE_BYTE_SIZE_MAX - prefix_size_bytes - 350) * 98 / 100;
             let url = endpoint_resolver
                 .xnet_endpoint_url(REMOTE_SUBNET, stream_begin, from, byte_limit)
@@ -745,7 +753,7 @@ proptest! {
                     if count > 50 {
                         panic!("refill task failed to complete within 5 seconds");
                     }
-                    tokio::time::delay_for(Duration::from_millis(100)).await;
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             });
 

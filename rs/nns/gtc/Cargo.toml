@@ -24,13 +24,12 @@ ic-nns-constants = { path = "../constants" }
 lazy_static = "1.4.0"
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 libsecp256k1 = "0.3.5"
-num-bigint = "0.3.1"
 prost = "0.7.0"
 rand = "0.7.3"
 rand_core = "0.5.1"
 serde = { version = "1.0", features = ["derive"] }
 sha3 = "0.9.1"
-simple_asn1 = "0.5.0"
+simple_asn1 = "0.5.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }

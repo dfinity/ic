@@ -22,7 +22,7 @@ _Note_: The `lifeline` canister's interface should be rather stable, think twice
 
 In case the user-facing interface of `lifeline` has changed, it makes sense to update the `lifeline.did` file. To perform that, following command can be run in the CLI
 ``` shell
-env MOC_UNLOCK_PRIM=yesplease moc --idl -o lifeline.did lifeline.mo --actor-alias governance "rrkah-fqaaa-aaaaa-aaaaq-cai" --actor-alias root "rkp4c-7iaaa-aaaaa-aaaca-cai" --actor-idl .
+moc --idl -o lifeline.did lifeline.mo --actor-alias governance "rrkah-fqaaa-aaaaa-aaaaq-cai" --actor-alias root "rkp4c-7iaaa-aaaaa-aaaca-cai" --actor-idl .
 ```
 The `--idl` option makes sure that the `.did` file is updated.
 

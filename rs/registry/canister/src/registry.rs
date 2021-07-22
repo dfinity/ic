@@ -1,7 +1,6 @@
 use ic_registry_transport::{
     pb::v1::{
-        registry_mutation::Type, Precondition, RegistryAtomicMutateRequest,
-        RegistryAtomicMutateResponse, RegistryDelta, RegistryError, RegistryMutation,
+        registry_mutation::Type, RegistryAtomicMutateRequest, RegistryDelta, RegistryMutation,
         RegistryValue,
     },
     Error,
@@ -116,80 +115,6 @@ impl Registry {
         self.version
     }
 
-    /// Verifies the given explicit precondition.
-    ///
-    /// The semantic we want to achieve is:
-    /// Key K has not been updated since the last time I read the registry,
-    /// which was at version V.
-    ///
-    /// If the key does not exist, this method will return an error, unless
-    /// the expected version in the precondition is 0. Using version 0 is
-    /// useful with UPSERTs.
-    fn verify_explicit_precondition(&self, precondition: &Precondition) -> Result<(), Error> {
-        match self.get_last(&precondition.key) {
-            None => {
-                if precondition.expected_version == 0 {
-                    Ok(())
-                } else {
-                    Err(Error::KeyNotPresent(precondition.key.clone()))
-                }
-            }
-            Some(value) => {
-                // Check if the expected version is in the future, then we can't
-                // attest anything.
-                if self.version < precondition.expected_version {
-                    Err(Error::VersionBeyondLatest(precondition.key.clone()))
-                } else if value.version > precondition.expected_version {
-                    Err(Error::VersionNotLatest(precondition.key.clone()))
-                } else {
-                    Ok(())
-                }
-            }
-        }
-    }
-
-    /// Verifies the implicit precondition corresponding to the mutation_type
-    /// field.
-    fn verify_implicit_precondition(&self, mutation: &RegistryMutation) -> Result<(), Error> {
-        let key = &mutation.key;
-        let latest = self
-            .get_last(&key)
-            .filter(|registry_value| !registry_value.deletion_marker);
-        match (Type::from_i32(mutation.mutation_type), latest) {
-            (None, _) => Err(Error::MalformedMessage(format!(
-                "Unknown mutation type {} for key {:?}.",
-                mutation.mutation_type, mutation.key
-            ))),
-            (Some(Type::Insert), None) => Ok(()),
-            (Some(Type::Insert), Some(_)) => Err(Error::KeyAlreadyPresent(key.to_vec())),
-            (Some(Type::Update), None) => Err(Error::KeyNotPresent(key.to_vec())),
-            (Some(Type::Update), Some(_)) => Ok(()),
-            (Some(Type::Delete), None) => Err(Error::KeyNotPresent(key.to_vec())),
-            (Some(Type::Delete), Some(_)) => Ok(()),
-            (Some(Type::Upsert), None) => Ok(()),
-            (Some(Type::Upsert), Some(_)) => Ok(()),
-        }
-    }
-
-    /// Collects violations for all the preconditions for the given
-    /// RegistryAtomicMutateRequest: the explicit ones in field
-    /// `preconditions`, and the ones that originate from the
-    /// `mutation_type` fields in the mutations.
-    fn get_precondition_violations(&self, request_pb: &RegistryAtomicMutateRequest) -> Vec<Error> {
-        let errors_explicit_preconditions_iter = request_pb
-            .preconditions
-            .iter()
-            .map(|p| self.verify_explicit_precondition(p));
-        let errors_implicit_preconditions_iter = request_pb
-            .mutations
-            .iter()
-            .map(|m| self.verify_implicit_precondition(m));
-        errors_explicit_preconditions_iter
-            .chain(errors_implicit_preconditions_iter)
-            .flat_map(Result::err)
-            .collect()
-    }
-
     fn apply_mutations_as_version(
         &mut self,
         mut mutations: Vec<RegistryMutation>,
@@ -202,7 +127,7 @@ impl Registry {
         mutations.sort_by(|l, r| l.key.cmp(&r.key));
         for m in mutations.iter_mut() {
             // We normalize all the INSERT/UPDATE/UPSERT operations to be just
-            // UPSERTs.  This serves 2 purposes:
+            // UPSERTs. This serves 2 purposes:
             //
             // 1. This significantly simplifies reconstruction of the changelog
             //    when we deserialize the registry from the original stable
@@ -251,6 +176,35 @@ impl Registry {
         self.apply_mutations_as_version(mutations, self.version);
     }
 
+    /// Verifies the implicit precondition corresponding to the mutation_type
+    /// field.
+    fn verify_mutation_type(&self, mutations: &[RegistryMutation]) -> Vec<Error> {
+        mutations
+            .iter()
+            .map(|m| {
+                let key = &m.key;
+                let latest = self
+                    .get_last(&key)
+                    .filter(|registry_value| !registry_value.deletion_marker);
+                match (Type::from_i32(m.mutation_type), latest) {
+                    (None, _) => Err(Error::MalformedMessage(format!(
+                        "Unknown mutation type {} for key {:?}.",
+                        m.mutation_type, m.key
+                    ))),
+                    (Some(Type::Insert), None) => Ok(()),
+                    (Some(Type::Insert), Some(_)) => Err(Error::KeyAlreadyPresent(key.to_vec())),
+                    (Some(Type::Update), None) => Err(Error::KeyNotPresent(key.to_vec())),
+                    (Some(Type::Update), Some(_)) => Ok(()),
+                    (Some(Type::Delete), None) => Err(Error::KeyNotPresent(key.to_vec())),
+                    (Some(Type::Delete), Some(_)) => Ok(()),
+                    (Some(Type::Upsert), None) => Ok(()),
+                    (Some(Type::Upsert), Some(_)) => Ok(()),
+                }
+            })
+            .flat_map(Result::err)
+            .collect()
+    }
+
     /// Checks that invariants hold after applying mutations
     pub fn maybe_apply_mutation_internal(&mut self, mutations: Vec<RegistryMutation>) {
         println!(
@@ -259,11 +213,7 @@ impl Registry {
             mutations.len()
         );
 
-        let request_pb = RegistryAtomicMutateRequest {
-            mutations,
-            preconditions: vec![],
-        };
-        let errors = self.get_precondition_violations(&request_pb);
+        let errors = self.verify_mutation_type(mutations.as_slice());
         if !errors.is_empty() {
             panic!(
                 "{}Transaction rejected because of the following errors: [{}].",
@@ -276,43 +226,8 @@ impl Registry {
             );
         }
 
-        self.check_global_invariants(&request_pb.mutations);
-        self.apply_mutations(request_pb.mutations);
-    }
-
-    pub fn maybe_apply_mutations(
-        &mut self,
-        request_pb: RegistryAtomicMutateRequest,
-    ) -> RegistryAtomicMutateResponse {
-        println!(
-            "{}Received a mutate call containing a list of {} mutations",
-            LOG_PREFIX,
-            request_pb.mutations.len()
-        );
-
-        let errors = self.get_precondition_violations(&request_pb);
-        if !errors.is_empty() {
-            println!(
-                "{}Transaction rejected because of the following errors: [{}].",
-                LOG_PREFIX,
-                errors
-                    .iter()
-                    .map(|e| format!("{}", e))
-                    .collect::<Vec::<String>>()
-                    .join(", ")
-            );
-            return RegistryAtomicMutateResponse {
-                errors: errors.into_iter().map(RegistryError::from).collect(),
-                version: self.latest_version(),
-            };
-        }
-
-        self.apply_mutations(request_pb.mutations);
-
-        RegistryAtomicMutateResponse {
-            errors: vec![],
-            version: self.version,
-        }
+        self.check_global_invariants(mutations.as_slice());
+        self.apply_mutations(mutations);
     }
 
     /// Serializes the registry contents using the specified version of stable
@@ -445,7 +360,7 @@ fn pb_encode(msg: &impl prost::Message) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_registry_transport::{delete, insert, pb::v1::RegistryMutation, update, upsert};
+    use ic_registry_transport::{delete, insert, update, upsert};
     use rand::Rng;
     use rand_core::SeedableRng;
     use rand_distr::{Alphanumeric, Distribution, Poisson, Uniform};
@@ -480,26 +395,15 @@ mod tests {
         assert_eq!(restored, registry);
     }
 
-    /// Shorthand to try a mutation with preconditions.
-    fn try_mutate_with_preconditions(
+    fn apply_mutations_skip_invariant_checks(
         registry: &mut Registry,
-        mutations: &[RegistryMutation],
-        preconditions: &[Precondition],
+        mutations: Vec<RegistryMutation>,
     ) -> Vec<Error> {
-        registry
-            .maybe_apply_mutations(RegistryAtomicMutateRequest {
-                preconditions: preconditions.to_vec(),
-                mutations: mutations.to_vec(),
-            })
-            .errors
-            .into_iter()
-            .map(Error::from)
-            .collect()
-    }
-
-    /// Shorthand to try a mutation with no preconditions.
-    fn try_mutate(registry: &mut Registry, mutations: &[RegistryMutation]) -> Vec<Error> {
-        try_mutate_with_preconditions(registry, mutations, &[])
+        let errors = registry.verify_mutation_type(&mutations);
+        if errors.is_empty() {
+            registry.apply_mutations(mutations);
+        }
+        errors
     }
 
     /// Shorthand for asserting equality with the empty vector.
@@ -515,8 +419,14 @@ mod tests {
         let key = vec![1, 2, 3, 4];
         let value = vec![5, 6, 7, 8];
         let value2 = vec![9, 10, 11, 12];
-        assert_empty!(try_mutate(&mut registry, &[insert(&key, &value)]));
-        assert_empty!(try_mutate(&mut registry, &[update(&key, &value2)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![insert(&key, &value)]
+        ));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![update(&key, &value2)]
+        ));
         let result2 = registry.get(&key, registry.latest_version());
         assert_eq!(value2, result2.unwrap().value);
         assert_eq!(registry.latest_version(), result2.unwrap().version);
@@ -533,17 +443,29 @@ mod tests {
         let key = vec![1, 2, 3, 4];
         let value = vec![5, 6, 7, 8];
         let value2 = vec![9, 10, 11, 12];
-        assert_empty!(try_mutate(&mut registry, &[insert(&key, &value)]));
-        assert_empty!(try_mutate(&mut registry, &[update(&key, &value2)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![insert(&key, &value)]
+        ));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![update(&key, &value2)]
+        ));
         let result2 = registry.get(&key, registry.latest_version());
         assert_eq!(value2, result2.unwrap().value);
         assert_eq!(registry.latest_version(), result2.unwrap().version);
-        assert_empty!(try_mutate(&mut registry, &[delete(&key)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![delete(&key)]
+        ));
         // The definition of get says that we should get None if the last version is has
         // a deletion marker set.
         let result = registry.get(&key, registry.latest_version());
         assert_eq!(None, result);
-        assert_empty!(try_mutate(&mut registry, &[insert(&key, &value)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![insert(&key, &value)]
+        ));
         let result = registry.get(&key, registry.latest_version());
         assert_eq!(value, result.unwrap().value);
         assert_eq!(registry.latest_version(), result.unwrap().version);
@@ -559,19 +481,25 @@ mod tests {
         let value1 = vec![5, 6, 7, 8];
         let value2 = vec![9, 10, 11, 12];
         // On the first mutation we insert key1
-        assert_empty!(try_mutate(&mut registry, &[insert(&key1, &value1)]));
-        // On the second mutation we insert key2 an update key 1
-        assert_empty!(try_mutate(
+        assert_empty!(apply_mutations_skip_invariant_checks(
             &mut registry,
-            &[insert(&key2, &value1), update(&key1, &value2)]
+            vec![insert(&key1, &value1)]
+        ));
+        // On the second mutation we insert key2 an update key 1
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![insert(&key2, &value1), update(&key1, &value2)],
         ));
         // On the third mutation we update key 2 and delete key one.
-        assert_empty!(try_mutate(
+        assert_empty!(apply_mutations_skip_invariant_checks(
             &mut registry,
-            &[delete(&key1), update(&key2, &value2)]
+            vec![delete(&key1), update(&key2, &value2)],
         ));
         // On the forth mutation we insert key one again
-        assert_empty!(try_mutate(&mut registry, &[insert(&key1, &value1)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![insert(&key1, &value1)]
+        ));
 
         // Fetching all the mutations since 0 should get
         // a total of 2 keys:
@@ -612,16 +540,25 @@ mod tests {
         let value = vec![5, 6, 7, 8];
         let value2 = vec![9, 10, 11, 12];
         // Inserting a non-existing key should succeed.
-        assert_empty!(try_mutate(&mut registry, &[insert(&key, &value)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![insert(&key, &value)]
+        ));
         // Inserting an existing (non-deleted) key should fail.
         assert_eq!(
-            try_mutate(&mut registry, &[insert(&key, &value)]),
+            registry.verify_mutation_type(&[insert(&key, &value)]),
             vec![Error::KeyAlreadyPresent(key.clone())]
         );
         // After deleting the key, it should be possible to insert
         // it again.
-        assert_empty!(try_mutate(&mut registry, &[delete(&key)]));
-        assert_empty!(try_mutate(&mut registry, &[insert(&key, &value2)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![delete(&key)]
+        ));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![insert(&key, &value2)]
+        ));
 
         serialize_then_deserialize(registry);
     }
@@ -635,18 +572,27 @@ mod tests {
         let value2 = vec![9, 10, 11, 12];
 
         assert_eq!(
-            try_mutate(&mut registry, &[update(&key, &value)]),
+            registry.verify_mutation_type(&[update(&key, &value)]),
             vec![Error::KeyNotPresent(key.clone())]
         );
         // After a regular insert the update should succeed.
-        assert_empty!(try_mutate(&mut registry, &[insert(&key, &value)]));
-        assert_empty!(try_mutate(&mut registry, &[update(&key, &value2)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![insert(&key, &value)]
+        ));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![update(&key, &value2)]
+        ));
         let result = registry.get(&key, registry.latest_version());
         assert_eq!(value2, result.unwrap().value);
         // After the key is deleted the update should fail.
-        assert_empty!(try_mutate(&mut registry, &[delete(&key)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![delete(&key)]
+        ));
         assert_eq!(
-            try_mutate(&mut registry, &[update(&key, &value)]),
+            apply_mutations_skip_invariant_checks(&mut registry, vec![update(&key, &value)]),
             vec![Error::KeyNotPresent(key)]
         );
 
@@ -661,16 +607,28 @@ mod tests {
         let value = vec![5, 6, 7, 8];
         let value2 = vec![9, 10, 11, 12];
 
-        assert_empty!(try_mutate(&mut registry, &[upsert(&key, &value)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![upsert(&key, &value)]
+        ));
         let result = registry.get(&key, registry.latest_version());
         assert_eq!(value, result.unwrap().value);
         // Afterwards, another upsert should update the value
-        assert_empty!(try_mutate(&mut registry, &[upsert(&key, &value2)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![upsert(&key, &value2)]
+        ));
         let result = registry.get(&key, registry.latest_version());
         assert_eq!(value2, result.unwrap().value);
         // After the key is deleted the upsert should succeed.
-        assert_empty!(try_mutate(&mut registry, &[delete(&key)]));
-        assert_empty!(try_mutate(&mut registry, &[upsert(&key, &value)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![delete(&key)]
+        ));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![upsert(&key, &value)]
+        ));
         let result = registry.get(&key, registry.latest_version());
         assert_eq!(value, result.unwrap().value);
 
@@ -684,15 +642,21 @@ mod tests {
         let value = vec![5, 6, 7, 8];
         // Deleting a non-existing key should fail.
         assert_eq!(
-            try_mutate(&mut registry, &[delete(&key)]),
+            apply_mutations_skip_invariant_checks(&mut registry, vec![delete(&key)]),
             vec![Error::KeyNotPresent(key.clone())]
         );
         // After inserting the key, delete should succeed.
-        assert_empty!(try_mutate(&mut registry, &[insert(&key, &value)]));
-        assert_empty!(try_mutate(&mut registry, &[delete(&key)]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![insert(&key, &value)]
+        ));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![delete(&key)]
+        ));
         // After a key has been deleted delete should fail.
         assert_eq!(
-            try_mutate(&mut registry, &[delete(&key)]),
+            apply_mutations_skip_invariant_checks(&mut registry, vec![delete(&key)]),
             vec![Error::KeyNotPresent(key)]
         );
 
@@ -700,221 +664,23 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_precondition_version_0() {
-        let mut registry = Registry::new();
-
-        assert_empty!(try_mutate_with_preconditions(
-            &mut registry,
-            &[upsert(b"spices", b"scary,sporty,baby,ginger,posh")],
-            &[Precondition {
-                key: b"spices".to_vec(),
-                expected_version: 0 as u64,
-            }]
-        ));
-        // but update should still fail
-        assert_eq!(
-            try_mutate_with_preconditions(
-                &mut registry,
-                &[update(b"real_spices", b"melanie,emma,mel,geri,victoria")],
-                &[Precondition {
-                    key: b"real_spices".to_vec(),
-                    expected_version: 0 as u64,
-                }]
-            ),
-            vec![Error::KeyNotPresent(b"real_spices".to_vec())]
-        );
-    }
-
-    #[test]
-    fn test_verify_precondition_scenario_with_deletion() {
-        let mut registry = Registry::new();
-
-        assert_empty!(try_mutate(
-            &mut registry,
-            &[insert(b"spices", b"scary,sporty,baby,ginger,posh")]
-        ));
-        assert_empty!(try_mutate(&mut registry, &[delete(b"spices")]));
-        let new_val = b"scary,sporty,baby,posh";
-        let latest_rv = registry.latest_version();
-        let (val, version) = registry
-            .get(b"spices", latest_rv)
-            .map(|x| (x.value.clone(), x.version))
-            .unwrap_or((new_val.to_vec(), latest_rv as u64));
-        assert_eq!(version, latest_rv);
-        assert_eq!(val, new_val);
-        assert_empty!(try_mutate_with_preconditions(
-            &mut registry,
-            &[upsert(b"spices", &val)],
-            &[Precondition {
-                key: b"spices".to_vec(),
-                expected_version: version,
-            }]
-        ));
-    }
-
-    #[test]
-    fn test_verify_precondition() {
-        let mut registry = Registry::new();
-        assert_empty!(try_mutate(
-            &mut registry,
-            &[insert(b"day_of_the_week", b"monday")]
-        ));
-
-        // Version matches
-        assert_eq!(
-            registry.verify_explicit_precondition(&Precondition {
-                key: b"day_of_the_week".to_vec(),
-                expected_version: 1 as u64,
-            }),
-            Ok(())
-        );
-        // Version too small
-        assert_eq!(
-            registry.verify_explicit_precondition(&Precondition {
-                key: b"day_of_the_week".to_vec(),
-                expected_version: 0 as u64,
-            }),
-            Err(Error::VersionNotLatest(b"day_of_the_week".to_vec()))
-        );
-        // Reading from the future should err, because we can't attest that
-        // the value will not change.
-        assert_eq!(
-            registry.verify_explicit_precondition(&Precondition {
-                key: b"day_of_the_week".to_vec(),
-                expected_version: 200 as u64,
-            }),
-            Err(Error::VersionBeyondLatest(b"day_of_the_week".to_vec()))
-        );
-        // Mutate
-        assert_empty!(try_mutate(
-            &mut registry,
-            &[update(b"day_of_the_week", b"tuesday")]
-        ));
-        // Version matches
-        assert_eq!(
-            registry.verify_explicit_precondition(&Precondition {
-                key: b"day_of_the_week".to_vec(),
-                expected_version: 2 as u64,
-            }),
-            Ok(())
-        );
-        // Version too small
-        assert_eq!(
-            registry.verify_explicit_precondition(&Precondition {
-                key: b"day_of_the_week".to_vec(),
-                expected_version: 1 as u64,
-            }),
-            Err(Error::VersionNotLatest(b"day_of_the_week".to_vec()))
-        );
-        assert_eq!(
-            registry.verify_explicit_precondition(&Precondition {
-                key: b"day_of_the_week".to_vec(),
-                expected_version: 3 as u64,
-            }),
-            Err(Error::VersionBeyondLatest(b"day_of_the_week".to_vec()))
-        );
-
-        serialize_then_deserialize(registry);
-    }
-
-    #[test]
-    fn test_verify_precondition_key_does_not_exist() {
-        let registry = Registry::new();
-        assert_eq!(
-            registry.verify_explicit_precondition(&Precondition {
-                key: b"month_of_the_year".to_vec(),
-                expected_version: 55 as u64
-            }),
-            Err(Error::KeyNotPresent(b"month_of_the_year".to_vec()))
-        );
-        serialize_then_deserialize(registry);
-    }
-
-    #[test]
-    fn test_preconditions_on_deleted_keys_are_legal() {
-        let mut registry = Registry::new();
-        assert_empty!(try_mutate(
-            &mut registry,
-            &[insert(b"world_population", b"8 billion")]
-        ));
-        assert_empty!(try_mutate(&mut registry, &[delete(b"world_population")])); // humanity has ended
-        assert_eq!(
-            registry.verify_explicit_precondition(&Precondition {
-                key: b"world_population".to_vec(),
-                expected_version: 3 as u64
-            }),
-            Err(Error::VersionBeyondLatest(b"world_population".to_vec()))
-        );
-        assert_eq!(
-            registry.verify_explicit_precondition(&Precondition {
-                key: b"world_population".to_vec(),
-                expected_version: 2 as u64
-            }),
-            Ok(())
-        );
-        assert_eq!(
-            registry.verify_explicit_precondition(&Precondition {
-                key: b"world_population".to_vec(),
-                expected_version: 1 as u64
-            }),
-            Err(Error::VersionNotLatest(b"world_population".to_vec()))
-        );
-        serialize_then_deserialize(registry);
-    }
-
-    #[test]
-    fn test_verify_preconditions() {
-        let mut registry = Registry::new();
-        assert_empty!(try_mutate(
-            &mut registry,
-            &[insert(b"polar_bears", b"endangered")]
-        ));
-        assert_empty!(try_mutate(
-            &mut registry,
-            &[
-                update(b"polar_bears", b"extinct"),
-                insert(b"pinguins", b"vulnerable")
-            ]
-        ));
-
-        // First precondition is violated, second is satisfied
-        assert_eq!(
-            registry.get_precondition_violations(&RegistryAtomicMutateRequest {
-                preconditions: vec![
-                    Precondition {
-                        key: b"polar_bears".to_vec(),
-                        expected_version: 1 as u64
-                    },
-                    Precondition {
-                        key: b"pinguins".to_vec(),
-                        expected_version: 2 as u64
-                    }
-                ],
-                mutations: vec![]
-            }),
-            vec![Error::VersionNotLatest(b"polar_bears".to_vec())]
-        );
-        serialize_then_deserialize(registry);
-    }
-
-    #[test]
     fn test_transactional_behavior() {
         let mut registry = Registry::new();
         // Single mutation, all good
-        assert_empty!(try_mutate(
+        assert_empty!(apply_mutations_skip_invariant_checks(
             &mut registry,
-            &[insert(b"shakira", b"colombia")]
+            vec![insert(b"shakira", b"colombia")]
         ));
         // Two mutations, all good
-        assert_empty!(try_mutate(
+        assert_empty!(apply_mutations_skip_invariant_checks(
             &mut registry,
-            &[insert(b"rihanna", b"barbados"), insert(b"m.i.a", b"uk")]
+            vec![insert(b"rihanna", b"barbados"), insert(b"m.i.a", b"uk")],
         ));
         // two insertions, but the second one is already present -- should do nothing
         assert_eq!(
-            try_mutate(
+            apply_mutations_skip_invariant_checks(
                 &mut registry,
-                &[insert(b"beyonce", b"us"), insert(b"m.i.a", b"sri lanka")]
+                vec![insert(b"beyonce", b"us"), insert(b"m.i.a", b"sri lanka")]
             ),
             vec![Error::KeyAlreadyPresent(b"m.i.a".to_vec())]
         );
@@ -930,17 +696,20 @@ mod tests {
     fn test_transactional_behavior_with_deletes() {
         let mut registry = Registry::new();
         // Single mutation, all good
-        assert_empty!(try_mutate(
+        assert_empty!(apply_mutations_skip_invariant_checks(
             &mut registry,
-            &[insert(b"shakira", b"colombia")]
+            vec![insert(b"shakira", b"colombia")]
         ));
         // Two mutations, all good
-        assert_empty!(try_mutate(
+        apply_mutations_skip_invariant_checks(
             &mut registry,
-            &[insert(b"rihanna", b"barbados"), insert(b"m.i.a", b"uk")]
-        ));
+            vec![insert(b"rihanna", b"barbados"), insert(b"m.i.a", b"uk")],
+        );
         // two insertions, but the second one is already present -- should do nothing
-        assert_empty!(try_mutate(&mut registry, &[delete(b"rihanna")]));
+        assert_empty!(apply_mutations_skip_invariant_checks(
+            &mut registry,
+            vec![delete(b"rihanna")]
+        ));
         // We should be at version 3
         assert_eq!(registry.latest_version(), 3);
         assert_eq!(registry.get(b"rihanna", 3), None);
@@ -1028,9 +797,9 @@ mod tests {
             mean_length: mean_value_length,
         };
         for k in &keys {
-            try_mutate(
+            apply_mutations_skip_invariant_checks(
                 &mut registry,
-                &[insert(k.as_bytes(), &gen.sample(&mut rng))],
+                vec![insert(k.as_bytes(), &gen.sample(&mut rng))],
             );
         }
         // Now let's do some mutations.
@@ -1038,13 +807,13 @@ mod tests {
         // number of RegistryValues.
         let key_index_distr = Uniform::new(0, keys.len());
         for _ in 0..num_updates {
-            assert_empty!(try_mutate(
+            apply_mutations_skip_invariant_checks(
                 &mut registry,
-                &[update(
+                vec![update(
                     &keys[key_index_distr.sample(&mut rng)],
-                    &gen.sample(&mut rng)
-                )]
-            ));
+                    &gen.sample(&mut rng),
+                )],
+            );
         }
         // Let's print out some stats to make sure we have the diversity we want
         let changes = registry.get_changes_since(0);

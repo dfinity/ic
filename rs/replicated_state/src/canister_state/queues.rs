@@ -10,10 +10,9 @@ use ic_protobuf::{
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
     xnet::{QueueId, SessionId},
-    CanisterId, QueueIndex,
+    CanisterId, CountBytes, QueueIndex,
 };
 use queue::{IngressQueue, InputQueue, OutputQueue};
-use serde::{Deserialize, Serialize};
 use std::convert::{From, TryFrom};
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -37,7 +36,7 @@ pub const QUEUE_INDEX_NONE: QueueIndex = QueueIndex::new(std::u64::MAX);
 /// Encapsulates the `InductionPool` component described in the spec. The reason
 /// for bundling together the induction pool and output queues is to reliably
 /// implement backpressure via queue reservations for response messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct CanisterQueues {
     /// Queue of ingress (user) messages.
     ingress_queue: IngressQueue,
@@ -51,6 +50,12 @@ pub struct CanisterQueues {
 
     /// Per-receiver output (canister-to-canister message) queues.
     output_queues: BTreeMap<CanisterId, OutputQueue>,
+
+    /// Count of messages in input queues.
+    input_queues_message_count: usize,
+
+    /// Byte size of input queues (queues + messages).
+    input_queues_size_bytes: usize,
 }
 
 impl CanisterQueues {
@@ -116,6 +121,7 @@ impl CanisterQueues {
                 None => return Err((StateError::QueueFull { capacity: 0 }, msg)),
             },
         };
+        let msg_size_bytes = InputQueue::message_size_bytes(&msg);
         input_queue.push(index, msg)?;
 
         // Add sender canister ID to the input schedule queue if it isn't already there.
@@ -124,6 +130,17 @@ impl CanisterQueues {
         if input_queue.num_messages() == 1 {
             self.input_schedule.push_back(sender);
         }
+
+        self.input_queues_message_count += 1;
+        self.input_queues_size_bytes += msg_size_bytes;
+        debug_assert_eq!(
+            Self::input_queues_stats(&self.input_queues),
+            (
+                self.input_queues_message_count,
+                self.input_queues_size_bytes
+            )
+        );
+
         Ok(())
     }
 
@@ -142,6 +159,15 @@ impl CanisterQueues {
             if input_queue.num_messages() != 0 {
                 self.input_schedule.push_back(sender);
             }
+            self.input_queues_message_count -= 1;
+            self.input_queues_size_bytes -= InputQueue::message_size_bytes(&msg);
+            debug_assert_eq!(
+                Self::input_queues_stats(&self.input_queues),
+                (
+                    self.input_queues_message_count,
+                    self.input_queues_size_bytes
+                )
+            );
 
             return Some(msg);
         }
@@ -221,10 +247,10 @@ impl CanisterQueues {
     }
 
     /// Returns an iterator that consumes all output messages.
-    pub fn output_into_iter<'a>(
-        &'a mut self,
+    pub fn output_into_iter(
+        &mut self,
         owner: CanisterId,
-    ) -> impl std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)> + 'a {
+    ) -> impl std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)> + '_ {
         self.output_queues
             .iter_mut()
             // Flat map output queues to their contents (prepended with a `QueueId`).
@@ -244,19 +270,54 @@ impl CanisterQueues {
             })
     }
 
+    /// Returns the number of enqueued ingress messages.
+    pub fn ingress_queue_message_count(&self) -> usize {
+        self.ingress_queue.size()
+    }
+
+    /// Returns the total byte size of enqueued ingress messages.
+    pub fn ingress_queue_size_bytes(&self) -> usize {
+        self.ingress_queue.count_bytes()
+    }
+
+    /// Returns the number of canister messages enqueued in input queues.
+    pub fn input_queues_message_count(&self) -> usize {
+        self.input_queues_message_count
+    }
+
+    /// Returns the total byte size of canister input queues (queues +
+    /// messages).
+    pub fn input_queues_size_bytes(&self) -> usize {
+        self.input_queues_size_bytes
+    }
+
     fn get_or_insert_queues(
         &mut self,
         canister_id: &CanisterId,
     ) -> (&mut InputQueue, &mut OutputQueue) {
-        let input_queue = self
-            .input_queues
-            .entry(*canister_id)
-            .or_insert_with(|| InputQueue::new(DEFAULT_QUEUE_CAPACITY));
+        let mut queue_bytes = 0;
+        let input_queue = self.input_queues.entry(*canister_id).or_insert_with(|| {
+            let iq = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
+            queue_bytes = iq.count_bytes();
+            iq
+        });
+        self.input_queues_size_bytes += queue_bytes;
         let output_queue = self
             .output_queues
             .entry(*canister_id)
             .or_insert_with(|| OutputQueue::new(DEFAULT_QUEUE_CAPACITY));
         (input_queue, output_queue)
+    }
+
+    /// Computes total message count and total byte size for `input_queues`.
+    fn input_queues_stats(input_queues: &BTreeMap<CanisterId, InputQueue>) -> (usize, usize) {
+        let mut message_count = 0;
+        let mut size_bytes = 0;
+        for q in input_queues.values() {
+            message_count += q.num_messages();
+            size_bytes += q.count_bytes();
+        }
+        (message_count, size_bytes)
     }
 }
 
@@ -292,7 +353,7 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
 impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_queues::CanisterQueues) -> Result<Self, Self::Error> {
-        if item.input_queues.len() != item.input_queues.len() {
+        if item.input_queues.len() != item.output_queues.len() {
             return Err(ProxyDecodeError::Other(format!(
                 "CanisterQueues: Mismatched input ({}) and output ({}) queue lengths",
                 item.input_queues.len(),
@@ -315,9 +376,12 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
         for entry in item.input_queues {
             let can_id =
                 try_from_option_field(entry.canister_id, "CanisterQueues::input_queues::K")?;
-            let iq = try_from_option_field(entry.queue, "CanisterQueues::input_queues::V")?;
+            let iq: InputQueue =
+                try_from_option_field(entry.queue, "CanisterQueues::input_queues::V")?;
             input_queues.insert(can_id, iq);
         }
+        let (input_queues_message_count, input_queues_size_bytes) =
+            Self::input_queues_stats(&input_queues);
 
         let mut output_queues = BTreeMap::<CanisterId, OutputQueue>::new();
         for entry in item.output_queues {
@@ -339,6 +403,8 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
             input_schedule,
             input_queues,
             output_queues,
+            input_queues_message_count,
+            input_queues_size_bytes,
         })
     }
 }
@@ -402,12 +468,13 @@ mod test {
     use super::*;
     use ic_test_utilities::types::{
         ids::{canister_test_id, message_test_id, user_test_id},
-        messages::{RequestBuilder, ResponseBuilder},
+        messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
     };
     use ic_types::time::current_time_and_expiry_time;
+    use std::convert::TryInto;
 
     #[test]
-    // Can push one request to the output queues.
+    /// Can push one request to the output queues.
     fn can_push_output_request() {
         let this = canister_test_id(13);
         let mut queues = CanisterQueues::default();
@@ -418,7 +485,8 @@ mod test {
 
     #[test]
     #[should_panic(expected = "alled `Option::unwrap()` on a `None` value")]
-    // Cannot push response to output queues without pushing an input request first.
+    /// Cannot push response to output queues without pushing an input request
+    /// first.
     fn cannot_push_output_response_without_input_request() {
         let this = canister_test_id(13);
         let mut queues = CanisterQueues::default();
@@ -456,7 +524,7 @@ mod test {
     }
 
     #[test]
-    // Can push response to output queues after pushing input request.
+    /// Can push response to output queues after pushing input request.
     fn can_push_output_response_after_input_request() {
         let this = canister_test_id(13);
         let other = canister_test_id(14);
@@ -480,7 +548,7 @@ mod test {
     }
 
     #[test]
-    // Can push one request to the induction pool.
+    /// Can push one request to the induction pool.
     fn can_push_input_request() {
         let this = canister_test_id(13);
         let mut queues = CanisterQueues::default();
@@ -493,8 +561,8 @@ mod test {
     }
 
     #[test]
-    // Cannot push response to the induction pool without pushing output request
-    // first.
+    /// Cannot push response to the induction pool without pushing output
+    /// request first.
     fn cannot_push_input_response_without_output_request() {
         let this = canister_test_id(13);
         let mut queues = CanisterQueues::default();
@@ -507,7 +575,8 @@ mod test {
     }
 
     #[test]
-    // Can push response to input queues after pushing request to output queues.
+    /// Can push response to input queues after pushing request to output
+    /// queues.
     fn can_push_input_response_after_output_request() {
         let this = canister_test_id(13);
         let other = canister_test_id(14);
@@ -533,7 +602,7 @@ mod test {
     }
 
     #[test]
-    // Enqueues 10 ingress messages and pops them.
+    /// Enqueues 10 ingress messages and pops them.
     fn test_message_picking_ingress_only() {
         let this = canister_test_id(13);
 
@@ -567,7 +636,7 @@ mod test {
     }
 
     #[test]
-    // Enqueues 3 requests for the same canister and consumes them.
+    /// Enqueues 3 requests for the same canister and consumes them.
     fn test_message_picking_round_robin_on_one_queue() {
         let this = canister_test_id(13);
         let other = canister_test_id(14);
@@ -601,8 +670,8 @@ mod test {
     }
 
     #[test]
-    // Enqueues 3 requests and 1 response, then pops them and verifies the expected
-    // order.
+    /// Enqueues 3 requests and 1 response, then pops them and verifies the
+    /// expected order.
     fn test_message_picking_round_robin() {
         let this = canister_test_id(13);
         let other_1 = canister_test_id(1);
@@ -692,8 +761,8 @@ mod test {
     }
 
     #[test]
-    // Enqueues 4 input requests across 3 canisters and consumes them, ensuring
-    // correct round-robin scheduling.
+    /// Enqueues 4 input requests across 3 canisters and consumes them, ensuring
+    /// correct round-robin scheduling.
     fn test_input_scheduling() {
         let this = canister_test_id(13);
         let other_1 = canister_test_id(1);
@@ -754,7 +823,7 @@ mod test {
     }
 
     #[test]
-    // Enqueues 6 output requests across 3 canisters and consumes them.
+    /// Enqueues 6 output requests across 3 canisters and consumes them.
     fn test_output_into_iter() {
         let this = canister_test_id(13);
         let other_1 = canister_test_id(1);
@@ -804,5 +873,35 @@ mod test {
         }
 
         assert_eq!(0, queues.output_into_iter(canister_id).count());
+    }
+
+    #[test]
+    /// Tests that an encode-decode roundtrip yields a result equal to the
+    /// original (and the queue size metrics of an organically constructed
+    /// `CanisterQueues` match those of a deserialized one).
+    fn encode_roundtrip() {
+        let mut queues = CanisterQueues::default();
+
+        let this = canister_test_id(13);
+        let other = canister_test_id(14);
+        queues
+            .push_input(
+                QueueIndex::from(0),
+                RequestBuilder::default().sender(this).build().into(),
+            )
+            .unwrap();
+        queues
+            .push_input(
+                QueueIndex::from(0),
+                RequestBuilder::default().sender(other).build().into(),
+            )
+            .unwrap();
+        queues.pop_canister_input().unwrap();
+        queues.push_ingress(IngressBuilder::default().receiver(this).build());
+
+        let encoded: pb_queues::CanisterQueues = (&queues).into();
+        let decoded = encoded.try_into().unwrap();
+
+        assert_eq!(queues, decoded);
     }
 }

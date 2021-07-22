@@ -5,8 +5,7 @@
 //!
 //! It provides an interface to *Gossip* enabling it to interact with all the
 //! pools without knowing artifact-related details.
-use crate::actors::{ClientActor, NewArtifact};
-use actix::prelude::Addr;
+use crate::actors::ClientActor;
 use ic_interfaces::{
     artifact_manager::{
         AdvertMismatchError, ArtifactAcceptance, ArtifactClient, ArtifactManager, OnArtifactError,
@@ -82,8 +81,8 @@ trait SomeArtifactClient: Send + Sync {
 struct SomeArtifactClientImpl<Artifact: ArtifactKind + 'static> {
     /// Reference to the artifact client.
     client: Arc<dyn ArtifactClient<Artifact>>,
-    /// The address of the client actor.
-    addr: Addr<ClientActor<Artifact>>,
+    /// The client actor.
+    actor: ClientActor<Artifact>,
 }
 
 /// Trait implementation for `SomeArtifactClient`.
@@ -123,12 +122,12 @@ where
                                 expected: expected.into(),
                             }
                         })?;
-                        // do_send ignores mailbox capacity, which is what we want here
-                        self.addr.do_send(NewArtifact(UnvalidatedArtifact {
+                        // this sends to an unbounded channel, which is what we want here
+                        self.actor.on_artifact(UnvalidatedArtifact {
                             message,
                             peer_id,
                             timestamp: time_source.get_relative_time(),
-                        }))
+                        })
                     }
                 };
                 Ok(())
@@ -386,7 +385,7 @@ impl ArtifactManagerMaker {
     pub fn add_arc_client<Artifact: ArtifactKind + 'static>(
         &mut self,
         client: Arc<dyn ArtifactClient<Artifact>>,
-        addr: Addr<ClientActor<Artifact>>,
+        actor: ClientActor<Artifact>,
     ) where
         Artifact::SerializeAs: TryFrom<artifact::Artifact, Error = artifact::Artifact>,
         Artifact::Message: ChunkableArtifact + Send,
@@ -401,14 +400,14 @@ impl ArtifactManagerMaker {
     {
         let tag = Artifact::TAG;
         self.clients
-            .insert(tag, Box::new(SomeArtifactClientImpl { client, addr }));
+            .insert(tag, Box::new(SomeArtifactClientImpl { client, actor }));
     }
 
     /// The method adds a new `ArtifactClient` to be managed.
     pub fn add_client<Artifact: ArtifactKind + 'static, Client: 'static>(
         &mut self,
         client: Client,
-        addr: Addr<ClientActor<Artifact>>,
+        actor: ClientActor<Artifact>,
     ) where
         Client: ArtifactClient<Artifact>,
         Artifact::SerializeAs: TryFrom<artifact::Artifact, Error = artifact::Artifact>,
@@ -427,7 +426,7 @@ impl ArtifactManagerMaker {
             tag,
             Box::new(SomeArtifactClientImpl {
                 client: Arc::new(client) as Arc<_>,
-                addr,
+                actor,
             }),
         );
     }

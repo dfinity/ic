@@ -132,14 +132,16 @@ message CanisterStateBits {
   CallContextManager call_context_manager = 3;
   uint64 compute_allocation = 4;
   int64 accumulated_priority = 5;
-  uint64 query_allocation = 6;
+  reserved 6;
+  reserved "query_allocation";
   ExecutionStateBits execution_state_bits = 7;
   uint64 memory_allocation = 8;
   // This field is now deprecated. Once all subnets in production contain the
   // new version of this field, we can remove it (and mark it as reserved).
   // (EXC-299) With this change, CyclesAccount can also be removed.
   CyclesAccount cycles_account = 9;
-  uint64 icp_balance = 10;
+  reserved 10;
+  reserved "icp_balance";
   oneof canister_status {
     CanisterStatusRunning running = 11;
     CanisterStatusStopping stopping = 12;

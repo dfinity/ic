@@ -16,7 +16,7 @@ mod errors;
 mod dkg;
 
 pub use dkg::DkgAlgorithm;
-pub use sign::threshold_sig::ni_dkg::NiDkgAlgorithm;
+pub use sign::threshold_sig::ni_dkg::{LoadTranscriptResult, NiDkgAlgorithm};
 
 mod sign;
 

@@ -20,7 +20,7 @@ impl ToProto for TotalSupplyArgs {
         Ok(TotalSupplyArgs {})
     }
 
-    fn to_proto(self) -> protobuf::TotalSupplyRequest {
+    fn into_proto(self) -> protobuf::TotalSupplyRequest {
         protobuf::TotalSupplyRequest {}
     }
 }
@@ -32,7 +32,7 @@ impl ToProto for ICPTs {
         Ok(ICPTs::from_e8s(sel.e8s))
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         protobuf::IcpTs {
             e8s: self.get_e8s(),
         }
@@ -48,9 +48,9 @@ impl ToProto for AccountBalanceArgs {
             .map(AccountBalanceArgs::new)
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         protobuf::AccountBalanceRequest {
-            account: Some(self.account.to_proto()),
+            account: Some(self.account.into_proto()),
         }
     }
 }
@@ -69,7 +69,7 @@ impl ToProto for TipOfChainRes {
         })
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         protobuf::TipOfChainResponse {
             certification: self
                 .certification
@@ -100,7 +100,7 @@ impl ToProto for CyclesResponse {
         }
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         let response = match self {
             CyclesResponse::Refunded(error, refund) => Response::Refund(protobuf::Refund {
                 error,
@@ -129,7 +129,7 @@ impl ToProto for GetBlocksArgs {
         })
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         protobuf::GetBlocksRequest {
             start: self.start as u64,
             length: self.length as u64,
@@ -160,7 +160,7 @@ impl ToProto for GetBlocksRes {
         }
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         match self.0 {
             Ok(blocks) => {
                 let blocks = blocks
@@ -201,7 +201,7 @@ impl ToProto for IterBlocksArgs {
         Ok(IterBlocksArgs { start, length })
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         protobuf::IterBlocksRequest {
             start: self.start as u64,
             length: self.length as u64,
@@ -221,7 +221,7 @@ impl ToProto for IterBlocksRes {
         Ok(IterBlocksRes(blocks))
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         let blocks = self
             .0
             .into_iter()
@@ -240,7 +240,7 @@ impl ToProto for BlockArg {
         Ok(BlockArg(pb.start))
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         protobuf::IterBlocksRequest {
             start: self.0,
             length: 1,
@@ -263,7 +263,7 @@ impl ToProto for BlockRes {
         }
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         match self.0 {
             None => protobuf::BlockResponse {
                 block_content: None,
@@ -325,7 +325,7 @@ impl ToProto for SendArgs {
             created_at_time,
         })
     }
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         let SendArgs {
             memo,
             amount,
@@ -334,16 +334,16 @@ impl ToProto for SendArgs {
             to,
             created_at_time,
         } = self;
-        let amount = amount.to_proto();
+        let amount = amount.into_proto();
         let payment = Some(protobuf::Payment {
             receiver_gets: Some(amount),
         });
         protobuf::SendRequest {
             memo: Some(protobuf::Memo { memo: memo.0 }),
             payment,
-            max_fee: Some(fee.to_proto()),
-            from_subaccount: from_subaccount.map(|sa| sa.to_proto()),
-            to: Some(to.to_proto()),
+            max_fee: Some(fee.into_proto()),
+            from_subaccount: from_subaccount.map(|sa| sa.into_proto()),
+            to: Some(to.into_proto()),
             created_at: None,
             created_at_time,
         }
@@ -386,12 +386,12 @@ impl ToProto for NotifyCanisterArgs {
         Ok(NotifyCanisterArgs {
             block_height,
             max_fee,
-            to_subaccount,
-            to_canister,
             from_subaccount,
+            to_canister,
+            to_subaccount,
         })
     }
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         let NotifyCanisterArgs {
             block_height,
             max_fee,
@@ -403,10 +403,10 @@ impl ToProto for NotifyCanisterArgs {
             block_height: Some(protobuf::BlockHeight {
                 height: block_height,
             }),
-            max_fee: Some(max_fee.to_proto()),
-            to_subaccount: to_subaccount.map(|sa| sa.to_proto()),
+            max_fee: Some(max_fee.into_proto()),
+            to_subaccount: to_subaccount.map(|sa| sa.into_proto()),
             to_canister: Some(to_canister.get()),
-            from_subaccount: from_subaccount.map(|sa| sa.to_proto()),
+            from_subaccount: from_subaccount.map(|sa| sa.into_proto()),
         }
     }
 }
@@ -451,7 +451,7 @@ impl ToProto for TransactionNotification {
         })
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         let TransactionNotification {
             from,
             from_subaccount,
@@ -462,14 +462,14 @@ impl ToProto for TransactionNotification {
             memo,
         } = self;
         protobuf::TransactionNotificationRequest {
-            from: Some(from.to_proto()),
-            from_subaccount: from_subaccount.map(|sa| sa.to_proto()),
-            to: Some(to.get().to_proto()),
-            to_subaccount: to_subaccount.map(|sa| sa.to_proto()),
+            from: Some(from.into_proto()),
+            from_subaccount: from_subaccount.map(|sa| sa.into_proto()),
+            to: Some(to.get().into_proto()),
+            to_subaccount: to_subaccount.map(|sa| sa.into_proto()),
             block_height: Some(protobuf::BlockHeight {
                 height: block_height,
             }),
-            amount: Some(amount.to_proto()),
+            amount: Some(amount.into_proto()),
             memo: Some(protobuf::Memo { memo: memo.0 }),
         }
     }
@@ -483,7 +483,7 @@ impl ToProto for Subaccount {
         Subaccount::try_from(&pb.sub_account[..]).map_err(|e| e.to_string())
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         protobuf::Subaccount {
             sub_account: self.to_vec(),
         }
@@ -497,7 +497,7 @@ impl ToProto for AccountIdentifier {
         AccountIdentifier::from_slice(&pb.hash[..])
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         protobuf::AccountIdentifier {
             hash: self.to_vec(),
         }
@@ -524,11 +524,11 @@ impl ToProto for Block {
         })
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         protobuf::Block {
-            parent_hash: self.parent_hash.map(|h| h.to_proto()),
-            transaction: Some(self.transaction.to_proto()),
-            timestamp: Some(self.timestamp.to_proto()),
+            parent_hash: self.parent_hash.map(|h| h.into_proto()),
+            transaction: Some(self.transaction.into_proto()),
+            timestamp: Some(self.timestamp.into_proto()),
         }
     }
 }
@@ -574,13 +574,13 @@ impl ToProto for Transaction {
             t => return Err(format!("Transaction lacked a required field: {:?}", t)),
         };
         Ok(Transaction {
+            transfer,
             memo,
             created_at_time,
-            transfer,
         })
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         let Transaction {
             memo,
             created_at_time,
@@ -588,13 +588,13 @@ impl ToProto for Transaction {
         } = self;
         let transfer = match transfer {
             Transfer::Burn { from, amount } => PTransfer::Burn(protobuf::Burn {
-                from: Some(from.to_proto()),
-                amount: Some(amount.to_proto()),
+                from: Some(from.into_proto()),
+                amount: Some(amount.into_proto()),
             }),
 
             Transfer::Mint { to, amount } => PTransfer::Mint(protobuf::Mint {
-                to: Some(to.to_proto()),
-                amount: Some(amount.to_proto()),
+                to: Some(to.into_proto()),
+                amount: Some(amount.into_proto()),
             }),
 
             Transfer::Send {
@@ -603,10 +603,10 @@ impl ToProto for Transaction {
                 from,
                 fee,
             } => PTransfer::Send(protobuf::Send {
-                to: Some(to.to_proto()),
-                amount: Some(amount.to_proto()),
-                from: Some(from.to_proto()),
-                max_fee: Some(fee.to_proto()),
+                to: Some(to.into_proto()),
+                amount: Some(amount.into_proto()),
+                from: Some(from.into_proto()),
+                max_fee: Some(fee.into_proto()),
             }),
         };
         protobuf::Transaction {
@@ -636,7 +636,7 @@ impl<T> ToProto for HashOf<T> {
         Ok(HashOf::new(*hash))
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         protobuf::Hash {
             hash: self.into_bytes().to_vec(),
         }

@@ -18,7 +18,6 @@ use crate::{
     nns_registry_replicator::Config as NnsRegistryReplicatorConfig,
     registration::Config as RegistrationConfig,
     registry_client::Config as RegistryClientConfig,
-    scheduler::Config as SchedulerConfig,
     state_manager::Config as StateManagerConfig,
 };
 use ic_types::{malicious_behaviour::MaliciousBehaviour, transport::TransportConfig};
@@ -32,7 +31,6 @@ pub struct Config {
     pub registry_client: RegistryClientConfig,
     pub transport: TransportConfig,
     pub state_manager: StateManagerConfig,
-    pub scheduler: SchedulerConfig,
     pub hypervisor: HypervisorConfig,
     pub http_handler: HttpHandlerConfig,
     pub metrics: MetricsConfig,
@@ -57,7 +55,6 @@ pub struct ConfigOptional {
     pub registry_client: Option<RegistryClientConfig>,
     pub transport: Option<TransportConfig>,
     pub state_manager: Option<StateManagerConfig>,
-    pub scheduler: Option<SchedulerConfig>,
     pub hypervisor: Option<HypervisorConfig>,
     pub http_handler: Option<http_handler::ExternalConfig>,
     pub metrics: Option<MetricsConfig>,
@@ -85,7 +82,6 @@ impl Config {
             registry_client: RegistryClientConfig::default(),
             transport: TransportConfig::default(),
             state_manager: StateManagerConfig::new(parent_dir.join("state")),
-            scheduler: SchedulerConfig::default(),
             hypervisor: HypervisorConfig::default(),
             http_handler: HttpHandlerConfig::default(),
             metrics: MetricsConfig::default(),
@@ -121,11 +117,6 @@ impl Config {
         (Self::new(tmpdir.path().to_path_buf()), tmpdir)
     }
 
-    #[cfg(test)]
-    pub(crate) fn test_config() -> Self {
-        Self::new(std::path::PathBuf::from(""))
-    }
-
     /// Load [Config] from the given 'config_descr' where if a section is
     /// omitted, its value is taken from the given 'default'.
     pub fn load_with_default(source: &ConfigSource, default: Config) -> Result<Self, ConfigError> {
@@ -138,7 +129,6 @@ impl Config {
             registry_client: cfg.registry_client.unwrap_or(default.registry_client),
             transport: cfg.transport.unwrap_or(default.transport),
             state_manager: cfg.state_manager.unwrap_or(default.state_manager),
-            scheduler: cfg.scheduler.unwrap_or(default.scheduler),
             hypervisor: cfg.hypervisor.unwrap_or(default.hypervisor),
             http_handler: HttpHandlerConfig::try_from(cfg.http_handler).map_err(|msg| {
                 ConfigError::ValidationError {
@@ -177,61 +167,6 @@ impl Config {
 
 impl ConfigValidate for ConfigOptional {
     fn validate(self) -> Result<Self, String> {
-        if let Some(scheduler) = &self.scheduler {
-            if scheduler.max_instructions_per_message > scheduler.max_instructions_per_round {
-                return Err(format!(
-                "'max_instructions_per_message' should be less than or equal to 'max_instructions_per_round' (expected {} <= {})",
-                scheduler.max_instructions_per_message, scheduler.max_instructions_per_round
-            ));
-            }
-        }
-
         Ok(self)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::Config;
-
-    #[test]
-    fn validate_ok_scheduler_max_instructions_per_message_lower_max_instructions_per_round() {
-        Config::load_with_default(
-            &ConfigSource::Literal(
-                "{scheduler: { max_instructions_per_round: 123, max_instructions_per_message: 122 }}"
-                    .to_string(),
-            ),
-            Config::test_config(),
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn validate_ok_scheduler_max_instructions_per_message_equal_max_instructions_per_round() {
-        Config::load_with_default(
-            &ConfigSource::Literal(
-                "{scheduler: { max_instructions_per_round: 123, max_instructions_per_message: 123 }}"
-                    .to_string(),
-            ),
-            Config::test_config(),
-        )
-        .unwrap();
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "\\'max_instructions_per_message\\' should be less than or equal to \\'max_instructions_per_round\\'"
-    )]
-    fn validate_fail_scheduler_max_instructions_per_message_greater_max_instructions_per_round() {
-        // should return an error
-        Config::load_with_default(
-            &ConfigSource::Literal(
-                "{scheduler: {max_instructions_per_round: 123, max_instructions_per_message: 124}}"
-                    .to_string(),
-            ),
-            Config::test_config(),
-        )
-        .unwrap();
     }
 }

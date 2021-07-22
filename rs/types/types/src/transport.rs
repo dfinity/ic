@@ -118,7 +118,7 @@ pub enum TransportErrorCode {
     /// Flow not found
     FlowNotFound,
 
-    /// Trying to enable a flow that already has a valid connection
+    /// Flow is already in connected state
     FlowConnectionUp,
 
     /// Unable to find config for the client type.

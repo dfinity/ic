@@ -1,9 +1,9 @@
 use crate::args::NodeManagerArgs;
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::crypto_helper::setup_crypto;
-use crate::error::NodeManagerResult;
 use crate::firewall::Firewall;
 use crate::metrics::NodeManagerMetrics;
+use crate::nns_registry_replicator::NnsRegistryReplicator;
 use crate::registration::NodeRegistration;
 use crate::registry_helper::RegistryHelper;
 use crate::release_package::ReleasePackage;
@@ -12,7 +12,6 @@ use crate::replica_process::ReplicaProcess;
 use crate::utils;
 use ic_config::registry_client::DataProviderConfig;
 use ic_config::{
-    firewall::Config as FirewallConfig,
     metrics::{Config as MetricsConfig, Exporter},
     Config,
 };
@@ -23,7 +22,6 @@ use ic_interfaces::{crypto::KeyManager, registry::RegistryClient};
 use ic_logger::{info, new_replica_logger, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
-use ic_registry_client::nns_registry_replicator::NnsRegistryReplicator;
 use ic_registry_common::local_store::{LocalStore, LocalStoreImpl};
 use slog_async::AsyncGuard;
 use std::env;
@@ -32,26 +30,29 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 pub struct NodeManager {
-    args: NodeManagerArgs,
     pub logger: ReplicaLogger,
     _async_log_guard: AsyncGuard,
-    metrics: Arc<NodeManagerMetrics>,
     _metrics_runtime: MetricsRuntimeImpl,
     _crypto: Arc<dyn CryptoComponentForNonReplicaProcess + Send + Sync>,
-    cup_provider: Arc<CatchUpPackageProvider>,
-    registry: Arc<RegistryHelper>,
-    release_package_provider: Arc<ReleasePackageProvider>,
-    firewall_config: Arc<FirewallConfig>,
-    pub(crate) nns_registry_replicator: Arc<NnsRegistryReplicator>,
-    current_node_manager_hash: String,
     // for tokio 1.0+ we can use `tokio::task::JoinHandle`
-    release_package: Option<Arc<std::sync::atomic::AtomicBool>>,
-    firewall: Option<Arc<std::sync::atomic::AtomicBool>>,
-    replica_process: Option<Arc<Mutex<ReplicaProcess>>>,
+    release_package: Arc<std::sync::atomic::AtomicBool>,
+    firewall: Arc<std::sync::atomic::AtomicBool>,
+    replica_process: Arc<Mutex<ReplicaProcess>>,
 }
 
 impl NodeManager {
-    pub async fn new(args: NodeManagerArgs) -> Self {
+    /// Start the Node Manager
+    ///
+    /// This starts 2 tasks for upgrades: one which runs and monitors
+    /// a Replica process, and another that constantly monitors for a
+    /// new release package that this node should upgrade to and
+    /// executes the upgrade to this new release.
+    ///
+    /// It spawns a third task that monitors the registry for new
+    /// data centers. If a new data center is added, node manager will
+    /// generate a new firewall configuration allowing access from the
+    /// IP range specified in the DC record.
+    pub async fn start(args: NodeManagerArgs) -> Result<Self, ()> {
         args.create_dirs();
         let metrics_addr = args.get_metrics_addr();
         let config = args.get_ic_config();
@@ -106,8 +107,6 @@ impl NodeManager {
         );
         let metrics = Arc::new(metrics);
 
-        let firewall = Arc::new(config.firewall.clone());
-
         let mut registration = NodeRegistration::new(
             logger.clone(),
             config.clone(),
@@ -150,86 +149,56 @@ impl NodeManager {
             logger.clone(),
         ));
 
-        Self {
-            args,
+        let slog_logger = logger.inner_logger.root.clone();
+        let replica_process = Arc::new(Mutex::new(ReplicaProcess::new(slog_logger.clone())));
+        let release_package = ReleasePackage::start(
+            Arc::clone(&registry),
+            replica_process.clone(),
+            release_package_provider,
+            cup_provider,
+            args.replica_binary_dir.clone(),
+            args.force_replica_binary.clone(),
+            args.replica_config_file.clone(),
+            args.ic_binary_directory
+                .as_ref()
+                .unwrap_or(&PathBuf::from("/tmp"))
+                .clone(),
+            current_node_manager_hash,
+            nns_registry_replicator,
+            logger.clone(),
+        )
+        .await;
+        let firewall = Firewall::new(
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            config.firewall.clone(),
+            logger.clone(),
+        )
+        .start();
+        Ok(Self {
             logger,
             _async_log_guard,
-            metrics,
             _metrics_runtime,
             _crypto: crypto,
-            cup_provider,
-            registry,
-            release_package_provider,
-            firewall_config: firewall,
-            nns_registry_replicator,
-            current_node_manager_hash,
-            release_package: None,
-            replica_process: None,
-            firewall: None,
-        }
-    }
-
-    /// Start the Node Manager
-    ///
-    /// This starts 2 tasks for upgrades: one which runs and monitors
-    /// a Replica process, and another that constantly monitors for a
-    /// new release package that this node should upgrade to and
-    /// executes the upgrade to this new release.
-    ///
-    /// It spawns a third task that monitors the registry for new
-    /// data centers. If a new data center is added, node manager will
-    /// generate a new firewall configuration allowing access from the
-    /// IP range specified in the DC record.
-    pub async fn start(&mut self) -> NodeManagerResult<()> {
-        let slog_logger = self.logger.inner_logger.root.clone();
-        let replica_process = Arc::new(Mutex::new(ReplicaProcess::new(slog_logger.clone())));
-        self.replica_process = Some(replica_process.clone());
-        self.release_package = Some(
-            ReleasePackage::start(
-                Arc::clone(&self.registry),
-                replica_process.clone(),
-                Arc::clone(&self.release_package_provider),
-                Arc::clone(&self.cup_provider),
-                self.args.replica_binary_dir.clone(),
-                self.args.force_replica_binary.clone(),
-                self.args.replica_config_file.clone(),
-                self.args
-                    .ic_binary_directory
-                    .as_ref()
-                    .unwrap_or(&PathBuf::from("/tmp"))
-                    .clone(),
-                self.current_node_manager_hash.clone(),
-                self.nns_registry_replicator.clone(),
-                self.logger.clone(),
-            )
-            .await,
-        );
-        self.firewall = Some(
-            Firewall::new(
-                Arc::clone(&self.registry),
-                Arc::clone(&self.metrics),
-                self.firewall_config.as_ref().clone(),
-                self.logger.clone(),
-            )
-            .start(),
-        );
-        Ok(())
+            release_package,
+            replica_process,
+            firewall,
+        })
     }
 
     pub fn spawn_wait_and_restart_replica(&self) {
-        let replica_process = self.replica_process.clone().unwrap();
-        ReplicaProcess::spawn_wait_and_restart(replica_process);
+        ReplicaProcess::spawn_wait_and_restart(self.replica_process.clone());
     }
 
     pub fn stop_replica(&mut self) {
         // Stop checking for new releases.
-        if let Some(release_package) = self.release_package.as_ref() {
-            release_package.store(false, std::sync::atomic::Ordering::Relaxed);
-        }
-        if let Some(firewall) = self.firewall.as_ref() {
-            firewall.store(false, std::sync::atomic::Ordering::Relaxed);
-        }
-        let e = self.replica_process.clone().unwrap().lock().unwrap().stop();
+        self.release_package
+            .as_ref()
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        self.firewall
+            .as_ref()
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        let e = self.replica_process.clone().lock().unwrap().stop();
         warn!(self.logger, "unable to stop replica: {:?}", e);
     }
 
@@ -259,6 +228,7 @@ impl NodeManager {
         };
 
         let metrics_runtime = MetricsRuntimeImpl::new(
+            tokio::runtime::Handle::current(),
             metrics_config,
             metrics_registry.clone(),
             registry_client,

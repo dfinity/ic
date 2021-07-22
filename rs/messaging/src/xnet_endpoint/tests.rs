@@ -1,6 +1,5 @@
 use super::*;
 use bytes::Bytes;
-use ic_base_thread::spawn_and_wait;
 use ic_interfaces::state_manager::{CertificationScope, StateManager};
 use ic_protobuf::{messaging::xnet::v1 as pb, proxy::ProtoProxy};
 use ic_replicated_state::{ReplicatedState, Stream};
@@ -19,7 +18,6 @@ use ic_test_utilities::{
 };
 use ic_types::{messages::CallbackId, xnet::StreamIndexedQueue, Height, SubnetId};
 use maplit::btreemap;
-use tokio::runtime;
 use url::Url;
 
 const SRC_CANISTER: u64 = 2;
@@ -77,58 +75,58 @@ impl Default for EndpointTestFixture {
 /// Tests the `/api/v1/streams` API endpoint.
 ///
 /// Heavyweight test that starts an `XNetEndpoint` and queries it over HTTP.
-#[tokio::test(threaded_scheduler)]
-async fn query_streams() {
+#[test]
+fn query_streams() {
     with_test_replica_logger(|log| {
-        spawn_and_wait(async {
-            let fixture = EndpointTestFixture::with_replicated_state();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let fixture = EndpointTestFixture::with_replicated_state();
 
-            let xnet_endpoint = XNetEndpoint::new(
-                tokio::runtime::Handle::current(),
-                fixture.state_manager.clone(),
-                fixture.tls_handshake.clone(),
-                fixture.registry_client.clone(),
-                Default::default(),
-                &fixture.metrics,
-                log,
-            );
+        let xnet_endpoint = XNetEndpoint::new(
+            rt.handle().clone(),
+            fixture.state_manager.clone(),
+            fixture.tls_handshake.clone(),
+            fixture.registry_client.clone(),
+            Default::default(),
+            &fixture.metrics,
+            log,
+        );
 
-            let resp = http_get("/api/v1/streams", &xnet_endpoint).await;
+        let resp = rt.block_on(async move { http_get("/api/v1/streams", &xnet_endpoint).await });
 
-            assert_eq!(format!("[\"{}\"]", DST_SUBNET), resp);
-            assert_eq!(
-                metric_vec(&[(&[("resource", "streams"), ("status", "200")], 1)]),
-                fixture.request_counts()
-            );
-            assert_eq!(0, fixture.slice_payload_size_stats().count);
-            assert_eq!(
-                metric_vec(&[(&[("resource", "streams")], 1)]),
-                fixture.response_size_counts()
-            );
-        });
+        assert_eq!(format!("[\"{}\"]", DST_SUBNET), resp);
+        assert_eq!(
+            metric_vec(&[(&[("resource", "streams"), ("status", "200")], 1)]),
+            fixture.request_counts()
+        );
+        assert_eq!(0, fixture.slice_payload_size_stats().count);
+        assert_eq!(
+            metric_vec(&[(&[("resource", "streams")], 1)]),
+            fixture.response_size_counts()
+        );
     });
 }
 
 /// Tests the `/api/v1/stream/{SubnetId}` API endpoint.
 ///
 /// Heavyweight test that starts an `XNetEndpoint` and queries it over HTTP.
-#[tokio::test(threaded_scheduler)]
-async fn query_stream() {
+#[test]
+fn query_stream() {
     with_test_replica_logger(|log| {
-        spawn_and_wait(async {
-            let fixture = EndpointTestFixture::with_replicated_state();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let fixture = EndpointTestFixture::with_replicated_state();
 
-            let xnet_endpoint = XNetEndpoint::new(
-                runtime::Handle::current(),
-                fixture.state_manager.clone(),
-                fixture.tls_handshake.clone(),
-                fixture.registry_client.clone(),
-                Default::default(),
-                &fixture.metrics,
-                log,
-            );
+        let xnet_endpoint = XNetEndpoint::new(
+            rt.handle().clone(),
+            fixture.state_manager.clone(),
+            fixture.tls_handshake.clone(),
+            fixture.registry_client.clone(),
+            Default::default(),
+            &fixture.metrics,
+            log,
+        );
 
-            let resp = http_get(
+        let resp = rt.block_on(async move {
+            http_get(
                 &format!(
                     "/api/v1/stream/{}?witness_begin={}&msg_begin={}",
                     DST_SUBNET,
@@ -137,32 +135,32 @@ async fn query_stream() {
                 ),
                 &xnet_endpoint,
             )
-            .await;
-
-            let expected = fixture
-                .state_manager
-                .encode_certified_stream_slice(
-                    DST_SUBNET,
-                    Some(STREAM_BEGIN),
-                    Some(STREAM_BEGIN.increment()),
-                    None,
-                    None,
-                )
-                .unwrap();
-            assert_eq!(
-                expected,
-                pb::CertifiedStreamSlice::proxy_decode(&resp).unwrap()
-            );
-            assert_eq!(
-                metric_vec(&[(&[("resource", "stream"), ("status", "200")], 1)]),
-                fixture.request_counts()
-            );
-            assert_eq!(1, fixture.slice_payload_size_stats().count);
-            assert_eq!(
-                metric_vec(&[(&[("resource", "stream")], 1)]),
-                fixture.response_size_counts()
-            );
+            .await
         });
+
+        let expected = fixture
+            .state_manager
+            .encode_certified_stream_slice(
+                DST_SUBNET,
+                Some(STREAM_BEGIN),
+                Some(STREAM_BEGIN.increment()),
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            expected,
+            pb::CertifiedStreamSlice::proxy_decode(&resp).unwrap()
+        );
+        assert_eq!(
+            metric_vec(&[(&[("resource", "stream"), ("status", "200")], 1)]),
+            fixture.request_counts()
+        );
+        assert_eq!(1, fixture.slice_payload_size_stats().count);
+        assert_eq!(
+            metric_vec(&[(&[("resource", "stream")], 1)]),
+            fixture.response_size_counts()
+        );
     });
 }
 
@@ -520,13 +518,13 @@ fn get_stream_for_testing() -> Stream {
         .sender_reply_callback(CallbackId::from(CALLBACK_ID))
         .build();
 
-    let mut stream = Stream {
-        messages: StreamIndexedQueue::with_begin(STREAM_BEGIN),
-        signals_end: Default::default(),
-    };
+    let mut stream = Stream::new(
+        StreamIndexedQueue::with_begin(STREAM_BEGIN),
+        Default::default(),
+    );
 
     for _ in 0..STREAM_COUNT {
-        stream.messages.push(message.clone().into());
+        stream.push(message.clone().into());
     }
     stream
 }

@@ -70,7 +70,7 @@ impl<T: RegistryClient + ?Sized> CryptoRegistry for T {
         version: RegistryVersion,
     ) -> RegistryClientResult<PublicKeyProto> {
         let bytes = self.get_value(&make_crypto_node_key(node_id, key_purpose), version);
-        Ok(deserialize_registry_value::<PublicKeyProto>(bytes)?)
+        deserialize_registry_value::<PublicKeyProto>(bytes)
     }
 
     fn get_threshold_signing_public_key_for_subnet(
@@ -102,7 +102,7 @@ impl<T: RegistryClient + ?Sized> CryptoRegistry for T {
         version: RegistryVersion,
     ) -> RegistryClientResult<X509PublicKeyCert> {
         let bytes = self.get_value(&make_crypto_tls_cert_key(node_id), version);
-        Ok(deserialize_registry_value::<X509PublicKeyCert>(bytes)?)
+        deserialize_registry_value::<X509PublicKeyCert>(bytes)
     }
 
     fn get_initial_dkg_transcripts(

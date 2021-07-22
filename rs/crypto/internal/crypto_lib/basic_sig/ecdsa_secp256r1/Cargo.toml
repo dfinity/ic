@@ -8,11 +8,12 @@ base64 = "0.11.0"
 hex = "0.4.2"
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-types = { path = "../../../../../types/types" }
+ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 openssl = "0.10.29"
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"
-serde_cbor = "0.11.1"
 zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
+simple_asn1 = "0.5.4"
 
 [dev-dependencies]
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }

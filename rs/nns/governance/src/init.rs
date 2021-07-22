@@ -11,10 +11,7 @@ use std::path::Path;
 
 use crate::pb::v1::{Governance, NetworkEconomics, Neuron};
 use ic_base_types::PrincipalId;
-use ic_nns_common::{
-    pb::v1::{CanisterAuthzInfo, MethodAuthzInfo},
-    types::NeuronId,
-};
+use ic_nns_common::types::NeuronId;
 
 #[allow(dead_code)]
 pub struct GovernanceCanisterInitPayloadBuilder {
@@ -30,15 +27,6 @@ impl GovernanceCanisterInitPayloadBuilder {
         Self {
             proto: Governance {
                 economics: Some(NetworkEconomics::with_default_values()),
-                authz: Some(CanisterAuthzInfo {
-                    methods_authz: vec![MethodAuthzInfo {
-                        method_name: "submit_proposal".to_string(),
-                        principal_ids: vec![
-                            ic_nns_constants::ROOT_CANISTER_ID.get().to_vec(),
-                            ic_nns_constants::LIFELINE_CANISTER_ID.get().to_vec(),
-                        ],
-                    }],
-                }),
                 wait_for_quiet_threshold_seconds: 60 * 60 * 24 * 2, // 2 days
                 short_voting_period_seconds: 60 * 60 * 12,          // 12 hours
                 ..Default::default()
@@ -79,11 +67,7 @@ impl GovernanceCanisterInitPayloadBuilder {
     pub fn with_governance_proto(&mut self, proto: Governance) -> &mut Self {
         // Save the neurons from the current proto, to account for the neurons
         // possibly already crated (say, for the GTC).
-        let mut proto = proto;
         let neurons = self.proto.neurons.clone();
-        if proto.authz.is_none() {
-            proto.authz = self.proto.authz.clone();
-        }
         self.proto = proto;
         self.proto.neurons.extend(neurons);
         self

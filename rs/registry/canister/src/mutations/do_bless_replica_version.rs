@@ -13,6 +13,11 @@ use ic_registry_keys::{make_blessed_replica_version_key, make_replica_version_ke
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
 
 impl Registry {
+    /// Adds a new replica version to the registry and blesses it, i.e., adds
+    /// the version's ID to the list of blessed replica versions.
+    ///
+    /// This method is called by the governance canister, after a proposal
+    /// for blessing a new replica version has been accepted.
     pub fn do_bless_replica_version(&mut self, payload: BlessReplicaVersionPayload) {
         println!("{}do_bless_replica_version: {:?}", LOG_PREFIX, payload);
 

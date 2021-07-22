@@ -429,7 +429,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                         .into()
                                 }),
                             );
-                            artifact.msg = proposal.to_message();
+                            artifact.msg = proposal.into_message();
                             batch.put_cf(cf_handle, key, check_ok_uw!(serialize(&artifact)));
                         }
                         ConsensusMessage::CatchUpPackage(cup) => {
@@ -550,7 +550,7 @@ fn deserialize_consensus_artifact(
                         .unwrap_or_else(|| panic!("Failed to deserialize payload: {:?}", key))
                 }),
             );
-            artifact.msg = proposal.to_message();
+            artifact.msg = proposal.into_message();
             Some(artifact)
         }
         _ => Some(artifact),
@@ -1238,7 +1238,7 @@ mod tests {
             let msg = ConsensusMessage::BlockProposal(block_proposal);
             let msg_expected = msg.clone();
             let hash = msg_expected.get_cm_hash();
-            let msg_id = ConsensusMessageId { height, hash };
+            let msg_id = ConsensusMessageId { hash, height };
             // Create a pool and insert an item.
             {
                 let mut pool =

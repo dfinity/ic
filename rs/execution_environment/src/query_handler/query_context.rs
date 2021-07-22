@@ -244,7 +244,7 @@ impl<'a> QueryContext<'a> {
             .unwrap_or_else(|| {
                 fatal!(
                     self.log,
-                    "Cansiter {}: Expected to find a CallContextManager",
+                    "Canister {}: Expected to find a CallContextManager",
                     canister_id
                 )
             });
@@ -339,22 +339,19 @@ impl<'a> QueryContext<'a> {
             .write()
             .unwrap()
             .allocation_before_execution(&canister);
-        let (canister, cycles_left, result) = self
-            .hypervisor
-            .execute_query(
-                QueryExecutionType::NonReplicated {
-                    call_context_id,
-                    routing_table: self.routing_table.clone(),
-                },
-                method_name,
-                method_payload,
-                source,
-                allocation_before.into(),
-                canister,
-                Some(self.data_certificate.clone()),
-                self.state.time(),
-            )
-            .get_no_pause();
+        let (canister, cycles_left, result) = self.hypervisor.execute_query(
+            QueryExecutionType::NonReplicated {
+                call_context_id,
+                routing_table: self.routing_table.clone(),
+            },
+            method_name,
+            method_payload,
+            source,
+            allocation_before.into(),
+            canister,
+            Some(self.data_certificate.clone()),
+            self.state.time(),
+        );
         self.query_allocations_used
             .write()
             .unwrap()
@@ -411,9 +408,8 @@ impl<'a> QueryContext<'a> {
             .write()
             .unwrap()
             .allocation_before_execution(&canister);
-        let (canister, cycles_left, _heap_delta, execution_result) = self
-            .hypervisor
-            .execute_callback(
+        let (canister, cycles_left, _heap_delta, execution_result) =
+            self.hypervisor.execute_callback(
                 canister,
                 &call_origin,
                 callback,
@@ -425,8 +421,7 @@ impl<'a> QueryContext<'a> {
                 self.routing_table.clone(),
                 subnet_records,
                 self.subnet_available_memory.clone(),
-            )
-            .get_no_pause();
+            );
         self.query_allocations_used
             .write()
             .unwrap()

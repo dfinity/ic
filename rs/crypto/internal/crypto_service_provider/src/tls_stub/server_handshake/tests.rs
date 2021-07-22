@@ -3,36 +3,36 @@ use crate::api::tls_errors::CspTlsServerHandshakeError;
 use crate::api::CspTlsServerHandshake;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::tls_stub::test_utils::{
-    dummy_csprng, malformed_cert, secret_key_store_with_csp_key, secret_key_store_with_key,
+    dummy_csprng, secret_key_store_with_csp_key, secret_key_store_with_key,
     tls_secret_key_with_bytes,
 };
 use crate::types::CspSecretKey;
 use crate::Csp;
 use ic_crypto_internal_multi_sig_bls12381::types::SecretKeyBytes;
-use ic_crypto_test_utils::tls::x509_certificates::{
-    cert_to_der, generate_ed25519_cert, private_key_to_der, x509_public_key_cert,
-};
+use ic_crypto_test_utils::tls::x509_certificates::{generate_ed25519_tlscert, private_key_to_der};
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use openssl::ssl::SslVerifyMode;
+use std::collections::HashSet;
 use tokio::net::{TcpListener, TcpStream};
 
 #[test]
 fn should_return_acceptor_from_clib_if_no_error_occurs() {
-    let (private_key, self_cert_x509) = generate_ed25519_cert();
-    let sks = secret_key_store_with_key(&private_key, &self_cert_x509);
+    let (private_key, self_cert) = generate_ed25519_tlscert();
+    let sks = secret_key_store_with_key(&private_key, &self_cert);
     let csp = Csp::of(dummy_csprng(), sks);
-    let (_, trusted_client_cert) = generate_ed25519_cert();
+    let (_, trusted_client_cert) = generate_ed25519_tlscert();
 
+    let mut trusted_certs_set = HashSet::new();
+    assert!(trusted_certs_set.insert(trusted_client_cert));
     let acceptor = csp
-        .tls_acceptor(
-            x509_public_key_cert(&self_cert_x509),
-            Some(vec![x509_public_key_cert(&trusted_client_cert)]),
-        )
+        .tls_acceptor(self_cert.clone(), Some(trusted_certs_set))
         .unwrap();
 
     // only check a few acceptor properties (details are tested in the CLib)
     assert_eq!(
-        cert_to_der(acceptor.context().certificate().unwrap()),
-        cert_to_der(&self_cert_x509)
+        TlsPublicKeyCert::new_from_x509(acceptor.context().certificate().unwrap().to_owned())
+            .expect("failed to convert X509 to TlsPublicKeyCert"),
+        self_cert
     );
     assert_eq!(
         private_key_to_der(acceptor.context().private_key().unwrap()),
@@ -42,16 +42,15 @@ fn should_return_acceptor_from_clib_if_no_error_occurs() {
 
 #[test]
 fn should_return_acceptor_with_correct_verify_peer_settings_with_auth() {
-    let (private_key, self_cert_x509) = generate_ed25519_cert();
-    let sks = secret_key_store_with_key(&private_key, &self_cert_x509);
+    let (private_key, self_cert) = generate_ed25519_tlscert();
+    let sks = secret_key_store_with_key(&private_key, &self_cert);
     let csp = Csp::of(dummy_csprng(), sks);
-    let (_, trusted_client_cert) = generate_ed25519_cert();
+    let (_, trusted_client_cert) = generate_ed25519_tlscert();
 
+    let mut trusted_certs_set = HashSet::new();
+    assert!(trusted_certs_set.insert(trusted_client_cert));
     let acceptor_with_auth = csp
-        .tls_acceptor(
-            x509_public_key_cert(&self_cert_x509),
-            Some(vec![x509_public_key_cert(&trusted_client_cert)]),
-        )
+        .tls_acceptor(self_cert, Some(trusted_certs_set))
         .unwrap();
 
     assert_eq!(
@@ -62,13 +61,11 @@ fn should_return_acceptor_with_correct_verify_peer_settings_with_auth() {
 
 #[test]
 fn should_return_acceptor_with_correct_verify_peer_settings_without_auth() {
-    let (private_key, self_cert_x509) = generate_ed25519_cert();
-    let sks = secret_key_store_with_key(&private_key, &self_cert_x509);
+    let (private_key, self_cert) = generate_ed25519_tlscert();
+    let sks = secret_key_store_with_key(&private_key, &self_cert);
     let csp = Csp::of(dummy_csprng(), sks);
 
-    let acceptor_no_auth = csp
-        .tls_acceptor(x509_public_key_cert(&self_cert_x509), None)
-        .unwrap();
+    let acceptor_no_auth = csp.tls_acceptor(self_cert, None).unwrap();
 
     assert_eq!(
         acceptor_no_auth.context().verify_mode(),
@@ -78,37 +75,27 @@ fn should_return_acceptor_with_correct_verify_peer_settings_without_auth() {
 
 #[tokio::test]
 async fn should_return_create_acceptor_error_from_clib() {
-    let (private_key, self_cert_x509) = generate_ed25519_cert();
-    let sks = secret_key_store_with_key(&private_key, &self_cert_x509);
+    let (private_key, self_cert) = generate_ed25519_tlscert();
+    let sks = secret_key_store_with_key(&private_key, &self_cert);
     let csp = Csp::of(dummy_csprng(), sks);
 
     let result = csp
-        .perform_tls_server_handshake(
-            dummy_tcp_stream().await,
-            x509_public_key_cert(&self_cert_x509),
-            vec![],
-        )
+        .perform_tls_server_handshake(dummy_tcp_stream().await, self_cert, HashSet::new())
         .await;
 
-    assert!(
-        matches!(result, Err(CspTlsServerHandshakeError::CreateAcceptorError { description, .. })
-            if description == "The trusted client certs must not be empty."
-        )
-    );
+    assert!(matches!(result,
+            Err(CspTlsServerHandshakeError::CreateAcceptorError{description, .. })
+            if description == "The trusted client certs must not be empty."));
 }
 
 #[tokio::test]
 async fn should_return_error_if_secret_key_not_found() {
-    let (_, self_cert_x509) = generate_ed25519_cert();
+    let (_, self_cert) = generate_ed25519_tlscert();
     let empty_sks = TempSecretKeyStore::new();
     let csp = Csp::of(dummy_csprng(), empty_sks);
 
     let result = csp
-        .perform_tls_server_handshake(
-            dummy_tcp_stream().await,
-            x509_public_key_cert(&self_cert_x509),
-            vec![],
-        )
+        .perform_tls_server_handshake(dummy_tcp_stream().await, self_cert, HashSet::new())
         .await;
 
     assert!(matches!(
@@ -119,15 +106,12 @@ async fn should_return_error_if_secret_key_not_found() {
 
 #[tokio::test]
 async fn should_return_error_if_secret_key_not_found_no_client_auth() {
-    let (_, self_cert_x509) = generate_ed25519_cert();
+    let (_, self_cert) = generate_ed25519_tlscert();
     let empty_sks = TempSecretKeyStore::new();
     let csp = Csp::of(dummy_csprng(), empty_sks);
 
     let result = csp
-        .perform_tls_server_handshake_without_client_auth(
-            dummy_tcp_stream().await,
-            x509_public_key_cert(&self_cert_x509),
-        )
+        .perform_tls_server_handshake_without_client_auth(dummy_tcp_stream().await, self_cert)
         .await;
 
     assert!(matches!(
@@ -138,18 +122,14 @@ async fn should_return_error_if_secret_key_not_found_no_client_auth() {
 
 #[tokio::test]
 async fn should_return_error_on_wrong_secret_key_type() {
-    let (_, self_cert_x509) = generate_ed25519_cert();
+    let (_, self_cert) = generate_ed25519_tlscert();
     let secret_key_with_wrong_type =
         CspSecretKey::MultiBls12_381(SecretKeyBytes([42; SecretKeyBytes::SIZE]));
-    let sks = secret_key_store_with_csp_key(&self_cert_x509, secret_key_with_wrong_type);
+    let sks = secret_key_store_with_csp_key(&self_cert, secret_key_with_wrong_type);
     let csp = Csp::of(dummy_csprng(), sks);
 
     let result = csp
-        .perform_tls_server_handshake(
-            dummy_tcp_stream().await,
-            x509_public_key_cert(&self_cert_x509),
-            vec![],
-        )
+        .perform_tls_server_handshake(dummy_tcp_stream().await, self_cert, HashSet::new())
         .await;
 
     assert!(matches!(
@@ -160,67 +140,19 @@ async fn should_return_error_on_wrong_secret_key_type() {
 
 #[tokio::test]
 async fn should_return_error_on_malformed_secret_key() {
-    let (_, self_cert_x509) = generate_ed25519_cert();
+    let (_, self_cert) = generate_ed25519_tlscert();
     let malformed_secret_key = tls_secret_key_with_bytes(vec![42; 10]);
-    let sks = secret_key_store_with_csp_key(&self_cert_x509, malformed_secret_key);
+    let sks = secret_key_store_with_csp_key(&self_cert, malformed_secret_key);
     let csp = Csp::of(dummy_csprng(), sks);
 
     let result = csp
-        .perform_tls_server_handshake(
-            dummy_tcp_stream().await,
-            x509_public_key_cert(&self_cert_x509),
-            vec![],
-        )
+        .perform_tls_server_handshake(dummy_tcp_stream().await, self_cert, HashSet::new())
         .await;
 
     assert!(matches!(
         result,
         Err(CspTlsServerHandshakeError::MalformedSecretKey { .. })
     ));
-}
-
-#[tokio::test]
-async fn should_return_error_on_malformed_self_cert() {
-    let (private_key, self_cert_x509) = generate_ed25519_cert();
-    let sks = secret_key_store_with_key(&private_key, &self_cert_x509);
-    let csp = Csp::of(dummy_csprng(), sks);
-    let malformed_self_cert = malformed_cert();
-
-    let error = csp
-        .perform_tls_server_handshake(dummy_tcp_stream().await, malformed_self_cert, vec![])
-        .await
-        .err()
-        .unwrap();
-
-    if let CspTlsServerHandshakeError::MalformedSelfCertificate { internal_error } = error {
-        assert!(internal_error.contains("bad object header"));
-    } else {
-        panic!("unexpected error");
-    }
-}
-
-#[tokio::test]
-async fn should_return_error_on_malformed_client_cert() {
-    let (private_key, self_cert_x509) = generate_ed25519_cert();
-    let sks = secret_key_store_with_key(&private_key, &self_cert_x509);
-    let csp = Csp::of(dummy_csprng(), sks);
-    let malformed_client_cert = malformed_cert();
-
-    let error = csp
-        .perform_tls_server_handshake(
-            dummy_tcp_stream().await,
-            x509_public_key_cert(&self_cert_x509),
-            vec![malformed_client_cert],
-        )
-        .await
-        .err()
-        .unwrap();
-
-    if let CspTlsServerHandshakeError::MalformedClientCertificate(e) = error {
-        assert!(e.internal_error.contains("bad object header"));
-    } else {
-        panic!("unexpected error");
-    }
 }
 
 async fn dummy_tcp_stream() -> TcpStream {

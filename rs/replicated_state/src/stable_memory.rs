@@ -2,13 +2,12 @@ use crate::{NumWasmPages, PageMap};
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::system_metadata::v1 as pb;
 use ic_sys::PAGE_SIZE;
-use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, sync::Arc};
 
 const WASM_PAGE_SIZE_IN_BYTES: u32 = 64 * 1024;
 const MAX_STABLE_MEMORY_IN_PAGES: u32 = 64 * 1024; // 4GiB
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum StableMemoryError {
     /// Attempting to access stable memory beyond its allocated bounds.
     StableMemoryOutOfBounds,
@@ -23,7 +22,7 @@ pub enum StableMemoryError {
 /// beyond upgrades. The interface mirrors roughly the memory-related
 /// instructions of WebAssembly, and tries to be forward compatible with
 /// exposing this feature as an additional memory.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StableMemory {
     // Stores the memory as a vector of bytes. The vector is stored behind an
     // `Arc` to enable cheap clones of the canister state between rounds. If a

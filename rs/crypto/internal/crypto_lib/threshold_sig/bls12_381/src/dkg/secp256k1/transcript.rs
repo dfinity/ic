@@ -239,12 +239,10 @@ mod transcript_util {
     ) -> Result<BTreeMap<EphemeralPublicKeyBytes, CLibDealingBytes>, DkgCreateTranscriptError> {
         let dealings: BTreeMap<EphemeralPublicKeyBytes, CLibDealingBytes> = {
             let mut dealings = verified_dealings.clone();
-            for response_maybe in verified_responses.iter() {
-                if let Some(response) = response_maybe {
-                    for (dealer_public_key, complaint_maybe) in response.complaints.iter() {
-                        if complaint_maybe.is_some() {
-                            dealings.remove(dealer_public_key);
-                        }
+            for response in verified_responses.iter().flatten() {
+                for (dealer_public_key, complaint_maybe) in response.complaints.iter() {
+                    if complaint_maybe.is_some() {
+                        dealings.remove(dealer_public_key);
                     }
                 }
             }
@@ -401,14 +399,11 @@ mod transcript_util {
             )?;
 
             // We need just the first `resharing_threshold_size` dealings:
-            let dealings_with_keys =
-                (0 as NodeIndex..)
-                    .zip(dealer_keys)
-                    .filter_map(|(index, key_maybe)| {
-                        key_maybe
-                            .map(|key| dealings.get(&key.0).map(|dealing| (index, key.0, dealing)))
-                            .flatten()
-                    });
+            let dealings_with_keys = (0_u32..).zip(dealer_keys).filter_map(|(index, key_maybe)| {
+                key_maybe
+                    .map(|key| dealings.get(&key.0).map(|dealing| (index, key.0, dealing)))
+                    .flatten()
+            });
             let first_n = dealings_with_keys.take(resharing_threshold_size);
 
             let mut selected_dealer_indices: Vec<NodeIndex> =

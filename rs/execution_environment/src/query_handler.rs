@@ -25,8 +25,8 @@ impl HttpQueryHandlerMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             query_execution_duration: metrics_registry.histogram(
-                "http_handler_query_executed_duration",
-                "Duration of a single query in seconds.",
+                "execution_query_duration_seconds",
+                "Canister query execution duration, in seconds.",
                 // 10µs, 20µs, 50µs, 100µs, ..., 1s, 2s, 5s
                 decimal_buckets(-5, 0),
             ),

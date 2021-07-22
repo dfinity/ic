@@ -7,5 +7,18 @@ import "ic_nns_common/pb/v1/types.proto";
 // A container for the what gets written to stable storage,
 // from the root canister.
 message RootCanisterStableStorage {
-  ic_nns_common.pb.v1.CanisterAuthzInfo authz = 1;
+  // This proto is devoid of data, and is not even used in code.
+
+  // The reason to keep it is purely to reserve an old tag. There is
+  // an (unlikely) scenario in which simply deleting this proto could lead to an issue:
+  // - a stateless version, without any stable memory proto, is adopted in code but never
+  //   deployed to prod.
+  // - a second change is made to re-introduce a stable memory proto which reuses tag 1.
+  // - that second version is deployed to prod
+  //
+  // In this scenario, data with tag 1 could be misinterpreted.
+  //
+  // If the intermediate stateless proto is deployed to prod, the issue is alleviated as long
+  // as the stateless version DOES wipe out the stable memory.
+  reserved 1;
 }

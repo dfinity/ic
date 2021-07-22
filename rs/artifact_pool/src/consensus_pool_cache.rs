@@ -174,7 +174,7 @@ pub(crate) fn get_highest_finalized_block(
 pub(crate) fn get_highest_catch_up_package(pool: &dyn ConsensusPool) -> CUPWithOriginalProtobuf {
     let protobuf = pool.validated().highest_catch_up_package_proto();
     let cup = CatchUpPackage::try_from(&protobuf).expect("CUP should be retrievable from protobuf");
-    CUPWithOriginalProtobuf { protobuf, cup }
+    CUPWithOriginalProtobuf { cup, protobuf }
 }
 
 /// Find the DKG summary block that is between the given 'summary_block' and a
@@ -305,7 +305,7 @@ mod test {
 
             // 2. Cache can be updated by finalization
             let updates = consensus_cache.prepare(&[ChangeAction::AddToValidated(
-                finalization.clone().to_message(),
+                finalization.clone().into_message(),
             )]);
             assert_eq!(updates, vec![CacheUpdateAction::Finalization]);
             pool.insert_validated(finalization);
@@ -322,7 +322,7 @@ mod test {
             );
             let catch_up_package = pool.make_catch_up_package(Height::from(4));
             let updates = consensus_cache.prepare(&[ChangeAction::AddToValidated(
-                catch_up_package.clone().to_message(),
+                catch_up_package.clone().into_message(),
             )]);
             assert_eq!(updates, vec![CacheUpdateAction::CatchUpPackage]);
             pool.insert_validated(catch_up_package.clone());

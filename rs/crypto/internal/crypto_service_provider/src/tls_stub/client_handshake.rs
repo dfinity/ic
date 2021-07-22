@@ -1,14 +1,14 @@
-use crate::api::tls_errors::{CspMalformedPeerCertificateError, CspTlsClientHandshakeError};
+use crate::api::tls_errors::CspTlsClientHandshakeError;
 use crate::api::CspTlsClientHandshake;
 use crate::secret_key_store::SecretKeyStore;
 use crate::tls_stub::{key_from_secret_key_store, peer_cert_from_stream, CspTlsSecretKeyError};
 use crate::Csp;
 use async_trait::async_trait;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::TlsStream;
-use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use openssl::ssl::ConnectConfiguration;
-use openssl::x509::X509;
 use rand::{CryptoRng, Rng};
+use std::pin::Pin;
 use tokio::net::TcpStream;
 
 #[cfg(test)]
@@ -19,26 +19,22 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore> CspTlsClientHandshake 
     async fn perform_tls_client_handshake(
         &self,
         tcp_stream: TcpStream,
-        self_cert: X509PublicKeyCert,
-        trusted_server_cert: X509PublicKeyCert,
-    ) -> Result<(TlsStream, X509), CspTlsClientHandshakeError> {
+        self_cert: TlsPublicKeyCert,
+        trusted_server_cert: TlsPublicKeyCert,
+    ) -> Result<(TlsStream, TlsPublicKeyCert), CspTlsClientHandshakeError> {
         let tls_connector = self.tls_connector(self_cert, trusted_server_cert)?;
 
-        let tls_stream = tokio_openssl::connect(
+        let mut tls_stream = unconnected_tls_stream(
             tls_connector,
             "domain is irrelevant, because hostname verification is disabled",
             tcp_stream,
-        )
-        .await
-        .map_err(|e| CspTlsClientHandshakeError::HandshakeError {
-            internal_error: format!("Handshake failed in tokio_openssl:connect: {}", e),
+        )?;
+        Pin::new(&mut tls_stream).connect().await.map_err(|e| {
+            CspTlsClientHandshakeError::HandshakeError {
+                internal_error: format!("Handshake failed in tokio_openssl:connect: {}", e),
+            }
         })?;
 
-        // The type of `peer_cert` (X509) is currently different from the cert types
-        // used for `self_cert` and `trusted_server_cert`. This will be cleaned up
-        // as part of moving the cert equality check from the IDKM to the CSP, which
-        // will remove the `peer_cert` return value entirely:
-        // TODO (CRP-772): Remove the X509 from the result
         let peer_cert = peer_cert_from_stream(&tls_stream)?.ok_or(
             CspTlsClientHandshakeError::HandshakeError {
                 internal_error: "Missing server certificate during handshake.".to_string(),
@@ -57,35 +53,39 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore> Csp<R, S> {
     /// `trusted_server_cert` in the TLS handshake.
     fn tls_connector(
         &self,
-        self_cert: X509PublicKeyCert,
-        trusted_server_cert: X509PublicKeyCert,
+        self_cert: TlsPublicKeyCert,
+        trusted_server_cert: TlsPublicKeyCert,
     ) -> Result<ConnectConfiguration, CspTlsClientHandshakeError> {
-        let self_cert_x509 = self_cert_x509(&self_cert)?;
-        let trusted_server_cert_x509 = trusted_server_cert_x509(trusted_server_cert)?;
         Ok(ic_crypto_internal_tls::tls_connector(
             &key_from_secret_key_store(&*self.sks_read_lock(), &self_cert)?,
-            &self_cert_x509,
-            &trusted_server_cert_x509,
+            &self_cert.as_x509(),
+            &trusted_server_cert.as_x509(),
         )?)
     }
 }
 
-fn self_cert_x509(self_cert: &X509PublicKeyCert) -> Result<X509, CspTlsClientHandshakeError> {
-    X509::from_der(&self_cert.certificate_der).map_err(|e| {
-        CspTlsClientHandshakeError::MalformedSelfCertificate {
+fn unconnected_tls_stream(
+    tls_connector: ConnectConfiguration,
+    domain: &str,
+    tcp_stream: TcpStream,
+) -> Result<tokio_openssl::SslStream<TcpStream>, CspTlsClientHandshakeError> {
+    let tls_state = tls_connector.into_ssl(domain).map_err(|e| {
+        CspTlsClientHandshakeError::CreateConnectorError {
+            description: "failed to convert TLS connector to state object".to_string(),
             internal_error: format!("{}", e),
+            client_cert_der: None,
+            server_cert_der: None,
         }
-    })
-}
-
-fn trusted_server_cert_x509(
-    trusted_server_cert: X509PublicKeyCert,
-) -> Result<X509, CspTlsClientHandshakeError> {
-    X509::from_der(&trusted_server_cert.certificate_der).map_err(|e| {
-        CspTlsClientHandshakeError::MalformedServerCertificate(CspMalformedPeerCertificateError {
+    })?;
+    let tls_stream = tokio_openssl::SslStream::new(tls_state, tcp_stream).map_err(|e| {
+        CspTlsClientHandshakeError::CreateConnectorError {
+            description: "failed to create tokio_openssl::SslStream".to_string(),
             internal_error: format!("{}", e),
-        })
-    })
+            client_cert_der: None,
+            server_cert_der: None,
+        }
+    })?;
+    Ok(tls_stream)
 }
 
 impl From<CspTlsSecretKeyError> for CspTlsClientHandshakeError {

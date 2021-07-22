@@ -11,14 +11,13 @@ use crate::{download_management::DownloadManagerImpl, event_handler::IngressThro
 use crate::{
     download_prioritization::DownloadPrioritizerImpl, event_handler::IngressEventHandlerImpl,
 };
-use actix::prelude::*;
 use ic_artifact_manager::{actors, manager};
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl,
     dkg_pool::DkgPoolImpl, ensure_persistent_pool_replica_version_compatibility,
     ingress_pool::IngressPoolImpl,
 };
-use ic_base_thread::spawn_and_wait;
+use ic_base_thread::async_safe_block_on_await;
 use ic_config::{artifact_pool::ArtifactPoolConfig, consensus::ConsensusConfig};
 use ic_consensus::{
     certification,
@@ -73,7 +72,6 @@ const P2P_TIMER_DURATION_MS: u64 = 100;
 /// A helper service to run the P2P component.
 pub struct P2PService {
     p2p: Option<P2P>,
-    p2p_arbiters: Vec<Arbiter>,
 }
 
 impl Drop for P2PService {
@@ -82,15 +80,6 @@ impl Drop for P2PService {
         if let Some(p2p) = self.p2p.take() {
             std::mem::drop(p2p);
         }
-        let mut arbiters = Vec::new();
-        std::mem::swap(&mut arbiters, &mut self.p2p_arbiters);
-        arbiters.into_iter().for_each(|mut arbiter| {
-            arbiter.stop();
-            arbiter
-                .join()
-                .unwrap_or_else(|err| panic!("P2P arbiter failed to join {:?}", err));
-            std::mem::drop(arbiter)
-        });
     }
 }
 
@@ -107,6 +96,8 @@ impl P2PRunner for P2PService {
 pub struct P2P {
     /// The logger.
     pub(crate) log: ReplicaLogger,
+    /// Handle to the Tokio runtime to be used by p2p.
+    rt_handle: tokio::runtime::Handle,
     /// The time source.
     time_source: Arc<SysTimeSource>,
     /// The *Gossip* struct with automatic reference counting.
@@ -159,6 +150,7 @@ impl P2P {
         clippy::new_ret_no_self
     )]
     pub fn new(
+        rt_handle: tokio::runtime::Handle,
         malicious_flags: MaliciousFlags,
         node_id: NodeId,
         subnet_id: SubnetId,
@@ -190,7 +182,6 @@ impl P2P {
         ),
         String,
     > {
-        let mut p2p_arbiters = Vec::new();
         let p2p_metrics = P2PMetrics::new(&metrics_registry);
         let flow_mapper = Arc::new(FlowMapper::new(flow_tags));
         // Initialize the time source.
@@ -202,7 +193,7 @@ impl P2P {
         // Now we setup the Artifact Pools and the manager.
         let (artifact_manager, consensus_pool_cache, event_handler, ingress_throttle) =
             setup_artifact_manager(
-                &mut p2p_arbiters,
+                rt_handle.clone(),
                 node_id,
                 Arc::clone(&crypto) as Arc<_>,
                 Arc::clone(&consensus_crypto) as Arc<_>,
@@ -258,6 +249,7 @@ impl P2P {
 
         let p2p = P2P {
             log,
+            rt_handle,
             gossip: gossip.clone(),
             time_source,
             metrics: p2p_metrics,
@@ -266,10 +258,7 @@ impl P2P {
             event_handler,
         };
 
-        let p2p_runner = P2PService {
-            p2p: Some(p2p),
-            p2p_arbiters,
-        };
+        let p2p_runner = P2PService { p2p: Some(p2p) };
         let ingress_handler = Arc::from(IngressEventHandlerImpl::new(
             ingress_throttle,
             gossip,
@@ -284,7 +273,7 @@ impl P2P {
         let event_handler = self.event_handler.clone();
         let log = self.log.clone();
         let killed = Arc::clone(&self.killed);
-        let handle = tokio::task::spawn_blocking(move || {
+        let handle = self.rt_handle.spawn_blocking(move || {
             debug!(log, "P2P::p2p_timer(): started processing",);
 
             let timer_duration = Duration::from_millis(P2P_TIMER_DURATION_MS);
@@ -302,7 +291,7 @@ impl Drop for P2P {
     fn drop(&mut self) {
         self.killed.store(true, SeqCst);
         while let Some(handle) = self.task_handles.pop() {
-            spawn_and_wait(handle).ok();
+            async_safe_block_on_await(handle).ok();
         }
         self.event_handler.stop();
     }
@@ -313,7 +302,7 @@ impl Drop for P2P {
 /// The Artifact Manager runs all artifact clients as separate actors.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn setup_artifact_manager(
-    p2p_arbiters: &mut Vec<Arbiter>,
+    rt_handle: tokio::runtime::Handle,
     node_id: NodeId,
     _crypto: Arc<dyn Crypto>,
     // ConsensusCrypto is an extension of the Crypto trait and we can
@@ -344,7 +333,6 @@ fn setup_artifact_manager(
     Arc<P2PEventHandlerImpl>,
     IngressThrottler,
 )> {
-    p2p_arbiters.push(Arbiter::new());
     let mut artifact_manager_maker = manager::ArtifactManagerMaker::new(time_source.clone());
 
     ensure_persistent_pool_replica_version_compatibility(
@@ -360,6 +348,7 @@ fn setup_artifact_manager(
     );
 
     let event_handler = Arc::new(P2PEventHandlerImpl::new(
+        rt_handle.clone(),
         node_id,
         replica_logger.clone(),
         &metrics_registry,
@@ -372,11 +361,11 @@ fn setup_artifact_manager(
     {
         let c_event_handler = event_handler.clone();
         let addr = actors::ClientActor::new(
-            &p2p_arbiters.last().unwrap(),
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry,
             actors::BoxOrArcClient::ArcClient(client_on_state_change),
             move |advert| c_event_handler.broadcast_advert(advert.into()),
+            rt_handle,
         );
         artifact_manager_maker.add_arc_client(client, addr);
         return Ok((
@@ -389,11 +378,11 @@ fn setup_artifact_manager(
     if let P2PStateSyncClient::Client(state_sync_client) = state_sync_client {
         let event_handler = event_handler.clone();
         let addr = actors::ClientActor::new(
-            &p2p_arbiters.last().unwrap(),
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry.clone(),
             actors::BoxOrArcClient::ArcClient(Arc::clone(&state_sync_client) as Arc<_>),
             move |advert| event_handler.broadcast_advert(advert.into()),
+            rt_handle.clone(),
         );
         artifact_manager_maker.add_arc_client(state_sync_client, addr);
     }
@@ -416,15 +405,14 @@ fn setup_artifact_manager(
         replica_logger.clone(),
         Arc::clone(&state_manager) as Arc<_>,
         cycles_account_manager,
+        malicious_flags.clone(),
     );
     let ingress_manager = Arc::new(ingress_manager);
 
     {
         // Create the consensus client.
         let event_handler = event_handler.clone();
-        p2p_arbiters.push(Arbiter::new());
-        let (consensus_client, addr) = actors::ConsensusClient::run(
-            &p2p_arbiters.last().unwrap(),
+        let (consensus_client, actor) = actors::ConsensusProcessor::build(
             move |advert| event_handler.broadcast_advert(advert.into()),
             || {
                 ic_consensus::consensus::setup(
@@ -439,7 +427,7 @@ fn setup_artifact_manager(
                     Arc::clone(&message_router) as Arc<_>,
                     Arc::clone(&state_manager) as Arc<_>,
                     Arc::clone(&time_source) as Arc<_>,
-                    malicious_flags,
+                    malicious_flags.clone(),
                     metrics_registry.clone(),
                     replica_logger.clone(),
                     local_store_time_reader,
@@ -449,34 +437,33 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&consensus_pool),
             Arc::clone(&ingress_pool),
+            rt_handle.clone(),
             replica_logger.clone(),
             metrics_registry.clone(),
         );
-        artifact_manager_maker.add_client(consensus_client, addr);
+        artifact_manager_maker.add_client(consensus_client, actor);
     }
 
     {
         // Create the ingress client.
         let event_handler = event_handler.clone();
-        p2p_arbiters.push(Arbiter::new());
-        let (ingress_client, addr) = actors::IngressClient::run(
-            &p2p_arbiters.last().unwrap(),
+        let (ingress_client, actor) = actors::IngressProcessor::build(
             move |advert| event_handler.broadcast_advert(advert.into()),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&ingress_pool),
             ingress_manager,
+            rt_handle.clone(),
             replica_logger.clone(),
             metrics_registry.clone(),
+            malicious_flags,
         );
-        artifact_manager_maker.add_client(ingress_client, addr);
+        artifact_manager_maker.add_client(ingress_client, actor);
     }
 
     {
         // Create the certification client.
         let event_handler = event_handler.clone();
-        p2p_arbiters.push(Arbiter::new());
-        let (certification_client, addr) = actors::CertificationClient::run(
-            &p2p_arbiters.last().unwrap(),
+        let (certification_client, actor) = actors::CertificationProcessor::build(
             move |advert| event_handler.broadcast_advert(advert.into()),
             || {
                 certification::setup(
@@ -491,17 +478,16 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&consensus_cache) as Arc<_>,
             Arc::clone(&cert_pool),
+            rt_handle.clone(),
             replica_logger.clone(),
             metrics_registry.clone(),
         );
-        artifact_manager_maker.add_client(certification_client, addr);
+        artifact_manager_maker.add_client(certification_client, actor);
     }
 
     {
         let event_handler = event_handler.clone();
-        p2p_arbiters.push(Arbiter::new());
-        let (dkg_client, addr) = actors::DkgClient::run(
-            &p2p_arbiters.last().unwrap(),
+        let (dkg_client, actor) = actors::DkgProcessor::build(
             move |advert| event_handler.broadcast_advert(advert.into()),
             || {
                 (
@@ -517,10 +503,11 @@ fn setup_artifact_manager(
             },
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&dkg_pool),
+            rt_handle,
             replica_logger.clone(),
             metrics_registry.clone(),
         );
-        artifact_manager_maker.add_client(dkg_client, addr);
+        artifact_manager_maker.add_client(dkg_client, actor);
     }
 
     Ok((
@@ -592,7 +579,7 @@ impl ArtifactKind for TestArtifact {
 
     /// The function converts a TestArtifactMessage to an advert for a
     /// TestArtifact.
-    fn to_advert(msg: &TestArtifactMessage) -> Advert<TestArtifact> {
+    fn message_to_advert(msg: &TestArtifactMessage) -> Advert<TestArtifact> {
         Advert {
             attribute: msg.id.to_string(),
             size: 0,

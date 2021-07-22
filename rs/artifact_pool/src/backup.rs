@@ -31,8 +31,8 @@ use ic_types::{
 };
 use prometheus::IntCounter;
 use prost::Message;
-use std::io;
 use std::{fs, io::Write, path::PathBuf, sync::RwLock, thread, time::Duration};
+use std::{io, path::Path};
 
 #[allow(clippy::large_enum_variant)]
 enum BackupArtifact {
@@ -215,7 +215,7 @@ fn purge(threshold_secs: Duration, path: PathBuf) -> Result<(), io::Error> {
 }
 
 // Traverses the given path and returns a list of all leaf directories.
-fn get_leaves(dir: &PathBuf, leaves: &mut Vec<PathBuf>) -> std::io::Result<()> {
+fn get_leaves(dir: &Path, leaves: &mut Vec<PathBuf>) -> std::io::Result<()> {
     if !dir.is_dir() {
         return Ok(());
     }
@@ -232,7 +232,7 @@ fn get_leaves(dir: &PathBuf, leaves: &mut Vec<PathBuf>) -> std::io::Result<()> {
             // We skip the folder lost+found, which is currently present on the backup
             // volume.
             if !path_name.contains("lost+found") {
-                leaves.push(dir.clone());
+                leaves.push(dir.to_path_buf());
             }
         }
     }
@@ -326,7 +326,7 @@ impl Drop for Backup {
 impl BackupArtifact {
     // Writes the protobuf serialization of the artifact into a file in the given
     // directory.
-    fn write_to_disk(&self, path: &PathBuf) -> Result<(), std::io::Error> {
+    fn write_to_disk(&self, path: &Path) -> Result<(), std::io::Error> {
         let (file_directory, file_name) = self.file_location(path);
         // Create the path if necessary.
         fs::create_dir_all(&file_directory)?;
@@ -363,7 +363,7 @@ impl BackupArtifact {
     // notarizations and finalizations, these artifacts can be created in different
     // ways on different replicas, so we need to put their hashes into the artifact
     // name.
-    fn file_location(&self, path: &PathBuf) -> (PathBuf, String) {
+    fn file_location(&self, path: &Path) -> (PathBuf, String) {
         // Create a subdir for the height
         use BackupArtifact::*;
         let (height, file_name) = match self {

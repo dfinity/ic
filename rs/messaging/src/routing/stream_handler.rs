@@ -181,7 +181,7 @@ impl StreamHandlerImpl {
         let loopback_stream = state.get_stream(self.subnet_id);
 
         // All done if the loopback stream does not exist or is empty.
-        if loopback_stream.is_none() || loopback_stream.unwrap().messages.is_empty() {
+        if loopback_stream.is_none() || loopback_stream.unwrap().messages().is_empty() {
             return state;
         }
         let loopback_stream = loopback_stream.unwrap();
@@ -189,14 +189,14 @@ impl StreamHandlerImpl {
         // Precondition: ensure that the loopback stream has had signals for all
         // earlier messages.
         assert!(
-            loopback_stream.signals_end == loopback_stream.messages.begin(),
+            loopback_stream.signals_end() == loopback_stream.messages_begin(),
             "Expecting loopback stream signals to end ({}) where messages begin ({})",
-            loopback_stream.signals_end,
-            loopback_stream.messages.begin()
+            loopback_stream.signals_end(),
+            loopback_stream.messages_begin()
         );
 
         // Remember the original messages end index, we may append reject responses.
-        let loopback_stream_messages_end = loopback_stream.messages.end();
+        let loopback_stream_messages_end = loopback_stream.messages_end();
 
         // Wrap it within a StreamSlice.
         let loopback_stream_slice: StreamSlice = loopback_stream.clone().into();
@@ -267,20 +267,20 @@ impl StreamHandlerImpl {
         stream_slice: &StreamSlice,
     ) {
         assert!(
-            stream.messages.begin() <= stream_slice.header().signals_end
-                && stream_slice.header().signals_end <= stream.messages.end(),
+            stream.messages_begin() <= stream_slice.header().signals_end
+                && stream_slice.header().signals_end <= stream.messages_end(),
             "Invalid signals in stream slice from subnet {}: signals_end {}, messages [{}, {})",
             remote_subnet,
             stream_slice.header().signals_end,
-            stream.messages.begin(),
-            stream.messages.end(),
+            stream.messages_begin(),
+            stream.messages_end(),
         );
 
         {
             let mut time_in_stream_metrics = self.time_in_stream_metrics.lock().unwrap();
             time_in_stream_metrics.observe_indexes(
                 remote_subnet,
-                stream.messages.begin()..stream_slice.header().signals_end,
+                stream.messages_begin()..stream_slice.header().signals_end,
             );
         }
 
@@ -291,8 +291,8 @@ impl StreamHandlerImpl {
     /// Helper function, discards all messages before `new_begin` while
     /// recording the number of garbage collected messages.
     fn discard_messages_before(&self, stream: &mut Stream, new_begin: StreamIndex) {
-        self.observe_gced_messages(stream.messages.begin(), new_begin);
-        stream.messages.discard_before(new_begin);
+        self.observe_gced_messages(stream.messages_begin(), new_begin);
+        stream.discard_before(new_begin);
     }
 
     /// Records latency metrics for the provided stream slices.
@@ -329,10 +329,10 @@ impl StreamHandlerImpl {
         state
     }
 
-    /// Attempts to unducts the given message at `stream_index` in the incoming
-    /// stream from `remote_subnet_id` into `state` and generates a signal into
-    /// the provided reverse `stream`. The induction attempt will result in one
-    /// of the following outcomes:
+    /// Attempts to induct the given message at `stream_index` in the incoming
+    /// stream from `remote_subnet_id` into `state`, producing a signal onto the
+    /// provided reverse `stream`. The induction attempt will result in one of
+    /// the following outcomes (in addition to the signal):
     ///
     ///  * enqueuing the message into the corresponding input queue;
     ///  * a reject response enqueued into the reverse stream: if enqueuing of a
@@ -415,11 +415,13 @@ impl StreamHandlerImpl {
 
         // Signals use the `StreamIndex` of the incoming message.
         assert_eq!(
-            stream.signals_end, stream_index,
+            stream.signals_end(),
+            stream_index,
             "Expecting signal with stream index {}, got {}",
-            stream.signals_end, stream_index
+            stream.signals_end(),
+            stream_index
         );
-        stream.signals_end.inc_assign();
+        stream.increment_signals_end();
     }
 
     /// Enqueues a reject `Response` for the provided `msg` (iff it is a
@@ -440,7 +442,7 @@ impl StreamHandlerImpl {
         match msg {
             RequestOrResponse::Request(_) => {
                 let context = RejectContext::new(reject_code, reject_message);
-                stream.messages.push(generate_reject_response(msg, context))
+                stream.push(generate_reject_response(msg, context))
             }
             RequestOrResponse::Response(_) => {}
         }

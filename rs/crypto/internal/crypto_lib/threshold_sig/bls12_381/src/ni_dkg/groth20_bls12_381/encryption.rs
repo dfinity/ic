@@ -13,8 +13,8 @@ use conversions::{
     chunking_proof_from_miracl, chunking_proof_into_miracl, ciphertext_from_miracl,
     ciphertext_into_miracl, epoch_from_miracl_secret_key, plaintext_from_bytes, plaintext_to_bytes,
     public_coefficients_to_miracl, public_key_from_miracl, public_key_into_miracl,
-    secret_key_from_miracl, secret_key_into_miracl, sharing_proof_from_miracl,
-    sharing_proof_into_miracl, Tau,
+    secret_key_from_miracl, sharing_proof_from_miracl, sharing_proof_into_miracl,
+    trusted_secret_key_into_miracl, Tau,
 };
 use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_from_bytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
@@ -39,8 +39,8 @@ mod crypto {
     pub use ic_crypto_internal_fs_ni_dkg::encryption_key_pop::EncryptionKeyPop;
     pub use ic_crypto_internal_fs_ni_dkg::forward_secure::{
         dec_chunks, enc_chunks, epoch_from_tau_vec, kgen, mk_sys_params,
-        verify_ciphertext_integrity, BTENode, Bit, PublicKeyWithPop, SecretKey, SysParam,
-        ToxicWaste, CRSZ,
+        verify_ciphertext_integrity, BTENode, Bit, Crsz, PublicKeyWithPop, SecretKey, SysParam,
+        ToxicWaste,
     };
     pub use ic_crypto_internal_fs_ni_dkg::nizk_chunking::{
         prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,
@@ -90,6 +90,8 @@ pub fn create_forward_secure_key_pair(
     }
 }
 
+// TODO(IDX-1866)
+#[allow(clippy::result_unit_err)]
 /// Verifies that a public key is a point on the curve and that the proof of
 /// possession holds.
 ///
@@ -128,7 +130,7 @@ pub fn update_forward_secure_epoch(
     seed: Randomness,
 ) -> FsEncryptionSecretKey {
     let mut rng = crypto::RAND_ChaCha20::new(seed.get());
-    let mut secret_key = secret_key_into_miracl(secret_key);
+    let mut secret_key = trusted_secret_key_into_miracl(secret_key);
     let tau = Tau::from(epoch);
     if epoch_from_miracl_secret_key(&secret_key) < epoch {
         secret_key.update_to(&tau.0, &SYS_PARAMS, &mut rng);
@@ -282,7 +284,7 @@ pub fn decrypt(
             node_index,
         });
     }
-    let secret_key = secret_key_into_miracl(secret_key);
+    let secret_key = trusted_secret_key_into_miracl(secret_key);
     if epoch < epoch_from_miracl_secret_key(&secret_key) {
         return Err(DecryptError::EpochTooOld {
             ciphertext_epoch: epoch,
@@ -312,7 +314,7 @@ pub fn decrypt(
 /// crypto::forward_secure so we need a thin wrapper to convert.
 fn prove_chunking(
     receiver_fs_public_keys: &[miracl::ECP],
-    ciphertext: &crypto::CRSZ,
+    ciphertext: &crypto::Crsz,
     plaintext_chunks: &[Vec<isize>],
     toxic_waste: &crypto::ToxicWaste,
     rng: &mut crypto::RAND_ChaCha20,
@@ -341,7 +343,7 @@ fn prove_chunking(
 fn prove_sharing(
     receiver_fs_public_keys: &[miracl::ECP],
     public_coefficients: &[miracl::ECP2],
-    ciphertext: &crypto::CRSZ,
+    ciphertext: &crypto::Crsz,
     plaintext_chunks: &[Vec<isize>],
     toxic_waste: &crypto::ToxicWaste,
     rng: &mut crypto::RAND_ChaCha20,

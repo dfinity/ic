@@ -9,7 +9,6 @@ use super::{
 use ic_protobuf::messaging::xnet::v1 as messaging_pb;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::convert::{TryFrom, TryInto};
 use std::io::Cursor;
@@ -46,23 +45,15 @@ pub struct ValidationContext {
     pub time: Time,
 }
 
-/// The derived PartialOrd trait implementation uses a lexicographic ordering
-/// over its fields, which is not what we want in the case of ValidationContext.
-/// We need every field to have the same order (or equal) to provide a
-/// Some(_) answer. If we get any contradictory result, we return None.
-impl PartialOrd for ValidationContext {
-    fn partial_cmp(&self, other: &ValidationContext) -> Option<Ordering> {
-        let registry_order = self.registry_version.partial_cmp(&other.registry_version)?;
-        let certified_height_order = self.certified_height.partial_cmp(&other.certified_height)?;
-        let time_order = self.time.partial_cmp(&other.time)?;
-        let mut order = Ordering::Equal;
-        for x in &[registry_order, certified_height_order, time_order] {
-            order = order.then(*x);
-            if order != x.then(order) {
-                return None;
-            }
-        }
-        Some(order)
+impl ValidationContext {
+    /// The derived PartialOrd trait implementation uses a lexicographic
+    /// ordering over its fields, which is not what we want in the case of
+    /// ValidationContext. We need every single field to be equal or greater
+    /// than those of 'other' to return true. Otherwise, we return false.
+    pub fn greater_or_equal(&self, other: &ValidationContext) -> bool {
+        self.registry_version >= other.registry_version
+            && self.certified_height >= other.certified_height
+            && self.time >= other.time
     }
 }
 
@@ -404,31 +395,31 @@ mod tests {
             certified_height: Height::new(1),
             time: Time::from_nanos_since_unix_epoch(1),
         };
-        assert_eq!(context1.partial_cmp(&context2), Some(Ordering::Less));
-        assert_eq!(context2.partial_cmp(&context1), Some(Ordering::Greater));
+        assert_eq!(context1.greater_or_equal(&context2), false);
+        assert_eq!(context2.greater_or_equal(&context1), true);
 
         let context3 = ValidationContext {
             registry_version: RegistryVersion::new(1),
             certified_height: Height::new(2),
             time: Time::from_nanos_since_unix_epoch(1),
         };
-        assert_eq!(context1.partial_cmp(&context3), Some(Ordering::Less));
-        assert_eq!(context3.partial_cmp(&context1), Some(Ordering::Greater));
+        assert_eq!(context1.greater_or_equal(&context3), false);
+        assert_eq!(context3.greater_or_equal(&context1), true);
 
         let context4 = ValidationContext {
             registry_version: RegistryVersion::new(1),
             certified_height: Height::new(1),
             time: Time::from_nanos_since_unix_epoch(2),
         };
-        assert_eq!(context1.partial_cmp(&context4), Some(Ordering::Less));
-        assert_eq!(context4.partial_cmp(&context1), Some(Ordering::Greater));
+        assert_eq!(context1.greater_or_equal(&context4), false);
+        assert_eq!(context4.greater_or_equal(&context1), true);
 
         let context5 = ValidationContext {
             registry_version: RegistryVersion::new(0),
             certified_height: Height::new(2),
             time: Time::from_nanos_since_unix_epoch(1),
         };
-        assert_eq!(context1.partial_cmp(&context5), None);
-        assert_eq!(context5.partial_cmp(&context1), None);
+        assert_eq!(context1.greater_or_equal(&context5), false);
+        assert_eq!(context5.greater_or_equal(&context1), false);
     }
 }

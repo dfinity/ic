@@ -41,6 +41,7 @@ use ic_types::{
     batch::ValidationContext,
     ic00::IC_00,
     ingress::{IngressStatus, MAX_INGRESS_TTL},
+    malicious_flags::MaliciousFlags,
     Height, RegistryVersion, SubnetId, Time,
 };
 use rand::Rng;
@@ -88,6 +89,7 @@ where
                 no_op_logger(),
                 Arc::new(state_manager),
                 cycles_account_manager,
+                MaliciousFlags::default(),
             ),
         )
     })

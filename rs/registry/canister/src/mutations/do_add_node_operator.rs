@@ -51,12 +51,12 @@ pub struct AddNodeOperatorPayload {
     pub node_allowance: u64,
 }
 
-impl Into<NodeOperatorRecord> for AddNodeOperatorPayload {
-    fn into(self) -> NodeOperatorRecord {
+impl From<AddNodeOperatorPayload> for NodeOperatorRecord {
+    fn from(val: AddNodeOperatorPayload) -> Self {
         NodeOperatorRecord {
-            node_operator_principal_id: self.node_operator_principal_id.unwrap().to_vec(),
-            node_provider_principal_id: self.node_provider_principal_id.unwrap().to_vec(),
-            node_allowance: self.node_allowance,
+            node_operator_principal_id: val.node_operator_principal_id.unwrap().to_vec(),
+            node_provider_principal_id: val.node_provider_principal_id.unwrap().to_vec(),
+            node_allowance: val.node_allowance,
         }
     }
 }

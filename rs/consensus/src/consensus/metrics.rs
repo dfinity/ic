@@ -5,7 +5,8 @@ use ic_metrics::{
     MetricsRegistry,
 };
 use ic_types::consensus::{Block, BlockProposal, HasHeight, HasRank};
-use prometheus::{GaugeVec, Histogram, HistogramVec, IntCounterVec, IntGauge};
+use prometheus::{GaugeVec, Histogram, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec};
+use std::sync::RwLock;
 
 // For certain metrics, we record metrics based on block's rank.
 // Since we can only record limited number of them, the follow is
@@ -14,6 +15,7 @@ const RANKS_TO_RECORD: [&str; 6] = ["0", "1", "2", "3", "4", "5"];
 
 pub struct BlockMakerMetrics {
     pub get_payload_calls: IntCounterVec,
+    pub block_size_bytes_estimate: IntGaugeVec,
 }
 
 impl BlockMakerMetrics {
@@ -24,7 +26,23 @@ impl BlockMakerMetrics {
                 "The number of times of calling get_payload(), for success, pending or other status.",
                 &["status"],
             ),
+            block_size_bytes_estimate: metrics_registry.int_gauge_vec(
+                "consensus_block_size_bytes_estimate", 
+                "An estimate about the block size produced by the block maker.",
+                &["payload_type"])
         }
+    }
+
+    /// Reports byte estimate metrics.
+    pub fn report_byte_estimate_metrics(&self, xnet_bytes: usize, ingress_bytes: usize) {
+        let _ = self
+            .block_size_bytes_estimate
+            .get_metric_with_label_values(&["xnet"])
+            .map(|gauge| gauge.set(xnet_bytes as i64));
+        let _ = self
+            .block_size_bytes_estimate
+            .get_metric_with_label_values(&["ingress"])
+            .map(|gauge| gauge.set(ingress_bytes as i64));
     }
 }
 
@@ -202,6 +220,8 @@ pub struct ValidatorMetrics {
     pub duplicate_artifact: IntCounterVec,
     pub validation_duration: HistogramVec,
     pub dkg_validator: IntCounterVec,
+    // Used to sum the values within a single validator run
+    dkg_time_per_validator_run: RwLock<f64>,
 }
 
 impl ValidatorMetrics {
@@ -234,6 +254,7 @@ impl ValidatorMetrics {
                 "DKG validator counter",
                 &["type"],
             ),
+            dkg_time_per_validator_run: RwLock::new(0.0),
         }
     }
 
@@ -254,6 +275,19 @@ impl ValidatorMetrics {
                 }
             }
         }
+    }
+
+    pub fn add_to_dkg_time_per_validator_run(&self, elapsed_time: f64) {
+        let mut dkg_time = self.dkg_time_per_validator_run.write().unwrap();
+        *dkg_time += elapsed_time;
+    }
+
+    pub fn observe_and_reset_dkg_time_per_validator_run(&self) {
+        let mut dkg_time = self.dkg_time_per_validator_run.write().unwrap();
+        self.validation_duration
+            .with_label_values(&["DkgPerRun"])
+            .observe(*dkg_time);
+        *dkg_time = 0.0;
     }
 }
 

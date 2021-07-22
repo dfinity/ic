@@ -1,5 +1,5 @@
 use http::{Method, Response, Uri};
-use hyper::{body::HttpBody as _, client::HttpConnector, Body, Client};
+use hyper::{body::HttpBody as _, client::Client, client::HttpConnector, Body};
 use hyper_tls::HttpsConnector;
 use ic_crypto_sha256::Sha256;
 use ic_logger::{info, warn, ReplicaLogger};
@@ -8,6 +8,7 @@ use std::fmt;
 use std::fs::{self, File};
 use std::io;
 use std::io::prelude::*;
+use std::path::Path;
 use std::path::PathBuf;
 
 use flate2::read::GzDecoder;
@@ -35,7 +36,7 @@ impl FileDownloader {
     pub async fn download_and_extract_tar_gz(
         &self,
         url: &str,
-        target_dir: &PathBuf,
+        target_dir: &Path,
         expected_sha256_hex: Option<String>,
     ) -> FileDownloadResult<()> {
         let tar_gz_path = target_dir.join("tmp.tar.gz");
@@ -59,7 +60,7 @@ impl FileDownloader {
     pub async fn download_file(
         &self,
         url: &str,
-        file_path: &PathBuf,
+        file_path: &Path,
         expected_sha256_hex: Option<String>,
     ) -> FileDownloadResult<()> {
         // In case the file already exists, check the file hash.
@@ -131,7 +132,7 @@ impl FileDownloader {
     async fn stream_response_body_to_file(
         &self,
         mut response: Response<Body>,
-        file_path: &PathBuf,
+        file_path: &Path,
     ) -> FileDownloadResult<()> {
         let mut output_file = File::create(file_path)
             .map_err(|e| FileDownloadError::file_create_error(file_path, e))?;
@@ -148,7 +149,7 @@ impl FileDownloader {
 }
 
 /// Compute the SHA256 of a file and return a hex-encoded string of the hash
-pub fn compute_sha256_hex(path: &PathBuf) -> FileDownloadResult<String> {
+pub fn compute_sha256_hex(path: &Path) -> FileDownloadResult<String> {
     let mut binary_file =
         fs::File::open(path).map_err(|e| FileDownloadError::file_open_error(path, e))?;
 
@@ -160,14 +161,14 @@ pub fn compute_sha256_hex(path: &PathBuf) -> FileDownloadResult<String> {
 }
 
 /// Assert that the given file has the given hash
-pub fn check_file_hash(path: &PathBuf, expected_sha256_hex: &str) -> FileDownloadResult<()> {
+pub fn check_file_hash(path: &Path, expected_sha256_hex: &str) -> FileDownloadResult<()> {
     let computed_sha256_hex = compute_sha256_hex(path)?;
 
     if computed_sha256_hex != expected_sha256_hex {
         Err(FileDownloadError::file_hash_mismatch_error(
             computed_sha256_hex,
             expected_sha256_hex.into(),
-            path.clone(),
+            path.to_path_buf(),
         ))
     } else {
         Ok(())
@@ -175,10 +176,7 @@ pub fn check_file_hash(path: &PathBuf, expected_sha256_hex: &str) -> FileDownloa
 }
 
 /// Extract the contents of a given .tar.gz file into `target_dir`
-pub fn extract_tar_gz_into_dir(
-    tar_gz_path: &PathBuf,
-    target_dir: &PathBuf,
-) -> FileDownloadResult<()> {
+pub fn extract_tar_gz_into_dir(tar_gz_path: &Path, target_dir: &Path) -> FileDownloadResult<()> {
     let map_to_untar_error = |e| FileDownloadError::untar_error(tar_gz_path, e);
 
     let tar_gz_file =
@@ -210,41 +208,41 @@ pub enum FileDownloadError {
 }
 
 impl FileDownloadError {
-    pub fn file_create_error(file_path: &PathBuf, e: io::Error) -> Self {
+    pub fn file_create_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to create file: {:?}", file_path), e)
     }
 
-    pub fn file_write_error(file_path: &PathBuf, e: io::Error) -> Self {
+    pub fn file_write_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to write to file: {:?}", file_path), e)
     }
 
-    pub fn file_open_error(file_path: &PathBuf, e: io::Error) -> Self {
+    pub fn file_open_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to open file: {:?}", file_path), e)
     }
 
-    pub fn file_remove_error(file_path: &PathBuf, e: io::Error) -> Self {
+    pub fn file_remove_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to remove file: {:?}", file_path), e)
     }
 
-    pub fn file_copy_error(src: &PathBuf, dest: &PathBuf, e: io::Error) -> Self {
+    pub fn file_copy_error(src: &Path, dest: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(
             format!("Failed to copy file from {:?} to {:?}", src, dest),
             e,
         )
     }
 
-    pub fn file_set_permissions_error(file_path: &PathBuf, e: io::Error) -> Self {
+    pub fn file_set_permissions_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(
             format!("Failed to set permissions on file: {:?}", file_path),
             e,
         )
     }
 
-    pub fn dir_create_error(dir: &PathBuf, e: io::Error) -> Self {
+    pub fn dir_create_error(dir: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to create dir: {:?}", dir), e)
     }
 
-    pub fn untar_error(file_path: &PathBuf, e: io::Error) -> Self {
+    pub fn untar_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to unpack tar file: {:?}", file_path), e)
     }
 
@@ -256,7 +254,7 @@ impl FileDownloadError {
         FileDownloadError::HttpError(HttpError::MalformedUrl(url.to_string(), e))
     }
 
-    pub fn compute_hash_error(file_path: &PathBuf, e: io::Error) -> Self {
+    pub fn compute_hash_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to hash of: {:?}", file_path), e)
     }
 
@@ -306,8 +304,8 @@ impl fmt::Display for FileDownloadError {
     }
 }
 
-impl From<hyper::error::Error> for FileDownloadError {
-    fn from(e: hyper::error::Error) -> Self {
+impl From<hyper::Error> for FileDownloadError {
+    fn from(e: hyper::Error) -> Self {
         FileDownloadError::HttpError(HttpError::HyperError(e))
     }
 }
@@ -321,7 +319,7 @@ pub enum HttpError {
     MalformedUrl(String, http::uri::InvalidUri),
 
     /// A hyper HTTP client produced an error
-    HyperError(hyper::error::Error),
+    HyperError(hyper::Error),
 
     /// A non-success HTTP response was received from the given URI
     NonSuccessResponse(http::Method, http::Uri, http::StatusCode),

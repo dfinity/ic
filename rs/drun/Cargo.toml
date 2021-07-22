@@ -1,0 +1,37 @@
+[package]
+name = "ic-drun"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-config = { path = "../config" }
+ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-execution-environment = { path = "../execution_environment" }
+ic-interfaces = { path = "../interfaces" }
+ic-messaging = { path = "../messaging" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-common = { path = "../registry/common" }
+ic-registry-keys = { path = "../registry/keys" }
+ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-registry-routing-table = { path = "../registry/routing_table" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-state-manager = { path = "../state_manager" }
+# This is usually supposed to be a dev-dependency. However, using it in `drun`
+# greatly simplifies the code that parses input messages to `SignedIngress`
+# messages that are delivered to Message Routing. `drun` is a tool that
+# is meant to be used mostly for testing anyway, so this dependency
+# should be fine.
+ic-test-utilities = { path = "../test_utilities" }
+ic-types = { path = "../types/types" }
+clap = "2.33.3"
+hex = "0.4.2"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog-term = "2.6.0"
+tokio = { version = "1.2.0", features = ["full"] }
+
+[[bin]]
+name = "drun"
+path = "src/main.rs"

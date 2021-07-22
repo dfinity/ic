@@ -14,13 +14,14 @@ use ic_crypto_tls_interfaces::{
     TlsStream,
 };
 use ic_interfaces::registry::RegistryClient;
+use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
 
 /// An implementation of hyper Executor that spawns futures on a tokio runtime
@@ -130,8 +131,8 @@ impl AsyncRead for TlsConnection {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<std::io::Result<usize>> {
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
         match &mut self.0 {
             ConnectionState::Unencrypted(ref mut tcp_stream) => {
                 Pin::new(tcp_stream).poll_read(cx, buf)
@@ -212,7 +213,7 @@ impl Accept for TlsAccept {
                         let future = async move {
                             tls.perform_tls_server_handshake(
                                 conn.into_inner(),
-                                AllowedClients::new(SomeOrAllNodes::All, vec![]).unwrap(),
+                                AllowedClients::new(SomeOrAllNodes::All, HashSet::new()).unwrap(),
                                 registry_version,
                             )
                             .await
@@ -274,6 +275,7 @@ fn bind_tcp_socket_with_reuse(addr: &SocketAddr) -> Result<socket2::Socket, BoxE
         socket.set_reuse_address(true)?;
         socket.set_reuse_port(true)?;
     }
+    socket.set_nonblocking(true)?;
     socket.bind(&SockAddr::from(*addr))?;
 
     Ok(socket)

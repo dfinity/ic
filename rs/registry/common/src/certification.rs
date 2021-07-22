@@ -44,20 +44,20 @@ struct CertifiedPayload {
 }
 
 fn embed_certificate_error(err: CertificateValidationError) -> CertificationError {
-    type CVE = CertificateValidationError;
-    type CE = CertificationError;
+    type Cve = CertificateValidationError;
+    type Ce = CertificationError;
     match err {
-        CVE::DeserError(err) => CE::DeserError(err),
-        CVE::InvalidSignature(err) => CE::InvalidSignature(err),
-        CVE::CertifiedDataMismatch {
+        Cve::DeserError(err) => Ce::DeserError(err),
+        Cve::InvalidSignature(err) => Ce::InvalidSignature(err),
+        Cve::CertifiedDataMismatch {
             certified,
             computed,
-        } => CE::CertifiedDataMismatch {
+        } => Ce::CertifiedDataMismatch {
             certified,
             computed,
         },
-        CVE::MalformedHashTree(err) => CE::MalformedHashTree(err),
-        CVE::SubnetDelegationNotAllowed => CE::SubnetDelegationNotAllowed,
+        Cve::MalformedHashTree(err) => Ce::MalformedHashTree(err),
+        Cve::SubnetDelegationNotAllowed => Ce::SubnetDelegationNotAllowed,
     }
 }
 

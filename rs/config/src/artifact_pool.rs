@@ -86,7 +86,7 @@ pub struct ArtifactPoolConfig {
 /// Choice of persistent pool database is either LMDB or RocksDB.
 #[derive(Clone, Debug)]
 pub enum PersistentPoolBackend {
-    LMDB(LMDBConfig),
+    Lmdb(LMDBConfig),
     RocksDB(RocksDBConfig),
 }
 
@@ -120,7 +120,7 @@ impl From<ArtifactPoolTomlConfig> for ArtifactPoolConfig {
             .consensus_pool_backend
             .unwrap_or_else(|| "lmdb".to_string());
         let persistent_pool_backend = match backend.as_str() {
-            "lmdb" => PersistentPoolBackend::LMDB(LMDBConfig {
+            "lmdb" => PersistentPoolBackend::Lmdb(LMDBConfig {
                 persistent_pool_validated_persistent_db_path: toml_config.consensus_pool_path,
             }),
             "rocksdb" => PersistentPoolBackend::RocksDB(RocksDBConfig {
@@ -156,7 +156,7 @@ impl ArtifactPoolConfig {
     /// Return the directory path to the persistent pool database.
     pub fn persistent_pool_db_path(&self) -> PathBuf {
         match &self.persistent_pool_backend {
-            PersistentPoolBackend::LMDB(config) => {
+            PersistentPoolBackend::Lmdb(config) => {
                 config.persistent_pool_validated_persistent_db_path.clone()
             }
             PersistentPoolBackend::RocksDB(config) => {

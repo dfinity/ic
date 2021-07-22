@@ -60,8 +60,8 @@ fn should_fail_if_insufficient_threshold() {
         let threshold = NumberOfNodes::new(*threshold);
         let max_corrupt_receivers = NumberOfNodes::new(*max_corrupt_receivers);
         let config_data = NiDkgConfigData {
-            threshold,
             max_corrupt_receivers,
+            threshold,
             ..valid_dkg_config_data()
         };
 
@@ -82,8 +82,8 @@ fn should_fail_if_insufficient_dealers() {
     let max_corrupt_dealers = NumberOfNodes::new(1);
     let dealers = set_of(&[node_id(NODE_1)]);
     let config_data = NiDkgConfigData {
-        dealers,
         max_corrupt_dealers,
+        dealers,
         ..valid_dkg_config_data()
     };
 

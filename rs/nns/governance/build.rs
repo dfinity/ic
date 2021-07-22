@@ -42,7 +42,7 @@ fn main() {
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.Topic",
-        "#[derive(candid::CandidType, candid::Deserialize)]",
+        "#[derive(candid::CandidType, candid::Deserialize, strum_macros::EnumIter)]",
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.NeuronState",
@@ -78,6 +78,10 @@ fn main() {
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.ManageNeuron.IncreaseDissolveDelay",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuron.SetDissolveTimestamp",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
@@ -133,7 +137,23 @@ fn main() {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuron.ClaimOrRefresh",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuron.ClaimOrRefresh.by",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuron.id",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.ManageNeuron",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuron.neuron_id_or_subaccount",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
@@ -174,6 +194,10 @@ fn main() {
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.ManageNeuronResponse.DisburseToNeuronResponse",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuronResponse.ClaimOrRefreshResponse",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
@@ -297,7 +321,19 @@ fn main() {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
-        "ic_nns_governance.pb.v1.RewardNodeProvider.CreateNeuron",
+        "ic_nns_governance.pb.v1.RewardNodeProvider.RewardToNeuron",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.RewardNodeProvider.RewardToAccount",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.RewardNodeProvider.reward_mode",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.Subaccount",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
 

@@ -112,7 +112,7 @@ pub mod util {
                 verifier.threshold_verify_individual_signature(
                     AlgorithmId::ThresBls12_381,
                     message,
-                    *signature,
+                    signature.clone(),
                     public_key
                 ),
                 Ok(()),
@@ -137,7 +137,7 @@ pub mod util {
                     )
                     .expect("Should be able to compute the wrong public key.");
                 assert!(
-                            verifier.threshold_verify_individual_signature(AlgorithmId::ThresBls12_381, message, *signature, wrong_public_key).is_err(),
+                            verifier.threshold_verify_individual_signature(AlgorithmId::ThresBls12_381, message, signature.clone(), wrong_public_key).is_err(),
                             "Individual signature verification accepted incorrect signatory {} instead of {}/{}",
                             wrong_index,
                             index,
@@ -149,7 +149,7 @@ pub mod util {
             // threshold > 0 otherwise all signatures are the same
             {
                 assert!(
-                            verifier.threshold_verify_individual_signature(AlgorithmId::ThresBls12_381, &incorrect_message, *signature, public_key).is_err(),
+                            verifier.threshold_verify_individual_signature(AlgorithmId::ThresBls12_381, &incorrect_message, signature.clone(), public_key).is_err(),
                             "Individual signature verification accepted incorrect message '{:?}' instead of '{:?}'",
                             &incorrect_message,
                             message
@@ -172,7 +172,7 @@ pub mod util {
             verifier.threshold_verify_combined_signature(
                 AlgorithmId::ThresBls12_381,
                 message,
-                signature,
+                signature.clone(),
                 public_coefficients.clone()
             ),
             Ok(())
@@ -186,7 +186,7 @@ pub mod util {
                 .threshold_verify_combined_signature(
                     AlgorithmId::ThresBls12_381,
                     &incorrect_message,
-                    signature,
+                    signature.clone(),
                     public_coefficients.clone()
                 )
                 .is_err());
@@ -215,12 +215,12 @@ pub mod util {
         }
         if threshold > NumberOfNodes::from(1) {
             // Otherwise all secret keys are the same.
-            let some_individual_signature = signatures[0];
+            let some_individual_signature = signatures[0].clone();
             assert!(
                 verifier.threshold_verify_combined_signature(
                     AlgorithmId::ThresBls12_381,
                     message,
-                    some_individual_signature,
+                    some_individual_signature.clone(),
                     public_coefficients.clone()
                 )
                 .is_err(),

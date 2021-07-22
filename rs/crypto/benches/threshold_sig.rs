@@ -3,11 +3,11 @@ use criterion::BatchSize::SmallInput;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto::THRESHOLD_SIG_DATA_STORE_CAPACITY;
-use ic_interfaces::crypto::{DkgAlgorithm, SignableMock, ThresholdSigVerifier, ThresholdSigner};
-use ic_test_utilities::crypto::threshold_sigs::{
-    initial_dkg_transcript_for_nodes_in_subnet, load_transcript, load_transcript_for_each,
-    sign_threshold_for_each,
+use ic_crypto_test_utils_threshold_sigs::interactive::{
+    initial_idkg_transcript_for_nodes_in_subnet, load_idkg_transcript,
+    load_idkg_transcript_for_each, sign_threshold_for_each,
 };
+use ic_interfaces::crypto::{DkgAlgorithm, SignableMock, ThresholdSigVerifier, ThresholdSigner};
 use ic_test_utilities::crypto::{crypto_for, temp_crypto_components_for};
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_types::consensus::Threshold;
@@ -55,12 +55,12 @@ fn bench_threshold_sig_n_nodes<M: Measurement>(
 ) {
     let nodes_in_subnet: Vec<_> = (1..=num_of_nodes_in_subnet).map(node_test_id).collect();
     let crypto_components = temp_crypto_components_for(&nodes_in_subnet);
-    let transcript = initial_dkg_transcript_for_nodes_in_subnet(
+    let transcript = initial_idkg_transcript_for_nodes_in_subnet(
         subnet_test_id(1),
         &nodes_in_subnet,
         &crypto_components,
     );
-    load_transcript_for_each(&nodes_in_subnet, &transcript, &crypto_components);
+    load_idkg_transcript_for_each(&nodes_in_subnet, &transcript, &crypto_components);
     let dkg_id = transcript.dkg_id;
 
     bench_threshold_sign(group, &nodes_in_subnet, &crypto_components, dkg_id);
@@ -142,7 +142,7 @@ fn bench_verify_threshold_sig_share_incl_loading_pubkey<M: Measurement>(
                 // calculated as part of the benchmark. After purging, the
                 // transcript is loaded again.
                 purge_dkg_id_from_data_store(dkg_id, &verifier, verifier_node_id, &transcript);
-                load_transcript(&transcript, &crypto_components, verifier_node_id);
+                load_idkg_transcript(&transcript, &crypto_components, verifier_node_id);
 
                 (sig_share, message, verifier, signer_node_id)
             },

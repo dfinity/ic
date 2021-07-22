@@ -64,7 +64,7 @@ mod test_multi_sig_verification {
             let crypto = crypto_component_with(registry_with(key_record), secret_key_store);
 
             let result = crypto.verify_multi_sig_individual(&sig, &msg, *node, REG_V1);
-            assert!(result.is_ok(), format!("Test vector {} failed", index));
+            assert!(result.is_ok(), "Test vector {} failed", index);
         }
     }
 

@@ -27,10 +27,7 @@ use dfn_protobuf::protobuf;
 
 use ic_base_types::PrincipalId;
 use ic_nns_common::{
-    access_control::{
-        check_caller_authz_and_log, check_caller_is_ledger, check_caller_is_root,
-        current_canister_authz, init_canister_authz, update_methods_authz,
-    },
+    access_control::{check_caller_is_ledger, check_caller_is_root},
     pb::v1::{CanisterAuthzInfo, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
     types::{MethodAuthzChange, NeuronId, ProposalId},
 };
@@ -49,7 +46,9 @@ use ic_nns_governance::{
     },
 };
 
+use dfn_core::api::reject_message;
 use ic_nns_common::access_control::check_caller_is_gtc;
+use ic_nns_governance::governance::HeapGrowthPotential;
 use ledger_canister::{
     metrics_encoder, AccountBalanceArgs, AccountIdentifier, ICPTs, Memo, SendArgs, Subaccount,
     TotalSupplyArgs, TransactionNotification,
@@ -144,11 +143,31 @@ impl Environment for CanisterEnv {
             governance_mut().set_proposal_execution_status(proposal_id, Ok(()));
         };
         let reject = move || {
+            // There's no guarantee that the reject response is a string of character, and
+            // it can also be potential large. Propagating error information
+            // here is on a best-effort basis.
+            let mut msg = reject_message();
+            const MAX_REJECT_MSG_SIZE: usize = 10000;
+            if msg.len() > MAX_REJECT_MSG_SIZE {
+                msg = "(truncated error message) "
+                    .to_string()
+                    .chars()
+                    .chain(
+                        msg.char_indices()
+                            .take_while(|(pos, _)| *pos < MAX_REJECT_MSG_SIZE)
+                            .map(|(_, char)| char),
+                    )
+                    .collect();
+            }
+
             governance_mut().set_proposal_execution_status(
                 proposal_id,
                 Err(GovernanceError::new_with_message(
                     ErrorType::External,
-                    "Error executing ExecuteNnsFunction proposal.",
+                    format!(
+                        "Error executing ExecuteNnsFunction proposal. Rejection message: {}",
+                        msg
+                    ),
                 )),
             );
         };
@@ -159,6 +178,22 @@ impl Environment for CanisterEnv {
         } else {
             Ok(())
         }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn heap_growth_potential(&self) -> HeapGrowthPotential {
+        if core::arch::wasm32::memory_size(0)
+            < ic_nns_governance::governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES
+        {
+            HeapGrowthPotential::NoIssue
+        } else {
+            HeapGrowthPotential::LimitedAvailability
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn heap_growth_potential(&self) -> HeapGrowthPotential {
+        unimplemented!("CanisterEnv can only be used with wasm32 environment.");
     }
 }
 
@@ -293,21 +328,11 @@ fn canister_init_(init_payload: GovernanceProto) {
     governance()
         .validate()
         .expect("Error initializing the governance canister.");
-    init_canister_authz(
-        governance()
-            .proto
-            .authz
-            .as_ref()
-            .expect("Missing required 'authz' in the governance proto ")
-            .clone(),
-    );
 }
 
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
     println!("{}Executing pre upgrade", LOG_PREFIX);
-
-    governance_mut().proto.authz = Some(current_canister_authz());
 
     let mut writer = BufferedStableMemWriter::new(STABLE_MEM_BUFFER_SIZE);
 
@@ -346,22 +371,29 @@ fn canister_post_upgrade() {
 #[export_name = "canister_update update_authz"]
 fn update_authz() {
     check_caller_is_root();
-    over(candid_one, update_authz_)
-}
-
-#[candid_method(update, rename = "update_authz")]
-fn update_authz_(methods_authz_change: Vec<MethodAuthzChange>) {
-    update_methods_authz(methods_authz_change, LOG_PREFIX)
+    over(candid_one, |_: Vec<MethodAuthzChange>| {
+        println!(
+            "{}update_authz was called. \
+                 This does not do anything, since the governance canister no longer has any \
+                 function whose access is controlled using this mechanism. \
+                 TODO(NNS1-413): Remove this once we are sure that there are no callers.",
+            LOG_PREFIX,
+        );
+    })
 }
 
 #[export_name = "canister_query current_authz"]
 fn current_authz() {
-    over(candid, |_: ()| -> CanisterAuthzInfo { current_authz_() })
-}
-
-#[candid_method(query, rename = "current_authz")]
-fn current_authz_() -> CanisterAuthzInfo {
-    current_canister_authz()
+    over(candid, |_: ()| {
+        println!(
+            "{}current_authz was called. \
+                 This always returns the default value, since the governance canister's state no \
+                 longer contains a CanisterAuthzInfo. \
+                 TODO(NNS1-413): Remove this once we are sure that there are no callers.",
+            LOG_PREFIX,
+        );
+        CanisterAuthzInfo::default()
+    })
 }
 
 /// DEPRECATED: Use manage_neuron directly instead.
@@ -377,6 +409,7 @@ fn vote() {
                     proposal: Some(ProposalIdProto::from(proposal_id)),
                     vote: vote as i32,
                 })),
+                neuron_id_or_subaccount: None,
             })
             .await
         },
@@ -561,25 +594,20 @@ fn list_neurons_(req: ListNeurons) -> ListNeuronsResponse {
     governance().list_neurons_by_principal(&req, &caller())
 }
 
-/// DEPRECATED: Only callable from the registry. Use manage_neuron instead.
+/// DEPRECATED: Always panics. Use manage_neuron instead.
+/// TODO(NNS1-413): Remove this once we are sure that there are no callers.
 #[export_name = "canister_update submit_proposal"]
 fn submit_proposal() {
-    check_caller_authz_and_log("submit_proposal", LOG_PREFIX);
     over(
         candid,
-        |(proposer, proposal, caller): (NeuronId, Proposal, PrincipalId)| -> ProposalId {
-            submit_proposal_(proposer, proposal, caller)
+        |(_proposer, _proposal, _caller): (NeuronId, Proposal, PrincipalId)| -> ProposalId {
+            panic!(
+                "{}submit_proposal is deprecated, and now always panics. \
+               Use `manage_neuron` instead to submit a proposal.",
+                LOG_PREFIX
+            );
         },
     );
-}
-
-#[candid_method(update, rename = "submit_proposal")]
-fn submit_proposal_(proposer: NeuronId, proposal: Proposal, caller: PrincipalId) -> ProposalId {
-    let proposer_proto = NeuronIdProto::from(proposer);
-    governance_mut()
-        .make_proposal(&proposer_proto, &caller, &proposal)
-        .expect("Couldn't create proposal")
-        .into()
 }
 
 /// DEPRECATED: Proposals are now executed on every vote.

@@ -31,13 +31,7 @@ mod tests {
         assert_eq!(f(vec![255, 0], 5), "ff00");
         assert_eq!(f(vec![1, 2, 3], 5), "010203");
         assert_eq!(f(vec![0, 1, 15, 255], 5), "4 bytes;00010fff");
-        assert_eq!(
-            f((0 as u8..100 as u8).collect(), 5),
-            "100 bytes;0001020304…"
-        );
-        assert_eq!(
-            f((0 as u8..100 as u8).collect(), 6),
-            "100 bytes;000102030405…"
-        );
+        assert_eq!(f((0_u8..100_u8).collect(), 5), "100 bytes;0001020304…");
+        assert_eq!(f((0_u8..100_u8).collect(), 6), "100 bytes;000102030405…");
     }
 }

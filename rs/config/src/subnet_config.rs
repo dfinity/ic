@@ -140,25 +140,7 @@ pub struct CyclesAccountManagerConfig {
 
 impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
-        Self {
-            // Setting the fee to create canisters to a significant amount to
-            // discourage potential DoS attacks that involve creating a ton of
-            // canisters on the network.
-            canister_creation_fee: Cycles::new(1_000_000_000_000),
-            compute_percent_allocated_per_second_fee: Cycles::new(100_000),
-
-            // The following fields are set based on an experiment where we
-            // measured how many resources a representative benchmark on a
-            // representative subnet is using.
-            update_message_execution_fee: Cycles::new(6_000_000),
-            ten_update_instructions_execution_fee: Cycles::new(40),
-            xnet_call_fee: Cycles::new(9_000_000),
-            xnet_byte_transmission_fee: Cycles::new(70_000),
-            ingress_message_reception_fee: Cycles::new(22_600_000),
-            ingress_byte_reception_fee: Cycles::new(140_000),
-            // 40 SDR per GiB per year => 40e12 Cycles per year
-            gib_storage_per_second_fee: Cycles::new(1_270_000),
-        }
+        Self::verified_application_subnet()
     }
 
     pub fn verified_application_subnet() -> Self {

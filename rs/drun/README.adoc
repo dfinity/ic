@@ -1,0 +1,258 @@
+= drun
+
+A simple tool to install and test a canister, provided as a Wasm binary file, on a single node. The
+primary use case is that of an Motoko-developer who wants to test Wasm binaries running on a single
+node.
+
+== Synopsis
+
+[source,shell]
+....
+$ drun [-c <config.json5>] <messages>
+....
+
+* `-c <config.json5>`: (Optional) A json file containing the node configuration. If no config is
+provided, default values will be used.
+* `<messages>`: A line-based ASCII-encoded text file containing the messages to be processed.
+
+== Configuration
+
+In order to prevent concurrent instances of `drun` from interfering with each other, the directory
+where the state manager stores snapshots and checkpoints will be chosen randomly, irrespective of
+the value provided in the configuration file.
+
+== Message Input File Format
+
+Each line of the input file contains at most one message to be processed. All messages are processed
+synchronously: The next message starts executing when the previous message has finished executing.
+Three message types are currently supported: `ingress`, `query` and `install`. Messages are directly
+deliver to message routing: there is neither a p2p nor a consensus layer.
+
+=== Create Canister Messages
+
+Create canister messages have the following format:
+
+----
+create
+----
+
+=== Code Installation Messages
+
+Code installation messages have the following format:
+
+----
+<mode> <canister_id> <wasmfile> <payload>
+----
+
+* `<mode>` is one of `install`, `reinstall` or `upgrade`
+
+* `<canister_id>` is the desired ID for the canister to be installed, given in textual
+representation (e.g. `lg264-qjkae`) as specified in https://sdk.dfinity.org/docs/interface-spec/index.html#textual-ids.
+
+* `<wasmfile>` is a path to a Wasm file that should be installed in this drun execution.
+
+* `<payload>` is a octet-string that is either encoded as an arbitrary length hex-string
+(e.g. `0xffffff`) or a double quoted ASCII string. See string escape rules
+section below for escape rules in strings.
+
+=== Ingress Messages
+
+Ingress messages have the following format:
+
+----
+ingress <canister_id> <method_name> <method_payload>
+----
+
+* `<canister_id>` is the ID of the canister for which this ingress message is destined. A canister
+with the given ID has to be installed perviously using `install <canister_id> ..`.
+
+* `<method_name>` is a C-like identifier (`[a-zA-Z_][a-zA-Z0-9_]*`). Examples: `_identifier`,
+`read`, `write`, ...
+
+* `<method_payload>` is a octet-string that is either encoded as an arbitrary length hex-string
+(e.g. `0xffffff`) or a double quoted ASCII string. See string escape rules
+section below for escape rules in strings.
+
+=== Query Messages
+
+----
+query <canister_id> <method_name> <method_payload>
+----
+
+Same as above, except that the method call will be processed as a query, not as an ingress message.
+
+=== String escape rules
+
+** `\\` to escape `\`
+** `\"` to escape `"`
+** `\x[0-9a-f]{2}` for a hexadecimal representation (i.e., ``"A\x01\x02\x03"``  is equivalent to
+`0x65010203`)
+** `\b[01]{8}` for a bitwise representation (i.e., `"A\b00000001\b00000010\b00000011"` is equivalent
+to `0x65010203`).
+
+== Output Format
+
+Each message produces exactly one line of output.
+
+=== Ingress Messages
+
+Each ingress message produces an output of the following form:
+----
+ingress(<msg_id>) <IngressStatus>: <WasmResult>
+----
+
+`<msg_id>` is the id given to this particular ingress message. Ingress messages are given
+consecutive ids, starting with `0`. The fist ingress message (with id `0`) is the (implicit)
+canister install message. Thus, the output stream always starts with a line indicating whether the
+canister has been successfully installed, even if no input messages are specified. E.g., the
+following line indicates that the canister has been successfully installed:
+
+----
+ingress(0) Completed: Reply: 0x{canister_id}
+----
+
+In principle, `<IngressStatus>` is one of `Received`, `Completed`, `Failed`, or `Unknown`. However,
+as of now, `drun` waits until the execution of a message has been completed before starting to
+process the next message. Thus, observing anything but `Completed` or `Failed` indicates a bug in
+`drun`.
+
+If the ingress message could be successfully executed (`Completed`), it is followed by the
+the <<WASM Result>>.
+
+=== Query Messages
+
+If the hypervisor could successfully execute the query, the output starts with `Ok:`, followed by
+the <<WASM Result>>. E.g.:
+
+----
+Ok: Payload: 0x010203
+----
+
+If an error occurs in the hypervisor, the output line starts with `Err:` followed by an error code.
+E.g.:
+
+----
+Err: 404
+----
+
+Even if a message is passed to the execution engine, executing the message might still fail—e.g., if
+the installed canister does not export a method with a method name provided in the message. In such
+a case, the output starts with `CanisterErr:` followed by an error code. E.g.:
+
+----
+CanisterErr: 500
+----
+
+==== WASM Result
+
+If the query is rejected by the method, the output is of the form:
+
+----
+Reject: <errorcode>
+----
+
+An empty query response produces the following output:
+
+----
+Empty
+----
+
+In case a payload is provided, it is encoded as an arbitrary length hexadecimal value. E.g.:
+
+----
+Payload: 0x010203
+----
+
+== Example Usage
+
+Let us assume that we have a file `counter.wasm` containing a compiled version of the Wasm-module
+given in the Appendix under <<Counter Module>>. Among others, the module exposes two methods,
+`write` and `read`. The `write` method increments a global counter stored on the heap, while the
+`read` functions just returns the value of the counter modulo 256 as payload—i.e. the least
+significant byte of the counter.
+
+Let us further assume that we have a text file `in.txt` containing the following messages:
+
+----
+create
+install ic:0100000000000000000000000000000000012D counter.wasm ""
+ingress ic:0100000000000000000000000000000000012D write "Hello"
+query ic:0100000000000000000000000000000000012D read "Hello"
+ingress ic:0100000000000000000000000000000000012D write "Hello"
+query ic:0100000000000000000000000000000000012D read "Hello"
+----
+
+Running the command
+
+[source,shell]
+----
+$ drun counter.wasm in.txt
+----
+
+should result in the following output:
+
+----
+ingress(0) Reply: 0x{canister_id}
+ingress(1) Completed: Empty
+Ok: Payload: 0x01
+ingress(2) Completed: Empty
+Ok: Payload: 0x02
+----
+
+== Appendix
+
+=== Counter Module
+
+This module exports two methods, `write` and `read`. The `write` method is supposed to be called
+with an ingress message, while the `read` method adheres to the query protocol as it calls the
+`reply` System API method before returning. Both methods copy the first byte of the message payload
+onto the heap. The copied byte is then used as an address into the heap to store or load a 32-bit
+integer from the heap. The `write` method loads the global counter from the heap, increments it and
+stores it back to the heap. The `read` method just returns the least significant byte of the counter
+as payload—i.e. the value of the counter modulo 256.
+
+[source,wast]
+----
+;; counter.wat ;;
+(module
+  (import "ic0" "msg_reply" (func $msg_reply))
+  (import "ic0" "msg_reply_data_append"
+    (func $msg_reply_data_append (param i32 i32)))
+  (import "ic0" "msg_arg_data_copy"
+    (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
+
+  (func $write (local $counter_addr i32)
+    ;; copy the counter address into heap[0]
+    (call $ic0_msg_arg_data_copy
+      (i32.const 0) ;; heap dst = 0
+      (i32.const 0) ;; payload offset = 0
+      (i32.const 1) ;; length = 1
+    )
+    ;; store counter addr in a named local for readability
+    (local.set $counter_addr (i32.load (i32.const 0)))
+
+    ;; load old counter value, add 1, and store it back
+    (i32.store
+      (local.get $counter_addr)
+      (i32.add (i32.const 1) (i32.load (local.get $counter_addr)))
+    )
+    (call $read)
+  )
+
+  (func $read
+    (call $ic0_msg_arg_data_copy
+      (i32.const 0) ;; heap dst = 0
+      (i32.const 0) ;; payload offset = 0
+      (i32.const 1) ;; length = 1
+    )
+    ;; now we copied the counter address into heap[0]
+    (call $msg_reply_data_append
+      (i32.load (i32.const 0)) ;; the counter address from heap[0]
+      (i32.const 1))            ;; length
+    (call $msg_reply))
+
+  (memory $memory 1)
+  (export "memory" (memory $memory))
+  (export "canister_update write" (func $write))
+  (export "canister_query read" (func $read)))
+----

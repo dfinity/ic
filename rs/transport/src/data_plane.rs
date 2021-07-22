@@ -19,8 +19,8 @@
 
 use crate::metrics::DataPlaneMetrics;
 use crate::types::{
-    SendQueueReader, TransportHeader, TransportImpl, TRANSPORT_FLAGS_IS_HEARTBEAT,
-    TRANSPORT_FLAGS_SENDER_ERROR, TRANSPORT_HEADER_SIZE,
+    Connected, ConnectionRole, ConnectionState, SendQueueReader, TransportHeader, TransportImpl,
+    TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_FLAGS_SENDER_ERROR, TRANSPORT_HEADER_SIZE,
 };
 use ic_crypto_tls_interfaces::{TlsReadHalf, TlsWriteHalf};
 use ic_interfaces::transport::AsyncTransportEventHandler;
@@ -31,6 +31,7 @@ use ic_types::transport::{
 
 use futures::future::{AbortHandle, Abortable, Aborted};
 use std::convert::TryInto;
+use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::time::{Duration, Instant};
@@ -366,6 +367,8 @@ impl TransportImpl {
     fn on_connect_setup(
         &self,
         flow_id: FlowId,
+        role: ConnectionRole,
+        peer_addr: SocketAddr,
         reader: Box<TlsReadHalf>,
         writer: Box<TlsWriteHalf>,
     ) -> Result<Arc<dyn AsyncTransportEventHandler>, TransportErrorCode> {
@@ -385,13 +388,18 @@ impl TransportImpl {
             None => return Err(TransportErrorCode::FlowNotFound),
         };
 
+        if let ConnectionState::Connected(_) = flow_state.connection_state {
+            // TODO: P2P-516
+            return Err(TransportErrorCode::FlowConnectionUp);
+        }
+
         // Spawn write task
         let flow_id_cl = flow_state.flow_id;
         let flow_label_cl = flow_state.flow_label.clone();
         let send_queue_reader = flow_state.send_queue.get_reader();
         let metrics_cl = self.data_plane_metrics.clone();
         let weak_self = self.weak_self.read().unwrap().clone();
-        let send_task = async move {
+        let write_task = async move {
             Self::flow_write_task(
                 flow_id_cl,
                 flow_label_cl,
@@ -408,7 +416,7 @@ impl TransportImpl {
         let event_handler_cl = event_handler.clone();
         let metrics_cl = self.data_plane_metrics.clone();
         let weak_self = self.weak_self.read().unwrap().clone();
-        let receive_task = async move {
+        let read_task = async move {
             Self::flow_read_task(
                 flow_id_cl,
                 flow_label_cl,
@@ -421,11 +429,11 @@ impl TransportImpl {
         };
 
         // Spawn the tasks with abort handles so tasks can be aborted if needed.
-        let (send_abort_handle, abort_registration) = AbortHandle::new_pair();
+        let (write_abort_handle, abort_registration) = AbortHandle::new_pair();
         let log_cl = self.log.clone();
         let flow_id_cl = flow_id;
         self.tokio_runtime.spawn(async move {
-            if let Err(Aborted) = Abortable::new(send_task, abort_registration).await {
+            if let Err(Aborted) = Abortable::new(write_task, abort_registration).await {
                 warn!(
                     log_cl,
                     "DataPlane:: Send task aborted: flow = {:?}", flow_id_cl
@@ -433,11 +441,11 @@ impl TransportImpl {
             }
         });
 
-        let (receive_abort_handle, abort_registration) = AbortHandle::new_pair();
+        let (read_abort_handle, abort_registration) = AbortHandle::new_pair();
         let log_cl = self.log.clone();
         let flow_id_cl = flow_id;
         self.tokio_runtime.spawn(async move {
-            if let Err(Aborted) = Abortable::new(receive_task, abort_registration).await {
+            if let Err(Aborted) = Abortable::new(read_task, abort_registration).await {
                 warn!(
                     log_cl,
                     "DataPlane:: Receive task aborted: flow = {:?}", flow_id_cl
@@ -445,7 +453,13 @@ impl TransportImpl {
             }
         });
 
-        flow_state.abort_handles = Some((send_abort_handle, receive_abort_handle));
+        let connected_state = Connected {
+            peer_addr,
+            read_task: read_abort_handle,
+            write_task: write_abort_handle,
+            role,
+        };
+        flow_state.update(ConnectionState::Connected(connected_state));
         Ok(event_handler)
     }
 
@@ -453,10 +467,12 @@ impl TransportImpl {
     pub(crate) async fn on_connect(
         &self,
         flow_id: FlowId,
+        role: ConnectionRole,
+        peer_addr: SocketAddr,
         reader: Box<TlsReadHalf>,
         writer: Box<TlsWriteHalf>,
     ) -> Result<(), TransportErrorCode> {
-        self.on_connect_setup(flow_id, reader, writer)?
+        self.on_connect_setup(flow_id, role, peer_addr, reader, writer)?
             // Notify the client that peer flow is up.
             .state_changed(TransportStateChange::PeerFlowUp(TransportFlowInfo {
                 peer_id: flow_id.peer_id,

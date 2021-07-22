@@ -128,10 +128,8 @@ pub(crate) fn parse_canister_query_response(message: &CBOR) -> Result<RequestSta
 
     // Attempt to extract reject message from reply
     let mut reject_message = None;
-    if let Some(rej) = &content.get(&CBOR::Text("reject_message".to_string())) {
-        if let CBOR::Text(b) = rej {
-            reject_message = Some(b.to_string());
-        }
+    if let Some(CBOR::Text(b)) = &content.get(&CBOR::Text("reject_message".to_string())) {
+        reject_message = Some(b.to_string());
     }
 
     Ok(RequestStatus {

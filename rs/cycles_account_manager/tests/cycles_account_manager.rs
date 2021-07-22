@@ -1,8 +1,7 @@
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetConfigs};
+use ic_config::subnet_config::SubnetConfigs;
 use ic_cycles_account_manager::{
-    freeze_threshold_cycles, CanisterOutOfCyclesError, IngressInductionCost,
-    IngressInductionCostError,
+    CanisterOutOfCyclesError, IngressInductionCost, IngressInductionCostError,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SystemState;
@@ -73,10 +72,11 @@ fn test_can_charge_application_subnets() {
 
 #[test]
 fn withdraw_cycles_with_not_enough_balance_returns_error() {
+    let initial_cycles = Cycles::from(100_000);
     let mut system_state = SystemState::new_running(
         canister_test_id(1),
         canister_test_id(2).get(),
-        Cycles::from(100_000),
+        initial_cycles,
         NumSeconds::from(0),
     );
     assert_eq!(
@@ -94,7 +94,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
     let mut system_state = SystemState::new_running(
         canister_test_id(1),
         canister_test_id(2).get(),
-        Cycles::from(100_000),
+        initial_cycles,
         NumSeconds::from(60),
     );
     assert_eq!(
@@ -112,7 +112,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
     let mut system_state = SystemState::new_running(
         canister_test_id(1),
         canister_test_id(2).get(),
-        Cycles::from(100_000),
+        initial_cycles,
         NumSeconds::from(0),
     );
     assert_eq!(
@@ -130,22 +130,27 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
     let mut system_state = SystemState::new_running(
         canister_test_id(1),
         canister_test_id(2).get(),
-        Cycles::from(100_000),
+        initial_cycles,
         NumSeconds::from(30),
     );
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let memory_usage = NumBytes::from(4 << 30);
     assert_eq!(
-        CyclesAccountManagerBuilder::new()
-            .build()
-            .withdraw_cycles_for_transfer(
-                &mut system_state,
-                NumBytes::from(4 << 30),
-                ComputeAllocation::default(),
-                Cycles::from(200),
-            ),
+        cycles_account_manager.withdraw_cycles_for_transfer(
+            &mut system_state,
+            memory_usage,
+            ComputeAllocation::default(),
+            Cycles::from(200),
+        ),
         Err(CanisterOutOfCyclesError {
             canister_id: canister_test_id(1),
-            available: Cycles::from(0),
-            requested: Cycles::from(200)
+            available: initial_cycles,
+            requested: Cycles::from(200),
+            threshold: cycles_account_manager.freeze_threshold_cycles(
+                &system_state,
+                memory_usage,
+                ComputeAllocation::default(),
+            )
         })
     );
 }
@@ -172,17 +177,23 @@ fn add_cycles_does_not_overflow_when_balance_limit() {
             return CYCLES_LIMIT_PER_CANISTER;
         }
         result
-    };
+    }
 
     let amount = Cycles::from(CYCLES_LIMIT_PER_CANISTER.get() / 2);
     cycles_balance_expected = add_limited(cycles_balance_expected, amount);
-    cycles_account_manager.add_cycles(&mut system_state, amount);
+    assert_eq!(
+        cycles_account_manager.add_cycles(&mut system_state, amount),
+        Cycles::from(0)
+    );
     assert_eq!(system_state.cycles_balance, apply_cycle_limit(amount));
     assert_eq!(system_state.cycles_balance, amount);
 
     let amount = amount - Cycles::from(10);
     cycles_balance_expected = add_limited(cycles_balance_expected, amount);
-    cycles_account_manager.add_cycles(&mut system_state, amount);
+    assert_eq!(
+        cycles_account_manager.add_cycles(&mut system_state, amount),
+        Cycles::from(0)
+    );
     assert_eq!(
         system_state.cycles_balance,
         apply_cycle_limit(cycles_balance_expected)
@@ -204,8 +215,11 @@ fn add_cycles_does_not_overflow_when_balance_limit() {
 
     cycles_account_manager.add_cycles(&mut system_state, Cycles::from(10));
     assert_eq!(system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
-
-    cycles_account_manager.add_cycles(&mut system_state, amount);
+    // Returns cycles which don't fit in the balance.
+    assert_eq!(
+        cycles_account_manager.add_cycles(&mut system_state, amount),
+        amount
+    );
     assert_eq!(system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
 }
 
@@ -306,7 +320,7 @@ fn max_cycles_per_canister_none_on_application_subnet() {
         .build();
 
     assert_eq!(
-        cycles_account_manager.check_max_cycles_can_add(&system_state, cycles),
+        cycles_account_manager.check_max_cycles_can_add(system_state.cycles_balance, cycles),
         cycles,
     );
 
@@ -326,7 +340,7 @@ fn max_cycles_per_canister_on_application_subnet() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
 
     assert_eq!(
-        cycles_account_manager.check_max_cycles_can_add(&system_state, cycles),
+        cycles_account_manager.check_max_cycles_can_add(system_state.cycles_balance, cycles),
         Cycles::new(0),
     );
 
@@ -345,7 +359,7 @@ fn max_cycles_per_canister_none_on_system_subnet() {
         .build();
 
     assert_eq!(
-        cycles_account_manager.check_max_cycles_can_add(&system_state, cycles),
+        cycles_account_manager.check_max_cycles_can_add(system_state.cycles_balance, cycles),
         cycles,
     );
 
@@ -369,7 +383,7 @@ fn max_cycles_per_canister_on_system_subnet() {
         .build();
 
     assert_eq!(
-        cycles_account_manager.check_max_cycles_can_add(&system_state, cycles),
+        cycles_account_manager.check_max_cycles_can_add(system_state.cycles_balance, cycles),
         cycles,
     );
 
@@ -555,25 +569,13 @@ fn cycles_withdraw_no_threshold() {
 
 #[test]
 fn cycles_withdraw_for_execution() {
-    let config = CyclesAccountManagerConfig::application_subnet();
-
-    let gib_storage_per_second_fee = config.gib_storage_per_second_fee;
-    let compute_allocation_fee = config.compute_percent_allocated_per_second_fee;
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let memory_usage = NumBytes::from(4 << 30);
-    let memory_allocation = None;
     let compute_allocation = ComputeAllocation::try_from(90).unwrap();
-    let freeze_threshold = NumSeconds::from(10);
-    let freeze_threshold_cycles = freeze_threshold_cycles(
-        memory_usage,
-        memory_allocation,
-        gib_storage_per_second_fee,
-        compute_allocation,
-        compute_allocation_fee,
-        freeze_threshold,
-    );
 
     let initial_amount = std::u128::MAX;
     let initial_cycles = Cycles::from(initial_amount);
+    let freeze_threshold = NumSeconds::from(10);
     let mut system_state = SystemState::new_running(
         canister_test_id(1),
         canister_test_id(2).get(),
@@ -581,7 +583,12 @@ fn cycles_withdraw_for_execution() {
         freeze_threshold,
     );
 
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let freeze_threshold_cycles = cycles_account_manager.freeze_threshold_cycles(
+        &system_state,
+        memory_usage,
+        compute_allocation,
+    );
+
     let amount = Cycles::from(initial_amount / 2);
     assert!(cycles_account_manager
         .consume_cycles(&mut system_state, memory_usage, compute_allocation, amount)
@@ -725,5 +732,25 @@ fn consume_cycles_updates_consumed_cycles() {
     assert_eq!(
         consumed_cycles_after - consumed_cycles_before,
         NominalCycles::from(1_000_000)
+    );
+}
+
+#[test]
+fn verify_refund() {
+    let mut system_state = SystemStateBuilder::new().build();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let initial_consumed_cycles = NominalCycles::from(1000);
+    system_state
+        .canister_metrics
+        .consumed_cycles_since_replica_started = initial_consumed_cycles;
+
+    let cycles = Cycles::from(100);
+    cycles_account_manager.refund_cycles(&mut system_state, cycles);
+    assert_eq!(system_state.cycles_balance, INITIAL_CYCLES + cycles);
+    assert_eq!(
+        system_state
+            .canister_metrics
+            .consumed_cycles_since_replica_started,
+        initial_consumed_cycles - NominalCycles::from(cycles)
     );
 }

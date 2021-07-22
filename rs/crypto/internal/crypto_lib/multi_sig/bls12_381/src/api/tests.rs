@@ -58,15 +58,13 @@ fn test_happy_path(
     let pop_verification: CryptoResult<()> = public_keys
         .iter()
         .zip(pops)
-        .map(|(public_key, pop)| multi_sig::verify_pop(pop, *public_key))
-        .collect();
+        .try_for_each(|(public_key, pop)| multi_sig::verify_pop(pop, *public_key));
     let individual_verification: CryptoResult<()> = public_keys
         .iter()
         .zip(signatures.clone())
-        .map(|(public_key, signature)| {
+        .try_for_each(|(public_key, signature)| {
             multi_sig::verify_individual(message, signature, *public_key)
-        })
-        .collect();
+        });
     assert!(pop_verification.is_ok(), "PoP verification failed");
     assert!(
         individual_verification.is_ok(),

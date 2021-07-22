@@ -575,14 +575,15 @@ mod tests {
                     Some(time_1)
                 );
 
-                let mut changeset = ChangeSet::new();
-                changeset.push(ChangeAction::MoveToValidated((
-                    message_id0.clone(),
-                    0,
-                    attribute_0,
-                    msg_0_integrity_hash,
-                )));
-                changeset.push(ChangeAction::RemoveFromUnvalidated(message_id1.clone()));
+                let changeset = vec![
+                    ChangeAction::MoveToValidated((
+                        message_id0.clone(),
+                        0,
+                        attribute_0,
+                        msg_0_integrity_hash,
+                    )),
+                    ChangeAction::RemoveFromUnvalidated(message_id1.clone()),
+                ];
                 ingress_pool.apply_changeset(changeset);
 
                 // Check timestamp is carried over for msg_0.

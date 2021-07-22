@@ -4,6 +4,7 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
+backoff = "0.3.0"
 ic-crypto-sha256 = { path = "../crypto/sha256" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 # TODO(CRP-909): use public crate (not the internal one) for ecdsa-secp256k1 when available.
@@ -14,22 +15,23 @@ ic-types = { path = "../types/types" }
 async-trait = "0.1.36"
 bytes = "1.0.1"
 ed25519-dalek = "1.0.1"
-hyper = "0.13.10"
-hyper-tls = "0.4.3"
-native-tls = "0.2.7"
+hyper = { version = "0.14.5", features = ["client", "tcp", "http1", "http2"] }
+hyper-tls = "0.5.0"
+native-tls = { version = "0.2.7", features = ["alpn"] }
 phantom_newtype = { path = "../phantom_newtype" }
 prost = "0.7.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.1"
-tokio = { version = "0.2.22", features = [ "full" ] }
+tokio = { version = "1.2.0", features = [ "macros", "time" ] }
 tree-deserializer = { path = "../tree_deserializer" }
 url = "2.1.1"
 
 [dev-dependencies]
 hex = "0.4.2"
+ic-test-utilities = { path = "../test_utilities" }
 ic-validator = { path = "../validator" }
 libsecp256k1 = "0.3.5"
 rand_chacha = "0.2.2"
 rand_core = "0.5.1"
-tokio-test = "0.2.1"
+tokio-test = "0.4.0"

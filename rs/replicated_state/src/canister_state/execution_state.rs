@@ -7,10 +7,7 @@ use ic_protobuf::{
     state::canister_state_bits::v1 as pb,
 };
 use ic_sys::PAGE_SIZE;
-use ic_types::{
-    methods::{SystemMethod, WasmMethod},
-    ExecutionRound, NumBytes,
-};
+use ic_types::{methods::WasmMethod, ExecutionRound, NumBytes};
 use ic_utils::ic_features::cow_state_feature;
 use ic_wasm_types::BinaryEncodedWasm;
 use ic_wasm_utils::{
@@ -41,7 +38,7 @@ impl EmbedderCache {
     where
         T: 'static,
     {
-        std::any::Any::downcast_ref::<T>(&*self.0)
+        <dyn std::any::Any>::downcast_ref::<T>(&*self.0)
     }
 }
 
@@ -113,16 +110,8 @@ impl ExportedFunctions {
         Self(Arc::new(exported_functions))
     }
 
-    pub fn has_update_method(&self, method_name: String) -> bool {
-        self.0.contains(&WasmMethod::Update(method_name))
-    }
-
-    pub fn has_query_method(&self, method_name: String) -> bool {
-        self.0.contains(&WasmMethod::Query(method_name))
-    }
-
-    pub fn has_system_method(&self, method: SystemMethod) -> bool {
-        self.0.contains(&WasmMethod::System(method))
+    pub fn has_method(&self, method: &WasmMethod) -> bool {
+        self.0.contains(method)
     }
 }
 
@@ -290,6 +279,11 @@ impl ExecutionState {
         };
 
         Ok(execution_state)
+    }
+
+    // Checks whether the given method is exported by the Wasm module or not.
+    pub fn exports_method(&self, method: &WasmMethod) -> bool {
+        self.exports.has_method(method)
     }
 
     /// Returns the memory currently used by the `ExecutionState`.

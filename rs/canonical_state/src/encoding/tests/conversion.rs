@@ -66,32 +66,26 @@ fn try_from_empty_request_or_response() {
                 message
             )
         }
-        Err(err) => panic!(
-            "Expected Err(ProxyDecodeError::Other), got Err({:?})",
-            err
-        ),
+        Err(err) => panic!("Expected Err(ProxyDecodeError::Other), got Err({:?})", err),
     }
 }
 
 #[test]
 fn try_from_empty_payload() {
-    let message = types::Payload {
+    let payload = types::Payload {
         data: None,
         reject: None,
     };
 
-    match Payload::try_from(message) {
+    match Payload::try_from(payload) {
         Ok(ctx) => panic!("Expected Err(_), got Ok({:?})", ctx),
-        Err(ProxyDecodeError::Other(message)) => {
+        Err(ProxyDecodeError::Other(payload)) => {
             assert_eq!(
                 "Payload: expected exactly one of `data` or `reject` to be `Some(_)`, got `Payload { data: None, reject: None }`",
-                message
+                payload
             )
         }
-        Err(err) => panic!(
-            "Expected Err(ProxyDecodeError::Other), got Err({:?})",
-            err
-        ),
+        Err(err) => panic!("Expected Err(ProxyDecodeError::Other), got Err({:?})", err),
     }
 }
 

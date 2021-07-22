@@ -155,10 +155,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of the execution environment.
     // ================================================
     hypervisor: {
-        // Which implementation of the runtime to use.
-        // For now, "wasmtime" is the default option.
-        embedder_type: "wasmtime",
-
         // Which technology to use to intercept Wasm memory changes.
         //
         // Alternatives:
@@ -297,8 +293,8 @@ pub const SAMPLE_CONFIG: &str = r#"
          maliciously_certify_invalid_hash: false,
          maliciously_malfunctioning_xnet_endpoint: false,
          maliciously_disable_execution: false,
-         maliciously_disable_http_handler_ingress_validation: false,
          maliciously_corrupt_own_state_at_heights: [],
+         maliciously_disable_ingress_validation: false,
        },
     },
 

@@ -1,7 +1,7 @@
 use candid::{Encode, Nat};
 use dfn_candid::candid;
 
-use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 
 use ic_nns_handler_root::{
     common::{
@@ -12,8 +12,7 @@ use ic_nns_handler_root::{
 };
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet,
-        registry_init_payload_allow_any_user_for_tests, set_up_registry_canister,
+        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_root_canister, set_up_universal_canister,
     },
     registry::get_value,
@@ -21,6 +20,7 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::nns::v1::NnsCanisterRecords;
 use ic_registry_keys::make_nns_canister_records_key;
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 
 use ic_test_utilities::empty_wasm::{EMPTY_WASM, EMPTY_WASM_SHA256};
 
@@ -33,25 +33,28 @@ use std::convert::TryFrom;
 fn test_add_nns_canister() {
     local_test_on_nns_subnet(|runtime| async move {
         // Set up the registry first so that it gets its expected id.
-        let mut init_payload = registry_init_payload_allow_any_user_for_tests();
-        init_payload
-            .mutations
-            .push(invariant_compliant_mutation_as_atomic_req());
+        let init_payload = RegistryCanisterInitPayloadBuilder::new()
+            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+            .build();
         let registry = set_up_registry_canister(&runtime, init_payload).await;
         assert_eq!(registry.canister_id(), REGISTRY_CANISTER_ID);
 
-        // Install the universal canister in place of the proposals canister
-        let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-        // Since it takes the id reserved for the proposal canister, it can impersonate
-        // it
+        // Install the universal canister in place of the governance canister so
+        // it can impersonate it.
+        let fake_governance_canister = set_up_universal_canister(&runtime).await;
         assert_eq!(
-            fake_proposal_canister.canister_id(),
+            fake_governance_canister.canister_id(),
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
 
-        // The root registry does not matter in this test.
+        let _fake_ledger = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .unwrap();
+
         let root =
             set_up_root_canister(&runtime, RootCanisterInitPayloadBuilder::new().build()).await;
+        assert_eq!(root.canister_id(), ROOT_CANISTER_ID);
 
         let name = "i dunno, what would be a good canister name?".to_string();
 
@@ -68,7 +71,7 @@ fn test_add_nns_canister() {
 
         assert!(
             forward_call_via_universal_canister(
-                &fake_proposal_canister,
+                &fake_governance_canister,
                 &root,
                 "add_nns_canister",
                 Encode!(&proposal_payload).unwrap(),

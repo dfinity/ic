@@ -8,11 +8,10 @@ use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::GovernanceError;
-use num_bigint::BigUint;
 use secp256k1::{PublicKey, PublicKeyFormat};
 use sha3::{Digest, Keccak256};
 use simple_asn1::ASN1Block::{BitString, ObjectIdentifier, Sequence};
-use simple_asn1::{oid, to_der, OID};
+use simple_asn1::{oid, to_der};
 use std::time::SystemTime;
 
 pub const LOG_PREFIX: &str = "[GTC] ";

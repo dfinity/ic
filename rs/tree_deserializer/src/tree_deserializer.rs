@@ -498,7 +498,7 @@ impl<'de> Deserializer<'de> for LabelDeserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        visitor.visit_borrowed_bytes(&self.0[..])
+        visitor.visit_borrowed_bytes(self.0)
     }
 
     fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>

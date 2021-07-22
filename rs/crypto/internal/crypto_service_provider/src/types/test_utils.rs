@@ -2,6 +2,7 @@ use super::*;
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1::types as ecdsa_secp256k1_types;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types as ecdsa_secp256r1_types;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
+use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_sig_types;
 use ic_crypto_internal_test_vectors::unhex::{
     hex_to_32_bytes, hex_to_48_bytes, hex_to_64_bytes, hex_to_96_bytes,
@@ -16,11 +17,14 @@ use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
     FsEncryptionPop, FsEncryptionPublicKey,
 };
+use ic_crypto_secrets_containers::SecretArray;
 
 impl CspSecretKey {
     /// This function is only used for tests
     pub fn ed25519_from_hex(hex: &str) -> Self {
-        CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(hex_to_32_bytes(hex)))
+        CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+            SecretArray::new_and_dont_zeroize_argument(&hex_to_32_bytes(hex)),
+        ))
     }
 
     /// This function is only used for tests
@@ -127,7 +131,9 @@ pub fn arbitrary_ed25519_secret_key() -> CspSecretKey {
     for b in random_bytes.iter_mut() {
         *b = rand::random();
     }
-    CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(random_bytes))
+    CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+        SecretArray::new_and_dont_zeroize_argument(&random_bytes),
+    ))
 }
 
 /// This function is only used for tests
@@ -180,6 +186,16 @@ pub fn arbitrary_tls_ed25519_secret_key() -> CspSecretKey {
     CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes {
         bytes: random_bytes.to_vec(),
     })
+}
+
+/// This function is only used for tests
+#[allow(unused)]
+pub fn arbitrary_rsa_public_key() -> CspPublicKey {
+    let rsa = openssl::rsa::Rsa::generate(2048).expect("RSA key generation failed");
+    let der = rsa
+        .public_key_to_der()
+        .expect("Converting RSA key to DER failed");
+    CspPublicKey::RsaSha256(rsa::RsaPublicKey::from_der_spki(&der).expect("Invalid RSA key"))
 }
 
 /// This function is only used for tests

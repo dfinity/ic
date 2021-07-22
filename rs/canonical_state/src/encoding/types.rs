@@ -67,7 +67,10 @@ pub struct Response {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cycles {
-    pub raw: u64,
+    pub low: u64,
+    // TODO(EXC-337) `Skip` used for maintaining the serialisation backward compatible.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub high: Option<u64>,
 }
 
 /// Canonical representation of `ic_types::funds::Funds`.
@@ -223,8 +226,14 @@ impl TryFrom<Response> for ic_types::messages::Response {
 
 impl From<&ic_types::funds::Cycles> for Cycles {
     fn from(cycles: &ic_types::funds::Cycles) -> Self {
+        let (high, low) = cycles.into_parts();
         Self {
-            raw: (*cycles).into(),
+            low,
+            // For backward compatibility, set to `None` when the upper 8 bytes are missing.
+            high: match high {
+                0 => None,
+                _ => Some(high),
+            },
         }
     }
 }
@@ -233,7 +242,10 @@ impl TryFrom<Cycles> for ic_types::funds::Cycles {
     type Error = ProxyDecodeError;
 
     fn try_from(cycles: Cycles) -> Result<Self, Self::Error> {
-        Ok(Self::from(cycles.raw))
+        match cycles.high {
+            None => Ok(Self::from(cycles.low)),
+            Some(high) => Ok(Self::from_parts(high, cycles.low)),
+        }
     }
 }
 
@@ -241,7 +253,7 @@ impl From<&ic_types::funds::Funds> for Funds {
     fn from(funds: &ic_types::funds::Funds) -> Self {
         Self {
             cycles: (&funds.cycles()).into(),
-            icp: funds.icp().balance(),
+            icp: 0,
         }
     }
 }
@@ -250,10 +262,7 @@ impl TryFrom<Funds> for ic_types::funds::Funds {
     type Error = ProxyDecodeError;
 
     fn try_from(funds: Funds) -> Result<Self, Self::Error> {
-        Ok(Self::new(
-            funds.cycles.try_into()?,
-            ic_types::funds::icp::Tap::mint(funds.icp),
-        ))
+        Ok(Self::new(funds.cycles.try_into()?))
     }
 }
 

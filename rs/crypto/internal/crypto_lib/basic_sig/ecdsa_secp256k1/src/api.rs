@@ -1,16 +1,26 @@
 //! ECDSA signature methods
 use super::types;
+use ic_crypto_internal_basic_sig_der_utils::PkixAlgorithmIdentifier;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use openssl::bn::{BigNum, BigNumContext};
 use openssl::ec::{EcGroup, EcKey, EcPoint};
 use openssl::ecdsa::EcdsaSig;
 use openssl::nid::Nid;
 use openssl::pkey::PKey;
+use simple_asn1::oid;
 
 #[cfg(test)]
 mod tests;
 
 const CURVE_NAME: Nid = Nid::SECP256K1;
+
+/// Return the algorithm identifier associated with ECDSA secp256k1
+pub fn algorithm_identifier() -> PkixAlgorithmIdentifier {
+    PkixAlgorithmIdentifier::new_with_oid_param(
+        oid!(1, 2, 840, 10045, 2, 1),
+        oid!(1, 3, 132, 0, 10),
+    )
+}
 
 // NOTE: both `new_keypair()` and `sign()` are marked as `#[cfg(test)]`
 // because the focus is on the signature verification (rather than creation),

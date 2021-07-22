@@ -3,10 +3,9 @@ use ic_crypto_test_utils::tls::custom_server::CustomServer;
 use ic_crypto_test_utils::tls::x509_certificates::CertWithPrivateKey;
 use ic_crypto_tls::{
     generate_tls_keys, perform_tls_client_handshake, TlsClientHandshakeError, TlsPrivateKey,
-    TlsPublicKeyCert,
 };
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::TlsStream;
-use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::{NodeId, PrincipalId};
 use openssl::ssl::SslVersion;
 use tokio::net::TcpStream;
@@ -24,7 +23,7 @@ const SERVER_ID: NodeId = NodeId::new(PrincipalId::new(
 async fn should_perform_client_handshake() {
     let (client_cert, client_private_key) = generate_tls_keys(COMMON_NAME, NOT_AFTER);
     let server = CustomServer::builder()
-        .build_with_default_server_cert(SERVER_ID, vec![x509_pub_key_cert(&client_cert)]);
+        .build_with_default_server_cert(SERVER_ID, vec![client_cert.to_proto()]);
 
     let (client_result, _) = tokio::join!(
         perform_tls_client_handshake(
@@ -45,7 +44,7 @@ async fn should_allow_connection_to_custom_server_only_supporting_aes_128_cipher
     let (client_cert, client_private_key) = generate_tls_keys(COMMON_NAME, NOT_AFTER);
     let server = CustomServer::builder()
         .with_allowed_cipher_suites(AES_128_ONLY_CIPHER_SUITE)
-        .build_with_default_server_cert(SERVER_ID, vec![x509_pub_key_cert(&client_cert)]);
+        .build_with_default_server_cert(SERVER_ID, vec![client_cert.to_proto()]);
 
     let (client_result, _) = tokio::join!(
         perform_tls_client_handshake(
@@ -66,7 +65,7 @@ async fn should_allow_connection_to_custom_server_only_supporting_aes_256_cipher
     let (client_cert, client_private_key) = generate_tls_keys(COMMON_NAME, NOT_AFTER);
     let server = CustomServer::builder()
         .with_allowed_cipher_suites(AES_256_ONLY_CIPHER_SUITE)
-        .build_with_default_server_cert(SERVER_ID, vec![x509_pub_key_cert(&client_cert)]);
+        .build_with_default_server_cert(SERVER_ID, vec![client_cert.to_proto()]);
 
     let (client_result, _) = tokio::join!(
         perform_tls_client_handshake(
@@ -90,7 +89,7 @@ async fn should_allow_connection_to_server_with_very_old_certificate() {
             .not_before("10121224075600Z")
             .cn(SERVER_ID.to_string())
             .build_ed25519(),
-        vec![x509_pub_key_cert(&client_cert)],
+        vec![client_cert.to_proto()],
     );
 
     let (client_result, _) = tokio::join!(
@@ -112,14 +111,12 @@ async fn should_perform_handshake_with_client_prime256v1_cert() {
         .cn(COMMON_NAME.to_string())
         .build_prime256v1();
     let prime256v1_client_cert =
-        TlsPublicKeyCert::new_from_pem(prime256v1_client_cert_with_private_key.cert_pem()).unwrap();
+        TlsPublicKeyCert::new_from_x509(prime256v1_client_cert_with_private_key.x509()).unwrap();
     let prime256v1_client_private_key =
         TlsPrivateKey::new_from_pem(prime256v1_client_cert_with_private_key.key_pair_pem())
             .unwrap();
-    let server = CustomServer::builder().build_with_default_server_cert(
-        SERVER_ID,
-        vec![x509_pub_key_cert(&prime256v1_client_cert)],
-    );
+    let server = CustomServer::builder()
+        .build_with_default_server_cert(SERVER_ID, vec![prime256v1_client_cert.to_proto()]);
 
     let (client_result, _) = tokio::join!(
         perform_tls_client_handshake(
@@ -139,8 +136,8 @@ async fn should_return_error_if_private_key_does_not_match_cert() {
     let (client_cert, _) = generate_tls_keys(COMMON_NAME, NOT_AFTER);
     let (_, wrong_client_private_key) = generate_tls_keys(COMMON_NAME, NOT_AFTER);
     let server = CustomServer::builder()
-        .expect_error("the handshake failed: unexpected EOF")
-        .build_with_default_server_cert(SERVER_ID, vec![x509_pub_key_cert(&client_cert)]);
+        .expect_error("unexpected EOF")
+        .build_with_default_server_cert(SERVER_ID, vec![client_cert.to_proto()]);
 
     let (client_result, _) = tokio::join!(
         perform_tls_client_handshake(
@@ -164,7 +161,7 @@ async fn should_return_error_if_server_does_not_support_tls_1_3() {
     let server = CustomServer::builder()
         .with_max_protocol_version(SslVersion::TLS1_2)
         .expect_error("tls_early_post_process_client_hello:unsupported protocol")
-        .build_with_default_server_cert(SERVER_ID, vec![x509_pub_key_cert(&client_cert)]);
+        .build_with_default_server_cert(SERVER_ID, vec![client_cert.to_proto()]);
 
     let (client_result, _) = tokio::join!(
         perform_tls_client_handshake(
@@ -186,7 +183,7 @@ async fn should_return_error_if_server_does_not_support_required_ciphers() {
     let server = CustomServer::builder()
         .with_allowed_cipher_suites(CIPHER_SUITES_NOT_SUPPORTED_BY_CLIENT)
         .expect_error("no shared cipher")
-        .build_with_default_server_cert(SERVER_ID, vec![x509_pub_key_cert(&client_cert)]);
+        .build_with_default_server_cert(SERVER_ID, vec![client_cert.to_proto()]);
 
     let (client_result, _) = tokio::join!(
         perform_tls_client_handshake(
@@ -207,7 +204,7 @@ async fn should_return_error_if_server_does_not_support_ed25519_sig_alg() {
     let server = CustomServer::builder()
         .with_allowed_signature_algorithms("ECDSA+SHA256:RSA+SHA256")
         .expect_error("no shared signature algorithms")
-        .build_with_default_server_cert(SERVER_ID, vec![x509_pub_key_cert(&client_cert)]);
+        .build_with_default_server_cert(SERVER_ID, vec![client_cert.to_proto()]);
 
     let (client_result, _) = tokio::join!(
         perform_tls_client_handshake(
@@ -232,7 +229,7 @@ async fn should_return_error_if_server_does_not_use_ed25519_cert() {
             CertWithPrivateKey::builder()
                 .cn(SERVER_ID.to_string())
                 .build_prime256v1(),
-            vec![x509_pub_key_cert(&client_cert)],
+            vec![client_cert.to_proto()],
         );
 
     let (client_result, _) = tokio::join!(
@@ -258,7 +255,7 @@ async fn should_return_error_if_server_uses_expired_cert() {
                 .cn(SERVER_ID.to_string())
                 .validity_days(0) // current time
                 .build_ed25519(),
-            vec![x509_pub_key_cert(&client_cert)],
+            vec![client_cert.to_proto()],
         );
 
     let (client_result, _) = tokio::join!(
@@ -271,7 +268,7 @@ async fn should_return_error_if_server_uses_expired_cert() {
         server.run()
     );
 
-    assert_handshake_client_error_containing(&client_result, "certificate has expired");
+    assert_handshake_client_error_containing(&client_result, "certificate verify failed");
 }
 
 #[tokio::test]
@@ -284,7 +281,7 @@ async fn should_return_error_if_server_cert_not_yet_valid() {
                 .cn(SERVER_ID.to_string())
                 .not_before_days_from_now(3) // 3 days in the future
                 .build_ed25519(),
-            vec![x509_pub_key_cert(&client_cert)],
+            vec![client_cert.to_proto()],
         );
 
     let (client_result, _) = tokio::join!(
@@ -297,13 +294,7 @@ async fn should_return_error_if_server_cert_not_yet_valid() {
         server.run()
     );
 
-    assert_handshake_client_error_containing(&client_result, "certificate is not yet valid");
-}
-
-fn x509_pub_key_cert(cert: &TlsPublicKeyCert) -> X509PublicKeyCert {
-    X509PublicKeyCert {
-        certificate_der: cert.to_der().unwrap(),
-    }
+    assert_handshake_client_error_containing(&client_result, "certificate verify failed");
 }
 
 async fn tcp_stream(port: u16) -> TcpStream {
@@ -313,7 +304,8 @@ async fn tcp_stream(port: u16) -> TcpStream {
 }
 
 fn tls_pubkey_cert(server: &CustomServer) -> TlsPublicKeyCert {
-    TlsPublicKeyCert::new_from_pem(server.cert_pem()).expect("unable to read cert from PEM")
+    TlsPublicKeyCert::new_from_der(server.cert().certificate_der)
+        .expect("unable to read cert from DER")
 }
 
 fn assert_handshake_client_error_containing(

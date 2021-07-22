@@ -9,7 +9,7 @@ use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_multi_sig_bls12381 as multi_sig;
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
 use ic_crypto_internal_types::context::{Context, DomainSeparationContext};
-use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::{AlgorithmId, CryptoError, KeyId};
 use ic_types::NodeId;
 use openssl::asn1::Asn1Time;
@@ -21,7 +21,6 @@ const KEY_ID_DOMAIN: &str = "ic-key-id";
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_sha256::Sha256;
 pub use tls_keygen::tls_cert_hash_as_key_id;
-pub use tls_keygen::tls_registry_cert_hash_as_key_id;
 
 #[cfg(test)]
 mod tests;
@@ -57,17 +56,16 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> CspKeyGenerator for Csp<R, S> {
         }
     }
 
-    fn gen_tls_key_pair(&mut self, node: NodeId, not_after: &str) -> X509PublicKeyCert {
+    fn gen_tls_key_pair(&mut self, node: NodeId, not_after: &str) -> TlsPublicKeyCert {
         let serial = self.rng_write_lock().gen::<[u8; 19]>();
         let common_name = &node.get().to_string()[..];
         let not_after = Asn1Time::from_str_x509(not_after)
             .expect("invalid X.509 certificate expiration date (not_after)");
         let (cert, secret_key) = generate_tls_key_pair_der(common_name, serial, &not_after);
 
-        let x509_pk_cert = X509PublicKeyCert {
-            certificate_der: cert.bytes.clone(),
-        };
-        let _key_id = self.store_tls_secret_key(cert, secret_key);
+        let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
+            .expect("generated X509 certificate has malformed DER encoding");
+        let _key_id = self.store_tls_secret_key(&x509_pk_cert, secret_key);
         x509_pk_cert
     }
 }
@@ -77,9 +75,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> CspSecretKeyStoreChecker for Csp<R, 
         self.sks_read_lock().contains(id)
     }
 
-    fn sks_contains_tls_key(&self, cert: &X509PublicKeyCert) -> bool {
+    fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> bool {
         // we calculate the key_id first to minimize locking time:
-        let key_id = tls_registry_cert_hash_as_key_id(cert.clone());
+        let key_id = tls_cert_hash_as_key_id(&cert);
         self.sks_read_lock().contains(&key_id)
     }
 }
@@ -157,26 +155,17 @@ pub fn forward_secure_key_id(public_key: &CspFsEncryptionPublicKey) -> KeyId {
 
 mod tls_keygen {
     use super::*;
-    use ic_crypto_internal_tls::keygen::{
-        TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes,
-    };
+    use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
 
     /// Create a key identifier by hashing the bytes of the certificate
-    pub fn tls_cert_hash_as_key_id(cert: &TlsEd25519CertificateDerBytes) -> KeyId {
-        bytes_hash_as_key_id(AlgorithmId::Tls, &cert.bytes)
-    }
-
-    /// Create a key identifier by hashing the bytes of the certificate
-    pub fn tls_registry_cert_hash_as_key_id(cert: X509PublicKeyCert) -> KeyId {
-        tls_cert_hash_as_key_id(&TlsEd25519CertificateDerBytes {
-            bytes: cert.certificate_der,
-        })
+    pub fn tls_cert_hash_as_key_id(cert: &TlsPublicKeyCert) -> KeyId {
+        bytes_hash_as_key_id(AlgorithmId::Tls, cert.as_der())
     }
 
     impl<R: Rng + CryptoRng, S: SecretKeyStore> Csp<R, S> {
         pub(super) fn store_tls_secret_key(
             &mut self,
-            cert: TlsEd25519CertificateDerBytes,
+            cert: &TlsPublicKeyCert,
             secret_key: TlsEd25519SecretKeyDerBytes,
         ) -> KeyId {
             let key_id = tls_cert_hash_as_key_id(&cert);

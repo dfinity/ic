@@ -118,31 +118,19 @@ impl fmt::Display for RegistryError {
 
 impl RegistryError {
     pub fn is_version_too_old(&self) -> bool {
-        match self {
-            RegistryError::VersionTooOld { .. } => true,
-            _ => false,
-        }
+        matches!(self, RegistryError::VersionTooOld { .. })
     }
 
     pub fn is_version_too_new(&self) -> bool {
-        match self {
-            RegistryError::VersionTooNew { .. } => true,
-            _ => false,
-        }
+        matches!(self, RegistryError::VersionTooNew { .. })
     }
 
     pub fn is_duplicate_key(&self) -> bool {
-        match self {
-            RegistryError::DuplicateKey { .. } => true,
-            _ => false,
-        }
+        matches!(self, RegistryError::DuplicateKey { .. })
     }
 
     pub fn is_validation_error(&self) -> bool {
-        match self {
-            RegistryError::ValidationError { .. } => true,
-            _ => false,
-        }
+        matches!(self, RegistryError::ValidationError { .. })
     }
 }
 
@@ -190,4 +178,7 @@ pub enum RegistryClientError {
         // which 'infects' this enum, and everything that uses it.
         error: String,
     },
+
+    #[error("failed to report the same version twice after {retries} times")]
+    PollingLatestVersionFailed { retries: usize },
 }

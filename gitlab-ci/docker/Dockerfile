@@ -1,6 +1,6 @@
 FROM ubuntu:20.04
 
-ARG rust_version=1.45.2
+ARG rust_version=1.52.1
 # make sure the motoko_version corresponds to the same version in nix/sources.json
 ARG motoko_version=0.5.10
 ARG sdk_version=0.7.0-beta.5
@@ -28,6 +28,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         build-essential pkg-config libssl-dev llvm-10-dev llvm-dev liblmdb-dev clang-10 cmake libbz2-dev \
         lldb libclang-10-dev liblz4-dev librocksdb-dev libsnappy-dev libzstd-dev vim emacs nano jq \
         zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev protobuf-compiler libprotobuf-dev \
+        sqlite3 libsqlite3-dev \
         qemu-system-x86 ovmf \
         iproute2 \
         dosfstools mtools fakeroot faketime android-sdk-ext4-utils policycoreutils \
@@ -115,7 +116,7 @@ RUN curl --fail -L -o /usr/bin/dumb-init \
 RUN V=v1.0.27; curl --fail -L https://github.com/go-jira/jira/releases/download/$V/jira-linux-amd64 -o /usr/bin/jira && \
     chmod +x /usr/bin/jira
 
-RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline junit-xml
+RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline junit-xml paramiko python-gitlab libhoney
 
 USER 1000
 
@@ -127,4 +128,4 @@ RUN mkdir --mode=0700 /home/ubuntu/.ssh && \
 
 WORKDIR /
 
-ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+ENTRYPOINT ["/usr/bin/dumb-init", "--"] 

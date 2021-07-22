@@ -9,41 +9,32 @@
 //! [`TransportImpl`](../types/struct.TransportImpl.html).
 
 use crate::types::{
-    ClientState, ConnectionState, FlowState, PeerState, QueueSize, ServerPort, TransportImpl,
+    ClientState, Connecting, ConnectionRole, ConnectionState, FlowState, PeerState, QueueSize,
+    ServerPort, ServerPortState, TransportImpl,
 };
 use crate::utils::{get_flow_ips, get_flow_label, SendQueueImpl};
-use futures::future::{self, Either, FutureExt};
+use futures::future::{AbortHandle, Abortable, Aborted};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsReadHalf, TlsWriteHalf};
 use ic_interfaces::transport::AsyncTransportEventHandler;
-use ic_logger::{debug, error, info, warn, ReplicaLogger};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::{
     transport::{FlowId, FlowTag, TransportClientType, TransportErrorCode},
     NodeId, RegistryVersion,
 };
-use socket2::Socket;
-use socket2::{Domain, SockAddr, Type};
 use std::collections::HashMap;
-use std::net::TcpListener as StdTcpListener;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::time::delay_for;
+use tokio::net::{TcpListener, TcpSocket, TcpStream};
+use tokio::time::sleep;
 
 /// Time to wait before retrying an unsuccessful connection attempt
 const CONNECT_RETRY_SECONDS: u64 = 3;
 
 /// Time to wait for the TLS handshake (for both client/server sides)
 const TLS_HANDSHAKE_TIMEOUT_SECONDS: u64 = 30;
-
-/// Timeout for accept() poll
-const CANCEL_CHECK_PERIOD_MILLISECONDS: u64 = 100;
-
-/// Connection accept backlog
-const ACCEPT_BACKLOG: i32 = 128;
 
 /// Connection status values
 #[derive(Debug)]
@@ -67,10 +58,9 @@ impl TransportImpl {
         let client_state = client_map
             .get_mut(&client_type)
             .ok_or(TransportErrorCode::TransportClientNotFound)?;
-        let is_peer_server = Self::is_peer_server(&self.node_id, &peer_id);
-        // If the peer is not the server, it's a client and we should add it to
-        // allowed_clients.
-        if !is_peer_server {
+        let role = Self::connection_role(&self.node_id, &peer_id);
+        // If we are the server, we should add the peer to the allowed_clients.
+        if role == ConnectionRole::Server {
             self.allowed_clients.write().unwrap().insert(*peer_id);
         }
         *self.registry_version.write().unwrap() = registry_version;
@@ -81,7 +71,7 @@ impl TransportImpl {
             self.node_id,
             peer_id
         );
-        self.start_peer(client_type, peer_id, peer_record, client_state)
+        self.start_peer(client_type, peer_id, peer_record, client_state, role)
     }
 
     /// Stops connection to a peer
@@ -102,7 +92,21 @@ impl TransportImpl {
             .get(&peer_id)
             .ok_or(TransportErrorCode::PeerNotFound)?;
 
-        self.free_peer(&peer_state);
+        // Remove flow from metrics.
+        for flow_state in peer_state.flow_map.values() {
+            if self
+                .control_plane_metrics
+                .flow_state
+                .remove_label_values(&[&flow_state.flow_label, &flow_state.flow_tag_label])
+                .is_err()
+            {
+                warn!(
+                    self.log,
+                    "ControlPlane::stop_peer_connections(): Could not remove flow metric {:?}",
+                    flow_state.flow_label
+                )
+            }
+        }
         client_state.peer_map.remove(&peer_id);
 
         info!(
@@ -122,15 +126,14 @@ impl TransportImpl {
         peer_id: &NodeId,
         peer_record: &NodeRecord,
         client_state: &mut ClientState,
+        role: ConnectionRole,
     ) -> Result<(), TransportErrorCode> {
         if client_state.peer_map.get(&peer_id).is_some() {
             return Err(TransportErrorCode::PeerAlreadyRegistered);
         }
 
-        let is_peer_server = Self::is_peer_server(&self.node_id, &peer_id);
         let mut peer_state = PeerState {
             flow_map: HashMap::new(),
-            connect_cancelers: Vec::new(),
         };
 
         // TODO: P2P-514
@@ -139,7 +142,7 @@ impl TransportImpl {
         for flow_config in &self.config.p2p_flows {
             let flow_tag = FlowTag::from(flow_config.flow_tag);
             queue_size_map.insert(flow_tag, QueueSize::from(flow_config.queue_size));
-            if !is_peer_server {
+            if role == ConnectionRole::Server {
                 let peer_ip = flow_ips
                     .get(&flow_tag)
                     .map_or("Unknown Peer IP".to_string(), |x| x.to_string());
@@ -149,30 +152,28 @@ impl TransportImpl {
                     peer_id: *peer_id,
                     flow_tag,
                 };
-                let flow_state = FlowState {
+                let flow_state = FlowState::new(
                     flow_id,
-                    flow_tag_label: flow_config.flow_tag.to_string(),
-                    flow_label: flow_label.clone(),
-                    connection_state: ConnectionState::Listening,
-                    abort_handles: Option::None,
-                    send_queue: Box::new(SendQueueImpl::new(
+                    flow_config.flow_tag.to_string(),
+                    flow_label.clone(),
+                    ConnectionState::Listening,
+                    Box::new(SendQueueImpl::new(
                         flow_label,
                         &flow_tag,
                         QueueSize::from(flow_config.queue_size),
                         self.send_queue_metrics.clone(),
                     )),
-                };
-                self.report_connection_state(&flow_state);
+                    self.control_plane_metrics.clone(),
+                );
                 peer_state.flow_map.insert(flow_tag, flow_state);
             }
         }
-        if !is_peer_server {
+        if role == ConnectionRole::Server {
             client_state.peer_map.insert(*peer_id, peer_state);
             return Ok(());
         }
 
         for flow_endpoint in &peer_record.p2p_flow_endpoints {
-            let connect_canceler = Arc::new(AtomicBool::new(false));
             let endpoint = match &flow_endpoint.endpoint {
                 Some(x) => x,
                 None => {
@@ -202,52 +203,42 @@ impl TransportImpl {
                 .unwrap_or_else(|_| panic!("Invalid node IP: {}", endpoint.ip_addr));
             let flow_label = get_flow_label(&endpoint.ip_addr.as_str(), peer_id);
             let server_port = endpoint.port as u16;
-            self.spawn_connect_task(
+            let connecting_task = self.spawn_connect_task(
                 client_type,
                 flow_endpoint.flow_tag.into(),
                 *peer_id,
                 peer_ip,
                 ServerPort::from(server_port),
-                connect_canceler.clone(),
             );
+            let connecting_state = Connecting {
+                peer_addr: SocketAddr::new(peer_ip, server_port),
+                connecting_task,
+            };
             let flow_id = FlowId {
                 client_type,
                 peer_id: *peer_id,
                 flow_tag,
             };
-            let flow_state = FlowState {
+            let flow_state = FlowState::new(
                 flow_id,
-                flow_tag_label: flow_endpoint.flow_tag.to_string(),
-                flow_label: flow_label.clone(),
-                connection_state: ConnectionState::Connecting(SocketAddr::new(
-                    peer_ip,
-                    server_port,
-                )),
-                abort_handles: Option::None,
-                send_queue: Box::new(SendQueueImpl::new(
+                flow_endpoint.flow_tag.to_string(),
+                flow_label.clone(),
+                ConnectionState::Connecting(connecting_state),
+                Box::new(SendQueueImpl::new(
                     flow_label.clone(),
                     &flow_tag,
                     *queue_size,
                     self.send_queue_metrics.clone(),
                 )),
-            };
-            self.report_connection_state(&flow_state);
+                self.control_plane_metrics.clone(),
+            );
             peer_state
                 .flow_map
                 .insert(flow_endpoint.flow_tag.into(), flow_state);
-            peer_state.connect_cancelers.push(connect_canceler);
         }
 
         client_state.peer_map.insert(*peer_id, peer_state);
         Ok(())
-    }
-
-    /// Cleans up the peer state
-    fn free_peer(&self, peer_state: &PeerState) {
-        // Stop the connect futures
-        for canceler in &peer_state.connect_cancelers {
-            canceler.store(true, Ordering::SeqCst);
-        }
     }
 
     /// Starts the async task to accept the incoming TcpStreams in server mode.
@@ -255,13 +246,12 @@ impl TransportImpl {
         &self,
         client_type: TransportClientType,
         flow_tag: FlowTag,
-        mut tcp_listener: TcpListener,
-        canceler: Arc<AtomicBool>,
-    ) {
+        tcp_listener: TcpListener,
+    ) -> AbortHandle {
         let weak_self = self.weak_self.read().unwrap().clone();
         let tokio_runtime = self.tokio_runtime.clone();
         let metrics = self.control_plane_metrics.clone();
-        self.tokio_runtime.spawn(async move {
+        let accept_task = async move {
             let local_addr = match tcp_listener.local_addr() {
                 Ok(addr) => addr,
                 _ => return,
@@ -272,50 +262,56 @@ impl TransportImpl {
                     Some(arc_self) => arc_self,
                     _ => return,
                 };
-                let timeout = delay_for(Duration::from_millis(CANCEL_CHECK_PERIOD_MILLISECONDS));
-                // TODO: P2P-515
-                match future::select(tcp_listener.accept().boxed(), timeout).await {
-                    Either::Left((result, _)) => {
-                        match result {
-                            Ok((stream, _)) => {
-                                let metrics = metrics.clone();
-                                metrics.tcp_accepts.with_label_values(&[&flow_tag.to_string()]).inc();
-                                tokio_runtime.spawn(async move {
-                                    // Errors are reported in set_sockopts
-                                    let stream = match Self::set_send_sockopts(stream, &arc_self.log) {
-                                        Ok(stream) => stream,
-                                        Err(_) => {
-                                            return
-                                        },
-                                    };
-                                    // Errors are reported in tls_server_handshake
-                                    if let Ok(()) =
-                                        arc_self.tls_server_handshake(client_type, flow_tag, stream)
-                                        .await {
-                                            metrics.tcp_accept_conn_success.with_label_values(&[&flow_tag.to_string()]).inc();
-                                        }
-                                });
-                            },
-                            Err(e) => {
-                                metrics.tcp_accept_conn_err.with_label_values(&[&flow_tag.to_string()]).inc();
-                                warn!(
-                                    arc_self.log,
-                                    "ControlPlane::accept(): local_addr = {:?} flow = {:?}, err = {:?}",
-                                    local_addr,
-                                    flow_tag,
-                                    e,
-                                );
+                match tcp_listener.accept().await {
+                    Ok((stream, _)) => {
+                        let metrics = metrics.clone();
+                        metrics
+                            .tcp_accepts
+                            .with_label_values(&[&flow_tag.to_string()])
+                            .inc();
+                        tokio_runtime.spawn(async move {
+                            // Errors are reported in set_sockopts
+                            let stream = match Self::set_send_sockopts(stream, &arc_self.log) {
+                                Ok(stream) => stream,
+                                Err(_) => return,
+                            };
+                            // Errors are reported in tls_server_handshake
+                            if let Ok(()) = arc_self
+                                .tls_server_handshake(client_type, flow_tag, stream)
+                                .await
+                            {
+                                metrics
+                                    .tcp_accept_conn_success
+                                    .with_label_values(&[&flow_tag.to_string()])
+                                    .inc();
                             }
-                        }
+                        });
                     }
-                    Either::Right((_, _)) => {
-                        if canceler.load(Ordering::SeqCst) {
-                            return;
-                        }
+                    Err(e) => {
+                        metrics
+                            .tcp_accept_conn_err
+                            .with_label_values(&[&flow_tag.to_string()])
+                            .inc();
+                        warn!(
+                            arc_self.log,
+                            "ControlPlane::accept(): local_addr = {:?} flow = {:?}, err = {:?}",
+                            local_addr,
+                            flow_tag,
+                            e,
+                        );
                     }
                 }
             }
+        };
+
+        let (abort_handle, abort_registration) = AbortHandle::new_pair();
+        let log_cl = self.log.clone();
+        self.tokio_runtime.spawn(async move {
+            if let Err(Aborted) = Abortable::new(accept_task, abort_registration).await {
+                warn!(log_cl, "ControlPlane: accept task aborted");
+            }
         });
+        abort_handle
     }
 
     /// Spawn a task that tries to connect to a peer (forever, or until
@@ -328,22 +324,18 @@ impl TransportImpl {
         peer_id: NodeId,
         peer_ip: IpAddr,
         server_port: ServerPort,
-        canceler: Arc<AtomicBool>,
-    ) {
+    ) -> AbortHandle {
         let node_ip = self.node_ip;
         let weak_self = self.weak_self.read().unwrap().clone();
         let metrics = self.control_plane_metrics.clone();
-        self.tokio_runtime.spawn(async move {
-            let local_addr: SockAddr = SocketAddr::new(node_ip, 0).into();
-            let peer_addr: SockAddr = SocketAddr::new(peer_ip, server_port.get()).into();
+        let connect_task = async move {
+            let local_addr = SocketAddr::new(node_ip, 0);
+            let peer_addr = SocketAddr::new(peer_ip, server_port.get());
 
             // Loop till connection is established
-            let mut retries : u32 = 0;
+            let mut retries: u32 = 0;
             loop {
                 retries += 1;
-                if canceler.load(Ordering::SeqCst) {
-                    return;
-                }
                 // If the TransportImpl has been deleted, abort.
                 let arc_self = match weak_self.upgrade() {
                     Some(arc_self) => arc_self,
@@ -353,32 +345,66 @@ impl TransportImpl {
                 // We currently retry forever, which is fine as we have per-connection
                 // async task. This loop will terminate when the peer is removed from
                 // valid set.
-                metrics.tcp_connects.with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()]).inc();
-                match Self::connect_to_server(&local_addr, &peer_addr, canceler.as_ref(), &arc_self.log)
-                    .await
-                {
+                metrics
+                    .tcp_connects
+                    .with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()])
+                    .inc();
+                match Self::connect_to_server(&local_addr, &peer_addr, &arc_self.log).await {
                     Ok(stream) => {
-                        match arc_self.tls_client_handshake(
-                            peer_id,
-                            client_type,
-                            flow_tag,
-                            stream,
-                        )
-                        .await
+                        match arc_self
+                            .tls_client_handshake(peer_id, client_type, flow_tag, stream)
+                            .await
                         {
                             Ok(()) => {
-                                metrics.tcp_conn_to_server_success.with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()]).inc();
+                                metrics
+                                    .tcp_conn_to_server_success
+                                    .with_label_values(&[
+                                        &peer_id.to_string(),
+                                        &flow_tag.to_string(),
+                                    ])
+                                    .inc();
+                                info!(
+                                    arc_self.log,
+                                    "ControlPlane::connect_to_server(): Successful TLS handshake. local_addr = {:?} peer = {:?}/{:?}, \
+                                    flow = {:?}, retries = {}",
+                                    local_addr,
+                                    peer_id,
+                                    peer_addr,
+                                    flow_tag,
+                                    retries,
+                                );
                                 return;
-                            },
-                            Err(_) => {
-                                metrics.tcp_conn_to_server_err.with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()]).inc();
-                                delay_for(Duration::from_secs(CONNECT_RETRY_SECONDS)).await;
+                            }
+                            Err(e) => {
+                                metrics
+                                    .tcp_conn_to_server_err
+                                    .with_label_values(&[
+                                        &peer_id.to_string(),
+                                        &flow_tag.to_string(),
+                                    ])
+                                    .inc();
+                                info!(
+                                    every_n_seconds => 300,
+                                    arc_self.log,
+                                    "ControlPlane::connect_to_server(): TLS handshake failed. local_addr = {:?} peer = {:?}/{:?}, \
+                                    flow = {:?}, err = {:?}, retries = {}",
+                                    local_addr,
+                                    peer_id,
+                                    peer_addr,
+                                    flow_tag,
+                                    e,
+                                    retries
+                                );
+                                sleep(Duration::from_secs(CONNECT_RETRY_SECONDS)).await;
                                 continue;
                             }
                         }
                     }
                     Err(e) => {
-                        metrics.tcp_conn_to_server_err.with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()]).inc();
+                        metrics
+                            .tcp_conn_to_server_err
+                            .with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()])
+                            .inc();
                         warn!(
                             arc_self.log,
                             "ControlPlane::connect_to_server(): local_addr = {:?} peer = {:?}/{:?}, \
@@ -390,11 +416,20 @@ impl TransportImpl {
                             e,
                             retries,
                         );
-                        delay_for(Duration::from_secs(CONNECT_RETRY_SECONDS)).await;
+                        sleep(Duration::from_secs(CONNECT_RETRY_SECONDS)).await;
                     }
                 }
             }
+        };
+
+        let (abort_handle, abort_registration) = AbortHandle::new_pair();
+        let log_cl = self.log.clone();
+        self.tokio_runtime.spawn(async move {
+            if let Err(Aborted) = Abortable::new(connect_task, abort_registration).await {
+                warn!(log_cl, "ControlPlane: connect task aborted");
+            }
         });
+        abort_handle
     }
 
     /// Handles the handshake completion during connection establishment (both
@@ -404,6 +439,7 @@ impl TransportImpl {
     async fn process_handshake_result(
         &self,
         peer_id: NodeId,
+        role: ConnectionRole,
         client_type: TransportClientType,
         flow_tag: FlowTag,
         local_addr: SocketAddr,
@@ -411,72 +447,36 @@ impl TransportImpl {
         tls_reader: TlsReadHalf,
         tls_writer: TlsWriteHalf,
     ) -> Result<(), TransportErrorCode> {
-        {
-            // Don't hold the lock across await point.
-            let mut client_map = self.client_map.write().unwrap();
-            let client_state = client_map
-                .get_mut(&client_type)
-                .ok_or(TransportErrorCode::TransportClientNotFound)?;
-            let peer_state = client_state
-                .peer_map
-                .get_mut(&peer_id)
-                .ok_or(TransportErrorCode::PeerNotFound)?;
-            let flow_state = peer_state
-                .flow_map
-                .get_mut(&flow_tag)
-                .ok_or(TransportErrorCode::FlowNotFound)?;
-
-            // Update the connection state for the flow
-            if let ConnectionState::Connected(_) = flow_state.connection_state {
-                // TODO: P2P-516
-                return Ok(());
-            }
-            self.set_connection_state(flow_state, &ConnectionState::Connected(peer_addr));
-        }
-
         // Pass the established connection to the data plane to start IOs.
         let flow_id = FlowId {
             client_type,
             peer_id,
             flow_tag,
         };
-        self.on_connect(flow_id, Box::new(tls_reader), Box::new(tls_writer))
-            .await
-            .map_err(|e| {
-                warn!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "ControlPlane::handshake_result(): failed to add flow: \
-                     node_id = {:?}, local_addr = {:?}, peer_addr = {:?}, is_peer_server = {} \
-                     flow = {:?}, error = {:?}",
-                    self.node_id,
-                    local_addr,
-                    peer_addr,
-                    Self::is_peer_server(&self.node_id, &peer_id),
-                    flow_tag,
-                    e
-                );
+        self.on_connect(
+            flow_id,
+            role,
+            peer_addr,
+            Box::new(tls_reader),
+            Box::new(tls_writer),
+        )
+        .await
+        .map_err(|e| {
+            warn!(
+                every_n_seconds => 30,
+                self.log,
+                "ControlPlane::handshake_result(): failed to add flow: \
+                 node_id = {:?}, local_addr = {:?}, peer_addr = {:?}, role = {:?}, \
+                 flow = {:?}, error = {:?}",
+                self.node_id,
+                local_addr,
+                peer_addr,
+                Self::connection_role(&self.node_id, &peer_id),
+                flow_tag,
                 e
-            })
-    }
-
-    /// Sets the state of a given flow connection
-    fn set_connection_state(&self, flow_state: &mut FlowState, connection_state: &ConnectionState) {
-        flow_state.connection_state = *connection_state;
-        self.report_connection_state(flow_state);
-    }
-
-    /// Reports the state of a flow to metrics
-    fn report_connection_state(&self, flow_state: &FlowState) {
-        let value = match flow_state.connection_state {
-            ConnectionState::Listening => 1,
-            ConnectionState::Connecting(_) => 2,
-            ConnectionState::Connected(_) => 3,
-        };
-        self.control_plane_metrics
-            .flow_state
-            .with_label_values(&[&flow_state.flow_label, &flow_state.flow_tag_label])
-            .set(value);
+            );
+            e
+        })
     }
 
     /// Retries to establish a connection
@@ -490,7 +490,6 @@ impl TransportImpl {
             .with_label_values(&[&flow_id.peer_id.to_string(), &flow_id.flow_tag.to_string()])
             .inc();
 
-        let connect_canceler = Arc::new(AtomicBool::new(false));
         let socket_addr: SocketAddr;
         {
             // Don't hold the lock across await points
@@ -507,16 +506,9 @@ impl TransportImpl {
                 .get_mut(&flow_id.flow_tag)
                 .ok_or(TransportErrorCode::FlowNotFound)?;
 
-            // Abort the previous tasks if any
-            if let Some((send_handle, receive_handle)) = flow_state.abort_handles.take() {
-                debug!(self.log, "ControlPlane::retry_connection(): node_id = {:?}, flow = {:?} -- Aborting existing read/write tasks", self.node_id, flow_id);
-                send_handle.abort();
-                receive_handle.abort();
-            }
-
-            if !Self::is_peer_server(&self.node_id, &flow_id.peer_id) {
+            if Self::connection_role(&self.node_id, &flow_id.peer_id) == ConnectionRole::Server {
                 // We are the server, wait for the peer to connect
-                self.set_connection_state(flow_state, &ConnectionState::Listening);
+                flow_state.update(ConnectionState::Listening);
                 warn!(
                     self.log,
                     "ControlPlane::process_disconnect(): node_id = {:?}, flow = {:?}, \
@@ -527,92 +519,60 @@ impl TransportImpl {
                 return Ok(());
             }
 
-            match flow_state.connection_state {
-                // reconnect if we have a listener
-                ConnectionState::Connected(sa)
-                    if client_state.accept_ports.contains_key(&flow_id.flow_tag) =>
-                {
-                    socket_addr = sa;
-                    self.set_connection_state(flow_state, &ConnectionState::Connecting(sa));
-                    peer_state.connect_cancelers.push(connect_canceler.clone());
+            // reconnect if we have a listener
+            if let ConnectionState::Connected(sa) = &flow_state.connection_state {
+                if client_state.accept_ports.contains_key(&flow_id.flow_tag) {
+                    socket_addr = sa.peer_addr;
+                    let connecting_task = self.spawn_connect_task(
+                        flow_id.client_type,
+                        flow_id.flow_tag,
+                        flow_id.peer_id,
+                        socket_addr.ip(),
+                        ServerPort::from(socket_addr.port()),
+                    );
+                    let connecting_state = Connecting {
+                        peer_addr: socket_addr,
+                        connecting_task,
+                    };
+                    flow_state.update(ConnectionState::Connecting(connecting_state));
+
+                    warn!(
+                        self.log,
+                        "ControlPlane::process_disconnect(): spawning reconnect task: node_id = {:?}, \
+                        flow = {:?}, local_addr = {:?}, peer_addr = {:?}, peer_port = {:?}",
+                        self.node_id,
+                        flow_id,
+                        self.node_ip,
+                        socket_addr.ip(),
+                        socket_addr.port(),
+                    );
                 }
-                _ => return Ok(()),
             }
         }
 
-        warn!(
-            self.log,
-            "ControlPlane::process_disconnect(): spawning reconnect task: node_id = {:?}, \
-                flow = {:?}, local_addr = {:?}, peer_addr = {:?}, peer_port = {:?}",
-            self.node_id,
-            flow_id,
-            self.node_ip,
-            socket_addr.ip(),
-            socket_addr.port(),
-        );
-
-        self.spawn_connect_task(
-            flow_id.client_type,
-            flow_id.flow_tag,
-            flow_id.peer_id,
-            socket_addr.ip(),
-            ServerPort::from(socket_addr.port()),
-            connect_canceler,
-        );
         Ok(())
     }
 
     /// Set up the client socket, and connect to the specified server peer
     async fn connect_to_server(
-        local_addr: &SockAddr,
-        peer_addr: &SockAddr,
-        canceler: &AtomicBool,
+        local_addr: &SocketAddr,
+        peer_addr: &SocketAddr,
         log: &ReplicaLogger,
     ) -> Result<TcpStream, TransportErrorCode> {
-        let mut retries: i64 = 0;
-        let client_socket = match Self::init_client_socket(local_addr, log) {
-            Ok(client_socket) => client_socket,
-            Err(e) => return Err(e),
-        };
-        let addr = Self::get_socket_addr(peer_addr);
-        let tcp_stream = client_socket.into_tcp_stream();
-        let connect = TcpStream::connect_std(tcp_stream, &addr);
-        let mut connect = connect.boxed();
-        loop {
-            retries += 1;
-            if canceler.load(Ordering::SeqCst) {
-                return Err(TransportErrorCode::ConnectOsError);
+        let client_socket = Self::init_client_socket(local_addr, log)?;
+        match Self::connect_status(client_socket.connect(*peer_addr).await) {
+            ConnectStatus::Success(stream) => Self::set_send_sockopts(stream, log),
+            ConnectStatus::ServerDown => Err(TransportErrorCode::ServerDown),
+            ConnectStatus::Error(err_code) => {
+                warn!(
+                    log,
+                    "ControlPlane::connect_to_server(): local_addr = {:?} peer_addr = {:?}, error {:?}",
+                    local_addr,
+                    peer_addr,
+                    err_code,
+                );
+                Err(TransportErrorCode::ConnectOsError)
             }
-            let timeout = delay_for(Duration::from_millis(CANCEL_CHECK_PERIOD_MILLISECONDS));
-            match future::select(connect, timeout).await {
-                // Notify the async completion handler
-                Either::Left((result, _)) => {
-                    match Self::connect_status(result) {
-                        ConnectStatus::Success(stream) => {
-                            return Self::set_send_sockopts(stream, log);
-                        }
-                        ConnectStatus::ServerDown => return Err(TransportErrorCode::ServerDown),
-                        ConnectStatus::Error(err_code) => {
-                            warn!(
-                                log,
-                                "ControlPlane::connect_to_server(): local_addr = {:?} peer_addr = {:?}, error {:?}, retries = {}",
-                                local_addr,
-                                peer_addr,
-                                err_code,
-                                retries,
-                            );
-                            return Err(TransportErrorCode::ConnectOsError);
-                        }
-                    };
-                }
-                // Cancel check period timeout
-                Either::Right((_, next_connect)) => {
-                    if canceler.load(Ordering::SeqCst) {
-                        return Err(TransportErrorCode::ConnectOsError);
-                    }
-                    connect = next_connect;
-                }
-            };
         }
     }
 
@@ -731,6 +691,7 @@ impl TransportImpl {
         };
         self.process_handshake_result(
             peer_id,
+            ConnectionRole::Server,
             client_type,
             flow_tag,
             local_addr,
@@ -802,6 +763,7 @@ impl TransportImpl {
 
         self.process_handshake_result(
             peer_id,
+            ConnectionRole::Client,
             client_type,
             flow_tag,
             local_addr,
@@ -818,95 +780,105 @@ impl TransportImpl {
         })
     }
 
-    /// Returns the domain (family) of the given `SockAddr`, if IPv4 or IPv6.
-    /// Panics if passed a socket of any other family (e.g. a Unix socket).
-    fn socket_domain(addr: &SockAddr) -> Domain {
-        match addr.as_std() {
-            Some(SocketAddr::V4(_)) => Domain::ipv4(),
-            Some(SocketAddr::V6(_)) => Domain::ipv6(),
-            None => panic!("Expecting an IPv4 or IPv6 address, have {:?}", addr),
+    // Sets up the server side socket with the node IP:port
+    fn init_listener(&self, local_addr: &SocketAddr) -> Result<TcpListener, TransportErrorCode> {
+        let socket = if local_addr.is_ipv6() {
+            TcpSocket::new_v6()
+        } else {
+            TcpSocket::new_v4()
+        };
+        let socket = match socket {
+            Ok(socket) => socket,
+            Err(e) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "ControlPlane::listen(): Failed to create socket: local_addr = {:?} {:?}",
+                    local_addr,
+                    e
+                );
+                return Err(TransportErrorCode::ServerSocketCreateFailed);
+            }
+        };
+
+        // TODO: set reuse flags only for tests if needed
+        if socket.set_reuseaddr(true).is_err() {
+            return Err(TransportErrorCode::ServerSocketAddrReuseFailed);
         }
-    }
 
-    /// Sets up the server side socket with the node IP:port
-    fn init_std_listener(
-        &self,
-        local_addr: &SockAddr,
-    ) -> Result<StdTcpListener, TransportErrorCode> {
-        let domain = Self::socket_domain(local_addr);
-        let socket = Socket::new(domain, Type::stream(), None).map_err(|e| {
-            warn!(
-                every_n_seconds => 30,
-                self.log,
-                "ControlPlane::listen(): Failed to create socket: local_addr = {:?} {:?}",
-                local_addr,
-                e
-            );
-            TransportErrorCode::ServerSocketCreateFailed
-        })?;
+        if socket.set_reuseport(true).is_err() {
+            return Err(TransportErrorCode::ServerSocketPortReuseFailed);
+        }
 
-        socket
-            .set_reuse_address(true)
-            .map_err(|_| TransportErrorCode::ServerSocketAddrReuseFailed)?;
-
-        socket
-            .set_reuse_port(true)
-            .map_err(|_| TransportErrorCode::ServerSocketPortReuseFailed)?;
-
-        socket.bind(&local_addr).map_err(|e| {
+        if let Err(e) = socket.bind(*local_addr) {
             warn!(
                 every_n_seconds => 30,
                 self.log,
                 "ControlPlane::listen(): Failed to bind: local_addr = {:?} {:?}", local_addr, e
             );
-            TransportErrorCode::ServerSocketBindFailed
-        })?;
+            return Err(TransportErrorCode::ServerSocketBindFailed);
+        }
 
-        socket.listen(ACCEPT_BACKLOG).map_err(|e| {
-            warn!(
-                every_n_seconds => 30,
-                self.log,
-                "ControlPlane::listen(): Failed to listen: local_addr = {:?} {:?}", local_addr, e
-            );
-            TransportErrorCode::ServerSocketListenFailed
-        })?;
-
-        Ok(socket.into_tcp_listener())
+        match socket.listen(128) {
+            Ok(listener) => Ok(listener),
+            Err(e) => {
+                warn!(
+                    self.log,
+                    "ControlPlane::listen(): Failed to listen: local_addr = {:?} {:?}",
+                    local_addr,
+                    e
+                );
+                Err(TransportErrorCode::ServerSocketListenFailed)
+            }
+        }
     }
 
     /// Sets up the client side socket with the node IP address
     fn init_client_socket(
-        local_addr: &SockAddr,
+        local_addr: &SocketAddr,
         log: &ReplicaLogger,
-    ) -> Result<Socket, TransportErrorCode> {
-        let domain = Self::socket_domain(local_addr);
-        let socket = Socket::new(domain, Type::stream(), None).map_err(|e| {
-            warn!(
-                every_n_seconds => 30,
-                log,
-                "ControlPlane::connect(): Failed to create socket: local_addr = {:?} {:?}",
-                local_addr,
-                e
-            );
-            TransportErrorCode::ClientSocketCreateFailed
-        })?;
-
-        socket.bind(local_addr).map_err(|e| {
-            warn!(
-                every_n_seconds => 30,
-                log,
-                "ControlPlane::connect(): Failed to bind(): local_addr = {:?} {:?}",
-                local_addr,
-                e
-            );
-            TransportErrorCode::ClientSocketBindFailed
-        })?;
-        Ok(socket)
+    ) -> Result<TcpSocket, TransportErrorCode> {
+        let socket = if local_addr.is_ipv6() {
+            TcpSocket::new_v6()
+        } else {
+            TcpSocket::new_v4()
+        };
+        let socket = match socket {
+            Ok(socket) => socket,
+            Err(e) => {
+                warn!(
+                    every_n_seconds => 30,
+                    log,
+                    "ControlPlane::connect(): Failed to create socket: local_addr = {:?} {:?}",
+                    local_addr,
+                    e
+                );
+                return Err(TransportErrorCode::ClientSocketCreateFailed);
+            }
+        };
+        match socket.bind(*local_addr) {
+            Ok(()) => Ok(socket),
+            Err(e) => {
+                warn!(
+                    every_n_seconds => 30,
+                    log,
+                    "ControlPlane::connect(): Failed to bind(): local_addr = {:?} {:?}",
+                    local_addr,
+                    e
+                );
+                Err(TransportErrorCode::ClientSocketBindFailed)
+            }
+        }
     }
 
-    /// Returns true if the peer should act as the TCP server
-    fn is_peer_server(my_id: &NodeId, peer: &NodeId) -> bool {
-        *peer > *my_id
+    /// Returns our role wrt the peer connection
+    fn connection_role(my_id: &NodeId, peer: &NodeId) -> ConnectionRole {
+        assert!(*my_id != *peer);
+        if *my_id > *peer {
+            ConnectionRole::Server
+        } else {
+            ConnectionRole::Client
+        }
     }
 
     /// Parses the `connect()` result and returns the status
@@ -929,14 +901,6 @@ impl TransportImpl {
         result.map_err(|_| TransportErrorCode::InvalidSockAddr)
     }
 
-    /// Returns the socket address based on the address family
-    fn get_socket_addr(addr: &SockAddr) -> SocketAddr {
-        match addr.as_inet() {
-            Some(a) => a.into(),
-            None => addr.as_inet6().unwrap().into(),
-        }
-    }
-
     /// Initilizes a client
     pub fn init_client(
         &self,
@@ -950,35 +914,31 @@ impl TransportImpl {
 
         // Bind to the server ports.
         let mut listeners = Vec::new();
-        let mut accept_ports = HashMap::new();
         for flow_config in &self.config.p2p_flows {
-            let flow_tag = FlowTag::from(flow_config.flow_tag);
-            accept_ports.insert(flow_tag, ServerPort::from(flow_config.server_port));
-            let server_addr: SockAddr =
-                SocketAddr::new(self.node_ip, flow_config.server_port).into();
-            let std_listener = self.init_std_listener(&server_addr)?;
-            match TcpListener::from_std(std_listener) {
-                Ok(tcp_listener) => listeners.push((flow_config.flow_tag, tcp_listener)),
-                _ => return Err(TransportErrorCode::ServerSocketConversionFailed),
-            }
+            let server_addr = SocketAddr::new(self.node_ip, flow_config.server_port);
+            listeners.push((
+                flow_config.flow_tag,
+                flow_config.server_port,
+                self.init_listener(&server_addr)?,
+            ));
         }
 
-        let mut accept_cancelers = Vec::new();
-        for (flow_tag, tcp_listener) in listeners {
-            let accept_canceler = Arc::new(AtomicBool::new(false));
-            self.spawn_accept_task(
-                client_type,
-                FlowTag::from(flow_tag),
-                tcp_listener,
-                accept_canceler.clone(),
+        let mut accept_ports = HashMap::new();
+        for (config_flow_tag, config_server_port, tcp_listener) in listeners {
+            let flow_tag = FlowTag::from(config_flow_tag);
+            let accept_task = self.spawn_accept_task(client_type, flow_tag, tcp_listener);
+            accept_ports.insert(
+                flow_tag,
+                ServerPortState {
+                    port: ServerPort::from(config_server_port),
+                    accept_task,
+                },
             );
-            accept_cancelers.push(accept_canceler);
         }
         client_map.insert(
             client_type,
             ClientState {
                 accept_ports,
-                accept_cancelers,
                 peer_map: HashMap::new(),
                 event_handler,
             },
@@ -1066,7 +1026,7 @@ mod tests {
         }
     }
 
-    #[tokio::test(core_threads = 2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_handshake() {
         let registry_version = REG_V1;
         let (connected_1, done_1) = bounded(0);
@@ -1181,7 +1141,7 @@ mod tests {
             .add(
                 &make_crypto_tls_cert_key(node_id),
                 REG_V1,
-                Some(tls_pubkey_cert),
+                Some(tls_pubkey_cert.to_proto()),
             )
             .expect("failed to add TLS cert to registry");
         temp_crypto

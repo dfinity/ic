@@ -1,5 +1,6 @@
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::error::{NodeManagerError, NodeManagerResult};
+use crate::nns_registry_replicator::NnsRegistryReplicator;
 use crate::registry_helper::RegistryHelper;
 use crate::release_package_provider::ReleasePackageProvider;
 use crate::replica_process::ReplicaProcess;
@@ -8,9 +9,7 @@ use ic_http_utils::file_downloader::check_file_hash;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
-
 use ic_registry_client::helper::subnet::SubnetRegistry;
-use ic_registry_client::nns_registry_replicator::NnsRegistryReplicator;
 use ic_registry_common::local_store::LocalStoreImpl;
 use ic_types::consensus::catchup::CUPWithOriginalProtobuf;
 use ic_types::{
@@ -198,7 +197,11 @@ impl ReleasePackage {
         // the replica (e.g. in cases we directly upgrade v1 -> v1).
         let current_replica_version = &self.replica_version;
         if Some(&latest_replica_version) == current_replica_version.as_ref()
-            && latest_public_key == self.high_threshold_pub_key
+            && (latest_public_key == self.high_threshold_pub_key ||
+                // There are cases where during start() get_public_key() was
+                // not yet available and it has been set to None. If that's
+                // the case and it is now available, set it and return.
+                    self.high_threshold_pub_key.is_none())
         {
             if self.fixed_version_mode && self.subnet_id.is_none() {
                 // Confirm base OS has booted (so it does not get reverted on next boot).
@@ -255,6 +258,18 @@ impl ReleasePackage {
                 return Ok((latest_replica_version, None));
             }
         }
+
+        info!(
+            self.logger,
+            "Runnig upgrade loop. Latest IC version in registry: {} \
+             - running IC version {:?} \
+             - latest public key: {:?} \
+             - running with public key: {:?}",
+            latest_replica_version,
+            self.replica_version.as_ref(),
+            latest_public_key,
+            self.high_threshold_pub_key,
+        );
 
         // Attempt to pro-actively download the replica version for
         // the highest current registry version. Note that the current
@@ -549,7 +564,7 @@ async fn background_task(mut release_package: ReleasePackage) {
             return;
         }
         release_package.check_for_upgrade_once().await;
-        tokio::time::delay_for(std::time::Duration::from_secs(10)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     }
 }
 

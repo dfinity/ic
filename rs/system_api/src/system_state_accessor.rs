@@ -6,7 +6,7 @@ use ic_replicated_state::{
 use ic_types::{
     messages::{CallContextId, CallbackId, Request},
     methods::Callback,
-    CanisterId, ComputeAllocation, Cycles, PrincipalId,
+    CanisterId, ComputeAllocation, Cycles, NumInstructions, PrincipalId,
 };
 
 /// The abstract interface through which canister user code can
@@ -35,6 +35,9 @@ pub trait SystemStateAccessor {
 
     /// Grows stable memory by specified amount.
     fn stable_grow(&self, additional_pages: u32) -> i32;
+
+    /// Returns the number of instructions needed to copy `num_bytes`.
+    fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions;
 
     /// Reads from stable memory back to heap.
     fn stable_read(

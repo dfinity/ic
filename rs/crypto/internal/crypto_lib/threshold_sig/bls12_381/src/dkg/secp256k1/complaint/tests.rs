@@ -219,8 +219,8 @@ proptest! {
         seed: Randomness,
         dealer_secret_key_bytes: EphemeralSecretKeyBytes,
         dkg_id in arbitrary_types::dkg_id(),
-        threshold in 0 as NodeIndex..4,
-        redundancy in 0 as NodeIndex..4,
+        threshold in 0_u32..4,
+        redundancy in 0_u32..4,
         receiver_secret_keys in proptest::collection::vec(any::<EphemeralSecretKeyBytes>(), 8..10),
     ) {
         prop_assume!(threshold + redundancy > 0);
@@ -232,8 +232,8 @@ proptest! {
         seed: Randomness,
         dealer_secret_key_bytes: EphemeralSecretKeyBytes,
         dkg_id in arbitrary_types::dkg_id(),
-        threshold in 1 as NodeIndex..4,
-        redundancy in 0 as NodeIndex..4,
+        threshold in 1_u32..4,
+        redundancy in 0_u32..4,
         receiver_secret_keys in proptest::collection::vec(any::<EphemeralSecretKeyBytes>(), 8..10),
     ) {
         prop_assume!(threshold + redundancy > 0);

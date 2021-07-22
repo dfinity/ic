@@ -158,7 +158,7 @@ impl Label {
 impl fmt::Debug for Label {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fn printable(byte: u8) -> bool {
-            byte >= 32 && byte < 127
+            (32..127).contains(&byte)
         }
         let bytes = self.as_bytes();
         if bytes.iter().all(|b| printable(*b)) {
@@ -180,15 +180,15 @@ impl fmt::Display for Label {
     }
 }
 
-impl Into<String> for Label {
-    fn into(self) -> String {
-        format!("{}", self)
+impl From<Label> for String {
+    fn from(val: Label) -> Self {
+        val.to_string()
     }
 }
 
-impl Into<serde_bytes::ByteBuf> for Label {
-    fn into(self) -> serde_bytes::ByteBuf {
-        serde_bytes::ByteBuf::from(self.to_vec())
+impl From<Label> for serde_bytes::ByteBuf {
+    fn from(val: Label) -> Self {
+        Self::from(val.to_vec())
     }
 }
 

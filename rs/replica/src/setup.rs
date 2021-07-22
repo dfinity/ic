@@ -64,9 +64,9 @@ pub fn get_catch_up_package(
             pb::CatchUpPackage::read_from_file(args.catch_up_package.clone()?)
                 .and_then(|protobuf| {
                     CatchUpPackage::try_from(&protobuf)
-                        .map(|cup| CUPWithOriginalProtobuf { protobuf, cup })
+                        .map(|cup| CUPWithOriginalProtobuf { cup, protobuf })
                 })
-                .map_err(|e| panic!(format!("Failed to load CUP at startup {:?}", e)))
+                .map_err(|e| panic!("Failed to load CUP at startup {:?}", e))
                 .unwrap(),
         ),
         Err(_) => {
@@ -131,7 +131,7 @@ pub async fn get_subnet_id(
                 node_id, registry_version
             );
         }
-        tokio::time::delay_for(std::time::Duration::from_millis(10)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
 }
 
@@ -164,7 +164,7 @@ pub async fn get_subnet_type(
                     "Unable to read the subnet record: {}\nTrying again...",
                     err.to_string(),
                 );
-                tokio::time::delay_for(std::time::Duration::from_millis(10)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             }
         }
     }
@@ -330,29 +330,4 @@ pub fn setup_crypto_provider(
     });
     CryptoConfig::set_dir_with_required_permission(&config.crypto_root).unwrap();
     CryptoComponent::new(config, registry, replica_logger, metrics_registry)
-}
-
-/// Similarly to `setup_crypto_provider` sets up a cryptographic
-/// functionality provider. The difference is we indicate a particular
-/// node id (`NodeId`).
-///
-/// # Panics
-///
-/// Panics when no root directory for the cryptography storage can be
-/// created.
-pub fn setup_crypto_provider_with_node_id(
-    config: &CryptoConfig,
-    registry: Arc<dyn RegistryClient>,
-    node_id: NodeId,
-    replica_logger: ReplicaLogger,
-) -> CryptoComponent {
-    std::fs::create_dir_all(&config.crypto_root).unwrap_or_else(|err| {
-        panic!(
-            "Failed to create crypto root directory {}: {}",
-            config.crypto_root.display(),
-            err
-        )
-    });
-    CryptoConfig::set_dir_with_required_permission(&config.crypto_root).unwrap();
-    CryptoComponent::new_with_fake_node_id(config, registry, node_id, replica_logger)
 }

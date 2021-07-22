@@ -11,11 +11,13 @@ use ic_types::{
     subnet_id_try_from_protobuf,
     time::{Time, UNIX_EPOCH},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
-    CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId,
+    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    mem::size_of,
+    sync::Arc,
+};
 
 pub type Streams = BTreeMap<SubnetId, Stream>;
 use ic_protobuf::{
@@ -31,7 +33,7 @@ use std::{
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
 /// history queries.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SystemMetadata {
     /// History of ingress messages as they traversed through the
     /// system.
@@ -49,6 +51,8 @@ pub struct SystemMetadata {
     pub prev_state_hash: Option<CryptoHashOfPartialState>,
 
     /// The Consensus-determined time this batch was created.
+    /// NOTE: this time is monotonically increasing (and not strictly
+    /// increasing).
     pub batch_time: Time,
 
     pub network_topology: NetworkTopology,
@@ -98,7 +102,7 @@ pub struct SystemMetadata {
     pub heap_delta_estimate: NumBytes,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NetworkTopology {
     pub subnets: BTreeMap<SubnetId, SubnetTopology>,
     pub routing_table: RoutingTable,
@@ -164,7 +168,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SubnetTopology {
     /// The public key of the subnet (a DER-encoded BLS key, see
     /// https://sdk.dfinity.org/docs/interface-spec/index.html#certification)
@@ -210,13 +214,12 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
             // It is fine to use an arbitrary value here. We always reset the
             // field before we actually use it. We pick the value of least
             // privilege just to be sure.
-            subnet_type: SubnetType::try_from(item.subnet_type)
-                .unwrap_or_else(|_| SubnetType::Application),
+            subnet_type: SubnetType::try_from(item.subnet_type).unwrap_or(SubnetType::Application),
         })
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NodeTopology {
     pub ip_address: String,
     pub http_port: u16,
@@ -248,10 +251,10 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
         Self {
             own_subnet_id: Some(subnet_id_into_protobuf(item.own_subnet_id)),
             generated_id_counter: item.generated_id_counter,
-            prev_state_hash: match item.prev_state_hash.clone() {
-                Some(prev_hash) => Some(prev_hash.get().0),
-                None => None,
-            },
+            prev_state_hash: item
+                .prev_state_hash
+                .clone()
+                .map(|prev_hash| prev_hash.get().0),
             batch_time_nanos: item.batch_time.as_nanos_since_unix_epoch(),
             ingress_history: Some((&item.ingress_history).into()),
             streams: item
@@ -294,10 +297,7 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             // properly set this value.
             own_subnet_type: SubnetType::default(),
             generated_id_counter: item.generated_id_counter,
-            prev_state_hash: match item.prev_state_hash {
-                None => None,
-                Some(b) => Some(CryptoHash(b).into()),
-            },
+            prev_state_hash: item.prev_state_hash.map(|b| CryptoHash(b).into()),
             batch_time: Time::from_nanos_since_unix_epoch(item.batch_time_nanos),
             ingress_history: try_from_option_field(
                 item.ingress_history,
@@ -361,7 +361,7 @@ impl SystemMetadata {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SubnetCallContextManager {
     next_callback_id: u64,
     pub contexts: BTreeMap<CallbackId, SubnetCallContext>,
@@ -412,7 +412,7 @@ impl TryFrom<pb_metadata::SubnetCallContextManager> for SubnetCallContextManager
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SubnetCallContext {
     SetupInitialDKGContext {
         request: Request,
@@ -478,9 +478,10 @@ impl TryFrom<pb_metadata::SubnetCallContext> for SubnetCallContext {
 /// Stream is the state of bi-directional communication session with a remote
 /// subnet.  It contains outgoing messages having that subnet as their
 /// destination and signals for inducted messages received from that subnet.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Stream {
-    pub messages: StreamIndexedQueue<RequestOrResponse>,
+    /// Indexed queue of outgoing messages.
+    messages: StreamIndexedQueue<RequestOrResponse>,
 
     /// Index of the next expected reverse stream message.
     ///
@@ -488,7 +489,23 @@ pub struct Stream {
     /// inducted message; but because these signals are all "Accept" (as we
     /// generate responses when rejecting messages), that queue can be safely
     /// represented by its end index (pointing just beyond the last signal).
-    pub signals_end: StreamIndex,
+    signals_end: StreamIndex,
+
+    /// Estimated stream byte size.
+    size_bytes: usize,
+}
+
+impl Default for Stream {
+    fn default() -> Self {
+        let messages = Default::default();
+        let signals_end = Default::default();
+        let size_bytes = Self::size_bytes(&messages);
+        Self {
+            messages,
+            signals_end,
+            size_bytes,
+        }
+    }
 }
 
 impl From<&Stream> for pb_queues::Stream {
@@ -513,15 +530,27 @@ impl TryFrom<pb_queues::Stream> for Stream {
         for req_or_resp in item.messages {
             messages.push(req_or_resp.try_into()?);
         }
+        let size_bytes = Self::size_bytes(&messages);
 
         Ok(Self {
             messages,
             signals_end: item.signals_end.into(),
+            size_bytes,
         })
     }
 }
 
 impl Stream {
+    /// Creates a new `Stream` with the given `messages` and `signals_end`.
+    pub fn new(messages: StreamIndexedQueue<RequestOrResponse>, signals_end: StreamIndex) -> Self {
+        let size_bytes = Self::size_bytes(&messages);
+        Self {
+            messages,
+            signals_end,
+            size_bytes,
+        }
+    }
+
     /// Creates a slice starting from index `from` and containing at most
     /// `count` messages from this stream.
     pub fn slice(&self, from: StreamIndex, count: Option<usize>) -> StreamSlice {
@@ -537,22 +566,87 @@ impl Stream {
             signals_end: self.signals_end,
         }
     }
+
+    /// Returns a reference to the message queue.
+    pub fn messages(&self) -> &StreamIndexedQueue<RequestOrResponse> {
+        &self.messages
+    }
+
+    /// Returns the stream's begin index.
+    pub fn messages_begin(&self) -> StreamIndex {
+        self.messages.begin()
+    }
+
+    /// Returns the stream's end index.
+    pub fn messages_end(&self) -> StreamIndex {
+        self.messages.end()
+    }
+
+    /// Appends the given message to the tail of the stream.
+    pub fn push(&mut self, message: RequestOrResponse) {
+        self.size_bytes += message.count_bytes();
+        self.messages.push(message);
+        debug_assert_eq!(Self::size_bytes(&self.messages), self.size_bytes);
+    }
+
+    /// Garbage collects messages before `new_begin`.
+    pub fn discard_before(&mut self, new_begin: StreamIndex) {
+        assert!(
+            new_begin >= self.messages.begin(),
+            "Begin index ({}) has already advanced past requested begin index ({})",
+            self.messages.begin(),
+            new_begin
+        );
+        assert!(
+            new_begin <= self.messages.end(),
+            "Cannot advance begin index ({}) beyond end index ({})",
+            new_begin,
+            self.messages.end()
+        );
+
+        while self.messages.begin() < new_begin {
+            self.size_bytes -= self.messages.pop().unwrap().1.count_bytes();
+            debug_assert_eq!(Self::size_bytes(&self.messages), self.size_bytes);
+        }
+    }
+
+    /// Returns the index just beyond the last sent signal.
+    pub fn signals_end(&self) -> StreamIndex {
+        self.signals_end
+    }
+
+    /// Increments the index of the last sent signal.
+    pub fn increment_signals_end(&mut self) {
+        self.signals_end.inc_assign()
+    }
+
+    /// Calculates the byte size of a `Stream` holding the given messages.
+    fn size_bytes(messages: &StreamIndexedQueue<RequestOrResponse>) -> usize {
+        let messages_bytes: usize = messages.iter().map(|(_, m)| m.count_bytes()).sum();
+        size_of::<Stream>() + messages_bytes
+    }
 }
 
-impl Into<StreamSlice> for Stream {
-    fn into(self) -> StreamSlice {
+impl CountBytes for Stream {
+    fn count_bytes(&self) -> usize {
+        self.size_bytes
+    }
+}
+
+impl From<Stream> for StreamSlice {
+    fn from(val: Stream) -> Self {
         StreamSlice::new(
             StreamHeader {
-                begin: self.messages.begin(),
-                end: self.messages.end(),
-                signals_end: self.signals_end,
+                begin: val.messages.begin(),
+                end: val.messages.end(),
+                signals_end: val.signals_end,
             },
-            self.messages,
+            val.messages,
         )
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// State associated with the history of statuses of ingress messages as they
 /// traversed through the system.
 pub struct IngressHistoryState {
@@ -693,9 +787,9 @@ mod tests {
     fn can_prune_old_ingress_history_entries() {
         let mut ingress_history = IngressHistoryState::new();
 
-        let message_id1 = MessageId::from([1 as u8; 32]);
-        let message_id2 = MessageId::from([2 as u8; 32]);
-        let message_id3 = MessageId::from([3 as u8; 32]);
+        let message_id1 = MessageId::from([1_u8; 32]);
+        let message_id2 = MessageId::from([2_u8; 32]);
+        let message_id3 = MessageId::from([3_u8; 32]);
 
         let time = mock_time();
         ingress_history.insert(

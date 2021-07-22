@@ -1,26 +1,15 @@
-use prost::Message;
-
-use candid::Decode;
 use dfn_candid::candid;
 use dfn_core::{
-    api::arg_data,
     endpoint::{over, over_async},
     stable,
 };
-use ic_nns_common::{
-    access_control::{check_caller_is_governance, current_canister_authz, init_canister_authz},
-    types::NeuronId,
-};
-use ic_nns_governance::handler_utils;
-use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_common::access_control::check_caller_is_governance;
 use ic_nns_handler_root::{
     canister_management,
     common::{
         AddNnsCanisterProposalPayload, CanisterIdRecord, ChangeNnsCanisterProposalPayload,
         StopOrStartNnsCanisterProposalPayload, LOG_PREFIX,
     },
-    init::RootCanisterInitPayload,
-    pb::v1::RootCanisterStableStorage,
 };
 
 fn main() {}
@@ -35,38 +24,16 @@ use ic_nns_handler_root::canister_management::do_add_nns_canister;
 #[export_name = "canister_init"]
 fn canister_init() {
     dfn_core::printer::hook();
-
-    let init_payload =
-        Decode!(&arg_data(), RootCanisterInitPayload).expect("Failed to decode init arguments");
-    println!(
-        "{}canister_init: Initializing with: {:?}",
-        LOG_PREFIX, init_payload
-    );
-    init_canister_authz(init_payload.authz_info);
-}
-
-#[export_name = "canister_pre_upgrade"]
-fn canister_pre_upgrade() {
-    println!("{}canister_pre_upgrade", LOG_PREFIX);
-    let mut serialized = Vec::new();
-    let ss = RootCanisterStableStorage {
-        authz: Some(current_canister_authz()),
-    };
-    ss.encode(&mut serialized)
-        .expect("Error serializing to stable.");
-    stable::set(&serialized);
+    println!("{}canister_init", LOG_PREFIX);
 }
 
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}canister_post_upgrade", LOG_PREFIX);
-    // Purposefully fail the upgrade if we can't find authz information.
-    // Best to have a broken canister, which we can reinstall, than a
-    // canister without authz information.
-    let ss = RootCanisterStableStorage::decode(stable::get().as_slice())
-        .expect("Error decoding from stable.");
-    init_canister_authz(ss.authz.expect("Canister must have authz info in stable"));
+    // Wipe out stable memory, because earlier version of this canister were
+    // stateful. This minimizes risk of future mis-interpretation of data.
+    stable::set(&[]);
 }
 
 /// Returns the status of the canister specified in the input.
@@ -89,18 +56,10 @@ fn canister_status() {
 
 #[export_name = "canister_update submit_change_nns_canister_proposal"]
 fn submit_change_nns_canister_proposal() {
-    over_async(
-        candid,
-        |(proposer, payload): (NeuronId, ChangeNnsCanisterProposalPayload)| async move {
-            println!("{}submit_change_nns_canister_proposal: received a proposal to with a wasm size {:e} B.", LOG_PREFIX, payload.wasm_module.len() as f64);
-            handler_utils::submit_proposal(
-                &proposer,
-                NnsFunction::NnsCanisterUpgrade,
-                &payload,
-                LOG_PREFIX,
-            )
-            .await
-        },
+    panic!(
+        "This method was removed in PR 11215. \
+            Use instead function `manage_neuron` on the Governance canister \
+            to submit a proposal to change an NNS canister."
     );
 }
 

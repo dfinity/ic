@@ -84,10 +84,6 @@ impl Registry {
 /// to a specific version.
 ///
 /// The replica will be mutated only if the given version is, indeed, blessed.
-///
-/// This is suffixed `Payload`, not `ProposalPayload`, to emphasize that it is
-/// intended to be used by an operator, without a proposal, on the grounds that
-/// limited damaged can be done given that the version must be blessed.
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateSubnetReplicaVersionPayload {
     /// The subnet to update.

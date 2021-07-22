@@ -168,13 +168,13 @@ impl StateManagerMetrics {
         }
 
         Self {
+            state_manager_error_count,
             checkpoint_op_duration,
             api_call_duration,
-            state_manager_error_count,
             last_diverged,
-            min_resident_height,
-            max_resident_height,
             latest_certified_height,
+            max_resident_height,
+            min_resident_height,
             last_computed_manifest_height,
             resident_state_count,
             state_sync_size,
@@ -392,6 +392,8 @@ pub struct StateManagerImpl {
     // requested quite often and this causes high contention on the lock.
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
+    /// The last height passed to remove_states_below()
+    requested_to_remove_states_below: AtomicU64,
     _state_hasher_handle: JoinOnDrop<()>,
     _deallocation_handle: JoinOnDrop<()>,
 }
@@ -727,6 +729,7 @@ impl StateManagerImpl {
             deallocation_sender,
             latest_state_height,
             latest_certified_height,
+            requested_to_remove_states_below: AtomicU64::new(0),
             _state_hasher_handle,
             _deallocation_handle,
         }
@@ -1334,6 +1337,8 @@ fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
 
     let mut prev = cached.load(Ordering::Relaxed);
     while prev < h.get() {
+        // TODO(IDX-1862)
+        #[allow(deprecated)]
         let updated = cached.compare_and_swap(prev, h.get(), Ordering::Relaxed);
         if updated == prev {
             break;
@@ -1634,6 +1639,9 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["remove_states_below"])
             .start_timer();
 
+        self.requested_to_remove_states_below
+            .store(requested_height.get(), Ordering::Relaxed);
+
         let checkpoint_heights = self
             .state_layout
             .checkpoint_heights()
@@ -1776,6 +1784,14 @@ impl StateManager for StateManagerImpl {
                 strip_page_map_deltas(&mut state);
                 let result = checkpoint::make_checkpoint(&state, height, &self.state_layout);
                 purge_cow_rounds_below(&mut state, self.first_known_height());
+
+                let low_water_mark = self
+                    .requested_to_remove_states_below
+                    .load(Ordering::Relaxed);
+
+                if height == Height::new(low_water_mark) {
+                    self.remove_states_below(height);
+                }
 
                 let elapsed = start.elapsed();
                 match result {
@@ -2086,31 +2102,31 @@ impl CertifiedStreamStore for StateManagerImpl {
 
         let (state, certification, hash_tree) = self
             .latest_certified_state()
-            .ok_or_else(|| EncodeStreamError::NoStreamForSubnet(remote_subnet))?;
+            .ok_or(EncodeStreamError::NoStreamForSubnet(remote_subnet))?;
 
         let stream = state
             .get_stream(remote_subnet)
-            .ok_or_else(|| EncodeStreamError::NoStreamForSubnet(remote_subnet))?;
+            .ok_or(EncodeStreamError::NoStreamForSubnet(remote_subnet))?;
 
         let validate_slice_begin = |begin| {
-            if begin < stream.messages.begin() || stream.messages.end() < begin {
+            if begin < stream.messages_begin() || stream.messages_end() < begin {
                 return Err(EncodeStreamError::InvalidSliceBegin {
                     slice_begin: begin,
-                    stream_begin: stream.messages.begin(),
-                    stream_end: stream.messages.end(),
+                    stream_begin: stream.messages_begin(),
+                    stream_end: stream.messages_end(),
                 });
             }
             Ok(())
         };
-        let msg_from = msg_begin.unwrap_or_else(|| stream.messages.begin());
+        let msg_from = msg_begin.unwrap_or_else(|| stream.messages_begin());
         validate_slice_begin(msg_from)?;
         let witness_from = witness_begin.unwrap_or(msg_from);
         validate_slice_begin(witness_from)?;
 
         let to = msg_limit
             .map(|n| msg_from + StreamIndex::new(n as u64))
-            .filter(|end| end <= &stream.messages.end())
-            .unwrap_or_else(|| stream.messages.end());
+            .filter(|end| end <= &stream.messages_end())
+            .unwrap_or_else(|| stream.messages_end());
 
         let witness_generator = WitnessGeneratorImpl::try_from(hash_tree.as_ref().clone())
             .expect("Failed to construct witness generator");

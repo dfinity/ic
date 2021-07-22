@@ -8,6 +8,7 @@ base64 = "0.11.0"
 curve25519-dalek = "3.0.2"
 ed25519-dalek = "1.0.1"
 hex = "0.4.2"
+ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-protobuf = { path = "../../../../../protobuf" }
@@ -15,7 +16,7 @@ ic-types = { path = "../../../../../types/types" }
 rand = "0.7.3"
 rand_chacha = "0.2.2"
 serde = { version = "1.0.99", features = [ "derive" ] }
-simple_asn1 = "0.4.1"
+simple_asn1 = "0.5.4"
 zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
 
 [dev-dependencies]
@@ -23,4 +24,5 @@ ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 proptest = "0.9.4"
 proptest-derive = "0.1.0"
 rand_core = "0.5.1"
+serde_cbor = "0.11.1"
 strum = "0.18.0"

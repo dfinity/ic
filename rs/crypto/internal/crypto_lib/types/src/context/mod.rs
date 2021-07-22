@@ -32,8 +32,7 @@ impl DomainSeparationContext {
         let domain_bytes: &[u8] = domain.as_bytes();
         let domain_bytes_len = u8::try_from(domain_bytes.len()).expect("domain too long");
 
-        let mut bytes = vec![];
-        bytes.push(domain_bytes_len);
+        let mut bytes = vec![domain_bytes_len];
         bytes.extend(domain_bytes);
 
         DomainSeparationContext { domain, bytes }

@@ -1,4 +1,4 @@
-use canister_test::{local_test_e, WASM};
+use canister_test::{local_test_e, Wasm};
 use criterion::Criterion;
 
 const HELLO_WORLD: &str = r#"
@@ -19,7 +19,7 @@ fn main() {
         let mut criterion = Criterion::default().sample_size(10);
         {
             let mut group = criterion.benchmark_group("user calls");
-            let canister = WASM::from_wat(HELLO_WORLD)
+            let canister = Wasm::from_wat(HELLO_WORLD)
                 .install(&r)
                 .bytes(Vec::new())
                 .await?;

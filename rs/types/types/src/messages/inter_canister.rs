@@ -1,4 +1,4 @@
-use crate::{ingress::WasmResult, CanisterId, Funds, NumBytes};
+use crate::{ingress::WasmResult, CanisterId, CountBytes, Funds, NumBytes};
 use ic_error_types::{RejectCode, UserError};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -7,7 +7,10 @@ use ic_protobuf::{
 };
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
-use std::convert::{From, TryFrom, TryInto};
+use std::{
+    convert::{From, TryFrom, TryInto},
+    mem::size_of,
+};
 
 pub struct CallbackIdTag;
 /// A value used as an opaque nonce to couple outgoing calls with their
@@ -162,6 +165,19 @@ impl RequestOrResponse {
             RequestOrResponse::Request(req) => req.sender,
             RequestOrResponse::Response(resp) => resp.respondent,
         }
+    }
+}
+
+impl CountBytes for RequestOrResponse {
+    fn count_bytes(&self) -> usize {
+        let var_fields_size = match self {
+            RequestOrResponse::Request(req) => req.method_name.len() + req.method_payload.len(),
+            RequestOrResponse::Response(resp) => match &resp.response_payload {
+                Payload::Data(data) => data.len(),
+                Payload::Reject(context) => context.message.len(),
+            },
+        };
+        size_of::<RequestOrResponse>() + var_fields_size
     }
 }
 

@@ -1,12 +1,12 @@
 use super::*;
 use crate::{
     routing::demux::MockDemux, routing::stream_builder::MockStreamBuilder,
-    scheduling::scheduler::MockScheduler, state_machine::StateMachineImpl,
+    state_machine::StateMachineImpl,
 };
-use ic_interfaces::state_manager::StateManager;
+use ic_interfaces::{execution_environment::Scheduler, state_manager::StateManager};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::SubnetTopology;
+use ic_replicated_state::{ReplicatedState, SubnetTopology};
 use ic_test_utilities::{
     state_manager::FakeStateManager,
     types::batch::{BatchBuilder, IngressPayloadBuilder, PayloadBuilder},
@@ -16,11 +16,26 @@ use ic_test_utilities::{
 };
 use ic_types::messages::SignedIngress;
 use ic_types::{Height, PrincipalId, SubnetId};
-use mockall::{predicate::*, Sequence};
+use mockall::{mock, predicate::*, Sequence};
 use std::collections::{BTreeMap, BTreeSet};
 
+mock! {
+    pub Scheduler {}
+    trait Scheduler {
+        type State = ReplicatedState;
+        fn execute_round(
+            &self,
+            state: ic_replicated_state::ReplicatedState,
+            randomness: ic_types::Randomness,
+            time_of_previous_batch: ic_types::Time,
+            current_round: ExecutionRound,
+            provisional_whitelist: ProvisionalWhitelist,
+        ) -> ReplicatedState;
+    }
+}
+
 struct StateMachineTestFixture {
-    scheduler: Box<dyn Scheduler>,
+    scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     demux: Box<dyn Demux>,
     stream_builder: Box<dyn StreamBuilder>,
     initial_state: ReplicatedState,

@@ -205,7 +205,7 @@ pub struct UncachedConsensusPoolImpl {
 impl UncachedConsensusPoolImpl {
     pub fn new(config: ArtifactPoolConfig, log: ReplicaLogger) -> UncachedConsensusPoolImpl {
         let validated = match config.persistent_pool_backend {
-            PersistentPoolBackend::LMDB(lmdb_config) => Box::new(
+            PersistentPoolBackend::Lmdb(lmdb_config) => Box::new(
                 crate::lmdb_pool::PersistentHeightIndexedPool::new_consensus_pool(
                     lmdb_config,
                     config.persistent_pool_read_only,
@@ -314,7 +314,13 @@ impl ConsensusPoolImpl {
         if should_insert {
             let mut ops = PoolSectionOps::new();
             ops.insert(ValidatedConsensusArtifact {
-                msg: cup.cup.content.random_beacon.as_ref().clone().to_message(),
+                msg: cup
+                    .cup
+                    .content
+                    .random_beacon
+                    .as_ref()
+                    .clone()
+                    .into_message(),
                 timestamp: cup.cup.content.block.as_ref().context.time,
             });
             pool_section.mutate(ops);
@@ -472,19 +478,22 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
         self.validated.get(id)
     }
 
-    // Get max height for each Validated pool and chain all the
-    // get_by_height_range() iterators.
+    // Return an iterator of all artifacts that is required to make progress
+    // above the given height filter.
     fn get_all_validated_by_filter(
         &self,
         filter: Self::Filter,
-    ) -> Box<dyn Iterator<Item = ConsensusMessage>> {
+    ) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
         let max_catch_up_height = self
             .validated
             .catch_up_package()
             .height_range()
             .map(|x| x.max)
             .unwrap();
-        let min = max_catch_up_height.max(filter) + Height::from(1);
+        // Since random beacon of previous height is required, min_random_beacon_height
+        // should be one less than the normal min height.
+        let min_random_beacon_height = max_catch_up_height.max(filter);
+        let min = min_random_beacon_height.increment();
         let max_finalized_height = self
             .validated
             .finalization()
@@ -518,8 +527,7 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
             .random_beacon()
             .height_range()
             .map(|x| x.max)
-            .unwrap_or(min);
-        let min_random_beacon_height = min;
+            .unwrap_or(min_random_beacon_height);
         let max_random_beacon_share_height = self
             .validated
             .random_beacon_share()
@@ -559,24 +567,21 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
                 .get();
         let random_tapes = tape_range
             .clone()
-            .map(|h| self.validated.random_tape().get_by_height(Height::from(h)))
-            .collect::<Vec<_>>();
-        let random_tape_shares = tape_range
-            .map(|h| {
-                self.validated
-                    .random_tape_share()
-                    .get_by_height(Height::from(h))
-            })
-            .collect::<Vec<_>>();
-        let random_tape_iterator = random_tapes
-            .into_iter()
-            .zip(random_tape_shares.into_iter())
-            .flat_map(|(mut tape, shares)| {
-                tape.next().map_or_else(
-                    || shares.map(|x| x.to_message()).collect::<Vec<_>>(),
-                    |x| vec![x.to_message()],
-                )
-            });
+            .map(move |h| self.validated.random_tape().get_by_height(Height::from(h)));
+        let random_tape_shares = tape_range.map(move |h| {
+            self.validated
+                .random_tape_share()
+                .get_by_height(Height::from(h))
+        });
+        let random_tape_iterator =
+            random_tapes
+                .zip(random_tape_shares)
+                .flat_map(|(mut tape, shares)| {
+                    tape.next().map_or_else(
+                        || shares.map(|x| x.into_message()).collect::<Vec<_>>(),
+                        |x| vec![x.into_message()],
+                    )
+                });
 
         Box::new(
             self.validated
@@ -585,7 +590,7 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
                     min: max_catch_up_height.max(filter),
                     max: max_catch_up_height,
                 })
-                .map(|x| x.to_message())
+                .map(|x| x.into_message())
                 .chain(
                     self.validated
                         .finalization()
@@ -593,7 +598,7 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
                             min: min_finalized_height,
                             max: max_finalized_height,
                         })
-                        .map(|x| x.to_message()),
+                        .map(|x| x.into_message()),
                 )
                 .chain(
                     self.validated
@@ -602,7 +607,7 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
                             min: min_finalized_share_height,
                             max: max_finalized_share_height,
                         })
-                        .map(|x| x.to_message()),
+                        .map(|x| x.into_message()),
                 )
                 .chain(
                     self.validated
@@ -611,7 +616,7 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
                             min: min_notarization_height,
                             max: max_notarization_height,
                         })
-                        .map(|x| x.to_message()),
+                        .map(|x| x.into_message()),
                 )
                 .chain(
                     self.validated
@@ -620,7 +625,7 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
                             min: min_notarization_share_height,
                             max: max_notarization_share_height,
                         })
-                        .map(|x| x.to_message()),
+                        .map(|x| x.into_message()),
                 )
                 .chain(
                     self.validated
@@ -629,7 +634,7 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
                             min: min_random_beacon_height,
                             max: max_random_beacon_height,
                         })
-                        .map(|x| x.to_message()),
+                        .map(|x| x.into_message()),
                 )
                 .chain(
                     self.validated
@@ -638,7 +643,7 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
                             min: min_random_beacon_share_height,
                             max: max_random_beacon_share_height,
                         })
-                        .map(|x| x.to_message()),
+                        .map(|x| x.into_message()),
                 )
                 .chain(
                     self.validated
@@ -647,7 +652,7 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
                             min: min_block_proposal_height,
                             max: max_block_proposal_height,
                         })
-                        .map(|x| x.to_message()),
+                        .map(|x| x.into_message()),
                 )
                 .chain(random_tape_iterator),
         )
@@ -697,10 +702,10 @@ mod tests {
                 Height::from(0),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
             ));
-            let msg_0 = random_beacon.clone().to_message();
+            let msg_0 = random_beacon.clone().into_message();
             let msg_id_0 = random_beacon.get_id();
             random_beacon.content.height = Height::from(1);
-            let msg_1 = random_beacon.clone().to_message();
+            let msg_1 = random_beacon.clone().into_message();
             let msg_id_1 = random_beacon.get_id();
 
             pool.insert(UnvalidatedArtifact {
@@ -722,9 +727,10 @@ mod tests {
             assert_eq!(pool.unvalidated().get_timestamp(&msg_id_0), Some(time_0));
             assert_eq!(pool.unvalidated().get_timestamp(&msg_id_1), Some(time_1));
 
-            let mut changeset = ChangeSet::new();
-            changeset.push(ChangeAction::MoveToValidated(msg_0));
-            changeset.push(ChangeAction::RemoveFromUnvalidated(msg_1));
+            let changeset = vec![
+                ChangeAction::MoveToValidated(msg_0),
+                ChangeAction::RemoveFromUnvalidated(msg_1),
+            ];
             pool.apply_changes(time_source.as_ref(), changeset);
 
             // Check timestamp is carried over for msg_0.
@@ -818,12 +824,12 @@ mod tests {
             );
 
             let changeset = vec![
-                random_beacon.clone().to_message(),
-                random_tape.clone().to_message(),
-                finalization.clone().to_message(),
-                notarization.clone().to_message(),
-                proposal.clone().to_message(),
-                cup.clone().to_message(),
+                random_beacon.clone().into_message(),
+                random_tape.clone().into_message(),
+                finalization.clone().into_message(),
+                notarization.clone().into_message(),
+                proposal.clone().into_message(),
+                cup.clone().into_message(),
             ]
             .into_iter()
             .map(ChangeAction::AddToValidated)
@@ -1073,7 +1079,7 @@ mod tests {
                 node_test_id(333),
             );
 
-            let changeset = vec![random_beacon.to_message(), random_tape.to_message()]
+            let changeset = vec![random_beacon.into_message(), random_tape.into_message()]
                 .into_iter()
                 .map(ChangeAction::AddToValidated)
                 .collect();
@@ -1100,7 +1106,7 @@ mod tests {
                 .unwrap();
 
             // Now add new artifacts
-            let changeset = vec![notarization.to_message(), proposal.to_message()]
+            let changeset = vec![notarization.into_message(), proposal.into_message()]
                 .into_iter()
                 .map(ChangeAction::AddToValidated)
                 .collect();

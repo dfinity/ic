@@ -148,7 +148,7 @@ impl ShareAggregator {
 }
 
 fn to_messages<T: ConsensusMessageHashable>(artifacts: Vec<T>) -> Vec<ConsensusMessage> {
-    artifacts.into_iter().map(|a| a.to_message()).collect()
+    artifacts.into_iter().map(|a| a.into_message()).collect()
 }
 
 #[cfg(test)]
@@ -223,10 +223,9 @@ mod tests {
             pool.insert_validated(finalization_share);
 
             let messages = aggregator.on_state_change(&PoolReader::new(&pool));
-            let finalization_was_created = messages.iter().any(|x| match x {
-                ConsensusMessage::Finalization(_) => true,
-                _ => false,
-            });
+            let finalization_was_created = messages
+                .iter()
+                .any(|x| matches!(x, ConsensusMessage::Finalization(_)));
 
             assert!(finalization_was_created);
             assert_eq!(messages.len(), 1);

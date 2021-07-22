@@ -74,11 +74,9 @@ pub fn make_checkpoint(
                 call_context_manager: canister_state.system_state.call_context_manager().cloned(),
                 compute_allocation: canister_state.scheduler_state.compute_allocation,
                 accumulated_priority: canister_state.scheduler_state.accumulated_priority,
-                query_allocation: canister_state.scheduler_state.query_allocation,
                 memory_allocation: canister_state.system_state.memory_allocation,
                 freeze_threshold: canister_state.system_state.freeze_threshold,
                 cycles_balance: canister_state.system_state.cycles_balance,
-                icp_balance: 0,
                 execution_state_bits,
                 status: canister_state.system_state.status.clone(),
                 scheduled_as_first: canister_state
@@ -237,7 +235,6 @@ pub fn load_checkpoint<P: ReadPolicy>(
                     last_full_execution_round: canister_state_bits.last_full_execution_round,
                     compute_allocation: canister_state_bits.compute_allocation,
                     accumulated_priority: canister_state_bits.accumulated_priority,
-                    query_allocation: canister_state_bits.query_allocation,
                 },
             },
         );
@@ -265,8 +262,8 @@ pub fn handle_disk_format_changes<P: ReadWritePolicy>(
             let canister_layout = layout.canister(canister)?;
             let execution_state = canister_state.execution_state.as_ref().unwrap();
 
-            let cansister_base = canister_layout.raw_path();
-            let is_cow = CowMemoryManagerImpl::is_cow(&cansister_base);
+            let canister_base = canister_layout.raw_path();
+            let is_cow = CowMemoryManagerImpl::is_cow(&canister_base);
             let should_upgrade =
                 !is_cow && cow_state_feature::is_enabled(cow_state_feature::cow_state);
             let should_downgrade =
@@ -300,7 +297,7 @@ pub fn handle_disk_format_changes<P: ReadWritePolicy>(
                     io_err: err.to_string(),
                 })?;
 
-                CowMemoryManagerImpl::purge(&cansister_base);
+                CowMemoryManagerImpl::purge(&canister_base);
 
                 // We should reload the state from disk after this format change
                 needs_reload = true;

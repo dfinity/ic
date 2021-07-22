@@ -44,6 +44,7 @@ pub fn create_make_proposal_payload(
 ) -> ManageNeuron {
     ManageNeuron {
         id: Some((*proposer_neuron_id).into()),
+        neuron_id_or_subaccount: None,
         command: Some(Command::MakeProposal(Box::new(proposal))),
     }
 }

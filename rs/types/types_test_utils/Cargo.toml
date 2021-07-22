@@ -1,0 +1,10 @@
+[package]
+name = "ic-types-test-utils"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+ic-types = { path = "../types" }
+proptest = "0.9.4"
+strum = "0.18.0"

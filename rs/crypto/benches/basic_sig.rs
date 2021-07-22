@@ -22,7 +22,7 @@ fn basic_sig(criterion: &mut Criterion) {
             signature: BasicSigOf<MessageId>,
             request_id: MessageId,
             public_key: UserPublicKey,
-        };
+        }
 
         bench.iter_with_setup(
             || {

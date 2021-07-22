@@ -42,8 +42,7 @@ impl Registry {
             )
             .unwrap();
 
-        // 2. Get the caller ID and check that it matches the node's NO and that it is
-        // in the registry
+        // 2. Get the caller ID and check that it matches the node's NO
         let caller = dfn_core::api::caller();
         assert_eq!(
             PrincipalId::try_from(

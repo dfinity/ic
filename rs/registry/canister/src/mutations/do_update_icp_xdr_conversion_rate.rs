@@ -5,7 +5,7 @@ use candid::{CandidType, Deserialize};
 use dfn_core::println;
 
 use ic_protobuf::registry::conversion_rate::v1::IcpXdrConversionRateRecord;
-use ic_registry_keys::XDR_PER_ICP_KEY;
+use ic_registry_keys::make_icp_xdr_conversion_rate_record_key;
 use ic_registry_transport::upsert;
 
 impl Registry {
@@ -20,7 +20,9 @@ impl Registry {
 
         // If there is no ICP/XDR conversion rate, we have to Insert new one
         let mutations = vec![upsert(
-            XDR_PER_ICP_KEY.as_bytes().to_vec(),
+            make_icp_xdr_conversion_rate_record_key()
+                .as_bytes()
+                .to_vec(),
             encode_or_panic::<IcpXdrConversionRateRecord>(&payload.into()),
         )];
 
@@ -42,11 +44,11 @@ pub struct UpdateIcpXdrConversionRatePayload {
     pub xdr_permyriad_per_icp: u64,
 }
 
-impl Into<IcpXdrConversionRateRecord> for UpdateIcpXdrConversionRatePayload {
-    fn into(self) -> IcpXdrConversionRateRecord {
+impl From<UpdateIcpXdrConversionRatePayload> for IcpXdrConversionRateRecord {
+    fn from(val: UpdateIcpXdrConversionRatePayload) -> Self {
         IcpXdrConversionRateRecord {
-            timestamp_seconds: self.timestamp_seconds,
-            xdr_permyriad_per_icp: self.xdr_permyriad_per_icp,
+            timestamp_seconds: val.timestamp_seconds,
+            xdr_permyriad_per_icp: val.xdr_permyriad_per_icp,
         }
     }
 }

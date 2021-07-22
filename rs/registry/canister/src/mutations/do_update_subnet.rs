@@ -42,7 +42,7 @@ impl Registry {
 /// Setting a field to `None` means that its value should not be changed. The
 /// rest of the fields will be overwritten in the SubnetRecord.
 ///
-/// Note that `initial_dkg_transcript`, `replica_version_id` and `membership`
+/// Note that `replica_version_id` and `membership`
 /// are intentionally left out as they are updated via other proposals and/or
 /// handlers because they are subject to invariants, e.g. the replica version
 /// must be "blessed".
@@ -52,6 +52,7 @@ pub struct UpdateSubnetPayload {
 
     pub ingress_bytes_per_block_soft_cap: Option<u64>,
     pub max_ingress_bytes_per_message: Option<u64>,
+    pub max_block_payload_size: Option<u64>,
     pub unit_delay_millis: Option<u64>,
     pub initial_notary_delay_millis: Option<u64>,
     pub dkg_interval_length: Option<u64>,
@@ -114,7 +115,7 @@ fn merge_subnet_record(
         panic!(
             "Attempt to update gossip config params when the subnet record does not have any gossip \
             config set and a default one was not requested. Use `set_gossip_config_to_default=true` \
-            and try again.".to_string(),
+            and try again."
         );
     }
 
@@ -122,6 +123,7 @@ fn merge_subnet_record(
         subnet_id: _subnet_id,
         ingress_bytes_per_block_soft_cap,
         max_ingress_bytes_per_message,
+        max_block_payload_size,
         unit_delay_millis,
         initial_notary_delay_millis,
         dkg_interval_length,
@@ -142,6 +144,7 @@ fn merge_subnet_record(
 
     maybe_set!(subnet_record, ingress_bytes_per_block_soft_cap);
     maybe_set!(subnet_record, max_ingress_bytes_per_message);
+    maybe_set!(subnet_record, max_block_payload_size);
     maybe_set!(subnet_record, unit_delay_millis);
     maybe_set!(subnet_record, initial_notary_delay_millis);
     maybe_set!(subnet_record, dkg_interval_length);
@@ -185,9 +188,9 @@ mod tests {
     fn can_override_all_fields() {
         let subnet_record = SubnetRecord {
             membership: vec![],
-            initial_dkg_transcript: Some(Default::default()),
             ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
@@ -218,6 +221,7 @@ mod tests {
             ),
             ingress_bytes_per_block_soft_cap: Some(100),
             max_ingress_bytes_per_message: Some(256),
+            max_block_payload_size: Some(200),
             unit_delay_millis: Some(300),
             initial_notary_delay_millis: Some(200),
             dkg_interval_length: Some(8),
@@ -240,10 +244,10 @@ mod tests {
             merge_subnet_record(subnet_record, payload),
             SubnetRecord {
                 membership: vec![],
-                initial_dkg_transcript: Some(Default::default()),
                 ingress_bytes_per_block_soft_cap: 100,
                 max_ingress_bytes_per_message: 256,
                 max_ingress_messages_per_block: 1000,
+                max_block_payload_size: 200,
                 unit_delay_millis: 300,
                 initial_notary_delay_millis: 200,
                 replica_version_id: "version_42".to_string(),
@@ -270,9 +274,9 @@ mod tests {
     fn can_override_some_fields() {
         let subnet_record = SubnetRecord {
             membership: vec![],
-            initial_dkg_transcript: Some(Default::default()),
             ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
@@ -303,6 +307,7 @@ mod tests {
             ),
             ingress_bytes_per_block_soft_cap: None,
             max_ingress_bytes_per_message: None,
+            max_block_payload_size: None,
             unit_delay_millis: Some(100),
             initial_notary_delay_millis: None,
             dkg_interval_length: Some(2),
@@ -325,9 +330,9 @@ mod tests {
             merge_subnet_record(subnet_record, payload),
             SubnetRecord {
                 membership: vec![],
-                initial_dkg_transcript: Some(Default::default()),
                 ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_block_payload_size: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 unit_delay_millis: 100,
                 initial_notary_delay_millis: 1500,
@@ -359,9 +364,9 @@ mod tests {
     fn can_handle_invalid_combination_of_set_gossip_config_to_default() {
         let subnet_record = SubnetRecord {
             membership: vec![],
-            initial_dkg_transcript: Some(Default::default()),
             ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
@@ -383,6 +388,7 @@ mod tests {
             ),
             ingress_bytes_per_block_soft_cap: None,
             max_ingress_bytes_per_message: None,
+            max_block_payload_size: None,
             unit_delay_millis: Some(100),
             initial_notary_delay_millis: None,
             dkg_interval_length: Some(2),
@@ -408,9 +414,9 @@ mod tests {
     fn can_set_default_gossip_config_and_override_fields() {
         let subnet_record = SubnetRecord {
             membership: vec![],
-            initial_dkg_transcript: Some(Default::default()),
             ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
@@ -432,6 +438,7 @@ mod tests {
             ),
             ingress_bytes_per_block_soft_cap: None,
             max_ingress_bytes_per_message: None,
+            max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
             dkg_interval_length: None,
@@ -454,9 +461,9 @@ mod tests {
             merge_subnet_record(subnet_record, payload),
             SubnetRecord {
                 membership: vec![],
-                initial_dkg_transcript: Some(Default::default()),
                 ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_block_payload_size: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 unit_delay_millis: 500,
                 initial_notary_delay_millis: 1500,

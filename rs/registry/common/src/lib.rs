@@ -1,4 +1,3 @@
-pub mod bootstrap_registry_data_provider;
 pub(crate) mod certification;
 pub mod data_provider;
 pub mod local_store;

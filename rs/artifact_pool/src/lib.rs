@@ -55,7 +55,6 @@ pub fn ensure_persistent_pool_replica_version_compatibility(pool_path: PathBuf) 
 mod tests {
     use super::*;
     use std::convert::TryFrom;
-    use std::panic;
 
     #[test]
     fn test_ensure_persistent_pool_replica_version_compatibility() {

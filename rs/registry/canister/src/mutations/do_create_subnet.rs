@@ -17,12 +17,12 @@ use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
-    subnet::v1::{CatchUpPackageContents, GossipConfig, SubnetListRecord, SubnetRecord},
+    subnet::v1::{CatchUpPackageContents, GossipConfig, SubnetRecord},
 };
 use ic_registry_keys::make_node_record_key;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
-    make_subnet_record_key, SUBNET_LIST_KEY,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
@@ -111,9 +111,7 @@ impl Registry {
         );
 
         let generated_subnet_id = response.fresh_subnet_id;
-        let subnet_id_principal = payload
-            .subnet_id_override
-            .unwrap_or_else(|| generated_subnet_id);
+        let subnet_id_principal = payload.subnet_id_override.unwrap_or(generated_subnet_id);
         let subnet_id = SubnetId::new(subnet_id_principal);
 
         // 3. Create subnet record and associated entries
@@ -147,13 +145,10 @@ impl Registry {
                 .map(|id| id.get().into_vec())
                 .collect::<Vec<_>>(),
 
-            // We should be only using the ni_dkg, but because some code still (2020-11-03)
-            // references this field, provide the default.
-            initial_dkg_transcript: Some(Default::default()),
-
             ingress_bytes_per_block_soft_cap: payload.ingress_bytes_per_block_soft_cap,
             max_ingress_bytes_per_message: payload.max_ingress_bytes_per_message,
             max_ingress_messages_per_block: payload.max_ingress_messages_per_block,
+            max_block_payload_size: payload.max_block_payload_size,
             replica_version_id: payload.replica_version_id.clone(),
             unit_delay_millis: payload.unit_delay_millis,
             initial_notary_delay_millis: payload.initial_notary_delay_millis,
@@ -181,34 +176,23 @@ impl Registry {
         // 4. Update registry with the new subnet data
         // The subnet data is the new subnet record plus the update to the global
         // subnet list.
-        let subnet_list_mutation = match self.get(SUBNET_LIST_KEY.as_bytes(), self.latest_version())
+        let mut subnet_list_record = self.get_subnet_list_record();
+        if subnet_list_record
+            .subnets
+            .iter()
+            .any(|x| *x == subnet_id.get().to_vec())
         {
-            Some(RegistryValue {
-                value: subnet_list_record_vec,
-                version: _,
-                deletion_marker: _,
-            }) => {
-                let mut subnet_list_record =
-                    decode_registry_value::<SubnetListRecord>(subnet_list_record_vec.clone());
-                if subnet_list_record
-                    .subnets
-                    .iter()
-                    .any(|x| *x == subnet_id.get().to_vec())
-                {
-                    panic!(
-                        "Subnet already present in subnet list record: {:?}",
-                        subnet_id
-                    );
-                }
-                subnet_list_record.subnets.push(subnet_id.get().to_vec());
+            panic!(
+                "Subnet already present in subnet list record: {:?}",
+                subnet_id
+            );
+        }
+        subnet_list_record.subnets.push(subnet_id.get().to_vec());
 
-                RegistryMutation {
-                    mutation_type: registry_mutation::Type::Update as i32,
-                    key: SUBNET_LIST_KEY.as_bytes().to_vec(),
-                    value: encode_or_panic(&subnet_list_record),
-                }
-            }
-            None => panic!("Error while fetching current subnet list record"),
+        let subnet_list_mutation = RegistryMutation {
+            mutation_type: registry_mutation::Type::Update as i32,
+            key: make_subnet_list_record_key().as_bytes().to_vec(),
+            value: encode_or_panic(&subnet_list_record),
         };
 
         let new_subnet = RegistryMutation {
@@ -248,6 +232,7 @@ pub struct CreateSubnetPayload {
     pub ingress_bytes_per_block_soft_cap: u64,
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_messages_per_block: u64,
+    pub max_block_payload_size: u64,
     pub unit_delay_millis: u64,
     pub initial_notary_delay_millis: u64,
     pub replica_version_id: std::string::String,
@@ -270,44 +255,41 @@ pub struct CreateSubnetPayload {
     pub is_halted: bool,
 }
 
-impl Into<SubnetRecord> for CreateSubnetPayload {
-    fn into(self) -> SubnetRecord {
+impl From<CreateSubnetPayload> for SubnetRecord {
+    fn from(val: CreateSubnetPayload) -> Self {
         SubnetRecord {
-            membership: self
+            membership: val
                 .node_ids
                 .iter()
                 .map(|id| id.get().into_vec())
                 .collect::<Vec<_>>(),
 
-            // We should be only using the ni_dkg, but because some code still (2020-11-03)
-            // references this field, provide the default.
-            initial_dkg_transcript: Some(Default::default()),
-
-            ingress_bytes_per_block_soft_cap: self.ingress_bytes_per_block_soft_cap,
-            max_ingress_bytes_per_message: self.max_ingress_bytes_per_message,
-            max_ingress_messages_per_block: self.max_ingress_messages_per_block,
-            replica_version_id: self.replica_version_id.clone(),
-            unit_delay_millis: self.unit_delay_millis,
-            initial_notary_delay_millis: self.initial_notary_delay_millis,
-            dkg_interval_length: self.dkg_interval_length,
-            dkg_dealings_per_block: self.dkg_dealings_per_block,
+            ingress_bytes_per_block_soft_cap: val.ingress_bytes_per_block_soft_cap,
+            max_ingress_bytes_per_message: val.max_ingress_bytes_per_message,
+            max_ingress_messages_per_block: val.max_ingress_messages_per_block,
+            max_block_payload_size: val.max_block_payload_size,
+            replica_version_id: val.replica_version_id.clone(),
+            unit_delay_millis: val.unit_delay_millis,
+            initial_notary_delay_millis: val.initial_notary_delay_millis,
+            dkg_interval_length: val.dkg_interval_length,
+            dkg_dealings_per_block: val.dkg_dealings_per_block,
 
             gossip_config: Some(GossipConfig {
-                max_artifact_streams_per_peer: self.gossip_max_artifact_streams_per_peer,
-                max_chunk_wait_ms: self.gossip_max_chunk_wait_ms,
-                max_duplicity: self.gossip_max_duplicity,
-                max_chunk_size: self.gossip_max_chunk_size,
-                receive_check_cache_size: self.gossip_receive_check_cache_size,
-                pfn_evaluation_period_ms: self.gossip_pfn_evaluation_period_ms,
-                registry_poll_period_ms: self.gossip_registry_poll_period_ms,
-                retransmission_request_ms: self.gossip_retransmission_request_ms,
+                max_artifact_streams_per_peer: val.gossip_max_artifact_streams_per_peer,
+                max_chunk_wait_ms: val.gossip_max_chunk_wait_ms,
+                max_duplicity: val.gossip_max_duplicity,
+                max_chunk_size: val.gossip_max_chunk_size,
+                receive_check_cache_size: val.gossip_receive_check_cache_size,
+                pfn_evaluation_period_ms: val.gossip_pfn_evaluation_period_ms,
+                registry_poll_period_ms: val.gossip_registry_poll_period_ms,
+                retransmission_request_ms: val.gossip_retransmission_request_ms,
             }),
 
-            start_as_nns: self.start_as_nns,
+            start_as_nns: val.start_as_nns,
 
-            subnet_type: self.subnet_type.into(),
+            subnet_type: val.subnet_type.into(),
 
-            is_halted: self.is_halted,
+            is_halted: val.is_halted,
         }
     }
 }

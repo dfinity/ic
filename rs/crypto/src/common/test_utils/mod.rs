@@ -9,10 +9,8 @@ use strum_macros::EnumIter;
 
 pub mod basic_sig;
 pub mod crypto_component;
-pub mod mock_csp;
 pub mod mockall_csp;
 pub mod multi_bls12_381;
-pub mod multi_threading;
 
 // Indirections to delete:
 pub use ic_crypto_internal_test_vectors::ecdsa_p256;

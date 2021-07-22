@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use crate::tls_utils::{temp_crypto_component_with_tls_keys, REG_V1};
 use ic_crypto::utils::TempCryptoComponent;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, Peer, SomeOrAllNodes, TlsHandshake, TlsReadHalf,
     TlsServerHandshakeError, TlsWriteHalf,
@@ -9,6 +10,7 @@ use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client::fake::FakeRegistryClient;
 use ic_types::NodeId;
 use proptest::std_facade::BTreeSet;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -18,7 +20,7 @@ pub struct ServerBuilder {
     msg_for_client: Option<String>,
     msg_expected_from_client: Option<String>,
     allowed_nodes: Option<SomeOrAllNodes>,
-    allowed_certs: Vec<X509PublicKeyCert>,
+    allowed_certs: HashSet<TlsPublicKeyCert>,
 }
 
 impl ServerBuilder {
@@ -67,7 +69,9 @@ impl ServerBuilder {
     }
 
     pub fn add_allowed_client_cert(mut self, cert: X509PublicKeyCert) -> ServerBuilder {
-        self.allowed_certs.push(cert);
+        let cert = TlsPublicKeyCert::new_from_der(cert.certificate_der)
+            .expect("failed to construct TlsPublicKeyCert from DER");
+        self.allowed_certs.insert(cert);
         self
     }
 
@@ -99,7 +103,7 @@ pub struct Server {
     allowed_clients: AllowedClients,
     msg_for_client: Option<String>,
     msg_expected_from_client: Option<String>,
-    cert: X509PublicKeyCert,
+    cert: TlsPublicKeyCert,
 }
 
 impl Server {
@@ -109,7 +113,7 @@ impl Server {
             msg_for_client: None,
             msg_expected_from_client: None,
             allowed_nodes: None,
-            allowed_certs: Vec::new(),
+            allowed_certs: HashSet::new(),
         }
     }
 
@@ -163,7 +167,10 @@ impl Server {
     }
 
     async fn accept_connection_on_listener(&self) -> TcpStream {
-        let mut tokio_tcp_listener = TcpListener::from_std(self.listener.try_clone().unwrap())
+        self.listener
+            .set_nonblocking(true)
+            .expect("failed to make listener non-blocking");
+        let tokio_tcp_listener = TcpListener::from_std(self.listener.try_clone().unwrap())
             .expect("failed to create tokio TcpListener");
         let (tcp_stream, _peer_address) = tokio_tcp_listener
             .accept()
@@ -200,7 +207,7 @@ impl Server {
     }
 
     pub fn cert(&self) -> X509PublicKeyCert {
-        self.cert.clone()
+        self.cert.to_proto()
     }
 
     pub fn allowed_clients(&self) -> &BTreeSet<NodeId> {

@@ -94,7 +94,7 @@ use crate::{
 
 extern crate lru;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
-use ic_registry_client::helper::subnet::SubnetTransportRegistry;
+use ic_registry_client::helper::subnet::{SubnetRegistry, SubnetTransportRegistry};
 use lru::LruCache;
 
 use std::{
@@ -110,6 +110,7 @@ use ic_logger::replica_logger::ReplicaLogger;
 use ic_logger::{info, trace, warn};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::{transport::TransportErrorCode, RegistryVersion};
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::ops::DerefMut;
 
@@ -265,7 +266,7 @@ pub(crate) struct DownloadManagerImpl {
     /// The node ID of the peer.
     node_id: NodeId,
     /// The subnet ID.
-    subnet_id: SubnetId,
+    subnet_id: RwLock<Option<SubnetId>>,
     /// The registry client.
     registry_client: Arc<dyn RegistryClient>,
     /// The artifact manager.
@@ -847,7 +848,7 @@ impl DownloadManagerImpl {
 
         let download_manager = DownloadManagerImpl {
             node_id,
-            subnet_id,
+            subnet_id: RwLock::new(Some(subnet_id)),
             registry_client,
             artifact_manager,
             prioritizer,
@@ -923,25 +924,82 @@ impl DownloadManagerImpl {
     // Update the peer manager state based on the latest registry value.
     pub fn refresh_registry(&self, event_handler: &Arc<dyn P2PEventHandlerControl>) {
         let registry_version = self.registry_client.get_latest_version();
-        self.registry_client
-            .get_subnet_transport_infos(self.subnet_id, registry_version)
-            .map_or(None, |opt_vec| opt_vec)
-            .map_or(vec![], |vec| vec)
-            .into_iter()
-            .for_each(|(node_id, node_record)| {
-                if self
-                    .peer_manager
-                    .add_peer(node_id, &node_record, registry_version, event_handler)
-                    .is_ok()
-                {
-                    self.receive_check_caches.write().unwrap().insert(
-                        node_id,
-                        ReceiveCheckCache::new(
-                            self.gossip_config.receive_check_cache_size as usize,
-                        ),
-                    );
-                }
+        self.metrics
+            .registry_version_used
+            .set(registry_version.get() as i64);
+        let subnet_id = *self.subnet_id.read().unwrap();
+        let node_records: Vec<(NodeId, NodeRecord)> = match subnet_id {
+            Some(subnet) => self
+                .registry_client
+                .get_subnet_transport_infos(subnet, registry_version)
+                .unwrap_or(None)
+                .unwrap_or_else(Vec::new),
+            None => Vec::new(),
+        };
+        let registry_nodes: BTreeSet<NodeId> =
+            node_records.iter().map(|node_id| node_id.0).collect();
+        node_records.into_iter().for_each(|(node_id, node_record)| {
+            if self
+                .peer_manager
+                .add_peer(node_id, &node_record, registry_version, event_handler)
+                .is_ok()
+            {
+                self.receive_check_caches.write().unwrap().insert(
+                    node_id,
+                    ReceiveCheckCache::new(self.gossip_config.receive_check_cache_size as usize),
+                );
+            }
+        });
+        // If this node is removed from current subnet, update subnet_id to reflect new
+        // state.
+        if !registry_nodes.contains(&self.node_id) {
+            // Write call to update subnet_id.
+            self.update_subnet_id(registry_version);
+        }
+        for peer in self.peer_manager.get_current_peer_ids().into_iter() {
+            // If a peer is not in registry, remove peer. If this node is not in registry,
+            // remove all peers.
+            if !registry_nodes.contains(&peer) || !registry_nodes.contains(&self.node_id) {
+                self.remove_node(peer, registry_version);
+                self.metrics.nodes_removed.inc();
+            }
+        }
+    }
+
+    fn update_subnet_id(&self, version: RegistryVersion) {
+        if let Some((subnet_id, _)) = self
+            .registry_client
+            .get_listed_subnet_for_node_id(self.node_id, version)
+            .unwrap_or_else(|e| {
+                trace!(
+                    self.log,
+                    "Failed to read subnet for node {:?}: {:?}",
+                    self.node_id,
+                    e
+                );
+                // If subnet read fails, mark as run. This will be retried next refresh_registry
+                // call.
+                None
             })
+        {
+            *self.subnet_id.write().unwrap() = Some(subnet_id);
+        } else {
+            *self.subnet_id.write().unwrap() = None;
+        }
+    }
+
+    /// This method removes the given node from peer manager and clears adverts.
+    fn remove_node(&self, node: NodeId, registry_version: RegistryVersion) {
+        self.peer_manager.remove_peer(node, registry_version);
+        self.receive_check_caches.write().unwrap().remove(&node);
+        self.prioritizer
+            .clear_peer_adverts(node, AdvertTrackerFinalAction::Abort)
+            .unwrap_or_else(|e| {
+                info!(
+                    self.log,
+                    "Failed to clear peer adverts when removing peer {:?} with error {:?}", node, e
+                )
+            });
     }
 
     /// The method sends the given message over transport to the given peer.
@@ -957,8 +1015,7 @@ impl DownloadManagerImpl {
             .with_label_values(&["transport_send"])
             .start_timer();
         let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
-        Ok(self
-            .transport
+        self.transport
             .send(self.transport_client_type, &peer_id, flow_tag, message)
             .map_err(|e| {
                 trace!(
@@ -968,7 +1025,7 @@ impl DownloadManagerImpl {
                     e
                 );
                 e
-            })?)
+            })
     }
 
     /// The method sends the given advert to the given list of peers.
@@ -1410,14 +1467,16 @@ impl PeerManager for PeerManagerImpl {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::download_prioritization::DownloadPrioritizerImpl;
+    use crate::download_prioritization::{DownloadPrioritizerError, DownloadPrioritizerImpl};
     use crate::event_handler::{tests::new_test_event_handler, MAX_ADVERT_BUFFER};
     use crate::metrics::DownloadPrioritizerMetrics;
     use ic_interfaces::artifact_manager::OnArtifactError;
     use ic_logger::LoggerImpl;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client::client::RegistryClientImpl;
+    use ic_registry_client::fake::FakeRegistryClient;
     use ic_test_utilities::port_allocation::allocate_ports;
+    use ic_test_utilities::registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities::{
         p2p::*,
         thread_transport::*,
@@ -1588,8 +1647,11 @@ pub mod tests {
         ThreadPort::new(node_test_id(instance_id as u64), hub, log)
     }
 
-    /// The function returns a new download manager with a registry.
-    fn new_test_download_manager(num_replicas: u32, logger: &LoggerImpl) -> DownloadManagerImpl {
+    fn new_test_download_manager_with_registry(
+        num_replicas: u32,
+        logger: &LoggerImpl,
+        registry_client: Arc<dyn RegistryClient>,
+    ) -> DownloadManagerImpl {
         let log: ReplicaLogger = logger.root.clone().into();
         let artifact_manager = TestArtifactManager {
             quota: 2 * 1024 * 1024 * 1024,
@@ -1618,17 +1680,6 @@ pub mod tests {
 
         let flow_tags = vec![FlowTag::from(0)];
         let flow_mapper = Arc::new(FlowMapper::new(flow_tags));
-        // Set up test registry
-        let allocated_ports = allocate_ports("127.0.0.1", num_replicas as u16)
-            .expect("Port allocation for test failed");
-        let node_port_allocation: Vec<u16> = allocated_ports.iter().map(|np| np.port).collect();
-        assert_eq!(num_replicas as usize, node_port_allocation.len());
-        let node_port_allocation = Arc::new(node_port_allocation);
-
-        let data_provider =
-            test_group_set_registry(subnet_test_id(P2P_SUBNET_ID_DEFAULT), node_port_allocation);
-        let registry_client = Arc::new(RegistryClientImpl::new(data_provider, None));
-        registry_client.fetch_and_start_polling().unwrap();
 
         // Create fake peers.
         let artifact_manager = Arc::new(artifact_manager);
@@ -1646,6 +1697,20 @@ pub mod tests {
             DownloadManagementMetrics::new(&metrics_registry),
         )
         .unwrap()
+    }
+
+    fn new_test_download_manager(num_replicas: u32, logger: &LoggerImpl) -> DownloadManagerImpl {
+        let allocated_ports = allocate_ports("127.0.0.1", num_replicas as u16)
+            .expect("Port allocation for test failed");
+        let node_port_allocation: Vec<u16> = allocated_ports.iter().map(|np| np.port).collect();
+        assert_eq!(num_replicas as usize, node_port_allocation.len());
+        let node_port_allocation = Arc::new(node_port_allocation);
+        let data_provider =
+            test_group_set_registry(subnet_test_id(P2P_SUBNET_ID_DEFAULT), node_port_allocation);
+        let registry_client = Arc::new(RegistryClientImpl::new(data_provider, None));
+        registry_client.fetch_and_start_polling().unwrap();
+
+        new_test_download_manager_with_registry(num_replicas, logger, registry_client)
     }
 
     /// The function adds the given number of adverts to the download manager.
@@ -1687,6 +1752,101 @@ pub mod tests {
 
     /// This function tests the functionality to add adverts to the
     /// download manager.
+    #[tokio::test]
+    async fn download_manager_remove_replica() {
+        let logger = p2p_test_setup_logger();
+        let num_replicas = 3;
+        let num_peers = num_replicas - 1;
+
+        let allocated_ports = allocate_ports("127.0.0.1", num_replicas as u16)
+            .expect("Port allocation for test failed");
+        let node_port_allocation: Vec<u16> = allocated_ports.iter().map(|np| np.port).collect();
+        assert_eq!(num_replicas as usize, node_port_allocation.len());
+        let node_port_allocation = Arc::new(node_port_allocation);
+
+        // Create data provider which will have subnet record of all replicas at version
+        // 1.
+        let data_provider = test_group_set_registry(
+            subnet_test_id(P2P_SUBNET_ID_DEFAULT),
+            node_port_allocation.clone(),
+        );
+        let registry_data_provider = data_provider.clone();
+        let registry_client = Arc::new(FakeRegistryClient::new(registry_data_provider));
+        registry_client.update_to_latest_version();
+
+        let download_manager = new_test_download_manager_with_registry(
+            num_replicas,
+            &logger,
+            Arc::clone(&registry_client) as Arc<_>,
+        );
+        // Add new subnet record with one less replica and at version 2.
+        let node_nums: Vec<u64> = (0..((node_port_allocation.len() - 1) as u64)).collect();
+        assert_eq!((num_replicas - 1) as usize, node_nums.len());
+        add_subnet_record(
+            &data_provider,
+            2,
+            subnet_test_id(P2P_SUBNET_ID_DEFAULT),
+            SubnetRecordBuilder::from(&node_nums.into_iter().map(node_test_id).collect::<Vec<_>>())
+                .build(),
+        );
+        // Get latest subnet record and assert it has one less replica than the initial
+        // version.
+        registry_client.update_to_latest_version();
+        let registry_version = registry_client.get_latest_version();
+        let node_records = registry_client
+            .get_subnet_transport_infos(subnet_test_id(P2P_SUBNET_ID_DEFAULT), registry_version)
+            .unwrap_or(None)
+            .unwrap_or_else(Vec::new);
+        assert_eq!((num_replicas - 1) as usize, node_records.len());
+
+        // Get removed node
+        let peers = download_manager.peer_manager.get_current_peer_ids();
+        let nodes: HashSet<NodeId> = node_records.iter().map(|node_id| node_id.0).collect();
+        let mut removed_peer = node_test_id(10);
+        let iter_peers = download_manager.peer_manager.get_current_peer_ids();
+        for peer in iter_peers.into_iter() {
+            if !nodes.contains(&peer) {
+                removed_peer = peer;
+            }
+        }
+        assert_ne!(removed_peer, node_test_id(10));
+        // Ensure number of peers reported by peer_manager are the expected amount
+        // from registry version 1 (version registry is currently using).
+        assert_eq!(num_peers as usize, peers.len());
+
+        // Add adverts from the peer that is removed in the latest registry version
+        test_add_adverts(&download_manager, 0..5, removed_peer);
+        let event_handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0));
+        let event_handler_arc = Arc::new(event_handler) as Arc<dyn P2PEventHandlerControl>;
+
+        // Refresh registry to get latest version.
+        download_manager.refresh_registry(&event_handler_arc);
+        // Assert number of peers has been decreased by one.
+        assert_eq!(
+            (num_peers - 1) as usize,
+            download_manager.peer_manager.get_current_peer_ids().len()
+        );
+
+        // Validate adverts from the removed_peer are no longer present.
+        for advert_id in 0..5 {
+            let advert = download_manager.prioritizer.get_advert_from_peer(
+                &ArtifactId::FileTreeSync(advert_id.to_string()),
+                &removed_peer,
+            );
+            assert_eq!(advert, Err(DownloadPrioritizerError::NotFound));
+        }
+
+        // Validate adverts added from removed_peer are rejected
+        test_add_adverts(&download_manager, 0..5, removed_peer);
+        for advert_id in 0..5 {
+            let advert = download_manager.prioritizer.get_advert_from_peer(
+                &ArtifactId::FileTreeSync(advert_id.to_string()),
+                &removed_peer,
+            );
+            assert_eq!(advert, Err(DownloadPrioritizerError::NotFound));
+        }
+    }
+
     #[tokio::test]
     async fn download_manager_add_adverts() {
         let logger = p2p_test_setup_logger();
@@ -2064,6 +2224,8 @@ pub mod tests {
         fn setting_same_set_of_nodes_changes_nothing(
             peers in arb_peer_list(0)
         ) {
+            // Tokio context is required here because some functions still assume it exists.
+            let _rt_guard = tokio::runtime::Runtime::new().unwrap().enter();
             let peers_dictionary: PeerContextDictionary = peers
                 .iter()
                 .map(|node_id| (*node_id, PeerContext::from(node_id.to_owned())))
@@ -2099,6 +2261,8 @@ pub mod tests {
         fn when_setting_new_peers_old_ones_preserved(
             peer_list in arb_peer_list(3)
         ) {
+            // Tokio context is required here because some functions still assume it exists.
+            let _rt_guard = tokio::runtime::Runtime::new().unwrap().enter();
             // Get the original peer list, split into three: a + b + c
             // then produce:
             // old = a + b

@@ -52,7 +52,7 @@ pub mod util {
     fn combined_secret_key(secret_keys: &[SecretKey]) -> SecretKey {
         let coordinates: Vec<(Fr, SecretKey)> = secret_keys
             .iter()
-            .zip(0 as NodeIndex..)
+            .zip(0_u32..)
             .map(|(y, index)| (crypto::x_for_index(index), *y))
             .collect();
         Polynomial::interpolate(&coordinates)
@@ -158,7 +158,7 @@ pub mod util {
         }
         if public_coefficients.coefficients.len() > 1 {
             let some_individual_public_key =
-                crypto::individual_public_key(public_coefficients, 11 as NodeIndex);
+                crypto::individual_public_key(public_coefficients, 11_u32);
             assert!(crypto::verify(message, signature, some_individual_public_key).is_err());
         }
     }
@@ -188,11 +188,7 @@ pub mod util {
     ) -> Result<(PublicCoefficients, Vec<SecretKey>), InvalidArgumentError> {
         let which_shares = vec![true; number_of_shares.get() as usize];
         crypto::keygen(seed, threshold, &which_shares).map(|(public_coefficients, keys_maybe)| {
-            let keys: Vec<SecretKey> = keys_maybe
-                .iter()
-                .cloned()
-                .filter_map(|maybe| maybe)
-                .collect();
+            let keys: Vec<SecretKey> = keys_maybe.iter().cloned().flatten().collect();
             (public_coefficients, keys)
         })
     }
@@ -338,7 +334,7 @@ proptest! {
         })]
 
         #[test]
-        fn single_keygen_is_valid(keygen_seed: [u8;32], test_seed: [u8;32], threshold in 0 as NodeIndex..5, redundancy in (0 as NodeIndex..10), message: Vec<u8>) {
+        fn single_keygen_is_valid(keygen_seed: [u8;32], test_seed: [u8;32], threshold in 0_u32..5, redundancy in (0_u32..10), message: Vec<u8>) {
             let threshold = NumberOfNodes::from(threshold);
             let num_shares = threshold + NumberOfNodes::from(redundancy);
             let (public_coefficients, secret_keys) = util::keygen(Randomness::from(keygen_seed), threshold, num_shares).expect("Failed to generate keys");
@@ -347,7 +343,7 @@ proptest! {
 
 
         #[test]
-        fn proptest_keygen_composes(keygen_seeds in proptest::collection::vec(any::<[u8;32]>(), 1..10), test_seed: [u8;32], threshold in 0 as NodeIndex..10, redundancy in (0 as NodeIndex..10), message: Vec<u8>) {
+        fn proptest_keygen_composes(keygen_seeds in proptest::collection::vec(any::<[u8;32]>(), 1..10), test_seed: [u8;32], threshold in 0_u32..10, redundancy in (0_u32..10), message: Vec<u8>) {
             let threshold = NumberOfNodes::from(threshold);
             let num_shares = threshold + NumberOfNodes::from(redundancy);
             let generations = keygen_seeds.into_iter().map(|seed| util::keygen(Randomness::from(seed), threshold, num_shares).expect("Could not generate keys")).collect::<Vec<_>>();
@@ -369,9 +365,9 @@ proptest! {
         /// that no error is returned.
         #[test]
         fn verify_keygen_args_rejects_insufficient_eligible_nodes(
-            threshold in 0 as NodeIndex..10,
-            eligible in 0 as NodeIndex..10,
-            ineligible in 0 as NodeIndex..10,
+            threshold in 0_u32..10,
+            eligible in 0_u32..10,
+            ineligible in 0_u32..10,
             seed: Randomness,
         ) {
             let all_nodes = vec![true;(eligible+ineligible) as usize];
@@ -385,9 +381,9 @@ proptest! {
         /// key of the generated key.
         #[test]
         fn verifies_that_keygen_with_secret_has_the_correct_public_coefficient_at_zero(
-            threshold in 1 as NodeIndex..5,
-            redundancy in 0 as NodeIndex..5,
-            idle_receivers in 0 as NodeIndex..5,
+            threshold in 1_u32..5,
+            redundancy in 0_u32..5,
+            idle_receivers in 0_u32..5,
             seed: Randomness
         ) {
             let mut rng = ChaChaRng::from_seed(seed.get());

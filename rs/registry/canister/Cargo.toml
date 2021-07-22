@@ -12,7 +12,7 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 candid = "0.6.15"
 ic-base-types = { path = "../../types/base_types/" }
-ic-crypto-key-validation = { path = "../../crypto/key_validation" }
+ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
@@ -33,6 +33,7 @@ url = "2"
 assert_matches = "1.3.0"
 ic-canister-client = { path = "../../canister_client" }
 ic-crypto = { path = "../../crypto" }
+ic-test-utilities = { path = "../../test_utilities" }
 lazy_static = "1.4.0"
 maplit = "1.0"
 rand = { version = "0.7.2", features = ["small_rng"]}

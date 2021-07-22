@@ -1,10 +1,12 @@
 //! Public interface for running a TLS handshake as a client
 use super::*;
 use ic_crypto_internal_tls::{tls_connector, CreateTlsConnectorError};
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::TlsStream;
+use openssl::ssl::ConnectConfiguration;
+use std::pin::Pin;
 use thiserror::Error;
 use tokio::net::TcpStream;
-use tokio_openssl::HandshakeError;
 
 /// Transforms a TCP stream into a TLS stream by performing a TLS client
 /// handshake.
@@ -47,13 +49,43 @@ pub async fn perform_tls_client_handshake(
         client_cert.as_x509(),
         trusted_server_cert.as_x509(),
     )?;
-    let tls_stream = tokio_openssl::connect(
+
+    let mut tls_stream = unconnected_tls_stream(
         tls_connector,
         "domain is irrelevant, because hostname verification is disabled",
         tcp_stream,
-    )
-    .await?;
+    )?;
+    Pin::new(&mut tls_stream).connect().await.map_err(|e| {
+        TlsClientHandshakeError::HandshakeError {
+            internal_error: format!("Handshake failed in tokio_openssl:connect: {}", e),
+        }
+    })?;
+
     Ok(TlsStream::new(tls_stream))
+}
+
+fn unconnected_tls_stream(
+    tls_connector: ConnectConfiguration,
+    domain: &str,
+    tcp_stream: TcpStream,
+) -> Result<tokio_openssl::SslStream<TcpStream>, TlsClientHandshakeError> {
+    let tls_state = tls_connector.into_ssl(domain).map_err(|e| {
+        TlsClientHandshakeError::CreateConnectorError {
+            description: "failed to convert TLS connector to state object".to_string(),
+            internal_error: format!("{}", e),
+            client_cert_der: None,
+            server_cert_der: None,
+        }
+    })?;
+    let tls_stream = tokio_openssl::SslStream::new(tls_state, tcp_stream).map_err(|e| {
+        TlsClientHandshakeError::CreateConnectorError {
+            description: "failed to create tokio_openssl::SslStream".to_string(),
+            internal_error: format!("{}", e),
+            client_cert_der: None,
+            server_cert_der: None,
+        }
+    })?;
+    Ok(tls_stream)
 }
 
 #[derive(Error, Clone, Debug, PartialEq, Eq)]
@@ -77,17 +109,6 @@ impl From<CreateTlsConnectorError> for TlsClientHandshakeError {
             client_cert_der: clib_create_tls_connector_error.client_cert_der,
             server_cert_der: clib_create_tls_connector_error.server_cert_der,
             internal_error: clib_create_tls_connector_error.internal_error,
-        }
-    }
-}
-
-impl From<HandshakeError<TcpStream>> for TlsClientHandshakeError {
-    fn from(handshake_error: HandshakeError<TcpStream>) -> Self {
-        TlsClientHandshakeError::HandshakeError {
-            internal_error: format!(
-                "Handshake failed in tokio_openssl:connect: {}",
-                handshake_error
-            ),
         }
     }
 }

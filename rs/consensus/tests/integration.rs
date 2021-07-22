@@ -28,18 +28,22 @@ fn multiple_nodes_are_live() -> Result<(), String> {
 
 #[test]
 fn single_node_is_live() {
-    let mut config = ConsensusRunnerConfig::default();
-    config.num_nodes = 1;
-    config.num_rounds = 126;
+    let config = ConsensusRunnerConfig {
+        num_nodes: 1,
+        num_rounds: 126,
+        ..Default::default()
+    };
     run_n_rounds_and_collect_hashes(config);
 }
 
 #[test]
 fn multiple_nodes_are_deterministic() {
     let run = || {
-        let mut config = ConsensusRunnerConfig::default();
-        config.num_nodes = 4;
-        config.num_rounds = 10;
+        let config = ConsensusRunnerConfig {
+            num_nodes: 4,
+            num_rounds: 10,
+            ..Default::default()
+        };
         run_n_rounds_and_collect_hashes(config)
     };
     assert_eq!(run(), run());

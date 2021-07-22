@@ -213,6 +213,10 @@ impl SigConverter {
                     secp256k1_types::SignatureBytes(bytes),
                 ))
             }
+            AlgorithmId::RsaSha256 => {
+                let sig_bytes = &signature.get_ref().0;
+                Ok(CspSignature::RsaSha256(sig_bytes.clone()))
+            }
             algorithm => Err(CryptoError::AlgorithmNotSupported {
                 algorithm,
                 reason: "Expecting Ed25519 or ECDSA-P256 signature".to_string(),

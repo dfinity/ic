@@ -6,9 +6,7 @@ use structopt::StructOpt;
 #[tokio::main]
 async fn main() {
     let args = NodeManagerArgs::from_args();
-    let mut node_manager = NodeManager::new(args).await;
-    node_manager
-        .start()
+    let mut node_manager = NodeManager::start(args)
         .await
         .expect("Failed to start node manager");
     node_manager.spawn_wait_and_restart_replica();

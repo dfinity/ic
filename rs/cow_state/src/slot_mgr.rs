@@ -149,14 +149,11 @@ impl<'a> Iterator for SlotMappingIteratorHelper<'a> {
     type Item = SingleContigRange;
     fn next(&mut self) -> Option<Self::Item> {
         let item = self.iter.next();
-        match item {
-            Some(cr) => Some(SingleContigRange {
-                logical_slot: cr.logical_slot,
-                map_len: cr.map_len,
-                physical_slot: SlotMgr::get_slot(cr.physical_slot),
-            }),
-            None => None,
-        }
+        item.map(|cr| SingleContigRange {
+            logical_slot: cr.logical_slot,
+            map_len: cr.map_len,
+            physical_slot: SlotMgr::get_slot(cr.physical_slot),
+        })
     }
 }
 
@@ -186,10 +183,7 @@ impl SlotMappings {
     }
 
     pub fn get_last_slot(&self) -> Option<u64> {
-        match self.0.last() {
-            Some(cr) => Some(cr.logical_slot + cr.map_len),
-            _ => None,
-        }
+        self.0.last().map(|cr| cr.logical_slot + cr.map_len)
     }
 
     pub fn len(&self) -> usize {
@@ -397,7 +391,7 @@ impl SlotMgr {
                         "LastCheckpointedRound" => {
                             last_checkpointed_round = Some(Self::decode_u64(v))
                         }
-                        _ => panic!(format!("Unknow table found {}", s)),
+                        _ => panic!("Unknown table found: {}", s),
                     }
                 }
                 (nr_slots, last_checkpointed_round)
@@ -829,7 +823,7 @@ mod tests {
         // This test validates that slots can be allocated, mappings persist
         // correctly and finally the are correctly presented when rounds are created
         let mapping_db = tempdir().expect("Unable to create temp directory");
-        let smgr = SlotMgr::new(mapping_db.path(), 10, 2 * 1024 * 1024 as u64);
+        let smgr = SlotMgr::new(mapping_db.path(), 10, 2 * 1024 * 1024_u64);
         let curr_mappings = smgr.get_current_round_mappings();
 
         // Make sure that we start with empty mappings
@@ -946,7 +940,7 @@ mod tests {
     #[test]
     fn slot_mgr_can_allocate_full() {
         let mapping_db = tempdir().expect("Unable to create temp directory");
-        let smgr = SlotMgr::new(mapping_db.path(), 10, 100 as u64);
+        let smgr = SlotMgr::new(mapping_db.path(), 10, 100_u64);
 
         let mut rounds_to_verify = Vec::new();
         for rnd in 0..10 {
@@ -978,8 +972,7 @@ mod tests {
         smgr.remove_rounds_below(9);
         assert_eq!(smgr.get_completed_rounds(), [9]);
 
-        let mut rounds_to_verify = Vec::new();
-        rounds_to_verify.push(9);
+        let mut rounds_to_verify = vec![9];
 
         // Validate that we can allocate space for 9 more rounds
         for rnd in 10..19 {
@@ -1004,7 +997,7 @@ mod tests {
     #[test]
     fn slot_mgr_allocator_test() {
         let mapping_db = tempdir().expect("Unable to create temp directory");
-        let smgr = SlotMgr::new(mapping_db.path(), 10, 30 as u64);
+        let smgr = SlotMgr::new(mapping_db.path(), 10, 30_u64);
 
         let (free_count, remaining) = smgr.dbg_get_free_list();
         // we should have 1 single range

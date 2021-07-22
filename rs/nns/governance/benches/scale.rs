@@ -20,7 +20,7 @@ use std::convert::TryFrom;
 
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::governance::{Environment, Governance, Ledger};
+use ic_nns_governance::governance::{Environment, Governance, HeapGrowthPotential, Ledger};
 
 use ic_nns_governance::pb::v1::neuron;
 use ic_nns_governance::pb::v1::proposal;
@@ -62,6 +62,10 @@ impl Environment for MockEnvironment {
         _update: &ExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         panic!("unexpected call")
+    }
+
+    fn heap_growth_potential(&self) -> HeapGrowthPotential {
+        HeapGrowthPotential::NoIssue
     }
 }
 

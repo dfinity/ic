@@ -25,13 +25,16 @@ serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.1"
 serde_json = "1.0.40"
-simple_asn1 = "0.4.1"
+simple_asn1 = "0.5.4"
 strum_macros = "0.18.0"
 zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 hex = "0.4.2"
+ic-crypto-internal-csp-test-utils = { path = "../../../csp_test_utils" }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
+ic-crypto-test-utils = { path = "../../../../test_utils" }
+ic-types-test-utils = { path = "../../../../../types/types_test_utils" }
 proptest = "0.9.4"
 proptest-derive = "0.1.0"
 rand_core = "0.5.1"

@@ -280,8 +280,7 @@ mod tests {
         index.insert(fifteen, &12);
         index.insert(one_hundred, &13);
 
-        let mut expected = Vec::new();
-        expected.push(13);
+        let mut expected = vec![13];
         assert_eq!(
             &index.lookup(one_hundred).cloned().collect::<Vec<i32>>(),
             &expected
@@ -312,9 +311,7 @@ mod tests {
         index.insert(twelve, &1);
         index.insert(twelve, &2);
 
-        let mut expected = Vec::new();
-        expected.push(1);
-        expected.push(2);
+        let mut expected = vec![1, 2];
         assert_eq!(
             &index.lookup(twelve).cloned().collect::<Vec<i32>>(),
             &expected

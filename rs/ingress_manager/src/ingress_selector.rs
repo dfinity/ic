@@ -12,12 +12,14 @@ use ic_interfaces::{
     ingress_pool::{IngressPoolSelect, SelectResult},
     validation::{ValidationError, ValidationResult},
 };
-use ic_logger::{error, fatal, warn};
+use ic_logger::{error, warn};
+use ic_registry_client::helper::subnet::IngressMessageSettings;
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     ingress::{IngressStatus, MAX_INGRESS_TTL},
-    messages::MessageId,
+    messages::{MessageId, SignedIngress},
     CanisterId, CountBytes, Cycles, Height, Time,
 };
 use ic_validator::{validate_request, RequestValidationError};
@@ -32,30 +34,34 @@ impl<'a> IngressSelector for IngressManager {
     ) -> IngressPayload {
         let _timer = self.metrics.ingress_selector_get_payload_time.start_timer();
         let certified_height = context.certified_height;
-        let past_ingress_set = IngressSetChain::new(context.time, past_ingress, || {
+        let past_ingress_set = match IngressSetChain::new(context.time, past_ingress, || {
             IngressHistorySet::new(self.ingress_hist_reader.as_ref(), certified_height)
-        })
-        .unwrap_or_else(|err| {
-            fatal!(
-                self.log,
-                "IngressHistoryReader doesn't have state for height {}: {:?}",
-                certified_height,
-                err
-            )
-        });
-
-        let state = self
-            .state_manager
-            .get_state_at(certified_height)
-            .unwrap_or_else(|err| {
-                fatal!(
+        }) {
+            Ok(past_ingress_set) => past_ingress_set,
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 5,
                     self.log,
-                    "StateManager doesn't have state for height {}: {:?}",
+                    "IngressHistoryReader doesn't have state for height {}: {:?}",
                     certified_height,
                     err
-                )
-            })
-            .take();
+                );
+                return IngressPayload::default();
+            }
+        };
+
+        let state = match self.state_manager.get_state_at(certified_height) {
+            Ok(state) => state,
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 5,
+                    self.log,
+                    "StateManager doesn't have state for height {}: {:?}", certified_height, err
+                );
+                return IngressPayload::default();
+            }
+        }
+        .take();
 
         let min_expiry = context.time;
         let max_expiry = context.time + MAX_INGRESS_TTL;
@@ -64,82 +70,41 @@ impl<'a> IngressSelector for IngressManager {
         let settings = self
             .get_ingress_message_settings(context.registry_version)
             .expect("Couldn't fetch ingress message parameters from the registry.");
+
         // Select valid ingress messages and stop once the total size
         // becomes greater than ingress_bytes_per_block_soft_cap.
-        let mut payload_size = 0;
+        let mut accumulated_size = 0;
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
         let mut num_messages = 0;
 
         let messages_in_payload = ingress_pool.select_validated(
             expiry_range,
             Box::new(move |ingress_obj| {
-                let ingress_id = IngressMessageId::from(ingress_obj);
-                let ingress_message_size = ingress_obj.signed_ingress.count_bytes();
-                // Skip the message if its size is larger than the configured maximum.
-                if ingress_message_size > settings.max_ingress_bytes_per_message {
-                    return SelectResult::Skip;
-                }
-
-                if payload_size > settings.ingress_bytes_per_block_soft_cap {
-                    // once the threshold value is reached, we are done
-                    return SelectResult::Abort;
-                }
-
-                // Skip the message if there aren't enough cycles to induct the message.
-                let msg = ingress_obj.signed_ingress.content();
-                match self.cycles_account_manager.ingress_induction_cost(msg) {
-                    Ok(IngressInductionCost::Fee { payer, cost }) => {
-                        match state.canister_state(&payer) {
-                            Some(canister) => {
-                                let canister_cycles_needed = cycles_needed
-                                    .entry(payer)
-                                    .or_insert_with(|| Cycles::from(0));
-                                *canister_cycles_needed += cost;
-                                if *canister_cycles_needed
-                                    > self
-                                        .cycles_account_manager
-                                        .cycles_balance_above_storage_reserve(
-                                            &canister.system_state,
-                                            canister.memory_usage(),
-                                            canister.scheduler_state.compute_allocation,
-                                        )
-                                {
-                                    return SelectResult::Skip;
-                                }
-                            }
-                            None => {
-                                return SelectResult::Skip;
-                            }
-                        }
+                let result = self.validate_ingress(
+                    IngressMessageId::from(ingress_obj),
+                    &ingress_obj.signed_ingress,
+                    &state,
+                    &context,
+                    &settings,
+                    &past_ingress_set,
+                    num_messages,
+                    accumulated_size,
+                    &mut cycles_needed,
+                );
+                match result {
+                    Ok(()) => {
+                        num_messages += 1;
+                        accumulated_size += ingress_obj.signed_ingress.count_bytes();
+                        SelectResult::Selected(ingress_obj.signed_ingress.clone())
                     }
-                    Ok(IngressInductionCost::Free) => {
-                        // Do nothing.
-                    }
-                    Err(_) => {
-                        return SelectResult::Skip;
-                    }
-                };
-
-                // Skip the message if it's a duplicate or it is considered invalid with
-                // respect to the given context (expiry & registry_version).
-                if past_ingress_set.contains(&ingress_id)
-                    || validate_request(
-                        ingress_obj.signed_ingress.as_ref(),
-                        self.ingress_signature_crypto.as_ref(),
-                        context.time,
-                        context.registry_version,
-                    )
-                    .is_err()
-                {
-                    return SelectResult::Skip;
+                    Err(ValidationError::Permanent(
+                        IngressPermanentError::IngressPayloadTooBig(_, _),
+                    )) => SelectResult::Abort,
+                    Err(ValidationError::Permanent(
+                        IngressPermanentError::IngressPayloadTooManyMessages(_, _),
+                    )) => SelectResult::Abort,
+                    _ => SelectResult::Skip,
                 }
-
-                num_messages += 1;
-                if num_messages > settings.max_ingress_messages_per_block {
-                    return SelectResult::Abort;
-                }
-                payload_size += ingress_message_size;
-                SelectResult::Selected(ingress_obj.signed_ingress.clone())
             }),
         );
 
@@ -174,18 +139,10 @@ impl<'a> IngressSelector for IngressManager {
             .get_ingress_message_settings(context.registry_version)
             .expect("Couldn't get ingress_bytes_per_block_soft_cap from the registry.");
 
-        if payload.message_count() > settings.max_ingress_messages_per_block {
-            return Err(ValidationError::Permanent(
-                IngressPermanentError::IngressPayloadTooManyMessages(
-                    payload.message_count(),
-                    settings.max_ingress_messages_per_block,
-                ),
-            ));
-        }
-
         let past_ingress = match IngressSetChain::new(context.time, past_ingress, || {
             IngressHistorySet::new(self.ingress_hist_reader.as_ref(), certified_height)
         }) {
+            Ok(ingress_set) => ingress_set,
             Err(err) => {
                 warn!(
                     self.log,
@@ -195,7 +152,6 @@ impl<'a> IngressSelector for IngressManager {
                 );
                 return Err(err);
             }
-            Ok(ingress_set) => ingress_set,
         };
 
         let state = match self.state_manager.get_state_at(certified_height) {
@@ -211,107 +167,37 @@ impl<'a> IngressSelector for IngressManager {
             }
         };
 
-        // track the sum of the size of all ingress messages in the payload checked so
-        // far
-        let mut acc = 0;
-        // track the sum of cycles needed per canister.
+        if payload.message_count() > settings.max_ingress_messages_per_block {
+            return Err(ValidationError::Permanent(
+                IngressPermanentError::IngressPayloadTooManyMessages(
+                    payload.message_count(),
+                    settings.max_ingress_messages_per_block,
+                ),
+            ));
+        }
+
+        // Tracks the sum of the size of all ingress messages checked so far.
+        let mut accumulated_size = 0;
+        // Tracks the sum of cycles needed per canister.
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
         for i in 0..payload.message_count() {
             let (ingress_id, ingress) = payload
                 .get(i)
                 .map_err(IngressPermanentError::IngressPayloadError)?;
-            let message_id = MessageId::from(&ingress_id);
 
-            if let Err(err) = validate_request(
-                ingress.as_ref(),
-                self.ingress_signature_crypto.as_ref(),
-                context.time,
-                context.registry_version,
-            ) {
-                return Err(ValidationError::Permanent(match err {
-                    RequestValidationError::InvalidIngressExpiry(msg)
-                    | RequestValidationError::InvalidDelegationExpiry(msg) => {
-                        IngressPermanentError::IngressExpired(message_id, msg)
-                    }
-                    err => IngressPermanentError::IngressValidationError(
-                        message_id,
-                        format!("{}", err),
-                    ),
-                }));
-            }
+            self.validate_ingress(
+                ingress_id.clone(),
+                &ingress,
+                &state,
+                &context,
+                &settings,
+                &past_ingress,
+                0, // message count is checked above.
+                accumulated_size,
+                &mut cycles_needed,
+            )?;
 
-            let ingress_message_size = ingress.count_bytes();
-            if ingress_message_size > settings.max_ingress_bytes_per_message {
-                return Err(ValidationError::Permanent(
-                    IngressPermanentError::IngressMessageTooBig(
-                        ingress_message_size,
-                        settings.max_ingress_bytes_per_message,
-                    ),
-                ));
-            }
-
-            // if the threshold value is reached before all messages
-            // have been processed, then return false
-            if acc > settings.ingress_bytes_per_block_soft_cap {
-                return Err(ValidationError::Permanent(
-                    IngressPermanentError::IngressPayloadTooBig(
-                        acc,
-                        settings.ingress_bytes_per_block_soft_cap,
-                    ),
-                ));
-            }
-
-            // add the size of the ingress message we iterate over
-            acc += ingress_message_size;
-            // check if the messages in payload exist in past payloads
-            if past_ingress.contains(&ingress_id) {
-                return Err(ValidationError::Permanent(
-                    IngressPermanentError::DuplicatedIngressMessage(message_id),
-                ));
-            }
-
-            // Check that the receiving canister has enough cycles to pay for the message.
-            match self
-                .cycles_account_manager
-                .ingress_induction_cost(&ingress.content())
-            {
-                Ok(IngressInductionCost::Fee { payer, cost }) => {
-                    match state.canister_state(&payer) {
-                        Some(canister) => {
-                            let canister_cycles_needed = cycles_needed
-                                .entry(payer)
-                                .or_insert_with(|| Cycles::from(0));
-                            if *canister_cycles_needed + cost
-                                > self
-                                    .cycles_account_manager
-                                    .cycles_balance_above_storage_reserve(
-                                        &canister.system_state,
-                                        canister.memory_usage(),
-                                        canister.scheduler_state.compute_allocation,
-                                    )
-                            {
-                                return Err(ValidationError::Permanent(
-                                    IngressPermanentError::InsufficientCycles(payer),
-                                ));
-                            }
-                            *canister_cycles_needed += cost;
-                        }
-                        None => {
-                            return Err(ValidationError::Permanent(
-                                IngressPermanentError::CanisterNotFound(payer),
-                            ));
-                        }
-                    };
-                }
-                Ok(IngressInductionCost::Free) => {
-                    // Nothing to do.
-                }
-                Err(_) => {
-                    return Err(ValidationError::Permanent(
-                        IngressPermanentError::InvalidManagementMessage,
-                    ));
-                }
-            };
+            accumulated_size += ingress.count_bytes();
         }
 
         Ok(())
@@ -319,6 +205,124 @@ impl<'a> IngressSelector for IngressManager {
 
     fn request_purge_finalized_messages(&self, message_ids: Vec<IngressMessageId>) {
         self.messages_to_purge.write().unwrap().push(message_ids)
+    }
+}
+
+impl IngressManager {
+    #[allow(clippy::too_many_arguments)]
+    fn validate_ingress(
+        &self,
+        ingress_id: IngressMessageId,
+        signed_ingress: &SignedIngress,
+        state: &ReplicatedState,
+        context: &ValidationContext,
+        settings: &IngressMessageSettings,
+        past_ingress_set: &IngressSetChain<IngressHistorySet>,
+        num_messages: usize,
+        accumulated_size: usize,
+        cycles_needed: &mut BTreeMap<CanisterId, Cycles>,
+    ) -> ValidationResult<IngressPayloadValidationError> {
+        let ingress_message_size = signed_ingress.count_bytes();
+        // The message is invalid if its size is larger than the configured maximum.
+        if ingress_message_size > settings.max_ingress_bytes_per_message {
+            return Err(ValidationError::Permanent(
+                IngressPermanentError::IngressMessageTooBig(
+                    ingress_message_size,
+                    settings.max_ingress_bytes_per_message,
+                ),
+            ));
+        }
+
+        if accumulated_size > settings.ingress_bytes_per_block_soft_cap {
+            // Once the threshold value is passed, we are done.
+            return Err(ValidationError::Permanent(
+                IngressPermanentError::IngressPayloadTooBig(
+                    accumulated_size,
+                    settings.ingress_bytes_per_block_soft_cap,
+                ),
+            ));
+        }
+
+        if num_messages >= settings.max_ingress_messages_per_block {
+            return Err(ValidationError::Permanent(
+                IngressPermanentError::IngressPayloadTooManyMessages(
+                    num_messages,
+                    settings.max_ingress_messages_per_block,
+                ),
+            ));
+        }
+
+        // Do not include the message if it's a duplicate.
+        if past_ingress_set.contains(&ingress_id) {
+            let message_id = MessageId::from(&ingress_id);
+            return Err(ValidationError::Permanent(
+                IngressPermanentError::DuplicatedIngressMessage(message_id),
+            ));
+        }
+
+        // Skip the message if there aren't enough cycles to induct the message.
+        let msg = signed_ingress.content();
+        match self.cycles_account_manager.ingress_induction_cost(msg) {
+            Ok(IngressInductionCost::Fee { payer, cost }) => match state.canister_state(&payer) {
+                Some(canister) => {
+                    let canister_cycles_needed = cycles_needed
+                        .entry(payer)
+                        .or_insert_with(|| Cycles::from(0));
+                    let cycles_available = self
+                        .cycles_account_manager
+                        .cycles_balance_above_storage_reserve(
+                            &canister.system_state,
+                            canister.memory_usage(),
+                            canister.scheduler_state.compute_allocation,
+                        );
+                    if *canister_cycles_needed + cost > cycles_available {
+                        return Err(ValidationError::Permanent(
+                            IngressPermanentError::InsufficientCycles(
+                                payer,
+                                *canister_cycles_needed,
+                                cycles_available,
+                            ),
+                        ));
+                    }
+                    *canister_cycles_needed += cost;
+                }
+                None => {
+                    return Err(ValidationError::Permanent(
+                        IngressPermanentError::CanisterNotFound(payer),
+                    ));
+                }
+            },
+            Ok(IngressInductionCost::Free) => {
+                // Do nothing.
+            }
+            Err(_) => {
+                return Err(ValidationError::Permanent(
+                    IngressPermanentError::InvalidManagementMessage,
+                ));
+            }
+        };
+
+        // Do not include the message if it is considered invalid with
+        // respect to the given context (expiry & registry_version).
+        if let Err(err) = validate_request(
+            signed_ingress.as_ref(),
+            self.ingress_signature_crypto.as_ref(),
+            context.time,
+            context.registry_version,
+            &self.malicious_flags,
+        ) {
+            let message_id = MessageId::from(&ingress_id);
+            return Err(ValidationError::Permanent(match err {
+                RequestValidationError::InvalidIngressExpiry(msg)
+                | RequestValidationError::InvalidDelegationExpiry(msg) => {
+                    IngressPermanentError::IngressExpired(message_id, msg)
+                }
+                err => {
+                    IngressPermanentError::IngressValidationError(message_id, format!("{}", err))
+                }
+            }));
+        }
+        Ok(())
     }
 }
 
@@ -498,11 +502,9 @@ mod tests {
 
             assert_matches!(
                 ingress_validation,
-                Err(
-                    ValidationError::Permanent(
-                        IngressPermanentError::IngressPayloadTooManyMessages(_, _),
-                    ),
-                )
+                Err(ValidationError::Permanent(
+                    IngressPermanentError::IngressPayloadTooManyMessages(_, _),
+                ),)
             );
         })
     }
@@ -647,7 +649,9 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(IngressPermanentError::IngressExpired(_, _)))
+                    Err(ValidationError::Permanent(
+                        IngressPermanentError::IngressExpired(_, _)
+                    ))
                 );
 
                 // Check if expired message passes
@@ -668,7 +672,9 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(IngressPermanentError::IngressExpired(_, _)))
+                    Err(ValidationError::Permanent(
+                        IngressPermanentError::IngressExpired(_, _)
+                    ))
                 );
             },
         );
@@ -696,7 +702,9 @@ mod tests {
             );
             assert_matches!(
                 ingress_validation,
-                Err(ValidationError::Permanent(IngressPermanentError::DuplicatedIngressMessage(_)))
+                Err(ValidationError::Permanent(
+                    IngressPermanentError::DuplicatedIngressMessage(_)
+                ))
             );
         });
     }
@@ -1013,11 +1021,9 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(
-                        ValidationError::Permanent(
-                            IngressPermanentError::DuplicatedIngressMessage(_),
-                        ),
-                    )
+                    Err(ValidationError::Permanent(
+                        IngressPermanentError::DuplicatedIngressMessage(_),
+                    ),)
                 );
             },
         );
@@ -1213,11 +1219,9 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(
-                        ValidationError::Permanent(
-                            IngressPermanentError::IngressPayloadTooBig(_, _),
-                        ),
-                    )
+                    Err(ValidationError::Permanent(
+                        IngressPermanentError::IngressPayloadTooBig(_, _),
+                    ),)
                 );
 
                 // Check if soft cap on block size works as expected
@@ -1453,7 +1457,9 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(IngressPermanentError::InsufficientCycles(_)))
+                    Err(ValidationError::Permanent(
+                        IngressPermanentError::InsufficientCycles(_, _, _)
+                    ))
                 );
             },
         );
@@ -1490,7 +1496,9 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(IngressPermanentError::CanisterNotFound(_)))
+                    Err(ValidationError::Permanent(
+                        IngressPermanentError::CanisterNotFound(_)
+                    ))
                 );
             },
         );
@@ -1636,7 +1644,7 @@ mod tests {
                         ),
                         // Validation should fail since the canister that needs to pay for the
                         // message doesn't have enough cycles.
-                        Err(ValidationError::Permanent(IngressPermanentError::InsufficientCycles(canister_id)))
+                        Err(ValidationError::Permanent(IngressPermanentError::InsufficientCycles(canister_id, _, _)))
                             if canister_id == canister_test_id(2)
                     );
                 }

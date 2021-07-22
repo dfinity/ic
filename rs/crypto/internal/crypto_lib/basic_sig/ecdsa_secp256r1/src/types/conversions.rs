@@ -2,9 +2,9 @@ use super::*;
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use std::convert::{From, TryFrom};
 
-impl Into<String> for SecretKeyBytes {
-    fn into(self) -> String {
-        base64::encode(&self.0[..])
+impl From<SecretKeyBytes> for String {
+    fn from(val: SecretKeyBytes) -> Self {
+        base64::encode(&val.0[..])
     }
 }
 
@@ -35,9 +35,9 @@ impl From<Vec<u8>> for PublicKeyBytes {
     }
 }
 
-impl Into<String> for PublicKeyBytes {
-    fn into(self) -> String {
-        base64::encode(&self.0[..])
+impl From<PublicKeyBytes> for String {
+    fn from(val: PublicKeyBytes) -> Self {
+        base64::encode(&val.0[..])
     }
 }
 
@@ -84,9 +84,9 @@ impl TryFrom<Vec<u8>> for SignatureBytes {
     }
 }
 
-impl Into<String> for SignatureBytes {
-    fn into(self) -> String {
-        base64::encode(&self.0.to_vec())
+impl From<SignatureBytes> for String {
+    fn from(val: SignatureBytes) -> Self {
+        base64::encode(&val.0.to_vec())
     }
 }
 

@@ -12,6 +12,7 @@ use std::fs;
 use std::io::{Read, Result, Write};
 use std::sync::mpsc::channel;
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
 /// Converts the node_id in u8 -> NodeId format
@@ -45,13 +46,13 @@ pub fn create_crypto(
         let filename = format!("tls_pubkey_cert.{}", node_index);
         println!("writing {}", filename);
         let mut file = fs::File::create(filename).expect("write tls cert");
-        file.write_all(&tls_pubkey_cert.certificate_der)?;
+        file.write_all(tls_pubkey_cert.as_der())?;
     }
     data_provider
         .add(
             &make_crypto_tls_cert_key(node_id),
             registry_version,
-            Some(tls_pubkey_cert),
+            Some(tls_pubkey_cert.to_proto()),
         )
         .expect("failed to add TLS cert to registry");
     let (tx, rx) = channel();
@@ -61,7 +62,7 @@ pub fn create_crypto(
     done[node_index] = true;
     let mut ndone = 1;
     // Remove certs when starting node 1.
-    loop {
+    for _ in 1..5 {
         for i in 1..(nodes + 1) {
             if done[i] {
                 continue;
@@ -83,6 +84,8 @@ pub fn create_crypto(
                 ndone += 1;
             } else {
                 println!("unable to open {}", filename);
+                // Wait for 3 seconds between retries. Maximum of 5 retries.
+                thread::sleep(Duration::from_secs(3))
             }
         }
         println!("ndone = {}", ndone);

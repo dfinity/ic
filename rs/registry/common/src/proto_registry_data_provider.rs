@@ -1,4 +1,3 @@
-use crate::bootstrap_registry_data_provider::INITIAL_REGISTRY_VERSION;
 use crate::pb::proto_registry::v1::{ProtoRegistry, ProtoRegistryRecord};
 use bytes::{Buf, BufMut};
 use ic_interfaces::registry::{RegistryDataProvider, RegistryTransportRecord, RegistryValue};
@@ -11,6 +10,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 use thiserror::Error;
+
+const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
 #[derive(Clone)]
 pub struct ProtoRegistryDataProvider {
@@ -52,15 +53,16 @@ impl ProtoRegistryDataProvider {
                 version,
             }),
             Err(idx) => {
-                let mut record = ProtoRegistryRecord::default();
-                record.key = key.to_string();
-                record.version = version.get();
-                record.value = value.map(|v| {
-                    let mut buf: Vec<u8> = vec![];
-                    v.encode(&mut buf)
-                        .expect("can't fail, encoding is infallible");
-                    buf
-                });
+                let record = ProtoRegistryRecord {
+                    key: key.to_string(),
+                    version: version.get(),
+                    value: value.map(|v| {
+                        let mut buf: Vec<u8> = vec![];
+                        v.encode(&mut buf)
+                            .expect("can't fail, encoding is infallible");
+                        buf
+                    }),
+                };
                 records.insert(idx, record);
                 Ok(())
             }
@@ -89,10 +91,11 @@ impl ProtoRegistryDataProvider {
                     })
                 }
                 Err(idx) => {
-                    let mut record = ProtoRegistryRecord::default();
-                    record.key = key.to_string();
-                    record.version = version.get();
-                    record.value = Some(mutation.value);
+                    let record = ProtoRegistryRecord {
+                        key: key.to_string(),
+                        version: version.get(),
+                        value: Some(mutation.value),
+                    };
                     records.insert(idx, record);
                 }
             }
@@ -110,9 +113,9 @@ impl ProtoRegistryDataProvider {
     }
 
     pub fn encode<B: BufMut>(&self, buf: &mut B) {
-        let mut protobuf_registry = ProtoRegistry::default();
-
-        protobuf_registry.records = self.records.read().unwrap().clone();
+        let protobuf_registry = ProtoRegistry {
+            records: self.records.read().unwrap().clone(),
+        };
         protobuf_registry
             .encode(buf)
             .expect("Could not encode protobuf registry.");
@@ -123,11 +126,11 @@ impl ProtoRegistryDataProvider {
         P: AsRef<Path>,
     {
         let buf = std::fs::read(path.as_ref()).unwrap_or_else(|e| {
-            panic!(format!(
+            panic!(
                 "Could not read protobuf registry file at {:?}: {}",
                 path.as_ref().to_str(),
                 e
-            ))
+            )
         });
         Self::decode(buf.as_ref())
     }
@@ -160,13 +163,8 @@ impl RegistryDataProvider for ProtoRegistryDataProvider {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion), RegistryDataProviderError> {
+    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
         let records = self.records.read().unwrap();
-        let max_version = records
-            .iter()
-            .max_by_key(|r| r.version)
-            .map(|r| r.version)
-            .unwrap_or(0);
 
         let records = records
             .iter()
@@ -178,7 +176,7 @@ impl RegistryDataProvider for ProtoRegistryDataProvider {
             })
             .collect();
 
-        Ok((records, RegistryVersion::new(max_version)))
+        Ok(records)
     }
 }
 
@@ -194,11 +192,9 @@ mod tests {
 
         let test_version = RegistryVersion::new(1);
 
-        let mut test_record = TestProto::default();
-        test_record.test_value = 1;
+        let test_record = TestProto { test_value: 1 };
 
-        let mut test_record2 = TestProto::default();
-        test_record2.test_value = 2;
+        let test_record2 = TestProto { test_value: 2 };
 
         let mut bytes1: Vec<u8> = Vec::new();
         let mut bytes2: Vec<u8> = Vec::new();
@@ -220,9 +216,8 @@ mod tests {
         registry.encode(&mut buf);
 
         let registry = ProtoRegistryDataProvider::decode(buf.as_ref());
-        let (records, version) = registry.get_updates_since(ZERO_REGISTRY_VERSION).unwrap();
+        let records = registry.get_updates_since(ZERO_REGISTRY_VERSION).unwrap();
 
-        assert_eq!(version, test_version);
         let mut records = records
             .iter()
             .map(|r| (r.key.clone(), r.value.to_owned()))

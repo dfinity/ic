@@ -501,12 +501,12 @@ impl Consensus for ConsensusImpl {
 pub(crate) fn add_all_to_validated<T: ConsensusMessageHashable>(messages: Vec<T>) -> ChangeSet {
     messages
         .into_iter()
-        .map(|msg| ChangeAction::AddToValidated(msg.to_message()))
+        .map(|msg| ChangeAction::AddToValidated(msg.into_message()))
         .collect()
 }
 
 fn add_to_validated<T: ConsensusMessageHashable>(msg: Option<T>) -> ChangeSet {
-    msg.map(|msg| ChangeAction::AddToValidated(msg.to_message()).into())
+    msg.map(|msg| ChangeAction::AddToValidated(msg.into_message()).into())
         .unwrap_or_default()
 }
 

@@ -5,6 +5,7 @@ use ic_interfaces::registry::RegistryClient;
 use ic_metrics::registry::MetricsRegistry;
 use prometheus::{Encoder, TextEncoder};
 use slog::{error, trace, warn};
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::string::String;
 use std::sync::Arc;
@@ -15,6 +16,7 @@ const LOG_INTERVAL_SECS: u64 = 30;
 
 /// The type of a metrics runtime implementation.
 pub struct MetricsRuntimeImpl {
+    rt_handle: tokio::runtime::Handle,
     config: Config,
     metrics_registry: MetricsRegistry,
     crypto_tls: Option<(Arc<dyn RegistryClient>, Arc<dyn TlsHandshake + Send + Sync>)>,
@@ -24,6 +26,7 @@ pub struct MetricsRuntimeImpl {
 /// An implementation of the metrics runtime type.
 impl MetricsRuntimeImpl {
     pub fn new(
+        rt_handle: tokio::runtime::Handle,
         config: Config,
         metrics_registry: MetricsRegistry,
         registry_client: Arc<dyn RegistryClient>,
@@ -33,6 +36,7 @@ impl MetricsRuntimeImpl {
         let log = log.new(slog::o!("Application" => "MetricsRuntime"));
 
         let metrics = Self {
+            rt_handle,
             config,
             metrics_registry,
             crypto_tls: Some((registry_client, crypto)),
@@ -51,6 +55,7 @@ impl MetricsRuntimeImpl {
     /// Create a MetricsRuntimeImpl supporting only HTTP for insecure use cases
     /// e.g. testing binaries where the node certificate may not be available.
     pub fn new_insecure(
+        rt_handle: tokio::runtime::Handle,
         config: Config,
         metrics_registry: MetricsRegistry,
         log: &slog::Logger,
@@ -58,6 +63,7 @@ impl MetricsRuntimeImpl {
         let log = log.new(slog::o!("Application" => "MetricsRuntime"));
 
         let metrics = Self {
+            rt_handle,
             config,
             metrics_registry,
             crypto_tls: None,
@@ -79,7 +85,7 @@ impl MetricsRuntimeImpl {
     fn start_log(&self) {
         let log = self.log.clone();
         let metrics_registry = self.metrics_registry.clone();
-        tokio::spawn(async move {
+        self.rt_handle.spawn(async move {
             let encoder = TextEncoder::new();
             let mut interval = tokio::time::interval(Duration::from_secs(LOG_INTERVAL_SECS));
             loop {
@@ -127,8 +133,8 @@ impl MetricsRuntimeImpl {
         // out IPv6 in prometheus and ic_p8s_service_discovery.
         let mut addr = "[::]:9090".parse::<SocketAddr>().unwrap();
         addr.set_port(address.port());
-        tokio::spawn(async move {
-            let mut listener = match TcpListener::bind(&addr).await {
+        self.rt_handle.spawn(async move {
+            let listener = match TcpListener::bind(&addr).await {
                 Err(e) => {
                     error!(log, "HTTP exporter server error: {}", e);
                     return;
@@ -141,15 +147,15 @@ impl MetricsRuntimeImpl {
                 let http = http.clone();
                 let aservice = aservice.clone();
                 let crypto_tls = crypto_tls.clone();
-                if let Ok((mut stream, _)) = listener.accept().await {
+                if let Ok((stream, _)) = listener.accept().await {
                     tokio::spawn(async move {
-                        let mut b = [0 as u8; 1];
+                        let mut b = [0_u8; 1];
                         if stream.peek(&mut b).await.is_ok() {
                             if b[0] == 22 {
                                 if let Some((registry_client, crypto)) = crypto_tls {
                                     // TLS
                                     let allowed_clients =
-                                        AllowedClients::new(SomeOrAllNodes::All, Vec::new())
+                                        AllowedClients::new(SomeOrAllNodes::All, HashSet::new())
                                             .expect("invalid allowed clients");
                                     // Note: the unwrap() can't fail since we tested Some(crypto)
                                     // above.

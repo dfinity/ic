@@ -188,7 +188,7 @@ pub trait ArtifactKind: Sized {
     type Filter: Default;
 
     /// Returns the advert of the given message.
-    fn to_advert(msg: &<Self as ArtifactKind>::Message) -> Advert<Self>;
+    fn message_to_advert(msg: &<Self as ArtifactKind>::Message) -> Advert<Self>;
 
     /// Checks if the given advert matches what is computed from the message.
     /// Returns the advert derived from artifact on mismatch.
@@ -199,7 +199,7 @@ pub trait ArtifactKind: Sized {
     where
         Advert<Self>: Eq,
     {
-        let computed = Self::to_advert(msg);
+        let computed = Self::message_to_advert(msg);
         if advert == &computed {
             Ok(())
         } else {

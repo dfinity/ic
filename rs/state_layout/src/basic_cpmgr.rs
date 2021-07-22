@@ -81,7 +81,7 @@ pub struct BasicCheckpointManager {
 
 impl BasicCheckpointManager {
     pub fn new(log: ReplicaLogger, root: PathBuf) -> Self {
-        Self { log, root }
+        Self { root, log }
     }
 
     fn tmp(&self) -> PathBuf {
@@ -100,8 +100,8 @@ impl BasicCheckpointManager {
         self.root.join("backups")
     }
 
-    fn ensure_dir_exists(&self, p: &PathBuf) -> std::io::Result<()> {
-        std::fs::create_dir_all(&p.as_path())
+    fn ensure_dir_exists(&self, p: &Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(p)
     }
 
     /// Atomically copies a checkpoint with the specified name located at src
@@ -262,9 +262,9 @@ impl CheckpointManager for BasicCheckpointManager {
         dir_file_names(&self.backups())
     }
 
-    fn reset_tip_to(&self, tip: &PathBuf, name: &str) -> std::io::Result<()> {
+    fn reset_tip_to(&self, tip: &Path, name: &str) -> std::io::Result<()> {
         if tip.exists() {
-            std::fs::remove_dir_all(tip.as_path())?;
+            std::fs::remove_dir_all(tip)?;
         }
 
         let cp_path = self.checkpoints().join(name);
@@ -275,12 +275,12 @@ impl CheckpointManager for BasicCheckpointManager {
         match copy_recursively_respecting_tombstones(
             &self.log,
             cp_path.as_path(),
-            tip.as_path(),
+            tip,
             FilePermissions::ReadWrite,
         ) {
             Ok(()) => Ok(()),
             Err(e) => {
-                std::fs::remove_dir_all(&tip.as_path())?;
+                std::fs::remove_dir_all(tip)?;
                 Err(e)
             }
         }

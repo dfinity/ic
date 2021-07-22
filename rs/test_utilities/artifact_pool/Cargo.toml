@@ -1,0 +1,19 @@
+[package]
+name = "ic-test-artifact-pool"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-artifact-pool = { path = "../../artifact_pool" }
+ic-config = { path = "../../config" }
+ic-consensus = { path = "../../consensus" }
+ic-consensus-message = { path = "../../consensus/message" }
+ic-crypto = { path = "../../crypto" }
+ic-interfaces = { path = "../../interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-test-utilities = { path = "../" }
+ic-types = { path = "../../types/types" }
+slog-scope = "4.1.2"
+tempfile = "3.1.0"

@@ -8,13 +8,13 @@ use ic_types::crypto::KeyPurpose;
 use ic_types::PrincipalId;
 use std::str::FromStr;
 
-pub const SUBNET_LIST_KEY: &str = "subnet_list";
+const SUBNET_LIST_KEY: &str = "subnet_list";
 /// The subnet id of the NNS subnet.
 /// Remark: This subnet id actually points to the root subnet. In all cases, so
 /// far, the root subnet happens to host the NNS canisters and the registry in
 /// particular.
 pub const ROOT_SUBNET_ID_KEY: &str = "nns_subnet_id";
-pub const XDR_PER_ICP_KEY: &str = "xdr_per_icp";
+const XDR_PER_ICP_KEY: &str = "xdr_per_icp";
 
 pub const NODE_RECORD_KEY_PREFIX: &str = "node_record_";
 pub const NODE_OPERATOR_RECORD_KEY_PREFIX: &str = "node_operator_record_";
@@ -84,9 +84,8 @@ pub fn make_crypto_tls_cert_key(node_id: NodeId) -> String {
 // NodeId. If parsing is successful, returns Some(node_id), otherwise returns
 // None.
 pub fn maybe_parse_crypto_tls_cert_key(key: &str) -> Option<NodeId> {
-    if key.starts_with(CRYPTO_TLS_CERT_KEY_PREFIX) {
-        PrincipalId::from_str(&key[CRYPTO_TLS_CERT_KEY_PREFIX.len()..])
-            .map_or(None, |id| Some(NodeId::new(id)))
+    if let Some(key) = key.strip_prefix(CRYPTO_TLS_CERT_KEY_PREFIX) {
+        PrincipalId::from_str(key).map_or(None, |id| Some(NodeId::new(id)))
     } else {
         None
     }
@@ -105,8 +104,8 @@ pub fn is_node_record_key(key: &str) -> bool {
 /// Returns the node_id associated with a given node_record key if
 /// the key is, in fact, a valid node_record_key.
 pub fn get_node_record_node_id(key: &str) -> Option<PrincipalId> {
-    if key.starts_with(NODE_RECORD_KEY_PREFIX) {
-        PrincipalId::from_str(&key[NODE_RECORD_KEY_PREFIX.len()..]).ok()
+    if let Some(key) = key.strip_prefix(NODE_RECORD_KEY_PREFIX) {
+        PrincipalId::from_str(key).ok()
     } else {
         None
     }
@@ -121,9 +120,8 @@ pub fn make_crypto_threshold_signing_pubkey_key(subnet_id: SubnetId) -> String {
 // to get SubnetId. If parsing is successful, returns Some(subnet_id), otherwise
 // returns None.
 pub fn maybe_parse_crypto_threshold_signing_pubkey_key(key: &str) -> Option<SubnetId> {
-    if key.starts_with(CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX) {
-        PrincipalId::from_str(&key[CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX.len()..])
-            .map_or(None, |id| Some(SubnetId::new(id)))
+    if let Some(key) = key.strip_prefix(CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX) {
+        PrincipalId::from_str(key).map_or(None, |id| Some(SubnetId::new(id)))
     } else {
         None
     }
@@ -153,8 +151,8 @@ pub fn make_crypto_node_key(node_id: NodeId, key_purpose: KeyPurpose) -> String 
 // NodeId and KeyPurpose. If parsing is successful, returns Some((node_id,
 // key_purpose)), otherwise returns None.
 pub fn maybe_parse_crypto_node_key(key: &str) -> Option<(NodeId, KeyPurpose)> {
-    if key.starts_with(CRYPTO_RECORD_KEY_PREFIX) {
-        let parts: Vec<&str> = key[CRYPTO_RECORD_KEY_PREFIX.len()..].split('_').collect();
+    if let Some(key) = key.strip_prefix(CRYPTO_RECORD_KEY_PREFIX) {
+        let parts: Vec<&str> = key.split('_').collect();
         if parts.len() != 2 {
             return None;
         }

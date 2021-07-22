@@ -74,21 +74,6 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
-            "exec",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![
-                        ValueType::I32,
-                        ValueType::I32,
-                        ValueType::I32,
-                        ValueType::I32,
-                    ],
-                    return_type: None,
-                },
-            )],
-        ),
-        (
             "msg_caller_copy",
             vec![(
                 API_VERSION_IC0,
@@ -619,7 +604,10 @@ fn validate_function_signature(
 // * If we import memory or table, we can only import from “env”.
 // * Any imported functions that appear in `valid_system_apis` have the correct
 //   signatures.
-fn validate_import_section(module: &Module) -> Result<(), WasmValidationError> {
+//
+// Returns true if the module imports `ic0.call_simple`, false otherwise.
+fn validate_import_section(module: &Module) -> Result<bool, WasmValidationError> {
+    let mut imports_call_simple = false;
     if let Some(section) = module.import_section() {
         let valid_system_apis = get_valid_system_apis();
         for entry in section.entries() {
@@ -627,6 +615,9 @@ fn validate_import_section(module: &Module) -> Result<(), WasmValidationError> {
             let field = entry.field();
             match entry.external() {
                 External::Function(index) => {
+                    if import_module == API_VERSION_IC0 && field == "call_simple" {
+                        imports_call_simple = true;
+                    }
                     match valid_system_apis.get(field) {
                         Some(signatures) => {
                             match signatures.get(import_module) {
@@ -674,7 +665,7 @@ fn validate_import_section(module: &Module) -> Result<(), WasmValidationError> {
             }
         }
     }
-    Ok(())
+    Ok(imports_call_simple)
 }
 
 // Performs the following checks:
@@ -683,7 +674,11 @@ fn validate_import_section(module: &Module) -> Result<(), WasmValidationError> {
 // * Validates the signatures of other allowed exported functions (like
 //   `canister_init` or `canister_pre_upgrade`) if present.
 // * Validates that the canister doesn't export any reserved symbols
-fn validate_export_section(module: &Module) -> Result<(), WasmValidationError> {
+//
+// Returns the number of exported functions that are not in the list of
+// allowed exports and whose name starts with the reserved "canister_" prefix.
+fn validate_export_section(module: &Module) -> Result<usize, WasmValidationError> {
+    let mut reserved_exports: usize = 0;
     if let Some(section) = module.export_section() {
         let mut seen_funcs: HashSet<&str> = HashSet::new();
         let valid_exported_functions = get_valid_exported_functions();
@@ -713,6 +708,14 @@ fn validate_export_section(module: &Module) -> Result<(), WasmValidationError> {
                     }
                     seen_funcs.insert(unmangled_func_name);
                     func_name = parts[0];
+                } else if func_name.starts_with("canister_") {
+                    // The "canister_" prefix is reserved and only functions allowed by the spec
+                    // can be exported.
+                    // TODO(EXC-350): Turn this into an actual error once we confirm that no
+                    // reserved functions are exported.
+                    if !valid_exported_functions.contains_key(func_name) {
+                        reserved_exports += 1;
+                    }
                 }
                 if let Some(valid_signature) = valid_exported_functions.get(func_name) {
                     // The function section contains only the functions defined locally in the
@@ -731,7 +734,7 @@ fn validate_export_section(module: &Module) -> Result<(), WasmValidationError> {
             }
         }
     }
-    Ok(())
+    Ok(reserved_exports)
 }
 
 // Checks that offset-expressions in data sections consist of only one constant
@@ -806,6 +809,18 @@ fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
     })
 }
 
+/// Returned as a result of `validate_wasm_binary` and provides
+/// additional information about the validation.
+#[derive(Debug, PartialEq, Eq)]
+pub struct WasmValidationDetails {
+    // The number of exported functions that are not in the list of
+    // allowed exports and whose name starts with the reserved
+    // "canister_" prefix.
+    pub reserved_exports: usize,
+    // True if the module imports `ic0.call_simple`.
+    pub imports_call_simple: bool,
+}
+
 /// Validates a Wasm binary against the requirements of the interface spec
 /// defined in https://sdk.dfinity.org/docs/interface-spec/index.html.
 ///
@@ -823,14 +838,17 @@ fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
 pub fn validate_wasm_binary(
     wasm: &BinaryEncodedWasm,
     config: WasmValidationLimits,
-) -> Result<(), WasmValidationError> {
+) -> Result<WasmValidationDetails, WasmValidationError> {
     can_compile(&wasm)?;
     let module = parity_wasm::deserialize_buffer::<Module>(wasm.as_slice())
         .map_err(|err| WasmValidationError::ParityDeserializeError(into_parity_wasm_error(err)))?;
-    validate_import_section(&module)?;
-    validate_export_section(&module)?;
+    let imports_call_simple = validate_import_section(&module)?;
+    let reserved_exports = validate_export_section(&module)?;
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
-    Ok(())
+    Ok(WasmValidationDetails {
+        reserved_exports,
+        imports_call_simple,
+    })
 }

@@ -17,9 +17,9 @@ use crate::pb::v1::{
 
 impl From<CanisterId> for CanisterIdProto {
     fn from(id: CanisterId) -> Self {
-        let mut cid = CanisterIdProto::default();
-        cid.serialized_id = id.get().as_slice().to_vec();
-        cid
+        CanisterIdProto {
+            serialized_id: id.get().as_slice().to_vec(),
+        }
     }
 }
 
@@ -41,9 +41,7 @@ impl From<NeuronIdProto> for NeuronId {
 
 impl From<NeuronId> for NeuronIdProto {
     fn from(id: NeuronId) -> Self {
-        let mut neuron_pb = NeuronIdProto::default();
-        neuron_pb.id = id.0;
-        neuron_pb
+        NeuronIdProto { id: id.0 }
     }
 }
 
@@ -70,9 +68,7 @@ impl From<ProposalIdProto> for ProposalId {
 
 impl From<ProposalId> for ProposalIdProto {
     fn from(id: ProposalId) -> Self {
-        let mut pb = ProposalIdProto::default();
-        pb.id = id.0;
-        pb
+        ProposalIdProto { id: id.0 }
     }
 }
 

@@ -1,21 +1,17 @@
 use dfn_candid::candid;
 
 use ic_canister_client::Sender;
-use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_nns_constants::ids::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
 use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
-    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
+    registry::{get_value, invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload},
 };
-use ic_protobuf::{
-    crypto::v1::NodePublicKeys,
-    registry::{
-        crypto::v1::{PublicKey, X509PublicKeyCert},
-        node::v1::NodeRecord,
-        node_operator::v1::NodeOperatorRecord,
-    },
+use ic_protobuf::registry::{
+    crypto::v1::{PublicKey, X509PublicKeyCert},
+    node::v1::NodeRecord,
+    node_operator::v1::NodeOperatorRecord,
 };
 use ic_registry_keys::{
     make_crypto_node_key, make_crypto_tls_cert_key, make_node_operator_record_key,
@@ -24,12 +20,8 @@ use ic_registry_keys::{
 use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
 };
-use ic_test_utilities::crypto::temp_dir::temp_dir;
-use ic_types::crypto::KeyPurpose;
-use ic_types::NodeId;
-use registry_canister::{
-    init::RegistryCanisterInitPayloadBuilder, mutations::do_add_node::AddNodePayload,
-};
+use ic_types::{crypto::KeyPurpose, NodeId};
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 
 use prost::Message;
 
@@ -47,7 +39,7 @@ fn node_is_created_on_receiving_the_request() {
         )
         .await;
 
-        let (payload, node_pks, node_id) = prepare_payload();
+        let (payload, node_pks, node_id) = prepare_add_node_payload();
 
         // Then, ensure there is no value for the node
         let node_record =
@@ -136,7 +128,7 @@ fn node_is_not_created_on_wrong_principal() {
         )
         .await;
 
-        let (payload, _node_pks, node_id) = prepare_payload();
+        let (payload, _node_pks, node_id) = prepare_add_node_payload();
 
         // Then, ensure there is no value for the node
         let node_record =
@@ -176,7 +168,7 @@ fn node_is_not_created_when_above_capacity() {
         )
         .await;
 
-        let (payload, _node_pks, node_id) = prepare_payload();
+        let (payload, _node_pks, node_id) = prepare_add_node_payload();
 
         // Then, ensure there is no value for the node
         let node_record =
@@ -195,7 +187,7 @@ fn node_is_not_created_when_above_capacity() {
         assert!(response.is_ok());
 
         // Try to add another node
-        let (payload, _node_pks, node_id) = prepare_payload();
+        let (payload, _node_pks, node_id) = prepare_add_node_payload();
 
         // Ensure there is no value for this new node
         let node_record =
@@ -239,33 +231,6 @@ fn init_mutation_with_node_allowance(node_allowance: u64) -> RegistryAtomicMutat
         }],
         preconditions: vec![],
     }
-}
-
-fn prepare_payload() -> (AddNodePayload, NodePublicKeys, NodeId) {
-    // As the node canister checks for validity of keys, we need to generate them
-    // first
-    let temp_dir = temp_dir();
-    let (node_pks, node_id) = get_node_keys_or_generate_if_missing(temp_dir.path());
-
-    // create payload message
-    let node_signing_pk = protobuf_to_vec(&node_pks.node_signing_pk.clone().unwrap());
-    let committee_signing_pk = protobuf_to_vec(&node_pks.committee_signing_pk.clone().unwrap());
-    let ni_dkg_dealing_encryption_pk =
-        protobuf_to_vec(&node_pks.dkg_dealing_encryption_pk.clone().unwrap());
-    let transport_tls_cert = protobuf_to_vec(&node_pks.tls_certificate.clone().unwrap());
-
-    let payload = AddNodePayload {
-        node_signing_pk,
-        committee_signing_pk,
-        ni_dkg_dealing_encryption_pk,
-        transport_tls_cert,
-        xnet_endpoint: "128.0.0.1:1234".to_string(),
-        http_endpoint: "128.0.0.1:8123".to_string(),
-        p2p_flow_endpoints: vec!["123,128.0.0.1:10000".to_string()],
-        prometheus_metrics_endpoint: "128.0.0.1:5555".to_string(),
-    };
-
-    (payload, node_pks, node_id)
 }
 
 fn protobuf_to_vec<M: Message>(entry: &M) -> Vec<u8> {

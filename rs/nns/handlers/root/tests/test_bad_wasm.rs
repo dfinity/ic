@@ -8,9 +8,9 @@ use ic_base_types::CanisterInstallMode::{self, Reinstall, Upgrade};
 use ic_nns_handler_root::common::{
     CanisterIdRecord, CanisterStatusResult, CanisterStatusType, ChangeNnsCanisterProposalPayload,
 };
+use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
-    forward_call_via_universal_canister, local_test_on_nns_subnet,
-    root_init_payload_allow_anonymous_user_for_tests, set_up_root_canister,
+    forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
     set_up_universal_canister,
 };
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM_SHA256;
@@ -38,12 +38,11 @@ async fn install_invalid_wasm(
     mode: CanisterInstallMode,
     stop_before_installing: bool,
 ) {
-    let root =
-        set_up_root_canister(&runtime, root_init_payload_allow_anonymous_user_for_tests()).await;
+    let root = set_up_root_canister(&runtime, RootCanisterInitPayloadBuilder::new().build()).await;
     // Install the universal canister in place of the proposals canister
     let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-    // Since it takes the id reserved for the proposal canister, it can impersonate
-    // it
+    // Since it takes the id reserved for the governance canister, it can
+    // impersonate it
     assert_eq!(
         fake_proposal_canister.canister_id(),
         ic_nns_constants::GOVERNANCE_CANISTER_ID

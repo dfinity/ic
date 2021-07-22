@@ -40,10 +40,10 @@ impl TryFrom<&proto::AccountIdentifier> for AccountIdentifier {
     }
 }
 
-impl Into<proto::AccountIdentifier> for AccountIdentifier {
-    fn into(self) -> proto::AccountIdentifier {
+impl From<AccountIdentifier> for proto::AccountIdentifier {
+    fn from(val: AccountIdentifier) -> Self {
         proto::AccountIdentifier {
-            hash: self.hash.to_vec(),
+            hash: val.hash.to_vec(),
         }
     }
 }
@@ -237,9 +237,9 @@ impl TryFrom<&Subaccount> for CanisterId {
     }
 }
 
-impl Into<Vec<u8>> for Subaccount {
-    fn into(self) -> Vec<u8> {
-        self.0.to_vec()
+impl From<Subaccount> for Vec<u8> {
+    fn from(val: Subaccount) -> Self {
+        val.0.to_vec()
     }
 }
 

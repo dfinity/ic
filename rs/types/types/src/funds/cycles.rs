@@ -21,8 +21,24 @@ impl Cycles {
         Self(input)
     }
 
+    pub fn from_parts(high: u64, low: u64) -> Self {
+        Self((high as u128) << 64 | low as u128)
+    }
+
     pub fn get(self) -> u128 {
         self.0
+    }
+
+    pub fn into_parts(self) -> (u64, u64) {
+        (self.high64(), self.low64())
+    }
+
+    pub fn high64(&self) -> u64 {
+        (self.0 >> 64) as u64
+    }
+
+    pub fn low64(&self) -> u64 {
+        (self.0 & 0xffff_ffff_ffff_ffff) as u64
     }
 }
 
@@ -50,15 +66,15 @@ impl From<&Vec<u8>> for Cycles {
     }
 }
 
-impl Into<Vec<u8>> for Cycles {
-    fn into(self) -> Vec<u8> {
-        self.0.to_le_bytes().to_vec()
+impl From<Cycles> for Vec<u8> {
+    fn from(val: Cycles) -> Self {
+        val.0.to_le_bytes().to_vec()
     }
 }
 
-impl Into<u64> for Cycles {
-    fn into(self) -> u64 {
-        self.0 as u64
+impl From<Cycles> for u64 {
+    fn from(val: Cycles) -> Self {
+        val.0 as u64
     }
 }
 
@@ -217,5 +233,38 @@ mod test {
         );
         assert_eq!(Cycles::from(0) - Cycles::from(10), Cycles::from(0));
         assert_eq!(Cycles::from(10) - Cycles::from(20), Cycles::from(0));
+    }
+
+    #[test]
+    fn test_from_parts() {
+        let nom = Cycles::from_parts(6692605942, 14083847773837265618);
+        assert_eq!(nom, Cycles::new(123456789012345678901234567890));
+
+        assert_eq!(
+            Cycles::from_parts(u64::MAX, u64::MAX),
+            Cycles::from(u128::MAX)
+        );
+    }
+
+    #[test]
+    fn test_low64() {
+        let nom = Cycles::new(123456789012345678901234567890);
+        assert_eq!(nom.low64(), 14083847773837265618);
+
+        assert_eq!(Cycles::new(u128::MAX).low64(), u64::MAX);
+    }
+
+    #[test]
+    fn test_high64() {
+        let nom = Cycles::new(123456789012345678901234567890);
+        assert_eq!(nom.high64(), 6692605942);
+
+        assert_eq!(Cycles::new(u128::MAX).high64(), u64::MAX);
+    }
+
+    #[test]
+    fn test_into_parts() {
+        let nom = Cycles::new(123456789012345678901234567890);
+        assert_eq!(nom.into_parts(), (nom.high64(), nom.low64()))
     }
 }

@@ -149,6 +149,12 @@ pub struct DownloadManagementMetrics {
     /// The retransmission request times.
     pub retransmission_request_time: Histogram,
 
+    // registry
+    pub registry_version_used: IntGauge,
+
+    // node removal
+    pub nodes_removed: IntCounter,
+
     // Connection fields.
     /// The number of a connection events.
     pub connection_up_events: IntCounter,
@@ -288,6 +294,18 @@ impl DownloadManagementMetrics {
                     700.0, 800.0, 900.0, 1000.0, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0, 2500.0,
                     3000.0, 4000.0, 5000.0, 7000.0, 10000.0, 20000.0,
                 ],
+            ),
+
+            // Registry version.
+            registry_version_used: metrics_registry.int_gauge(
+                "registry_version_used",
+                "The registry version currently in use by P2P",
+            ),
+
+            // Nodes removed in P2P.
+            nodes_removed: metrics_registry.int_counter(
+                "p2p_nodes_removed",
+                "Nodes removed by p2p based on registry node membership changes",
             ),
 
             // Download next stats.

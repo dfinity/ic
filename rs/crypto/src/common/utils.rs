@@ -9,12 +9,12 @@ use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider};
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_interfaces::crypto::DkgAlgorithm;
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::dkg::EncryptionPublicKeyWithPop;
@@ -77,71 +77,24 @@ pub fn generate_dkg_dealing_encryption_keys(crypto_root: &Path, node_id: NodeId)
     ic_crypto_internal_csp::keygen::utils::dkg_dealing_encryption_pk_to_proto(pubkey, pop)
 }
 
-/// Obtains the node keys or generates them for the given `node_id` if they are
-/// missing.
+// TODO (CRP-994): Extend check_keys_locally to check consistency for all keys.
+/// Obtains the node's cryptographic keys or generates them if they are missing.
 ///
-/// Retrieves the node's public keys from `crypto_root`, and checks their
-/// consistency with the secret keys.
-/// If there are no public keys in `crypto_root`, new keys are generated: the
-/// secret parts are stored in the secret key store and the public parts are
-/// stored in the public key store.
+/// First, tries to retrieve the node's public keys from `crypto_root`. If they
+/// exist and they are consistent with the secret keys in `crypto_root`, the
+/// public keys are returned together with the corresponding node ID.
+///
+/// If they do not exist, new keys are generated: the secret parts are stored in
+/// a secret key store at `crypto_root`, and the public parts are stored in a
+/// public key store at `crypto_root`. The keys are generated for a particular
+/// node ID, which is derived from the node's signing public key. In particular,
+/// the node's TLS certificate and the node's DKG dealing encryption key are
+/// bound to this node ID. The newly generated public keys are then returned
+/// together with the corresponding node ID.
 ///
 /// # Panics
 ///  * if public keys exist but are inconsistent with the secret keys.
-///  * if an error occurs when accessing or generating the key.
-///
-/// # Notes
-/// There are two variants of the function:
-/// - `get_node_keys_or_generate_if_missing_for_node_id()` which takes an
-///   additional `node_id` argument, and uses it when generating TLS keys.  This
-///   is a temporary variant intended for the setup when node ids are generated
-///   externally.
-/// - `get_node_keys_or_generate_if_missing()` which derives `node_id` from the
-///   retrieved or generated node signing public key, uses the derived `node_id`
-///   when generating TLS keys, and returns `node_id` together with all the
-///   generated public keys.  This is the variant to be used eventually by node
-///   manager and other clients.
-// TODO(CRP-356): remove the note above and the temporary variant
-// `get_node_keys_or_generate_if_missing_for_node_id()`.
-pub fn get_node_keys_or_generate_if_missing_for_node_id(
-    crypto_root: &Path,
-    node_id: NodeId,
-) -> NodePublicKeys {
-    match check_keys_locally(crypto_root) {
-        Ok(None) => {
-            // Generate new keys.
-            let committee_signing_pk = generate_committee_signing_keys(crypto_root);
-            let node_signing_pk = generate_node_signing_keys(crypto_root);
-            let dkg_dealing_encryption_pk =
-                generate_dkg_dealing_encryption_keys(crypto_root, node_id);
-            let tls_certificate = generate_tls_keys(crypto_root, node_id);
-            let node_pks = NodePublicKeys {
-                version: 0,
-                node_signing_pk: Some(node_signing_pk),
-                committee_signing_pk: Some(committee_signing_pk),
-                tls_certificate: Some(tls_certificate),
-                dkg_dealing_encryption_pk: Some(dkg_dealing_encryption_pk),
-            };
-            public_key_store::store_node_public_keys(crypto_root, &node_pks)
-                .unwrap_or_else(|_| panic!("Failed to store public key material"));
-            // Re-check the generated keys.
-            let stored_keys = check_keys_locally(crypto_root)
-                .expect("Could not read generated keys.")
-                .expect("Newly generated keys are inconsistent.");
-            if stored_keys != node_pks {
-                panic!("Generated keys differ from the stored ones.");
-            }
-            node_pks
-        }
-        Ok(Some(node_pks)) => node_pks,
-        Err(e) => panic!(format!("Node contains inconsistent key material: {}", e)),
-    }
-}
-
-/// Obtains the node keys or generates them if they are missing.
-///
-/// Please refer to the documentation of
-/// `get_node_keys_or_generate_if_missing_for_node_id` for more details.
+///  * if an error occurs when accessing or generating the keys.
 pub fn get_node_keys_or_generate_if_missing(crypto_root: &Path) -> (NodePublicKeys, NodeId) {
     match check_keys_locally(crypto_root) {
         Ok(None) => {
@@ -151,7 +104,7 @@ pub fn get_node_keys_or_generate_if_missing(crypto_root: &Path) -> (NodePublicKe
             let node_id = derive_node_id(&node_signing_pk);
             let dkg_dealing_encryption_pk =
                 generate_dkg_dealing_encryption_keys(crypto_root, node_id);
-            let tls_certificate = generate_tls_keys(crypto_root, node_id);
+            let tls_certificate = generate_tls_keys(crypto_root, node_id).to_proto();
             let node_pks = NodePublicKeys {
                 version: 0,
                 node_signing_pk: Some(node_signing_pk),
@@ -229,7 +182,7 @@ fn check_keys_locally(crypto_root: &Path) -> CryptoResult<Option<NodePublicKeys>
     }
     let csp = csp_at_root(crypto_root);
     ensure_node_signing_key_is_set_up_locally(&node_pks.node_signing_pk, &csp)?;
-    // TODO(CRP-622): add checks for other local keys.
+    // TODO (CRP-994): add checks for other local keys.
     Ok(Some(node_pks))
 }
 
@@ -300,7 +253,7 @@ fn generate_committee_signing_keys(crypto_root: &Path) -> PublicKeyProto {
 /// certificate has no well-defined expiration date.
 ///
 /// Returns the certificate.
-fn generate_tls_keys(crypto_root: &Path, node: NodeId) -> X509PublicKeyCert {
+fn generate_tls_keys(crypto_root: &Path, node: NodeId) -> TlsPublicKeyCert {
     let mut csp = csp_at_root(crypto_root);
     csp.gen_tls_key_pair(node, "99991231235959Z")
 }

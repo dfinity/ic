@@ -104,10 +104,7 @@ mod test {
         };
 
         if left != right {
-            panic!(format!(
-                "Pop data does not match:\n\n{:#?}\n\n{:#?}",
-                left, right
-            ));
+            panic!("Pop data does not match:\n\n{:#?}\n\n{:#?}", left, right);
         }
     }
     pub fn honest_keys_should_validate(seed: Randomness, dkg_id: IDkgId, sender: &[u8]) {

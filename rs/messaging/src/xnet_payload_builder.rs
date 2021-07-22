@@ -1,3 +1,5 @@
+mod proximity;
+
 #[cfg(test)]
 mod impl_tests;
 #[cfg(test)]
@@ -32,10 +34,7 @@ use ic_metrics::{
 };
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
-use ic_registry_client::helper::{
-    node::NodeRegistry,
-    subnet::{SubnetListRegistry, SubnetRegistry},
-};
+use ic_registry_client::helper::{node::NodeRegistry, subnet::SubnetListRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -45,37 +44,16 @@ use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
+pub use proximity::{GenRangeFn, ProximityMap};
 use rand::{thread_rng, Rng};
 use std::{
     collections::BTreeMap,
     convert::TryFrom,
     net::SocketAddr,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::{runtime, sync::mpsc};
-
-/// Retrieves the given node's operator ID at the given registry version.
-///
-/// Returns `None` if the node record does not exist or the registry read
-/// failed.
-fn get_node_operator_id(
-    node_id: &NodeId,
-    registry: &dyn RegistryClient,
-    registry_version: &RegistryVersion,
-    log: &ReplicaLogger,
-) -> Option<Vec<u8>> {
-    registry
-        .get_transport_info(*node_id, *registry_version)
-        .unwrap_or_else(|_| {
-            info!(
-                log,
-                "Failed to retrieve registry record for node {}", node_id
-            );
-            None
-        })
-        .map(|r| r.node_operator_id)
-}
 
 pub struct XNetPayloadBuilderMetrics {
     /// Records the time it took to build the payload, by status.
@@ -221,6 +199,7 @@ pub struct XNetPayloadBuilderImpl {
 }
 
 /// Represents the location of a peer
+#[derive(Debug, PartialEq)]
 pub enum PeerLocation {
     /// Peer in the same datacenter
     Local,
@@ -239,6 +218,7 @@ impl From<PeerLocation> for &str {
 }
 
 /// Metadata describing a replica's XNet endpoint.
+#[derive(Debug, PartialEq)]
 pub struct EndpointLocator {
     /// The ID of the node hosting the replica.
     node_id: NodeId,
@@ -270,7 +250,7 @@ impl XNetPayloadBuilderImpl {
     ///
     /// # Panics
     ///
-    ///  Panics if reading the node's own `node_operator_id` from the registry
+    /// Panics if reading the node's own `node_operator_id` from the registry
     /// fails.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -284,43 +264,28 @@ impl XNetPayloadBuilderImpl {
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> XNetPayloadBuilderImpl {
+        let proximity_map = Arc::new(ProximityMap::new(
+            node_id,
+            registry.clone(),
+            metrics_registry,
+            log.clone(),
+        ));
         let xnet_client: Arc<dyn XNetClient> = Arc::new(XNetClientImpl::new(
             metrics_registry,
             runtime_handle.clone(),
             tls_handshake,
+            proximity_map.clone(),
         ));
 
-        Self::with_xnet_client(
-            xnet_client,
-            state_manager,
-            certified_stream_store,
-            registry,
-            runtime_handle,
-            node_id,
-            subnet_id,
-            metrics_registry,
-            log,
-        )
-    }
-
-    /// Test helper for creating a `XNetPayloadBuilder` around a provided
-    /// `XNetClient`.
-    #[allow(clippy::too_many_arguments)]
-    fn with_xnet_client(
-        xnet_client: Arc<dyn XNetClient>,
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        registry: Arc<dyn RegistryClient>,
-        runtime_handle: runtime::Handle,
-        node_id: NodeId,
-        subnet_id: SubnetId,
-        metrics_registry: &MetricsRegistry,
-        log: ReplicaLogger,
-    ) -> XNetPayloadBuilderImpl {
         let slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(metrics_registry)));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(metrics_registry));
-        let endpoint_resolver =
-            XNetEndpointResolver::new(Arc::clone(&registry), node_id, subnet_id, log.clone());
+        let endpoint_resolver = XNetEndpointResolver::new(
+            Arc::clone(&registry),
+            node_id,
+            subnet_id,
+            proximity_map,
+            log.clone(),
+        );
         let refill_task_handle = PoolRefillTask::start(
             Arc::clone(&slice_pool),
             endpoint_resolver,
@@ -348,7 +313,7 @@ impl XNetPayloadBuilderImpl {
     /// `subnet_id` in `payloads`, when that exists; or `signals_end` of the
     /// outgoing `Stream` to `subnet_id` in `state`. The next expected signal
     /// index is the most recent `signals_end` from `subnet_id` in `payloads`,
-    /// when that exists; or `messages.begin()` of the outgoing `Stream` to
+    /// when that exists; or `messages_begin()` of the outgoing `Stream` to
     /// `subnet_id` in `state`.
     ///
     /// Returns the default value `(0, 0)` when no stream or slices from the
@@ -387,8 +352,8 @@ impl XNetPayloadBuilderImpl {
             .streams()
             .get(&subnet_id)
             .map(|stream| ExpectedIndices {
-                message_index: stream.signals_end,
-                signal_index: most_recent_signal_index.unwrap_or_else(|| stream.messages.begin()),
+                message_index: stream.signals_end(),
+                signal_index: most_recent_signal_index.unwrap_or_else(|| stream.messages_begin()),
             })
             .unwrap_or_default()
     }
@@ -420,7 +385,7 @@ impl XNetPayloadBuilderImpl {
 
     /// Validates the `signals_end` of the incoming `StreamSlice` from
     /// `subnet_id` with respect to `expected` (the expected signal index);
-    /// and to `messages.end()` of the outgoing `Stream` to `subnet_id`.
+    /// and to `messages_end()` of the outgoing `Stream` to `subnet_id`.
     ///
     /// In particular:
     ///
@@ -428,7 +393,7 @@ impl XNetPayloadBuilderImpl {
     /// signals_end`; and
     ///
     ///  2. signals must only refer to past and current messages, i.e.
-    /// `signals_end <= stream.messages.end()`.
+    /// `signals_end <= stream.messages_end()`.
     fn validate_signals(
         &self,
         subnet_id: SubnetId,
@@ -436,17 +401,17 @@ impl XNetPayloadBuilderImpl {
         expected: StreamIndex,
         state: &ReplicatedState,
     ) -> SignalsValidationResult {
-        // `messages.end()` of the outgoing stream.
+        // `messages_end()` of the outgoing stream.
         let (self_messages_begin, self_messages_end) = state
             .streams()
             .get(&subnet_id)
-            .map(|s| (s.messages.begin(), s.messages.end()))
+            .map(|s| (s.messages_begin(), s.messages_end()))
             .unwrap_or_default();
 
         // Must expect signal for existing message (or just beyond last message).
         assert!(
             self_messages_begin <= expected && expected <= self_messages_end,
-            "Subnet {}: invalid expected signal; messages.begin() ({}) <= expected ({}) <= messages.end() ({})",
+            "Subnet {}: invalid expected signal; messages_begin() ({}) <= expected ({}) <= messages_end() ({})",
             subnet_id,
             self_messages_begin,
             expected,
@@ -458,7 +423,7 @@ impl XNetPayloadBuilderImpl {
         } else {
             warn!(
                 self.log,
-                "Invalid stream from {}: expected ({}) <= signals_end ({}) <= self.messages.end() ({})",
+                "Invalid stream from {}: expected ({}) <= signals_end ({}) <= self.messages_end() ({})",
                 subnet_id,
                 expected,
                 signals_end,
@@ -720,7 +685,7 @@ impl XNetPayloadBuilderImpl {
             SubnetType::System => state
                 .streams()
                 .get(&subnet_id)
-                .map(|stream| stream.messages.len())
+                .map(|stream| stream.messages().len())
                 .or(Some(0))
                 .map(|len| SYSTEM_SUBNET_STREAM_MSG_LIMIT.saturating_sub(len)),
         }
@@ -741,7 +706,8 @@ pub struct XNetEndpointResolver {
     // This node's operator ID.
     node_operator_id: Vec<u8>,
 
-    log: ReplicaLogger,
+    /// Proximity map to use for probabilistically selecting nearby replicas.
+    proximity_map: Arc<ProximityMap>,
 }
 
 impl XNetEndpointResolver {
@@ -749,6 +715,7 @@ impl XNetEndpointResolver {
         registry: Arc<dyn RegistryClient>,
         node_id: NodeId,
         subnet_id: SubnetId,
+        proximity_map: Arc<ProximityMap>,
         log: ReplicaLogger,
     ) -> Self {
         let newest_registry = registry.get_latest_version();
@@ -764,7 +731,7 @@ impl XNetEndpointResolver {
             registry,
             subnet_id,
             node_operator_id,
-            log,
+            proximity_map,
         }
     }
 
@@ -787,64 +754,28 @@ impl XNetEndpointResolver {
         assert!(witness_begin <= msg_begin);
 
         let version = self.registry.get_latest_version();
-
-        // Retrieve `subnet_id`'s nodes.
-        let nodes = self
-            .registry
-            .get_node_ids_on_subnet(subnet_id, version)
-            .map_err(|e| Error::RegistryGetSubnetInfoFailed(subnet_id, e))?
-            .filter(|nodes| !nodes.is_empty())
-            .ok_or_else(|| Error::MissingSubnet(subnet_id))?;
-
-        // Attempt to pick a node under the same node operator, if such a node exists.
-        // TODO(MR-27) select node based on proximity.
-        let mut same_node_operator_nodes: Vec<NodeId> = Vec::new();
-
-        for n in nodes.iter() {
-            if let Some(node_operator_id) =
-                get_node_operator_id(n, self.registry.as_ref(), &version, &self.log)
-            {
-                if self.node_operator_id == node_operator_id {
-                    same_node_operator_nodes.push(*n);
-                }
-            }
-        }
-
-        let (nodes, proximity) = if same_node_operator_nodes.is_empty() {
-            (nodes, PeerLocation::Remote)
+        let (node, node_record) = self.proximity_map.pick_node(subnet_id, version)?;
+        let proximity = if node_record.node_operator_id == self.node_operator_id {
+            PeerLocation::Local
         } else {
-            (same_node_operator_nodes, PeerLocation::Local)
+            PeerLocation::Remote
         };
-        // Pick a random node from among the candidates, to spread the load.
-        let node = nodes.get(thread_rng().gen_range(0, nodes.len())).unwrap();
-
-        let node_record = self
-            .registry
-            .get_transport_info(*node, version)
-            .map_err(|e| Error::RegistryGetNodeInfoFailed(*node, e))?;
 
         // TODO(OR4-18): Handle more than one xnet endpoint if given. This
-        // prefers the first entry in .xnet_endpoint, or the only entry in
-        let xnet_endpoint = match node_record {
-            Some(node_record) => {
-                if node_record.xnet_api.is_empty() {
-                    node_record
-                        .xnet
-                        .ok_or_else(|| Error::MissingXNetEndpoint(*node))
-                } else {
-                    Ok(node_record.xnet_api[0].clone())
-                }
-            }
-            None => Err(Error::MissingXNetEndpoint(*node)),
+        // prefers the first entry in `.xnet_api`, or the only entry in `.xnet`.
+        let xnet_endpoint = if node_record.xnet_api.is_empty() {
+            node_record.xnet.ok_or(Error::MissingXNetEndpoint(node))
+        } else {
+            Ok(node_record.xnet_api.into_iter().next().unwrap())
         }?;
 
         let xnet_endpoint = ConnectionEndpoint::try_from(xnet_endpoint)
-            .map_err(|e| Error::InvalidXNetEndpoint(*node, e.to_string()))?;
+            .map_err(|e| Error::InvalidXNetEndpoint(node, e.to_string()))?;
 
         let socket_addr = SocketAddr::from(&xnet_endpoint);
 
         let authority = XNetAuthority {
-            node_id: *node,
+            node_id: node,
             registry_version: version,
             address: socket_addr,
         };
@@ -859,7 +790,7 @@ impl XNetEndpointResolver {
                 panic!("Could not parse URL {} : {}", url, e);
             })
             .map(|url| EndpointLocator {
-                node_id: *node,
+                node_id: node,
                 url,
                 proximity,
             })
@@ -972,6 +903,28 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
             .observe_validate_duration(VALIDATION_STATUS_VALID, timer);
         Ok(())
     }
+}
+
+/// Retrieves the given node's operator ID at the given registry version.
+///
+/// Returns `None` if the node record does not exist or the registry read
+/// failed.
+fn get_node_operator_id(
+    node_id: &NodeId,
+    registry: &dyn RegistryClient,
+    registry_version: &RegistryVersion,
+    log: &ReplicaLogger,
+) -> Option<Vec<u8>> {
+    registry
+        .get_transport_info(*node_id, *registry_version)
+        .unwrap_or_else(|_| {
+            info!(
+                log,
+                "Failed to retrieve registry record for node {}", node_id
+            );
+            None
+        })
+        .map(|r| r.node_operator_id)
 }
 
 /// Maps `StateManagerErrors` to their `XNetPayloadError` namesakes.
@@ -1120,11 +1073,11 @@ impl PoolRefillTask {
             let pool = Arc::clone(&self.pool);
             let log = self.log.clone();
             self.runtime_handle.spawn(async move {
-                let proximity = endpoint_locator.proximity.into();
                 let timer = Timer::start();
                 metrics.outstanding_queries.inc();
-                let query_result = xnet_client.query(endpoint_locator.url.clone()).await;
+                let query_result = xnet_client.query(&endpoint_locator).await;
                 metrics.outstanding_queries.dec();
+                let proximity = endpoint_locator.proximity.into();
 
                 match query_result {
                     Ok(slice) => {
@@ -1302,10 +1255,13 @@ impl Error {
 /// implementation because Rust does not have support for `async fn` in traits.
 #[async_trait]
 pub trait XNetClient: Sync + Send {
-    /// Queries the given `XNetEndpoint` URL for a `CertifiedStreamSlice`.
+    /// Queries the given `XNetEndpoint` for a `CertifiedStreamSlice`.
     ///
-    /// On success, returns the deserialized slice and its (serialized) size.
-    async fn query(&self, url: Uri) -> Result<CertifiedStreamSlice, XNetClientError>;
+    /// On success, returns the deserialized slice.
+    async fn query(
+        &self,
+        endpoint: &EndpointLocator,
+    ) -> Result<CertifiedStreamSlice, XNetClientError>;
 }
 
 /// The default `XNetClient` implementation, wrapping an HTTP client (for both
@@ -1316,6 +1272,9 @@ struct XNetClientImpl {
 
     /// Response body (encoded slice) size.
     response_body_size: HistogramVec,
+
+    /// Proximity map to update after every query with the time-to-first-byte.
+    proximity_map: Arc<ProximityMap>,
 }
 
 impl XNetClientImpl {
@@ -1325,6 +1284,7 @@ impl XNetClientImpl {
         metrics_registry: &MetricsRegistry,
         runtime_handle: runtime::Handle,
         tls: Arc<dyn TlsHandshake + Send + Sync>,
+        proximity_map: Arc<ProximityMap>,
     ) -> XNetClientImpl {
         // TODO(MR-28) Make timeout configurable.
         let http_client: Client<TlsConnector, _> = Client::builder()
@@ -1346,22 +1306,38 @@ impl XNetClientImpl {
         XNetClientImpl {
             http_client,
             response_body_size,
+            proximity_map,
         }
     }
 }
 
 #[async_trait]
 impl XNetClient for XNetClientImpl {
-    async fn query(&self, url: Uri) -> Result<CertifiedStreamSlice, XNetClientError> {
+    async fn query(
+        &self,
+        endpoint: &EndpointLocator,
+    ) -> Result<CertifiedStreamSlice, XNetClientError> {
         // TODO(MR-28) Make timeout configurable.
         let result = tokio::time::timeout(Duration::from_secs(5), async {
-            let response = self.http_client.get(url.clone()).await.map_err(|e| {
+            let request_start = Instant::now();
+            let result = self.http_client.get(endpoint.url.clone()).await;
+            // While this is not exactly roundtrip time (it may include multiple roundtrips
+            // e.g. if a TLS connection needs to be established first), it is a good enough
+            // approximation. Else, we would have to use explicit pings to measure actual
+            // roundtrip times.
+            self.proximity_map.observe_roundtrip_time(
+                endpoint.node_id,
+                Instant::now().saturating_duration_since(request_start),
+            );
+
+            let response = result.map_err(|e| {
                 if e.is_timeout() {
                     XNetClientError::Timeout
                 } else {
                     XNetClientError::RequestFailed(e)
                 }
             })?;
+
             let status = response.status();
             let content = hyper::body::to_bytes(response.into_body())
                 .await
@@ -1453,10 +1429,10 @@ pub mod testing {
     use super::*;
 
     pub use super::{
-        PoolRefillTask, RefillTaskHandle, XNetClient, XNetClientError, XNetEndpointResolver,
-        XNetPayloadBuilderMetrics, LABEL_STATUS, METRIC_BUILD_PAYLOAD_DURATION,
-        METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE, POOL_SLICE_BYTE_SIZE_MAX, STATUS_SUCCESS,
-        SYSTEM_SUBNET_STREAM_MSG_LIMIT,
+        EndpointLocator, GenRangeFn, PoolRefillTask, ProximityMap, RefillTaskHandle, XNetClient,
+        XNetClientError, XNetEndpointResolver, XNetPayloadBuilderMetrics, LABEL_STATUS,
+        METRIC_BUILD_PAYLOAD_DURATION, METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE,
+        POOL_SLICE_BYTE_SIZE_MAX, STATUS_SUCCESS, SYSTEM_SUBNET_STREAM_MSG_LIMIT,
     };
 
     /// Puts the provided slice into the payload builder's slice pool.
@@ -1471,32 +1447,5 @@ pub mod testing {
             .unwrap()
             .put(subnet_id, slice)
             .unwrap();
-    }
-
-    /// Test helper for creating a `XNetPayloadBuilder` around a provided
-    /// `XNetClient`.
-    #[allow(clippy::too_many_arguments)]
-    pub fn xnet_payload_builder_with_xnet_client(
-        xnet_client: Arc<dyn XNetClient>,
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        registry: Arc<dyn RegistryClient>,
-        runtime_handle: runtime::Handle,
-        node_id: NodeId,
-        subnet_id: SubnetId,
-        metrics_registry: &MetricsRegistry,
-        log: ReplicaLogger,
-    ) -> XNetPayloadBuilderImpl {
-        XNetPayloadBuilderImpl::with_xnet_client(
-            xnet_client,
-            state_manager,
-            certified_stream_store,
-            registry,
-            runtime_handle,
-            node_id,
-            subnet_id,
-            metrics_registry,
-            log,
-        )
     }
 }

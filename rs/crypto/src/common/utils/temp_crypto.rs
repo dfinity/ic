@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider, Csp};
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, Peer, TlsClientHandshakeError, TlsHandshake,
     TlsServerHandshakeError, TlsStream,
@@ -20,7 +21,6 @@ use ic_interfaces::registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
 use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
@@ -115,7 +115,7 @@ impl TempCryptoComponent {
     pub fn new_with_tls_key_generation(
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
-    ) -> (Self, X509PublicKeyCert) {
+    ) -> (Self, TlsPublicKeyCert) {
         let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
         let tls_pubkey = generate_tls_keys(&temp_dir.path().to_path_buf(), node_id);
 
@@ -158,7 +158,7 @@ impl TempCryptoComponent {
             false => None,
         };
         let tls_certificate = match selector.generate_tls_keys_and_certificate {
-            true => Some(generate_tls_keys(&temp_dir_path, node_id)),
+            true => Some(generate_tls_keys(&temp_dir_path, node_id).to_proto()),
             false => None,
         };
 

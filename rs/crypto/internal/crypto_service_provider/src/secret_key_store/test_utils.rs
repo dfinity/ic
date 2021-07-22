@@ -8,6 +8,7 @@ use crate::secret_key_store::{scope::ConstScope, Scope, SecretKeyStore, SecretKe
 use crate::types::CspSecretKey;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
+use ic_crypto_secrets_containers::SecretArray;
 use ic_types::crypto::KeyId;
 use mockall::predicate::*;
 use mockall::*;
@@ -41,7 +42,7 @@ impl TempSecretKeyStore {
     pub fn new() -> Self {
         let tempdir = mk_temp_dir_with_permissions(0o700);
         let store = ProtoSecretKeyStore::open(tempdir.path(), None);
-        TempSecretKeyStore { tempdir, store }
+        TempSecretKeyStore { store, tempdir }
     }
 }
 
@@ -81,7 +82,7 @@ fn make_key_id(seed: u64) -> KeyId {
 
 fn make_secret_key(seed: u64) -> CspSecretKey {
     CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        ChaCha20Rng::seed_from_u64(seed).gen(),
+        SecretArray::new_and_dont_zeroize_argument(&ChaCha20Rng::seed_from_u64(seed).gen()),
     ))
 }
 

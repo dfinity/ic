@@ -1,6 +1,6 @@
 use super::super::types::{CspPop, CspPublicKey};
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::crypto::v1::NodePublicKeys;
-use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::crypto::{AlgorithmId, CryptoError, KeyId};
 use ic_types::NodeId;
 
@@ -47,9 +47,10 @@ pub trait CspKeyGenerator {
     /// Returns the public key certificate.
     ///
     /// # Panics
-    /// Panics if `not_after` is not specified according to RFC 5280 or if
-    /// `not_after` is in the past.
-    fn gen_tls_key_pair(&mut self, node_id: NodeId, not_after: &str) -> X509PublicKeyCert;
+    /// * if `not_after` is not specified according to RFC 5280 or if
+    /// `not_after` is in the past
+    /// * if a malformed X509 certificate is generated
+    fn gen_tls_key_pair(&mut self, node_id: NodeId, not_after: &str) -> TlsPublicKeyCert;
 }
 
 /// A trait that allows checking the secret key store for the availability of a
@@ -59,7 +60,7 @@ pub trait CspSecretKeyStoreChecker {
     fn sks_contains(&self, key_id: &KeyId) -> bool;
 
     /// Checks whether the store contains a private key for the given `cert`.
-    fn sks_contains_tls_key(&self, cert: &X509PublicKeyCert) -> bool;
+    fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> bool;
 }
 
 /// A trait that exposes the information about node public keys and key

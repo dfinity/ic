@@ -16,7 +16,6 @@ pub mod metrics;
 pub mod nns_registry_replicator;
 pub mod registration;
 pub mod registry_client;
-pub mod scheduler;
 pub mod state_manager;
 
 pub use config::*;

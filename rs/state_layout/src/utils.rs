@@ -30,6 +30,8 @@ pub fn do_copy(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io::Result<(
     if ON_COW_FS.load(Ordering::Relaxed) && SAME_FS.load(Ordering::Relaxed) {
         match ic_sys::fs::clone_file(src, dst) {
             Err(FileCloneError::DifferentFileSystems) => {
+                // TODO(IDX-1862)
+                #[allow(deprecated)]
                 if SAME_FS.compare_and_swap(true, false, Ordering::Relaxed) {
                     warn!(
                         log,
@@ -43,6 +45,8 @@ pub fn do_copy(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io::Result<(
                 Ok(())
             }
             Err(FileCloneError::OperationNotSupported) => {
+                // TODO(IDX-1862)
+                #[allow(deprecated)]
                 if ON_COW_FS.compare_and_swap(true, false, Ordering::Relaxed) {
                     warn!(
                         log,

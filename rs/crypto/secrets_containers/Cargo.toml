@@ -1,0 +1,11 @@
+[package]
+name = "ic-crypto-secrets-containers"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+serde = { version = "1.0.99" }
+zeroize = { version = "1.1.1", features = ["zeroize_derive"] }
+
+[dev-dependencies]
+serde_cbor = "0.11.1"

@@ -40,6 +40,7 @@ assert_matches = "1.3.0"
 criterion = "0.3"
 ic-crypto = { path = "../crypto" }
 ic-sys = { path = "../sys" }
+ic-test-utilities = { path = "../test_utilities" }
 ic-wasm-types = { path = "../types/wasm_types" }
 maplit = "1.0.2"
 proptest = "0.9.4"

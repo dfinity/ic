@@ -19,17 +19,25 @@ use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, 
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
     FsEncryptionPok, FsEncryptionPublicKey,
 };
+use ic_crypto_secrets_containers::SecretArray;
 use ic_interfaces::crypto::CryptoHashableTestDummy;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, UserPublicKey};
 use std::convert::TryFrom;
+
+fn sk_ed25519_bytes(key: &CspSecretKey) -> Option<&[u8; 32]> {
+    match key {
+        CspSecretKey::Ed25519(bytes) => Some(bytes.0.expose_secret()),
+        _ => None,
+    }
+}
 
 #[test]
 fn should_return_correct_ed25519_secret_key_bytes_for_ed25519_secret_key() {
     let ed25519_csp_sk = CspSecretKey::ed25519_from_hex(TESTVEC_RFC8032_ED25519_SHA_ABC_SK);
 
     assert_eq!(
-        ed25519_csp_sk.ed25519_bytes().unwrap().to_vec(),
+        sk_ed25519_bytes(&ed25519_csp_sk).unwrap().to_vec(),
         hex_to_byte_vec(TESTVEC_RFC8032_ED25519_SHA_ABC_SK)
     );
 }
@@ -39,13 +47,13 @@ fn should_return_no_ed25519_secret_key_bytes_for_non_ed25519_secret_key() {
     let secret_key = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes(
         [0u8; multi_types::SecretKeyBytes::SIZE],
     ));
-    assert!(secret_key.ed25519_bytes().is_none())
+    assert!(sk_ed25519_bytes(&secret_key).is_none())
 }
 
 #[test]
 fn should_redact_csp_secret_key_ed25519_debug() {
     let cspsk_ed25519 = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        [1u8; ed25519_types::SecretKeyBytes::SIZE],
+        SecretArray::new_and_dont_zeroize_argument(&[1u8; ed25519_types::SecretKeyBytes::SIZE]),
     ));
     assert_eq!(
         "CspSecretKey::Ed25519 - REDACTED",
@@ -224,7 +232,6 @@ fn should_correctly_compare_csp_signatures() {
     let ed25519_s1_2 = CspSignature::ed25519_from_hex(TESTVEC_RFC8032_ED25519_1_SIG);
     let ed25519_s2 = CspSignature::ed25519_from_hex(TESTVEC_RFC8032_ED25519_2_SIG);
 
-    assert_eq!(ed25519_s1, ed25519_s1);
     assert_eq!(ed25519_s1, ed25519_s1_2);
     assert_ne!(ed25519_s1, ed25519_s2);
 }

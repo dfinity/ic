@@ -434,7 +434,7 @@ mod load_transcript {
             transcript_data.public_coefficients(),
             &csp_pub_coeffs(pub_coeffs)
         );
-        assert!(result.is_ok());
+        assert_eq!(result, Ok(LoadTranscriptResult::SigningKeyAvailable));
     }
 
     #[test]
@@ -457,7 +457,7 @@ mod load_transcript {
         let transcript_data =
             transcript_data_from_store_option(&threshold_sig_data_store, NI_DKG_ID);
         assert!(transcript_data.is_some());
-        assert!(result.is_ok());
+        assert_eq!(result, Ok(LoadTranscriptResult::SigningKeyUnavailable));
     }
 
     #[test]
@@ -657,7 +657,10 @@ mod load_transcript {
         let transcript_data =
             transcript_data_from_store_option(&threshold_sig_data_store, NI_DKG_ID);
         assert!(transcript_data.is_some());
-        assert!(result.is_ok());
+        assert_eq!(
+            result,
+            Ok(LoadTranscriptResult::SigningKeyUnavailableDueToDiscard)
+        );
     }
 
     fn epoch_too_old_error() -> CspDkgLoadPrivateKeyError {

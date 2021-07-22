@@ -16,6 +16,7 @@ use ic_types::{
 };
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 pub const STATE_SYNC_V1: u32 = 1;
@@ -279,6 +280,28 @@ fn files_with_sizes(
         }
     }
     Ok(())
+}
+
+/// Returns the range of chunks belonging to the file with the specified index.
+///
+/// If the file is empty and doesn't have any chunks, returns an empty range.
+#[allow(clippy::reversed_empty_ranges)]
+pub fn file_chunk_range(manifest: &Manifest, file_index: usize) -> Range<usize> {
+    if let Some(start) = manifest
+        .chunk_table
+        .iter()
+        .position(|c| c.file_index as usize == file_index)
+    {
+        match manifest.chunk_table[start..]
+            .iter()
+            .position(|c| c.file_index as usize != file_index)
+        {
+            Some(len) => start..(start + len),
+            None => start..manifest.file_table.len(),
+        }
+    } else {
+        0..0
+    }
 }
 
 /// Computes manifest for the checkpoint located at `checkpoint_root_path`.

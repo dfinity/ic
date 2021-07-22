@@ -41,12 +41,10 @@ impl MemoryArea {
     pub fn page_addr(&self, page_num: usize) -> *const libc::c_void {
         assert!(
             page_num < self.size.get() / *PAGE_SIZE,
-            format!(
-                "page({}) is not within memory area addr={:?}, size={}",
-                page_num,
-                self.addr,
-                self.size.get()
-            )
+            "page({}) is not within memory area addr={:?}, size={}",
+            page_num,
+            self.addr,
+            self.size.get()
         );
         unsafe { self.addr.add(page_num * *PAGE_SIZE) }
     }

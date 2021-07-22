@@ -6,6 +6,7 @@ edition = "2018"
 [dependencies]
 base64 = "0.11.0"
 ic-base-types = { path = "../types/base_types" }
+ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-protobuf = { path = "../protobuf" }
 ic-types = { path = "../types/types" }

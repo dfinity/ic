@@ -364,12 +364,7 @@ fn block(block_index: BlockHeight) -> Option<Result<EncodedBlock, CanisterId>> {
             "[ledger] Checking the ledger for block [{}]",
             block_index
         ));
-        match state.blockchain.get(block_index).cloned() {
-            // Block in the ledger
-            Some(block) => Some(Ok(block)),
-            // Not in the ledger and not in the archive. Thus, does not exist
-            None => None,
-        }
+        state.blockchain.get(block_index).cloned().map(Ok)
     }
 }
 

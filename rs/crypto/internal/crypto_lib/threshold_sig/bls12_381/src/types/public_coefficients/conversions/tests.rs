@@ -23,7 +23,7 @@ fn invalid_size_conversion_should_work() {
 fn public_coefficients_size_should_be_correct() {
     let mut rng = ChaChaRng::from_seed([1u8; 32]);
     let mut public_keys = Vec::new();
-    for size in 0 as NodeIndex..10 {
+    for size in 0_u32..10 {
         let public_coefficients = PublicCoefficients {
             coefficients: public_keys.iter().map(|key| PublicKey(*key)).collect(),
         };
@@ -39,7 +39,7 @@ fn public_coefficients_size_should_be_correct() {
 #[test]
 fn public_coefficients_bytes_size_should_be_correct() {
     let mut public_keys = Vec::new();
-    for size in 0 as NodeIndex..10 {
+    for size in 0_u32..10 {
         let public_coefficients = PublicCoefficientsBytes {
             coefficients: public_keys.clone(),
         };
@@ -58,7 +58,7 @@ fn public_coefficients_bytes_size_should_be_correct() {
 #[test]
 fn public_coefficients_from_polynomial_should_be_correct() {
     let mut rng = ChaChaRng::from_seed([1u8; 32]);
-    for size in 0 as usize..10 {
+    for size in 0_usize..10 {
         let polynomial = Polynomial::random(size, &mut rng);
         let public_coefficients = PublicCoefficients::from(polynomial);
         assert_eq!(size, public_coefficients.coefficients.len());
@@ -187,9 +187,9 @@ fn test_stringifying_and_parsing_public_coefficients_should_produce_original(
 /// error
 #[test]
 fn test_parsing_invalid_public_coefficients_string_should_produce_error() {
-    let string = "base 64 has no spaces".to_string();
-    let parsed = PublicCoefficientsBytes::try_from(string.as_str());
-    assert!(parsed.is_err(), string);
+    let string = "base 64 has no spaces";
+    let parsed = PublicCoefficientsBytes::try_from(string);
+    assert!(parsed.is_err(), "{}", string);
 }
 
 proptest! {

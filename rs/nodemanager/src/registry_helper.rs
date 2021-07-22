@@ -160,9 +160,10 @@ impl RegistryHelper {
         self.registry_client
             .get_replica_version_record_from_version_id(&replica_version_id, version)
             .map_err(NodeManagerError::RegistryError)?
-            .ok_or_else(|| {
-                NodeManagerError::ReplicaVersionMissingError(replica_version_id, version)
-            })
+            .ok_or(NodeManagerError::ReplicaVersionMissingError(
+                replica_version_id,
+                version,
+            ))
     }
 
     /// Return the genesis cup at the given registry version for this node
@@ -171,8 +172,15 @@ impl RegistryHelper {
         version: RegistryVersion,
     ) -> NodeManagerResult<CatchUpPackage> {
         let subnet_id = self.get_subnet_id(version)?;
-        make_registry_cup(&*self.registry_client, subnet_id)
-            .ok_or_else(|| NodeManagerError::MakeRegistryCupError(subnet_id, version))
+        let maybe_registry_cup =
+            make_registry_cup(&*self.registry_client, subnet_id, Some(&self.logger));
+        match maybe_registry_cup {
+            Some(registry_cup) => Ok(registry_cup),
+            None => {
+                warn!(self.logger, "make_registry_cup returned None",);
+                Err(NodeManagerError::MakeRegistryCupError(subnet_id, version))
+            }
+        }
     }
 
     pub(crate) fn get_firewall_config(

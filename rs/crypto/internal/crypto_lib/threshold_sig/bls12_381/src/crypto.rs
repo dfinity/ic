@@ -197,7 +197,7 @@ fn keygen_from_polynomial(
     let public_coefficients = PublicCoefficients::from(&polynomial);
     let shares: Vec<Option<SecretKey>> = share_indices
         .iter()
-        .zip(0 as NodeIndex..)
+        .zip(0_u32..)
         .map(|(needs_share, index)| {
             if *needs_share {
                 Some(polynomial.evaluate_at(&x_for_index(index)))
@@ -272,7 +272,7 @@ pub fn combine_signatures(
     }
     let signatures: Vec<(Fr, Signature)> = signatures
         .iter()
-        .zip(0 as NodeIndex..)
+        .zip(0_u32..)
         .filter_map(|(signature, index)| signature.map(|signature| (x_for_index(index), signature)))
         .collect();
     Ok(PublicCoefficients::interpolate(&signatures).expect("Duplicate indices"))

@@ -37,9 +37,11 @@ pub fn maliciously_alter_changeset(
         // If maliciously_propose_empty_blocks is enabled, we should remove non-empty
         // block proposals by the honest code from the changeset.
         if malicious_flags.maliciously_propose_empty_blocks {
-            changeset.retain(|change_action| match change_action {
-                ChangeAction::AddToValidated(BlockProposal(_)) => false,
-                _ => true,
+            changeset.retain(|change_action| {
+                !matches!(
+                    change_action,
+                    ChangeAction::AddToValidated(BlockProposal(_))
+                )
             });
         }
 
@@ -57,11 +59,13 @@ pub fn maliciously_alter_changeset(
         // First undo validations and invalidations of block proposals by the honest
         // code. We would not want the new ChangeActions to contradict or repeat
         // an existing ChangeAction.
-        changeset.retain(|change_action| match change_action {
-            ChangeAction::RemoveFromUnvalidated(BlockProposal(_))
-            | ChangeAction::MoveToValidated(BlockProposal(_))
-            | ChangeAction::HandleInvalid(BlockProposal(_), _) => false,
-            _ => true,
+        changeset.retain(|change_action| {
+            !matches!(
+                change_action,
+                ChangeAction::RemoveFromUnvalidated(BlockProposal(_))
+                    | ChangeAction::MoveToValidated(BlockProposal(_))
+                    | ChangeAction::HandleInvalid(BlockProposal(_), _)
+            )
         });
 
         // Validate all block proposals in a range
@@ -78,9 +82,11 @@ pub fn maliciously_alter_changeset(
     if malicious_flags.maliciously_finalize_all {
         // Remove any finalization shares that might have been output by the honest
         // code, to avoid deduplication.
-        changeset.retain(|change_action| match change_action {
-            ChangeAction::AddToValidated(FinalizationShare(_)) => false,
-            _ => true,
+        changeset.retain(|change_action| {
+            !matches!(
+                change_action,
+                ChangeAction::AddToValidated(FinalizationShare(_))
+            )
         });
 
         // Finalize all block proposals

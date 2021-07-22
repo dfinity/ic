@@ -67,13 +67,7 @@ impl AsRef<str> for ReplicaVersion {
 
 /// Checks if a valid replica version is allowed to contain specified char.
 fn is_valid_version_symbol(c: char) -> bool {
-    match c {
-        'a'..='z' => true,
-        'A'..='Z' => true,
-        '0'..='9' => true,
-        '.' | '_' | '-' => true,
-        _ => false,
-    }
+    matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-')
 }
 
 impl TryFrom<&str> for ReplicaVersion {

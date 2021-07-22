@@ -1,7 +1,7 @@
 use ic_interfaces::registry::{RegistryDataProvider, RegistryTransportRecord};
 
 use crate::registry::RegistryCanister;
-use ic_base_thread::spawn_and_wait;
+use ic_base_thread::async_safe_block_on_await;
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryDataProviderError,
     RegistryVersion,
@@ -29,22 +29,22 @@ impl RegistryDataProvider for NnsDataProvider {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion), RegistryDataProviderError> {
-        spawn_and_wait({
+    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+        async_safe_block_on_await({
             let registry_canister = Arc::clone(&self.registry_canister);
             async move {
                 match registry_canister.get_changes_since(version.get()).await {
-                    Ok((deltas, last_version)) => {
+                    Ok((deltas, _last_version)) => {
                         let mut changes: Vec<RegistryTransportRecord> = vec![];
 
                         for delta in &deltas {
                             let key: String = std::str::from_utf8(&delta.key).unwrap().to_string();
 
                             for value in &delta.values {
-                                let version: u64 = value.version;
+                                let version = RegistryVersion::from(value.version);
                                 let record = RegistryTransportRecord {
                                     key: key.clone(),
-                                    version: RegistryVersion::from(version),
+                                    version,
                                     value: if value.deletion_marker {
                                         None
                                     } else {
@@ -56,7 +56,7 @@ impl RegistryDataProvider for NnsDataProvider {
                             }
                         }
 
-                        Ok((changes, RegistryVersion::from(last_version)))
+                        Ok(changes)
                     }
                     Err(source) => Err(RegistryDataProviderError::Transfer { source }),
                 }
@@ -78,8 +78,8 @@ impl RegistryDataProvider for CertifiedNnsDataProvider {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion), RegistryDataProviderError> {
-        let (records, version, _time) = spawn_and_wait({
+    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+        let (records, _version, _time) = async_safe_block_on_await({
             let registry_canister = Arc::clone(&self.registry_canister);
             let nns_public_key = Arc::clone(&self.nns_public_key);
             async move {
@@ -89,6 +89,6 @@ impl RegistryDataProvider for CertifiedNnsDataProvider {
                     .map_err(|source| RegistryDataProviderError::Transfer { source })
             }
         })?;
-        Ok((records, version))
+        Ok(records)
     }
 }

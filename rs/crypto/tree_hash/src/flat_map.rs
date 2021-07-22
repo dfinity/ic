@@ -29,13 +29,7 @@ macro_rules! flatmap {
     ( $($key:expr => $value:expr,)+ ) => (flatmap!($($key => $value),+));
 
     ( $($key:expr => $value:expr),* ) => {
-        {
-            let mut _kv = ::std::vec::Vec::new();
-            $(
-                _kv.push(($key, $value));
-            )*
-            $crate::flat_map::FlatMap::from_key_values(_kv)
-        }
+            $crate::flat_map::FlatMap::from_key_values(vec![$(($key, $value)),*])
     };
 }
 

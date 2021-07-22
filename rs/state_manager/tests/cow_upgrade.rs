@@ -71,12 +71,13 @@ fn cow_state_can_handle_upgrade() {
         let random_bytes1: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
         let random_bytes2: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
 
-        let mut pages = vec![];
-        pages.push((PageIndex::from(p0_o10), random_bytes.as_slice()));
-        pages.push((PageIndex::from(p0_o20), random_bytes1.as_slice()));
-        pages.push((PageIndex::from(p0_o257), random_bytes2.as_slice()));
-
-        let pd = PageDelta::from(pages.as_slice());
+        let pd = PageDelta::from(
+            &[
+                (PageIndex::from(p0_o10), random_bytes.as_slice()),
+                (PageIndex::from(p0_o20), random_bytes1.as_slice()),
+                (PageIndex::from(p0_o257), random_bytes2.as_slice()),
+            ][..],
+        );
 
         let (_height, mut state) = src_state_manager.take_tip();
 
@@ -215,13 +216,14 @@ fn cow_state_can_handle_upgrade() {
         let random_bytes7: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
         let random_bytes8: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
 
-        let mut pages = vec![];
-        pages.push((PageIndex::from(p0_o50), random_bytes6.as_slice()));
-        pages.push((PageIndex::from(p0_o60), random_bytes7.as_slice()));
-        pages.push((PageIndex::from(p0_o257), random_bytes8.as_slice()));
-        pages.push((PageIndex::from(p3_o257), random_bytes8.as_slice()));
-
-        let pd = PageDelta::from(pages.as_slice());
+        let pd = PageDelta::from(
+            &[
+                (PageIndex::from(p0_o50), random_bytes6.as_slice()),
+                (PageIndex::from(p0_o60), random_bytes7.as_slice()),
+                (PageIndex::from(p0_o257), random_bytes8.as_slice()),
+                (PageIndex::from(p3_o257), random_bytes8.as_slice()),
+            ][..],
+        );
 
         es.page_map.update(pd);
 

@@ -170,10 +170,9 @@ fn test_invalid_transitions() {
             });
             assert!(
                 result.is_err(),
-                format!(
-                    "transition from {:?} to {:?} worked but should have failed",
-                    origin_state, next_state
-                )
+                "transition from {:?} to {:?} worked but should have failed",
+                origin_state,
+                next_state
             );
         }
     })

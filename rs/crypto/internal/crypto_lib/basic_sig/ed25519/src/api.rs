@@ -1,9 +1,9 @@
 //! API for Ed25519 basic signature
 use super::types;
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
+use ic_crypto_secrets_containers::SecretArray;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use rand::{CryptoRng, Rng};
-use simple_asn1::{BigUint, OID};
 use std::convert::TryFrom;
 
 #[cfg(test)]
@@ -14,9 +14,18 @@ pub fn keypair_from_rng<R: Rng + CryptoRng>(
     csprng: &mut R,
 ) -> (types::SecretKeyBytes, types::PublicKeyBytes) {
     let keypair = ed25519_dalek::Keypair::generate(csprng);
-    let sk = types::SecretKeyBytes(keypair.secret.to_bytes());
+    let sk = types::SecretKeyBytes(SecretArray::new_and_dont_zeroize_argument(
+        keypair.secret.as_bytes(),
+    ));
     let pk = types::PublicKeyBytes(keypair.public.to_bytes());
     (sk, pk)
+}
+
+/// The object identifier for Ed25519 public keys
+///
+/// See [RFC 8410](https://tools.ietf.org/html/rfc8410).
+pub fn algorithm_identifier() -> der_utils::PkixAlgorithmIdentifier {
+    der_utils::PkixAlgorithmIdentifier::new_with_empty_param(simple_asn1::oid!(1, 3, 101, 112))
 }
 
 /// Decodes an Ed25519 public key from a DER-encoding according to
@@ -28,14 +37,13 @@ pub fn keypair_from_rng<R: Rng + CryptoRng>(
 /// * `MalformedPublicKey` if the input is not a valid DER-encoding according to
 ///   RFC 8410, or the OID in incorrect, or the key length is incorrect.
 pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes> {
-    let (oid, pk_bytes) = der_utils::oid_and_public_key_bytes_from_der(pk_der).map_err(|e| {
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Ed25519,
-            key_bytes: Some(pk_der.to_vec()),
-            internal_error: e.internal_error,
-        }
-    })?;
-    ensure_correct_oid(oid, pk_der)?;
+    let expected_pk_len = 32;
+    let pk_bytes = der_utils::parse_public_key(
+        pk_der,
+        AlgorithmId::Ed25519,
+        algorithm_identifier(),
+        Some(expected_pk_len),
+    )?;
     types::PublicKeyBytes::try_from(&pk_bytes)
 }
 
@@ -63,9 +71,11 @@ pub fn public_key_to_der(key: types::PublicKeyBytes) -> Vec<u8> {
 pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> CryptoResult<types::SignatureBytes> {
     use ed25519_dalek::{Keypair, PublicKey, SecretKey, Signer};
 
-    let secret = SecretKey::from_bytes(&sk.0).map_err(|e| CryptoError::MalformedSecretKey {
-        algorithm: AlgorithmId::Ed25519,
-        internal_error: e.to_string(),
+    let secret = SecretKey::from_bytes(sk.0.expose_secret()).map_err(|_e| {
+        CryptoError::MalformedSecretKey {
+            algorithm: AlgorithmId::Ed25519,
+            internal_error: "dalek_ed25519::SecretKey::from_bytes failed".to_string(),
+        }
     })?;
     // TODO (DFN-845): Consider storing pubkey in key store to improve performance
     let public = PublicKey::from(&secret);
@@ -112,16 +122,4 @@ pub fn verify_public_key(pk: &types::PublicKeyBytes) -> bool {
         None => false,
         Some(edwards_point) => edwards_point.is_torsion_free(),
     }
-}
-
-fn ensure_correct_oid(oid: simple_asn1::OID, pk_der: &[u8]) -> CryptoResult<()> {
-    // OID for Ed25519 is 1.3.101.112, see https://tools.ietf.org/html/rfc8410
-    if oid != simple_asn1::oid!(1, 3, 101, 112) {
-        return Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Ed25519,
-            key_bytes: Some(Vec::from(pk_der)),
-            internal_error: format!("Wrong OID: {:?}", oid),
-        });
-    }
-    Ok(())
 }

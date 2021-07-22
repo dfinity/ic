@@ -1,11 +1,12 @@
 use crate::QueryExecutionType;
-use ic_config::execution_environment::Config;
+use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cow_state::{error::CowError, CowMemoryManager};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::{WasmExecutionInput, WasmExecutionOutput};
+use ic_embedders::{
+    wasm_executor::WasmExecutor, WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
+};
 use ic_interfaces::execution_environment::{
-    EarlyResult, ExecResult, HypervisorError, HypervisorResult, MessageAcceptanceError,
-    SubnetAvailableMemory,
+    HypervisorError, HypervisorResult, MessageAcceptanceError, SubnetAvailableMemory,
 };
 use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::{debug, fatal, ReplicaLogger};
@@ -14,7 +15,7 @@ use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     page_map::allocated_pages_count, CallContextAction, CallOrigin, CanisterState, ExecutionState,
-    SystemState,
+    SchedulerState, SystemState,
 };
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ApiType;
@@ -26,7 +27,6 @@ use ic_types::{
     SubnetId, Time,
 };
 use prometheus::{Histogram, IntCounterVec, IntGauge};
-use runtime::WasmExecutionDispatcher;
 use std::{collections::BTreeMap, sync::Arc};
 
 #[doc(hidden)] // pub for usage in tests
@@ -35,7 +35,6 @@ pub struct HypervisorMetrics {
     dirty_pages: Histogram,
     allocated_pages: IntGauge,
     executed_messages: IntCounterVec,
-    out_of_instruction_failures: IntGauge,
 }
 
 impl HypervisorMetrics {
@@ -62,10 +61,6 @@ impl HypervisorMetrics {
                 "Number of messages executed, by type and status.",
                 &["api_type", "status"],
             ),
-            out_of_instruction_failures: metrics_registry.int_gauge(
-                "hypervisor_out_of_instruction_errors",
-                "Number of messages failed due to running out of instructions ",
-            ),
         }
     }
 
@@ -80,22 +75,18 @@ impl HypervisorMetrics {
             Ok(Some(WasmResult::Reply(_))) => "success",
             Ok(Some(WasmResult::Reject(_))) => "Reject",
             Ok(None) => "NoResponse",
-            Err(e) => {
-                if let HypervisorError::OutOfInstructions = e {
-                    self.out_of_instruction_failures.inc();
-                }
-                e.as_str()
-            }
+            Err(e) => e.as_str(),
         };
         self.executed_messages
-            .with_label_values(&[api_type, status]);
+            .with_label_values(&[api_type, status])
+            .inc();
     }
 }
 
 #[doc(hidden)]
 pub struct Hypervisor {
     config: Config,
-    wasm_executor: Arc<WasmExecutionDispatcher>,
+    wasm_executor: Arc<WasmExecutor>,
     metrics: Arc<HypervisorMetrics>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
@@ -108,8 +99,8 @@ impl Hypervisor {
     ///
     /// Returns:
     ///
-    /// - If the execution succeeded, then the updated CanisterState otherwise
-    /// the old CanisterState.
+    /// - The updated `CanisterState` if the execution succeeded, otherwise
+    /// the old `CanisterState`.
     ///
     /// - Number of instructions left. This should be <= `instructions_limit`.
     ///
@@ -117,19 +108,19 @@ impl Hypervisor {
     /// the current state of the call context associated with the request that
     /// was executed.
     ///
-    /// - The size of delta of heap changes that the canister produced during
-    /// execution. If execution failed, then must be 0.
+    /// - The size of the heap delta change that the canister produced during
+    /// execution. If execution failed, then the value is 0.
     #[allow(clippy::too_many_arguments)]
     pub fn execute_update(
         &self,
-        mut canister: CanisterState,
+        canister: CanisterState,
         mut request: RequestOrIngress,
         instructions_limit: NumInstructions,
         time: Time,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecResult<(CanisterState, NumInstructions, CallContextAction, NumBytes)> {
+    ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
         debug!(self.log, "execute_update: method {}", request.method_name());
 
         let received_funds = request.take_funds();
@@ -137,7 +128,7 @@ impl Hypervisor {
 
         // Validate that the canister is running.
         if CanisterStatusType::Running != canister.status() {
-            return EarlyResult::new((
+            return (
                 canister,
                 instructions_limit,
                 CallContextAction::Fail {
@@ -145,38 +136,44 @@ impl Hypervisor {
                     refund: received_funds.cycles(),
                 },
                 NumBytes::from(0),
-            ));
+            );
         }
 
-        // Validate that the canister has an `ExecutionState`.
-        if canister.execution_state.is_none() {
-            return EarlyResult::new((
-                canister,
+        let method = WasmMethod::Update(request.method_name().to_string());
+        let memory_limit = self.canister_memory_limit(&canister);
+        let memory_usage = canister.memory_usage();
+        let (execution_state, mut system_state, scheduler_state) = canister.into_parts();
+
+        // Validate that the Wasm module is present.
+        let execution_state = match execution_state {
+            None => {
+                return (
+                    CanisterState::from_parts(None, system_state, scheduler_state),
+                    instructions_limit,
+                    CallContextAction::Fail {
+                        error: HypervisorError::WasmModuleNotFound,
+                        refund: received_funds.cycles(),
+                    },
+                    NumBytes::from(0),
+                );
+            }
+            Some(es) => es,
+        };
+
+        // Validate that the Wasm module exports the method.
+        if !execution_state.exports_method(&method) {
+            return (
+                CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
                 instructions_limit,
                 CallContextAction::Fail {
-                    error: HypervisorError::WasmModuleNotFound,
+                    error: HypervisorError::MethodNotFound(method),
                     refund: received_funds.cycles(),
                 },
                 NumBytes::from(0),
-            ));
+            );
         }
 
-        let wasm_method = WasmMethod::Update(request.method_name().to_string());
-        // Validate that the canister exports an update method of the requested name.
-        if !canister.exports_update_method(request.method_name().to_string()) {
-            return EarlyResult::new((
-                canister,
-                instructions_limit,
-                CallContextAction::Fail {
-                    error: HypervisorError::MethodNotFound(wasm_method),
-                    refund: received_funds.cycles(),
-                },
-                NumBytes::from(0),
-            ));
-        }
-
-        let call_context_id = canister
-            .system_state
+        let call_context_id = system_state
             .call_context_manager_mut()
             .unwrap()
             .new_call_context(CallOrigin::from(&request), received_funds.cycles());
@@ -194,37 +191,38 @@ impl Hypervisor {
         );
         let output = execute(
             api_type,
-            canister.system_state.clone(),
+            system_state.clone(),
             instructions_limit,
-            self.canister_memory_limit(&canister),
-            canister.memory_usage(),
+            memory_limit,
+            memory_usage,
             subnet_available_memory,
-            canister.scheduler_state.compute_allocation,
-            FuncRef::Method(wasm_method),
-            canister.execution_state.take().unwrap(),
+            scheduler_state.compute_allocation,
+            FuncRef::Method(method),
+            execution_state,
             Arc::clone(&self.cycles_account_manager),
             Arc::clone(&self.metrics),
             Arc::clone(&self.wasm_executor),
         );
 
-        output.and_then(move |output| {
-            canister.execution_state = Some(output.execution_state);
+        let (mut system_state, heap_delta) = if output.wasm_result.is_ok() {
+            (
+                output.system_state,
+                NumBytes::from((output.instance_stats.dirty_pages * *PAGE_SIZE) as u64),
+            )
+        } else {
+            // In contrast to other methods, an update methods ignores the
+            // Wasm execution error and returns 0 as the heap delta.
+            (system_state, NumBytes::from(0))
+        };
 
-            let heap_delta = if output.wasm_result.is_ok() {
-                canister.system_state = output.system_state;
-                NumBytes::from((output.instance_stats.dirty_pages * *PAGE_SIZE) as u64)
-            } else {
-                NumBytes::from(0)
-            };
+        let action = system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .on_canister_result(call_context_id, output.wasm_result);
 
-            let action = canister
-                .system_state
-                .call_context_manager_mut()
-                .unwrap()
-                .on_canister_result(call_context_id, output.wasm_result);
-
-            (canister, output.num_instructions_left, action, heap_delta)
-        })
+        let canister =
+            CanisterState::from_parts(Some(output.execution_state), system_state, scheduler_state);
+        (canister, output.num_instructions_left, action, heap_delta)
     }
 
     /// Execute a query call.
@@ -244,44 +242,45 @@ impl Hypervisor {
         canister: CanisterState,
         data_certificate: Option<Vec<u8>>,
         time: Time,
-    ) -> ExecResult<(
+    ) -> (
         CanisterState,
         NumInstructions,
         HypervisorResult<Option<WasmResult>>,
-    )> {
-        let wasm_method = WasmMethod::Query(method.to_string());
+    ) {
         // Validate that the canister is running.
         if CanisterStatusType::Running != canister.status() {
-            return EarlyResult::new((
+            return (
                 canister,
                 instructions_limit,
                 Err(HypervisorError::CanisterStopped),
-            ));
+            );
         }
 
-        let canister_memory_limit = self.canister_memory_limit(&canister);
-        let canister_current_memory_usage = canister.memory_usage();
-        let canister_compute_allocation = canister.scheduler_state.compute_allocation;
+        let method = WasmMethod::Query(method.to_string());
+        let memory_limit = self.canister_memory_limit(&canister);
+        let memory_usage = canister.memory_usage();
+        let compute_allocation = canister.scheduler_state.compute_allocation;
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
+        // Validate that the Wasm module is present.
         let mut execution_state = match execution_state {
             None => {
-                return EarlyResult::new((
+                return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
                     instructions_limit,
                     Err(HypervisorError::WasmModuleNotFound),
-                ));
+                );
             }
             Some(state) => state,
         };
 
-        // Validate that the canister exports a query method of the requested name.
-        if !execution_state.exports.has_query_method(method.to_string()) {
-            return EarlyResult::new((
+        // Validate that the Wasm module exports the method.
+        if !execution_state.exports_method(&method) {
+            return (
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
                 instructions_limit,
-                Err(HypervisorError::MethodNotFound(wasm_method)),
-            ));
+                Err(HypervisorError::MethodNotFound(method)),
+            );
         }
 
         match query_execution_type {
@@ -304,29 +303,25 @@ impl Hypervisor {
                     api_type,
                     system_state.clone(),
                     instructions_limit,
-                    canister_memory_limit,
-                    canister_current_memory_usage,
+                    memory_limit,
+                    memory_usage,
                     // Letting the canister grow arbitrarily when executing the
                     // query is fine as we do not persist state modifications.
                     SubnetAvailableMemory::new(self.config.subnet_memory_capacity),
-                    canister_compute_allocation,
-                    FuncRef::Method(wasm_method),
+                    compute_allocation,
+                    FuncRef::Method(method),
                     execution_state.clone(),
                     Arc::clone(&self.cycles_account_manager),
                     Arc::clone(&self.metrics),
                     Arc::clone(&self.wasm_executor),
                 );
-                output.and_then(move |output| {
-                    // Updating embedder cache should be the only modification
-                    // of the canister state
-                    execution_state.embedder_cache = output.execution_state.embedder_cache;
-                    let canister = CanisterState::from_parts(
-                        Some(execution_state),
-                        system_state,
-                        scheduler_state,
-                    );
-                    (canister, output.num_instructions_left, output.wasm_result)
-                })
+
+                // Updating embedder cache should be the only modification
+                // of the canister state
+                execution_state.embedder_cache = output.execution_state.embedder_cache;
+                let canister =
+                    CanisterState::from_parts(Some(execution_state), system_state, scheduler_state);
+                (canister, output.num_instructions_left, output.wasm_result)
             }
             QueryExecutionType::NonReplicated {
                 call_context_id,
@@ -362,26 +357,25 @@ impl Hypervisor {
                     api_type,
                     system_state,
                     instructions_limit,
-                    canister_memory_limit,
-                    canister_current_memory_usage,
+                    memory_limit,
+                    memory_usage,
                     // Letting the canister grow arbitrarily when executing the
                     // query is fine as we do not persist state modifications.
                     SubnetAvailableMemory::new(self.config.subnet_memory_capacity),
-                    canister_compute_allocation,
-                    FuncRef::Method(wasm_method),
+                    compute_allocation,
+                    FuncRef::Method(method),
                     execution_state,
                     Arc::clone(&self.cycles_account_manager),
                     Arc::clone(&self.metrics),
                     Arc::clone(&self.wasm_executor),
                 );
-                output.and_then(move |output| {
-                    let canister = CanisterState::from_parts(
-                        Some(output.execution_state),
-                        output.system_state,
-                        scheduler_state,
-                    );
-                    (canister, output.num_instructions_left, output.wasm_result)
-                })
+
+                let canister = CanisterState::from_parts(
+                    Some(output.execution_state),
+                    output.system_state,
+                    scheduler_state,
+                );
+                (canister, output.num_instructions_left, output.wasm_result)
             }
         }
     }
@@ -393,15 +387,15 @@ impl Hypervisor {
     ///
     /// Returns:
     ///
-    /// - If the execution succeeded, then the updated CanisterState otherwise
-    /// the old CanisterState.
+    /// - The updated `CanisterState` if the execution succeeded, otherwise
+    /// the old `CanisterState`.
     ///
     /// - Number of instructions left. This should be <= `instructions_limit`.
     ///
-    /// - The size of the delta of heap change that the execution produced.
+    /// - The size of the heap delta change that the execution produced.
     ///
     /// - A HypervisorResult that on success contains an optional wasm execution
-    ///   result and an error if execution failed.
+    ///   result or the relevant error if execution failed.
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     pub fn execute_callback(
         &self,
@@ -415,30 +409,30 @@ impl Hypervisor {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecResult<(
+    ) -> (
         CanisterState,
         NumInstructions,
         NumBytes,
         HypervisorResult<Option<WasmResult>>,
-    )> {
+    ) {
         // Validate that the canister is not stopped.
         if canister.status() == CanisterStatusType::Stopped {
-            return EarlyResult::new((
+            return (
                 canister,
                 instructions_limit,
                 NumBytes::from(0),
                 Err(HypervisorError::CanisterStopped),
-            ));
+            );
         }
 
         // Validate that the canister has an `ExecutionState`.
         if canister.execution_state.is_none() {
-            return EarlyResult::new((
+            return (
                 canister,
                 instructions_limit,
                 NumBytes::from(0),
                 Err(HypervisorError::WasmModuleNotFound),
-            ));
+            );
         }
 
         let call_responded = canister
@@ -506,293 +500,390 @@ impl Hypervisor {
 
         let cycles_account_manager = Arc::clone(&self.cycles_account_manager);
         let metrics = Arc::clone(&self.metrics);
-        let wasm_executor = Arc::clone(&self.wasm_executor);
         let canister_memory_limit = self.canister_memory_limit(&canister);
         let canister_current_memory_usage = canister.memory_usage();
         let call_origin = call_origin.clone();
 
-        output.and_then(move |output| {
-            canister.execution_state = Some(output.execution_state);
-            match output.wasm_result {
-                result @ Ok(_) => {
-                    // Executing the reply/reject closure succeeded.
-                    canister.system_state = output.system_state;
-                    let heap_delta =
-                        NumBytes::from((output.instance_stats.dirty_pages * *PAGE_SIZE) as u64);
-                    (canister, output.num_instructions_left, heap_delta, result)
-                }
-                Err(callback_err) => {
-                    // A trap has occurred when executing the reply/reject closure.
-                    // Execute the cleanup if it exists.
-                    match callback.on_cleanup {
-                        None => {
-                            // No cleanup closure present. Return the callback error as-is.
-                            (
-                                canister,
-                                output.num_instructions_left,
-                                NumBytes::from(0),
-                                Err(callback_err),
-                            )
-                        }
-                        Some(cleanup_closure) => {
-                            let func_ref = match call_origin {
-                                CallOrigin::Ingress(_, _)
-                                | CallOrigin::CanisterUpdate(_, _)
-                                | CallOrigin::Heartbeat => FuncRef::UpdateClosure(cleanup_closure),
-                                CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
-                                    FuncRef::QueryClosure(cleanup_closure)
-                                }
-                            };
-                            execute(
-                                ApiType::Cleanup { time },
-                                canister.system_state.clone(),
-                                output.num_instructions_left,
-                                canister_memory_limit,
-                                canister_current_memory_usage,
-                                subnet_available_memory,
-                                canister.scheduler_state.compute_allocation,
-                                func_ref,
-                                canister.execution_state.take().unwrap(),
-                                cycles_account_manager,
-                                metrics,
-                                wasm_executor,
-                            )
-                            .and_then(move |cleanup_output| {
-                                canister.execution_state = Some(cleanup_output.execution_state);
-                                match cleanup_output.wasm_result {
-                                    Ok(_) => {
-                                        // Executing the cleanup callback has succeeded.
-                                        canister.system_state = cleanup_output.system_state;
-                                        let heap_delta = NumBytes::from(
-                                            (cleanup_output.instance_stats.dirty_pages * *PAGE_SIZE)
-                                                as u64,
-                                        );
+        canister.execution_state = Some(output.execution_state);
+        match output.wasm_result {
+            result @ Ok(_) => {
+                // Executing the reply/reject closure succeeded.
+                canister.system_state = output.system_state;
+                let heap_delta =
+                    NumBytes::from((output.instance_stats.dirty_pages * *PAGE_SIZE) as u64);
+                (canister, output.num_instructions_left, heap_delta, result)
+            }
+            Err(callback_err) => {
+                // A trap has occurred when executing the reply/reject closure.
+                // Execute the cleanup if it exists.
+                match callback.on_cleanup {
+                    None => {
+                        // No cleanup closure present. Return the callback error as-is.
+                        (
+                            canister,
+                            output.num_instructions_left,
+                            NumBytes::from(0),
+                            Err(callback_err),
+                        )
+                    }
+                    Some(cleanup_closure) => {
+                        let func_ref = match call_origin {
+                            CallOrigin::Ingress(_, _)
+                            | CallOrigin::CanisterUpdate(_, _)
+                            | CallOrigin::Heartbeat => FuncRef::UpdateClosure(cleanup_closure),
+                            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
+                                FuncRef::QueryClosure(cleanup_closure)
+                            }
+                        };
+                        let cleanup_output = execute(
+                            ApiType::Cleanup { time },
+                            canister.system_state.clone(),
+                            output.num_instructions_left,
+                            canister_memory_limit,
+                            canister_current_memory_usage,
+                            subnet_available_memory,
+                            canister.scheduler_state.compute_allocation,
+                            func_ref,
+                            canister.execution_state.take().unwrap(),
+                            cycles_account_manager,
+                            metrics,
+                            Arc::clone(&self.wasm_executor),
+                        );
 
-                                        // Note that, even though the callback has succeeded,
-                                        // the original callback error is returned.
-                                        (
-                                            canister,
-                                            cleanup_output.num_instructions_left,
-                                            heap_delta,
-                                            Err(callback_err),
-                                        )
-                                    }
-                                    Err(cleanup_err) => {
-                                        // Executing the cleanup call back failed.
-                                        (
-                                            canister,
-                                            cleanup_output.num_instructions_left,
-                                            NumBytes::from(0),
-                                            Err(HypervisorError::Cleanup {
-                                                callback_err: Box::new(callback_err),
-                                                cleanup_err: Box::new(cleanup_err),
-                                            }),
-                                        )
-                                    }
-                                }
-                            })
-                            .get_no_pause()
+                        canister.execution_state = Some(cleanup_output.execution_state);
+                        match cleanup_output.wasm_result {
+                            Ok(_) => {
+                                // Executing the cleanup callback has succeeded.
+                                canister.system_state = cleanup_output.system_state;
+                                let heap_delta = NumBytes::from(
+                                    (cleanup_output.instance_stats.dirty_pages * *PAGE_SIZE) as u64,
+                                );
+
+                                // Note that, even though the callback has succeeded,
+                                // the original callback error is returned.
+                                (
+                                    canister,
+                                    cleanup_output.num_instructions_left,
+                                    heap_delta,
+                                    Err(callback_err),
+                                )
+                            }
+                            Err(cleanup_err) => {
+                                // Executing the cleanup call back failed.
+                                (
+                                    canister,
+                                    cleanup_output.num_instructions_left,
+                                    NumBytes::from(0),
+                                    Err(HypervisorError::Cleanup {
+                                        callback_err: Box::new(callback_err),
+                                        cleanup_err: Box::new(cleanup_err),
+                                    }),
+                                )
+                            }
                         }
                     }
                 }
             }
-        })
+        }
     }
 
-    /// Execute the canister start method if it is exposed.
+    /// Executes the system method `canister_start`.
     ///
     /// Returns:
     ///
-    /// - If the execution succeeded, then the updated CanisterState otherwise
-    /// the old CanisterState.
+    /// - The updated `CanisterState` if the execution succeeded, otherwise
+    /// the old `CanisterState`.
     ///
     /// - Number of instructions left. This should be <= `instructions_limit`.
     ///
-    /// - A HypervisorResult containing the size of the delta of heap change if
-    /// execution was successful and the relevant error if execution failed.
+    /// - A HypervisorResult containing the size of the heap delta change if
+    /// execution was successful or the relevant error if execution failed.
     #[allow(clippy::type_complexity)]
     pub fn execute_canister_start(
         &self,
-        mut canister: CanisterState,
+        canister: CanisterState,
         instructions_limit: NumInstructions,
         subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecResult<(CanisterState, NumInstructions, HypervisorResult<NumBytes>)> {
-        let method = SystemMethod::CanisterStart;
+    ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
+        let method = WasmMethod::System(SystemMethod::CanisterStart);
+        let memory_limit = self.canister_memory_limit(&canister);
+        let memory_usage = canister.memory_usage();
+        let canister_id = canister.canister_id();
+        let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
-        if canister.execution_state.is_some() && !canister.exports_system_method(method.clone()) {
-            return EarlyResult::new((canister, instructions_limit, Ok(NumBytes::from(0))));
-        }
-
-        let execution_state = match canister.execution_state.take() {
+        // Validate that the Wasm module is present.
+        let execution_state = match execution_state {
             None => {
-                return EarlyResult::new((
-                    canister,
+                return (
+                    CanisterState::from_parts(None, system_state, scheduler_state),
                     instructions_limit,
                     Err(HypervisorError::WasmModuleNotFound),
-                ));
+                );
             }
             Some(es) => es,
         };
 
+        // If the Wasm module does not export the method, then this execution
+        // succeeds as a no-op.
+        if !execution_state.exports_method(&method) {
+            return (
+                CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
+                instructions_limit,
+                Ok(NumBytes::from(0)),
+            );
+        }
+
         let output = execute(
             ApiType::start(),
-            SystemState::new_for_start(canister.canister_id()),
+            SystemState::new_for_start(canister_id),
             instructions_limit,
-            self.canister_memory_limit(&canister),
-            canister.memory_usage(),
+            memory_limit,
+            memory_usage,
             subnet_available_memory,
-            canister.scheduler_state.compute_allocation,
-            FuncRef::Method(WasmMethod::System(method)),
+            scheduler_state.compute_allocation,
+            FuncRef::Method(method),
             execution_state,
             Arc::clone(&self.cycles_account_manager),
             Arc::clone(&self.metrics),
             Arc::clone(&self.wasm_executor),
         );
 
-        output.and_then(move |output| {
-            canister.execution_state = Some(output.execution_state);
-            let result = match output.wasm_result {
-                Ok(opt_result) => {
-                    assert!(opt_result.is_none(), "System methods cannot use msg_reply.");
-                    Ok(NumBytes::from(
-                        (output.instance_stats.dirty_pages * *PAGE_SIZE) as u64,
-                    ))
-                }
-                Err(err) => Err(err),
-            };
-            (canister, output.num_instructions_left, result)
-        })
+        system_execution_result_with_old_system_state(output, system_state, scheduler_state)
     }
 
-    pub fn execute_empty(
-        &self,
-        mut canister: CanisterState,
-    ) -> ExecResult<(CanisterState, HypervisorResult<()>)> {
-        let execution_state = match canister.execution_state.take() {
+    pub fn execute_empty(&self, canister: CanisterState) -> (CanisterState, HypervisorResult<()>) {
+        let method = WasmMethod::System(SystemMethod::Empty);
+        let memory_limit = self.canister_memory_limit(&canister);
+        let memory_usage = canister.memory_usage();
+        let canister_id = canister.canister_id();
+        let (execution_state, system_state, scheduler_state) = canister.into_parts();
+
+        // Validate that the Wasm module is present.
+        let execution_state = match execution_state {
             None => {
-                return EarlyResult::new((canister, Err(HypervisorError::WasmModuleNotFound)));
+                return (
+                    CanisterState::from_parts(None, system_state, scheduler_state),
+                    Err(HypervisorError::WasmModuleNotFound),
+                );
             }
             Some(es) => es,
         };
 
         let output = execute(
             ApiType::start(),
-            SystemState::new_for_start(canister.canister_id()),
+            SystemState::new_for_start(canister_id),
             NumInstructions::from(0),
-            self.canister_memory_limit(&canister),
-            canister.memory_usage(),
+            memory_limit,
+            memory_usage,
             SubnetAvailableMemory::new(NumBytes::from(0)),
             ComputeAllocation::zero(),
-            FuncRef::Method(WasmMethod::System(SystemMethod::Empty)),
+            FuncRef::Method(method),
             execution_state,
             Arc::clone(&self.cycles_account_manager),
             Arc::clone(&self.metrics),
             Arc::clone(&self.wasm_executor),
         );
 
-        output.and_then(move |output| {
-            canister.execution_state = Some(output.execution_state);
-            let result = match output.wasm_result {
-                Ok(opt_result) => {
-                    assert!(opt_result.is_none(), "System methods cannot use msg_reply.");
-                    Ok(())
-                }
-                Err(err) => Err(err),
-            };
-            (canister, result)
-        })
+        let (canister, _, heap_delta) =
+            system_execution_result_with_old_system_state(output, system_state, scheduler_state);
+        // In contrast to other methods, the empty method returns `()` instead of
+        // the heap delta.
+        let result = heap_delta.map(|_| ());
+        (canister, result)
     }
 
-    /// Execute a system method.
-    ///
-    /// System methods are special methods that are called by the IC under
-    /// specific circumstances (e.g. canister_init, canister_pre_upgrade, etc.)
+    /// Executes the system method `canister_pre_upgrade`.
     ///
     /// Returns:
     ///
-    /// - If the execution succeeded, then the updated CanisterState otherwise
-    /// the old CanisterState.
+    /// - The updated `CanisterState` if the execution succeeded, otherwise
+    /// the old `CanisterState`.
     ///
     /// - Number of instructions left. This should be <= `instructions_limit`.
     ///
-    /// - A HypervisorResult containing the size of the delta of heap change if
-    /// execution was successful and the relevant error if execution failed.
+    /// - A HypervisorResult containing the size of the heap delta change if
+    /// execution was successful or the relevant error if execution failed.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-    pub fn execute_system(
+    pub fn execute_canister_pre_upgrade(
         &self,
-        mut canister: CanisterState,
-        method: SystemMethod,
+        canister: CanisterState,
+        caller: PrincipalId,
+        instructions_limit: NumInstructions,
+        time: Time,
+        subnet_available_memory: SubnetAvailableMemory,
+    ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
+        let method = WasmMethod::System(SystemMethod::CanisterPreUpgrade);
+        let memory_limit = self.canister_memory_limit(&canister);
+        let memory_usage = canister.memory_usage();
+        let (execution_state, system_state, scheduler_state) = canister.into_parts();
+
+        // Validate that the Wasm module is present.
+        let execution_state = match execution_state {
+            None => {
+                return (
+                    CanisterState::from_parts(None, system_state, scheduler_state),
+                    instructions_limit,
+                    Err(HypervisorError::WasmModuleNotFound),
+                );
+            }
+            Some(es) => es,
+        };
+
+        // If the Wasm module does not export the method, then this execution
+        // succeeds as a no-op.
+        if !execution_state.exports_method(&method) {
+            return (
+                CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
+                instructions_limit,
+                Ok(NumBytes::from(0)),
+            );
+        }
+
+        let output = execute(
+            ApiType::pre_upgrade(time, caller),
+            system_state.clone(),
+            instructions_limit,
+            memory_limit,
+            memory_usage,
+            subnet_available_memory,
+            scheduler_state.compute_allocation,
+            FuncRef::Method(method),
+            execution_state,
+            Arc::clone(&self.cycles_account_manager),
+            Arc::clone(&self.metrics),
+            Arc::clone(&self.wasm_executor),
+        );
+        system_execution_result(output, system_state, scheduler_state)
+    }
+
+    /// Executes the system method `canister_init`.
+    ///
+    /// Returns:
+    ///
+    /// - The updated `CanisterState` if the execution succeeded, otherwise
+    /// the old `CanisterState`.
+    ///
+    /// - Number of instructions left. This should be <= `instructions_limit`.
+    ///
+    /// - A HypervisorResult containing the size of the heap delta change if
+    /// execution was successful or the relevant error if execution failed.
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    pub fn execute_canister_init(
+        &self,
+        canister: CanisterState,
         caller: PrincipalId,
         payload: &[u8],
         instructions_limit: NumInstructions,
         time: Time,
         subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecResult<(CanisterState, NumInstructions, HypervisorResult<NumBytes>)> {
-        // Validate that the canister has an `ExecutionState`.
-        if canister.execution_state.is_none() {
-            return EarlyResult::new((
-                canister,
-                instructions_limit,
-                Err(HypervisorError::WasmModuleNotFound),
-            ));
-        }
+    ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
+        let method = WasmMethod::System(SystemMethod::CanisterInit);
+        let memory_limit = self.canister_memory_limit(&canister);
+        let memory_usage = canister.memory_usage();
+        let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
-        if !canister.exports_system_method(method.clone()) {
-            // System method isn't exported. Nothing to do.
-            return EarlyResult::new((canister, instructions_limit, Ok(NumBytes::from(0))));
-        }
-        let (api_type, system_state) = match method {
-            SystemMethod::CanisterInit | SystemMethod::CanisterPostUpgrade => (
-                ApiType::init(time, payload.to_vec(), caller),
-                canister.system_state.clone(),
-            ),
-            SystemMethod::CanisterPreUpgrade => (
-                ApiType::pre_upgrade(time, caller),
-                canister.system_state.clone(),
-            ),
-            SystemMethod::CanisterStart => fatal!(self.log, "use execute_canister_start instead"),
-            SystemMethod::CanisterInspectMessage => {
-                fatal!(self.log, "use execute_inspect_message instead")
-            }
-            SystemMethod::CanisterHeartbeat => {
-                fatal!(self.log, "Use execute_canister_heartbeat instead. execute_system will be broken up per EXE-13");
-            }
-            SystemMethod::Empty => {
-                fatal!(
-                    self.log,
-                    "Use execute_empty instead. execute_system will be broken up per EXE-13"
+        // Validate that the Wasm module is present.
+        let execution_state = match execution_state {
+            None => {
+                return (
+                    CanisterState::from_parts(None, system_state, scheduler_state),
+                    instructions_limit,
+                    Err(HypervisorError::WasmModuleNotFound),
                 );
             }
+            Some(es) => es,
         };
+
+        // If the Wasm module does not export the method, then this execution
+        // succeeds as a no-op.
+        if !execution_state.exports_method(&method) {
+            return (
+                CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
+                instructions_limit,
+                Ok(NumBytes::from(0)),
+            );
+        }
+
         let output = execute(
-            api_type,
-            system_state,
+            ApiType::init(time, payload.to_vec(), caller),
+            system_state.clone(),
             instructions_limit,
-            self.canister_memory_limit(&canister),
-            canister.memory_usage(),
+            memory_limit,
+            memory_usage,
             subnet_available_memory,
-            canister.scheduler_state.compute_allocation,
-            FuncRef::Method(WasmMethod::System(method)),
-            canister.execution_state.take().unwrap(),
+            scheduler_state.compute_allocation,
+            FuncRef::Method(method),
+            execution_state,
             Arc::clone(&self.cycles_account_manager),
             Arc::clone(&self.metrics),
             Arc::clone(&self.wasm_executor),
         );
+        system_execution_result(output, system_state, scheduler_state)
+    }
 
-        output.and_then(move |output| {
-            let result = match output.wasm_result {
-                Ok(opt_result) => {
-                    assert!(opt_result.is_none(), "System methods cannot use msg_reply.");
-                    canister.system_state = output.system_state;
-                    Ok(NumBytes::from(
-                        (output.instance_stats.dirty_pages * *PAGE_SIZE) as u64,
-                    ))
-                }
-                Err(err) => Err(err),
-            };
-            canister.execution_state = Some(output.execution_state);
-            (canister, output.num_instructions_left, result)
-        })
+    /// Executes the system method `canister_post_upgrade`.
+    ///
+    /// Returns:
+    ///
+    /// - The updated `CanisterState` if the execution succeeded, otherwise
+    /// the old `CanisterState`.
+    ///
+    /// - Number of instructions left. This should be <= `instructions_limit`.
+    ///
+    /// - A HypervisorResult containing the size of the heap delta change if
+    /// execution was successful or the relevant error if execution failed.
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    pub fn execute_canister_post_upgrade(
+        &self,
+        canister: CanisterState,
+        caller: PrincipalId,
+        payload: &[u8],
+        instructions_limit: NumInstructions,
+        time: Time,
+        subnet_available_memory: SubnetAvailableMemory,
+    ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
+        let method = WasmMethod::System(SystemMethod::CanisterPostUpgrade);
+        let memory_limit = self.canister_memory_limit(&canister);
+        let memory_usage = canister.memory_usage();
+        let (execution_state, system_state, scheduler_state) = canister.into_parts();
+
+        // Validate that the Wasm module is present.
+        let execution_state = match execution_state {
+            None => {
+                return (
+                    CanisterState::from_parts(None, system_state, scheduler_state),
+                    instructions_limit,
+                    Err(HypervisorError::WasmModuleNotFound),
+                );
+            }
+            Some(es) => es,
+        };
+
+        // If the Wasm module does not export the method, then this execution
+        // succeeds as a no-op.
+        if !execution_state.exports_method(&method) {
+            return (
+                CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
+                instructions_limit,
+                Ok(NumBytes::from(0)),
+            );
+        }
+
+        let output = execute(
+            ApiType::init(time, payload.to_vec(), caller),
+            system_state.clone(),
+            instructions_limit,
+            memory_limit,
+            memory_usage,
+            subnet_available_memory,
+            scheduler_state.compute_allocation,
+            FuncRef::Method(method),
+            execution_state,
+            Arc::clone(&self.cycles_account_manager),
+            Arc::clone(&self.metrics),
+            Arc::clone(&self.wasm_executor),
+        );
+        system_execution_result(output, system_state, scheduler_state)
     }
 
     /// Executes the system method `canister_inspect_message`.
@@ -807,45 +898,41 @@ impl Hypervisor {
         method_payload: Vec<u8>,
         instructions_limit: NumInstructions,
         time: Time,
-    ) -> ExecResult<Result<(), MessageAcceptanceError>> {
-        let canister_memory_limit = self.canister_memory_limit(&canister);
-        let canister_current_memory_usage = canister.memory_usage();
-        let canister_compute_allocation = canister.scheduler_state.compute_allocation;
-        let (mut maybe_execution_state, system_state, _) = canister.into_parts();
-        let execution_state = match maybe_execution_state.take() {
-            // The canister has no execution state so it does not have a wasm module so it is unable
-            // to handle any messages.  Reject the message.
-            None => return EarlyResult::new(Err(MessageAcceptanceError::CanisterHasNoWasmModule)),
+    ) -> Result<(), MessageAcceptanceError> {
+        let method = WasmMethod::System(SystemMethod::CanisterInspectMessage);
+        let memory_limit = self.canister_memory_limit(&canister);
+        let memory_usage = canister.memory_usage();
+        let (execution_state, system_state, scheduler_state) = canister.into_parts();
+
+        // Validate that the Wasm module is present.
+        let execution_state = match execution_state {
+            None => return Err(MessageAcceptanceError::CanisterHasNoWasmModule),
             Some(execution_state) => execution_state,
         };
 
-        // if a non-empty canister does not expose the inspect message method we accept
-        // the message.
-        if !execution_state
-            .exports
-            .has_system_method(SystemMethod::CanisterInspectMessage)
-        {
-            return EarlyResult::new(Ok(()));
+        // If the Wasm module does not export the method, then this execution
+        // succeeds as a no-op.
+        if !execution_state.exports_method(&method) {
+            return Ok(());
         }
 
         let system_api = ApiType::inspect_message(sender, method_name, method_payload, time);
+        let log = self.log.clone();
         let output = execute(
             system_api,
             system_state,
             instructions_limit,
-            canister_memory_limit,
-            canister_current_memory_usage,
+            memory_limit,
+            memory_usage,
             SubnetAvailableMemory::new(self.config.subnet_memory_capacity),
-            canister_compute_allocation,
-            FuncRef::Method(WasmMethod::System(SystemMethod::CanisterInspectMessage)),
+            scheduler_state.compute_allocation,
+            FuncRef::Method(method),
             execution_state,
             Arc::clone(&self.cycles_account_manager),
             Arc::clone(&self.metrics),
             Arc::clone(&self.wasm_executor),
         );
-
-        let log = self.log.clone();
-        output.and_then(move |output| match output.wasm_result {
+        match output.wasm_result {
             Ok(maybe_wasm_result) => match maybe_wasm_result {
                 None => Ok(()),
                 Some(_result) => fatal!(
@@ -857,50 +944,58 @@ impl Hypervisor {
                 HypervisorError::MessageRejected => Err(MessageAcceptanceError::CanisterRejected),
                 err => Err(MessageAcceptanceError::CanisterExecutionFailed(err)),
             },
-        })
+        }
     }
 
     /// Executes the `canister_heartbeat` system method.
     ///
     /// Returns:
     ///
-    /// - If the execution succeeded, then the updated CanisterState otherwise
-    /// the old CanisterState.
+    /// - The updated `CanisterState` if the execution succeeded, otherwise
+    /// the old `CanisterState`.
     ///
     /// - Number of instructions left. This should be <= `instructions_limit`.
     ///
-    /// - A HypervisorResult containing the size of the delta of heap change if
-    /// execution was successful and the relevant error if execution failed.
+    /// - A HypervisorResult containing the size of the heap delta change if
+    /// execution was successful or the relevant error if execution failed.
     #[allow(clippy::type_complexity)]
     pub fn execute_canister_heartbeat(
         &self,
-        mut canister: CanisterState,
+        canister: CanisterState,
         instructions_limit: NumInstructions,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         time: Time,
         subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecResult<(CanisterState, NumInstructions, HypervisorResult<NumBytes>)> {
-        if canister.execution_state.is_some()
-            && !canister.exports_system_method(SystemMethod::CanisterHeartbeat)
-        {
-            // System method isn't exported. Nothing to do.
-            return EarlyResult::new((canister, instructions_limit, Ok(NumBytes::from(0))));
-        }
+    ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
+        let method = WasmMethod::System(SystemMethod::CanisterHeartbeat);
+        let memory_limit = self.canister_memory_limit(&canister);
+        let memory_usage = canister.memory_usage();
+        let (execution_state, mut system_state, scheduler_state) = canister.into_parts();
 
-        let execution_state = match canister.execution_state.take() {
+        // Validate that the Wasm module is present.
+        let execution_state = match execution_state {
             None => {
-                return EarlyResult::new((
-                    canister,
+                return (
+                    CanisterState::from_parts(None, system_state, scheduler_state),
                     instructions_limit,
                     Err(HypervisorError::WasmModuleNotFound),
-                ));
+                );
             }
-            Some(execution_state) => execution_state,
+            Some(es) => es,
         };
 
-        let call_context_id = canister
-            .system_state
+        // If the Wasm module does not export the method, then this execution
+        // succeeds as a no-op.
+        if !execution_state.exports_method(&method) {
+            return (
+                CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
+                instructions_limit,
+                Ok(NumBytes::from(0)),
+            );
+        }
+
+        let call_context_id = system_state
             .call_context_manager_mut()
             .unwrap()
             .new_call_context(CallOrigin::Heartbeat, Cycles::from(0));
@@ -916,43 +1011,30 @@ impl Hypervisor {
 
         let output = execute(
             api_type,
-            canister.system_state.clone(),
+            system_state.clone(),
             instructions_limit,
-            self.canister_memory_limit(&canister),
-            canister.memory_usage(),
+            memory_limit,
+            memory_usage,
             subnet_available_memory,
-            canister.scheduler_state.compute_allocation,
-            FuncRef::Method(WasmMethod::System(SystemMethod::CanisterHeartbeat)),
+            scheduler_state.compute_allocation,
+            FuncRef::Method(method),
             execution_state,
             Arc::clone(&self.cycles_account_manager),
             Arc::clone(&self.metrics),
             Arc::clone(&self.wasm_executor),
         );
 
-        output.and_then(move |output: ic_embedders::WasmExecutionOutput| {
-            canister.execution_state = Some(output.execution_state);
-
-            if output.wasm_result.is_ok() {
-                canister.system_state = output.system_state;
-            }
-
+        {
+            let wasm_result = output.wasm_result.clone();
+            let (mut canister, num_instructions_left, heap_delta) =
+                system_execution_result(output, system_state, scheduler_state);
             let _action = canister
                 .system_state
                 .call_context_manager_mut()
                 .unwrap()
-                .on_canister_result(call_context_id, output.wasm_result.clone());
-
-            let result = match output.wasm_result {
-                Ok(opt_result) => {
-                    assert!(opt_result.is_none(), "System methods cannot use msg_reply.");
-                    Ok(NumBytes::from(
-                        (output.instance_stats.dirty_pages * *PAGE_SIZE) as u64,
-                    ))
-                }
-                Err(err) => Err(err),
-            };
-            (canister, output.num_instructions_left, result)
-        })
+                .on_canister_result(call_context_id, wasm_result);
+            (canister, num_instructions_left, heap_delta)
+        }
     }
 
     pub fn new(
@@ -964,16 +1046,21 @@ impl Hypervisor {
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
-        let my_config = config.clone();
-        let mut dispatcher_config = ic_config::embedders::Config::new();
-        dispatcher_config.persistence_type = config.persistence_type;
-        dispatcher_config.num_runtime_generic_threads = num_runtime_threads;
-        dispatcher_config.num_runtime_query_threads = std::cmp::min(num_runtime_threads, 4);
-        let wasm_executor =
-            WasmExecutionDispatcher::new(config.embedder_type, dispatcher_config, log.clone());
+        let mut embedder_config = EmbeddersConfig::new();
+        embedder_config.persistence_type = config.persistence_type.clone();
+        embedder_config.num_runtime_generic_threads = num_runtime_threads;
+        embedder_config.num_runtime_query_threads = std::cmp::min(num_runtime_threads, 4);
+
+        let wasm_embedder = WasmtimeEmbedder::new(embedder_config.clone(), log.clone());
+        let wasm_executor = WasmExecutor::new(
+            wasm_embedder,
+            embedder_config.max_globals,
+            embedder_config.max_functions,
+            metrics_registry,
+        );
 
         Self {
-            config: my_config,
+            config,
             wasm_executor: Arc::new(wasm_executor),
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
             own_subnet_id,
@@ -1015,11 +1102,12 @@ pub fn execute(
     execution_state: ExecutionState,
     cycles_account_manager: Arc<CyclesAccountManager>,
     metrics: Arc<HypervisorMetrics>,
-    wasm_executor: Arc<WasmExecutionDispatcher>,
-) -> ExecResult<WasmExecutionOutput> {
+    wasm_executor: Arc<WasmExecutor>,
+) -> WasmExecutionOutput {
     let api_type_str = api_type.as_str();
-    let result = ExecResult::new(Box::new(wasm_executor.execute(WasmExecutionInput {
-        api_type,
+
+    let result = wasm_executor.process(WasmExecutionInput {
+        api_type: api_type.clone(),
         system_state,
         instructions_limit,
         canister_memory_limit,
@@ -1029,10 +1117,59 @@ pub fn execute(
         func_ref,
         execution_state,
         cycles_account_manager,
-    })));
+    });
 
-    result.and_then(move |result| {
-        metrics.observe(api_type_str, &result);
-        result
-    })
+    metrics.observe(api_type_str, &result);
+    result
+}
+
+// A helper that converts a Wasm execution output to an execution
+// result of `execution_canister_*` functions.
+//
+// The components of the resulting `CanisterState` are computed
+// as follows:
+// - `execution_state` is taken from the Wasm output.
+// - `scheduler_state` is taken from the corresponding argument.
+// - `system_state` is taken from the Wasm output if the execution succeeded;
+//   otherwise, it is taken from the corresponding argument.
+fn system_execution_result(
+    output: WasmExecutionOutput,
+    old_system_state: SystemState,
+    scheduler_state: SchedulerState,
+) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
+    let (system_state, heap_delta) = match output.wasm_result {
+        Ok(opt_result) => {
+            assert!(opt_result.is_none(), "System methods cannot use msg_reply.");
+            let bytes = NumBytes::from((output.instance_stats.dirty_pages * *PAGE_SIZE) as u64);
+            (output.system_state, Ok(bytes))
+        }
+        Err(err) => (old_system_state, Err(err)),
+    };
+    let canister =
+        CanisterState::from_parts(Some(output.execution_state), system_state, scheduler_state);
+    (canister, output.num_instructions_left, heap_delta)
+}
+
+// Similar to `system_execution_result` but unconditionally uses
+// the given `old_system_state` for the resulting canister state.
+fn system_execution_result_with_old_system_state(
+    output: WasmExecutionOutput,
+    old_system_state: SystemState,
+    scheduler_state: SchedulerState,
+) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
+    let heap_delta = match output.wasm_result {
+        Ok(opt_result) => {
+            assert!(opt_result.is_none(), "System methods cannot use msg_reply.");
+            Ok(NumBytes::from(
+                (output.instance_stats.dirty_pages * *PAGE_SIZE) as u64,
+            ))
+        }
+        Err(err) => Err(err),
+    };
+    let canister = CanisterState::from_parts(
+        Some(output.execution_state),
+        old_system_state,
+        scheduler_state,
+    );
+    (canister, output.num_instructions_left, heap_delta)
 }

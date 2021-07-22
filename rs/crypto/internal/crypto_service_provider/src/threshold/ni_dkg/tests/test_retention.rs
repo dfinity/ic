@@ -43,9 +43,9 @@ fn test_retention() {
     let internal_public_coefficients = state.transcript.public_coefficients();
 
     // We will apply our tests to just one CSP:
-    fn get_one_csp<'a>(
-        state: &'a mut StateWithTranscript,
-    ) -> &'a mut Csp<ChaCha20Rng, VolatileSecretKeyStore> {
+    fn get_one_csp(
+        state: &mut StateWithTranscript,
+    ) -> &mut Csp<ChaCha20Rng, VolatileSecretKeyStore> {
         &mut state
             .network
             .nodes_by_node_id

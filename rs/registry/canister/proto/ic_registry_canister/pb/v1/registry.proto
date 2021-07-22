@@ -78,6 +78,7 @@ message RegistryStableStorage {
 // A container for the what gets written to stable storage,
 // from the registry canister.
 message RegistryCanisterStableStorage {
-  ic_nns_common.pb.v1.CanisterAuthzInfo authz = 1;
   RegistryStableStorage registry = 2;
+
+  reserved 1;
 }

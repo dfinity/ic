@@ -14,11 +14,12 @@ ic-types = { path = "../../../../../types/types" }
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"
 serde_cbor = "0.11"
-simple_asn1 = "0.4.1"
+simple_asn1 = "0.5.4"
 
 [dev-dependencies]
 base64 = "0.13.0"
 # TODO (CRP-912) Replace ic-crypto with ic-crypto-utils-threshold-sig
 ic-crypto = { path = "../../../../../crypto" }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
+ic-crypto-test-utils = { path = "../../../../test_utils" }
 ic-interfaces = { path = "../../../../../interfaces" }

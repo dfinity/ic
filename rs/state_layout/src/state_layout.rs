@@ -14,8 +14,8 @@ use ic_replicated_state::{
     CallContextManager, CanisterStatus, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_types::{
-    ic00::IC_00, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation,
-    Cycles, ExecutionRound, Height, MemoryAllocation, PrincipalId, QueryAllocation,
+    nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation, Cycles,
+    ExecutionRound, Height, MemoryAllocation, PrincipalId,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 use std::convert::{From, TryFrom, TryInto};
@@ -77,7 +77,7 @@ pub trait CheckpointManager: Send + Sync {
     fn list_checkpoints(&self) -> std::io::Result<Vec<String>>;
 
     /// Atomically resets containts of "tip" directory to that of checkpoint
-    fn reset_tip_to(&self, tip: &PathBuf, name: &str) -> std::io::Result<()>;
+    fn reset_tip_to(&self, tip: &Path, name: &str) -> std::io::Result<()>;
 }
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
@@ -155,12 +155,10 @@ pub struct CanisterStateBits {
     pub call_context_manager: Option<CallContextManager>,
     pub compute_allocation: ComputeAllocation,
     pub accumulated_priority: AccumulatedPriority,
-    pub query_allocation: QueryAllocation,
     pub execution_state_bits: Option<ExecutionStateBits>,
     pub memory_allocation: Option<MemoryAllocation>,
     pub freeze_threshold: NumSeconds,
     pub cycles_balance: Cycles,
-    pub icp_balance: u64,
     pub status: CanisterStatus,
     pub scheduled_as_first: u64,
     pub skipped_round_due_to_no_messages: u64,
@@ -863,15 +861,11 @@ where
     T: ReadPolicy,
 {
     pub fn deserialize(&self) -> Result<BinaryEncodedWasm, LayoutError> {
-        Ok(
-            BinaryEncodedWasm::new_from_file(self.path.clone()).map_err(|err| {
-                LayoutError::IoError {
-                    path: self.path.clone(),
-                    message: "Failed to read file contents".to_string(),
-                    io_err: err,
-                }
-            })?,
-        )
+        BinaryEncodedWasm::new_from_file(self.path.clone()).map_err(|err| LayoutError::IoError {
+            path: self.path.clone(),
+            message: "Failed to read file contents".to_string(),
+            io_err: err,
+        })
     }
 }
 
@@ -931,7 +925,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 // we assign one of them as the controller, and if there are none, we assign
                 // the "no controller" marker.
                 match item.controllers.iter().next() {
-                    None => no_controllers_marker(),
+                    None => no_controllers_marker().into(),
                     Some(controller) => controller.to_owned().into(),
                 },
             ),
@@ -944,7 +938,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             call_context_manager: item.call_context_manager.as_ref().map(|v| v.into()),
             compute_allocation: item.compute_allocation.as_percent(),
             accumulated_priority: item.accumulated_priority.value(),
-            query_allocation: item.query_allocation.get(),
             execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
             // Per the public spec, a memory allocation of zero = no memory allocation set.
             memory_allocation: match item.memory_allocation {
@@ -954,7 +947,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             freeze_threshold: item.freeze_threshold.get(),
             cycles_balance: Some(item.cycles_balance.into()),
             cycles_account: Some(item.cycles_balance.into()),
-            icp_balance: item.icp_balance,
             canister_status: Some((&item.status).into()),
             scheduled_as_first: item.scheduled_as_first,
             skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
@@ -992,21 +984,10 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
 
         let mut controllers = BTreeSet::new();
         for controller in value.controllers.into_iter() {
-            // HACK(ICSUP-1705): IC_00 was erroneously added to the list of
-            // controllers. These are ignored.
-            if controller != IC_00.get().into() {
-                let controller = PrincipalId::try_from(controller)?;
-                controllers.insert(controller);
-            }
+            controllers.insert(PrincipalId::try_from(controller)?);
         }
         if let Some(controller) = value.controller {
-            if controller == no_controllers_marker() || controller == IC_00.get().into() {
-                // Don't add the no controllers placeholder.
-                // HACK(ICSUP-1705): IC_00 is added to this check because it was
-                // formerly used as the no controller
-                // placeholder. Once ICSUP-1705 is resolved this
-                // additional check should be removed.
-            } else {
+            if controller != no_controllers_marker().into() {
                 controllers.insert(PrincipalId::try_from(controller)?);
             }
         }
@@ -1034,12 +1015,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 },
             )?,
             accumulated_priority: value.accumulated_priority.into(),
-            query_allocation: QueryAllocation::try_from(value.query_allocation).map_err(|e| {
-                ProxyDecodeError::ValueOutOfRange {
-                    typ: "QueryAllocation",
-                    err: format!("{:?}", e),
-                }
-            })?,
             execution_state_bits,
             // Per the public spec, a memory allocation of zero = no memory allocation set.
             memory_allocation: if value.memory_allocation == 0 {
@@ -1056,7 +1031,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             },
             freeze_threshold: NumSeconds::from(value.freeze_threshold),
             cycles_balance,
-            icp_balance: value.icp_balance,
             status: try_from_option_field(
                 value.canister_status,
                 "CanisterStateBits::canister_status",
@@ -1105,10 +1079,8 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
 
 // A principal used to indicate that there are no controllers present.
 // Note the "no controller" substring in the principal.
-fn no_controllers_marker() -> ic_protobuf::types::v1::PrincipalId {
-    PrincipalId::from_str("zrl4w-cqaaa-nocon-troll-eraaa-d5qc")
-        .unwrap()
-        .into()
+fn no_controllers_marker() -> PrincipalId {
+    PrincipalId::from_str("zrl4w-cqaaa-nocon-troll-eraaa-d5qc").unwrap()
 }
 
 #[cfg(test)]
@@ -1116,6 +1088,7 @@ mod test {
     use super::*;
 
     use ic_test_utilities::types::ids::canister_test_id;
+    use ic_types::ic00::IC_00;
 
     #[test]
     fn test_encode_decode_empty_controllers() {
@@ -1138,14 +1111,12 @@ mod test {
             certified_data: vec![],
             consumed_cycles_since_replica_started: NominalCycles::from(0),
             stable_memory_size: NumWasmPages::from(0),
-            query_allocation: QueryAllocation::zero(),
-            icp_balance: 0,
         };
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
 
         // No controllers is encoded with the "no controller" marker.
-        assert_eq!(pb_bits.controller, Some(no_controllers_marker()));
+        assert_eq!(pb_bits.controller, Some(no_controllers_marker().into()));
 
         let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
 
@@ -1153,10 +1124,8 @@ mod test {
         assert_eq!(canister_state_bits.controllers, BTreeSet::new());
     }
 
-    // HACK(ICSUP-1705): To fix the issues we're observing, the controller IC_00
-    // should be removed from the list of controllers.
     #[test]
-    fn test_encode_decode_ic00_controller() {
+    fn test_encode_decode_non_empty_controllers() {
         let mut controllers = BTreeSet::new();
         controllers.insert(IC_00.into());
         controllers.insert(canister_test_id(0).get());
@@ -1180,8 +1149,6 @@ mod test {
             certified_data: vec![],
             consumed_cycles_since_replica_started: NominalCycles::from(0),
             stable_memory_size: NumWasmPages::from(0),
-            query_allocation: QueryAllocation::zero(),
-            icp_balance: 0,
         };
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
@@ -1190,9 +1157,44 @@ mod test {
 
         let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
 
-        // IC00 is removed from the controllers.
         let mut expected_controllers = BTreeSet::new();
         expected_controllers.insert(canister_test_id(0).get());
+        expected_controllers.insert(IC_00.into());
         assert_eq!(canister_state_bits.controllers, expected_controllers);
+    }
+
+    #[test]
+    fn test_encode_decode_no_controller_marker_as_controllers() {
+        // If the controller is set explicitly to the no_controllers_marker, then
+        // it should still be preserved.
+        let mut controllers = BTreeSet::new();
+        controllers.insert(no_controllers_marker());
+
+        // A canister state with empty controllers.
+        let canister_state_bits = CanisterStateBits {
+            controllers: controllers.clone(),
+            last_full_execution_round: ExecutionRound::from(0),
+            call_context_manager: None,
+            compute_allocation: ComputeAllocation::try_from(0).unwrap(),
+            accumulated_priority: AccumulatedPriority::from(0),
+            execution_state_bits: None,
+            memory_allocation: None,
+            freeze_threshold: NumSeconds::from(0),
+            cycles_balance: Cycles::from(0),
+            status: CanisterStatus::Stopped,
+            scheduled_as_first: 0,
+            skipped_round_due_to_no_messages: 0,
+            executed: 0,
+            interruped_during_execution: 0,
+            certified_data: vec![],
+            consumed_cycles_since_replica_started: NominalCycles::from(0),
+            stable_memory_size: NumWasmPages::from(0),
+        };
+
+        let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+
+        let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+
+        assert_eq!(canister_state_bits.controllers, controllers)
     }
 }

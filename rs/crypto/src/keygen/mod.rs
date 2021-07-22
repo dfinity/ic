@@ -7,6 +7,7 @@ use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_interfaces::crypto::{KeyManager, Keygen};
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
@@ -152,18 +153,33 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         &self,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
-        let x509_public_key_cert = self
+        let public_key_cert = self
             .registry_client
             .get_tls_certificate(self.node_id, registry_version)?
-            .ok_or(CryptoError::TlsCertNotFound {
-                node_id: self.node_id,
-                registry_version,
-            })?;
-        if !self.csp.sks_contains_tls_key(&x509_public_key_cert) {
+            .map_or_else(
+                || {
+                    Err(CryptoError::TlsCertNotFound {
+                        node_id: self.node_id,
+                        registry_version,
+                    })
+                },
+                |cert| {
+                    TlsPublicKeyCert::new_from_der(cert.certificate_der).map_err(|e| {
+                        CryptoError::MalformedPublicKey {
+                            algorithm: AlgorithmId::Ed25519,
+                            key_bytes: None, // The DER is included in the `internal_error` below.
+                            internal_error: format!("{}", e),
+                        }
+                    })
+                },
+            )?;
+
+        if !self.csp.sks_contains_tls_key(&public_key_cert) {
             return Err(CryptoError::TlsSecretKeyNotFound {
-                certificate_der: x509_public_key_cert.certificate_der,
+                certificate_der: public_key_cert.as_der().clone(),
             });
         }
+
         Ok(())
     }
 

@@ -92,7 +92,7 @@ enum Topic {
 enum NeuronState {
   // Not a valid state. Required by Protobufs.
   NEURON_STATE_UNSPECIFIED = 0;
-  // In this state, the neuron is locked with a specific
+  // In this state, the neuron is not dissolving and has a specific
   // `dissolve_delay`. It accrues `age` by the passge of time and it
   // can vote if `dissolve_delay` is at least six months. The method
   // [Neuron::start_dissolving] can be called to transfer the neuron
@@ -100,12 +100,12 @@ enum NeuronState {
   // [Neuron::increase_dissolve_delay] can be used to increase the
   // dissolve delay without affecting the state or the age of the
   // neuron.
-  NEURON_STATE_LOCKED = 1;
+  NEURON_STATE_NOT_DISSOLVING = 1;
   // In this state, the neuron's `dissolve_delay` decreases with the
   // passage of time. While dissolving, the neuron's age is considered
   // zero. Eventually it will reach the `Dissolved` state. The method
   // [Neuron::stop_dissolving] can be called to transfer the neuron to
-  // the `Locked` state, and the neuron will start aging again. The
+  // the `NotDissolving` state, and the neuron will start aging again. The
   // method [Neuron::increase_dissolve_delay] can be used to increase
   // the dissolve delay, but this will not stop the timer or affect
   // the age of the neuron.
@@ -115,8 +115,8 @@ enum NeuronState {
   // `dissolve_delay` is considered to be zero.
   //
   // If the method [Neuron::increase_dissolve_delay] is called in this
-  // state, the neuron will become locked with the specified dissolve
-  // delay and start againg again.
+  // state, the neuron will no longer be dissolving, with the specified
+  // dissolve delay, and will start aging again.
   //
   // Neuron holders have an incentive not to keep neurons in the
   // 'dissolved' state for a long time: if the holders wants to make
@@ -137,10 +137,9 @@ message BallotInfo {
 // The result of querying for the state of a single neuron.
 message NeuronInfo {
   // The exact time at which this data was computed. This means, for
-  // example, that the exact time that this neuron will be unlocked,
-  // i.e., enter the dissolved state, assuming it is currently
-  // dissolving, is given by
-  // `retrieved_at_timestamp_seconds+dissolve_delay_seconds`.
+  // example, that the exact time that this neuron will enter the
+  // dissolved state, assuming it is currently dissolving, is given
+  // by `retrieved_at_timestamp_seconds+dissolve_delay_seconds`.
   uint64 retrieved_at_timestamp_seconds = 1;
   // The current state of the neuron. See [NeuronState] for a
   // description of the different states.
@@ -245,8 +244,8 @@ message Neuron {
   // At any time, at most one of `when_dissolved` and
   // `dissolve_delay` are specified.
   //
-  // `Locked`. This is represented by `dissolve_delay` being set to a
-  // non zero value.
+  // `NotDissolving`. This is represented by `dissolve_delay` being
+  // set to a non zero value.
   //
   // `Dissolving`. This is represented by `when_dissolved` being
   // set, and this value is in the future.
@@ -414,6 +413,8 @@ enum NnsFunction {
   NNS_FUNCTION_STOP_OR_START_NNS_CANISTER = 17;
   // Remove unassigned nodes from the registry.
   NNS_FUNCTION_REMOVE_NODES = 18;
+  // Uninstall code of a canister.
+  NNS_FUNCTION_UNINSTALL_CODE = 19;
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -477,13 +478,26 @@ message RewardNodeProvider {
   // - All other values are set as for other neurons: timestamp is
   //   now, following is set up per default, maturity is 0, neuron fee
   //   is 0.
-  message CreateNeuron {
+  message RewardToNeuron {
     uint64 dissolve_delay_seconds = 1;
   }
-  // If this is specified, executing this proposal will create a
-  // neuron instead of directly minting ICP into the node provider's
-  // account.
-  CreateNeuron create_neuron = 3;
+
+  message RewardToAccount {
+    ic_ledger.pb.v1.AccountIdentifier to_account = 1;
+  }
+
+  oneof reward_mode {
+    // If this is specified, executing this proposal will create a
+    // neuron instead of directly minting ICP into the node provider's
+    // account.
+    RewardToNeuron reward_to_neuron = 4;
+    // If this is specificed, executing this proposal will mint to the
+    // specified account.
+    RewardToAccount reward_to_account = 5;
+  }
+
+  reserved 3;
+  reserved "create_neuron";
 }
 
 // Changes the default followees to match the one provided.
@@ -571,12 +585,25 @@ message Proposal {
 // registered hot keys of the neuron.
 message ManageNeuron {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
-  // The ID of the neuron to manage.
+
+  // This is the legacy way to specify neuron IDs that is now discouraged.
   ic_nns_common.pb.v1.NeuronId id = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+
+  // The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
+  oneof neuron_id_or_subaccount {
+    bytes subaccount = 11 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+    ic_nns_common.pb.v1.NeuronId neuron_id = 12 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  }
+
   // The dissolve delay of a neuron can be increased up to a maximum
   // of 8 years.
   message IncreaseDissolveDelay {
     uint32 additional_dissolve_delay_seconds = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  }
+  // An (idempotent) alternative to IncreaseDissolveDelay where the dissolve delay
+  // is passed as an absolute timestamp in seconds since the unix epoch.
+  message SetDissolveTimestamp {
+    uint64 dissolve_timestamp_seconds = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
   message StartDissolving {}
   message StopDissolving {}
@@ -603,6 +630,7 @@ message ManageNeuron {
       StopDissolving stop_dissolving = 3;
       AddHotKey add_hot_key = 4;
       RemoveHotKey remove_hot_key = 5;
+      SetDissolveTimestamp set_dissolve_timestamp = 6;
     }
   }
   // Disburse this neuron's stake: transfer the staked ICP to the
@@ -688,6 +716,13 @@ message ManageNeuron {
     ic_nns_common.pb.v1.ProposalId proposal = 1;
     Vote vote = 2;
   }
+
+  message ClaimOrRefresh {
+    oneof by {
+      uint64 memo = 1;
+    }
+  }
+
   oneof command {
     Configure configure = 2;
     Disburse disburse = 3;
@@ -697,6 +732,7 @@ message ManageNeuron {
     RegisterVote register_vote = 7;
     Split split = 8;
     DisburseToNeuron disburse_to_neuron = 9;
+    ClaimOrRefresh claim_or_refresh = 10;
   }
 }
 
@@ -735,6 +771,10 @@ message ManageNeuronResponse {
     ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
   }
 
+  message ClaimOrRefreshResponse {
+    ic_nns_common.pb.v1.NeuronId refreshed_neuron_id = 1;
+  }
+
   oneof command {
     GovernanceError error = 1;
     ConfigureResponse configure = 2;
@@ -745,6 +785,7 @@ message ManageNeuronResponse {
     RegisterVoteResponse register_vote = 7;
     SplitResponse split = 8;
     DisburseToNeuronResponse disburse_to_neuron = 9;
+    ClaimOrRefreshResponse claim_or_refresh = 10;
   }
 }
 
@@ -757,18 +798,21 @@ message GovernanceError {
      ERROR_TYPE_UNAVAILABLE = 2;
      // The caller is not authorized to perform this operation.
      ERROR_TYPE_NOT_AUTHORIZED = 3;
-     // The specified neuron was not found.
+     // Some entity required for the operation (for example, a neuron) was not found.
      ERROR_TYPE_NOT_FOUND = 4;
      // The command was missing or invalid. This is a permanent error.
      ERROR_TYPE_INVALID_COMMAND = 5;
-     // The neuron is not locked and the operation requires it to be
-     // locked.
-     ERROR_TYPE_REQUIRES_LOCKED = 6;
-     // The neuron is not dissolving and the operation requires it to be
-     // dissolving.
+     // The neuron is dissolving or dissolved and the operation requires it to
+     // be not dissolving (that is, having a non-zero dissolve delay that is
+     // accumulating age).
+     ERROR_TYPE_REQUIRES_NOT_DISSOLVING = 6;
+     // The neuron is not dissolving or dissolved and the operation requires
+     // it to be dissolving (that is, having a non-zero dissolve delay with
+     // zero age that is not accumulating).
      ERROR_TYPE_REQUIRES_DISSOLVING = 7;
-     // The neuron is not dissolved and the operation requires it to be
-     // dissolved.
+     // The neuron is not dissolving and not dissolved and the operation
+     // requires it to be dissolved (that is, having a dissolve delay of zero
+     // and an age of zero).
      ERROR_TYPE_REQUIRES_DISSOLVED = 8;
      // When adding or removing a hot key: the key to add was already
      // present or the key to remove was not present or the key to add
@@ -909,6 +953,10 @@ message ProposalData {
   // to the current timestamp.
   uint64 failed_timestamp_seconds = 13;
 
+  // When an adopted proposal has failed to executed, this is set the
+  // reason for the failure.
+  GovernanceError failure_reason = 15;
+
   // The reward event round at which rewards for votes on this proposal
   // was distributed.
   //
@@ -955,6 +1003,9 @@ message ProposalInfo {
 
   // See [PropopsalData::failed_timestamp_seconds].
   uint64 failed_timestamp_seconds = 13;
+
+  // See [ProposalData::failure_reason].
+  GovernanceError failure_reason = 18;
 
   // See [PropopsalData::reward_event_round].
   uint64 reward_event_round = 14;
@@ -1078,8 +1129,7 @@ message Governance {
   //
   // See also `short_voting_period_seconds`.
   uint64 wait_for_quiet_threshold_seconds = 5;
-  // The authz information for the governance canister.
-  ic_nns_common.pb.v1.CanisterAuthzInfo authz = 6;
+
   // The network economics configuration parameters.
   NetworkEconomics economics = 8;
   // The last reward event. Should never be missing.
@@ -1146,6 +1196,9 @@ message Governance {
   // period has not been decided (adopted or rejected) within this
   // time since the proposal was made, the proposal is rejected.
   uint64 short_voting_period_seconds = 14;
+
+  reserved 6;
+  reserved "authz";
 }
 
 // Proposals with restricted voting are not included unless the caller

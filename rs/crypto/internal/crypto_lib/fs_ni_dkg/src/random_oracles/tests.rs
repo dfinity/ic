@@ -179,9 +179,7 @@ mod unique_hashing {
         let point = ECP::generator();
         let other_point = ECP::generator().mul(&BIG::new_int(42));
 
-        let mut vec = Vec::new();
-        vec.push(point);
-        vec.push(other_point);
+        let vec = vec![point, other_point];
         let _hash = vec.unique_hash();
     }
 
@@ -190,13 +188,8 @@ mod unique_hashing {
         let point = ECP::generator();
         let other_point = ECP::generator();
 
-        let mut vec_in = Vec::new();
-        vec_in.push(point);
-        vec_in.push(other_point);
-        let mut vec_out = Vec::new();
-        vec_out.push(vec_in.clone());
-        vec_out.push(vec_in.clone());
-        vec_out.push(vec_in);
+        let vec_in = vec![point, other_point];
+        let vec_out = vec![vec_in; 3];
 
         let _hash = vec_out.unique_hash();
     }
@@ -213,9 +206,7 @@ mod unique_hashing {
             scalar: BIG::new_int(36),
             bytes: vec![1, 2, 3, 4],
         };
-        let mut vec_in = Vec::new();
-        vec_in.push(point1);
-        vec_in.push(point2);
+        let vec_in = vec![point1, point2];
         let mut vec_out: Vec<&dyn UniqueHash> = Vec::new();
         let hashed_map = hashable_struct.unique_hash().to_vec();
         let hashable_map = HashableMap::from(&hashable_struct);

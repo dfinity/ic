@@ -372,12 +372,12 @@ impl Payload {
     ) -> CertifiedSliceResult<(Label, Option<Vec<u8>>, Option<PayloadTreeMap>)> {
         let streams_tree = Self::children_of(payload)?
             .remove(&Label::from(LABEL_STREAMS))
-            .ok_or_else(|| CertifiedSliceError::InvalidPayload(MissingStreams))?;
+            .ok_or(CertifiedSliceError::InvalidPayload(MissingStreams))?;
         let mut streams = Self::children_of(streams_tree)?.into_iter();
 
         let (subnet_id, stream_tree) = streams
             .next()
-            .ok_or_else(|| CertifiedSliceError::InvalidPayload(MissingStream))?;
+            .ok_or(CertifiedSliceError::InvalidPayload(MissingStream))?;
         if streams.next().is_some() {
             return Err(CertifiedSliceError::InvalidPayload(MoreThanOneStream));
         }
@@ -502,7 +502,7 @@ impl TryFrom<&[u8]> for Payload {
         let tree: PayloadTree = v1::LabeledTree::proxy_decode(payload_bytes)?;
         let (subnet_id, header, messages) = Self::unpack(tree)?;
 
-        let header = header.ok_or_else(|| CertifiedSliceError::InvalidPayload(MissingHeader))?;
+        let header = header.ok_or(CertifiedSliceError::InvalidPayload(MissingHeader))?;
         let decoded_header = encoding::decode_stream_header(&header)?;
 
         Ok(Self {
@@ -662,9 +662,9 @@ impl UnpackedStreamSlice {
     /// Returns `Err(InvalidWitness)` if `self.merkle_proof` is malformed.
     fn witness_messages_begin(&self) -> CertifiedSliceResult<Option<StreamIndex>> {
         let streams = sub_witness(&self.merkle_proof, &Label::from(LABEL_STREAMS))
-            .ok_or_else(|| CertifiedSliceError::InvalidWitness(MissingStreams))?;
-        let (_subnet_id, stream) = first_sub_witness(streams)
-            .ok_or_else(|| CertifiedSliceError::InvalidWitness(MissingStream))?;
+            .ok_or(CertifiedSliceError::InvalidWitness(MissingStreams))?;
+        let (_subnet_id, stream) =
+            first_sub_witness(streams).ok_or(CertifiedSliceError::InvalidWitness(MissingStream))?;
         sub_witness(stream, &Label::from(LABEL_MESSAGES))
             .map(first_sub_witness)
             .flatten()
@@ -804,7 +804,7 @@ impl From<ProxyDecodeError> for CertifiedSliceError {
 
 /// Converts a `LabeledTree` or `Witness` label into a `StreamIndex`.
 fn to_stream_index(label: &Label) -> Result<StreamIndex, InvalidSlice> {
-    StreamIndex::from_label(label.as_bytes()).ok_or_else(|| NotAStreamIndex)
+    StreamIndex::from_label(label.as_bytes()).ok_or(NotAStreamIndex)
 }
 
 /// A pool of `CertifiedStreamSlices` that provides support for taking out

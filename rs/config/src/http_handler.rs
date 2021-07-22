@@ -1,4 +1,4 @@
-use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::{convert::TryFrom, net::SocketAddr};
@@ -116,7 +116,7 @@ pub struct Config {
     /// True if the replica public key is returned from the `/status` endpoint
     pub show_root_key_in_status: bool,
     /// The digital certificate used by TLS.
-    pub clients_x509_cert: Option<X509PublicKeyCert>,
+    pub clients_x509_cert: Option<TlsPublicKeyCert>,
 }
 
 impl Default for Config {
@@ -166,9 +166,10 @@ impl TryFrom<ExternalConfig> for Config {
         if let Some(base64_clients_x509_cert) = ec.clients_x509_cert {
             let base64_decoded_clients_x509_cert = base64::decode(&base64_clients_x509_cert)
                 .map_err(|_err| "Could not decode x509 cert from base64 encoding.")?;
-            config.clients_x509_cert = Some(X509PublicKeyCert {
-                certificate_der: base64_decoded_clients_x509_cert,
-            });
+            config.clients_x509_cert = Some(
+                TlsPublicKeyCert::new_from_der(base64_decoded_clients_x509_cert)
+                    .map_err(|_err| "Could not decode x509 cert from DER encoding")?,
+            );
         }
         Ok(config)
     }

@@ -3,8 +3,8 @@ use super::super::types::{BTENode, FsEncryptionSecretKey};
 use super::crypto;
 use arrayvec::ArrayVec;
 use ic_crypto_internal_bls12381_serde_miracl::{
-    miracl_fr_from_bytes, miracl_fr_to_bytes, miracl_g1_from_bytes, miracl_g1_to_bytes,
-    miracl_g2_from_bytes, miracl_g2_to_bytes,
+    miracl_fr_from_bytes, miracl_fr_to_bytes, miracl_g1_from_bytes, miracl_g1_from_bytes_unchecked,
+    miracl_g1_to_bytes, miracl_g2_from_bytes, miracl_g2_from_bytes_unchecked, miracl_g2_to_bytes,
 };
 use ic_crypto_internal_fs_ni_dkg::{nizk_chunking::ProofChunking, nizk_sharing::ProofSharing};
 use ic_crypto_internal_types::curves::bls12_381::{G1 as G1Bytes, G2 as G2Bytes};
@@ -41,34 +41,46 @@ pub fn secret_key_from_miracl(miracl_secret_key: &crypto::SecretKey) -> FsEncryp
 
 /// Parses a forward secure secret key into a miracl-compatible form.
 ///
+/// # Security Note
+///
+/// The provided `secret_key` is assumed to be "trusted",
+/// meaning it was obtained from a known and trusted source.
+/// This is because certain safety checks are NOT performed
+/// on the members of the key.
+///
 /// # Panics
 /// Panics if the key is malformed.  Given that secret keys are created and
 /// managed within the CSP such a failure is an error in this code or a
 /// corruption of the secret key store.
-pub fn secret_key_into_miracl(secret_key: &FsEncryptionSecretKey) -> crypto::SecretKey {
+pub fn trusted_secret_key_into_miracl(secret_key: &FsEncryptionSecretKey) -> crypto::SecretKey {
     crypto::SecretKey {
         bte_nodes: secret_key
             .bte_nodes
             .iter()
             .map(|node| crypto::BTENode {
                 tau: node.tau.iter().copied().map(crypto::Bit::from).collect(),
-                a: miracl_g1_from_bytes(&node.a.0).expect("Malformed secret key at BTENode.a"),
-                b: miracl_g2_from_bytes(&node.b.0).expect("Malformed secret key at BTENode.b"),
+                a: miracl_g1_from_bytes_unchecked(&node.a.0)
+                    .expect("Malformed secret key at BTENode.a"),
+                b: miracl_g2_from_bytes_unchecked(&node.b.0)
+                    .expect("Malformed secret key at BTENode.b"),
                 d_t: node
                     .d_t
                     .iter()
                     .map(|g2| {
-                        miracl_g2_from_bytes(&g2.0).expect("Malformed secret key at BTENode.d_t")
+                        miracl_g2_from_bytes_unchecked(&g2.0)
+                            .expect("Malformed secret key at BTENode.d_t")
                     })
                     .collect(),
                 d_h: node
                     .d_h
                     .iter()
                     .map(|g2| {
-                        miracl_g2_from_bytes(&g2.0).expect("Malformed secret key at BTENode.d_h")
+                        miracl_g2_from_bytes_unchecked(&g2.0)
+                            .expect("Malformed secret key at BTENode.d_h")
                     })
                     .collect(),
-                e: miracl_g2_from_bytes(&node.e.0).expect("Malformed secret key at BTENode.e"),
+                e: miracl_g2_from_bytes_unchecked(&node.e.0)
+                    .expect("Malformed secret key at BTENode.e"),
             })
             .collect(),
     }
@@ -95,6 +107,8 @@ pub fn public_key_from_miracl(
     (public_key_bytes, pop_bytes)
 }
 
+// TODO(IDX-1866)
+#[allow(clippy::result_unit_err)]
 /// Parses a standard form public key into the miracl-based type.
 ///
 /// # Errors
@@ -149,7 +163,7 @@ pub fn epoch_from_miracl_secret_key(secret_key: &crypto::SecretKey) -> Epoch {
 /// This will panic if the miracl representation is invalid.  Given that the
 /// miracl representation is generated internally, this can happen only if there
 /// is an error in our code.
-pub fn ciphertext_from_miracl(ciphertext: &crypto::CRSZ) -> FsEncryptionCiphertext {
+pub fn ciphertext_from_miracl(ciphertext: &crypto::Crsz) -> FsEncryptionCiphertext {
     let rand_r = {
         assert_eq!(
             ciphertext.rr.len(),
@@ -208,7 +222,7 @@ pub fn ciphertext_from_miracl(ciphertext: &crypto::CRSZ) -> FsEncryptionCipherte
 /// invalid.
 pub fn ciphertext_into_miracl(
     ciphertext: &FsEncryptionCiphertext,
-) -> Result<crypto::CRSZ, &'static str> {
+) -> Result<crypto::Crsz, &'static str> {
     let rr: Vec<ECP> = ciphertext.rand_r[..]
         .iter()
         .map(|g1_bytes| miracl_g1_from_bytes(&g1_bytes.0).or(Err("Malformed rand_r")))
@@ -231,7 +245,7 @@ pub fn ciphertext_into_miracl(
                 .collect::<Result<Vec<_>, _>>()
         })
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(crypto::CRSZ { rr, ss, zz, cc })
+    Ok(crypto::Crsz { cc, rr, ss, zz })
 }
 
 /// Converts a miracl-compatible plaintext into a standard-sized plaintext

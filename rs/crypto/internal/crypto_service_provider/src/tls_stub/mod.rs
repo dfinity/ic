@@ -1,15 +1,16 @@
 //! TLS utilities
 
-use crate::api::tls_errors::{CspTlsClientHandshakeError, CspTlsServerHandshakeError};
-use crate::keygen::tls_registry_cert_hash_as_key_id;
+use crate::api::tls_errors::{
+    CspMalformedPeerCertificateError, CspTlsClientHandshakeError, CspTlsServerHandshakeError,
+};
+use crate::keygen::tls_cert_hash_as_key_id;
 use crate::secret_key_store::SecretKeyStore;
 use crate::tls_stub::cert_chain::CspCertificateChainCreationError;
 use crate::types::CspSecretKey;
 use cert_chain::CspCertificateChain;
-use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use openssl::hash::MessageDigest;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use openssl::pkey::{PKey, Private};
-use openssl::x509::{X509VerifyResult, X509};
+use openssl::x509::X509VerifyResult;
 use std::convert::TryFrom;
 use tokio::net::TcpStream;
 use tokio_openssl::SslStream;
@@ -23,11 +24,11 @@ mod test_utils;
 
 fn key_from_secret_key_store<S: SecretKeyStore>(
     secret_key_store: &S,
-    self_cert: &X509PublicKeyCert,
+    self_cert: &TlsPublicKeyCert,
 ) -> Result<PKey<Private>, CspTlsSecretKeyError> {
     let secret_key: CspSecretKey = secret_key_store
-        .get(&tls_registry_cert_hash_as_key_id(self_cert.clone()))
-        .ok_or_else(|| CspTlsSecretKeyError::SecretKeyNotFound)?;
+        .get(&tls_cert_hash_as_key_id(&self_cert))
+        .ok_or(CspTlsSecretKeyError::SecretKeyNotFound)?;
     let secret_key_der_bytes = match secret_key {
         CspSecretKey::TlsEd25519(secret_key_der_bytes) => Ok(secret_key_der_bytes),
         _ => Err(CspTlsSecretKeyError::WrongSecretKeyType),
@@ -46,17 +47,28 @@ enum CspTlsSecretKeyError {
 
 fn peer_cert_from_stream(
     tls_stream: &SslStream<TcpStream>,
-) -> Result<Option<X509>, CspPeerCertFromStreamError> {
-    let peer_cert = tls_stream.ssl().peer_certificate();
-    if peer_cert.is_some() && tls_stream.ssl().verify_result() != X509VerifyResult::OK {
-        return Err(CspPeerCertFromStreamError::PeerCertificateNotVerified);
-    }
-    Ok(peer_cert)
+) -> Result<Option<TlsPublicKeyCert>, CspPeerCertFromStreamError> {
+    tls_stream.ssl().peer_certificate().map_or_else(
+        || Ok(None),
+        |peer_cert_x509| {
+            if tls_stream.ssl().verify_result() != X509VerifyResult::OK {
+                return Err(CspPeerCertFromStreamError::PeerCertificateNotVerified);
+            }
+
+            let peer_cert = TlsPublicKeyCert::new_from_x509(peer_cert_x509).map_err(|e| {
+                CspPeerCertFromStreamError::PeerCertificateMalformed {
+                    internal_error: e.internal_error,
+                }
+            })?;
+            Ok(Some(peer_cert))
+        },
+    )
 }
 
 #[derive(Debug)]
 enum CspPeerCertFromStreamError {
     PeerCertificateNotVerified,
+    PeerCertificateMalformed { internal_error: String },
 }
 
 impl From<CspPeerCertFromStreamError> for CspTlsClientHandshakeError {
@@ -67,6 +79,11 @@ impl From<CspPeerCertFromStreamError> for CspTlsClientHandshakeError {
                     internal_error: "The server certificate was not verified during the handshake."
                         .to_string(),
                 }
+            }
+            CspPeerCertFromStreamError::PeerCertificateMalformed { internal_error } => {
+                CspTlsClientHandshakeError::MalformedServerCertificate(
+                    CspMalformedPeerCertificateError { internal_error },
+                )
             }
         }
     }
@@ -80,6 +97,11 @@ impl From<CspPeerCertFromStreamError> for CspTlsServerHandshakeError {
                     internal_error: "The client certificate was not verified during the handshake."
                         .to_string(),
                 }
+            }
+            CspPeerCertFromStreamError::PeerCertificateMalformed { internal_error } => {
+                CspTlsServerHandshakeError::MalformedClientCertificate(
+                    CspMalformedPeerCertificateError { internal_error },
+                )
             }
         }
     }
@@ -96,7 +118,8 @@ fn peer_cert_chain_from_stream(
         (None, _) => Ok(None),
         (Some(verified_chain), true) => {
             let cert_chain = CspCertificateChain::try_from(verified_chain)?;
-            ensure_chain_leaf_consistency(&cert_chain, &tls_stream.ssl().peer_certificate())?;
+            let peer_cert = peer_cert_from_stream(&tls_stream)?;
+            ensure_chain_leaf_consistency(&cert_chain, &peer_cert)?;
             Ok(Some(cert_chain))
         }
         (Some(_), false) => Err(CspPeerCertChainFromStreamError::UnverifiedCertChain),
@@ -105,30 +128,14 @@ fn peer_cert_chain_from_stream(
 
 fn ensure_chain_leaf_consistency(
     cert_chain: &CspCertificateChain,
-    peer_cert: &Option<X509>,
+    peer_cert: &Option<TlsPublicKeyCert>,
 ) -> Result<(), CspPeerCertChainFromStreamError> {
     let peer_cert = peer_cert.as_ref().ok_or_else(|| {
         CspPeerCertChainFromStreamError::CertChainLeafInconsistency(
             "missing peer certificate".to_string(),
         )
     })?;
-    let peer_cert_digest = peer_cert.digest(MessageDigest::sha256()).map_err(|e| {
-        CspPeerCertChainFromStreamError::CertChainLeafInconsistency(format!(
-            "failed to create digest for peer cert: {}",
-            e
-        ))
-    })?;
-    let cert_chain_leaf_digest =
-        cert_chain
-            .leaf()
-            .digest(MessageDigest::sha256())
-            .map_err(|e| {
-                CspPeerCertChainFromStreamError::CertChainLeafInconsistency(format!(
-                    "failed to create digest for cert chain leaf: {}",
-                    e
-                ))
-            })?;
-    if *peer_cert_digest != *cert_chain_leaf_digest {
+    if peer_cert != cert_chain.leaf() {
         return Err(CspPeerCertChainFromStreamError::CertChainLeafInconsistency(
             "leaf of peer certificate chain is inconsistent with peer certificate".to_string(),
         ));
@@ -141,6 +148,21 @@ enum CspPeerCertChainFromStreamError {
     UnverifiedCertChain,
     EmptyCertChain,
     CertChainLeafInconsistency(String),
+    PeerCertificateNotVerified,
+    PeerCertificateMalformed(String),
+}
+
+impl From<CspPeerCertFromStreamError> for CspPeerCertChainFromStreamError {
+    fn from(peer_cert_error: CspPeerCertFromStreamError) -> Self {
+        match peer_cert_error {
+            CspPeerCertFromStreamError::PeerCertificateNotVerified => {
+                CspPeerCertChainFromStreamError::PeerCertificateNotVerified
+            }
+            CspPeerCertFromStreamError::PeerCertificateMalformed { internal_error } => {
+                CspPeerCertChainFromStreamError::PeerCertificateMalformed(internal_error)
+            }
+        }
+    }
 }
 
 impl From<CspCertificateChainCreationError> for CspPeerCertChainFromStreamError {
@@ -148,6 +170,9 @@ impl From<CspCertificateChainCreationError> for CspPeerCertChainFromStreamError 
         match cert_chain_creation_error {
             CspCertificateChainCreationError::ChainEmpty => {
                 CspPeerCertChainFromStreamError::EmptyCertChain
+            }
+            CspCertificateChainCreationError::CertificateMalformed { internal_error } => {
+                CspPeerCertChainFromStreamError::PeerCertificateMalformed(internal_error)
             }
         }
     }
@@ -177,6 +202,17 @@ impl From<CspPeerCertChainFromStreamError> for CspTlsServerHandshakeError {
                         internal_error
                     ),
                 }
+            }
+            CspPeerCertChainFromStreamError::PeerCertificateNotVerified => {
+                CspTlsServerHandshakeError::HandshakeError {
+                    internal_error: "The client certificate was not verified during the handshake."
+                        .to_string(),
+                }
+            }
+            CspPeerCertChainFromStreamError::PeerCertificateMalformed(internal_error) => {
+                CspTlsServerHandshakeError::MalformedClientCertificate(
+                    CspMalformedPeerCertificateError { internal_error },
+                )
             }
         }
     }

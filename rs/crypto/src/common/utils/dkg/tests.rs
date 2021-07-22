@@ -5,7 +5,7 @@ use ic_crypto_internal_types::sign::threshold_sig::dkg::encryption_public_key::s
 use ic_crypto_internal_types::sign::threshold_sig::dkg::encryption_public_key::{
     CspEncryptionPublicKey, InternalCspEncryptionPublicKey,
 };
-use ic_test_utilities::types::ids::{node_test_id, subnet_test_id, SUBNET_1};
+use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_types::crypto::dkg::{EncryptionPublicKey, EncryptionPublicKeyPop};
 
 #[test]
@@ -158,50 +158,4 @@ fn csp_enc_pk(content: u8) -> CspEncryptionPublicKey {
 
 fn csp_pop(content: u8) -> CspPop {
     CspPop::Secp256k1(EphemeralPopBytes([content; EphemeralPopBytes::SIZE]))
-}
-
-mod transcript_to_protobuf_conversion {
-    use super::*;
-    use ic_protobuf::registry::subnet::v1::DkgId as protobuf_DkgId;
-
-    const DKG_ID: IDkgId = IDkgId {
-        instance_id: Height::new(1),
-        subnet_id: SUBNET_1,
-    };
-
-    #[test]
-    fn should_correctly_convert_transcript_to_protobuf() {
-        let transcript_bytes = vec![1, 2, 3, 4];
-        let transcript = dkg::Transcript {
-            dkg_id: DKG_ID,
-            committee: vec![Some(node_id(42)), Some(node_id(17))],
-            transcript_bytes: dkg::TranscriptBytes(transcript_bytes.clone()),
-        };
-
-        let protobuf = initial_dkg_transcript_record_from_transcript(transcript);
-
-        assert_eq!(
-            protobuf,
-            InitialDkgTranscriptRecord {
-                id: Some(protobuf_DkgId {
-                    subnet_id: DKG_ID.subnet_id.get().into_vec(),
-                    instance_id: DKG_ID.instance_id.get(),
-                }),
-                committee: vec![node_id(42).get().into_vec(), node_id(17).get().into_vec()],
-                transcript_bytes,
-            }
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "invalid initial DKG transcript")]
-    fn should_panic_on_invalid_initial_dkg_transcript() {
-        let transcript = dkg::Transcript {
-            dkg_id: DKG_ID,
-            committee: vec![Some(node_id(42)), None],
-            transcript_bytes: dkg::TranscriptBytes(vec![1, 2, 3, 4]),
-        };
-
-        let _panic = initial_dkg_transcript_record_from_transcript(transcript);
-    }
 }

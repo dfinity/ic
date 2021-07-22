@@ -44,7 +44,7 @@ fn keys_and_ciphertext_for(
     epoch: Epoch,
     associated_data: &[u8],
     rng: &mut impl RAND,
-) -> (Vec<(PublicKeyWithPop, SecretKey)>, Vec<Vec<isize>>, CRSZ) {
+) -> (Vec<(PublicKeyWithPop, SecretKey)>, Vec<Vec<isize>>, Crsz) {
     let sys = &mk_sys_params();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0u8, 1u8, 0u8, 6u8];
 

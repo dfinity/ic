@@ -1,6 +1,7 @@
 //! Common test fixtures for `XNetPayloadBuilder` tests.
 
 use super::*;
+use ic_base_types::PrincipalId;
 use ic_interfaces::state_manager::CertificationScope;
 use ic_protobuf::registry::{
     node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
@@ -8,7 +9,7 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
-use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_LIST_KEY};
+use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
 use ic_replicated_state::{ReplicatedState, Stream};
 use ic_test_utilities::{
     mock_time,
@@ -16,8 +17,8 @@ use ic_test_utilities::{
     state_manager::FakeStateManager,
     types::{
         ids::{
-            canister_test_id, node_test_id, subnet_test_id, NODE_1, NODE_2, NODE_3, NODE_4, NODE_5,
-            NODE_6, NODE_7, SUBNET_0, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5,
+            canister_test_id, node_test_id, subnet_test_id, NODE_1, NODE_2, NODE_3, NODE_4,
+            SUBNET_0, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5,
         },
         messages::RequestBuilder,
     },
@@ -36,19 +37,21 @@ pub(crate) const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(169);
 pub(crate) const LOCAL_SUBNET: SubnetId = SUBNET_0;
 pub(crate) const LOCAL_NODE: NodeId = NODE_1;
 
+pub(crate) const REMOTE_SUBNET: SubnetId = SUBNET_1;
+
 pub(crate) const SRC_CANISTER: u64 = 2;
 pub(crate) const DST_CANISTER: u64 = 3;
 pub(crate) const CALLBACK_ID: u64 = 4;
 
 pub(crate) const PAYLOAD_BYTES_LIMIT: NumBytes = NumBytes::new(POOL_SLICE_BYTE_SIZE_MAX as u64);
 
-pub(crate) const REMOTE_NODE_1_NO_1: NodeId = NODE_1;
-pub(crate) const REMOTE_NODE_2_NO_1: NodeId = NODE_2;
-pub(crate) const REMOTE_NODE_3_NO_2: NodeId = NODE_3;
-pub(crate) const REMOTE_NODE_4_NO_2: NodeId = NODE_4;
-pub(crate) const LOCAL_NODE_NO_1: NodeId = NODE_5;
-pub(crate) const LOCAL_NODE_NO_2: NodeId = NODE_6;
-pub(crate) const LOCAL_NODE_NO_3: NodeId = NODE_7;
+pub(crate) const LOCAL_NODE_1_OPERATOR_1: NodeId = NODE_1;
+pub(crate) const REMOTE_NODE_1_OPERATOR_1: NodeId = NODE_2;
+pub(crate) const REMOTE_NODE_2_OPERATOR_1: NodeId = NODE_3;
+pub(crate) const REMOTE_NODE_3_OPERATOR_2: NodeId = NODE_4;
+
+pub(crate) const OPERATOR_1: PrincipalId = PrincipalId::new(1, [1; 29]);
+pub(crate) const OPERATOR_2: PrincipalId = PrincipalId::new(1, [2; 29]);
 
 /// Generates a valid combination of `ReplicatedState` and `XNetPayloads` and
 /// the expected message and signal indices for each subnet.
@@ -212,10 +215,7 @@ pub(crate) fn generate_stream(config: &StreamConfig) -> Stream {
         messages.push(message.clone().into());
     }
 
-    Stream {
-        messages,
-        signals_end: config.signal_end.into(),
-    }
+    Stream::new(messages, config.signal_end.into())
 }
 
 /// Generates a `ValidationContext` at `REGISTRY_VERSION` and
@@ -306,7 +306,7 @@ pub(crate) fn get_registry_and_urls_for_test(
     // Add lists of subnets.
     data_provider
         .add(
-            SUBNET_LIST_KEY,
+            make_subnet_list_record_key().as_str(),
             REGISTRY_VERSION,
             Some(SubnetListRecord { subnets }),
         )
@@ -339,7 +339,7 @@ fn add_node_record_with_node_operator_id(
     data_provider: &ProtoRegistryDataProvider,
     node_id: NodeId,
     node_ip: String,
-    node_operator_id: Vec<u8>,
+    node_operator_id: PrincipalId,
 ) {
     let xnet_endpoint = ConnectionEndpoint {
         ip_addr: node_ip,
@@ -354,7 +354,7 @@ fn add_node_record_with_node_operator_id(
             Some(NodeRecord {
                 xnet: Some(xnet_endpoint.clone()),
                 xnet_api: vec![xnet_endpoint],
-                node_operator_id,
+                node_operator_id: node_operator_id.to_vec(),
                 ..Default::default()
             }),
         )
@@ -378,79 +378,76 @@ fn add_subnet_record(
         .expect("Could not add subnet record.");
 }
 
-/// Creates a registry to be used with the `xnet_endpoint_url` tests. The
-/// setting is the following. There is one subnet with `subnet_test_id(1)` with
-/// three nodes `LOCAL_NODE_NO_1`, `LOCAL_NODE_NO_2`, `LOCAL_NODE_NO_3` and one
-/// subnet with `subnet_test_id(2)` with four nodes: `REMOTE_NODE_1_NO_1`,
-/// `REMOTE_NODE_2_NO_1`, `REMOTE_NODE_3_NO_2`, `REMOTE_NODE_4_NO_2`, where the
-/// `NO_X` postfix indicates in which node operator they are under.
+/// Creates a registry to be used with the `xnet_endpoint_url` tests. The setup
+/// is as follows:
+/// * `LOCAL_SUBNET` consisting of `LOCAL_NODE_1_OPERATOR_1` (operated by node
+///   operator 1); and
+/// * `REMOTE_SUBNET` consisting of 3 nodes: `LOCAL_NODE_1_OPERATOR_1` and
+///   `LOCAL_NODE_2_OPERATOR_1` (both operated by node operator 1) and
+///   `LOCAL_NODE_3_OPERATOR_2` (operated by node operator 2).
 pub(crate) fn create_xnet_endpoint_url_test_fixture() -> Arc<RegistryClientImpl> {
     let data_provider = ProtoRegistryDataProvider::new();
 
     add_node_record_with_node_operator_id(
         &data_provider,
-        LOCAL_NODE_NO_1,
+        LOCAL_NODE_1_OPERATOR_1,
         "192.168.0.1".to_string(),
-        vec![1],
+        OPERATOR_1,
+    );
+    add_subnet_record(&data_provider, LOCAL_SUBNET, vec![LOCAL_NODE_1_OPERATOR_1]);
+
+    add_node_record_with_node_operator_id(
+        &data_provider,
+        REMOTE_NODE_1_OPERATOR_1,
+        "192.168.1.1".to_string(),
+        OPERATOR_1,
     );
     add_node_record_with_node_operator_id(
         &data_provider,
-        LOCAL_NODE_NO_2,
-        "192.168.0.2".to_string(),
-        vec![2],
+        REMOTE_NODE_2_OPERATOR_1,
+        "192.168.1.2".to_string(),
+        OPERATOR_1,
     );
     add_node_record_with_node_operator_id(
         &data_provider,
-        LOCAL_NODE_NO_3,
-        "192.168.0.3".to_string(),
-        vec![3],
+        REMOTE_NODE_3_OPERATOR_2,
+        "192.168.1.3".to_string(),
+        OPERATOR_2,
     );
     add_subnet_record(
         &data_provider,
-        subnet_test_id(1),
-        vec![LOCAL_NODE_NO_1, LOCAL_NODE_NO_2, LOCAL_NODE_NO_3],
-    );
-
-    add_node_record_with_node_operator_id(
-        &data_provider,
-        REMOTE_NODE_1_NO_1,
-        "192.168.0.4".to_string(),
-        vec![1],
-    );
-
-    add_node_record_with_node_operator_id(
-        &data_provider,
-        REMOTE_NODE_2_NO_1,
-        "192.168.0.5".to_string(),
-        vec![1],
-    );
-
-    add_node_record_with_node_operator_id(
-        &data_provider,
-        REMOTE_NODE_3_NO_2,
-        "192.168.0.6".to_string(),
-        vec![2],
-    );
-
-    add_node_record_with_node_operator_id(
-        &data_provider,
-        REMOTE_NODE_4_NO_2,
-        "192.168.0.7".to_string(),
-        vec![2],
-    );
-
-    add_subnet_record(
-        &data_provider,
-        subnet_test_id(2),
+        REMOTE_SUBNET,
         vec![
-            REMOTE_NODE_1_NO_1,
-            REMOTE_NODE_2_NO_1,
-            REMOTE_NODE_3_NO_2,
-            REMOTE_NODE_4_NO_2,
+            REMOTE_NODE_1_OPERATOR_1,
+            REMOTE_NODE_2_OPERATOR_1,
+            REMOTE_NODE_3_OPERATOR_2,
         ],
     );
 
     let registry_client = RegistryClientImpl::new(Arc::new(data_provider), None);
     registry_client.fetch_and_start_polling().unwrap();
     Arc::new(registry_client)
+}
+
+/// Returns a mock `GenRangeFn` that for a given `gen_range(low, high)` call
+/// returns `low + numerator * (high - low) / denominator` while ensuring that
+/// `denominator` divides `high - low` exactly.
+pub fn mock_gen_range_low(numerator: u64, denominator: u64) -> GenRangeFn {
+    mock_gen_range(numerator, denominator, 0)
+}
+
+/// Returns a mock `GenRangeFn` that for a given `gen_range(low, high)` call
+/// returns `low + numerator * (high - low) / denominator - 1` while ensuring
+/// that `denominator` divides `high - low` exactly.
+pub fn mock_gen_range_high(numerator: u64, denominator: u64) -> GenRangeFn {
+    mock_gen_range(numerator, denominator, 1)
+}
+
+fn mock_gen_range(numerator: u64, denominator: u64, offset: u64) -> GenRangeFn {
+    Box::new(move |low, high| {
+        // Ensure that `high - low` is a multiple of `denominator`.
+        assert_eq!(0, (high - low) % denominator);
+
+        low + (high - low) / denominator * numerator - offset
+    })
 }

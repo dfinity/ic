@@ -158,7 +158,7 @@ impl SendQueue for SendQueueImpl {
             .with_label_values(&[&self.flow_label, &self.flow_tag])
             .inc_by(message.0.len() as u64);
 
-        let mut channel_ends = self.channel_ends.lock().unwrap();
+        let channel_ends = self.channel_ends.lock().unwrap();
         match channel_ends.0.try_send((Instant::now(), message)) {
             Ok(_) => None,
             Err(TrySendError::Full((_, unsent))) => {

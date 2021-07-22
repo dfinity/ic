@@ -52,6 +52,8 @@ impl ErrorReplication for CryptoError {
                 },
                 // may be a transient error
                 RegistryClientError::PollLockFailed { .. } => false,
+                // may be transient errors
+                RegistryClientError::PollingLatestVersionFailed { .. } => false,
             },
             // true, as the registry is guaranteed to be consistent across replicas
             CryptoError::DkgTranscriptNotFound { .. } => true,
@@ -86,6 +88,8 @@ impl ErrorReplication for DkgVerifyDealingError {
                     },
                     // may be a transient error
                     RegistryClientError::PollLockFailed { .. } => false,
+                    // may be transient errors
+                    RegistryClientError::PollingLatestVersionFailed { .. } => false,
                 }
             }
             DkgVerifyDealingError::MalformedFsEncryptionPublicKey(_) => {

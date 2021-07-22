@@ -44,9 +44,3 @@ pub enum PersistenceType {
     Sigsegv,
     Pagemap,
 }
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EmbedderType {
-    Wasmtime,
-}

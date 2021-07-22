@@ -83,22 +83,6 @@ pub fn update_methods_authz(methods_authz_change: Vec<MethodAuthzChange>, log_pr
     }
 }
 
-/// Checks that the caller (as returned by dfn_core::api::caller()) is
-/// authorized to access the given method.
-///
-/// To reduce boilerplate this additionally add the log trace indicating that
-/// the method was called.
-pub fn check_caller_authz_and_log(method_name: &str, log_prefix: &str) {
-    let principal = caller();
-    println!("{}call: {} from: {}", log_prefix, method_name, principal);
-    if !is_authorized(method_name, principal) {
-        panic!(
-            "{}Principal: {} is not authorized to call this method: {}",
-            log_prefix, principal, method_name
-        );
-    }
-}
-
 /// Checks whether the given principal has access to the given method.
 pub fn is_authorized(method_name: &str, principal_id: PrincipalId) -> bool {
     let authz = AUTHZ_MAP.read().unwrap();

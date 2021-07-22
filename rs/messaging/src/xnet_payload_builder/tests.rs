@@ -14,7 +14,6 @@ use ic_test_utilities::{
         HistogramStats, MetricVec,
     },
     state_manager::{FakeStateManager, MockStateManager},
-    types::ids::subnet_test_id,
     types::ids::{SUBNET_1, SUBNET_2},
     with_test_replica_logger,
 };
@@ -50,73 +49,61 @@ async fn build_payload_no_subnets() {
     });
 }
 
-fn resolve_xnet_endpoint_url(local_node: NodeId, log: ReplicaLogger) -> NodeId {
+/// Creates an `XNetEndpointResolver` around a `ProximityMap` that resolves to
+/// the remote node of the given index; and calls `xnet_endpoint_url()` on it.
+fn resolve_xnet_endpoint(remote_node_index: u64, log: ReplicaLogger) -> EndpointLocator {
     let registry = create_xnet_endpoint_url_test_fixture();
+    let metrics = MetricsRegistry::new();
 
-    let endpoint_resolver = XNetEndpointResolver::new(registry, local_node, subnet_test_id(1), log);
+    let proximity_map = Arc::new(ProximityMap::with_rng(
+        mock_gen_range_low(remote_node_index, 3),
+        LOCAL_NODE,
+        registry.clone(),
+        &metrics,
+        log.clone(),
+    ));
+    let endpoint_resolver = XNetEndpointResolver::new(
+        registry,
+        LOCAL_NODE_1_OPERATOR_1,
+        LOCAL_SUBNET,
+        proximity_map,
+        log,
+    );
 
     endpoint_resolver
-        .xnet_endpoint_url(subnet_test_id(2), 0.into(), 0.into(), 1000)
+        .xnet_endpoint_url(REMOTE_SUBNET, 1.into(), 2.into(), 1000)
         .unwrap()
-        .node_id
 }
 
 #[tokio::test]
-async fn xnet_endpoint_url_node_in_node_operator_1() {
+async fn xnet_endpoint_url_node_same_operator() {
     with_test_replica_logger(|log| {
-        let expected = vec![REMOTE_NODE_1_NO_1, REMOTE_NODE_2_NO_1];
-
-        for _ in 0..10 {
-            let res = resolve_xnet_endpoint_url(LOCAL_NODE_NO_1, log.clone());
-
-            assert!(
-                expected.contains(&res),
-                "Expected one of {:?}, got {:?}",
-                expected,
-                res
-            );
-        }
+        assert_eq!(
+            EndpointLocator {
+                node_id: REMOTE_NODE_1_OPERATOR_1,
+                url: "http://gfvbo-licaa-aaaaa-aaaap-2ai.169@192.168.1.1:2197/api/v1/stream/fscpm-uiaaa-aaaaa-aaaap-yai?msg_begin=2&witness_begin=1&byte_limit=1000"
+                    .parse::<Uri>()
+                    .unwrap(),
+                proximity: PeerLocation::Local
+            },
+            resolve_xnet_endpoint(0, log)
+        );
     });
 }
 
 #[tokio::test]
-async fn xnet_endpoint_url_node_in_node_operator_2() {
+async fn xnet_endpoint_url_node_other_operator() {
     with_test_replica_logger(|log| {
-        let expected = vec![REMOTE_NODE_3_NO_2, REMOTE_NODE_4_NO_2];
-
-        for _ in 0..10 {
-            let res = resolve_xnet_endpoint_url(LOCAL_NODE_NO_2, log.clone());
-
-            assert!(
-                expected.contains(&res),
-                "Expected one of {:?}, got {:?}",
-                expected,
-                res
-            );
-        }
-    });
-}
-
-#[tokio::test]
-async fn xnet_endpoint_url_node_in_node_operator_3() {
-    with_test_replica_logger(|log| {
-        let expected = vec![
-            REMOTE_NODE_1_NO_1,
-            REMOTE_NODE_2_NO_1,
-            REMOTE_NODE_3_NO_2,
-            REMOTE_NODE_4_NO_2,
-        ];
-
-        for _ in 0..10 {
-            let res = resolve_xnet_endpoint_url(LOCAL_NODE_NO_3, log.clone());
-
-            assert!(
-                expected.contains(&res),
-                "Expected one of {:?}, got {:?}",
-                expected,
-                res
-            );
-        }
+        assert_eq!(
+            EndpointLocator {
+                node_id: REMOTE_NODE_3_OPERATOR_2,
+                url: "http://hr2go-2qeaa-aaaaa-aaaap-2ai.169@192.168.1.3:2197/api/v1/stream/fscpm-uiaaa-aaaaa-aaaap-yai?msg_begin=2&witness_begin=1&byte_limit=1000"
+                    .parse::<Uri>()
+                    .unwrap(),
+                proximity: PeerLocation::Remote
+            },
+            resolve_xnet_endpoint(2, log)
+        );
     });
 }
 
@@ -435,27 +422,6 @@ impl PayloadBuilderTestFixture {
             Arc::clone(&self.state_manager) as Arc<_>,
             Arc::clone(&self.state_manager) as Arc<_>,
             Arc::clone(&self.tls_handshake) as Arc<_>,
-            Arc::clone(&self.registry) as Arc<_>,
-            tokio::runtime::Handle::current(),
-            LOCAL_NODE,
-            LOCAL_SUBNET,
-            &self.metrics,
-            log,
-        )
-    }
-
-    /// Constructs an `XNetPayloadBuilderImpl` using the provided `XNetClient`
-    /// and the fixture's `state_manager`, `registry` and `metrics`.
-    #[allow(dead_code)]
-    pub fn new_xnet_payload_builder_with_xnet_client(
-        &self,
-        xnet_client: Arc<dyn XNetClient>,
-        log: ReplicaLogger,
-    ) -> XNetPayloadBuilderImpl {
-        XNetPayloadBuilderImpl::with_xnet_client(
-            xnet_client,
-            Arc::clone(&self.state_manager) as Arc<_>,
-            Arc::clone(&self.state_manager) as Arc<_>,
             Arc::clone(&self.registry) as Arc<_>,
             tokio::runtime::Handle::current(),
             LOCAL_NODE,

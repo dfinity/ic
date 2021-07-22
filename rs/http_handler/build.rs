@@ -27,6 +27,7 @@ struct Dashboard<'a> {{
     replicated_state: &'a ic_replicated_state::replicated_state::ReplicatedState,
     canisters: &'a Vec<&'a ic_replicated_state::CanisterState>,
     cow_memory_manager_enabled: bool,
+    replica_version: ic_types::ReplicaVersion,
 }}
     "#,
             std::fs::read_to_string("templates/dashboard.html").unwrap()

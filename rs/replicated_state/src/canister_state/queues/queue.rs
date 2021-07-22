@@ -2,14 +2,17 @@ use crate::StateError;
 
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
+use ic_types::CountBytes;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
     QueueIndex,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
-use std::convert::{From, TryFrom, TryInto};
-use std::sync::Arc;
+use std::{
+    collections::VecDeque,
+    convert::{From, TryFrom, TryInto},
+    mem::size_of,
+    sync::Arc,
+};
 
 fn pop_queue<T: std::clone::Clone>(queue: &mut VecDeque<Arc<T>>) -> Option<T> {
     // If there's only one reference to the ref-counted value, we extract it
@@ -31,22 +34,28 @@ fn pop_queue<T: std::clone::Clone>(queue: &mut VecDeque<Arc<T>>) -> Option<T> {
 ///
 /// Stores items inside an `Arc` making it cheaper to copy the queue for
 /// creating snapshots.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct QueueWithReservation<T: std::clone::Clone> {
     queue: VecDeque<Arc<T>>,
-    // Maximum number of messages allowed in the `queue` above.
+    /// Maximum number of messages allowed in the `queue` above.
     capacity: usize,
-    // Number of slots in the above `queue` currently reserved.  A slot must
-    // first be reserved before it can be pushed to which consumes it.
+    /// Number of slots in the above `queue` currently reserved.  A slot must
+    /// first be reserved before it can be pushed to which consumes it.
     num_slots_reserved: usize,
+    /// Estimated size in bytes.
+    size_bytes: usize,
 }
 
-impl<T: std::clone::Clone> QueueWithReservation<T> {
+impl<T: std::clone::Clone + CountBytes> QueueWithReservation<T> {
     fn new(capacity: usize) -> Self {
+        let queue = VecDeque::new();
+        let size_bytes = Self::size_bytes(&queue);
+
         Self {
-            queue: VecDeque::new(),
+            queue,
             capacity,
             num_slots_reserved: 0,
+            size_bytes,
         }
     }
 
@@ -74,7 +83,9 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
         if let Err(e) = self.check_has_slot() {
             return Err((e, msg));
         }
+        self.size_bytes += Self::message_size_bytes(&msg);
         self.queue.push_back(Arc::new(msg));
+        debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
         Ok(())
     }
 
@@ -83,7 +94,9 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
     fn push_into_reserved_slot(&mut self, msg: T) -> Result<(), (StateError, T)> {
         if self.num_slots_reserved > 0 {
             self.num_slots_reserved -= 1;
+            self.size_bytes += Self::message_size_bytes(&msg);
             self.queue.push_back(Arc::new(msg));
+            debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
             Ok(())
         } else {
             Err((StateError::QueueFull { capacity: 0 }, msg))
@@ -92,21 +105,46 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
 
     /// Pops an item off the tail of the queue or `None` if the queue is empty.
     fn pop(&mut self) -> Option<T> {
-        pop_queue(&mut self.queue)
+        let res = pop_queue(&mut self.queue);
+        if let Some(msg) = res.as_ref() {
+            self.size_bytes -= Self::message_size_bytes(&msg);
+            debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
+        }
+        res
     }
 
     /// Returns an Arc<item> at the head of the queue or `None` if the queue is
     /// empty.
     fn peek(&self) -> Option<Arc<T>> {
-        match self.queue.front() {
-            None => None,
-            Some(msg) => Some(Arc::clone(msg)),
-        }
+        self.queue.front().map(|msg| Arc::clone(msg))
     }
 
     /// Number of actual messages in the queue.
     fn num_messages(&self) -> usize {
         self.queue.len()
+    }
+
+    /// Calculates the size in bytes of a `QueueWithReservation` holding the
+    /// given items.
+    ///
+    /// Time complexity: O(num_messages).
+    fn size_bytes(queue: &VecDeque<Arc<T>>) -> usize {
+        size_of::<Self>()
+            + queue
+                .iter()
+                .map(|m| Self::message_size_bytes(m))
+                .sum::<usize>()
+    }
+
+    /// Returns an estimate of the size of a message in bytes.
+    pub(super) fn message_size_bytes(msg: &T) -> usize {
+        size_of::<Arc<T>>() + msg.count_bytes()
+    }
+}
+
+impl CountBytes for QueueWithReservation<RequestOrResponse> {
+    fn count_bytes(&self) -> usize {
+        self.size_bytes
     }
 }
 
@@ -136,14 +174,18 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<RequestOrResp
             )));
         }
 
+        let queue = item
+            .queue
+            .into_iter()
+            .map(|rr| rr.try_into().map(Arc::new))
+            .collect::<Result<VecDeque<_>, _>>()?;
+        let size_bytes = Self::size_bytes(&queue);
+
         Ok(QueueWithReservation {
-            queue: item
-                .queue
-                .into_iter()
-                .map(|rr| rr.try_into().map(Arc::new))
-                .collect::<Result<VecDeque<_>, _>>()?,
+            queue,
             capacity: super::DEFAULT_QUEUE_CAPACITY,
             num_slots_reserved: item.num_slots_reserved as usize,
+            size_bytes,
         })
     }
 }
@@ -153,7 +195,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<RequestOrResp
 /// used effectively as a sequence number for the next message that the queue
 /// expects.  The queue will refuse to insert a message that was not presented
 /// with the expected sequence number.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) struct InputQueue {
     queue: QueueWithReservation<RequestOrResponse>,
     ind: QueueIndex,
@@ -199,9 +241,21 @@ impl InputQueue {
         self.queue.pop()
     }
 
-    /// Number of actual messages in the queue
+    /// Returns the number of actual messages in the queue.
     pub(super) fn num_messages(&self) -> usize {
         self.queue.num_messages()
+    }
+
+    /// Returns an estimate of the size of a message in bytes.
+    pub(super) fn message_size_bytes(msg: &RequestOrResponse) -> usize {
+        QueueWithReservation::message_size_bytes(msg)
+    }
+}
+
+impl CountBytes for InputQueue {
+    fn count_bytes(&self) -> usize {
+        size_of::<Self>() - size_of::<QueueWithReservation<RequestOrResponse>>()
+            + self.queue.count_bytes()
     }
 }
 
@@ -231,7 +285,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
 /// on the number of messages it can store.  There is also a `QueueIndex` which
 /// can be used effectively as a sequence number for the next message popped out
 /// of the queue.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct OutputQueue {
     queue: QueueWithReservation<RequestOrResponse>,
     ind: QueueIndex,
@@ -329,18 +383,28 @@ impl TryFrom<pb_queues::InputOutputQueue> for OutputQueue {
 
 /// Representation of the Ingress queue.  There is no upper bound on
 /// the number of messages it can store.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) struct IngressQueue {
     queue: VecDeque<Arc<Ingress>>,
+
+    /// Estimated size in bytes.
+    size_bytes: usize,
 }
 
 impl IngressQueue {
     pub(super) fn push(&mut self, msg: Ingress) {
+        self.size_bytes += Self::ingress_size_bytes(&msg);
         self.queue.push_back(Arc::new(msg));
+        debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
     }
 
     pub(super) fn pop(&mut self) -> Option<Ingress> {
-        pop_queue(&mut self.queue)
+        let res = pop_queue(&mut self.queue);
+        if let Some(msg) = res.as_ref() {
+            self.size_bytes -= Self::ingress_size_bytes(&msg);
+            debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
+        }
+        res
     }
 
     pub(super) fn size(&self) -> usize {
@@ -351,13 +415,48 @@ impl IngressQueue {
         self.size() == 0
     }
 
-    /// Call the `filter` on each ingress message in the queue.  Retain the
-    /// messages for whom the filter returns `true` and drop the rest.
+    /// Calls `filter` on each ingress message in the queue, retaining the
+    /// messages for whom the filter returns `true` and dropping the rest.
     pub(super) fn filter_messages<F>(&mut self, filter: F)
     where
         F: FnMut(&Arc<Ingress>) -> bool,
     {
-        self.queue.retain(filter)
+        self.queue.retain(filter);
+        self.size_bytes = Self::size_bytes(&self.queue)
+    }
+
+    /// Calculates the size in bytes of an `IngressQueue` holding the given
+    /// ingress messages.
+    ///
+    /// Time complexity: O(num_messages).
+    fn size_bytes(queue: &VecDeque<Arc<Ingress>>) -> usize {
+        size_of::<Self>()
+            + queue
+                .iter()
+                .map(|i| Self::ingress_size_bytes(i))
+                .sum::<usize>()
+    }
+
+    /// Returns an estimate of the size of an ingress message in bytes.
+    fn ingress_size_bytes(msg: &Ingress) -> usize {
+        size_of::<Arc<Ingress>>() + msg.count_bytes()
+    }
+}
+
+impl Default for IngressQueue {
+    fn default() -> Self {
+        let queue = Default::default();
+        let size_bytes = Self::size_bytes(&queue);
+        Self { queue, size_bytes }
+    }
+}
+
+impl CountBytes for IngressQueue {
+    /// Estimate of the queue size in bytes, including metadata.
+    ///
+    /// Time complexity: O(num_messages).
+    fn count_bytes(&self) -> usize {
+        self.size_bytes
     }
 }
 
@@ -371,12 +470,13 @@ impl TryFrom<Vec<pb_ingress::Ingress>> for IngressQueue {
     type Error = ProxyDecodeError;
 
     fn try_from(item: Vec<pb_ingress::Ingress>) -> Result<Self, Self::Error> {
-        Ok(IngressQueue {
-            queue: item
-                .into_iter()
-                .map(|i| i.try_into().map(Arc::new))
-                .collect::<Result<VecDeque<_>, _>>()?,
-        })
+        let queue = item
+            .into_iter()
+            .map(|i| i.try_into().map(Arc::new))
+            .collect::<Result<VecDeque<_>, _>>()?;
+        let size_bytes = Self::size_bytes(&queue);
+
+        Ok(IngressQueue { queue, size_bytes })
     }
 }
 

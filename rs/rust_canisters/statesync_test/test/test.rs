@@ -15,7 +15,7 @@ fn test_statesync_test_canisters() {
         println!("Installed statesync test canister");
 
         let mut res: Result<u8, String> = canister
-            .query_("read_state", dfn_json::json, 0 as usize)
+            .query_("read_state", dfn_json::json, 0_usize)
             .await
             .unwrap();
         assert_eq!(
@@ -26,7 +26,7 @@ fn test_statesync_test_canisters() {
         );
 
         res = canister
-            .update_("change_state", dfn_json::json, 33 as u32)
+            .update_("change_state", dfn_json::json, 33_u32)
             .await
             .unwrap();
         assert_eq!(
@@ -37,7 +37,7 @@ fn test_statesync_test_canisters() {
         );
 
         res = canister
-            .query_("read_state", dfn_json::json, 0 as usize)
+            .query_("read_state", dfn_json::json, 0_usize)
             .await
             .unwrap();
         assert_eq!(

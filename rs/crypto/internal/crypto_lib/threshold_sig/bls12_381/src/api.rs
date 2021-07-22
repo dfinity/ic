@@ -50,7 +50,7 @@ use ic_types::{
     crypto::{AlgorithmId, CryptoError, CryptoResult},
     NodeIndex, NumberOfNodes, Randomness,
 };
-use simple_asn1::{oid, ASN1Block, BigUint, OID};
+use simple_asn1::{oid, ASN1Block};
 use std::convert::{TryFrom, TryInto};
 
 pub mod dkg_errors;

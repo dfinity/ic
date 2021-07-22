@@ -32,9 +32,6 @@ mod canister_sig;
 mod multi_sig;
 mod threshold_sig;
 
-// TODO (CRP-689): remove the multi threading tests.
-#[cfg(test)]
-mod multi_threading_tests;
 #[cfg(test)]
 mod tests;
 // TODO: Remove this indirection:

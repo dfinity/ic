@@ -10,7 +10,7 @@ use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_common::values::deserialize_registry_value;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_node_record_key, make_replica_version_key,
-    make_subnet_record_key, ROOT_SUBNET_ID_KEY, SUBNET_LIST_KEY,
+    make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_types::{Height, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
@@ -303,7 +303,7 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         version: RegistryVersion,
     ) -> RegistryClientResult<ReplicaVersionRecord> {
         let bytes = self.get_value(&make_replica_version_key(replica_version_id), version);
-        Ok(deserialize_registry_value::<ReplicaVersionRecord>(bytes)?)
+        deserialize_registry_value::<ReplicaVersionRecord>(bytes)
     }
 
     fn get_subnet_record_registry_version(
@@ -390,7 +390,7 @@ pub trait SubnetListRegistry {
 
 impl<T: RegistryClient + ?Sized> SubnetListRegistry for T {
     fn get_subnet_ids(&self, version: RegistryVersion) -> RegistryClientResult<Vec<SubnetId>> {
-        let bytes = self.get_value(SUBNET_LIST_KEY, version);
+        let bytes = self.get_value(make_subnet_list_record_key().as_str(), version);
         Ok(
             deserialize_registry_value::<SubnetListRecord>(bytes)?.map(|subnet| {
                 subnet
@@ -485,12 +485,13 @@ mod tests {
         let subnet_id = subnet_id(4);
         let version = RegistryVersion::from(2);
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        let mut subnet_record = SubnetRecord::default();
-
-        subnet_record.membership = vec![
-            node_id(32u64).get().into_vec(),
-            node_id(33u64).get().into_vec(),
-        ];
+        let subnet_record = SubnetRecord {
+            membership: vec![
+                node_id(32u64).get().into_vec(),
+                node_id(33u64).get().into_vec(),
+            ],
+            ..Default::default()
+        };
         data_provider
             .add(
                 &make_subnet_record_key(subnet_id),
@@ -517,9 +518,10 @@ mod tests {
         let mut subnet_record = SubnetRecord::default();
 
         let replica_version = ReplicaVersion::try_from("some_version").unwrap();
-        let mut replica_version_record = ReplicaVersionRecord::default();
-
-        replica_version_record.binary_url = "http://some.url".to_string();
+        let replica_version_record = ReplicaVersionRecord {
+            binary_url: "http://some.url".to_string(),
+            ..Default::default()
+        };
         subnet_record.replica_version_id = String::from(&replica_version);
         data_provider
             .add(

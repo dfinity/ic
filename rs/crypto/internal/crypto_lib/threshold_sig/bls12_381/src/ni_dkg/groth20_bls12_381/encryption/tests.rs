@@ -45,7 +45,7 @@ fn epoch_of_a_new_key_should_be_zero() {
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 3u8, 0u8, 6u8];
     let key_set =
         create_forward_secure_key_pair(Randomness::from([12u8; 32]), KEY_GEN_ASSOCIATED_DATA);
-    let epoch = epoch_from_miracl_secret_key(&secret_key_into_miracl(&key_set.secret_key));
+    let epoch = epoch_from_miracl_secret_key(&trusted_secret_key_into_miracl(&key_set.secret_key));
     assert_eq!(epoch.get(), 0);
 }
 
@@ -58,7 +58,8 @@ fn single_stepping_a_key_should_increment_current_epoch() {
         let secret_key_epoch = Epoch::from(epoch);
         secret_key =
             update_forward_secure_epoch(&secret_key, secret_key_epoch, Randomness::from([9u8; 32]));
-        let key_epoch = epoch_from_miracl_secret_key(&secret_key_into_miracl(&secret_key)).get();
+        let key_epoch =
+            epoch_from_miracl_secret_key(&trusted_secret_key_into_miracl(&secret_key)).get();
         assert_eq!(
             key_epoch, epoch,
             "Deleted epoch {} but key epoch is {}\n  {:?}",

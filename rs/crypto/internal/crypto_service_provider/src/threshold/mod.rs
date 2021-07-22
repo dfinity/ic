@@ -72,7 +72,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> ThresholdSignatureCspClient for Csp<
     ) -> Result<CspSignature, CspThresholdSignError> {
         match algorithm_id {
             AlgorithmId::ThresBls12_381 => {
-                let csp_key = self.sks_read_lock().get(&key_id).ok_or_else(|| {
+                let csp_key = self.sks_read_lock().get(&key_id).ok_or({
                     CspThresholdSignError::SecretKeyNotFound {
                         algorithm: AlgorithmId::ThresBls12_381,
                         key_id,
@@ -115,6 +115,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> ThresholdSignatureCspClient for Csp<
                     .iter()
                     .map(|csp_signature_maybe| {
                         csp_signature_maybe
+                            .clone()
                             .map(clib::types::IndividualSignatureBytes::try_from)
                             .transpose()
                     })

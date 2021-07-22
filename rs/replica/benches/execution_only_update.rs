@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_config::{
-    execution_environment::Config as ExecutionConfig, scheduler::Config as SchedulerConfig,
-    state_manager::Config as StateManagerConfig, subnet_config::SubnetConfigs,
+    execution_environment::Config as ExecutionConfig, state_manager::Config as StateManagerConfig,
+    subnet_config::SubnetConfigs,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::{setup_execution, IngressHistoryReaderImpl};
@@ -167,12 +167,12 @@ fn criterion_calls(criterion: &mut Criterion) {
     let bench_replica = BenchReplica::new();
     let mut id: u64 = 0;
 
-    let scheduler_config = SchedulerConfig::default();
     let registry = Arc::new(MockRegistryClient::new());
 
     let subnet_type = SubnetType::Application;
+    let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
     let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-        scheduler_config.max_instructions_per_message,
+        subnet_config.scheduler_config.max_instructions_per_message,
         ExecutionConfig::default().max_cycles_per_canister,
         subnet_type,
         bench_replica.replica_config.subnet_id,
@@ -181,17 +181,16 @@ fn criterion_calls(criterion: &mut Criterion) {
             .cycles_account_manager_config,
     ));
 
-    let (exec_env, ingress_history_writer, _) = setup_execution(
+    let (_, ingress_history_writer, _, scheduler) = setup_execution(
         bench_replica.log.clone(),
         &bench_replica.metrics_registry,
         bench_replica.replica_config.subnet_id,
         subnet_type,
-        scheduler_config.scheduler_cores,
+        subnet_config.scheduler_config,
         ExecutionConfig::default(),
         Arc::clone(&cycles_account_manager),
     );
 
-    let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
     let tmpdir = tempfile::Builder::new()
         .prefix("ic_config")
         .tempdir()
@@ -215,11 +214,9 @@ fn criterion_calls(criterion: &mut Criterion) {
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&ingress_history_writer) as Arc<_>,
-        Arc::clone(&exec_env) as Arc<_>,
+        scheduler,
         cycles_account_manager,
-        subnet_config.scheduler_config,
         bench_replica.replica_config.subnet_id,
-        subnet_type,
         &bench_replica.metrics_registry,
         bench_replica.log.clone(),
         registry,
@@ -228,7 +225,7 @@ fn criterion_calls(criterion: &mut Criterion) {
     struct BenchData {
         message_id: MessageId,
         signed_ingress: SignedIngress,
-    };
+    }
 
     bench_replica.install(&message_routing, &ingress_hist_reader);
 

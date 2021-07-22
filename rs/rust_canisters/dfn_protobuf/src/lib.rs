@@ -30,7 +30,7 @@ where
 pub trait ToProto: Sized {
     type Proto: Message + Default;
     fn from_proto(_: Self::Proto) -> Result<Self, String>;
-    fn to_proto(self) -> Self::Proto;
+    fn into_proto(self) -> Self::Proto;
 }
 
 impl<Type: Message + Default> ToProto for Type {
@@ -40,7 +40,7 @@ impl<Type: Message + Default> ToProto for Type {
         Ok(pt)
     }
 
-    fn to_proto(self) -> Self::Proto {
+    fn into_proto(self) -> Self::Proto {
         self
     }
 }
@@ -54,7 +54,7 @@ impl<Type: ToProto> FromWire for ProtoBuf<Type> {
 
 impl<Type: ToProto> IntoWire for ProtoBuf<Type> {
     fn into_bytes(self) -> Result<Vec<u8>, String> {
-        let proto_type = self.0.to_proto();
+        let proto_type = self.0.into_proto();
         let mut buf = Vec::with_capacity(proto_type.encoded_len());
         proto_type.encode(&mut buf).map_err(|e| e.to_string())?;
         Ok(buf)

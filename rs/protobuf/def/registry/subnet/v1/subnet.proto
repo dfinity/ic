@@ -10,7 +10,9 @@ message SubnetRecord {
   reserved 6;
   reserved "ic_version_id";
   repeated bytes membership = 3;
-  InitialDkgTranscriptRecord initial_dkg_transcript = 2;
+
+  reserved 2;
+  reserved "initial_dkg_transcript";
 
   // Ingress message params used by that subnet.
   //
@@ -54,6 +56,9 @@ message SubnetRecord {
 
   // Max number of ingress messages per block.
   uint64 max_ingress_messages_per_block = 18;
+
+  // The maximum combined size of the ingress and xnet messages that fit into a block.
+  uint64 max_block_payload_size = 19; 
 }
 
 // Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
@@ -94,25 +99,6 @@ message RegistryStoreUri {
 message SubnetListRecord {
   reserved 1;  // this is from subnet id being a uint64
   repeated bytes subnets = 2;
-}
-
-message InitialDkgTranscriptRecord {
-  // the dkg id
-  DkgId id = 1;
-
-  // Node Ids of the nodes that originally participated in this subnet
-  repeated bytes committee = 4;
-  reserved 2;    // this is from committee consisting of uint64
-
-  // the transcript
-  bytes transcript_bytes = 3;
-}
-
-// The dkg id
-message DkgId {
-  uint64 instance_id = 1;
-  reserved 2;    // this is from subnet id being a uint64
-  bytes subnet_id = 3;
 }
 
 // Initial non-interactive DKG transcript record

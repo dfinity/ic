@@ -21,6 +21,6 @@ fn ensure_equality_of_signed_bytes_of_catch_up_package_wrappers() {
     let filepath = Builder::new().tempfile().unwrap().path().to_path_buf();
     protobuf.write_to_file(&filepath).unwrap();
     pb::CatchUpPackage::read_from_file(&filepath)
-        .map_err(|e| panic!(format!("Failed to read CUP {}", e)))
+        .map_err(|e| panic!("Failed to read CUP {}", e))
         .unwrap();
 }

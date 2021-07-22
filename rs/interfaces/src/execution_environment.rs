@@ -1,25 +1,19 @@
 //! The execution environment public interface.
 mod errors;
 
-use crate::{messages::CanisterInputMessage, state_manager::StateManagerError};
+use crate::state_manager::StateManagerError;
 pub use errors::{CanisterHeartbeatError, MessageAcceptanceError};
 pub use errors::{HypervisorError, TrapCode};
-use ic_base_types::{NumBytes, SubnetId};
+use ic_base_types::NumBytes;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     ingress::{IngressStatus, WasmResult},
     messages::{MessageId, SignedIngressContent, UserQuery},
     user_error::UserError,
-    Height, NumInstructions, Time,
+    ExecutionRound, Height, NumInstructions, Randomness, Time,
 };
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 /// Instance execution statistics. The stats are cumulative and
 /// contain measurements from the point in time when the instance was
@@ -75,86 +69,6 @@ impl SubnetAvailableMemory {
     }
 }
 
-/// ExecutionEnvironment is the component responsible for executing messages
-/// on the IC.
-pub trait ExecutionEnvironment: Sync + Send {
-    /// Type modelling the replicated state.
-    ///
-    /// Should typically be
-    /// `ic_replicated_state::ReplicatedState`.
-    // Note [Associated Types in Interfaces]
-    type State;
-
-    /// Type modelling the canister state.
-    ///
-    /// Should typically be
-    /// `ic_replicated_state::CanisterState`.
-    // Note [Associated Types in Interfaces]
-    type CanisterState;
-
-    /// Executes a message sent to a subnet.
-    //
-    // A deterministic cryptographically secure pseudo-random number generator
-    // is created per round and per thread and passed to this method to be used
-    // while responding to randomness requests (i.e. raw_rand). Using the type
-    // "&mut RngCore" imposes a problem with our usage of "mockall" library in
-    // the test_utilities. Mockall's doc states: "The only restrictions on
-    // mocking generic methods are that all generic parameters must be 'static,
-    // and generic lifetime parameters are not allowed." Hence, the type of the
-    // parameter is "&mut (dyn RngCore + 'static)".
-    #[allow(clippy::too_many_arguments)]
-    fn execute_subnet_message(
-        &self,
-        msg: CanisterInputMessage,
-        state: Self::State,
-        instructions_limit: NumInstructions,
-        rng: &mut (dyn RngCore + 'static),
-        provisional_whitelist: &ProvisionalWhitelist,
-        subnet_available_memory: SubnetAvailableMemory,
-    ) -> Self::State;
-
-    /// Executes a message sent to a canister.
-    #[allow(clippy::too_many_arguments)]
-    fn execute_canister_message(
-        &self,
-        canister_state: Self::CanisterState,
-        instructions_limit: NumInstructions,
-        msg: CanisterInputMessage,
-        time: Time,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
-        subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecResult<ExecuteMessageResult<Self::CanisterState>>;
-
-    /// Asks the canister if it is willing to accept the provided ingress
-    /// message.
-    fn should_accept_ingress_message(
-        &self,
-        state: Arc<Self::State>,
-        provisional_whitelist: &ProvisionalWhitelist,
-        ingress: &SignedIngressContent,
-    ) -> Result<(), MessageAcceptanceError>;
-
-    /// Executes a heartbeat of a given canister.
-    fn execute_canister_heartbeat(
-        &self,
-        canister_state: Self::CanisterState,
-        instructions_limit: NumInstructions,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
-        time: Time,
-        subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecResult<(
-        Self::CanisterState,
-        NumInstructions,
-        Result<NumBytes, CanisterHeartbeatError>,
-    )>;
-
-    /// Look up the current amount of memory available on the subnet.
-    /// EXC-185 will make this method obsolete.
-    fn subnet_available_memory(&self, state: &Self::State) -> NumBytes;
-}
-
 /// The data structure returned by
 /// `ExecutionEnvironment.execute_canister_message()`.
 pub struct ExecuteMessageResult<CanisterState> {
@@ -168,178 +82,6 @@ pub struct ExecuteMessageResult<CanisterState> {
     pub ingress_status: Option<(MessageId, IngressStatus)>,
     /// The size of the heap delta the canister produced
     pub heap_delta: NumBytes,
-}
-
-/// An underlying struct/helper for implementing select() on multiple
-/// AsyncResult<T>'s. If an AsyncResult is really an ongoing computation, we
-/// have to obtain its result from a channel. However, some AsyncResults are of
-/// type EarlyResult, which only emulates being async, but in reality is a ready
-/// value (mostly used for early errors). In such case, there is no channel
-/// present and we can simply return the value without waiting.
-pub enum TrySelect<T> {
-    EarlyResult(T),
-    // These Box<Any>'s are here only to hide internal data types from the interfaces crate.
-    // These are known types (crossbeam channnel, WasmExecutionOutput),
-    // and if we restructure our dependency tree we may put the real types here.
-    Channel(
-        Box<dyn std::any::Any + 'static>,
-        Box<dyn FnOnce(Box<dyn std::any::Any + 'static>) -> T>,
-    ),
-}
-
-/// An execution can finish successfully or get interrupted (out of cycles).
-pub enum ExecResultVariant<T> {
-    Completed(T),
-    Interrupted(Box<dyn InterruptedExec<T>>),
-}
-
-// Most likely these traits can be moved to embedders crate if we restructure
-// ExecutionEnvironment a little.
-
-/// An async result which allows for sync wait and select.
-pub trait AsyncResult<T> {
-    fn get(self: Box<Self>) -> ExecResultVariant<T>;
-    fn try_select(self: Box<Self>) -> TrySelect<T>;
-}
-
-/// Interrupted execution. Can be resumed or canceled.
-pub trait InterruptedExec<T> {
-    fn resume(self: Box<Self>, cycles_topup: NumInstructions) -> ExecResult<T>;
-    fn cancel(self: Box<Self>) -> ExecResult<T>;
-}
-
-impl<A: 'static> dyn InterruptedExec<A> {
-    /// Add post-processing on the output received after resume/cancel.
-    pub fn and_then<B: 'static, F: 'static + FnOnce(A) -> B>(
-        self: Box<Self>,
-        f: F,
-    ) -> Box<dyn InterruptedExec<B>> {
-        Box::new(ResumeTokenWrapper {
-            resume_token: self,
-            f,
-        })
-    }
-}
-
-// A wrapper which allows for post processing of the ExecResult returned by
-// original resume/cancel.
-struct ResumeTokenWrapper<A, B, F: FnOnce(A) -> B> {
-    resume_token: Box<dyn InterruptedExec<A>>,
-    f: F,
-}
-
-impl<A, B, F> InterruptedExec<B> for ResumeTokenWrapper<A, B, F>
-where
-    A: 'static,
-    B: 'static,
-    F: 'static + FnOnce(A) -> B,
-{
-    fn resume(self: Box<Self>, cycles_topup: NumInstructions) -> ExecResult<B> {
-        self.resume_token.resume(cycles_topup).and_then(self.f)
-    }
-
-    fn cancel(self: Box<Self>) -> ExecResult<B> {
-        self.resume_token.cancel().and_then(self.f)
-    }
-}
-
-/// Generic async result of an execution.
-pub struct ExecResult<T> {
-    result: Box<dyn AsyncResult<T>>,
-}
-
-impl<T> ExecResult<T> {
-    pub fn new(result: Box<dyn AsyncResult<T>>) -> Self {
-        Self { result }
-    }
-
-    /// Wait for the result
-    pub fn get(self) -> ExecResultVariant<T> {
-        self.result.get()
-    }
-
-    /// Wait for the final result without allowing for a pause.
-    /// If pause occurs, the execution is automatically cancelled.
-    pub fn get_no_pause(self) -> T {
-        match self.result.get() {
-            ExecResultVariant::Completed(x) => x,
-            ExecResultVariant::Interrupted(resume_token) => {
-                if let ExecResultVariant::Completed(x) = resume_token.cancel().get() {
-                    x
-                } else {
-                    panic!("Unexpected response from execution cancel request");
-                }
-            }
-        }
-    }
-
-    /// This function allows to extract an underlying channel to perform a
-    /// select. It is used to implement 'ic_embedders::ExecSelect' and is
-    /// not meant to be used explicitly.
-    pub fn try_select(self) -> TrySelect<T> {
-        self.result.try_select()
-    }
-}
-
-impl<A: 'static> ExecResult<A> {
-    /// Add post-processing on the result.
-    pub fn and_then<B: 'static, F: 'static + FnOnce(A) -> B>(self, f: F) -> ExecResult<B> {
-        ExecResult::new(Box::new(ExecResultWrapper { result: self, f }))
-    }
-}
-
-// A wrapper which allows for post processing of the original ExecResult.
-struct ExecResultWrapper<A, B, F: FnOnce(A) -> B> {
-    result: ExecResult<A>,
-    f: F,
-}
-
-impl<A, B, F> AsyncResult<B> for ExecResultWrapper<A, B, F>
-where
-    A: 'static,
-    B: 'static,
-    F: 'static + FnOnce(A) -> B,
-{
-    fn get(self: Box<Self>) -> ExecResultVariant<B> {
-        match self.result.get() {
-            ExecResultVariant::Completed(x) => ExecResultVariant::Completed((self.f)(x)),
-            ExecResultVariant::Interrupted(resume_token) => {
-                ExecResultVariant::Interrupted(resume_token.and_then(self.f))
-            }
-        }
-    }
-
-    fn try_select(self: Box<Self>) -> TrySelect<B> {
-        let f = self.f;
-        match self.result.try_select() {
-            TrySelect::EarlyResult(res) => TrySelect::EarlyResult(f(res)),
-            TrySelect::Channel(a, p) => TrySelect::Channel(a, Box::new(move |x| f(p(x)))),
-        }
-    }
-}
-
-/// Sync result implementing async interface.
-pub struct EarlyResult<T> {
-    result: T,
-}
-
-impl<T: 'static> EarlyResult<T> {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(result: T) -> ExecResult<T> {
-        ExecResult {
-            result: Box::new(Self { result }),
-        }
-    }
-}
-
-impl<T: 'static> AsyncResult<T> for EarlyResult<T> {
-    fn get(self: Box<Self>) -> ExecResultVariant<T> {
-        ExecResultVariant::Completed(self.result)
-    }
-
-    fn try_select(self: Box<Self>) -> TrySelect<T> {
-        TrySelect::EarlyResult(self.result)
-    }
 }
 
 pub type HypervisorResult<T> = Result<T, HypervisorError>;
@@ -360,6 +102,25 @@ pub trait QueryHandler: Send + Sync {
         processing_state: Arc<Self::State>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError>;
+}
+
+/// Interface for the component to filter out ingress messages that
+/// the canister is not willing to accept.
+pub trait IngressMessageFilter: Send + Sync {
+    /// Type of state managed by StateReader.
+    ///
+    /// Should typically be `ic_replicated_state::ReplicatedState`.
+    // Note [Associated Types in Interfaces]
+    type State;
+
+    /// Asks the canister if it is willing to accept the provided ingress
+    /// message.
+    fn should_accept_ingress_message(
+        &self,
+        state: Arc<Self::State>,
+        provisional_whitelist: &ProvisionalWhitelist,
+        ingress: &SignedIngressContent,
+    ) -> Result<(), MessageAcceptanceError>;
 }
 
 /// Errors that can be returned when reading/writing from/to ingress history.
@@ -419,14 +180,11 @@ pub trait SystemApi {
     /// Returns the reference to the execution error.
     fn get_execution_error(&self) -> Option<&HypervisorError>;
 
-    /// Returns the amount of available instructions.
-    fn get_available_num_instructions(&self) -> NumInstructions;
-
     /// Returns the stable memory delta that the canister produced
     fn get_stable_memory_delta_pages(&self) -> usize;
 
-    /// Sets the amount of available instructions.
-    fn set_available_num_instructions(&mut self, num_instructions: NumInstructions);
+    /// Returns the amount of instructions needed to copy `num_bytes`.
+    fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions;
 
     /// Copies `size` bytes starting from `offset` inside the opaque caller blob
     /// and copies them to heap[dst..dst+size]. The caller is the canister
@@ -549,10 +307,6 @@ pub trait SystemApi {
     /// Outputs the specified bytes on the heap as a string on STDOUT.
     fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]);
 
-    /// Just like `exec` in C replaces the current process with a new process,
-    /// this system call replaces the current canister with a new canister.
-    fn ic0_exec(&mut self, bytes: Vec<u8>, payload: Vec<u8>) -> HypervisorError;
-
     /// Traps, with a possibly helpful message
     fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorError;
 
@@ -669,11 +423,8 @@ pub trait SystemApi {
     fn ic0_time(&self) -> HypervisorResult<Time>;
 
     /// This system call is not part of the public spec and used by the
-    /// hypervisor, when execution runs out of instructions. Higher levels
-    /// can decide how to proceed, by either providing more instructions
-    /// or aborting the execution (typically with an out-of-instructions
-    /// error).
-    fn out_of_instructions(&self) -> HypervisorResult<NumInstructions>;
+    /// hypervisor, when execution runs out of instructions.
+    fn out_of_instructions(&self) -> HypervisorError;
 
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` has been called to check whether there's enough
@@ -754,4 +505,57 @@ pub trait SystemApi {
     ///
     /// Returns the amount of cycles added to the canister's balance.
     fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64>;
+}
+
+pub trait Scheduler: Send {
+    /// Type modelling the replicated state.
+    ///
+    /// Should typically be
+    /// `ic_replicated_state::ReplicatedState`.
+    // Note [Associated Types in Interfaces]
+    type State;
+
+    /// Executes a list of messages. Triggered by the Coordinator as part of
+    /// processing a batch.
+    ///
+    /// # Configuration parameters that might affect a round's execution
+    ///
+    /// * `scheduler_cores`: number of concurrent threads that the scheduler can
+    ///   use during an execution round.
+    /// * `max_instructions_per_round`: max number of instructions a single
+    ///   round on a single thread can
+    /// consume.
+    /// * `max_instructions_per_message`: max number of instructions a single
+    ///   message execution can consume.
+    ///
+    /// # Walkthrough of a round
+    ///
+    /// The scheduler decides on a deterministic and fair order of canisters to
+    /// execute on each thread (not fully implemented yet).
+    /// For each thread we want to schedule **at least** a `pulse` for the first
+    /// canister. The canister's `pulse` can consume the entire round of the
+    /// thread if it has enough messages or, if not, we can give a `pulse` to
+    /// the next canister. Similarly, the second canister can use the rest
+    /// of the round of the thread if it has enough messages or we can give
+    /// a `pulse` to the next canister and so on.
+    ///
+    /// # Constraints
+    ///
+    /// * To be able to start a pulse for a canister we need to have at least
+    ///   `max_instructions_per_message` left in the current round (basically we
+    ///   need a guarantee that we are able to execute successfully at least one
+    ///   message).
+    /// * The round (and thus the first `pulse`) starts with a limit of
+    ///   `max_instructions_per_round`. When the `pulse` ends it returns how
+    ///   many instructions is left which is used to update the limit for the
+    ///   next `pulse` and if the above constraint is satisfied, we can start
+    ///   the `pulse`. And so on.
+    fn execute_round(
+        &self,
+        state: Self::State,
+        randomness: Randomness,
+        time_of_previous_batch: Time,
+        current_round: ExecutionRound,
+        provisional_whitelist: ProvisionalWhitelist,
+    ) -> Self::State;
 }

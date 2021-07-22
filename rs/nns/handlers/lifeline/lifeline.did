@@ -12,11 +12,4 @@ service : {
                 stopping;
               };
     });
-  submit_upgrade_root_proposal:
-   (neuron_id: NeuronId,
-    proposal: record {
-      module_arg: blob;
-      stop_upgrade_start: bool;
-      wasm_module: blob;
-    }) -> (nat64);
 }

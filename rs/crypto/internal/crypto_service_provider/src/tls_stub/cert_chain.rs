@@ -1,7 +1,9 @@
 //! X.509 certificate chain utilities
 
 use super::*;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use openssl::stack::StackRef;
+use openssl::x509::X509;
 use std::fmt::{self, Debug, Formatter};
 
 #[cfg(test)]
@@ -19,7 +21,7 @@ mod tests;
 #[derive(Clone)]
 pub struct CspCertificateChain {
     /// The first element is considered the chain's root
-    chain: Vec<X509>,
+    chain: Vec<TlsPublicKeyCert>,
 }
 
 impl CspCertificateChain {
@@ -31,7 +33,7 @@ impl CspCertificateChain {
     /// issuance.
     ///
     /// Returns an error if the given `chain` is empty.
-    fn new(chain: Vec<X509>) -> Result<Self, CspCertificateChainCreationError> {
+    fn new(chain: Vec<TlsPublicKeyCert>) -> Result<Self, CspCertificateChainCreationError> {
         if chain.is_empty() {
             return Err(CspCertificateChainCreationError::ChainEmpty);
         }
@@ -39,12 +41,12 @@ impl CspCertificateChain {
     }
 
     /// Returns the chain as vector where the root is the first element.
-    pub fn chain(&self) -> &Vec<X509> {
+    pub fn chain(&self) -> &Vec<TlsPublicKeyCert> {
         &self.chain
     }
 
     /// Returns the root of the chain.
-    pub fn root(&self) -> &X509 {
+    pub fn root(&self) -> &TlsPublicKeyCert {
         &self
             .chain
             .get(Self::root_index())
@@ -52,7 +54,7 @@ impl CspCertificateChain {
     }
 
     /// Returns the leaf of the chain.
-    pub fn leaf(&self) -> &X509 {
+    pub fn leaf(&self) -> &TlsPublicKeyCert {
         &self
             .chain
             .get(self.leaf_index())
@@ -72,6 +74,7 @@ impl CspCertificateChain {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CspCertificateChainCreationError {
     ChainEmpty,
+    CertificateMalformed { internal_error: String },
 }
 
 impl TryFrom<&StackRef<X509>> for CspCertificateChain {
@@ -82,7 +85,12 @@ impl TryFrom<&StackRef<X509>> for CspCertificateChain {
     fn try_from(x509_stack: &StackRef<X509>) -> Result<Self, Self::Error> {
         let mut chain = Vec::new();
         for x509 in x509_stack.iter().rev() {
-            chain.push(x509.to_owned());
+            let cert = TlsPublicKeyCert::new_from_x509(x509.to_owned()).map_err(|e| {
+                CspCertificateChainCreationError::CertificateMalformed {
+                    internal_error: e.internal_error,
+                }
+            })?;
+            chain.push(cert);
         }
         Self::new(chain)
     }

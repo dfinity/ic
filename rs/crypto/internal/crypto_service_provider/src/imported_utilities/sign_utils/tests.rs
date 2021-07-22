@@ -2,7 +2,7 @@
 use crate::imported_utilities::sign_utils as utils;
 use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
 use ic_crypto_internal_test_vectors::test_data;
-use simple_asn1::{oid, BigUint, OID};
+use simple_asn1::oid;
 
 use ic_types::crypto::AlgorithmId;
 use openssl::ec::{EcGroup, EcKey};

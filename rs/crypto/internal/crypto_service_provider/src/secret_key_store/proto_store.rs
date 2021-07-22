@@ -194,8 +194,10 @@ impl ProtoSecretKeyStore {
     }
 
     fn secret_keys_to_sks_proto(secret_keys: &SecretKeys) -> pb::SecretKeyStore {
-        let mut sks_proto = pb::SecretKeyStore::default();
-        sks_proto.version = CURRENT_SKS_VERSION;
+        let mut sks_proto = pb::SecretKeyStore {
+            version: CURRENT_SKS_VERSION,
+            ..Default::default()
+        };
         for (key_id, (csp_key, maybe_scope)) in secret_keys {
             let key_id_hex = key_id_to_hex(key_id);
             let key_as_cbor = serde_cbor::to_vec(&csp_key)
@@ -284,9 +286,8 @@ impl SecretKeyStore for ProtoSecretKeyStore {
     }
 
     fn get(&self, id: &KeyId) -> Option<CspSecretKey> {
-        with_read_lock(&self.keys, |keys| match keys.get(id) {
-            Some((csp_key, _)) => Some(csp_key.to_owned()),
-            None => None,
+        with_read_lock(&self.keys, |keys| {
+            keys.get(id).map(|(csp_key, _)| csp_key.to_owned())
         })
     }
 

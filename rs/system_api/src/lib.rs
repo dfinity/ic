@@ -23,7 +23,6 @@ use ic_types::{
     Time,
 };
 use request_in_prep::{into_request, RequestInPrep};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     convert::{From, TryFrom},
@@ -35,7 +34,7 @@ pub use system_state_accessor_direct::SystemStateAccessorDirect;
 const MULTIPLIER_MAX_SIZE_INTRA_SUBNET: u64 = 5;
 const MAX_NON_REPLICATED_QUERY_REPLY_SIZE: NumBytes = NumBytes::new(3 << 20);
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[doc(hidden)]
 pub enum ResponseStatus {
     // Indicates that the current call context was never replied.
@@ -48,7 +47,7 @@ pub enum ResponseStatus {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub enum ApiType {
     // For executing the `canister_start` method
     Start,
@@ -399,16 +398,6 @@ impl std::fmt::Display for ApiType {
     }
 }
 
-/// Interface for canister execution to pause itself in "out-of-cyles"
-/// events.
-pub trait PauseHandler {
-    /// Pause execution of calling canister until return of this
-    /// function. If non-zero amount of cycles is returned, execution
-    /// may proceed. Otherwise, the canister execution is terminated
-    /// with an OutOfInstructions error.
-    fn pause(&self) -> NumInstructions;
-}
-
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
 struct MemoryUsage {
@@ -447,10 +436,7 @@ impl MemoryUsage {
 /// Struct that implements the SystemApi trait. This trait enables a canister to
 /// have mediated access to its system state.
 pub struct SystemApiImpl<A: SystemStateAccessor> {
-    // Amount of cycles available for the current execution.
-    available_num_instructions: NumInstructions,
-
-    // an execution error of the current message
+    // An execution error of the current message.
     execution_error: Option<HypervisorError>,
 
     // The variant of ApiType being executed.
@@ -462,9 +448,6 @@ pub struct SystemApiImpl<A: SystemStateAccessor> {
     memory_usage: MemoryUsage,
 
     compute_allocation: ComputeAllocation,
-
-    // Handler for out-of-cycles case.
-    pause_handler: Box<dyn PauseHandler>,
 }
 
 impl<A: SystemStateAccessor> SystemApiImpl<A> {
@@ -472,12 +455,10 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
     pub fn new(
         api_type: ApiType,
         system_state_accessor: A,
-        available_num_instructions: NumInstructions,
         canister_memory_limit: NumBytes,
         canister_current_memory_usage: NumBytes,
         subnet_available_memory: SubnetAvailableMemory,
         compute_allocation: ComputeAllocation,
-        pause_handler: Box<dyn PauseHandler>,
     ) -> Self {
         let memory_usage = MemoryUsage::new(
             canister_memory_limit,
@@ -486,13 +467,11 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
         );
 
         Self {
-            available_num_instructions,
             execution_error: None,
             api_type,
             system_state_accessor,
             memory_usage,
             compute_allocation,
-            pause_handler,
         }
     }
 
@@ -654,16 +633,13 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         self.execution_error.as_ref()
     }
 
-    fn get_available_num_instructions(&self) -> NumInstructions {
-        self.available_num_instructions
-    }
-
-    fn set_available_num_instructions(&mut self, cycles: NumInstructions) {
-        self.available_num_instructions = cycles
-    }
-
     fn get_stable_memory_delta_pages(&self) -> usize {
         self.memory_usage.stable_memory_delta
+    }
+
+    fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions {
+        self.system_state_accessor
+            .get_num_instructions_from_bytes(num_bytes)
     }
 
     fn ic0_msg_caller_copy(
@@ -687,7 +663,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::NonReplicatedQuery { caller, .. } => {
                 let id_bytes = caller.as_slice();
                 valid_subslice("ic0.msg_caller_copy heap", dst, size, heap)?;
-                let slice = valid_subslice("ic0.msg_caller_copy id", offset, size, &id_bytes[..])?;
+                let slice = valid_subslice("ic0.msg_caller_copy id", offset, size, id_bytes)?;
                 let (dst, size) = (dst as usize, size as usize);
                 heap[dst..dst + size].copy_from_slice(slice);
                 Ok(())
@@ -1085,10 +1061,6 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         );
     }
 
-    fn ic0_exec(&mut self, bytes: Vec<u8>, payload: Vec<u8>) -> HypervisorError {
-        CanisterExec(bytes, payload)
-    }
-
     fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorError {
         let msg = valid_subslice("trap", src, size, heap)
             .map(|bytes| String::from_utf8_lossy(bytes).to_string())
@@ -1167,8 +1139,8 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 let id_bytes =
                     valid_subslice("ic0.call_simple callee_src", callee_src, callee_size, heap)?;
 
-                let callee = PrincipalId::try_from(&id_bytes[..])
-                    .map_err(HypervisorError::InvalidPrincipalId)?;
+                let callee =
+                    PrincipalId::try_from(id_bytes).map_err(HypervisorError::InvalidPrincipalId)?;
 
                 let callee = if callee == IC_00.get() {
                     // This is a request to ic:00. Update `callee` to be the appropriate subnet.
@@ -1652,13 +1624,8 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         }
     }
 
-    fn out_of_instructions(&self) -> HypervisorResult<NumInstructions> {
-        let additional_cycles = self.pause_handler.pause();
-        if additional_cycles.get() == 0 {
-            Err(HypervisorError::OutOfInstructions)
-        } else {
-            Ok(additional_cycles)
-        }
+    fn out_of_instructions(&self) -> HypervisorError {
+        HypervisorError::OutOfInstructions
     }
 
     fn update_available_memory(
@@ -2006,24 +1973,12 @@ mod test {
     use std::convert::TryInto;
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 40);
-    const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
     const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
     const CANISTER_MEMORY_LIMIT: NumBytes = NumBytes::new(4 << 30);
     const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
     lazy_static! {
         static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
             SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX));
-    }
-
-    struct DummyPauseHandler {}
-    impl PauseHandler for DummyPauseHandler {
-        fn pause(&self) -> NumInstructions {
-            NumInstructions::from(0)
-        }
-    }
-
-    fn dummy_pause_handler() -> Box<dyn PauseHandler> {
-        Box::new(DummyPauseHandler {})
     }
 
     fn setup() -> (
@@ -2075,25 +2030,23 @@ mod test {
                 subnet_records,
             ),
             system_state_accessor,
-            MAX_NUM_INSTRUCTIONS,
             CANISTER_MEMORY_LIMIT,
             CANISTER_CURRENT_MEMORY_USAGE,
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             ComputeAllocation::default(),
-            dummy_pause_handler(),
         )
     }
 
     fn assert_api_supported<T>(res: HypervisorResult<T>) {
         if let Err(HypervisorError::ContractViolation(err)) = res {
-            assert!(!err.contains("cannot be executed"), err)
+            assert!(!err.contains("cannot be executed"), "{}", err)
         }
     }
 
     fn assert_api_not_supported<T>(res: HypervisorResult<T>) {
         match res {
             Err(HypervisorError::ContractViolation(err)) => {
-                assert!(err.contains("cannot be executed"), err)
+                assert!(err.contains("cannot be executed"), "{}", err)
             }
             _ => unreachable!("Expected api to be unsupported."),
         }
@@ -2148,12 +2101,10 @@ mod test {
         SystemApiImpl::new(
             api_type,
             system_state_accessor,
-            MAX_NUM_INSTRUCTIONS,
             CANISTER_MEMORY_LIMIT,
             CANISTER_CURRENT_MEMORY_USAGE,
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             ComputeAllocation::default(),
-            dummy_pause_handler(),
         )
     }
 

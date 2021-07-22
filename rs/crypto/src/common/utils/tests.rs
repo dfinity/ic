@@ -2,70 +2,9 @@
 
 use super::*;
 use ic_config::crypto::CryptoConfig;
-use ic_test_utilities::types::ids::node_test_id;
-
-const NODE_ID: u64 = 42;
 
 fn store_public_keys(crypto_root: &Path, node_pks: &NodePublicKeys) {
     public_key_store::store_node_public_keys(crypto_root, node_pks).unwrap();
-}
-
-#[test]
-fn should_generate_all_keys_for_given_node_id_for_new_node() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let node_pks = get_node_keys_or_generate_if_missing_for_node_id(
-            &config.crypto_root,
-            node_test_id(NODE_ID),
-        );
-        assert!(all_node_keys_are_present(&node_pks));
-        let result = check_keys_locally(&config.crypto_root);
-        assert!(result.is_ok());
-        let maybe_pks = result.unwrap();
-        assert!(maybe_pks.is_some());
-        assert_eq!(maybe_pks.unwrap(), node_pks);
-    })
-}
-
-#[test]
-fn should_generate_all_keys_for_given_node_id_for_a_node_without_public_keys() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let first_node_signing_pk = generate_node_signing_keys(&config.crypto_root);
-        // first_node_signing_pk NOT saved.
-        let node_pks = get_node_keys_or_generate_if_missing_for_node_id(
-            &config.crypto_root,
-            node_test_id(NODE_ID),
-        );
-        assert!(all_node_keys_are_present(&node_pks));
-        let result = check_keys_locally(&config.crypto_root);
-        assert!(result.is_ok());
-        let maybe_pks = result.unwrap();
-        assert!(maybe_pks.is_some());
-        let node_pks = maybe_pks.unwrap();
-        assert_ne!(first_node_signing_pk, node_pks.node_signing_pk.unwrap());
-    })
-}
-
-#[test]
-#[should_panic(expected = "inconsistent key material")]
-fn should_panic_for_given_node_id_if_node_has_inconsistent_keys() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let _node_signing_pk = Some(generate_node_signing_keys(&config.crypto_root));
-        let different_crypto_root = config.crypto_root.join("different_subdir");
-        let different_node_signing_pk = Some(generate_node_signing_keys(&different_crypto_root));
-
-        // Store different_node_signing_pk in `config.crypto_root`.
-        store_public_keys(
-            &config.crypto_root,
-            &NodePublicKeys {
-                node_signing_pk: different_node_signing_pk,
-                ..Default::default()
-            },
-        );
-        let _node_pks = get_node_keys_or_generate_if_missing_for_node_id(
-            &config.crypto_root,
-            node_test_id(NODE_ID),
-        );
-    })
 }
 
 #[test]
@@ -189,7 +128,6 @@ fn should_succeed_check_keys_locally_if_all_keys_are_present() {
 
 mod tls {
     use super::super::generate_tls_keys;
-    use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
     use ic_test_utilities::crypto::temp_dir::temp_dir;
     use ic_test_utilities::types::ids::node_test_id;
     use openssl::x509::X509VerifyResult;
@@ -198,12 +136,12 @@ mod tls {
     const NODE_ID: u64 = 123;
 
     #[test]
-    fn should_return_der_encoded_self_signed_certificate() {
+    fn should_return_self_signed_certificate() {
         let temp_dir = temp_dir();
 
-        let der_cert = generate_tls_keys(&temp_dir.into_path(), node_test_id(NODE_ID));
+        let cert = generate_tls_keys(&temp_dir.into_path(), node_test_id(NODE_ID));
 
-        let x509_cert = x509_cert(&der_cert);
+        let x509_cert = cert.as_x509();
         let public_key = x509_cert.public_key().unwrap();
         assert_eq!(x509_cert.verify(&public_key).ok(), Some(true));
         assert_eq!(x509_cert.issued(&x509_cert), X509VerifyResult::OK);
@@ -213,9 +151,9 @@ mod tls {
     fn should_not_set_subject_alt_name() {
         let temp_dir = temp_dir();
 
-        let der_cert = generate_tls_keys(&temp_dir.into_path(), node_test_id(NODE_ID));
+        let cert = generate_tls_keys(&temp_dir.into_path(), node_test_id(NODE_ID));
 
-        let x509_cert = x509_cert(&der_cert);
+        let x509_cert = cert.as_x509();
         let subject_alt_names = x509_cert.subject_alt_names();
         assert!(subject_alt_names.is_none());
     }
@@ -224,9 +162,9 @@ mod tls {
     fn should_set_cert_issuer_and_subject_cn_as_node_id() {
         let temp_dir = temp_dir();
 
-        let der_cert = generate_tls_keys(&temp_dir.into_path(), node_test_id(NODE_ID));
+        let cert = generate_tls_keys(&temp_dir.into_path(), node_test_id(NODE_ID));
 
-        let x509_cert = x509_cert(&der_cert);
+        let x509_cert = cert.as_x509();
         let issuer_cn = issuer_cn(&x509_cert);
         let subject_cn = subject_cn(&x509_cert);
         let expected_cn = node_test_id(NODE_ID).get().to_string();
@@ -239,15 +177,11 @@ mod tls {
         const RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE: &str = "99991231235959Z";
         let temp_dir = temp_dir();
 
-        let der_cert = generate_tls_keys(&temp_dir.into_path(), node_test_id(NODE_ID));
+        let cert = generate_tls_keys(&temp_dir.into_path(), node_test_id(NODE_ID));
 
         let expected_not_after =
             Asn1Time::from_str_x509(RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE).unwrap();
-        assert!(x509_cert(&der_cert).not_after() == expected_not_after);
-    }
-
-    fn x509_cert(cert: &X509PublicKeyCert) -> X509 {
-        X509::from_der(&cert.certificate_der).unwrap()
+        assert!(cert.as_x509().not_after() == expected_not_after);
     }
 
     fn subject_cn(x509_cert: &X509) -> &X509NameEntryRef {

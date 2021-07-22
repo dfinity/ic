@@ -7,8 +7,8 @@ edition = "2018"
 flate2 = "1.0.17"
 hex = "0.4.2"
 http = "0.2.1"
-hyper = "0.13.10"
-hyper-tls = "0.4.3"
+hyper = { version = "0.14.5", features = ["full"] }
+hyper-tls = "0.5.0"
 ic-crypto-sha256 = { path = "../crypto/sha256" }
 ic-logger = { path = "../monitoring/logger" }
 slog = "2.5.2"

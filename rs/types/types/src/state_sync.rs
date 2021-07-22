@@ -67,6 +67,7 @@ pub mod proto;
 use crate::chunkable::ChunkId;
 use ic_protobuf::state::sync::v1 as pb;
 use std::fmt;
+use std::ops::Range;
 
 /// Id of the manifest chunk in StateSync artifact.
 pub const MANIFEST_CHUNK: ChunkId = ChunkId::new(0);
@@ -95,6 +96,13 @@ pub struct ChunkInfo {
     /// SHA-256 hash of the chunk content.
     /// See note [Manifest Hash].
     pub hash: [u8; 32],
+}
+
+impl ChunkInfo {
+    /// Returns the range of bytes belonging to this chunk.
+    pub fn byte_range(&self) -> Range<usize> {
+        self.offset as usize..(self.offset as usize + self.size_bytes as usize)
+    }
 }
 
 /// Manifest is a short description of the checkpoint contents.

@@ -211,9 +211,9 @@ mod verify {
         let (sk, pk) = new_keypair().unwrap();
         let msg = b"some message to sign";
         let mut signature = sign(msg, &sk).unwrap();
-        // Zero the last byte of the signature.
+        // Modify the last byte of the signature.
         assert_eq!(signature.0.len(), SignatureBytes::SIZE);
-        signature.0[SignatureBytes::SIZE - 1] = 0;
+        signature.0[SignatureBytes::SIZE - 1] = !signature.0[SignatureBytes::SIZE - 1];
         let result = verify(&signature, msg, &pk);
         assert!(result.is_err());
         assert!(result.unwrap_err().is_signature_verification_error());

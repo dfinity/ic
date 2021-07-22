@@ -2,12 +2,11 @@ use crate::{
     routing, scheduling,
     state_machine::{StateMachine, StateMachineImpl},
 };
-use actix::{Actor, SyncContext};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::state_manager::{CertificationScope, StateManagerError};
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
-    execution_environment::{ExecutionEnvironment, IngressHistoryWriter},
+    execution_environment::{IngressHistoryWriter, Scheduler},
     messaging::{MessageRouting, MessageRoutingError},
     registry::RegistryClient,
     state_manager::StateManager,
@@ -250,16 +249,6 @@ pub struct MessageRoutingImpl {
     _batch_processor_handle: JoinOnDrop<()>,
 }
 
-/// The message routing implementation realizes a synchronous
-/// actor. Namely, it has a synchronous context, that processes each
-/// request without preemption. Note that threads of execution running
-/// in a SyncContext are supervised by the main system via a
-/// SyncArbiter and run on dedicated threads -- in this case it should
-/// be a single thread.
-impl Actor for MessageRoutingImpl {
-    type Context = SyncContext<Self>;
-}
-
 /// A component that executes Consensus [batches](Batch) sequentially, by
 /// retrieving the matching state, applying the batch and committing the result.
 #[cfg_attr(test, automock)]
@@ -315,7 +304,7 @@ impl BatchProcessorImpl {
         // soon.
         let ceiling: i64 = 1 << 53;
         let memory_usage = std::cmp::min(
-            i64::try_from(memory_usage.get()).unwrap_or_else(|_| ceiling),
+            i64::try_from(memory_usage.get()).unwrap_or(ceiling),
             ceiling,
         );
         self.metrics.canisters_memory_usage_bytes.set(memory_usage);
@@ -757,28 +746,13 @@ impl MessageRoutingImpl {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
-        exec_env: Arc<
-            dyn ExecutionEnvironment<State = ReplicatedState, CanisterState = CanisterState>
-                + 'static,
-        >,
+        scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        scheduler_config: ic_config::subnet_config::SchedulerConfig,
         subnet_id: SubnetId,
-        subnet_type: SubnetType,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
         registry: Arc<dyn RegistryClient>,
     ) -> Self {
-        let scheduler = Box::new(scheduling::scheduler::SchedulerImpl::new(
-            scheduler_config,
-            subnet_id,
-            subnet_type,
-            Arc::clone(&ingress_history_writer),
-            exec_env,
-            Arc::clone(&cycles_account_manager),
-            metrics_registry,
-            log.clone(),
-        ));
         let time_in_stream_metrics = Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
             metrics_registry,
         )));

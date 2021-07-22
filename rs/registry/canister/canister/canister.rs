@@ -1,4 +1,4 @@
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use prost::Message;
 
 use candid::Decode;
@@ -9,12 +9,7 @@ use dfn_core::{
 };
 use ic_crypto_tree_hash::{LabeledTree, WitnessGenerator, WitnessGeneratorImpl};
 use ic_nns_common::{
-    access_control::{
-        check_caller_authz_and_log, check_caller_is_root, current_canister_authz,
-        init_canister_authz, update_methods_authz,
-    },
-    pb::v1::CanisterAuthzInfo,
-    types::MethodAuthzChange,
+    access_control::check_caller_is_root, pb::v1::CanisterAuthzInfo, types::MethodAuthzChange,
 };
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
@@ -135,8 +130,6 @@ fn canister_init() {
         "{}canister_init: Initializing with: {}",
         LOG_PREFIX, init_payload
     );
-    init_canister_authz(init_payload.authz_info);
-
     let registry = registry_mut();
 
     init_payload
@@ -154,7 +147,6 @@ fn canister_pre_upgrade() {
     let registry = registry_mut();
     let mut serialized = Vec::new();
     let ss = RegistryCanisterStableStorage {
-        authz: Some(current_canister_authz()),
         registry: Some(registry.serializable_form()),
     };
     ss.encode(&mut serialized)
@@ -171,7 +163,6 @@ fn canister_post_upgrade() {
     // canister without authz information.
     let ss = RegistryCanisterStableStorage::decode(stable::get().as_slice())
         .expect("Error decoding from stable.");
-    init_canister_authz(ss.authz.expect("Canister must have authz info in stable"));
     let registry = registry_mut();
     registry.from_serializable_form(ss.registry.expect("Error decoding from stable"));
 
@@ -182,19 +173,29 @@ fn canister_post_upgrade() {
 #[export_name = "canister_update update_authz"]
 fn update_authz() {
     check_caller_is_root();
-    over(
-        candid_one,
-        |methods_authz_change: Vec<MethodAuthzChange>| {
-            update_methods_authz(methods_authz_change, LOG_PREFIX);
-        },
-    );
+    over(candid_one, |_: Vec<MethodAuthzChange>| {
+        println!(
+            "{}update_authz was called. \
+                 This does not do anything, since the registry canister no longer has any \
+                 function whose access is controlled using this mechanism. \
+                 TODO(NNS1-413): Remove this once we are sure that there are no callers.",
+            LOG_PREFIX,
+        );
+    })
 }
 
 #[export_name = "canister_query current_authz"]
 fn current_authz() {
-    over(candid, |_: ()| -> CanisterAuthzInfo {
-        current_canister_authz()
-    });
+    over(candid, |_: ()| {
+        println!(
+            "{}current_authz was called. \
+                 This always returns the default value, since the registry canister's state no \
+                 longer contains a CanisterAuthzInfo. \
+                 TODO(NNS1-413): Remove this once we are sure that there are no callers.",
+            LOG_PREFIX,
+        );
+        CanisterAuthzInfo::default()
+    })
 }
 
 #[export_name = "canister_query get_changes_since"]
@@ -311,9 +312,18 @@ fn get_latest_version_certified() {
 
 #[export_name = "canister_update atomic_mutate"]
 fn atomic_mutate() {
-    // This method requires authz as it should only be called in non-prod
-    // environments
-    check_caller_authz_and_log("atomic_mutate", LOG_PREFIX);
+    let caller = dfn_core::api::caller();
+    //
+    // - The governance canister is always allowed to mutate the registry
+    // - The root canister is also allowed, so that IDs of new NNS canisters can be
+    //   recorded.
+    assert!(
+        caller == GOVERNANCE_CANISTER_ID.get() || caller == ROOT_CANISTER_ID.get(),
+        "{}Principal {} is not authorized to call 'atomic_mutate'.",
+        LOG_PREFIX,
+        caller
+    );
+    println!("{}call 'atomic_mutate' from {}", LOG_PREFIX, caller);
 
     let response_pb = match deserialize_atomic_mutate_request(arg_data()) {
         Ok(request_pb) => {
@@ -329,9 +339,11 @@ fn atomic_mutate() {
                 LOG_PREFIX, error
             );
             let mut response_pb = RegistryAtomicMutateResponse::default();
-            let mut error_pb = RegistryError::default();
-            error_pb.code = Code::MalformedMessage as i32;
-            error_pb.reason = error.to_string();
+            let error_pb = RegistryError {
+                code: Code::MalformedMessage as i32,
+                reason: error.to_string(),
+                ..Default::default()
+            };
             response_pb.errors.push(error_pb);
             response_pb
         }

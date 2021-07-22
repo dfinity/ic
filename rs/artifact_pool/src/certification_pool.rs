@@ -43,7 +43,7 @@ impl CertificationPoolImpl {
         metrics_registry: MetricsRegistry,
     ) -> Self {
         let persistent_pool = match config.persistent_pool_backend {
-            PersistentPoolBackend::LMDB(lmdb_config) => Box::new(
+            PersistentPoolBackend::Lmdb(lmdb_config) => Box::new(
                 crate::lmdb_pool::PersistentHeightIndexedPool::new_certification_pool(
                     lmdb_config,
                     config.persistent_pool_read_only,
@@ -356,7 +356,7 @@ mod tests {
         let signature = ThresholdSignature::fake();
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
-            signed: Signed { signature, content },
+            signed: Signed { content, signature },
         })
     }
 

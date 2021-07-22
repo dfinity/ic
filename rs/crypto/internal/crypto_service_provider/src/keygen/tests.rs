@@ -1,8 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
 use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
-use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
-use ic_crypto_internal_tls::keygen::TlsEd25519CertificateDerBytes;
+use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
 use ic_types_test_utils::ids::node_test_id;
 use openssl::x509::X509NameEntries;
 use openssl::{asn1::Asn1Time, bn::BigNum, nid::Nid, x509::X509};
@@ -49,13 +48,38 @@ fn should_retrieve_newly_generated_secret_key_from_store() {
 #[test]
 /// If this test fails, old key IDs in the SKS will no longer work!
 fn should_correctly_convert_tls_cert_hash_as_key_id() {
-    let key_id = tls_cert_hash_as_key_id(&TlsEd25519CertificateDerBytes {
-        bytes: vec![42; 10],
-    });
+    // openssl-generated example X509 cert.
+    let cert_der = hex_to_byte_vec(
+        "308201423081f5a00302010202147dfa\
+         b83de61da8c8aa957cbc6ad9645f2bbc\
+         c9f8300506032b657030173115301306\
+         035504030c0c4446494e495459205465\
+         7374301e170d32313036303331373337\
+         35305a170d3231303730333137333735\
+         305a30173115301306035504030c0c44\
+         46494e4954592054657374302a300506\
+         032b657003210026c5e95c453549621b\
+         2dc6475e0dde204caa3e4f326f4728fd\
+         0458e7771ac03ca3533051301d060355\
+         1d0e0416041484696f2370163c1c489c\
+         095dfea6574a3fa88ad5301f0603551d\
+         2304183016801484696f2370163c1c48\
+         9c095dfea6574a3fa88ad5300f060355\
+         1d130101ff040530030101ff30050603\
+         2b65700341009b0e731565bcfaedb6c7\
+         0805fa75066ff931b8bc6993c10bf020\
+         2c14b96ab5abd0704f163cb0a6b57621\
+         2b2eb8ddf74ab60d5cdc59f906acc8a1\
+         24678c290e06",
+    );
+    let cert = TlsPublicKeyCert::new_from_der(cert_der)
+        .expect("failed to build TlsPublicKeyCert from DER");
+
+    let key_id = tls_cert_hash_as_key_id(&cert);
 
     // We expect the following hard coded key id:
     let expected_key_id =
-        hex_to_32_bytes("72b4aa974fd37a17b896f2f39a57ed7bc943f5a96f663f342bf8785f3ca24e08");
+        hex_to_32_bytes("bc1f70570a2aaa0904069e1a77b710c729ac1bf026a02f14ad8613c3627b211a");
     assert_eq!(key_id, KeyId(expected_key_id));
 }
 
@@ -129,7 +153,6 @@ mod multi {
 mod tls {
     use super::*;
     use crate::secret_key_store::test_utils::MockSecretKeyStore;
-    use ic_crypto_internal_tls::keygen::TlsEd25519CertificateDerBytes;
     use openssl::pkey::{Id, PKey};
     use openssl::x509::X509VerifyResult;
 
@@ -144,10 +167,9 @@ mod tls {
         let sks = volatile_key_store();
         let mut csp = Csp::of(rng(), sks);
 
-        let der_cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
-        let x509_cert = x509_cert(&der_cert);
-        let secret_key = secret_key_from_store(&mut csp, x509_cert);
+        let secret_key = secret_key_from_store(&mut csp, cert.as_x509().clone());
         if let CspSecretKey::TlsEd25519(sk_der_bytes) = secret_key {
             let private_key = PKey::private_key_from_der(&sk_der_bytes.bytes)
                 .expect("unable to parse DER secret key");
@@ -177,9 +199,9 @@ mod tls {
     fn should_return_der_encoded_self_signed_certificate() {
         let mut csp = Csp::of(rng(), volatile_key_store());
 
-        let der_cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
-        let x509_cert = x509_cert(&der_cert);
+        let x509_cert = cert.as_x509();
         let public_key = x509_cert.public_key().unwrap();
         assert_eq!(x509_cert.verify(&public_key).ok(), Some(true));
         assert_eq!(x509_cert.issued(&x509_cert), X509VerifyResult::OK);
@@ -189,9 +211,9 @@ mod tls {
     fn should_set_cert_subject_cn_as_node_id() {
         let mut csp = Csp::of(rng(), volatile_key_store());
 
-        let der_cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
-        let x509_cert = x509_cert(&der_cert);
+        let x509_cert = cert.as_x509();
         assert_eq!(cn_entries(&x509_cert).count(), 1);
         let subject_cn = cn_entries(&x509_cert).next().unwrap();
         let expected_subject_cn = node_test_id(NODE_1).get().to_string();
@@ -202,10 +224,9 @@ mod tls {
     fn should_use_stable_node_id_string_representation_as_subject_cn() {
         let mut csp = Csp::of(rng(), volatile_key_store());
 
-        let der_cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
-        let x509_cert = x509_cert(&der_cert);
-        let subject_cn = cn_entries(&x509_cert).next().unwrap();
+        let subject_cn = cn_entries(&cert.as_x509()).next().unwrap();
         assert_eq!(b"w43gn-nurca-aaaaa-aaaap-2ai", subject_cn.data().as_slice());
     }
 
@@ -213,10 +234,10 @@ mod tls {
     fn should_set_cert_issuer_cn_as_node_id() {
         let mut csp = Csp::of(rng(), volatile_key_store());
 
-        let der_cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
-        let x509_cert = x509_cert(&der_cert);
-        let issuer_cn = x509_cert
+        let issuer_cn = cert
+            .as_x509()
             .issuer_name()
             .entries_by_nid(Nid::COMMONNAME)
             .next()
@@ -229,10 +250,9 @@ mod tls {
     fn should_not_set_cert_subject_alt_name() {
         let mut csp = Csp::of(rng(), volatile_key_store());
 
-        let der_cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
-        let x509_cert = x509_cert(&der_cert);
-        let subject_alt_names = x509_cert.subject_alt_names();
+        let subject_alt_names = cert.as_x509().subject_alt_names();
         assert!(subject_alt_names.is_none());
     }
 
@@ -240,10 +260,9 @@ mod tls {
     fn should_set_random_cert_serial_number() {
         let mut csp = Csp::of(csprng_seeded_with(FIXED_SEED), volatile_key_store());
 
-        let der_cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
-        let x509_cert = x509_cert(&der_cert);
-        let cert_serial = x509_cert.serial_number().to_bn().unwrap();
+        let cert_serial = cert.as_x509().serial_number().to_bn().unwrap();
         let expected_randomness = csprng_seeded_with(FIXED_SEED).gen::<[u8; 19]>();
         let expected_serial = BigNum::from_slice(&expected_randomness).unwrap();
         assert_eq!(expected_serial, cert_serial);
@@ -253,13 +272,13 @@ mod tls {
     fn should_set_different_serial_numbers_for_multiple_certs() {
         let mut csp = Csp::of(rng(), volatile_key_store());
 
-        let der_cert_1 = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
-        let der_cert_2 = csp.gen_tls_key_pair(node_test_id(NODE_2), NOT_AFTER);
-        let der_cert_3 = csp.gen_tls_key_pair(node_test_id(NODE_3), NOT_AFTER);
+        let cert_1 = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert_2 = csp.gen_tls_key_pair(node_test_id(NODE_2), NOT_AFTER);
+        let cert_3 = csp.gen_tls_key_pair(node_test_id(NODE_3), NOT_AFTER);
 
-        let serial_1 = serial_number(&der_cert_1);
-        let serial_2 = serial_number(&der_cert_2);
-        let serial_3 = serial_number(&der_cert_3);
+        let serial_1 = serial_number(&cert_1);
+        let serial_2 = serial_number(&cert_2);
+        let serial_3 = serial_number(&cert_3);
         assert_ne!(serial_1, serial_2);
         assert_ne!(serial_2, serial_3);
         assert_ne!(serial_1, serial_3);
@@ -272,7 +291,7 @@ mod tls {
 
         let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), not_after);
 
-        assert!(x509_cert(&cert).not_after() == Asn1Time::from_str_x509(not_after).unwrap());
+        assert!(cert.as_x509().not_after() == Asn1Time::from_str_x509(not_after).unwrap());
     }
 
     #[test]
@@ -292,10 +311,6 @@ mod tls {
         let _panic = csp.gen_tls_key_pair(node_test_id(NODE_1), &date_in_the_past);
     }
 
-    fn x509_cert(cert: &X509PublicKeyCert) -> X509 {
-        X509::from_der(&cert.certificate_der).unwrap()
-    }
-
     fn rng() -> impl CryptoRng + Rng {
         csprng_seeded_with(42)
     }
@@ -304,10 +319,9 @@ mod tls {
         csp: &mut Csp<impl CryptoRng + Rng, VolatileSecretKeyStore>,
         x509_cert: X509,
     ) -> CspSecretKey {
-        let cert_der = TlsEd25519CertificateDerBytes {
-            bytes: x509_cert.to_der().expect("DER-conversion failed."),
-        };
-        let key_id = tls_keygen::tls_cert_hash_as_key_id(&cert_der);
+        let cert = TlsPublicKeyCert::new_from_x509(x509_cert)
+            .expect("failed to convert X509 into TlsPublicKeyCert");
+        let key_id = tls_keygen::tls_cert_hash_as_key_id(&cert);
         csp.sks_read_lock()
             .get(&key_id)
             .expect("secret key not found")
@@ -317,7 +331,7 @@ mod tls {
         x509_cert.subject_name().entries_by_nid(Nid::COMMONNAME)
     }
 
-    fn serial_number(der_cert: &X509PublicKeyCert) -> BigNum {
-        x509_cert(&der_cert).serial_number().to_bn().unwrap()
+    fn serial_number(cert: &TlsPublicKeyCert) -> BigNum {
+        cert.as_x509().serial_number().to_bn().unwrap()
     }
 }

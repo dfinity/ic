@@ -23,7 +23,7 @@ various tests of the Crypto Component.
 3+^| **Miscellaneous public crates**
 
 
-| `key_validation/..` | `ic-crypto-key-validation`^**[Wasm]**^ |
+| `node_key_validation/..` | `ic-crypto-node-key-validation`^**[Wasm]**^ |
 validation utils for public keys of a node
 
 | `sha256/..` | `ic-crypto-sha256`^**[Wasm]**^ |

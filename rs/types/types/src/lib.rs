@@ -81,7 +81,6 @@ pub mod xnet;
 use crate::messages::CanisterInstallMode;
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
-pub use funds::icp::{ICPError, ICP};
 pub use funds::*;
 use ic_base_types::NumSeconds;
 pub use ic_base_types::{
@@ -274,9 +273,9 @@ impl std::ops::Sub for QueryAllocation {
     }
 }
 
-impl Into<NumInstructions> for QueryAllocation {
-    fn into(self) -> NumInstructions {
-        NumInstructions::from(self.0)
+impl From<QueryAllocation> for NumInstructions {
+    fn from(val: QueryAllocation) -> Self {
+        NumInstructions::from(val.0)
     }
 }
 
@@ -354,8 +353,8 @@ impl Default for ComputeAllocation {
 /// [`ComputeAllocation`].
 #[derive(Clone, Debug)]
 pub struct InvalidComputeAllocationError {
-    min: u64,
-    max: u64,
+    min: candid::Nat,
+    max: candid::Nat,
     given: candid::Nat,
 }
 
@@ -365,18 +364,18 @@ const MAX_COMPUTE_ALLOCATION: u64 = 100;
 impl InvalidComputeAllocationError {
     pub fn new(given: candid::Nat) -> Self {
         Self {
-            min: MIN_COMPUTE_ALLOCATION,
-            max: MAX_COMPUTE_ALLOCATION,
+            min: candid::Nat::from(MIN_COMPUTE_ALLOCATION),
+            max: candid::Nat::from(MAX_COMPUTE_ALLOCATION),
             given,
         }
     }
 
-    pub fn min(&self) -> u64 {
-        self.min
+    pub fn min(&self) -> candid::Nat {
+        self.min.clone()
     }
 
-    pub fn max(&self) -> u64 {
-        self.max
+    pub fn max(&self) -> candid::Nat {
+        self.max.clone()
     }
 
     pub fn given(&self) -> candid::Nat {
@@ -445,8 +444,8 @@ impl fmt::Display for MemoryAllocation {
 /// [`MemoryAllocation`].
 #[derive(Clone, Debug)]
 pub struct InvalidMemoryAllocationError {
-    pub min: NumBytes,
-    pub max: NumBytes,
+    pub min: candid::Nat,
+    pub max: candid::Nat,
     pub given: candid::Nat,
 }
 
@@ -456,8 +455,8 @@ const MAX_MEMORY_ALLOCATION: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024);
 impl InvalidMemoryAllocationError {
     pub fn new(given: candid::Nat) -> Self {
         Self {
-            min: MIN_MEMORY_ALLOCATION,
-            max: MAX_MEMORY_ALLOCATION,
+            min: candid::Nat::from(MIN_MEMORY_ALLOCATION.get()),
+            max: candid::Nat::from(MAX_MEMORY_ALLOCATION.get()),
             given,
         }
     }

@@ -99,10 +99,10 @@ mod tests {
         let mut streams = state.take_streams();
         streams.insert(
             subnet_test_id(5),
-            Stream {
-                messages: StreamIndexedQueue::with_begin(StreamIndex::new(4)),
-                signals_end: StreamIndex::new(10),
-            },
+            Stream::new(
+                StreamIndexedQueue::with_begin(StreamIndex::new(4)),
+                StreamIndex::new(10),
+            ),
         );
         state.put_streams(streams);
 
@@ -126,10 +126,10 @@ mod tests {
             "NOT_USED".into(),
         );
 
-        let stream = Stream {
-            messages: StreamIndexedQueue::with_begin(StreamIndex::from(4)),
-            signals_end: StreamIndex::new(10),
-        };
+        let stream = Stream::new(
+            StreamIndexedQueue::with_begin(StreamIndex::from(4)),
+            StreamIndex::new(10),
+        );
 
         let mut streams = state.take_streams();
         streams.insert(subnet_test_id(5), stream);
@@ -137,10 +137,10 @@ mod tests {
 
         let hash_of_state_one = hash_state(&state);
 
-        let stream = Stream {
-            messages: StreamIndexedQueue::with_begin(StreamIndex::from(14)),
-            signals_end: StreamIndex::new(11),
-        };
+        let stream = Stream::new(
+            StreamIndexedQueue::with_begin(StreamIndex::from(14)),
+            StreamIndex::new(11),
+        );
         let mut streams = state.take_streams();
         streams.insert(subnet_test_id(6), stream);
         state.put_streams(streams);
@@ -194,15 +194,13 @@ mod tests {
 
             state.put_canister_state(canister_state);
 
-            let mut stream = Stream {
-                messages: StreamIndexedQueue::with_begin(StreamIndex::from(4)),
-                signals_end: StreamIndex::new(10),
-            };
+            let mut stream = Stream::new(
+                StreamIndexedQueue::with_begin(StreamIndex::from(4)),
+                StreamIndex::new(10),
+            );
 
             for _ in 1..6 {
-                stream
-                    .messages
-                    .push(RequestOrResponse::Response(ResponseBuilder::new().build()));
+                stream.push(RequestOrResponse::Response(ResponseBuilder::new().build()));
             }
 
             let mut streams = state.take_streams();

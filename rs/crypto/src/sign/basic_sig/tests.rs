@@ -247,10 +247,11 @@ mod test_request_id_sig_verification {
 
     proptest! {
         #[test]
-        fn should_fail_with_algorithm_not_supported_if_pubkey_is_none_of_ed25519_ecdsap256_ecdsasecp256k1 (
+        fn should_fail_with_algorithm_not_supported_if_pubkey_is_not_a_basic_sig (
             not_supported_user_pubkey in arbitrary_types::user_public_key()
                 .prop_filter("ed25519 only", |pk|
                 (pk.algorithm_id != AlgorithmId::Ed25519) &&
+                (pk.algorithm_id != AlgorithmId::RsaSha256) &&
                 (pk.algorithm_id != AlgorithmId::EcdsaP256) &&
                 (pk.algorithm_id != AlgorithmId::EcdsaSecp256k1))
         ) {

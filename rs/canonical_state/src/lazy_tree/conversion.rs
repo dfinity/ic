@@ -245,7 +245,7 @@ fn streams_as_tree(streams: &Streams, certification_version: u32) -> LazyTree<'_
                     .with_tree(
                         "messages",
                         fork(StreamQueueFork {
-                            queue: &stream.messages,
+                            queue: stream.messages(),
                             mk_tree: |_idx, msg| blob(move || encode_message(msg)),
                         }),
                     ),

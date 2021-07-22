@@ -277,7 +277,7 @@ mod tests {
         assert_eq!(debug_blob(vec![255, 0]), "Blob{ff00}");
         assert_eq!(debug_blob(vec![1, 2, 3]), "Blob{010203}");
         assert_eq!(debug_blob(vec![0, 1, 15, 255]), "Blob{4 bytes;00010fff}");
-        let long_vec: Vec<u8> = (0 as u8..100 as u8).collect();
+        let long_vec: Vec<u8> = (0_u8..100_u8).collect();
         let long_debug = debug_blob(long_vec);
         assert_eq!(
             long_debug.len(),
@@ -302,7 +302,7 @@ mod tests {
         assert_eq!(format_blob(vec![255, 0]), "Blob{ff00}");
         assert_eq!(format_blob(vec![1, 2, 3]), "Blob{010203}");
         assert_eq!(format_blob(vec![0, 1, 15, 255]), "Blob{4 bytes;00010fff}");
-        let long_vec: Vec<u8> = (0 as u8..100 as u8).collect();
+        let long_vec: Vec<u8> = (0_u8..100_u8).collect();
         let long_str = format_blob(long_vec);
         assert_eq!(
             long_str.len(),

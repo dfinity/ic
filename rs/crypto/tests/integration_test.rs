@@ -2,10 +2,10 @@
 use crate::keygen_utils::{add_keys_to_registry, TestKeygenCrypto};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::utils::{
-    get_node_keys_or_generate_if_missing, get_node_keys_or_generate_if_missing_for_node_id,
-    NodeKeysToGenerate, TempCryptoComponent,
+    get_node_keys_or_generate_if_missing, NodeKeysToGenerate, TempCryptoComponent,
 };
 use ic_crypto::CryptoComponent;
+use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_interfaces::crypto::{BasicSigner, KeyManager, Keygen, SignableMock};
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
@@ -121,34 +121,6 @@ fn should_sign_with_keys_generated_in_multiple_threads() {
 }
 
 // TODO(CRP-430): check/improve the test coverage of SKS checks.
-
-#[test]
-fn should_generate_all_keys_for_given_node_id_for_new_node() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let node_pks = get_node_keys_or_generate_if_missing_for_node_id(
-            &config.crypto_root,
-            node_test_id(NODE_ID),
-        );
-        assert!(all_node_keys_are_present(&node_pks));
-    })
-}
-
-#[test]
-fn should_not_generate_new_keys_for_given_node_id_if_all_keys_are_present() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let orig_node_pks = get_node_keys_or_generate_if_missing_for_node_id(
-            &config.crypto_root,
-            node_test_id(NODE_ID),
-        );
-        assert!(all_node_keys_are_present(&orig_node_pks));
-        let new_node_pks = get_node_keys_or_generate_if_missing_for_node_id(
-            &config.crypto_root,
-            node_test_id(NODE_ID),
-        );
-        assert!(all_node_keys_are_present(&new_node_pks));
-        assert_eq!(orig_node_pks, new_node_pks);
-    })
-}
 
 #[test]
 fn should_generate_all_keys_for_new_node() {
@@ -270,6 +242,38 @@ fn should_fail_check_keys_with_registry_if_tls_cert_is_missing_in_registry() {
             registry_version: REG_V1
         }
     );
+}
+
+#[test]
+fn should_fail_check_keys_with_registry_if_cert_is_malformed() {
+    let node_keys_to_generate = NodeKeysToGenerate {
+        generate_node_signing_keys: true,
+        generate_committee_signing_keys: true,
+        generate_dkg_dealing_encryption_keys: true,
+        generate_tls_keys_and_certificate: false,
+    };
+    let malformed_cert = X509PublicKeyCert {
+        certificate_der: b"not DER".to_vec(),
+    };
+    let crypto = TestKeygenCrypto::builder()
+        .with_node_keys_to_generate(node_keys_to_generate)
+        .with_tls_cert_in_registry(malformed_cert)
+        .add_generated_node_signing_key_to_registry()
+        .add_generated_committee_signing_key_to_registry()
+        .add_generated_dkg_dealing_enc_key_to_registry()
+        .build(NODE_ID, REG_V1);
+
+    let result = crypto.get().check_keys_with_registry(REG_V1);
+
+    assert!(matches!(
+        result,
+        Err(CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::Ed25519,
+            key_bytes: None,
+            internal_error
+        })
+        if internal_error.contains("Error parsing DER")
+    ));
 }
 
 #[test]
@@ -553,7 +557,10 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_malformed() {
 #[test]
 fn should_fail_check_keys_with_registry_if_tls_cert_secret_key_is_missing() {
     let cert_without_corresponding_secret_key = X509PublicKeyCert {
-        certificate_der: vec![0, 1, 2],
+        certificate_der: generate_ed25519_cert()
+            .1
+            .to_der()
+            .expect("Failed to convert X509 to DER"),
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())

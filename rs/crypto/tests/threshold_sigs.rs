@@ -1,12 +1,13 @@
 #![allow(clippy::unwrap_used)]
 use distributed_key_generation::run_dkg;
 use ic_crypto::utils::{combined_threshold_signature_and_public_key, TempCryptoComponent};
+use ic_crypto_test_utils_threshold_sigs::interactive::{
+    initial_idkg_transcript_for_nodes_in_subnet, load_idkg_transcript_for_each,
+    sign_threshold_for_each,
+};
 use ic_interfaces::crypto::{DkgAlgorithm, Signable, SignableMock, ThresholdSigVerifier};
 use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities::crypto::threshold_sigs::{
-    initial_dkg_transcript_for_nodes_in_subnet, load_transcript_for_each, sign_threshold_for_each,
-};
 use ic_test_utilities::crypto::{crypto_for, temp_crypto_components_for};
 use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_1};
 use ic_types::crypto::dkg::Transcript;
@@ -103,9 +104,9 @@ fn should_threshold_sign_with_initial_dkg_transcript() {
     let nodes_in_subnet: Vec<_> = (1..=num_of_nodes_in_subnet).map(node_test_id).collect();
     let crypto_components = temp_crypto_components_for(&nodes_in_subnet);
     let transcript =
-        initial_dkg_transcript_for_nodes_in_subnet(SUBNET_1, &nodes_in_subnet, &crypto_components);
+        initial_idkg_transcript_for_nodes_in_subnet(SUBNET_1, &nodes_in_subnet, &crypto_components);
 
-    load_transcript_for_each(&nodes_in_subnet, &transcript, &crypto_components);
+    load_idkg_transcript_for_each(&nodes_in_subnet, &transcript, &crypto_components);
     let initial_dkg_id = transcript.dkg_id;
     let msg = message();
     let combined_sig = threshold_sign_and_combine(
@@ -128,9 +129,9 @@ fn should_threshold_sign_with_initial_dkg_transcript_with_single_node() {
     let nodes_in_subnet = [NODE_1];
     let crypto_components = temp_crypto_components_for(&nodes_in_subnet);
     let transcript =
-        initial_dkg_transcript_for_nodes_in_subnet(SUBNET_1, &nodes_in_subnet, &crypto_components);
+        initial_idkg_transcript_for_nodes_in_subnet(SUBNET_1, &nodes_in_subnet, &crypto_components);
 
-    load_transcript_for_each(&nodes_in_subnet, &transcript, &crypto_components);
+    load_idkg_transcript_for_each(&nodes_in_subnet, &transcript, &crypto_components);
     let initial_dkg_id = transcript.dkg_id;
     let msg = message();
     let combined_sig = threshold_sign_and_combine(
@@ -155,7 +156,7 @@ fn should_create_initial_dkg_transcript_for_28_nodes() {
     let nodes_in_subnet: Vec<_> = (1..=num_of_nodes_in_subnet).map(node_test_id).collect();
     let crypto_components = temp_crypto_components_for(&nodes_in_subnet);
     let _ =
-        initial_dkg_transcript_for_nodes_in_subnet(SUBNET_1, &nodes_in_subnet, &crypto_components);
+        initial_idkg_transcript_for_nodes_in_subnet(SUBNET_1, &nodes_in_subnet, &crypto_components);
 }
 
 #[test]
@@ -247,13 +248,13 @@ mod threshold_sigs_with_resharing_dkg {
         let crypto_components = temp_crypto_components_for(&nodes_in_subnet);
 
         // Initial DKG
-        let initial_transcript = initial_dkg_transcript_for_nodes_in_subnet(
+        let initial_transcript = initial_idkg_transcript_for_nodes_in_subnet(
             SUBNET_1,
             &nodes_in_subnet,
             &crypto_components,
         );
         let initial_dkg_id = initial_transcript.dkg_id;
-        load_transcript_for_each(&nodes_in_subnet, &initial_transcript, &crypto_components);
+        load_idkg_transcript_for_each(&nodes_in_subnet, &initial_transcript, &crypto_components);
         assert_threshold_sign_works_and_combined_sig_is_valid(
             &crypto_components,
             msg("epoch 1 message"),
@@ -328,7 +329,6 @@ mod threshold_sigs_with_resharing_dkg {
 
 mod threshold_sig_verification_by_public_key {
     use super::*;
-    use ic_crypto::utils::dkg::initial_dkg_transcript_record_from_transcript;
     use ic_crypto::verify_combined_threshold_sig;
     use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
     use ic_registry_keys::make_subnet_record_key;
@@ -395,7 +395,7 @@ mod threshold_sig_verification_by_public_key {
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
         let crypto_components =
             TempCryptoComponent::multiple_new(&nodes_in_subnet, Arc::clone(&registry) as Arc<_>);
-        let transcript = initial_dkg_transcript_for_nodes_in_subnet(
+        let transcript = initial_idkg_transcript_for_nodes_in_subnet(
             SUBNET_1,
             &nodes_in_subnet,
             &crypto_components,
@@ -403,7 +403,7 @@ mod threshold_sig_verification_by_public_key {
         add_dkg_transcript_to_registry(&registry_data, &transcript, SUBNET_1, REG_V1);
         registry.update_to_latest_version(); // Required to update the cache
 
-        load_transcript_for_each(&nodes_in_subnet, &transcript, &crypto_components);
+        load_idkg_transcript_for_each(&nodes_in_subnet, &transcript, &crypto_components);
         let initial_dkg_id = transcript.dkg_id;
         let msg = message();
         let combined_sig = threshold_sign_and_combine(
@@ -468,15 +468,11 @@ mod threshold_sig_verification_by_public_key {
 
     fn add_dkg_transcript_to_registry(
         registry_data_provider: &Arc<ProtoRegistryDataProvider>,
-        transcript: &Transcript,
+        _transcript: &Transcript,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) {
-        let mut subnet_record = test_subnet_record();
-        subnet_record.initial_dkg_transcript = Some(initial_dkg_transcript_record_from_transcript(
-            transcript.clone(),
-        ));
-
+        let subnet_record = test_subnet_record();
         registry_data_provider
             .add(
                 &make_subnet_record_key(subnet_id),
@@ -544,7 +540,7 @@ fn assert_sig_shares_are_valid<H: Signable>(
 
 mod distributed_key_generation {
     use super::*;
-    use ic_test_utilities::crypto::threshold_sigs::encryption_public_keys;
+    use ic_crypto_test_utils_threshold_sigs::interactive::idkg_encryption_public_keys;
     use ic_types::crypto::dkg::{Dealing, EncryptionPublicKeyWithPop, Response, Transcript};
     use std::collections::BTreeMap;
 
@@ -580,7 +576,8 @@ mod distributed_key_generation {
         crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
     ) -> BTreeMap<NodeId, dkg::EncryptionPublicKeyWithPop> {
         let dealers_and_receivers = dealers_and_receivers(dkg_config);
-        let keys = encryption_public_keys(&dealers_and_receivers, dkg_config, crypto_components);
+        let keys =
+            idkg_encryption_public_keys(&dealers_and_receivers, dkg_config, crypto_components);
         verify_encryption_public_keys(&dkg_config.receivers, dkg_config, &keys, crypto_components);
         keys
     }

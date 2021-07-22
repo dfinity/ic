@@ -3,7 +3,7 @@ use crate::dkg::secp256k1::ephemeral_key::tests::create_ephemeral_public_key;
 use crate::dkg::secp256k1::types::EphemeralSecretKeyBytes;
 use crate::test_utils::select_n;
 use crate::types::PublicKey;
-use ic_types::{NodeIndex, Randomness};
+use ic_types::Randomness;
 use ic_types_test_utils::arbitrary as arbitrary_types;
 use proptest::prelude::*;
 use rand::seq::IteratorRandom;
@@ -119,8 +119,8 @@ prop_compose! {
         seed: Randomness,
         dealer_secret_key_bytes: EphemeralSecretKeyBytes,
         dkg_id in arbitrary_types::dkg_id(),
-        threshold in 1 as NodeIndex..4,
-        redundancy in 0 as NodeIndex..4,
+        threshold in 1_u32..4,
+        redundancy in 0_u32..4,
         receiver_secret_keys in proptest::collection::vec(any::<EphemeralSecretKeyBytes>(), 8..10),
     ) -> DealingFixture {
         let mut rng = ChaChaRng::from_seed(seed.get());
@@ -173,7 +173,7 @@ proptest! {
     #[test]
     fn different_threshold_fails(
         fixture in arbitrary_dealing_fixture(),
-        receiver_threshold in 0 as NodeIndex..40,
+        receiver_threshold in 0_u32..40,
     ) {
         let receiver_threshold = NumberOfNodes::from(receiver_threshold);
         prop_assume!(fixture.threshold != receiver_threshold);
@@ -204,9 +204,9 @@ proptest! {
         seed: Randomness,
         dealer_secret_key_bytes: EphemeralSecretKeyBytes,
         dkg_id in arbitrary_types::dkg_id(),
-        threshold in 0 as NodeIndex..4,
-        dealer_redundancy in 0 as NodeIndex..4,
-        verifier_redundancy in 0 as NodeIndex..4,
+        threshold in 0_u32..4,
+        dealer_redundancy in 0_u32..4,
+        verifier_redundancy in 0_u32..4,
         receiver_secret_keys in proptest::collection::vec(any::<EphemeralSecretKeyBytes>(), 8..10),
     ) {
         let mut rng = ChaChaRng::from_seed(seed.get());

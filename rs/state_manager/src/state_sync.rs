@@ -29,7 +29,7 @@ impl ArtifactKind for StateSyncArtifact {
     type Attribute = StateSyncAttribute;
     type Filter = StateSyncFilter;
 
-    fn to_advert(msg: &StateSyncMessage) -> Advert<StateSyncArtifact> {
+    fn message_to_advert(msg: &StateSyncMessage) -> Advert<StateSyncArtifact> {
         let size: u64 = msg
             .manifest
             .file_table
@@ -145,7 +145,7 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
                             crate::state_sync::chunkable::get_state_sync_chunk,
                         ),
                     };
-                    Some(StateSyncArtifact::to_advert(&msg))
+                    Some(StateSyncArtifact::message_to_advert(&msg))
                 } else {
                     None
                 }

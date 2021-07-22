@@ -85,9 +85,9 @@ impl ArtifactClient<TestArtifact> for ArtifactChunkingTestImpl {
         pool.contains_key(message_id)
     }
 
-    fn get_validated_by_identifier<'b>(
+    fn get_validated_by_identifier(
         &self,
-        message_id: &'b TestArtifactId,
+        message_id: &TestArtifactId,
     ) -> Option<TestArtifactMessage> {
         let pool = self.file_tree_sync_validated_pool.lock().unwrap();
         pool.get(message_id).cloned()

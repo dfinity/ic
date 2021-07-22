@@ -84,7 +84,7 @@ impl Errors {
                 .iter()
                 .map(|(msg, span)| format!("{}\nAt: {:?}", msg, span));
 
-            panic!(errors.collect::<Vec<_>>().join("\n"))
+            panic!("{}", errors.collect::<Vec<_>>().join("\n"))
         }
     }
 }
@@ -218,8 +218,8 @@ fn function_info(
         FunctionInfo {
             function_call,
             tuple_pat,
-            name,
             attrs,
+            name,
             is_async,
         },
     ))

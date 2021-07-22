@@ -50,8 +50,8 @@ pub struct StateWithThresholdKey {
 }
 impl StateWithThresholdKey {
     pub fn random(rng: &mut ChaChaRng) -> Self {
-        let threshold = NumberOfNodes::from(rng.gen_range(1 as NodeIndex, 10 as NodeIndex));
-        let num_signatories = NumberOfNodes::from(rng.gen_range(threshold.get(), 10 as NodeIndex));
+        let threshold = NumberOfNodes::from(rng.gen_range(1_u32, 10_u32));
+        let num_signatories = NumberOfNodes::from(rng.gen_range(threshold.get(), 10_u32));
         let eligibility = vec![true; num_signatories.get() as usize];
         let (public_coefficients, secret_keys): (
             PublicCoefficientsBytes,
@@ -128,7 +128,7 @@ impl StateWithEphemeralKeys {
     pub fn random(mut rng: &mut ChaChaRng, initial_state: StateWithThresholdKey) -> Self {
         let dkg_id = random_dkg_id(&mut rng);
         let num_dealers = initial_state.num_signatories;
-        let num_receivers = NumberOfNodes::from(rng.gen_range(1, 10 as NodeIndex));
+        let num_receivers = NumberOfNodes::from(rng.gen_range(1, 10_u32));
         let dealer_ephemeral_keys = (0..num_dealers.get())
             .map(|dealer_index| {
                 Some(ephemeral_key_set_from_tuple(create_ephemeral(
@@ -234,13 +234,13 @@ impl StateWithResharedDealings {
         StateWithResharedDealings {
             initial_state,
             dkg_id,
+            num_dealers,
+            num_receivers,
             dealer_ephemeral_keys,
             receiver_ephemeral_keys,
             dealer_indices,
             new_threshold,
             dealings,
-            num_dealers,
-            num_receivers,
         }
     }
     pub fn verify_dealings(&self) -> Result<(), DkgVerifyReshareDealingError> {
@@ -317,13 +317,13 @@ impl StateWithResponses {
         StateWithResponses {
             initial_state,
             dkg_id,
+            num_dealers,
+            num_receivers,
             dealer_ephemeral_keys,
             receiver_ephemeral_keys,
             dealer_indices,
             new_threshold,
             dealings,
-            num_dealers,
-            num_receivers,
             responses,
         }
     }
@@ -410,13 +410,13 @@ impl StateWithTranscript {
         StateWithTranscript {
             initial_state,
             dkg_id,
+            num_dealers,
+            num_receivers,
             dealer_ephemeral_keys,
             receiver_ephemeral_keys,
             dealer_indices,
             new_threshold,
             dealings,
-            num_dealers,
-            num_receivers,
             transcript,
         }
     }

@@ -14,6 +14,7 @@ use ic_logger::{info, trace, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     ingress::WasmResult,
+    malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply,
         HttpReadContent, HttpReadStateResponse, HttpRequest, HttpRequestEnvelope, MessageId,
@@ -21,7 +22,7 @@ use ic_types::{
     },
     time::current_time,
     user_error::{ErrorCode, RejectCode, UserError},
-    RegistryVersion, UserId,
+    RegistryVersion, Time, UserId,
 };
 use ic_validator::{get_authorized_canisters, CanisterIdSet};
 use std::convert::TryFrom;
@@ -65,6 +66,7 @@ pub(crate) fn handle(
     registry_version: RegistryVersion,
     body: Vec<u8>,
     metrics: &HttpHandlerMetrics,
+    malicious_flags: &MaliciousFlags,
 ) -> (Response<Body>, ApiReqType) {
     trace!(log, "in handle read");
     use ApiReqType::*;
@@ -97,17 +99,22 @@ pub(crate) fn handle(
         }
     };
 
-    let targets =
-        match get_authorized_canisters(&request, validator, current_time(), registry_version) {
-            Ok(targets) => targets,
-            Err(err) => {
-                metrics.observe_forbidden_request(&RequestType::Read, "ReadReqAuthFailed");
-                return (
-                    common::make_response_on_validation_error(request.id(), err, log),
-                    Unknown,
-                );
-            }
-        };
+    let targets = match get_authorized_canisters(
+        &request,
+        validator,
+        current_time(),
+        registry_version,
+        malicious_flags,
+    ) {
+        Ok(targets) => targets,
+        Err(err) => {
+            metrics.observe_forbidden_request(&RequestType::Read, "ReadReqAuthFailed");
+            return (
+                common::make_response_on_validation_error(request.id(), err, log),
+                Unknown,
+            );
+        }
+    };
 
     match request.content() {
         ReadContent::Query(query) => (
@@ -118,6 +125,7 @@ pub(crate) fn handle(
                 state_reader,
                 query.clone(),
                 targets,
+                metrics,
             ),
             Query,
         ),
@@ -143,10 +151,16 @@ fn handle_query(
     state_reader: &dyn StateReader<State = ReplicatedState>,
     query: UserQuery,
     targets: CanisterIdSet,
+    metrics: &HttpHandlerMetrics,
 ) -> Response<Body> {
     if !targets.contains(&query.receiver) {
         return common::make_response(StatusCode::UNAUTHORIZED, "Unauthorized.");
     }
+    metrics.observe_unreliable_request_acceptance_duration(
+        RequestType::Read,
+        ApiReqType::Query,
+        Time::from_nanos_since_unix_epoch(query.ingress_expiry),
+    );
 
     let res = match common::get_latest_certified_state_and_data_certificate(
         state_reader,
@@ -203,6 +217,11 @@ fn handle_read_state(
         metrics.observe_forbidden_request(&RequestType::Read, "InvalidPaths");
         return common::make_response(StatusCode::FORBIDDEN, &err.description());
     }
+    metrics.observe_unreliable_request_acceptance_duration(
+        RequestType::Read,
+        ApiReqType::ReadState,
+        Time::from_nanos_since_unix_epoch(read_state.ingress_expiry),
+    );
 
     let mut paths: Vec<Path> = read_state.paths;
 

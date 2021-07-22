@@ -1,9 +1,11 @@
 use crate::config;
+use ic_embedders::{wasm_executor::WasmExecutor, WasmtimeEmbedder};
 use ic_execution_environment::{
     execute as hypervisor_execute, Hypervisor, HypervisorMetrics, QueryExecutionType,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorError::ContractViolation, SubnetAvailableMemory, TrapCode,
+    HypervisorError, HypervisorError::ContractViolation, HypervisorResult, SubnetAvailableMemory,
+    TrapCode,
 };
 use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::replica_logger::no_op_logger;
@@ -34,13 +36,12 @@ use ic_types::{
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
     user_error::RejectCode,
     CanisterId, ComputeAllocation, Cycles, Funds, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, SubnetId, Time, UserId, ICP,
+    PrincipalId, SubnetId, Time, UserId,
 };
 use ic_utils::ic_features::cow_state_feature;
 use ic_wasm_utils::validation::WasmValidationLimits;
 use lazy_static::lazy_static;
 use maplit::btreemap;
-use runtime::WasmExecutionDispatcher;
 use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, time::Duration};
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
@@ -183,17 +184,15 @@ fn execute_update_with_cycles_memory_time(
         .build();
 
     let (_, _, routing_table, subnet_records) = setup();
-    let (canister, num_instructions_left, action, heap_delta) = hypervisor
-        .execute_update(
-            canister,
-            RequestOrIngress::Ingress(req),
-            instructions_limit,
-            time,
-            routing_table,
-            subnet_records,
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-        )
-        .get_no_pause();
+    let (canister, num_instructions_left, action, heap_delta) = hypervisor.execute_update(
+        canister,
+        RequestOrIngress::Ingress(req),
+        instructions_limit,
+        time,
+        routing_table,
+        subnet_records,
+        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+    );
 
     (canister, num_instructions_left, action, heap_delta)
 }
@@ -225,21 +224,19 @@ fn execute_update_for_request(
         .method_payload(payload)
         .sender(caller)
         .receiver(canister.canister_id())
-        .payment(Funds::new(payment, ICP::zero()))
+        .payment(Funds::new(payment))
         .build();
 
     let (_, _, routing_table, subnet_records) = setup();
-    let (canister, num_instructions_left, action, _) = hypervisor
-        .execute_update(
-            canister,
-            RequestOrIngress::Request(req),
-            instructions_limit,
-            time,
-            routing_table,
-            subnet_records,
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-        )
-        .get_no_pause();
+    let (canister, num_instructions_left, action, _) = hypervisor.execute_update(
+        canister,
+        RequestOrIngress::Request(req),
+        instructions_limit,
+        time,
+        routing_table,
+        subnet_records,
+        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+    );
 
     (canister, num_instructions_left, action)
 }
@@ -265,10 +262,18 @@ fn execute(
     let metrics_registry = MetricsRegistry::new();
     let metrics = Arc::new(HypervisorMetrics::new(&metrics_registry));
     let config = config();
-    let mut dispatcher_config = ic_config::embedders::Config::new();
-    dispatcher_config.persistence_type = config.persistence_type;
-    let wasm_executor =
-        WasmExecutionDispatcher::new(config.embedder_type, dispatcher_config, no_op_logger());
+
+    let mut embedder_config = ic_config::embedders::Config::new();
+    embedder_config.persistence_type = config.persistence_type;
+
+    let wasm_embedder = WasmtimeEmbedder::new(embedder_config.clone(), no_op_logger());
+    let wasm_executor = WasmExecutor::new(
+        wasm_embedder,
+        embedder_config.max_globals,
+        embedder_config.max_functions,
+        &metrics_registry,
+    );
+
     hypervisor_execute(
         api_type,
         system_state,
@@ -283,7 +288,6 @@ fn execute(
         metrics,
         Arc::new(wasm_executor),
     )
-    .get_no_pause()
     .wasm_result
 }
 
@@ -381,7 +385,6 @@ fn start_noop() {
                 MAX_NUM_INSTRUCTIONS,
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             )
-            .get_no_pause()
             .2
             .expect("(start) succeeds");
     });
@@ -1230,33 +1233,29 @@ fn test_execute_query_msg_caller() {
         let _system_state = SystemStateBuilder::default().build();
         let canister = canister_from_exec_state(execution_state);
         let id = user_test_id(12);
-        let (canister, _, result) = hypervisor
-            .execute_query(
-                QueryExecutionType::Replicated,
-                "query_test",
-                &[],
-                id.clone().get(),
-                MAX_NUM_INSTRUCTIONS,
-                canister,
-                None,
-                mock_time(),
-            )
-            .get_no_pause();
+        let (canister, _, result) = hypervisor.execute_query(
+            QueryExecutionType::Replicated,
+            "query_test",
+            &[],
+            id.clone().get(),
+            MAX_NUM_INSTRUCTIONS,
+            canister,
+            None,
+            mock_time(),
+        );
         assert_eq!(result, Ok(Some(WasmResult::Reply(id.get().into_vec()))));
 
         let id = canister_test_id(37);
-        let (_, _, result) = hypervisor
-            .execute_query(
-                QueryExecutionType::Replicated,
-                "query_test",
-                &[],
-                id.clone().get(),
-                MAX_NUM_INSTRUCTIONS,
-                canister,
-                None,
-                mock_time(),
-            )
-            .get_no_pause();
+        let (_, _, result) = hypervisor.execute_query(
+            QueryExecutionType::Replicated,
+            "query_test",
+            &[],
+            id.clone().get(),
+            MAX_NUM_INSTRUCTIONS,
+            canister,
+            None,
+            mock_time(),
+        );
         assert_eq!(result, Ok(Some(WasmResult::Reply(id.get().into_vec()))));
     });
 }
@@ -2544,18 +2543,16 @@ fn executing_non_existing_method_does_not_consume_cycles() {
         assert_eq!(num_instructions_left, MAX_NUM_INSTRUCTIONS);
 
         // Check a query method.
-        let (_, num_instructions_left, res) = hypervisor
-            .execute_query(
-                QueryExecutionType::Replicated,
-                "foo",
-                EMPTY_PAYLOAD.as_slice(),
-                test_caller(),
-                MAX_NUM_INSTRUCTIONS,
-                canister,
-                None,
-                mock_time(),
-            )
-            .get_no_pause();
+        let (_, num_instructions_left, res) = hypervisor.execute_query(
+            QueryExecutionType::Replicated,
+            "foo",
+            EMPTY_PAYLOAD.as_slice(),
+            test_caller(),
+            MAX_NUM_INSTRUCTIONS,
+            canister,
+            None,
+            mock_time(),
+        );
         assert_eq!(
             res,
             Err(HypervisorError::MethodNotFound(WasmMethod::Query(
@@ -2586,16 +2583,14 @@ fn grow_memory() {
 
         let canister = canister_from_exec_state(execution_state);
         hypervisor
-            .execute_system(
+            .execute_canister_init(
                 canister,
-                SystemMethod::CanisterInit,
                 user_test_id(0).get(),
                 &[],
                 MAX_NUM_INSTRUCTIONS,
                 mock_time(),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             )
-            .get_no_pause()
             .2
             .unwrap();
     });
@@ -2630,7 +2625,6 @@ fn memory_access_between_min_and_max_canister_start() {
                     MAX_NUM_INSTRUCTIONS,
                     MAX_SUBNET_AVAILABLE_MEMORY.clone(),
                 )
-                .get_no_pause()
                 .2,
             Err(HypervisorError::Trapped(TrapCode::HeapOutOfBounds))
         );
@@ -2698,27 +2692,23 @@ fn test_system_method_is_callable(system_method: SystemMethod) {
 
         // Run the system method to increment the counter.
         let (canister, instructions, res) = match system_method {
-            SystemMethod::CanisterPostUpgrade => hypervisor.execute_system(
+            SystemMethod::CanisterPostUpgrade => hypervisor.execute_canister_post_upgrade(
                 canister,
-                SystemMethod::CanisterPostUpgrade,
                 test_caller(),
                 EMPTY_PAYLOAD.as_slice(),
                 MAX_NUM_INSTRUCTIONS,
                 mock_time(),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             ),
-            SystemMethod::CanisterPreUpgrade => hypervisor.execute_system(
+            SystemMethod::CanisterPreUpgrade => hypervisor.execute_canister_pre_upgrade(
                 canister,
-                SystemMethod::CanisterPreUpgrade,
                 test_caller(),
-                EMPTY_PAYLOAD.as_slice(),
                 MAX_NUM_INSTRUCTIONS,
                 mock_time(),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             ),
-            SystemMethod::CanisterInit => hypervisor.execute_system(
+            SystemMethod::CanisterInit => hypervisor.execute_canister_init(
                 canister,
-                SystemMethod::CanisterInit,
                 test_caller(),
                 EMPTY_PAYLOAD.as_slice(),
                 MAX_NUM_INSTRUCTIONS,
@@ -2733,8 +2723,7 @@ fn test_system_method_is_callable(system_method: SystemMethod) {
             SystemMethod::CanisterInspectMessage => unimplemented!(),
             SystemMethod::Empty => unimplemented!(),
             SystemMethod::CanisterHeartbeat => unimplemented!("We don't need this test."),
-        }
-        .get_no_pause();
+        };
 
         assert!(
             res.is_ok(),
@@ -2748,18 +2737,16 @@ fn test_system_method_is_callable(system_method: SystemMethod) {
         );
 
         // The counter should now be incremented to 1.
-        let (_, _, result) = hypervisor
-            .execute_query(
-                QueryExecutionType::Replicated,
-                "read",
-                EMPTY_PAYLOAD.as_slice(),
-                test_caller(),
-                MAX_NUM_INSTRUCTIONS,
-                canister,
-                None,
-                mock_time(),
-            )
-            .get_no_pause();
+        let (_, _, result) = hypervisor.execute_query(
+            QueryExecutionType::Replicated,
+            "read",
+            EMPTY_PAYLOAD.as_slice(),
+            test_caller(),
+            MAX_NUM_INSTRUCTIONS,
+            canister,
+            None,
+            mock_time(),
+        );
         assert_eq!(result, Ok(Some(WasmResult::Reply(vec![1, 0, 0, 0]))));
     });
 }
@@ -2796,27 +2783,23 @@ fn test_non_existing_system_method(system_method: SystemMethod) {
         let (_, _, routing_table, subnet_records) = setup();
         // Run the non-existing system method.
         let (_, cycles, res) = match system_method {
-            SystemMethod::CanisterPostUpgrade => hypervisor.execute_system(
+            SystemMethod::CanisterPostUpgrade => hypervisor.execute_canister_post_upgrade(
                 canister,
-                SystemMethod::CanisterPostUpgrade,
                 test_caller(),
                 EMPTY_PAYLOAD.as_slice(),
                 MAX_NUM_INSTRUCTIONS,
                 mock_time(),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             ),
-            SystemMethod::CanisterPreUpgrade => hypervisor.execute_system(
+            SystemMethod::CanisterPreUpgrade => hypervisor.execute_canister_pre_upgrade(
                 canister,
-                SystemMethod::CanisterPreUpgrade,
                 test_caller(),
-                EMPTY_PAYLOAD.as_slice(),
                 MAX_NUM_INSTRUCTIONS,
                 mock_time(),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             ),
-            SystemMethod::CanisterInit => hypervisor.execute_system(
+            SystemMethod::CanisterInit => hypervisor.execute_canister_init(
                 canister,
-                SystemMethod::CanisterInit,
                 test_caller(),
                 EMPTY_PAYLOAD.as_slice(),
                 MAX_NUM_INSTRUCTIONS,
@@ -2838,8 +2821,7 @@ fn test_non_existing_system_method(system_method: SystemMethod) {
                 mock_time(),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             ),
-        }
-        .get_no_pause();
+        };
 
         assert!(
             res.is_ok(),
@@ -2900,17 +2882,14 @@ fn canister_init_can_set_mutable_globals() {
             ExecutionState::new(wasm, tmp_path, WasmValidationLimits::default()).unwrap(),
         );
 
-        let (canister, _, _) = hypervisor
-            .execute_system(
-                canister,
-                SystemMethod::CanisterInit,
-                test_caller(),
-                EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS,
-                mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
-            .get_no_pause();
+        let (canister, _, _) = hypervisor.execute_canister_init(
+            canister,
+            test_caller(),
+            EMPTY_PAYLOAD.as_slice(),
+            MAX_NUM_INSTRUCTIONS,
+            mock_time(),
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
 
         assert_eq!(
             canister.execution_state.unwrap().exported_globals[0],
@@ -2946,17 +2925,14 @@ fn grow_memory_beyond_max_size_1() {
 
         let canister = canister_from_exec_state(execution_state);
 
-        let (_, _, res) = hypervisor
-            .execute_system(
-                canister,
-                SystemMethod::CanisterInit,
-                test_caller(),
-                EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS,
-                mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
-            .get_no_pause();
+        let (_, _, res) = hypervisor.execute_canister_init(
+            canister,
+            test_caller(),
+            EMPTY_PAYLOAD.as_slice(),
+            MAX_NUM_INSTRUCTIONS,
+            mock_time(),
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
 
         assert_eq!(
             res.unwrap_err(),
@@ -2985,17 +2961,14 @@ fn memory_access_between_min_and_max_canister_init() {
         .unwrap();
 
         let canister = canister_from_exec_state(execution_state);
-        let (_, _, res) = hypervisor
-            .execute_system(
-                canister,
-                SystemMethod::CanisterInit,
-                test_caller(),
-                EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS,
-                mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
-            .get_no_pause();
+        let (_, _, res) = hypervisor.execute_canister_init(
+            canister,
+            test_caller(),
+            EMPTY_PAYLOAD.as_slice(),
+            MAX_NUM_INSTRUCTIONS,
+            mock_time(),
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
 
         assert_eq!(
             res.unwrap_err(),
@@ -3029,17 +3002,14 @@ fn grow_memory_beyond_max_size_2() {
         .unwrap();
 
         let canister = canister_from_exec_state(execution_state);
-        let (_, _, res) = hypervisor
-            .execute_system(
-                canister,
-                SystemMethod::CanisterInit,
-                test_caller(),
-                EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS,
-                mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
-            .get_no_pause();
+        let (_, _, res) = hypervisor.execute_canister_init(
+            canister,
+            test_caller(),
+            EMPTY_PAYLOAD.as_slice(),
+            MAX_NUM_INSTRUCTIONS,
+            mock_time(),
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
 
         assert_eq!(
             res.unwrap_err(),
@@ -3048,7 +3018,13 @@ fn grow_memory_beyond_max_size_2() {
     });
 }
 
-fn test_stable_memory_is_rolled_back_on_failure(method: SystemMethod) {
+fn test_stable_memory_is_rolled_back_on_failure<F>(execute_method: F)
+where
+    F: FnOnce(
+        &Hypervisor,
+        CanisterState,
+    ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>),
+{
     with_hypervisor(|hypervisor, tmp_path| {
         let wat = r#"
             (module
@@ -3083,17 +3059,7 @@ fn test_stable_memory_is_rolled_back_on_failure(method: SystemMethod) {
         .unwrap();
         let canister = canister_from_exec_state(execution_state);
 
-        let (canister, _, res) = hypervisor
-            .execute_system(
-                canister,
-                method,
-                test_caller(),
-                EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS,
-                mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
-            .get_no_pause();
+        let (canister, _, res) = execute_method(&hypervisor, canister);
 
         // We expect an out of bounds memory error. The order and
         // applicability we do the checks depends on runtime mode
@@ -3117,17 +3083,49 @@ fn test_stable_memory_is_rolled_back_on_failure(method: SystemMethod) {
 
 #[test]
 fn changes_to_stable_memory_in_canister_init_are_rolled_back_on_failure() {
-    test_stable_memory_is_rolled_back_on_failure(SystemMethod::CanisterInit);
+    test_stable_memory_is_rolled_back_on_failure(
+        |hypervisor: &Hypervisor, canister: CanisterState| {
+            hypervisor.execute_canister_init(
+                canister,
+                test_caller(),
+                EMPTY_PAYLOAD.as_slice(),
+                MAX_NUM_INSTRUCTIONS,
+                mock_time(),
+                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            )
+        },
+    );
 }
 
 #[test]
 fn changes_to_stable_memory_in_canister_pre_upgrade_are_rolled_back_on_failure() {
-    test_stable_memory_is_rolled_back_on_failure(SystemMethod::CanisterPreUpgrade);
+    test_stable_memory_is_rolled_back_on_failure(
+        |hypervisor: &Hypervisor, canister: CanisterState| {
+            hypervisor.execute_canister_pre_upgrade(
+                canister,
+                test_caller(),
+                MAX_NUM_INSTRUCTIONS,
+                mock_time(),
+                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            )
+        },
+    )
 }
 
 #[test]
 fn changes_to_stable_memory_in_canister_post_upgrade_are_rolled_back_on_failure() {
-    test_stable_memory_is_rolled_back_on_failure(SystemMethod::CanisterPostUpgrade);
+    test_stable_memory_is_rolled_back_on_failure(
+        |hypervisor: &Hypervisor, canister: CanisterState| {
+            hypervisor.execute_canister_post_upgrade(
+                canister,
+                test_caller(),
+                EMPTY_PAYLOAD.as_slice(),
+                MAX_NUM_INSTRUCTIONS,
+                mock_time(),
+                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            )
+        },
+    )
 }
 
 #[test]
@@ -3147,7 +3145,6 @@ fn cannot_execute_update_on_stopping_canister() {
                     subnet_records,
                     MAX_SUBNET_AVAILABLE_MEMORY.clone(),
                 )
-                .get_no_pause()
                 .2,
             CallContextAction::Fail {
                 error: HypervisorError::CanisterStopped,
@@ -3174,7 +3171,6 @@ fn cannot_execute_update_on_stopped_canister() {
                     subnet_records,
                     MAX_SUBNET_AVAILABLE_MEMORY.clone(),
                 )
-                .get_no_pause()
                 .2,
             CallContextAction::Fail {
                 error: HypervisorError::CanisterStopped,
@@ -3201,7 +3197,6 @@ fn cannot_execute_query_on_stopping_canister() {
                     None,
                     mock_time(),
                 )
-                .get_no_pause()
                 .2,
             Err(HypervisorError::CanisterStopped)
         );
@@ -3225,7 +3220,6 @@ fn cannot_execute_query_on_stopped_canister() {
                     None,
                     mock_time(),
                 )
-                .get_no_pause()
                 .2,
             Err(HypervisorError::CanisterStopped)
         );
@@ -3258,7 +3252,6 @@ fn cannot_execute_callback_on_stopped_canister() {
                     subnet_records,
                     MAX_SUBNET_AVAILABLE_MEMORY.clone(),
                 )
-                .get_no_pause()
                 .3,
             Err(HypervisorError::CanisterStopped)
         );
@@ -3302,22 +3295,20 @@ fn sys_api_call_ic_trap_preserves_some_cycles() {
         // Check that ic0.trap call wasn't expensive
         assert_eq!(
             num_instructions_left,
-            MAX_NUM_INSTRUCTIONS - NumInstructions::new(3)
+            MAX_NUM_INSTRUCTIONS - NumInstructions::new(4)
         );
 
         // Check a query method.
-        let (_, num_instructions_left, res) = hypervisor
-            .execute_query(
-                QueryExecutionType::Replicated,
-                "query_trap",
-                EMPTY_PAYLOAD.as_slice(),
-                test_caller(),
-                MAX_NUM_INSTRUCTIONS,
-                canister,
-                None,
-                mock_time(),
-            )
-            .get_no_pause();
+        let (_, num_instructions_left, res) = hypervisor.execute_query(
+            QueryExecutionType::Replicated,
+            "query_trap",
+            EMPTY_PAYLOAD.as_slice(),
+            test_caller(),
+            MAX_NUM_INSTRUCTIONS,
+            canister,
+            None,
+            mock_time(),
+        );
         assert_eq!(
             res,
             Err(HypervisorError::CalledTrap("Trap called!".to_string()))
@@ -3325,7 +3316,7 @@ fn sys_api_call_ic_trap_preserves_some_cycles() {
         // Check that ic0.trap call wasn't expensive
         assert_eq!(
             num_instructions_left,
-            MAX_NUM_INSTRUCTIONS - NumInstructions::new(3)
+            MAX_NUM_INSTRUCTIONS - NumInstructions::new(4)
         );
     });
 }
@@ -3358,7 +3349,6 @@ fn canister_heartbeat() {
                     mock_time(),
                     MAX_SUBNET_AVAILABLE_MEMORY.clone(),
                 )
-                .get_no_pause()
                 .2,
             Err(HypervisorError::Trapped(TrapCode::Unreachable))
         );
@@ -3384,16 +3374,14 @@ fn execute_canister_heartbeat_produces_heap_delta() {
         let canister = canister_from_exec_state(execution_state);
         let (_, _, routing_table, subnet_records) = setup();
 
-        let (_, _, result) = hypervisor
-            .execute_canister_heartbeat(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                routing_table,
-                subnet_records,
-                mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
-            .get_no_pause();
+        let (_, _, result) = hypervisor.execute_canister_heartbeat(
+            canister,
+            MAX_NUM_INSTRUCTIONS,
+            routing_table,
+            subnet_records,
+            mock_time(),
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
         let heap_delta = result.unwrap();
         // the wasm module touched one memory location so that should produce one page
         // of delta.
@@ -3426,17 +3414,15 @@ fn execute_update_produces_heap_delta() {
                 .build(),
         );
 
-        let (_, _, _, heap_delta) = hypervisor
-            .execute_update(
-                canister,
-                message,
-                MAX_NUM_INSTRUCTIONS,
-                mock_time(),
-                routing_table,
-                subnet_records,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
-            .get_no_pause();
+        let (_, _, _, heap_delta) = hypervisor.execute_update(
+            canister,
+            message,
+            MAX_NUM_INSTRUCTIONS,
+            mock_time(),
+            routing_table,
+            subnet_records,
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
         // the wasm module touched one memory location so that should produce one page
         // of delta.
         assert_eq!(heap_delta.get(), (*PAGE_SIZE) as u64);
@@ -3462,13 +3448,11 @@ fn execute_canister_start_produces_heap_delta() {
             .expect("Failed to create execution state.");
         let canister = canister_from_exec_state(execution_state);
 
-        let (_, _, result) = hypervisor
-            .execute_canister_start(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
-            .get_no_pause();
+        let (_, _, result) = hypervisor.execute_canister_start(
+            canister,
+            MAX_NUM_INSTRUCTIONS,
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
         let heap_delta = result.unwrap();
         // the wasm module touched one memory location so that should produce one page
         // of delta.
@@ -3494,17 +3478,14 @@ fn execute_system_produces_heap_delta() {
             .expect("Failed to create execution state.");
         let canister = canister_from_exec_state(execution_state);
 
-        let (_, _, result) = hypervisor
-            .execute_system(
-                canister,
-                SystemMethod::CanisterInit,
-                user_test_id(0).get(),
-                &[],
-                MAX_NUM_INSTRUCTIONS,
-                mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
-            .get_no_pause();
+        let (_, _, result) = hypervisor.execute_canister_init(
+            canister,
+            user_test_id(0).get(),
+            &[],
+            MAX_NUM_INSTRUCTIONS,
+            mock_time(),
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
         let heap_delta = result.unwrap();
         // the wasm module touched one memory location so that should produce one page
         // of delta.

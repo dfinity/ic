@@ -687,11 +687,11 @@ impl fmt::Debug for WitnessGeneratorImpl {
 
 fn path_as_string(path: &[Label]) -> String {
     let mut str = String::new();
-    str.push_str("[");
+    str.push('[');
     for label in path {
         str.push_str(&label.to_string())
     }
-    str.push_str("]");
+    str.push(']');
     str
 }
 
@@ -944,11 +944,9 @@ impl HashTreeBuilderImpl {
     /// Does not `panic!`.
     #[allow(dead_code)]
     pub fn as_hash_tree(&self) -> Option<HashTree> {
-        if let Some(hash_tree) = self.hash_tree.as_ref() {
-            Some((*hash_tree).to_owned())
-        } else {
-            None
-        }
+        self.hash_tree
+            .as_ref()
+            .map(|hash_tree| (*hash_tree).to_owned())
     }
 
     /// Returns the HashTree corresponding to the traversed tree if the
@@ -962,11 +960,9 @@ impl HashTreeBuilderImpl {
     /// Does not `panic!`.
     #[allow(dead_code)]
     pub fn as_labeled_tree(&self) -> Option<LabeledTree<Digest>> {
-        if let Some(labeled_tree) = self.labeled_tree.as_ref() {
-            Some(labeled_tree.to_owned())
-        } else {
-            None
-        }
+        self.labeled_tree
+            .as_ref()
+            .map(|labeled_tree| labeled_tree.to_owned())
     }
 }
 

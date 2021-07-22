@@ -5,7 +5,6 @@ authors = ["The Internet Computer Project Developers"]
 edition = "2018"
 
 [dependencies]
-actix = "0.10.0"
 anymap = "0.12.1"
 base64 = "0.11.0"
 hex = "0.4.2"
@@ -56,12 +55,13 @@ static_assertions = "0.3.4"
 structopt = "0.3"
 tempfile = "3.1.0"
 thread_profiler = { version = "0.3", optional = true }
-tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "1.2.0", features = ["full"] }
 tracing = "0.1.13"
 
 [dev-dependencies]
 assert_cmd = "0.12"
 criterion = "0.3"
+ic-test-utilities = { path = "../test_utilities" }
 predicates = "1.0.1"
 wabt = "0.10.0"
 
@@ -80,4 +80,9 @@ path = "src/main.rs"
 
 [features]
 profiler = ["thread_profiler/thread_profiler", "pprof"]
-malicious_code = ["ic-consensus/malicious_code", "ic-state-manager/malicious_code"]
+malicious_code = [
+  "ic-consensus/malicious_code",
+  "ic-http-handler/malicious_code",
+  "ic-p2p/malicious_code",
+  "ic-state-manager/malicious_code",
+]

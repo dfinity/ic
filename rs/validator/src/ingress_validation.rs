@@ -3,8 +3,9 @@ use ic_crypto::{user_public_key_from_bytes, KeyBytesContentType};
 use ic_interfaces::crypto::IngressSigVerifier;
 use ic_types::crypto::{CanisterSig, CanisterSigOf};
 use ic_types::{
-    crypto::{BasicSig, BasicSigOf, CryptoError, UserPublicKey},
+    crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoError, UserPublicKey},
     ingress::MAX_INGRESS_TTL,
+    malicious_flags::MaliciousFlags,
     messages::{
         Authentication, Delegation, HasCanisterId, HttpRequest, HttpRequestContent, MessageId,
         SignedDelegation, UserSignature, WebAuthnSignature,
@@ -22,12 +23,21 @@ pub fn validate_request<C: HttpRequestContent + HasCanisterId>(
     ingress_signature_verifier: &dyn IngressSigVerifier,
     current_time: Time,
     registry_version: RegistryVersion,
+    malicious_flags: &MaliciousFlags,
 ) -> Result<(), RequestValidationError> {
+    #[cfg(feature = "malicious_code")]
+    {
+        if malicious_flags.maliciously_disable_ingress_validation {
+            return Ok(());
+        }
+    }
+
     get_authorized_canisters(
         &request,
         ingress_signature_verifier,
         current_time,
         registry_version,
+        malicious_flags,
     )
     .and_then(|targets| {
         if targets.contains(&request.content().canister_id()) {
@@ -49,7 +59,15 @@ pub fn get_authorized_canisters<C: HttpRequestContent>(
     ingress_signature_verifier: &dyn IngressSigVerifier,
     current_time: Time,
     registry_version: RegistryVersion,
+    #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
 ) -> Result<CanisterIdSet, RequestValidationError> {
+    #[cfg(feature = "malicious_code")]
+    {
+        if malicious_flags.maliciously_disable_ingress_validation {
+            return Ok(CanisterIdSet::All);
+        }
+    }
+
     validate_ingress_expiry(request, current_time)?;
     validate_user_id_and_signature(
         ingress_signature_verifier,
@@ -170,7 +188,7 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
              Minimum allowed expiry: {}\n\
              Maximum allowed expiry: {}\n\
              Provided expiry:        {}\n\
-             Local time:             {}",
+             Local replica time:     {}",
             min_allowed_expiry,
             max_allowed_expiry,
             provided_expiry,
@@ -193,8 +211,8 @@ fn validate_sender_delegation_expiry(
             if delegation.delegation().expiration() < current_time {
                 return Err(InvalidDelegationExpiry(format!(
                     "Specified sender delegation has expired:\n\
-                     Provided expiry: {}\n\
-                     Local time:      {}",
+                     Provided expiry:    {}\n\
+                     Local replica time: {}",
                     expiry, current_time,
                 )));
             }
@@ -237,7 +255,8 @@ fn validate_signature(
     let (pk, pk_type) = public_key_from_bytes(&pubkey).map_err(InvalidSignature)?;
 
     match pk_type {
-        KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose => {
+        KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose
+        | KeyBytesContentType::RsaSha256PublicKeyDerWrappedCose => {
             let webauthn_sig = WebAuthnSignature::try_from(signature.signature.as_slice())
                 .map_err(WebAuthnError)
                 .map_err(InvalidSignature)?;
@@ -261,6 +280,14 @@ fn validate_signature(
                 .map_err(InvalidCanisterSignature)
                 .map_err(InvalidSignature)?;
             Ok(targets)
+        }
+        KeyBytesContentType::RsaSha256PublicKeyDer => {
+            Err(RequestValidationError::InvalidSignature(
+                AuthenticationError::InvalidBasicSignature(CryptoError::AlgorithmNotSupported {
+                    algorithm: AlgorithmId::RsaSha256,
+                    reason: "RSA signatures are not allowed except in webauthn context".to_owned(),
+                }),
+            ))
         }
     }
 }
@@ -320,14 +347,16 @@ fn validate_delegation(
     let (pk, pk_type) = public_key_from_bytes(pubkey)?;
 
     match pk_type {
-        KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose => {
+        KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose
+        | KeyBytesContentType::RsaSha256PublicKeyDerWrappedCose => {
             let webauthn_sig = WebAuthnSignature::try_from(signature).map_err(WebAuthnError)?;
             validate_webauthn_sig(validator, &webauthn_sig, delegation, &pk)
                 .map_err(WebAuthnError)?;
         }
         KeyBytesContentType::Ed25519PublicKeyDer
         | KeyBytesContentType::EcdsaP256PublicKeyDer
-        | KeyBytesContentType::EcdsaSecp256k1PublicKeyDer => {
+        | KeyBytesContentType::EcdsaSecp256k1PublicKeyDer
+        | KeyBytesContentType::RsaSha256PublicKeyDer => {
             let basic_sig = BasicSigOf::from(BasicSig(signature.to_vec()));
             validator
                 .verify_basic_sig_by_public_key(&basic_sig, delegation, &pk)

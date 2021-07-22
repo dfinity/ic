@@ -6,14 +6,13 @@ use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, CallbackId, MessageId},
     methods::Callback,
-    user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, UserId, ICP,
+    user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, UserId,
 };
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom, TryInto};
 
 /// Call context contains all context information related to an incoming call.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CallContext {
     /// Tracks relevant information about who sent the request that created the
     /// CallContext needed to form the eventual reply.
@@ -93,7 +92,7 @@ impl CallContext {
 
 impl From<&CallContext> for pb::CallContext {
     fn from(item: &CallContext) -> Self {
-        let funds = Funds::new(item.available_cycles, ICP::zero());
+        let funds = Funds::new(item.available_cycles);
         Self {
             call_origin: Some((&item.call_origin).into()),
             responded: item.responded,
@@ -126,9 +125,9 @@ pub enum CallContextError {
     },
 }
 
-impl Into<HypervisorError> for CallContextError {
-    fn into(self) -> HypervisorError {
-        match self {
+impl From<CallContextError> for HypervisorError {
+    fn from(val: CallContextError) -> Self {
+        match val {
             CallContextError::InsufficientCyclesInCall {
                 available,
                 requested,
@@ -182,7 +181,7 @@ pub enum CallContextAction {
 /// with the serialization of these pointers. In the future we might consider
 /// introducing an intermediate layer between the serialization and the actual
 /// working data structure, to separate these concerns.
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct CallContextManager {
     next_call_context_id: u64,
     next_callback_id: u64,
@@ -191,7 +190,7 @@ pub struct CallContextManager {
     callbacks: BTreeMap<CallbackId, Callback>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CallOrigin {
     Ingress(UserId, MessageId),
     CanisterUpdate(CanisterId, CallbackId),
@@ -319,11 +318,11 @@ impl CallContextManager {
         enum OutstandingCalls {
             Yes,
             No,
-        };
+        }
         enum Responded {
             Yes,
             No,
-        };
+        }
 
         let outstanding_calls = if self.outstanding_calls(call_context_id) > 0 {
             OutstandingCalls::Yes

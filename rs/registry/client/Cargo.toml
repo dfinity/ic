@@ -4,7 +4,6 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-ic-base-thread = { path = "../../base/thread" }
 ic-config = { path = "../../config" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -25,7 +24,9 @@ slog = { version = "2.5.2", features = [
     "max_level_trace",
     "release_max_level_debug",
 ] }
-tokio = { version = "0.2.23", features = ["full"] }
+tokio = { version = "1.2.0", features = ["full"] }
 url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]
+assert_matches = "1.3.0"
+ic-test-utilities = { path = "../../test_utilities" }

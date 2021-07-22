@@ -157,7 +157,9 @@ impl<'de, T> Deserialize<'de> for HashOf<T> {
     }
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
 #[serde(transparent)]
 pub struct EncodedBlock(pub Box<[u8]>);
 
@@ -295,12 +297,12 @@ impl<S: Default + BalancesStore> Balances<S> {
                 Some(x) => *x,
                 None => panic!("You tried to withdraw funds from empty account {}", from),
             };
-            // This is technically redundant because Amount uses checked arithmetic, but
-            // belt an braces
-            assert!(
-                balance >= amount,
-                "You have tried to spend more than the balance of your account"
-            );
+            if balance < amount {
+                panic!(
+                    "You have tried to spend more than the balance of account {}",
+                    from
+                );
+            }
             balance -= amount;
             balance
         });
@@ -369,7 +371,9 @@ impl LedgerBalances {
 }
 
 /// An operation which modifies account balances
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
+)]
 pub enum Transfer {
     Burn {
         from: AccountIdentifier,
@@ -388,7 +392,9 @@ pub enum Transfer {
 }
 
 /// A transfer with the metadata the client generated attached to it
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
+)]
 pub struct Transaction {
     pub transfer: Transfer,
     pub memo: Memo,
@@ -1111,11 +1117,13 @@ mod tests {
     #[test]
     fn balances_overflow() {
         let balances = LedgerBalances::new();
-        let mut state = Ledger::default();
-        state.balances = balances;
-        state.maximum_number_of_accounts = 8;
-        state.accounts_overflow_trim_quantity = 2;
-        state.minting_account_id = Some(PrincipalId::new_user_test_id(137).into());
+        let mut state = Ledger {
+            balances,
+            maximum_number_of_accounts: 8,
+            accounts_overflow_trim_quantity: 2,
+            minting_account_id: Some(PrincipalId::new_user_test_id(137).into()),
+            ..Default::default()
+        };
         assert_eq!(state.balances.icpt_pool, ICPTs::MAX);
         println!(
             "minting canister initial balance: {}",
@@ -1824,8 +1832,10 @@ pub fn recover_from_failed_archive(
 
     // Similarly, block_to_archive must go back to the the front of the
     // Vec in the Blockchain
-    use std::iter::FromIterator;
-    let all_blocks: Vec<_> = Vec::from_iter(blocks_to_archive.into_iter().chain(blocks.drain(..)));
+    let all_blocks: Vec<_> = blocks_to_archive
+        .into_iter()
+        .chain(blocks.drain(..))
+        .collect();
 
     // TODO: It would be better to change blocks from Vec to VecDeque
     // to avoid copying

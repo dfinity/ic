@@ -224,7 +224,7 @@ mod tests {
             assert_eq!(
                 priority(
                     &block.get_id(),
-                    &ConsensusMessageAttribute::from(&block.clone().to_message())
+                    &ConsensusMessageAttribute::from(&block.clone().into_message())
                 ),
                 Fetch
             );
@@ -239,7 +239,7 @@ mod tests {
             assert_eq!(
                 priority(
                     &notarization.get_id(),
-                    &ConsensusMessageAttribute::from(&notarization.to_message())
+                    &ConsensusMessageAttribute::from(&notarization.into_message())
                 ),
                 Drop
             );
@@ -256,7 +256,7 @@ mod tests {
             let mut dup_notarization = notarization.clone();
             let dup_notarization_id = dup_notarization.get_id();
             dup_notarization.signature.signers = vec![node_test_id(42)];
-            let dup_msg = dup_notarization.to_message();
+            let dup_msg = dup_notarization.into_message();
             let attr = ConsensusMessageAttribute::from(&dup_msg);
             // Move block back to unvalidated after attribute is computed
             pool.remove_validated(block.clone());
@@ -299,7 +299,7 @@ mod tests {
             let mut dup_finalization = finalization.clone();
             let dup_finalization_id = dup_finalization.get_id();
             dup_finalization.signature.signers = vec![node_test_id(42)];
-            let dup_msg = dup_finalization.to_message();
+            let dup_msg = dup_finalization.into_message();
             let priority = get_priority_function(&pool, expected_batch_height, &test_metrics());
             assert_eq!(
                 priority(

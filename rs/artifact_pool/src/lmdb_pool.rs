@@ -278,7 +278,7 @@ macro_rules! log_err_except {
 
 /// The max size (in bytes) of a persistent pool, also know as the LMDB map
 /// size. It is a constant because it cannot be changed once DB is created.
-const MAX_PERSISTENT_POOL_SIZE: usize = 0x1_000_000_000; // 64GB
+const MAX_PERSISTENT_POOL_SIZE: usize = 0x0010_0000_0000; // 64GB
 
 /// Max number of DB readers.
 const MAX_READERS: c_uint = 2048;
@@ -833,7 +833,7 @@ impl PoolArtifact for ConsensusMessage {
                         .into()
                 }),
             );
-            value.msg = PersistedConsensusMessage::from(proposal.to_message());
+            value.msg = PersistedConsensusMessage::from(proposal.into_message());
         }
         let bytes = log_err!(
             bincode::serialize::<Self::ObjectType>(&value),
@@ -879,7 +879,7 @@ impl PoolArtifact for ConsensusMessage {
                     .unwrap()
                 }),
             );
-            artifact.msg = PersistedConsensusMessage::from(proposal.to_message());
+            artifact.msg = PersistedConsensusMessage::from(proposal.into_message());
         }
         log_err!(
             ConsensusMessage::try_from(artifact.msg)
@@ -1337,7 +1337,7 @@ mod tests {
             let msg = ConsensusMessage::BlockProposal(block_proposal);
             let msg_expected = msg.clone();
             let hash = msg_expected.get_cm_hash();
-            let msg_id = ConsensusMessageId { height, hash };
+            let msg_id = ConsensusMessageId { hash, height };
             // Create a pool and insert an item.
             {
                 let mut pool = PersistentHeightIndexedPool::new_consensus_pool(

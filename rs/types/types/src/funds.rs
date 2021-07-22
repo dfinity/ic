@@ -1,7 +1,6 @@
 //! Defines types that are useful when handling funds on the IC.
 
 mod cycles;
-pub mod icp;
 
 pub use cycles::Cycles;
 use ic_protobuf::{
@@ -9,7 +8,6 @@ use ic_protobuf::{
     state::queues::v1::Cycles as PbCycles,
     state::queues::v1::Funds as PbFunds,
 };
-use icp::ICP;
 use serde::{Deserialize, Serialize};
 use std::convert::{From, TryFrom};
 
@@ -19,19 +17,17 @@ use std::convert::{From, TryFrom};
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Funds {
     cycles: Cycles,
-    icp: ICP,
 }
 
 impl Funds {
-    pub fn new(cycles: Cycles, icp: ICP) -> Self {
-        Self { cycles, icp }
+    pub fn new(cycles: Cycles) -> Self {
+        Self { cycles }
     }
 
     /// Returns a new `Funds` object containing zero funds.
     pub fn zero() -> Self {
         Self {
             cycles: Cycles::from(0),
-            icp: ICP::zero(),
         }
     }
 
@@ -56,36 +52,15 @@ impl Funds {
         self.cycles += cycles;
     }
 
-    pub fn icp(&self) -> &ICP {
-        &self.icp
-    }
-
-    pub fn icp_mut(&mut self) -> &mut ICP {
-        &mut self.icp
-    }
-
-    /// Takes all the ICP out of the current `Funds`.
-    pub fn take_icp(&mut self) -> ICP {
-        self.icp_mut().take()
-    }
-
-    /// Adds the given ICP to the current funds.
-    pub fn add_icp(&mut self, icp: ICP) {
-        self.icp.add(icp);
-    }
-
     /// Extracts the funds from the current object into a new `Funds` object.
     pub fn take(&mut self) -> Funds {
-        Funds::new(self.cycles, self.icp.take())
+        Funds::new(self.cycles)
     }
 }
 
 impl From<Cycles> for Funds {
     fn from(cycles: Cycles) -> Self {
-        Self {
-            cycles,
-            icp: ICP::zero(),
-        }
+        Self { cycles }
     }
 }
 
@@ -93,7 +68,7 @@ impl From<&Funds> for PbFunds {
     fn from(item: &Funds) -> Self {
         Self {
             cycles_struct: Some(PbCycles::from(item.cycles)),
-            icp: item.icp.balance(),
+            icp: 0,
         }
     }
 }
@@ -104,7 +79,6 @@ impl TryFrom<PbFunds> for Funds {
     fn try_from(item: PbFunds) -> Result<Self, Self::Error> {
         Ok(Self {
             cycles: try_from_option_field(item.cycles_struct, "Funds::cycles_struct")?,
-            icp: icp::Tap::mint(item.icp),
         })
     }
 }

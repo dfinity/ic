@@ -24,7 +24,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> CspSigner for Csp<R, S> {
         let secret_key: CspSecretKey =
             self.sks_read_lock()
                 .get(&key_id)
-                .ok_or_else(|| CryptoError::SecretKeyNotFound {
+                .ok_or(CryptoError::SecretKeyNotFound {
                     algorithm: algorithm_id,
                     key_id,
                 })?;
@@ -62,7 +62,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> CspSigner for Csp<R, S> {
         algorithm_id: AlgorithmId,
         signer: CspPublicKey,
     ) -> CryptoResult<()> {
-        match (algorithm_id, *sig, signer) {
+        match (algorithm_id, sig, signer) {
             (
                 AlgorithmId::EcdsaP256,
                 CspSignature::EcdsaP256(signature),
@@ -96,10 +96,19 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> CspSigner for Csp<R, S> {
                 ed25519::verify(&signature, msg, &public_key)
             }
             (
+                AlgorithmId::RsaSha256,
+                CspSignature::RsaSha256(signature),
+                CspPublicKey::RsaSha256(public_key),
+            ) =>
+            // RSA hashes the message using SHA-256
+            {
+                public_key.verify_pkcs1_sha256(&msg, &signature)
+            }
+            (
                 AlgorithmId::MultiBls12_381,
                 CspSignature::MultiBls12_381(MultiBls12_381_Signature::Individual(signature)),
                 CspPublicKey::MultiBls12_381(public_key),
-            ) => multi_sig::verify_individual(msg, signature, public_key),
+            ) => multi_sig::verify_individual(msg, *signature, public_key),
             (.., signer) => Err(CryptoError::SignatureVerification {
                 algorithm: algorithm_id,
                 public_key_bytes: signer.as_ref().to_vec(),

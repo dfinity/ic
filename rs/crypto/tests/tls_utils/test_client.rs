@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use crate::tls_utils::{temp_crypto_component_with_tls_keys, REG_V1};
 use ic_crypto::utils::TempCryptoComponent;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{TlsClientHandshakeError, TlsHandshake, TlsReadHalf, TlsWriteHalf};
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client::fake::FakeRegistryClient;
@@ -55,7 +56,7 @@ pub struct Client {
     msg_expected_from_server: Option<String>,
     msg_for_server: Option<String>,
     expected_error_substring_when_reading_stream: Option<String>,
-    cert: X509PublicKeyCert,
+    cert: TlsPublicKeyCert,
 }
 
 impl Client {
@@ -129,6 +130,6 @@ impl Client {
     }
 
     pub fn cert(&self) -> X509PublicKeyCert {
-        self.cert.clone()
+        self.cert.to_proto()
     }
 }

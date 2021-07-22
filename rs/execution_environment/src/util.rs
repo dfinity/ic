@@ -1,7 +1,10 @@
 use crate::types::Response;
 use ic_interfaces::execution_environment::IngressHistoryWriter;
 use ic_replicated_state::ReplicatedState;
+use ic_types::CanisterId;
 use std::sync::Arc;
+
+pub(crate) const GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
 
 /// Sends responses to their callers.
 ///

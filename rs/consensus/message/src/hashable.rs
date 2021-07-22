@@ -4,7 +4,7 @@ pub trait ConsensusMessageHashable: Clone {
     fn get_id(&self) -> ConsensusMessageId;
     fn get_cm_hash(&self) -> ConsensusMessageHash;
     fn assert(msg: &ConsensusMessage) -> Option<&Self>;
-    fn to_message(self) -> ConsensusMessage;
+    fn into_message(self) -> ConsensusMessage;
 
     /// Check integrity of a message. Default is true.
     /// This should be implemented for those that have `Hashed<H, V>`.
@@ -34,7 +34,7 @@ impl ConsensusMessageHashable for Finalization {
         }
     }
 
-    fn to_message(self) -> ConsensusMessage {
+    fn into_message(self) -> ConsensusMessage {
         ConsensusMessage::Finalization(self)
     }
 }
@@ -59,7 +59,7 @@ impl ConsensusMessageHashable for FinalizationShare {
         }
     }
 
-    fn to_message(self) -> ConsensusMessage {
+    fn into_message(self) -> ConsensusMessage {
         ConsensusMessage::FinalizationShare(self)
     }
 }
@@ -84,7 +84,7 @@ impl ConsensusMessageHashable for Notarization {
         }
     }
 
-    fn to_message(self) -> ConsensusMessage {
+    fn into_message(self) -> ConsensusMessage {
         ConsensusMessage::Notarization(self)
     }
 }
@@ -109,7 +109,7 @@ impl ConsensusMessageHashable for NotarizationShare {
         }
     }
 
-    fn to_message(self) -> ConsensusMessage {
+    fn into_message(self) -> ConsensusMessage {
         ConsensusMessage::NotarizationShare(self)
     }
 }
@@ -134,7 +134,7 @@ impl ConsensusMessageHashable for RandomBeacon {
         }
     }
 
-    fn to_message(self) -> ConsensusMessage {
+    fn into_message(self) -> ConsensusMessage {
         ConsensusMessage::RandomBeacon(self)
     }
 }
@@ -159,7 +159,7 @@ impl ConsensusMessageHashable for RandomBeaconShare {
         }
     }
 
-    fn to_message(self) -> ConsensusMessage {
+    fn into_message(self) -> ConsensusMessage {
         ConsensusMessage::RandomBeaconShare(self)
     }
 }
@@ -184,7 +184,7 @@ impl ConsensusMessageHashable for BlockProposal {
         }
     }
 
-    fn to_message(self) -> ConsensusMessage {
+    fn into_message(self) -> ConsensusMessage {
         ConsensusMessage::BlockProposal(self)
     }
 
@@ -219,7 +219,7 @@ impl ConsensusMessageHashable for RandomTape {
         }
     }
 
-    fn to_message(self) -> ConsensusMessage {
+    fn into_message(self) -> ConsensusMessage {
         ConsensusMessage::RandomTape(self)
     }
 }
@@ -244,7 +244,7 @@ impl ConsensusMessageHashable for RandomTapeShare {
         }
     }
 
-    fn to_message(self) -> ConsensusMessage {
+    fn into_message(self) -> ConsensusMessage {
         ConsensusMessage::RandomTapeShare(self)
     }
 }
@@ -269,7 +269,7 @@ impl ConsensusMessageHashable for CatchUpPackage {
         }
     }
 
-    fn to_message(self) -> ConsensusMessage {
+    fn into_message(self) -> ConsensusMessage {
         ConsensusMessage::CatchUpPackage(self)
     }
 
@@ -308,7 +308,7 @@ impl ConsensusMessageHashable for CatchUpPackageShare {
         }
     }
 
-    fn to_message(self) -> ConsensusMessage {
+    fn into_message(self) -> ConsensusMessage {
         ConsensusMessage::CatchUpPackageShare(self)
     }
 
@@ -347,7 +347,7 @@ impl ConsensusMessageHashable for ConsensusMessage {
         Some(msg)
     }
 
-    fn to_message(self) -> ConsensusMessage {
+    fn into_message(self) -> ConsensusMessage {
         self
     }
 }

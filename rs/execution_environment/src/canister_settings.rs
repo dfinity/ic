@@ -61,15 +61,17 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
 
     fn try_from(input: CanisterSettingsArgs) -> Result<Self, Self::Error> {
         let compute_allocation = match input.compute_allocation {
-            Some(ca) => Some(ComputeAllocation::try_from(
-                ca.0.to_u64().unwrap_or(u64::MAX),
-            )?),
+            Some(ca) => Some(ComputeAllocation::try_from(ca.0.to_u64().ok_or_else(
+                || UpdateSettingsError::ComputeAllocation(InvalidComputeAllocationError::new(ca)),
+            )?)?),
             None => None,
         };
 
         let memory_allocation = match input.memory_allocation {
             Some(ma) => Some(MemoryAllocation::try_from(NumBytes::from(
-                ma.0.to_u64().unwrap_or(u64::MAX),
+                ma.0.to_u64().ok_or_else(|| {
+                    UpdateSettingsError::MemoryAllocation(InvalidMemoryAllocationError::new(ma))
+                })?,
             ))?),
             None => None,
         };

@@ -95,9 +95,9 @@ impl fmt::Display for PrincipalIdBlobParseError {
 
 impl std::error::Error for PrincipalIdBlobParseError {}
 
-impl Into<Vec<u8>> for PrincipalId {
-    fn into(self) -> Vec<u8> {
-        self.to_vec()
+impl From<PrincipalId> for Vec<u8> {
+    fn from(val: PrincipalId) -> Self {
+        val.to_vec()
     }
 }
 
@@ -115,7 +115,7 @@ impl TryFrom<&[u8]> for PrincipalId {
             len: blob.len(),
             data: [0; Self::MAX_LENGTH_IN_BYTES],
         };
-        id.data[..blob.len()].copy_from_slice(&blob[..]);
+        id.data[..blob.len()].copy_from_slice(blob);
         Ok(id)
     }
 }

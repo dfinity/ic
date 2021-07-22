@@ -1,5 +1,5 @@
 use crate::{
-    embedders::{EmbedderType, PersistenceType, MAX_FUNCTIONS, MAX_GLOBALS},
+    embedders::{PersistenceType, MAX_FUNCTIONS, MAX_GLOBALS},
     subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE,
 };
 use ic_base_types::NumSeconds;
@@ -33,7 +33,6 @@ pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(1024 * 102
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
 pub struct Config {
-    pub embedder_type: EmbedderType,
     pub persistence_type: PersistenceType,
     /// This is no longer used in the code.  It is not removed yet as removing
     /// this option will be a breaking change.
@@ -63,14 +62,17 @@ pub struct Config {
 
     /// Maximum number of globals allowed in a Wasm module.
     pub max_globals: usize,
+
     /// Maximum number of functions allowed in a Wasm module.
     pub max_functions: usize,
+
+    /// Maximum number of controllers a canister can have.
+    pub max_controllers: usize,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            embedder_type: EmbedderType::Wasmtime,
             persistence_type: PersistenceType::Sigsegv,
             create_funds_whitelist: String::default(),
             max_instructions_for_message_acceptance_calls: MAX_INSTRUCTIONS_PER_MESSAGE,
@@ -86,6 +88,9 @@ impl Default for Config {
             default_freeze_threshold: NumSeconds::from(30 * 24 * 60 * 60),
             max_globals: MAX_GLOBALS,
             max_functions: MAX_FUNCTIONS,
+            // Maximum number of controllers allowed in a request (specified in the public
+            // Spec).
+            max_controllers: 10,
         }
     }
 }

@@ -11,7 +11,7 @@ use ic_base_types::{NodeId, PrincipalId, SubnetId};
 impl Registry {
     /// Adds the nodes to an existing subnet record in the registry.
     ///
-    /// This method is called by the proposals canister, after a proposal
+    /// This method is called by the governance canister, after a proposal
     /// for modifying a subnet by adding nodes has been accepted.
     pub fn do_add_nodes_to_subnet(&mut self, payload: AddNodesToSubnetPayload) {
         println!("{}do_add_nodes_to_subnet: {:?}", LOG_PREFIX, payload);

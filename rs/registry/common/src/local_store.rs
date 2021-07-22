@@ -201,7 +201,7 @@ impl RegistryDataProvider for LocalStoreImpl {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion), RegistryDataProviderError> {
+    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
         let changelog = self.get_changelog_since_version(version).map_err(|e| {
             RegistryDataProviderError::Transfer {
                 source: ic_registry_transport::Error::MalformedMessage(format!(
@@ -210,7 +210,6 @@ impl RegistryDataProvider for LocalStoreImpl {
                 )),
             }
         })?;
-        let versions = changelog.len();
         let res: Vec<_> = changelog
             .iter()
             .enumerate()
@@ -221,7 +220,7 @@ impl RegistryDataProvider for LocalStoreImpl {
                 value: km.value.clone(),
             })
             .collect();
-        Ok((res, version + RegistryVersion::from(versions as u64)))
+        Ok(res)
     }
 }
 

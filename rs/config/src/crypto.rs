@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -60,7 +61,7 @@ impl CryptoConfig {
 
     /// Set a directory permission to u+rwx (0700), which is required for
     /// storing crypto states. Returns an error if it fails.
-    pub fn set_dir_with_required_permission(dir: &PathBuf) -> Result<(), String> {
+    pub fn set_dir_with_required_permission(dir: &Path) -> Result<(), String> {
         if !dir.exists() {
             Err(format!(
                 "Crypto state directory does not exist: {}",

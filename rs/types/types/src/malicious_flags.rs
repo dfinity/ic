@@ -28,10 +28,8 @@ pub struct MaliciousFlags {
     pub maliciously_certify_invalid_hash: bool,
     pub maliciously_malfunctioning_xnet_endpoint: bool,
     pub maliciously_disable_execution: bool,
-    /// If this flag is set, the result of validate_message() is ignored in the
-    /// http handler.
-    pub maliciously_disable_http_handler_ingress_validation: bool,
     pub maliciously_corrupt_own_state_at_heights: Vec<u64>,
+    pub maliciously_disable_ingress_validation: bool,
 }
 
 impl MaliciousFlags {

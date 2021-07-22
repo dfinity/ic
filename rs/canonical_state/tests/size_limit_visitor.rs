@@ -27,8 +27,8 @@ prop_compose! {
     /// An arbitrary fixture with default `slice_begin` and `size_limit` values.
     fn arb_barebone_fixture(max_size: usize)
                    (stream in arb_stream(0, max_size)) -> Fixture {
-        let begin = stream.messages.begin().get();
-        let end = stream.messages.end().get();
+        let begin = stream.messages_begin().get();
+        let end = stream.messages_end().get();
 
         let mut state = ReplicatedState::new_rooted_at(subnet_test_id(1), SubnetType::Application, "NOT_USED".into());
         let subnet = subnet_test_id(42);

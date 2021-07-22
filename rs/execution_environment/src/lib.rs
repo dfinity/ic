@@ -4,28 +4,28 @@ mod execution_environment;
 mod execution_environment_metrics;
 mod history;
 mod hypervisor;
+mod ingress_message_filter;
 mod query_handler;
+mod scheduler;
 mod types;
-// TODO(EXC-185): Make this private once scheduler is moved into this crate.
-#[doc(hidden)]
-pub mod util;
+mod util;
 
-pub use execution_environment::ExecutionEnvironmentImpl;
+pub use execution_environment::{ExecutionEnvironment, ExecutionEnvironmentImpl};
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{execute, Hypervisor, HypervisorMetrics};
-use ic_config::execution_environment::Config;
+use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::{ExecutionEnvironment, IngressHistoryWriter};
+use ic_interfaces::execution_environment::{IngressHistoryWriter, IngressMessageFilter, Scheduler};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterState, ReplicatedState};
+use ic_replicated_state::ReplicatedState;
 use ic_types::{messages::CallContextId, SubnetId};
+use ingress_message_filter::IngressMessageFilterImpl;
 pub use query_handler::HttpQueryHandlerImpl;
+use scheduler::SchedulerImpl;
 use std::sync::Arc;
-// TODO(EXC-185): Remove this once scheduler is moved into this crate.
-pub use canister_manager::uninstall_canister;
 
 /// When executing a wasm method of query type, this enum indicates if we are
 /// running in an replicated or non-replicated context. This information is
@@ -56,17 +56,18 @@ pub fn setup_execution(
     metrics_registry: &MetricsRegistry,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
-    cores: usize,
+    scheduler_config: SchedulerConfig,
     config: Config,
     cycles_account_manager: Arc<CyclesAccountManager>,
 ) -> (
-    Arc<dyn ExecutionEnvironment<State = ReplicatedState, CanisterState = CanisterState>>,
+    Box<dyn IngressMessageFilter<State = ReplicatedState>>,
     Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     Arc<HttpQueryHandlerImpl>,
+    Box<dyn Scheduler<State = ReplicatedState>>,
 ) {
     let hypervisor = Arc::new(Hypervisor::new(
         config.clone(),
-        cores,
+        1,
         &metrics_registry,
         own_subnet_id,
         own_subnet_type,
@@ -85,13 +86,12 @@ pub fn setup_execution(
         Arc::clone(&ingress_history_writer) as Arc<_>,
         &metrics_registry,
         own_subnet_id,
-        own_subnet_type,
-        cores,
+        scheduler_config.scheduler_cores,
         config.clone(),
         Arc::clone(&cycles_account_manager),
     ));
     let http_query_handler = Arc::new(HttpQueryHandlerImpl::new(
-        logger,
+        logger.clone(),
         hypervisor,
         own_subnet_id,
         own_subnet_type,
@@ -99,5 +99,22 @@ pub fn setup_execution(
         &metrics_registry,
     ));
 
-    (exec_env, ingress_history_writer, http_query_handler)
+    let ingress_message_filter = Box::new(IngressMessageFilterImpl::new(Arc::clone(&exec_env)));
+
+    let scheduler = Box::new(SchedulerImpl::new(
+        scheduler_config,
+        own_subnet_id,
+        Arc::clone(&ingress_history_writer) as Arc<_>,
+        Arc::clone(&exec_env) as Arc<_>,
+        Arc::clone(&&cycles_account_manager),
+        &metrics_registry,
+        logger,
+    ));
+
+    (
+        ingress_message_filter,
+        ingress_history_writer,
+        http_query_handler,
+        scheduler,
+    )
 }

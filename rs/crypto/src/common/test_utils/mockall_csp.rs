@@ -31,9 +31,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_crypto_tls_interfaces::TlsStream;
+use ic_crypto_tls_interfaces::{TlsPublicKeyCert, TlsStream};
 use ic_protobuf::crypto::v1::NodePublicKeys;
-use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::KeyId;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
@@ -41,8 +40,7 @@ use ic_types::IDkgId;
 use ic_types::{NodeId, NodeIndex, NumberOfNodes};
 use mockall::predicate::*;
 use mockall::*;
-use openssl::x509::X509;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use tokio::net::TcpStream;
 
 mock! {
@@ -98,7 +96,7 @@ mock! {
             &mut self,
             node: NodeId,
             not_after: &str,
-        ) -> X509PublicKeyCert;
+        ) -> TlsPublicKeyCert;
     }
 
     pub trait ThresholdSignatureCspClient {
@@ -335,7 +333,7 @@ mock! {
 
     pub trait CspSecretKeyStoreChecker {
         fn sks_contains(&self, id: &KeyId) -> bool;
-        fn sks_contains_tls_key(&self, cert: &X509PublicKeyCert) -> bool;
+        fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> bool;
     }
 
     #[async_trait]
@@ -343,14 +341,14 @@ mock! {
         async fn perform_tls_server_handshake(
             &self,
             tcp_stream: TcpStream,
-            self_cert: X509PublicKeyCert,
-            trusted_client_certs: Vec<X509PublicKeyCert>,
+            self_cert: TlsPublicKeyCert,
+            trusted_client_certs: HashSet<TlsPublicKeyCert>,
         ) -> Result<(TlsStream, Option<CspCertificateChain>), CspTlsServerHandshakeError>;
 
         async fn perform_tls_server_handshake_without_client_auth(
             &self,
             tcp_stream: TcpStream,
-            self_cert: X509PublicKeyCert,
+            self_cert: TlsPublicKeyCert,
         ) -> Result<TlsStream, CspTlsServerHandshakeError>;
     }
 
@@ -359,9 +357,9 @@ mock! {
         async fn perform_tls_client_handshake(
             &self,
             tcp_stream: TcpStream,
-            self_cert: X509PublicKeyCert,
-            trusted_server_cert: X509PublicKeyCert,
-        ) -> Result<(TlsStream, X509), CspTlsClientHandshakeError>;
+            self_cert: TlsPublicKeyCert,
+            trusted_server_cert: TlsPublicKeyCert,
+        ) -> Result<(TlsStream, TlsPublicKeyCert), CspTlsClientHandshakeError>;
     }
 
     pub trait NodePublicKeyData {

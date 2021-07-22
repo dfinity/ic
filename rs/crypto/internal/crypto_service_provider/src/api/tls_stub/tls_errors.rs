@@ -8,9 +8,6 @@ use ic_crypto_tls_interfaces::{
 /// Errors occurring during a TLS handshake
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CspTlsClientHandshakeError {
-    MalformedSelfCertificate {
-        internal_error: String,
-    },
     MalformedServerCertificate(CspMalformedPeerCertificateError),
     CreateConnectorError {
         description: String,
@@ -36,9 +33,6 @@ impl From<CspTlsClientHandshakeError> for TlsClientHandshakeError {
     fn from(csp_tls_client_handshake_error: CspTlsClientHandshakeError) -> Self {
         let panic_prefix = "CSP TLS client handshake error: ";
         match csp_tls_client_handshake_error {
-            CspTlsClientHandshakeError::MalformedSelfCertificate { internal_error } => {
-                TlsClientHandshakeError::MalformedSelfCertificate { internal_error }
-            }
             CspTlsClientHandshakeError::MalformedServerCertificate(csp_error) => {
                 TlsClientHandshakeError::MalformedServerCertificate(MalformedPeerCertificateError {
                     internal_error: csp_error.internal_error,
@@ -88,9 +82,6 @@ impl From<CreateTlsConnectorError> for CspTlsClientHandshakeError {
 /// TLS handshake failed (server side)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CspTlsServerHandshakeError {
-    MalformedSelfCertificate {
-        internal_error: String,
-    },
     MalformedClientCertificate(CspMalformedPeerCertificateError),
     CreateAcceptorError {
         description: String,
@@ -109,9 +100,6 @@ impl From<CspTlsServerHandshakeError> for TlsServerHandshakeError {
     fn from(csp_tls_server_handshake_error: CspTlsServerHandshakeError) -> Self {
         let panic_prefix = "CSP TLS server handshake error: ";
         match csp_tls_server_handshake_error {
-            CspTlsServerHandshakeError::MalformedSelfCertificate { internal_error } => {
-                TlsServerHandshakeError::MalformedSelfCertificate { internal_error }
-            }
             CspTlsServerHandshakeError::MalformedClientCertificate(csp_error) => {
                 TlsServerHandshakeError::MalformedClientCertificate(MalformedPeerCertificateError {
                     internal_error: csp_error.internal_error,

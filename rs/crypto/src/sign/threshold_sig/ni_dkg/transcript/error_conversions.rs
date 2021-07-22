@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 mod load_transcript_error_conversions {
     use crate::sign::threshold_sig::ni_dkg::utils::DkgEncPubkeyRegistryQueryError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;

@@ -1,4 +1,7 @@
+use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
+use prost::Message;
 use rand::seq::SliceRandom;
+use std::time::Duration;
 use url::Url;
 
 use ic_canister_client::{Agent, Sender};
@@ -21,7 +24,18 @@ pub struct RegistryCanister {
 }
 
 impl RegistryCanister {
-    pub fn new(url: Vec<Url>) -> RegistryCanister {
+    pub fn new(url: Vec<Url>) -> Self {
+        Self::new_with_agent_transformer(url, |a| a)
+    }
+
+    pub fn new_with_query_timeout(url: Vec<Url>, t: Duration) -> Self {
+        Self::new_with_agent_transformer(url, |a| a.with_query_timeout(t))
+    }
+
+    fn new_with_agent_transformer<F>(url: Vec<Url>, f: F) -> Self
+    where
+        F: FnMut(Agent) -> Agent,
+    {
         assert!(
             !url.is_empty(),
             "empty list of URLs passed to RegistryCanister::new()"
@@ -32,6 +46,7 @@ impl RegistryCanister {
             agent: url
                 .iter()
                 .map(|url| Agent::new(url.clone(), Sender::Anonymous))
+                .map(f)
                 .collect(),
         }
     }
@@ -121,6 +136,30 @@ impl RegistryCanister {
             &response[..],
         )
         .map_err(|err| Error::UnknownError(format!("{:?}", err)))
+    }
+
+    pub async fn get_latest_version(&self) -> Result<u64, Error> {
+        let agent = self.choose_random_agent();
+        match agent
+            .execute_query(&self.canister_id, "get_latest_version", vec![])
+            .await
+        {
+            Ok(result) => match result {
+                Some(response) => {
+                    match RegistryGetLatestVersionResponse::decode(response.as_slice()) {
+                        Ok(res) => Ok(res.version),
+                        Err(error) => Err(Error::MalformedMessage(error.to_string())),
+                    }
+                }
+                None => Err(ic_registry_transport::Error::UnknownError(
+                    "No response was received from registry_get_value.".to_string(),
+                )),
+            },
+            Err(error_string) => Err(ic_registry_transport::Error::UnknownError(format!(
+                "Error on registry_get_value_since: {} using agent {:?}",
+                error_string, &agent
+            ))),
+        }
     }
 
     /// Obtains the value for 'key'. If 'version_opt' is Some, this will try to

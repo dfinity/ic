@@ -65,7 +65,7 @@ fn key_for_node(
     keys: &BTreeMap<NodeId, EncryptionPublicKeyWithPop>,
 ) -> Result<&EncryptionPublicKeyWithPop, DealingsToCspDealingsError> {
     keys.get(&dealer)
-        .ok_or_else(|| DealingsToCspDealingsError::KeyForDealerNotFound {
+        .ok_or(DealingsToCspDealingsError::KeyForDealerNotFound {
             dealer_node_id: dealer,
         })
 }

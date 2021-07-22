@@ -109,12 +109,6 @@ pub enum HypervisorError {
     /// An attempt to perform an operation that isn't allowed when the canister
     /// is stopped.
     CanisterStopped,
-    /// Canister performed an 'exec' system call.
-    /// Strictly speaking this is not an error. However, it immediately aborts
-    /// the execution in the same manner an error would. And it must be handled
-    /// by the Hypervisor. The payload is WASM bytecode.
-    /// Thus, it can be thought of as 'recoverable error'.
-    CanisterExec(Vec<u8>, Vec<u8>),
     /// An attempt was made to use more cycles than was available in a call
     /// context.
     InsufficientCyclesInCall {
@@ -241,10 +235,6 @@ impl HypervisorError {
                 E::CanisterStopped,
                 format!("Canister {} is stopped", canister_id,),
             ),
-            Self::CanisterExec(_, _) => UserError::new(
-                E::CanisterContractViolation,
-                "Calling exec is only allowed in the update call".to_string(),
-            ),
             Self::InsufficientCyclesInCall {
                 available,
                 requested,
@@ -306,7 +296,6 @@ impl HypervisorError {
             HypervisorError::WasmModuleNotFound => "WasmModuleNotFound",
             HypervisorError::OutOfMemory => "OutOfMemory",
             HypervisorError::CanisterStopped => "CanisterStopped",
-            HypervisorError::CanisterExec(..) => "CanisterExec",
             HypervisorError::InsufficientCyclesInCall { .. } => "InsufficientCyclesInCall",
             HypervisorError::InvalidPrincipalId(_) => "InvalidPrincipalId",
             HypervisorError::InvalidCanisterId(_) => "InvalidCanisterId",

@@ -33,10 +33,7 @@ impl BlockPayload {
 
     /// Return true if the given payload is a summary block.
     pub fn is_summary(&self) -> bool {
-        match self {
-            BlockPayload::Summary(_) => true,
-            _ => false,
-        }
+        matches!(self, BlockPayload::Summary(_))
     }
 
     /// Returns a reference to DKG summary. Panics if called on a dealings

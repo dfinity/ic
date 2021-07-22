@@ -209,11 +209,11 @@ pub(crate) enum GossipMessage {
 
 /// A *Gossip* message can be converted into a
 /// `FlowTag`.
-impl Into<FlowTag> for &GossipMessage {
+impl From<&GossipMessage> for FlowTag {
     /// The method returns the flow tag corresponding to the gossip message.
     ///
     /// Currently, the flow tag is always 0.
-    fn into(self) -> FlowTag {
+    fn from(_: &GossipMessage) -> Self {
         FlowTag::from(0)
     }
 }
@@ -393,7 +393,7 @@ impl Gossip for GossipImpl {
         ingress: Self::Ingress,
         peer_id: Self::NodeId,
     ) -> Result<(), OnArtifactError<Artifact>> {
-        let advert = IngressArtifact::to_advert(&ingress);
+        let advert = IngressArtifact::message_to_advert(&ingress);
         self.artifact_manager
             .on_artifact(
                 Artifact::IngressMessage(ingress.into()),
@@ -523,7 +523,8 @@ impl From<GossipChunkRequest> for pb::GossipChunkRequest {
     /// equivalent.
     fn from(gossip_chunk_request: GossipChunkRequest) -> Self {
         Self {
-            artifact_id: serialize(&gossip_chunk_request.artifact_id).unwrap(),
+            artifact_id: serialize(&gossip_chunk_request.artifact_id)
+                .expect("Local value serailization should succeed"),
             chunk_id: gossip_chunk_request.chunk_id.get(),
         }
     }
@@ -536,7 +537,7 @@ impl TryFrom<pb::GossipChunkRequest> for GossipChunkRequest {
     /// GossipChunkRequest.
     fn try_from(gossip_chunk_request: pb::GossipChunkRequest) -> Result<Self, Self::Error> {
         Ok(Self {
-            artifact_id: deserialize(&gossip_chunk_request.artifact_id).unwrap(),
+            artifact_id: deserialize(&gossip_chunk_request.artifact_id)?,
             chunk_id: ChunkId::from(gossip_chunk_request.chunk_id),
         })
     }
@@ -552,7 +553,8 @@ impl From<GossipChunk> for pb::GossipChunk {
             Err(_) => Some(Response::Error(pb::P2pError::NotFound as i32)),
         };
         Self {
-            artifact_id: serialize(&gossip_chunk.artifact_id).unwrap(),
+            artifact_id: serialize(&gossip_chunk.artifact_id)
+                .expect("Local value serailization should succeed"),
             chunk_id: gossip_chunk.chunk_id.get(),
             response,
         }
@@ -567,7 +569,7 @@ impl TryFrom<pb::GossipChunk> for GossipChunk {
         let response = try_from_option_field(gossip_chunk.response, "GossipChunk.response")?;
         let chunk_id = ChunkId::from(gossip_chunk.chunk_id);
         Ok(Self {
-            artifact_id: deserialize(&gossip_chunk.artifact_id).unwrap(),
+            artifact_id: deserialize(&gossip_chunk.artifact_id)?,
             chunk_id,
             artifact_chunk: match response {
                 Response::Chunk(c) => Ok(add_chunk_id(c.try_into()?, chunk_id)),

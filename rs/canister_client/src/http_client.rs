@@ -17,6 +17,7 @@ pub struct HttpClient {
 impl HttpClient {
     pub fn new() -> Self {
         let native_tls_connector = native_tls::TlsConnector::builder()
+            .request_alpns(&["h2"])
             .danger_accept_invalid_certs(true)
             .build()
             .expect("failed to build tls connector");
@@ -28,6 +29,7 @@ impl HttpClient {
         let hyper = HyperClient::builder()
             .pool_idle_timeout(Some(Duration::from_secs(600)))
             .pool_max_idle_per_host(1)
+            .http2_only(true)
             .build::<_, hyper::Body>(https_connector);
 
         Self { hyper }
@@ -76,8 +78,14 @@ impl HttpClient {
                 uri, response
             ));
         }
-        hyper::body::to_bytes(response)
+        tokio::time::timeout_at(deadline, hyper::body::to_bytes(response))
             .await
+            .map_err(|e| {
+                format!(
+                    "HttpClient: hyper::body::to_bytes() timed out for {:?}: {:?}",
+                    uri, e
+                )
+            })?
             .map(|bytes| bytes.to_vec())
             .map_err(|e| {
                 format!(

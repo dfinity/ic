@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-hyper = "0.13.10"
+hyper = { version = "0.14.5", features = ["full"] }
 ic-config = { path = "../../config" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-interfaces = { path = "../../interfaces" }
@@ -13,4 +13,4 @@ ic-types = { path = "../../types/types" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
-tokio = "0.2.22"
+tokio = "1.2.0"

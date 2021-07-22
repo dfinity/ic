@@ -24,7 +24,7 @@ mod generate_encryption_keys {
         csp.expect_dkg_create_ephemeral()
             .withf(move |dkg_id, node_id| {
                 *dkg_id == I_DKG_ID
-                    && PrincipalId::try_from(&node_id[..]).unwrap() == node_test_id(NODE_ID).get()
+                    && PrincipalId::try_from(node_id).unwrap() == node_test_id(NODE_ID).get()
             })
             .times(1)
             .return_const(Ok((csp_enc_pk(), csp_pop())));
@@ -112,7 +112,7 @@ mod verify_encryption_public_key {
         csp.expect_dkg_verify_ephemeral()
             .withf(move |dkg_id, node_id, key| {
                 *dkg_id == I_DKG_ID
-                    && PrincipalId::try_from(&node_id[..]).unwrap() == node_test_id(SENDER).get()
+                    && PrincipalId::try_from(node_id).unwrap() == node_test_id(SENDER).get()
                     && *key == (csp_pk, csp_pop)
             })
             .times(1)

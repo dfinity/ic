@@ -1,8 +1,6 @@
 use crate::message_routing::MessageRoutingMetrics;
-use crate::{
-    routing::{demux::Demux, stream_builder::StreamBuilder},
-    scheduling::scheduler::Scheduler,
-};
+use crate::routing::{demux::Demux, stream_builder::StreamBuilder};
+use ic_interfaces::execution_environment::Scheduler;
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::Timer;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -26,9 +24,8 @@ pub(crate) trait StateMachine: Send {
         provisional_whitelist: ProvisionalWhitelist,
     ) -> ReplicatedState;
 }
-
 pub(crate) struct StateMachineImpl {
-    scheduler: Box<dyn Scheduler>,
+    scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     demux: Box<dyn Demux>,
     stream_builder: Box<dyn StreamBuilder>,
     log: ReplicaLogger,
@@ -37,7 +34,7 @@ pub(crate) struct StateMachineImpl {
 
 impl StateMachineImpl {
     pub(crate) fn new(
-        scheduler: Box<dyn Scheduler>,
+        scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
         demux: Box<dyn Demux>,
         stream_builder: Box<dyn StreamBuilder>,
         log: ReplicaLogger,

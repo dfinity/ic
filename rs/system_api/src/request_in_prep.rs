@@ -6,9 +6,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     messages::{CallContextId, Request},
     methods::{Callback, WasmClosure},
-    CanisterId, Cycles, Funds, NumBytes, PrincipalId, SubnetId, ICP,
+    CanisterId, Cycles, Funds, NumBytes, PrincipalId, SubnetId,
 };
-use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
 
 /// Represents an under construction `Request`.
@@ -29,7 +28,7 @@ use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
 /// does not make much sense, actually -- it never needs to be transferred
 /// across processes. It should probably be moved out of ApiType (such that
 /// "mutable" bits are not part of it).
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct RequestInPrep {
     sender: CanisterId,
     callee: PrincipalId,
@@ -164,7 +163,7 @@ pub(crate) fn into_request(
     own_subnet_type: SubnetType,
     system_state_accessor: &dyn SystemStateAccessor,
 ) -> HypervisorResult<Request> {
-    let payment = Funds::new(cycles, ICP::zero());
+    let payment = Funds::new(cycles);
     let (destination_canister, destination_subnet) = if callee == IC_00.get() {
         // This is a request to ic:00. Update `callee` to be the appropriate
         // subnet.
@@ -174,8 +173,7 @@ pub(crate) fn into_request(
             method_payload.as_slice(),
             own_subnet_id,
         )
-        .map(|subnet_id| subnet_id)
-        .unwrap_or_else(|_| {
+        .unwrap_or({
             // Couldn't find the right subnet. Send it to the current subnet,
             // which will handle rejecting the request gracefully.
             own_subnet_id
@@ -189,9 +187,7 @@ pub(crate) fn into_request(
             CanisterId::new(callee).map_err(HypervisorError::InvalidCanisterId)?;
         let destination_subnet = routing_table
             .route(destination_canister.get())
-            // Couldn't find the right subnet. Send it to the current subnet,
-            // which will handle rejecting the request gracefully.
-            .unwrap_or_else(|| own_subnet_id);
+            .unwrap_or(own_subnet_id);
         (destination_canister, destination_subnet)
     };
 

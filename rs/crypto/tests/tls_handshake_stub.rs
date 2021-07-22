@@ -4,7 +4,7 @@ use crate::tls_utils::temp_crypto_component_with_tls_keys;
 use crate::tls_utils::test_client::{Client, ClientBuilder};
 use crate::tls_utils::test_server::{Server, ServerBuilder};
 use ic_crypto_tls_interfaces::{
-    AuthenticatedPeer, MalformedPeerCertificateError, TlsClientHandshakeError,
+    AuthenticatedPeer, MalformedPeerCertificateError, TlsClientHandshakeError, TlsPublicKeyCert,
     TlsServerHandshakeError,
 };
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
@@ -220,23 +220,6 @@ mod server_with_certs {
     }
 
     #[tokio::test]
-    async fn should_return_error_if_allowed_client_cert_is_malformed() {
-        let registry = TlsRegistry::new();
-        let server = Server::builder(SERVER_ID_1)
-            .add_allowed_client_cert(malformed_cert())
-            .build(registry.get());
-        let client = CustomClient::builder()
-            .with_client_auth(CertWithPrivateKey::builder().build_ed25519())
-            .expect_error("Connection reset by peer")
-            .build(server.cert());
-        registry.add_cert(SERVER_ID_1, server.cert()).update();
-
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
-
-        assert_malformed_client_cert_server_error_containing(&server_result, "asn1 encoding");
-    }
-
-    #[tokio::test]
     async fn should_return_error_if_allowed_client_cert_has_bad_sig() {
         let registry = TlsRegistry::new();
         let allowed_cert = CertWithPrivateKey::builder()
@@ -253,7 +236,7 @@ mod server_with_certs {
 
         let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_server_error_containing(&server_result, "certificate signature failure");
+        assert_handshake_server_error_containing(&server_result, "certificate verify failed");
     }
 }
 
@@ -357,7 +340,6 @@ mod server_allowing_all_nodes {
 
         let (_client_result, server_result) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_server_error_containing(&server_result, "self signed certificate");
         assert_handshake_server_error_containing(&server_result, "certificate verify failed");
     }
 }
@@ -396,7 +378,7 @@ mod server {
             &server_result,
             "Handshake failed in tokio_openssl:accept",
         );
-        assert_handshake_server_error_containing(&server_result, "self signed certificate");
+        assert_handshake_server_error_containing(&server_result, "certificate verify failed");
     }
 
     #[tokio::test]
@@ -726,9 +708,27 @@ mod server {
         let (_, server_result) =
             tokio::join!(client_2_with_illegal_cn.run(server.port()), server.run());
 
-        // OpenSSL gets confused with two certificates in the trust store that both use
-        // CLIENT_ID_1 as subject and issuer CNs:
-        assert_handshake_server_error_containing(&server_result, "self signed certificate");
+        // When OpenSSL is given two certificates in the trust store that both use
+        // CLIENT_ID_1 as subject and issuer CNs, it can only "see" one of them
+        // (the one it was given first) during the handshake.
+        // Because we store the certs in a HashSet, their ordering is non-deterministic
+        // across tests (it depends on their hashes, which depend on the particular keys
+        // generated each run).
+        // That means CLIENT_ID_2 can get rejected in two ways in this test:
+        // - If OpenSSL only "sees" CLIENT_ID_1's certificate, we get a HandshakeError,
+        // - If OpenSSL "sees" CLIENT_ID_2's certificate, the TLS handshake will succeed
+        //   but then the Registry check of the cert will fail, and we get a
+        //   ClientNotAllowed error.
+        match server_result.unwrap_err() {
+            TlsServerHandshakeError::HandshakeError { internal_error } => {
+                assert_string_contains(internal_error, "certificate verify failed");
+            }
+            TlsServerHandshakeError::ClientNotAllowed(PeerNotAllowedError::CertificatesDiffer) => {}
+            e => panic!(
+                "expected HandshakeError or ClientNotAllowed error, got {}",
+                e
+            ),
+        }
     }
 
     #[tokio::test]
@@ -754,7 +754,7 @@ mod server {
 
         let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_server_error_containing(&server_result, "self signed certificate");
+        assert_handshake_server_error_containing(&server_result, "certificate verify failed");
     }
 
     #[tokio::test]
@@ -790,7 +790,7 @@ mod server {
 
         let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_server_error_containing(&server_result, "self signed certificate");
+        assert_handshake_server_error_containing(&server_result, "certificate verify failed");
     }
 
     #[tokio::test]
@@ -853,7 +853,7 @@ mod server {
 
         let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_server_error_containing(&server_result, "certificate has expired");
+        assert_handshake_server_error_containing(&server_result, "certificate verify failed");
     }
 
     #[tokio::test]
@@ -877,7 +877,7 @@ mod server {
 
         let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_server_error_containing(&server_result, "certificate is not yet valid");
+        assert_handshake_server_error_containing(&server_result, "certificate verify failed");
     }
 }
 
@@ -1335,7 +1335,7 @@ mod client {
 
         let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_client_error_containing(&client_result, "self signed certificate")
+        assert_handshake_client_error_containing(&client_result, "certificate verify failed")
     }
 
     #[tokio::test]
@@ -1370,7 +1370,7 @@ mod client {
 
         let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_client_error_containing(&client_result, "self signed certificate")
+        assert_handshake_client_error_containing(&client_result, "certificate verify failed")
     }
 
     #[tokio::test]
@@ -1426,7 +1426,7 @@ mod client {
 
         let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_client_error_containing(&client_result, "certificate has expired");
+        assert_handshake_client_error_containing(&client_result, "certificate verify failed");
     }
 
     #[tokio::test]
@@ -1449,7 +1449,7 @@ mod client {
 
         let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_client_error_containing(&client_result, "certificate is not yet valid");
+        assert_handshake_client_error_containing(&client_result, "certificate verify failed");
     }
 
     #[tokio::test]
@@ -1471,7 +1471,7 @@ mod client {
 
         let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_client_error_containing(&client_result, "certificate signature failure");
+        assert_handshake_client_error_containing(&client_result, "certificate verify failed");
     }
 }
 
@@ -1552,7 +1552,7 @@ fn generate_cert_using_temp_crypto(node_id: NodeId) -> X509PublicKeyCert {
         ProtoRegistryDataProvider::new(),
     )) as Arc<_>));
     let (_crypto, cert) = temp_crypto_component_with_tls_keys(unused_dummy_registry, node_id);
-    cert
+    cert.to_proto()
 }
 
 fn malformed_cert() -> X509PublicKeyCert {
@@ -1657,7 +1657,11 @@ fn assert_peer_node_eq(peer: AuthenticatedPeer, node_id: NodeId) {
 
 fn assert_peer_cert_eq(peer: AuthenticatedPeer, cert: X509PublicKeyCert) {
     match peer {
-        AuthenticatedPeer::Cert(c) => assert_eq!(c, cert),
+        AuthenticatedPeer::Cert(c) => assert_eq!(
+            c,
+            TlsPublicKeyCert::new_from_der(cert.certificate_der)
+                .expect("failed to convert DER to TlsPublicKeyCert")
+        ),
         AuthenticatedPeer::Node(_) => panic!("expected peer to be a cert not a node"),
     }
 }

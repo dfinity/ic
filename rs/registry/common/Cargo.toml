@@ -20,15 +20,15 @@ ic-utils = { path = "../../utils" }
 bytes = "1.0.1"
 chrono = "0.4.19"
 futures = "0.3.6"
-hyper = "0.13.10"
-hyper-tls = "0.4.3"
+hyper = "0.14.5"
+hyper-tls = "0.5.0"
 prost = "0.7.0"
 prost-types = "0.7.0"
 rand = "0.7.3"
-reqwest = "0.10.10"
+reqwest = { version = "0.11.1", features = [ "native-tls" ] }
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.11.1"
-tokio = "0.2.22"
+tokio = "1.2.0"
 tree-deserializer = { path = "../../tree_deserializer" }
 lazy_static = "1.4.0"
 url = { version = "2.1.1", features = ["serde"] }

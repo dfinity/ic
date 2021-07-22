@@ -2,7 +2,7 @@
 
 use super::*;
 use ic_crypto_internal_csp::CryptoServiceProvider;
-use ic_interfaces::crypto::NiDkgAlgorithm;
+use ic_interfaces::crypto::{LoadTranscriptResult, NiDkgAlgorithm};
 use ic_logger::{debug, new_logger};
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
@@ -100,7 +100,10 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         result
     }
 
-    fn load_transcript(&self, transcript: &NiDkgTranscript) -> Result<(), DkgLoadTranscriptError> {
+    fn load_transcript(
+        &self,
+        transcript: &NiDkgTranscript,
+    ) -> Result<LoadTranscriptResult, DkgLoadTranscriptError> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "NiDkgAlgorithm",
             crypto.method_name => "load_transcript",

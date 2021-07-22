@@ -312,7 +312,7 @@ where
 {
     /// Returns the amount incremented by 1.
     pub fn increment(self) -> AmountOf<Unit, Repr> {
-        Self(self.0 + Repr::from(1 as u8), PhantomData)
+        Self(self.0 + Repr::from(1_u8), PhantomData)
     }
 }
 
@@ -322,7 +322,7 @@ where
 {
     /// Increments the amount by 1.
     pub fn inc_assign(&mut self) {
-        self.0 += Repr::from(1 as u8)
+        self.0 += Repr::from(1_u8)
     }
 }
 
@@ -333,7 +333,7 @@ where
     /// Returns the amount decremented by 1. Like regular subtraction, panics in
     /// debug mode if `Repr` is an unsigned integer type and the amount is zero.
     pub fn decrement(self) -> AmountOf<Unit, Repr> {
-        Self(self.0 - Repr::from(1 as u8), PhantomData)
+        Self(self.0 - Repr::from(1_u8), PhantomData)
     }
 }
 
@@ -344,7 +344,7 @@ where
     /// Decrements the amount by 1. Like regular subtraction, panics in debug
     /// mode if `Repr` is an unsigned integer type and the amount is zero.
     pub fn dec_assign(&mut self) {
-        self.0 -= Repr::from(1 as u8)
+        self.0 -= Repr::from(1_u8)
     }
 }
 

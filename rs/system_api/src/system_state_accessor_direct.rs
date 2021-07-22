@@ -1,5 +1,6 @@
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::system_state::CanisterStatus, page_map, NumWasmPages, StableMemoryError,
     StateError, SystemState,
@@ -7,7 +8,7 @@ use ic_replicated_state::{
 use ic_types::{
     messages::{CallContextId, CallbackId, Request},
     methods::Callback,
-    CanisterId, ComputeAllocation, Cycles, PrincipalId,
+    CanisterId, ComputeAllocation, Cycles, NumInstructions, PrincipalId,
 };
 use std::ops::DerefMut;
 use std::{cell::RefCell, sync::Arc};
@@ -17,6 +18,8 @@ use ic_base_types::NumBytes;
 
 const WASM_PAGE_SIZE_IN_BYTES: u32 = 64 * 1024;
 const MAX_STABLE_MEMORY_IN_PAGES: u32 = 64 * 1024; // 4GiB
+const BYTES_PER_INSTRUCTION: NumBytes = NumBytes::new(10); // Number of bytes that can be copied from/to canister's heap with one
+                                                           // instruction.
 
 #[doc(hidden)]
 pub struct SystemStateAccessorDirect {
@@ -61,6 +64,15 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
         *self.system_state.borrow().controller()
     }
 
+    fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions {
+        match self.cycles_account_manager.subnet_type() {
+            SubnetType::System => NumInstructions::from(0),
+            SubnetType::Application | SubnetType::VerifiedApplication => {
+                NumInstructions::from(num_bytes / BYTES_PER_INSTRUCTION)
+            }
+        }
+    }
+
     fn mint_cycles(&self, amount_to_mint: Cycles) -> HypervisorResult<()> {
         let mut system_state = self.system_state.borrow_mut();
         self.cycles_account_manager
@@ -80,7 +92,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
         // Scale amount that can be accepted by CYCLES_LIMIT_PER_CANISTER.
         let amount_to_accept = self
             .cycles_account_manager
-            .check_max_cycles_can_add(&system_state, amount_to_accept);
+            .check_max_cycles_can_add(system_state.cycles_balance, amount_to_accept);
 
         // Scale amount that can be accepted by what is actually available on
         // the call context.

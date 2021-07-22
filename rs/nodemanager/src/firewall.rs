@@ -9,7 +9,7 @@ use ic_protobuf::registry::firewall::v1::FirewallConfig as FirewallConfigPB;
 use ic_types::RegistryVersion;
 use ic_utils::fs::write_atomically;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,8 +17,8 @@ const FIREWALL_CHECK_INTERVAL: Duration = Duration::from_secs(2);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum DataSource {
-    CONFIG,
-    REGISTRY,
+    Config,
+    Registry,
 }
 
 /// Continuously checks the Registry to determine if there has been a change in
@@ -65,7 +65,7 @@ impl Firewall {
             registry,
             metrics,
             configuration: config,
-            source: DataSource::CONFIG,
+            source: DataSource::Config,
             logger,
             compiled_config: "".to_string(),
             must_write: true,
@@ -95,18 +95,18 @@ impl Firewall {
             Ok(registry_fw_config) => {
                 // Data found in registry!
                 self.update_config_from_pb(registry_fw_config);
-                self.source = DataSource::REGISTRY;
+                self.source = DataSource::Registry;
             }
             Err(e) => {
                 // No data was found in registry
                 match self.source {
-                    DataSource::REGISTRY => warn!(
+                    DataSource::Registry => warn!(
                         every_n_seconds => 300,
                         self.logger,
                         "Firewall configuration was not found in registry. Using previously fetched data. (Error from registry: {:?})",
                         e
                     ),
-                    DataSource::CONFIG => warn!(
+                    DataSource::Config => warn!(
                         every_n_seconds => 300,
                         self.logger,
                         "Firewall configuration was not found in registry. Using config file instead. (Error from registry: {:?})",
@@ -159,7 +159,7 @@ impl Firewall {
     }
 
     /// Writes a given content to a file at the given path
-    fn write_to_file(file_path: &PathBuf, content: &str) -> NodeManagerResult<()> {
+    fn write_to_file(file_path: &Path, content: &str) -> NodeManagerResult<()> {
         write_atomically(file_path, |f| f.write_all(content.as_bytes()))
             .map_err(|e| NodeManagerError::file_write_error(file_path, e))?;
         Ok(())
@@ -196,6 +196,6 @@ async fn background_task(mut firewall: Firewall) {
             ),
         };
 
-        tokio::time::delay_for(FIREWALL_CHECK_INTERVAL).await;
+        tokio::time::sleep(FIREWALL_CHECK_INTERVAL).await;
     }
 }

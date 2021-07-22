@@ -38,9 +38,7 @@ static ALLOC: Jemalloc = Jemalloc;
 
 use ic_registry_common::local_store::LocalStoreImpl;
 #[cfg(feature = "profiler")]
-use pprof::*;
-#[cfg(feature = "profiler")]
-use prost::Message;
+use pprof::{protos::Message, ProfilerGuard};
 #[cfg(feature = "profiler")]
 use regex::Regex;
 #[cfg(feature = "profiler")]
@@ -59,7 +57,7 @@ fn abort_on_panic() {
 /// Determine sha256 hash of the current replica binary
 ///
 /// Returns tuple (path of the replica binary, hex encoded sha256 of binary)
-fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
+fn get_replica_binary_hash() -> std::result::Result<(PathBuf, String), String> {
     let mut hasher = Sha256::new();
     let replica_binary_path = env::current_exe()
         .map_err(|e| format!("Failed to determine replica binary path: {:?}", e))?;
@@ -74,12 +72,13 @@ fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
 }
 
 #[tokio::main]
-async fn main() -> io::Result<()> {
+async fn main() {
+    run().await.unwrap();
+}
+
+async fn run() -> io::Result<()> {
     // We do not support 32 bits architectures and probably never will.
     assert_eq_size!(usize, u64);
-    let local = tokio::task::LocalSet::new();
-    let sys = actix::System::run_in_tokio("replica", &local);
-    local.spawn_local(sys);
 
     // At this point we need to setup a new process group. This is
     // done to ensure all our children processes belong to the same
@@ -206,6 +205,9 @@ async fn main() -> io::Result<()> {
     .await;
 
     let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
+    // Any change to these lines should be mirrored in the file
+    // `rs/replay/src/lib.rs` so that the replica and the replay tool of the same
+    // version have an identical behavior wrt. CoW.
     if subnet_config.cow_memory_manager_config.enabled {
         cow_state_feature::enable(cow_state_feature::cow_state);
     } else {
@@ -249,6 +251,7 @@ async fn main() -> io::Result<()> {
 
     let crypto = Arc::new(crypto);
     let _metrics = MetricsRuntimeImpl::new(
+        tokio::runtime::Handle::current(),
         config.metrics.clone(),
         metrics_registry.clone(),
         registry.clone(),
@@ -282,7 +285,7 @@ async fn main() -> io::Result<()> {
         mut p2p_runner,
         p2p_event_handler,
         consensus_pool_cache,
-        exec_env,
+        ingress_message_filter,
         _xnet_endpoint,
     ) = ic_replica::setup_p2p::construct_p2p_stack(
         logger.clone(),
@@ -302,10 +305,6 @@ async fn main() -> io::Result<()> {
     p2p_runner.run();
 
     let malicious_behaviour = &config.malicious_behaviour;
-    let maliciously_disable_ingress_validation = malicious_behaviour.allow_malicious_behaviour
-        && malicious_behaviour
-            .malicious_flags
-            .maliciously_disable_http_handler_ingress_validation;
 
     task::spawn(ic_http_handler::start_server(
         metrics_registry.clone(),
@@ -319,18 +318,18 @@ async fn main() -> io::Result<()> {
         root_subnet_id,
         logger.clone(),
         consensus_pool_cache,
-        exec_env,
-        maliciously_disable_ingress_validation,
+        ingress_message_filter,
         subnet_type,
+        malicious_behaviour.malicious_flags.clone(),
     ));
 
-    tokio::time::delay_for(Duration::from_millis(5000)).await;
+    tokio::time::sleep(Duration::from_millis(5000)).await;
 
     if config.malicious_behaviour.maliciously_seg_fault() {
         tokio::spawn(async move {
             loop {
                 // Exit roughly every 8 seconds.
-                tokio::time::delay_for(Duration::from_millis(500)).await;
+                tokio::time::sleep(Duration::from_millis(500)).await;
                 let r: u8 = rand::random();
                 if r % 16 == 0 {
                     // Exit immediately without cleaning up.
@@ -352,8 +351,6 @@ async fn main() -> io::Result<()> {
     info!(logger, "IC Replica Terminated");
     // Ensure we join any threads etc.
     std::mem::drop(p2p_runner);
-    // Shutdown all actors here via System::current().stop().
-    actix::System::current().stop();
     Ok(())
 }
 

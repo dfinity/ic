@@ -95,11 +95,11 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
         subnet_id,
     ));
     Dependencies {
-        time_source,
-        registry_data_provider,
-        registry,
-        membership,
         crypto,
+        registry,
+        registry_data_provider,
+        membership,
+        time_source,
         pool,
         replica_config,
         state_manager,
@@ -138,11 +138,11 @@ pub fn dependencies_with_subnet_params(
         )));
 
     Dependencies {
-        time_source,
-        registry_data_provider,
-        registry,
-        membership,
         crypto,
+        registry,
+        registry_data_provider,
+        membership,
+        time_source,
         pool,
         replica_config,
         state_manager,

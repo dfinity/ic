@@ -20,7 +20,7 @@ use ic_types::crypto::{AlgorithmId, CanisterSig, CanisterSigOf, CryptoError, Use
 use ic_types::messages::Delegation;
 use ic_types::time::{current_time, Time};
 use ic_types::{CanisterId, RegistryVersion, SubnetId};
-use simple_asn1::{oid, BigUint, OID};
+use simple_asn1::oid;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -56,16 +56,24 @@ fn should_verify_valid_canister_signature() {
 #[test]
 fn should_fail_to_verify_on_wrong_signature() {
     let (message, signature, user_pubkey, root_pubkey) = test_vec(iccsa::TestVectorId::STABILITY_1);
-    let wrong_signature = CanisterSigOf::new(CanisterSig(vec![42, 43, 44]));
+    let corrupted_sig_bytes = {
+        let mut corrupted_sig = signature.clone().get().0;
+        let len = corrupted_sig.len();
+        corrupted_sig[len - 5] ^= 0xFF;
+        corrupted_sig
+    };
+    let wrong_signature = CanisterSigOf::new(CanisterSig(corrupted_sig_bytes));
     assert_ne!(signature, wrong_signature);
     let temp_crypto = temp_crypto_with_registry_with_root_pubkey(root_pubkey, REG_V1);
 
     let result = temp_crypto.verify_canister_sig(&wrong_signature, &message, &user_pubkey, REG_V1);
 
-    assert!(matches!(
-        result,
-        Err(CryptoError::MalformedSignature { .. })
-    ));
+    assert!(
+        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+            if internal_error.contains("certificate verification failed")
+            && algorithm == AlgorithmId::IcCanisterSignature
+        )
+    );
 }
 
 #[test]
@@ -77,10 +85,12 @@ fn should_fail_to_verify_on_wrong_message() {
 
     let result = temp_crypto.verify_canister_sig(&signature, &wrong_message, &user_pubkey, REG_V1);
 
-    assert!(matches!(
-        result,
-        Err(CryptoError::SignatureVerification { .. })
-    ));
+    assert!(
+        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+            if internal_error.contains("the signature tree doesn't contain sig")
+            && algorithm == AlgorithmId::IcCanisterSignature
+        )
+    );
 }
 
 #[test]
@@ -95,29 +105,60 @@ fn should_fail_to_verify_on_wrong_public_key() {
 
     let result = temp_crypto.verify_canister_sig(&signature, &message, &wrong_pubkey, REG_V1);
 
-    assert!(matches!(
-        result,
-        Err(CryptoError::SignatureVerification { .. })
-    ));
+    assert!(
+        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+            if internal_error.contains("the signature tree doesn't contain sig")
+            && algorithm == AlgorithmId::IcCanisterSignature
+        )
+    );
+}
+
+#[test]
+fn should_fail_to_verify_on_invalid_root_public_key() {
+    let (message, signature, user_pubkey, root_pubkey) = test_vec(iccsa::TestVectorId::STABILITY_1);
+    let invalid_root_pk = {
+        ThresholdSigPublicKey::from(bls12_381::PublicKeyBytes(
+            [42; bls12_381::PublicKeyBytes::SIZE],
+        ))
+    };
+    assert_ne!(root_pubkey, invalid_root_pk);
+    let temp_crypto = temp_crypto_with_registry_with_root_pubkey(invalid_root_pk, REG_V1);
+
+    let result = temp_crypto.verify_canister_sig(&signature, &message, &user_pubkey, REG_V1);
+
+    assert!(
+        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+            if internal_error.contains("Invalid public key")
+            && internal_error.contains("certificate verification failed")
+            && algorithm == AlgorithmId::IcCanisterSignature
+        )
+    );
 }
 
 #[test]
 fn should_fail_to_verify_on_wrong_root_public_key() {
     let (message, signature, user_pubkey, root_pubkey) = test_vec(iccsa::TestVectorId::STABILITY_1);
+    // This is a valid public key different from root_pk. It was extracted using
+    // `From<&NiDkgTranscript> for ThresholdSigPublicKey` from an `NiDkgTranscript`
+    // in an integration test.
     let wrong_root_pubkey = {
-        ThresholdSigPublicKey::from(bls12_381::PublicKeyBytes(
-            [42; bls12_381::PublicKeyBytes::SIZE],
-        ))
+        let wrong_root_pk_vec = hex::decode("91cf31d8a6ac701281d2e38d285a4141858f355e05102cedd280f98dfb277613a8b96ac32a5f463ebea2ae493f4eba8006e30b0f2f5c426323fb825a191fb7f639f61d33a0c07addcdd2791d2ac32ec8be354e8465b6a18da6b5685deb0e9245").unwrap();
+        let mut wrong_root_pk_bytes = [0; 96];
+        wrong_root_pk_bytes.copy_from_slice(&wrong_root_pk_vec);
+        ThresholdSigPublicKey::from(bls12_381::PublicKeyBytes(wrong_root_pk_bytes))
     };
     assert_ne!(root_pubkey, wrong_root_pubkey);
     let temp_crypto = temp_crypto_with_registry_with_root_pubkey(wrong_root_pubkey, REG_V1);
 
     let result = temp_crypto.verify_canister_sig(&signature, &message, &user_pubkey, REG_V1);
 
-    assert!(matches!(
-        result,
-        Err(CryptoError::SignatureVerification { .. })
-    ));
+    assert!(
+        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+            if internal_error.contains("Invalid combined threshold signature")
+            && internal_error.contains("certificate verification failed")
+            && algorithm == AlgorithmId::IcCanisterSignature
+        )
+    );
 }
 
 #[test]

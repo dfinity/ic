@@ -13,7 +13,6 @@
 //! 2. executing the operation and return `cycles_spent`
 //! 3. reimburse the canister with `cycles_reserved` - `cycles_spent`
 
-use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_logger::{info, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
@@ -27,7 +26,7 @@ use ic_types::{
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     nominal_cycles::NominalCycles,
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
+    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId,
 };
 use std::{str::FromStr, time::Duration};
 
@@ -56,6 +55,7 @@ pub struct CanisterOutOfCyclesError {
     pub canister_id: CanisterId,
     pub available: Cycles,
     pub requested: Cycles,
+    pub threshold: Cycles,
 }
 
 impl std::error::Error for CanisterOutOfCyclesError {}
@@ -87,41 +87,6 @@ pub struct CyclesAccountManager {
     /// The configuration of this [`CyclesAccountManager`] controlling the fees
     /// that are charged for various operations.
     config: CyclesAccountManagerConfig,
-}
-
-#[doc(hidden)]
-pub fn freeze_threshold_cycles(
-    memory_usage: NumBytes,
-    memory_allocation: Option<MemoryAllocation>,
-    gib_storage_per_second_fee: Cycles,
-    compute_allocation: ComputeAllocation,
-    compute_allocation_fee: Cycles,
-    freeze_threshold: NumSeconds,
-) -> Cycles {
-    let one_gib = 1 << 30;
-
-    let memory_fee = {
-        let memory = match memory_allocation {
-            Some(memory) => memory.get(),
-            None => memory_usage,
-        };
-        Cycles::from(
-            (memory.get() as u128
-                * gib_storage_per_second_fee.get()
-                * freeze_threshold.get() as u128)
-                / one_gib,
-        )
-    };
-
-    let compute_fee = {
-        Cycles::from(
-            compute_allocation.as_percent() as u128
-                * compute_allocation_fee.get()
-                * freeze_threshold.get() as u128,
-        )
-    };
-
-    memory_fee + compute_fee
 }
 
 impl CyclesAccountManager {
@@ -179,6 +144,39 @@ impl CyclesAccountManager {
         self.config.xnet_byte_transmission_fee * Cycles::from(payload_size.get())
     }
 
+    #[doc(hidden)]
+    pub fn freeze_threshold_cycles(
+        &self,
+        system_state: &SystemState,
+        memory_usage: NumBytes,
+        compute_allocation: ComputeAllocation,
+    ) -> Cycles {
+        let one_gib = 1 << 30;
+
+        let memory_fee = {
+            let memory = match system_state.memory_allocation {
+                Some(memory) => memory.get(),
+                None => memory_usage,
+            };
+            Cycles::from(
+                (memory.get() as u128
+                    * self.config.gib_storage_per_second_fee.get()
+                    * system_state.freeze_threshold.get() as u128)
+                    / one_gib,
+            )
+        };
+
+        let compute_fee = {
+            Cycles::from(
+                compute_allocation.as_percent() as u128
+                    * self.config.compute_percent_allocated_per_second_fee.get()
+                    * system_state.freeze_threshold.get() as u128,
+            )
+        };
+
+        memory_fee + compute_fee
+    }
+
     /// Withdraws `cycles` worth of cycles from the canister's balance.
     ///
     /// NOTE: This method is intended for use in inter-canister transfers.
@@ -196,13 +194,10 @@ impl CyclesAccountManager {
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let threshold = freeze_threshold_cycles(
+        let threshold = self.freeze_threshold_cycles(
+            system_state,
             canister_current_memory_usage,
-            system_state.memory_allocation,
-            self.config.gib_storage_per_second_fee,
             canister_compute_allocation,
-            self.config.compute_percent_allocated_per_second_fee,
-            system_state.freeze_threshold,
         );
         self.withdraw_with_threshold(system_state, cycles, threshold)
     }
@@ -224,13 +219,10 @@ impl CyclesAccountManager {
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let threshold = freeze_threshold_cycles(
+        let threshold = self.freeze_threshold_cycles(
+            system_state,
             canister_current_memory_usage,
-            system_state.memory_allocation,
-            self.config.gib_storage_per_second_fee,
             canister_compute_allocation,
-            self.config.compute_percent_allocated_per_second_fee,
-            system_state.freeze_threshold,
         );
         self.consume_with_threshold(system_state, cycles, threshold)
     }
@@ -261,13 +253,10 @@ impl CyclesAccountManager {
         self.consume_with_threshold(
             system_state,
             cycles_to_withdraw,
-            freeze_threshold_cycles(
+            self.freeze_threshold_cycles(
+                system_state,
                 canister_current_memory_usage,
-                system_state.memory_allocation,
-                self.config.gib_storage_per_second_fee,
                 canister_compute_allocation,
-                self.config.compute_percent_allocated_per_second_fee,
-                system_state.freeze_threshold,
             ),
         )
     }
@@ -464,13 +453,10 @@ impl CyclesAccountManager {
         self.consume_with_threshold(
             system_state,
             fee,
-            freeze_threshold_cycles(
+            self.freeze_threshold_cycles(
+                system_state,
                 canister_current_memory_usage,
-                system_state.memory_allocation,
-                self.config.gib_storage_per_second_fee,
                 canister_compute_allocation,
-                self.config.compute_percent_allocated_per_second_fee,
-                system_state.freeze_threshold,
             ),
         )
     }
@@ -480,7 +466,7 @@ impl CyclesAccountManager {
     /// sent earlier.
     pub fn response_cycles_refund(&self, system_state: &mut SystemState, response: &mut Response) {
         // We originally charged for the maximum number of bytes possible so
-        // figure out how many extra bytes we chared for.
+        // figure out how many extra bytes we charged for.
         let extra_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES - response.response_payload.size_of();
         let cycles_to_refund =
             self.config.xnet_byte_transmission_fee * Cycles::from(extra_bytes.get());
@@ -500,13 +486,10 @@ impl CyclesAccountManager {
         canister_current_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
     ) -> Cycles {
-        let cycles_storage_reserve = freeze_threshold_cycles(
+        let cycles_storage_reserve = self.freeze_threshold_cycles(
+            system_state,
             canister_current_memory_usage,
-            system_state.memory_allocation,
-            self.config.gib_storage_per_second_fee,
             canister_compute_allocation,
-            self.config.compute_percent_allocated_per_second_fee,
-            system_state.freeze_threshold,
         );
 
         if system_state.cycles_balance > cycles_storage_reserve {
@@ -516,9 +499,13 @@ impl CyclesAccountManager {
         }
     }
 
-    fn refund_cycles(&self, system_state: &mut SystemState, cycles: Cycles) {
+    /// Note that this function is made public only for the tests.
+    #[doc(hidden)]
+    pub fn refund_cycles(&self, system_state: &mut SystemState, cycles: Cycles) {
         system_state.cycles_balance += cycles;
-        self.observe_consumed_cycles(system_state, cycles)
+        system_state
+            .canister_metrics
+            .consumed_cycles_since_replica_started -= NominalCycles::from_cycles(cycles);
     }
 
     /// Subtracts and consumes the cycles. This call should be used when the
@@ -552,8 +539,9 @@ impl CyclesAccountManager {
         if cycles > cycles_available {
             return Err(CanisterOutOfCyclesError {
                 canister_id: system_state.canister_id,
-                available: cycles_available,
+                available: system_state.cycles_balance,
                 requested: cycles,
+                threshold,
             });
         }
 
@@ -566,7 +554,7 @@ impl CyclesAccountManager {
     /// present.
     pub fn check_max_cycles_can_add(
         &self,
-        system_state: &SystemState,
+        current_balance: Cycles,
         cycles_to_add: Cycles,
     ) -> Cycles {
         match self.own_subnet_type {
@@ -574,9 +562,7 @@ impl CyclesAccountManager {
             SubnetType::Application | SubnetType::VerifiedApplication => {
                 match self.max_cycles_per_canister {
                     None => cycles_to_add,
-                    Some(max_cycles) => {
-                        std::cmp::min(cycles_to_add, max_cycles - system_state.cycles_balance)
-                    }
+                    Some(max_cycles) => std::cmp::min(cycles_to_add, max_cycles - current_balance),
                 }
             }
         }
@@ -584,9 +570,11 @@ impl CyclesAccountManager {
 
     /// Adds `cycles` worth of cycles to the canister's balance.
     /// The cycles balance added in a single go is limited to u64::max_value()
-    pub fn add_cycles(&self, system_state: &mut SystemState, cycles_to_add: Cycles) {
-        let cycles = self.check_max_cycles_can_add(system_state, cycles_to_add);
+    /// Returns the amount of cycles that does not fit in the balance.
+    pub fn add_cycles(&self, system_state: &mut SystemState, cycles_to_add: Cycles) -> Cycles {
+        let cycles = self.check_max_cycles_can_add(system_state.cycles_balance, cycles_to_add);
         system_state.cycles_balance += cycles;
+        cycles_to_add - cycles
     }
 
     /// Mints `amount_to_mint` [`Cycles`].

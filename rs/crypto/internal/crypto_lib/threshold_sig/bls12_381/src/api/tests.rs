@@ -7,7 +7,7 @@ use super::super::types::{
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_types::{NumberOfNodes, Randomness};
 use proptest::prelude::*;
 
 mod util {
@@ -176,7 +176,7 @@ fn test_public_key_to_der() {
     struct BlsPublicKey<'a> {
         raw_hex: &'a str,
         der_hex: &'a str,
-    };
+    }
 
     let test_vectors = [
         BlsPublicKey {
@@ -214,15 +214,15 @@ proptest! {
         })]
 
         #[test]
-        fn individual_signature_verifies(seed: [u8;32], threshold in 0 as NodeIndex..20, redundancy in 0 as NodeIndex..20, message: Vec<u8>) {
+        fn individual_signature_verifies(seed: [u8;32], threshold in 0_u32..20, redundancy in 0_u32..20, message: Vec<u8>) {
             test_individual_signature_verifies(Randomness::from(seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
         }
         #[test]
-        fn combined_signature_verifies(seed: [u8;32], threshold in 0 as NodeIndex..20, redundancy in 0 as NodeIndex..20, message: Vec<u8>) {
+        fn combined_signature_verifies(seed: [u8;32], threshold in 0_u32..20, redundancy in 0_u32..20, message: Vec<u8>) {
             test_combined_signature_verifies(Randomness::from(seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
         }
         #[test]
-        fn threshold_sig_api_and_core_match(seed: [u8;32], threshold in 0 as NodeIndex..10, redundancy in 0 as NodeIndex..10, message: Vec<u8>) {
+        fn threshold_sig_api_and_core_match(seed: [u8;32], threshold in 0_u32..10, redundancy in 0_u32..10, message: Vec<u8>) {
             test_threshold_sig_api_and_core_match(Randomness::from(seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
         }
 }

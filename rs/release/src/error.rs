@@ -77,7 +77,7 @@ impl ReleaseError {
         ReleaseError::IoError(format!("{} `{:?}`", msg, file.as_ref()), e)
     }
 
-    pub fn file_set_permissions_error(file_path: &PathBuf, e: std::io::Error) -> Self {
+    pub fn file_set_permissions_error(file_path: &Path, e: std::io::Error) -> Self {
         Self::path_io_error("Failed to set permissions on file", file_path, e)
     }
 }

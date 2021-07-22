@@ -3,19 +3,21 @@ use super::{
     metadata_state::{IngressHistoryState, Stream, Streams, SystemMetadata},
 };
 use crate::{canister_state::QUEUE_INDEX_NONE, CanisterQueues};
+use ic_base_types::PrincipalId;
 use ic_logger::{fatal, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{RequestOrResponse, Response};
 use ic_types::{
-    ingress::IngressStatus, messages::MessageId, CanisterId, Cycles, NumBytes, QueueIndex,
-    SubnetId, Time,
+    ingress::IngressStatus,
+    messages::MessageId,
+    user_error::{ErrorCode, UserError},
+    CanisterId, Cycles, NumBytes, QueueIndex, SubnetId, Time,
 };
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub enum StateError {
     /// Message enqueuing failed due to no matching canister ID.
     CanisterNotFound(CanisterId),
@@ -55,7 +57,7 @@ pub const LABEL_VALUE_INVALID_SUBNET_PAYLOAD: &str = "InvalidSubnetPayload";
 impl StateError {
     /// Returns a string representation of the `StateError` variant name to be
     /// used as a metric label value (e.g. `"QueueFull"`).
-    pub fn to_label_value(&self) -> &str {
+    pub fn to_label_value(&self) -> &'static str {
         match self {
             StateError::CanisterNotFound(_) => LABEL_VALUE_CANISTER_NOT_FOUND,
             StateError::QueueFull { .. } => LABEL_VALUE_QUEUE_FULL,
@@ -303,6 +305,22 @@ impl ReplicatedState {
                     .unwrap_or_else(|| canister.memory_usage())
             })
             .sum()
+    }
+
+    pub fn find_subnet_id(&self, principal_id: PrincipalId) -> Result<SubnetId, UserError> {
+        let subnet_id = self
+            .metadata
+            .network_topology
+            .routing_table
+            .route(principal_id);
+
+        match subnet_id {
+            None => Err(UserError::new(
+                ErrorCode::SubnetNotFound,
+                format!("Could not find subnetId given principalId {}", principal_id),
+            )),
+            Some(subnet_id) => Ok(subnet_id),
+        }
     }
 
     /// Pushes a `RequestOrResponse` into the induction pool.

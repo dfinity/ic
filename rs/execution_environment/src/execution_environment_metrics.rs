@@ -14,7 +14,7 @@ impl ExecutionEnvironmentMetrics {
         Self {
             subnet_messages: metrics_registry.histogram_vec(
                 "execution_subnet_message_duration_seconds",
-                "Duration of a executing subnet messages in seconds.",
+                "Duration of a subnet message execution, in seconds.",
                 decimal_buckets(-3, 1),
                 &["method_name", "outcome"],
             ),

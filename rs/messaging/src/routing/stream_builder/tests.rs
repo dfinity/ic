@@ -23,7 +23,7 @@ use ic_types::{
     messages::{CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response},
     user_error::RejectCode,
     xnet::{StreamIndex, StreamIndexedQueue},
-    CanisterId, Cycles, Funds, SubnetId, ICP,
+    CanisterId, Cycles, Funds, SubnetId,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -173,10 +173,11 @@ fn build_streams_success() {
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
 
         // Set up the expected Stream from the messages.
-        let expected_stream = Stream {
-            messages: requests_into_queue(StreamIndex::from(0), msgs.clone()),
-            ..Stream::default()
-        };
+        let expected_stream = Stream::new(
+            requests_into_queue(StreamIndex::from(0), msgs.clone()),
+            Default::default(),
+        );
+        let expected_stream_bytes = expected_stream.count_bytes() as u64;
 
         let mut expected_streams = BTreeMap::new();
         expected_streams.insert(REMOTE_SUBNET, expected_stream);
@@ -210,8 +211,15 @@ fn build_streams_success() {
         );
         assert_eq!(14, fetch_routed_payload_count(&metrics_registry));
         assert_eq!(
-            metric_vec(&[(&[(LABEL_DESTINATION, &REMOTE_SUBNET.to_string()),], 14,)]),
+            metric_vec(&[(&[(LABEL_DESTINATION, &REMOTE_SUBNET.to_string())], 14)]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MESSAGES)
+        );
+        assert_eq!(
+            metric_vec(&[(
+                &[(LABEL_DESTINATION, &REMOTE_SUBNET.to_string())],
+                expected_stream_bytes
+            )]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)
         );
     });
 }
@@ -251,10 +259,11 @@ fn build_streams_local_canisters() {
         provided_state.metadata.network_topology.routing_table = routing_table.clone();
 
         // Set up the expected Stream from the messages.
-        let expected_stream = Stream {
-            messages: requests_into_queue(StreamIndex::from(0), msgs.clone()),
-            ..Stream::default()
-        };
+        let expected_stream = Stream::new(
+            requests_into_queue(StreamIndex::from(0), msgs.clone()),
+            Default::default(),
+        );
+        let expected_stream_bytes = expected_stream.count_bytes() as u64;
 
         // Set up the expected Stream
         let mut expected_stream_state = Streams::new();
@@ -301,8 +310,15 @@ fn build_streams_local_canisters() {
         );
         assert_eq!(14, fetch_routed_payload_count(&metrics_registry));
         assert_eq!(
-            metric_vec(&[(&[(LABEL_DESTINATION, &LOCAL_SUBNET.to_string()),], 14,)]),
+            metric_vec(&[(&[(LABEL_DESTINATION, &LOCAL_SUBNET.to_string())], 14)]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MESSAGES)
+        );
+        assert_eq!(
+            metric_vec(&[(
+                &[(LABEL_DESTINATION, &LOCAL_SUBNET.to_string())],
+                expected_stream_bytes
+            )]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)
         );
     });
 }
@@ -361,6 +377,10 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
             btreemap! {},
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MESSAGES)
         );
+        assert_eq!(
+            btreemap! {},
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)
+        );
     });
 }
 
@@ -383,10 +403,11 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
         let mut expected_state = provided_state.clone();
 
         // Set up the expected Stream from the messages.
-        let expected_stream = Stream {
-            messages: requests_into_queue(StreamIndex::from(0), msgs.clone()),
-            ..Stream::default()
-        };
+        let expected_stream = Stream::new(
+            requests_into_queue(StreamIndex::from(0), msgs.clone()),
+            Default::default(),
+        );
+        let expected_stream_bytes = expected_stream.count_bytes() as u64;
 
         let mut expected_streams = BTreeMap::new();
         expected_streams.insert(REMOTE_SUBNET, expected_stream);
@@ -420,8 +441,15 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
         );
         assert_eq!(1, fetch_routed_payload_count(&metrics_registry));
         assert_eq!(
-            metric_vec(&[(&[(LABEL_DESTINATION, &REMOTE_SUBNET.to_string()),], 1)]),
+            metric_vec(&[(&[(LABEL_DESTINATION, &REMOTE_SUBNET.to_string())], 1)]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MESSAGES)
+        );
+        assert_eq!(
+            metric_vec(&[(
+                &[(LABEL_DESTINATION, &REMOTE_SUBNET.to_string())],
+                expected_stream_bytes
+            )]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)
         );
     });
 }
@@ -487,7 +515,7 @@ fn generate_message_for_test(
         .sender(sender)
         .receiver(receiver)
         .method_name(method_name)
-        .payment(Funds::new(payment, ICP::zero()))
+        .payment(Funds::new(payment))
         .sender_reply_callback(CallbackId::from(999))
         .build()
 }

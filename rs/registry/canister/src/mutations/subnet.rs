@@ -8,7 +8,7 @@ use std::{collections::HashSet, convert::TryFrom};
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
-use ic_registry_keys::{make_subnet_record_key, SUBNET_LIST_KEY};
+use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 
 impl Registry {
@@ -34,7 +34,10 @@ impl Registry {
     }
 
     pub fn get_subnet_list_record(&self) -> SubnetListRecord {
-        match self.get(&SUBNET_LIST_KEY.as_bytes(), self.latest_version()) {
+        match self.get(
+            &make_subnet_list_record_key().as_bytes(),
+            self.latest_version(),
+        ) {
             Some(RegistryValue {
                 value,
                 version: _,
@@ -47,8 +50,8 @@ impl Registry {
         }
     }
 
-    /// Return the mutation and preconditions that can be used to replace the
-    /// given subnet's membership with `new_membership`
+    /// Return the mutation that can be used to replace the given subnet's
+    /// membership with `new_membership`.
     pub fn make_replace_subnet_membership_mutation(
         &self,
         subnet_id: SubnetId,

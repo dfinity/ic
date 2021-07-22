@@ -1,6 +1,8 @@
 use assert_matches::assert_matches;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
-use ic_wasm_utils::validation::{validate_wasm_binary, WasmValidationLimits, RESERVED_SYMBOLS};
+use ic_wasm_utils::validation::{
+    validate_wasm_binary, WasmValidationDetails, WasmValidationLimits, RESERVED_SYMBOLS,
+};
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wabt::Error> {
     wabt::wat2wasm(wat).map(BinaryEncodedWasm::new)
@@ -17,7 +19,10 @@ fn can_validate_valid_import_section() {
     .unwrap();
     assert_matches!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
-        Ok(())
+        Ok(WasmValidationDetails {
+            reserved_exports: 0,
+            imports_call_simple: false,
+        })
     );
 }
 
@@ -63,7 +68,34 @@ fn can_validate_valid_export_section() {
     .unwrap();
     assert_matches!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
-        Ok(())
+        Ok(WasmValidationDetails {
+            reserved_exports: 0,
+            imports_call_simple: false,
+        })
+    );
+}
+
+#[test]
+fn can_validate_valid_export_section_with_reserved_functions() {
+    let wasm = wat2wasm(
+        r#"(module
+                  (func $x)
+                  (export "canister_init" (func $x))
+                  (export "canister_heartbeat" (func $x))
+                  (export "canister_pre_upgrade" (func $x))
+                  (export "canister_post_upgrade" (func $x))
+                  (export "canister_query read" (func $x))
+                  (export "some_function_is_ok" (func $x))
+                  (export "canister_bar_is_reserved" (func $x))
+                  (export "canister_foo_is_reserved" (func $x)))"#,
+    )
+    .unwrap();
+    assert_matches!(
+        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        Ok(WasmValidationDetails {
+            reserved_exports: 2,
+            imports_call_simple: false,
+        })
     );
 }
 
@@ -219,7 +251,10 @@ fn can_validate_canister_query_update_method_name_with_whitespace() {
     .unwrap();
     assert_matches!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
-        Ok(())
+        Ok(WasmValidationDetails {
+            reserved_exports: 0,
+            imports_call_simple: false,
+        })
     );
 }
 
@@ -236,7 +271,10 @@ fn can_validate_valid_data_section() {
     .unwrap();
     assert_matches!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
-        Ok(())
+        Ok(WasmValidationDetails {
+            reserved_exports: 0,
+            imports_call_simple: false,
+        })
     );
 }
 
@@ -267,7 +305,10 @@ fn can_validate_module_with_import_func() {
     let wasm = wat2wasm(r#"(module (import "ic0" "msg_reply" (func $msg_reply)))"#).unwrap();
     assert_matches!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
-        Ok(())
+        Ok(WasmValidationDetails {
+            reserved_exports: 0,
+            imports_call_simple: false,
+        })
     );
 }
 
@@ -400,5 +441,30 @@ fn can_reject_wasm_with_invalid_global_access() {
     assert_matches!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
         Err(WasmValidationError::WasmtimeValidation(_))
+    );
+}
+
+#[test]
+fn can_validate_module_with_call_simple_import() {
+    // Instruments import of `call_simple` from `ic0`.
+    let wasm = wat2wasm(
+        r#"(module 
+        (import "ic0" "call_simple" 
+          (func $ic0_call_simple
+            (param i32 i32)
+            (param $method_name_src i32)    (param $method_name_len i32)
+            (param $reply_fun i32)          (param $reply_env i32)
+            (param $reject_fun i32)         (param $reject_env i32)
+            (param $data_src i32)           (param $data_len i32)
+            (result i32))
+    ))"#,
+    )
+    .unwrap();
+    assert_matches!(
+        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        Ok(WasmValidationDetails {
+            reserved_exports: 0,
+            imports_call_simple: true,
+        })
     );
 }

@@ -16,7 +16,7 @@ use ic_test_utilities::{
 use ic_types::{
     messages::{CallbackId, Payload, RequestOrResponse},
     xnet::StreamIndex,
-    Cycles, Funds, ICP,
+    Cycles, Funds,
 };
 use std::convert::TryFrom;
 
@@ -29,14 +29,14 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
             let mut stream = Stream::default();
 
             for i in 0..1000u64 {
-                stream.signals_end.inc_assign();
+                stream.increment_signals_end();
                 let msg = if i % 2 == 0 {
                     RequestOrResponse::Request(
                         RequestBuilder::new()
                             .receiver(canister_test_id(i))
                             .sender(canister_test_id(i))
                             .sender_reply_callback(CallbackId::from(i))
-                            .payment(Funds::new(Cycles::from(10), ICP::zero()))
+                            .payment(Funds::new(Cycles::from(10)))
                             .method_name("test".to_string())
                             .method_payload(vec![1; 100])
                             .build(),
@@ -47,12 +47,12 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
                             .originator(canister_test_id(i))
                             .respondent(canister_test_id(i))
                             .originator_reply_callback(CallbackId::from(i))
-                            .refund(Funds::new(Cycles::from(10), ICP::zero()))
+                            .refund(Funds::new(Cycles::from(10)))
                             .response_payload(Payload::Data(vec![2, 100]))
                             .build(),
                     )
                 };
-                stream.messages.push(msg);
+                stream.push(msg);
             }
 
             streams.insert(subnet_test_id(remote_subnet), stream);

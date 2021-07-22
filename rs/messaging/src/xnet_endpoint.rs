@@ -119,7 +119,7 @@ impl Drop for XNetEndpoint {
         info!(self.log, "Shutting down XNet endpoint");
 
         // Request graceful shutdown of the HTTP server and the background thread.
-        self.shutdown_notify.notify();
+        self.shutdown_notify.notify_one();
         self.request_sender
             .send(WorkerMessage::Stop)
             .expect("failed to send stop signal");
@@ -239,7 +239,8 @@ impl<'a> XNetEndpoint {
             }
         });
 
-        let (address, server) = runtime_handle.enter(|| {
+        let (address, server) = {
+            let _guard = runtime_handle.enter();
             let (addr, builder) =
                 tls_bind(&config.address, tls, registry_client).unwrap_or_else(|e| {
                     panic!(
@@ -253,7 +254,7 @@ impl<'a> XNetEndpoint {
                     .executor(ExecuteOnRuntime(runtime_handle.clone()))
                     .serve(make_service),
             )
-        });
+        };
 
         info!(log, "XNet Endpoint listening on {}", address);
 

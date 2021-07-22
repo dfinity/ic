@@ -203,7 +203,7 @@ pub type CatchUpPackageShare = Signed<CatchUpShareContent, ThresholdSignatureSha
 ///   C1.height > C2.height ||
 ///   C1.height == C2.height && C1.registry_version > C2.registry_version
 /// ```
-#[derive(Serialize, Deserialize, Ord, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
 pub struct CatchUpPackageParam {
     height: Height,
     registry_version: RegistryVersion,
@@ -216,6 +216,15 @@ impl PartialOrd for CatchUpPackageParam {
         match self.height.cmp(&other.height) {
             Ordering::Greater => Some(Ordering::Greater),
             _ => self.registry_version.partial_cmp(&other.registry_version),
+        }
+    }
+}
+
+impl Ord for CatchUpPackageParam {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.height.cmp(&other.height) {
+            Ordering::Equal => self.registry_version.cmp(&other.registry_version),
+            o => o,
         }
     }
 }

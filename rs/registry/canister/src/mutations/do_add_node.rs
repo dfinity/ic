@@ -11,7 +11,7 @@ use candid::{CandidType, Deserialize};
 use dfn_core::println;
 
 use ic_base_types::{NodeId, PrincipalId};
-use ic_crypto_key_validation::ValidNodePublicKeys;
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::{
     crypto::v1::NodePublicKeys,
     registry::{

@@ -1,8 +1,6 @@
 use crate::framework::file_tree_artifact_mgr::ArtifactChunkingTestImpl;
+use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::subnet_config::SubnetConfigs;
-use ic_config::{
-    execution_environment::Config as HypervisorConfig, scheduler::Config as SchedulerConfig,
-};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::{registry::RegistryClient, transport::Transport};
@@ -74,17 +72,17 @@ fn execute_test(
         let ingress_hist_reader = Box::new(IngressHistoryReaderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
         ));
+        let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::System);
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            SchedulerConfig::default().max_instructions_per_message,
+            subnet_config.scheduler_config.max_instructions_per_message,
             HypervisorConfig::default().max_cycles_per_canister,
             SubnetType::System,
             subnet_id,
-            SubnetConfigs::default()
-                .own_subnet_config(SubnetType::System)
-                .cycles_account_manager_config,
+            subnet_config.cycles_account_manager_config,
         ));
 
         let (_, p2p_runner, _) = P2P::new(
+            tokio::runtime::Handle::current(),
             Default::default(),
             node_id,
             subnet_id,
@@ -225,17 +223,17 @@ fn execute_test_chunking_pool(
             state_sync_client.clone(),
             state_sync_client,
         );
+        let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::System);
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            SchedulerConfig::default().max_instructions_per_message,
+            subnet_config.scheduler_config.max_instructions_per_message,
             HypervisorConfig::default().max_cycles_per_canister,
             SubnetType::System,
             subnet_id,
-            SubnetConfigs::default()
-                .own_subnet_config(SubnetType::System)
-                .cycles_account_manager_config,
+            subnet_config.cycles_account_manager_config,
         ));
 
         let (_a, p2p_runner, _) = P2P::new(
+            tokio::runtime::Handle::current(),
             Default::default(),
             node_id,
             subnet_id,
@@ -361,35 +359,30 @@ pub fn spawn_replicas_as_threads(
         let jh = std::thread::Builder::new()
             .name(format!("Thread Node {}", i))
             .spawn(move || {
-                let mut rt = tokio::runtime::Runtime::new().unwrap();
-                let local = tokio::task::LocalSet::new();
-                let actix_sys = actix::System::run_in_tokio("replica", &local);
-                rt.enter(|| {
-                    // Spawn System
-                    if real_artifact_pool {
-                        execute_test(
-                            i as u64,
-                            replica_config,
-                            replica_registry,
-                            tp,
-                            replica_test_synchronizer,
-                            replica_log.clone(),
-                            test,
-                        );
-                    } else {
-                        execute_test_chunking_pool(
-                            i as u64,
-                            replica_config,
-                            replica_registry,
-                            tp,
-                            replica_test_synchronizer,
-                            replica_log,
-                            test,
-                        );
-                    }
-                });
-                actix::System::current().stop();
-                local.block_on(&mut rt, actix_sys).unwrap();
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                let _rt_guard = rt.enter();
+                // Spawn System
+                if real_artifact_pool {
+                    execute_test(
+                        i as u64,
+                        replica_config,
+                        replica_registry,
+                        tp,
+                        replica_test_synchronizer,
+                        replica_log.clone(),
+                        test,
+                    );
+                } else {
+                    execute_test_chunking_pool(
+                        i as u64,
+                        replica_config,
+                        replica_registry,
+                        tp,
+                        replica_test_synchronizer,
+                        replica_log,
+                        test,
+                    );
+                }
             })
             .unwrap();
         join_handles.push(jh);

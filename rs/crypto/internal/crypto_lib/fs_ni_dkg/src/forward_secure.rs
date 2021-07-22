@@ -468,10 +468,7 @@ impl SecretKey {
         }
     }
     pub fn epoch(&mut self) -> Option<&[Bit]> {
-        match self.bte_nodes.back() {
-            None => None,
-            Some(node) => Some(&node.tau),
-        }
+        self.bte_nodes.back().map(|node| node.tau.as_slice())
     }
     /// Updates `self` to the given `epoch`.
     ///
@@ -781,7 +778,7 @@ pub fn dec_single(dks: &mut SecretKey, ct: &SingleCiphertext, sys: &SysParam) ->
 ///
 /// This is (C,R,S,Z) tuple of section 5.2, with multiple C values,
 /// one for each recipent.
-pub struct CRSZ {
+pub struct Crsz {
     pub cc: Vec<Vec<ECP>>,
     pub rr: Vec<ECP>,
     pub ss: Vec<ECP>,
@@ -794,7 +791,7 @@ fn format_ecp(f: &mut std::fmt::Formatter<'_>, ecp: &ECP) -> std::fmt::Result {
     write!(f, "0x{}", hex::encode(&ecp_buffer[..]))
 }
 
-impl std::fmt::Debug for CRSZ {
+impl std::fmt::Debug for Crsz {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "CRSZ{{\n  cc: [")?;
         for ciphertext in &self.cc {
@@ -832,7 +829,7 @@ pub fn enc_chunks(
     associated_data: &[u8],
     sys: &SysParam,
     rng: &mut impl RAND,
-) -> Option<(CRSZ, ToxicWaste)> {
+) -> Option<(Crsz, ToxicWaste)> {
     if sij.is_empty() {
         return None;
     }
@@ -895,7 +892,7 @@ pub fn enc_chunks(
         tmp.add(&g2mul(&sys.h, &s[j]));
         zz.push(tmp);
     }
-    Some((CRSZ { cc, rr, ss, zz }, ToxicWaste { spec_r, s }))
+    Some((Crsz { cc, rr, ss, zz }, ToxicWaste { spec_r, s }))
 }
 
 fn is_prefix(xs: &[Bit], ys: &[Bit]) -> bool {
@@ -1006,7 +1003,7 @@ pub enum DecErr {
 pub fn dec_chunks(
     dks: &SecretKey,
     i: usize,
-    crsz: &CRSZ,
+    crsz: &Crsz,
     tau: &[Bit],
     associated_data: &[u8],
     sys: &SysParam,
@@ -1096,6 +1093,8 @@ pub fn dec_chunks(
     Ok(redundant)
 }
 
+// TODO(IDX-1866)
+#[allow(clippy::result_unit_err)]
 /// Verify ciphertext integrity
 ///
 /// Part of DVfy of Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
@@ -1103,7 +1102,7 @@ pub fn dec_chunks(
 /// In addition to verifying the proofs of chunking and sharing,
 /// we must also verify ciphertext integrity.
 pub fn verify_ciphertext_integrity(
-    crsz: &CRSZ,
+    crsz: &Crsz,
     tau: &[Bit],
     associated_data: &[u8],
     sys: &SysParam,
@@ -1132,7 +1131,7 @@ pub fn verify_ciphertext_integrity(
         .rr
         .iter()
         .zip(crsz.ss.iter().zip(crsz.zz.iter()))
-        .map(|(spec_r, (s, z))| {
+        .try_for_each(|(spec_r, (s, z))| {
             let lhs = pair::fexp(&pair::ate(z, &g1));
             let rhs = pair::fexp(&pair::ate2(&id, spec_r, &sys.h, s));
             if lhs.equals(&rhs) {
@@ -1140,8 +1139,7 @@ pub fn verify_ciphertext_integrity(
             } else {
                 Err(())
             }
-        })
-        .collect();
+        });
     checks
 }
 

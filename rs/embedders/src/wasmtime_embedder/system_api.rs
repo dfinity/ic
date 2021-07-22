@@ -1,8 +1,11 @@
 use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
+use ic_types::NumBytes;
+use std::borrow::Borrow;
 use std::cell::{RefCell, RefMut};
 use std::convert::TryFrom;
+use std::ops::DerefMut;
 use std::rc::Rc;
-use wasmtime::{Caller, Linker, Store, Val};
+use wasmtime::{Caller, Linker, Store, Trap, Val};
 
 #[derive(Clone)]
 pub struct SystemApiHandle {
@@ -38,10 +41,42 @@ fn process_err(api: &mut dyn SystemApi, e: HypervisorError) -> wasmtime::Trap {
     t
 }
 
+fn update_num_instructions_global(
+    num_instructions_global_rc: &std::rc::Weak<RefCell<Option<wasmtime::Global>>>,
+    api: &mut dyn SystemApi,
+    num_bytes: u32,
+) -> Result<(), Trap> {
+    let num_instructions_global = num_instructions_global_rc.upgrade().unwrap();
+    let num_instructions_global_ref = num_instructions_global.borrow_mut();
+    let num_instructions_global = num_instructions_global_ref.as_ref().unwrap();
+
+    match num_instructions_global.get() {
+        Val::I64(current_instructions) => {
+            let num_instructions = api
+                .get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64))
+                .get() as i64;
+            if current_instructions < num_instructions {
+                return Err(process_err(api, HypervisorError::OutOfInstructions));
+            }
+
+            num_instructions_global
+                .set(Val::I64(current_instructions - num_instructions))
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "Setting counter_instructions to {}  failed",
+                        num_instructions
+                    )
+                });
+            Ok(())
+        }
+        _ => unreachable!("invalid instructions counter type"),
+    }
+}
+
 pub(crate) fn syscalls(
     store: &Store,
     api: SystemApiHandle,
-    cycles_global: std::rc::Weak<RefCell<Option<wasmtime::Global>>>,
+    num_instructions_global: std::rc::Weak<RefCell<Option<wasmtime::Global>>>,
 ) -> Linker {
     fn get_memory(
         caller: Caller<'_>,
@@ -114,10 +149,16 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "msg_arg_data_copy", {
             let api = api.clone();
+            let num_instructions_global = num_instructions_global.clone();
             move |caller: Caller<'_>, dst: i32, offset: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    size as u32,
+                )?;
                 api.ic0_msg_arg_data_copy(dst as u32, offset as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -143,10 +184,16 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "msg_method_name_copy", {
             let api = api.clone();
+            let num_instructions_global = num_instructions_global.clone();
             move |caller: Caller<'_>, dst: i32, offset: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    size as u32,
+                )?;
                 api.ic0_msg_method_name_copy(dst as u32, offset as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -167,10 +214,16 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "msg_reply_data_append", {
             let api = api.clone();
+            let num_instructions_global = num_instructions_global.clone();
             move |caller: Caller<'_>, src: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    size as u32,
+                )?;
                 api.ic0_msg_reply_data_append(src as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -201,10 +254,16 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "msg_reject", {
             let api = api.clone();
+            let num_instructions_global = num_instructions_global.clone();
             move |caller: Caller<'_>, src: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    size as u32,
+                )?;
                 api.ic0_msg_reject(src as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -230,10 +289,16 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "msg_reject_msg_copy", {
             let api = api.clone();
+            let num_instructions_global = num_instructions_global.clone();
             move |caller: Caller<'_>, dst: i32, offset: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    size as u32,
+                )?;
                 api.ic0_msg_reject_msg_copy(dst as u32, offset as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -301,10 +366,16 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "debug_print", {
             let api = api.clone();
+            let num_instructions_global = num_instructions_global.clone();
             move |caller: Caller<'_>, offset: i32, length: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    length as u32,
+                )?;
                 api.ic0_debug_print(offset as u32, length as u32, memory);
                 Ok(())
             }
@@ -314,10 +385,16 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "trap", {
             let api = api.clone();
+            let num_instructions_global = num_instructions_global.clone();
             move |caller: Caller<'_>, offset: i32, length: i32| -> Result<(), _> {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    length as u32,
+                )?;
                 let trap = api.ic0_trap(offset as u32, length as u32, memory);
                 Err(process_err(&mut *api, trap))
             }
@@ -327,6 +404,7 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "call_simple", {
             let api = api.clone();
+            let num_instructions_global = num_instructions_global.clone();
             move |caller: Caller<'_>,
                   callee_src: i32,
                   callee_size: i32,
@@ -341,6 +419,11 @@ pub(crate) fn syscalls(
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    len as u32,
+                )?;
                 api.ic0_call_simple(
                     callee_src as u32,
                     callee_size as u32,
@@ -393,10 +476,16 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "call_data_append", {
             let api = api.clone();
+            let num_instructions_global = num_instructions_global.clone();
             move |caller: Caller<'_>, src: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    size as u32,
+                )?;
                 api.ic0_call_data_append(src as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -466,10 +555,16 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "stable_read", {
             let api = api.clone();
+            let num_instructions_global = num_instructions_global.clone();
             move |caller: Caller<'_>, dst: i32, offset: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    size as u32,
+                )?;
                 api.ic0_stable_read(dst as u32, offset as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -483,6 +578,11 @@ pub(crate) fn syscalls(
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    size as u32,
+                )?;
                 api.ic0_stable_write(offset as u32, src as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -565,22 +665,8 @@ pub(crate) fn syscalls(
             let api = api.clone();
             move || -> Result<(), _> {
                 let mut api = api.get_system_api();
-                match api.out_of_instructions() {
-                    Err(err) => Err(process_err(&mut *api, err)),
-                    Ok(new_cycles) => {
-                        let cycles_rc = cycles_global.upgrade().unwrap();
-                        let cycles_global = cycles_rc.borrow_mut();
-                        let cycles_global_ref = cycles_global.as_ref().unwrap();
-                        match cycles_global_ref.get() {
-                            Val::I64(current_cycles) => {
-                                cycles_global_ref
-                                    .set(Val::I64(new_cycles.get() as i64 + current_cycles))?;
-                                Ok(())
-                            }
-                            _ => Err(wasmtime::Trap::new("invalid cycles counter type")),
-                        }
-                    }
-                }
+                let err = api.out_of_instructions();
+                Err(process_err(&mut *api, err))
             }
         })
         .unwrap();
@@ -592,29 +678,6 @@ pub(crate) fn syscalls(
                 let mut api = api.get_system_api();
                 api.update_available_memory(native_memory_grow_res, additional_pages as u32)
                     .map_err(|e| process_err(&mut *api, e))
-            }
-        })
-        .unwrap();
-
-    linker
-        .func("ic0", "exec", {
-            let api = api.clone();
-            move |caller: Caller<'_>,
-                  bytes_offset: i32,
-                  bytes_length: i32,
-                  payload_offset: i32,
-                  payload_length: i32|
-                  -> Result<(), _> {
-                let mut api = api.get_system_api();
-                let mem = get_memory(caller, &mut *api)?;
-                let memory = unsafe { mem.data_unchecked_mut() };
-                let bytes =
-                    memory[bytes_offset as usize..(bytes_offset + bytes_length) as usize].to_vec();
-                let payload = memory
-                    [payload_offset as usize..(payload_offset + payload_length) as usize]
-                    .to_vec();
-                let err = api.ic0_exec(bytes, payload);
-                Err(process_err(&mut *api, err))
             }
         })
         .unwrap();

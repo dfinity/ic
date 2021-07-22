@@ -135,6 +135,7 @@ where
             no_op_logger(),
             Arc::new(state_manager),
             cycles_account_manager,
+            ic_types::malicious_flags::MaliciousFlags::default(),
         ));
 
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
@@ -248,7 +249,7 @@ fn add_past_blocks(
 
         parent = block.clone();
         let proposal = BlockProposal::fake(block, node_test_id(i as u64));
-        changeset.push(ChangeAction::AddToValidated(proposal.to_message()));
+        changeset.push(ChangeAction::AddToValidated(proposal.into_message()));
     }
     let time_source = FastForwardTimeSource::new();
     consensus_pool.apply_changes(time_source.as_ref(), changeset);
@@ -288,7 +289,7 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
     group.sample_size(30);
     group.measurement_time(std::time::Duration::from_secs(40));
 
-    for message_count in (50..=900).step_by(50) {
+    for message_count in (50..=850).step_by(50) {
         run_test(
             "validate_payload_benchmark",
             |now: Time,

@@ -44,11 +44,11 @@ impl<'a> ConsensusDriver<'a> {
             consensus,
             dkg,
             certifier,
-            consensus_pool,
             logger,
+            consensus_pool,
+            certification_pool,
             ingress_pool,
             dkg_pool,
-            certification_pool,
         }
     }
 

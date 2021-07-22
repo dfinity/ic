@@ -3,6 +3,7 @@ use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{api::caller, over, over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
+use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_types::ic00::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, Method, IC_00};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use lazy_static::lazy_static;
@@ -141,6 +142,33 @@ fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetI
         print("[cycles] setting default subnet list");
         state.default_subnets = subnets;
     }
+}
+
+#[export_name = "canister_update remove_subnet_from_authorized_subnet_list"]
+fn remove_subnet_from_authorized_subnet_list_() {
+    let caller = caller();
+    assert_eq!(
+        caller,
+        REGISTRY_CANISTER_ID.into(),
+        "{} is not authorized to call this method: {}",
+        caller,
+        "remove_subnet_from_authorized_subnet_list"
+    );
+    over(
+        candid_one,
+        |RemoveSubnetFromAuthorizedSubnetListArgs { subnet }| {
+            remove_subnet_from_authorized_subnet_list(subnet)
+        },
+    )
+}
+
+fn remove_subnet_from_authorized_subnet_list(subnet_to_remove: SubnetId) {
+    let mut state = STATE.write().unwrap();
+    state
+        .authorized_subnets
+        .values_mut()
+        .into_iter()
+        .for_each(|subnet_list| subnet_list.retain(|subnet| *subnet != subnet_to_remove));
 }
 
 /// Wrapper around over_async_may_reject that requires the future to

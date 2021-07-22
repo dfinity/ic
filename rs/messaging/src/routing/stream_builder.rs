@@ -6,7 +6,7 @@ use ic_types::{
     messages::{Payload, RejectContext, Request, RequestOrResponse, Response},
     user_error::RejectCode,
     xnet::QueueId,
-    CanisterId, QueueIndex, SubnetId,
+    CanisterId, CountBytes, QueueIndex, SubnetId,
 };
 #[cfg(test)]
 use mockall::automock;
@@ -19,6 +19,8 @@ mod tests;
 struct StreamBuilderMetrics {
     /// Messages currently enqueued in streams, by destination subnet.
     pub stream_messages: IntGaugeVec,
+    /// Stream byte size, by destination subnet.
+    pub stream_bytes: IntGaugeVec,
     /// Routed XNet messages, by type and status.
     pub routed_messages: IntCounterVec,
     /// Successfully routed XNet messages' total payload size.
@@ -26,6 +28,7 @@ struct StreamBuilderMetrics {
 }
 
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
+const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 
@@ -43,6 +46,11 @@ impl StreamBuilderMetrics {
         let stream_messages = metrics_registry.int_gauge_vec(
             METRIC_STREAM_MESSAGES,
             "Messages currently enqueued in streams, by destination subnet.",
+            &[LABEL_DESTINATION],
+        );
+        let stream_bytes = metrics_registry.int_gauge_vec(
+            METRIC_STREAM_BYTES,
+            "Stream byte size including header, by destination subnet.",
             &[LABEL_DESTINATION],
         );
         let routed_messages = metrics_registry.int_counter_vec(
@@ -76,6 +84,7 @@ impl StreamBuilderMetrics {
 
         Self {
             stream_messages,
+            stream_bytes,
             routed_messages,
             routed_payload_sizes,
         }
@@ -200,7 +209,7 @@ impl StreamBuilder for StreamBuilderImpl {
                     // Insert the message into the stream.
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                     self.observe_payload_size(&msg);
-                    streams.entry(dst_net_id).or_default().messages.push(msg);
+                    streams.entry(dst_net_id).or_default().push(msg);
                 }
 
                 // Destination subnet not found.
@@ -230,15 +239,25 @@ impl StreamBuilder for StreamBuilderImpl {
             };
         }
 
-        // Export the total number of enqueued messages.
+        // Export the total number of enqueued messages and byte size, per stream.
         streams
             .iter()
-            .map(|(subnet, stream)| (subnet, stream.messages.len()))
-            .for_each(|(subnet, len)| {
+            .map(|(subnet, stream)| {
+                (
+                    subnet.to_string(),
+                    stream.messages().len(),
+                    stream.count_bytes(),
+                )
+            })
+            .for_each(|(subnet, len, size_bytes)| {
                 self.metrics
                     .stream_messages
-                    .with_label_values(&[&subnet.to_string()])
+                    .with_label_values(&[&subnet])
                     .set(len as i64);
+                self.metrics
+                    .stream_bytes
+                    .with_label_values(&[&subnet])
+                    .set(size_bytes as i64);
             });
 
         {

@@ -13,7 +13,6 @@
 #![deny(clippy::unwrap_used)]
 
 use openssl::pkey::{PKey, Private};
-use openssl::x509::X509;
 use std::fmt;
 
 pub use client_handshake::{perform_tls_client_handshake, TlsClientHandshakeError};
@@ -21,49 +20,6 @@ pub use keygen::generate_tls_keys;
 
 mod client_handshake;
 mod keygen;
-
-// TODO (CRP-773): Use this domain object also in the `TlsHandshake`
-#[allow(unused)]
-#[derive(Clone, Debug)]
-/// An X.509 certificate
-pub struct TlsPublicKeyCert {
-    cert: X509,
-}
-
-#[allow(unused)]
-impl TlsPublicKeyCert {
-    /// Creates a certificate from PEM encoding
-    pub fn new_from_pem(cert_pem: Vec<u8>) -> Result<Self, TlsPemParsingError> {
-        let cert = X509::from_pem(&cert_pem).map_err(|e| TlsPemParsingError {
-            internal_error: format!("Error parsing PEM: {}", e),
-        })?;
-        Ok(Self { cert })
-    }
-
-    /// Creates a certificate from an existing OpenSSL struct
-    pub fn new_from_x509(cert: X509) -> Self {
-        Self { cert }
-    }
-
-    /// Returns the certificate in PEM format
-    pub fn to_pem(&self) -> Result<Vec<u8>, TlsEncodingError> {
-        self.cert.to_pem().map_err(|e| TlsEncodingError {
-            internal_error: format!("Error encoding PEM: {}", e),
-        })
-    }
-
-    /// Returns the certificate in DER format
-    pub fn to_der(&self) -> Result<Vec<u8>, TlsEncodingError> {
-        self.cert.to_der().map_err(|e| TlsEncodingError {
-            internal_error: format!("Error encoding DER: {}", e),
-        })
-    }
-
-    /// Returns the certificate as an OpenSSL struct
-    pub fn as_x509(&self) -> &X509 {
-        &self.cert
-    }
-}
 
 #[allow(unused)]
 #[derive(Clone)]

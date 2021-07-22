@@ -4,27 +4,13 @@ import Prim "mo:prim";
 import Root "canister:root";
 import Governance "canister:governance";
 
-actor class (auth : Any) { // auth is unused, kept for interface  compatibility
+actor {
     private let governanceCanister : Principal = Prim.principalOfActor Governance;
     private let root : Principal = Prim.principalOfActor Root;
-
+    type ProposalId = Nat64;
     type NeuronId = Nat64;
-    type CreateUpgradeRootProposalPayload = { wasm_module : Blob; module_arg : Blob; stop_upgrade_start : Bool };
-    // In order to capture an argument sequence as a Blob, we use the (jailbroken) `serialize`
-    // primitive. See README.md for details.
-    private func ser(b : Blob, a : Blob, d : Bool) : Blob = (prim "serialize" : (Blob, Blob, Bool) -> Blob) (b, a, d);
 
-    /* Note: we could do away with this conversion by declaring the
-            `Proposal` data type to refer to `Blob`. */
-    private func blobToNat8Array(b : Blob) : [Nat8] {
-      let vid : [var Nat8] = Prim.Array_init(b.size(), 0 : Nat8);
-      var indx = 0;
-      for (byte in b.bytes()) {
-        vid[indx] := Prim.word8ToNat8 byte;
-        indx := indx + 1
-      };
-      Prim.Array_tabulate(b.size(), func (i : Nat) : Nat8 = vid[i])
-    };
+    type CreateUpgradeRootProposalPayload = { wasm_module : Blob; module_arg : Blob; stop_upgrade_start : Bool };
 
     // IC00 is the management canister. We rely on it for the four
     // fundamental methods as listed below.
@@ -43,19 +29,11 @@ actor class (auth : Any) { // auth is unused, kept for interface  compatibility
       stop_canister : CanisterIdRecord -> async ()
     };
 
-    public shared ({caller}) func submit_upgrade_root_proposal(neuron_id: NeuronId, pl: CreateUpgradeRootProposalPayload) : async Governance.ProposalId {
-      let prop : Governance.Proposal = {
-        summary = "upgrade_root";
-        url = "";
-        action = ?(
-          #ExecuteNnsFunction {
-            nns_function = 9 : Int32; // inlined: NNS_FUNCTION_NNS_ROOT_UPGRADE
-            // invariant: keep in sync with rs/nns/governance/proto/ic_nns_governance/pb/v1/governance.proto
-            payload = blobToNat8Array(ser(pl.wasm_module, pl.module_arg, pl.stop_upgrade_start));
-          }
-        )
-      };
-      await Governance.submit_proposal(neuron_id, prop, caller);
+    public shared func submit_upgrade_root_proposal(neuron_id : NeuronId, pl : CreateUpgradeRootProposalPayload) : async () {
+      throw Prim.error(
+        "Method 'submit_upgrade_root_proposal' was removed in PR 11771. "
+        # "Use method 'manage_neuron' of the governance canister instead to submit a proposal to upgrade the "
+        # "root canister.")
     };
 
     public shared ({caller}) func upgrade_root(wasm : Blob, module_arg : Blob, stop_upgrade_start : Bool) : async () {

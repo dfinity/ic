@@ -52,7 +52,7 @@ impl CanisterId {
     pub const fn from_u64(val: u64) -> Self {
         // It is important to use big endian here to ensure that the generated
         // `PrincipalId`s still maintain ordering.
-        let mut data = [0 as u8; PrincipalId::MAX_LENGTH_IN_BYTES];
+        let mut data = [0_u8; PrincipalId::MAX_LENGTH_IN_BYTES];
 
         // Specify explicitly the length, so as to assert at compile time that a u64
         // takes exactly 8 bytes

@@ -160,8 +160,8 @@ pub mod ni_dkg_groth20_bls12_381 {
     /// that supports const generics, which should happen fairly soon.  There is
     /// little point in optimising this code given that it will be deleted
     /// shortly.
-    #[serde(rename(serialize = "ZKProofDec"))]
     #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+    #[serde(rename(serialize = "ZKProofDec"))]
     struct ZKProofDecHelper {
         pub first_move_y0: G1,
         pub first_move_b: Vec<G1>,

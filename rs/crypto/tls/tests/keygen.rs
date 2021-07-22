@@ -11,7 +11,7 @@ const NOT_AFTER: &str = "20701231235959Z";
 fn should_generate_valid_self_signed_certificate() {
     let (cert, _sk) = generate_tls_keys("some common name", NOT_AFTER);
 
-    let x509_cert = X509::from_pem(&cert.to_pem().unwrap()).unwrap();
+    let x509_cert = cert.as_x509();
     let public_key = x509_cert.public_key().unwrap();
     assert_eq!(x509_cert.verify(&public_key).ok(), Some(true));
     assert_eq!(x509_cert.issued(&x509_cert), X509VerifyResult::OK);
@@ -23,7 +23,7 @@ fn should_set_cert_subject_cn() {
 
     let (cert, _sk) = generate_tls_keys(SUBJECT_CN, NOT_AFTER);
 
-    let x509_cert = X509::from_pem(&cert.to_pem().unwrap()).unwrap();
+    let x509_cert = cert.as_x509();
     assert_eq!(subject_cn_entries(&x509_cert).count(), 1);
     let subject_cn = subject_cn_entries(&x509_cert).next().unwrap();
     assert_eq!(SUBJECT_CN.as_bytes(), subject_cn.data().as_slice());
@@ -35,7 +35,7 @@ fn should_set_cert_issuer_cn_to_subject_cn() {
 
     let (cert, _sk) = generate_tls_keys(SUBJECT_CN, NOT_AFTER);
 
-    let x509_cert = X509::from_pem(&cert.to_pem().unwrap()).unwrap();
+    let x509_cert = cert.as_x509();
     assert_eq!(issuer_cn_entries(&x509_cert).count(), 1);
     let issuer_cn = issuer_cn_entries(&x509_cert).next().unwrap();
     assert_eq!(SUBJECT_CN.as_bytes(), issuer_cn.data().as_slice());
@@ -47,9 +47,9 @@ fn should_set_different_serial_numbers_for_multiple_certs() {
     let (cert_2, _sk_2) = generate_tls_keys("some common name 2", NOT_AFTER);
     let (cert_3, _sk_3) = generate_tls_keys("some common name 3", NOT_AFTER);
 
-    let x509_cert_1 = X509::from_pem(&cert_1.to_pem().unwrap()).unwrap();
-    let x509_cert_2 = X509::from_pem(&cert_2.to_pem().unwrap()).unwrap();
-    let x509_cert_3 = X509::from_pem(&cert_3.to_pem().unwrap()).unwrap();
+    let x509_cert_1 = cert_1.as_x509();
+    let x509_cert_2 = cert_2.as_x509();
+    let x509_cert_3 = cert_3.as_x509();
     let serial_1 = serial_number(&x509_cert_1);
     let serial_2 = serial_number(&x509_cert_2);
     let serial_3 = serial_number(&x509_cert_3);
@@ -64,7 +64,7 @@ fn should_set_cert_not_after_correctly() {
 
     let (cert, _sk) = generate_tls_keys("some common name", NOT_AFTER);
 
-    let x509_cert = X509::from_pem(&cert.to_pem().unwrap()).unwrap();
+    let x509_cert = cert.as_x509();
     assert!(x509_cert.not_after() == Asn1Time::from_str_x509(NOT_AFTER).unwrap());
 }
 

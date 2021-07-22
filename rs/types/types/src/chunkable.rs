@@ -58,6 +58,16 @@ pub struct ArtifactChunk {
     pub artifact_chunk_data: ArtifactChunkData,
 }
 
+impl ArtifactChunk {
+    fn new(chunk_id: ChunkId, artifact_chunk_data: ArtifactChunkData) -> ArtifactChunk {
+        ArtifactChunk {
+            chunk_id,
+            witness: Vec::new(),
+            artifact_chunk_data,
+        }
+    }
+}
+
 // Static polymorphic dispatch for chunk tracking.
 //
 // Chunk trackers give a polymorphic interface over client chunk tracking logic.
@@ -91,101 +101,57 @@ pub trait ChunkableArtifact {
     fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk>;
 }
 
-/// TODO(P2P-482): Fix repetition of implementing `get_chunk` with a macro.
-impl ChunkableArtifact for ConsensusMessage {
-    fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
-        if chunk_id != ChunkId::from(CHUNKID_UNIT_CHUNK) {
-            // Single chunked in identified only chunk CHUNKID_UNIT_CHUNK
-            None
-        } else {
-            Some(ArtifactChunk {
-                chunk_id,
-                witness: Vec::with_capacity(0),
-                artifact_chunk_data: ArtifactChunkData::UnitChunkData(Artifact::ConsensusMessage(
-                    *self,
-                )),
-            })
+macro_rules! chunkable_artifact_impl {
+    ($id:path, |$self:ident| $v:expr) => {
+        impl ChunkableArtifact for $id {
+            fn get_chunk($self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
+                if chunk_id != ChunkId::from(CHUNKID_UNIT_CHUNK) {
+                    // Single chunked in identified only chunk CHUNKID_UNIT_CHUNK
+                    None
+                } else {
+                    Some(ArtifactChunk::new(chunk_id, $v))
+                }
+            }
         }
-    }
+    };
 }
 
-impl ChunkableArtifact for SignedIngress {
-    fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
-        if chunk_id != ChunkId::from(CHUNKID_UNIT_CHUNK) {
-            // Single chunked in identified only chunk CHUNKID_UNIT_CHUNK
-            None
-        } else {
-            Some(ArtifactChunk {
-                chunk_id,
-                witness: Vec::with_capacity(0),
-                artifact_chunk_data: ArtifactChunkData::UnitChunkData(Artifact::IngressMessage(
-                    (*self).into(),
-                )),
-            })
-        }
-    }
+chunkable_artifact_impl! {ConsensusMessage, |self|
+    ArtifactChunkData::UnitChunkData(Artifact::ConsensusMessage(*self))
 }
-
-impl ChunkableArtifact for CertificationMessage {
-    fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
-        if chunk_id != ChunkId::from(CHUNKID_UNIT_CHUNK) {
-            // Single chunked in identified only chunk CHUNKID_UNIT_CHUNK
-            None
-        } else {
-            Some(ArtifactChunk {
-                chunk_id,
-                witness: Vec::with_capacity(0),
-                artifact_chunk_data: ArtifactChunkData::UnitChunkData(
-                    Artifact::CertificationMessage(*self),
-                ),
-            })
-        }
-    }
+chunkable_artifact_impl! {SignedIngress, |self|
+    ArtifactChunkData::UnitChunkData(Artifact::IngressMessage((*self).into()))
 }
-
-impl ChunkableArtifact for DkgMessage {
-    fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
-        if chunk_id != ChunkId::from(CHUNKID_UNIT_CHUNK) {
-            // Single chunked in identified only chunk CHUNKID_UNIT_CHUNK
-            None
-        } else {
-            Some(ArtifactChunk {
-                chunk_id,
-                witness: Vec::with_capacity(0),
-                artifact_chunk_data: ArtifactChunkData::UnitChunkData(Artifact::DkgMessage(*self)),
-            })
-        }
-    }
+chunkable_artifact_impl! {CertificationMessage, |self|
+    ArtifactChunkData::UnitChunkData(Artifact::CertificationMessage(*self))
+}
+chunkable_artifact_impl! {DkgMessage, |self|
+    ArtifactChunkData::UnitChunkData(Artifact::DkgMessage(*self))
 }
 
 impl ChunkableArtifact for StateSyncMessage {
     fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
-        fn byte_chunk(chunk_id: ChunkId, payload: Vec<u8>) -> ArtifactChunk {
-            ArtifactChunk {
-                chunk_id,
-                witness: vec![],
-                artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(payload),
-            }
-        }
-
-        if chunk_id == crate::state_sync::MANIFEST_CHUNK {
-            let payload = crate::state_sync::encode_manifest(&self.manifest);
-            return Some(byte_chunk(chunk_id, payload));
-        }
-
-        let chunk_table_index = (chunk_id.get() - 1) as usize;
-
-        if chunk_table_index >= self.manifest.chunk_table.len() {
+        let buf = if chunk_id == crate::state_sync::MANIFEST_CHUNK {
+            crate::state_sync::encode_manifest(&self.manifest)
+        } else if let Some(chunk) = self
+            .manifest
+            .chunk_table
+            .get((chunk_id.get() - 1) as usize)
+            .cloned()
+        {
+            let path = self
+                .checkpoint_root
+                .join(&self.manifest.file_table[chunk.file_index as usize].relative_path);
+            let get_state_sync_chunk = self.get_state_sync_chunk.unwrap();
+            get_state_sync_chunk(path, chunk.offset, chunk.size_bytes).ok()?
+        } else {
             return None;
-        }
+        };
 
-        let chunk = self.manifest.chunk_table[chunk_table_index].clone();
-        let path = self
-            .checkpoint_root
-            .join(&self.manifest.file_table[chunk.file_index as usize].relative_path);
-        let get_state_sync_chunk = self.get_state_sync_chunk.unwrap();
-        let buf = get_state_sync_chunk(path, chunk.offset, chunk.size_bytes).ok()?;
-        Some(byte_chunk(chunk_id, buf))
+        Some(ArtifactChunk::new(
+            chunk_id,
+            ArtifactChunkData::SemiStructuredChunkData(buf),
+        ))
     }
 }
 

@@ -1,4 +1,5 @@
 //! Utilities for building X.509 certificates for tests.
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use openssl::asn1::{Asn1Integer, Asn1Time};
 use openssl::bn::BigNum;
@@ -36,6 +37,15 @@ pub fn generate_ed25519_cert() -> (PKey<Private>, X509) {
     (key_pair, server_cert)
 }
 
+/// Generates a TlsPublicKeyCert certificate together with its private key.
+pub fn generate_ed25519_tlscert() -> (PKey<Private>, TlsPublicKeyCert) {
+    let key_pair = ed25519_key_pair();
+    let server_cert_x509 = generate_cert(&key_pair, MessageDigest::null());
+    let server_cert = TlsPublicKeyCert::new_from_x509(server_cert_x509)
+        .expect("error converting X509 to TlsPublicKeyCert");
+    (key_pair, server_cert)
+}
+
 /// Converts the `cert` into an `X509PublicKeyCert`.
 pub fn x509_public_key_cert(cert: &X509) -> X509PublicKeyCert {
     X509PublicKeyCert {
@@ -65,6 +75,7 @@ pub fn generate_cert(key_pair: &PKey<Private>, digest: MessageDigest) -> X509 {
 pub struct CertBuilder {
     version: Option<i32>,
     cn: Option<String>,
+    serial_number: Option<[u8; 19]>,
     validity_days: Option<u32>,
     not_after: Option<String>,
     not_before_days_from_now: Option<u32>,
@@ -85,6 +96,11 @@ impl CertBuilder {
 
     pub fn cn(mut self, cn: String) -> Self {
         self.cn = Some(cn);
+        self
+    }
+
+    pub fn serial_number(mut self, serial_number: [u8; 19]) -> Self {
+        self.serial_number = Some(serial_number);
         self
     }
 
@@ -172,7 +188,9 @@ impl CertBuilder {
             .set_version(version - 1) // OpenSSL uses index origin 0 for version
             .expect("unable to set version");
         builder
-            .set_serial_number(&serial_number(DEFAULT_SERIAL))
+            .set_serial_number(&serial_number(
+                self.serial_number.clone().unwrap_or(DEFAULT_SERIAL),
+            ))
             .expect("unable to set serial number");
         let subject_cn = x509_name_with_cn(
             &self.cn.clone().unwrap_or_else(|| DEFAULT_CN.to_string()),
@@ -269,6 +287,7 @@ impl CertWithPrivateKey {
         CertBuilder {
             version: None,
             cn: None,
+            serial_number: None,
             not_before_days_from_now: None,
             not_before: None,
             not_before_unix: None,

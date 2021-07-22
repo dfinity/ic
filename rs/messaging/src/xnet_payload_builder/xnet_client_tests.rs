@@ -6,14 +6,18 @@ use super::*;
 use hyper::Uri;
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_test_utilities::crypto::fake_tls_handshake::FakeTlsHandshake;
-use ic_test_utilities::metrics::{fetch_histogram_vec_count, metric_vec, MetricVec};
-use ic_test_utilities::types::ids::SUBNET_6;
+use ic_test_utilities::{
+    crypto::fake_tls_handshake::FakeTlsHandshake,
+    metrics::{fetch_histogram_vec_count, metric_vec, MetricVec},
+    types::ids::SUBNET_6,
+    with_test_replica_logger,
+};
 use ic_types::{xnet::CertifiedStreamSlice, SubnetId};
 use std::io::Cursor;
 use std::sync::Arc;
 use std::{net::SocketAddr, sync::Barrier};
 use tiny_http::{Request, Response, Server, StatusCode};
+
 const DST_SUBNET: SubnetId = SUBNET_6;
 
 const STREAM_BEGIN: u64 = 7;
@@ -39,15 +43,17 @@ where
     response
 }
 
-fn make_xnet_client(metrics: &MetricsRegistry) -> XNetClientImpl {
+fn make_xnet_client(metrics: &MetricsRegistry, log: ReplicaLogger) -> XNetClientImpl {
+    let registry = get_empty_registry_for_test();
     XNetClientImpl::new(
         &metrics,
         tokio::runtime::Handle::current(),
         Arc::new(FakeTlsHandshake::new()) as Arc<_>,
+        Arc::new(ProximityMap::new(LOCAL_NODE, registry, &metrics, log)),
     )
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn query_success() {
     let metrics = MetricsRegistry::new();
     let slice = get_stream_slice_for_testing();
@@ -61,7 +67,9 @@ async fn query_success() {
             .unwrap_or_else(|e| panic!("Error responding: {}", e));
     };
 
-    let result = do_xnet_client_query(make_xnet_client(&metrics), respond_with_slice).await;
+    let result = with_test_replica_logger(|log| {
+        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_slice)
+    });
 
     assert_eq!(expected, result.unwrap());
     assert_eq!(
@@ -73,16 +81,18 @@ async fn query_success() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn query_garbage_response() {
     let metrics = MetricsRegistry::new();
-    let respond_with_garbage = move |request: Request| {
+    let respond_with_garbage = |request: Request| {
         request
             .respond(Response::from_data(b"garbage".to_vec()))
             .unwrap_or_else(|e| panic!("Error responding: {}", e));
     };
 
-    let result = do_xnet_client_query(make_xnet_client(&metrics), respond_with_garbage).await;
+    let result = with_test_replica_logger(|log| {
+        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_garbage)
+    });
 
     match result {
         Err(XNetClientError::ProxyDecodeError(ProxyDecodeError::DecodeError(_))) => (),
@@ -100,7 +110,7 @@ async fn query_garbage_response() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn query_invalid_proto() {
     let metrics = MetricsRegistry::new();
 
@@ -114,7 +124,9 @@ async fn query_invalid_proto() {
             .unwrap_or_else(|e| panic!("Error responding: {}", e));
     };
 
-    let result = do_xnet_client_query(make_xnet_client(&metrics), respond_with_invalid_proto).await;
+    let result = with_test_replica_logger(|log| {
+        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_invalid_proto)
+    });
 
     match result {
         Err(XNetClientError::ProxyDecodeError(ProxyDecodeError::MissingField(_))) => (),
@@ -132,7 +144,7 @@ async fn query_invalid_proto() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn query_no_content() {
     let metrics = MetricsRegistry::new();
     let respond_with_garbage = move |request: Request| {
@@ -141,7 +153,9 @@ async fn query_no_content() {
             .unwrap_or_else(|e| panic!("Error responding: {}", e));
     };
 
-    let result = do_xnet_client_query(make_xnet_client(&metrics), respond_with_garbage).await;
+    let result = with_test_replica_logger(|log| {
+        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_garbage)
+    });
 
     match result {
         Err(XNetClientError::NoContent) => (),
@@ -156,7 +170,7 @@ async fn query_no_content() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn query_error_response() {
     let metrics = MetricsRegistry::new();
     let respond_with_error = move |request: Request| {
@@ -165,7 +179,9 @@ async fn query_error_response() {
             .unwrap_or_else(|e| panic!("Error responding: {}", e));
     };
 
-    let result = do_xnet_client_query(make_xnet_client(&metrics), respond_with_error).await;
+    let result = with_test_replica_logger(|log| {
+        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_error)
+    });
 
     match result {
         Err(XNetClientError::ErrorResponse(reqwest::StatusCode::INTERNAL_SERVER_ERROR, _)) => (),
@@ -180,7 +196,7 @@ async fn query_error_response() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn query_request_timeout() {
     let metrics = &MetricsRegistry::new();
 
@@ -204,7 +220,8 @@ async fn query_request_timeout() {
         Err(e) => panic!("server.recv() returned error: {}", e),
     });
 
-    let result = make_xnet_client(&metrics).query(url).await;
+    let result =
+        with_test_replica_logger(|log| do_async_query(make_xnet_client(&metrics, log), url));
 
     // Only let the server proceed after we've timed out.
     barrier.wait();
@@ -231,7 +248,7 @@ async fn query_request_timeout() {
 // which causes the request to block instead of failing. Only run this test on
 // Linux.
 #[cfg(target_os = "linux")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn query_request_failed() {
     use nix::sys::socket::{
         bind, getsockname, socket, AddressFamily, InetAddr, SockAddr, SockFlag, SockType,
@@ -256,7 +273,8 @@ async fn query_request_failed() {
     // URL to query a server that would be running on the allocated port.
     let url = format!("http://{}", sa.to_str()).parse::<Uri>().unwrap();
 
-    let result = make_xnet_client(&metrics).query(url).await;
+    let result =
+        with_test_replica_logger(|log| do_async_query(make_xnet_client(&metrics, log), url));
 
     match result {
         Err(XNetClientError::RequestFailed(_)) => (),
@@ -273,7 +291,7 @@ async fn query_request_failed() {
 
 /// Returns the result of invoking `xnet_client.query()` against an HTTP server
 /// in a spawned thread that processes a single request using `handle_request`.
-async fn do_xnet_client_query<H: Fn(Request) + Send + 'static>(
+fn do_xnet_client_query<H: Fn(Request) + Send + 'static>(
     xnet_client: XNetClientImpl,
     handle_request: H,
 ) -> Result<CertifiedStreamSlice, XNetClientError> {
@@ -293,9 +311,9 @@ async fn do_xnet_client_query<H: Fn(Request) + Send + 'static>(
             Err(e) => panic!("server.recv() returned error: {}", e),
         }
     });
-
     barrier.wait();
-    let result = xnet_client.query(uri).await;
+
+    let result = do_async_query(xnet_client, uri);
 
     // Join the server thread, ensure it didn't panic.
     join_handle
@@ -303,6 +321,23 @@ async fn do_xnet_client_query<H: Fn(Request) + Send + 'static>(
         .unwrap_or_else(|e| panic!("Server thread has panicked: {:?}", e));
 
     result
+}
+
+/// Helper for synchronously calling `query()` on the given `XNetClientImpl`,
+/// with the given URL.
+fn do_async_query(
+    xnet_client: XNetClientImpl,
+    url: Uri,
+) -> Result<CertifiedStreamSlice, XNetClientError> {
+    let endpoint = EndpointLocator {
+        node_id: LOCAL_NODE,
+        url,
+        proximity: PeerLocation::Local,
+    };
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current()
+            .block_on(async move { xnet_client.query(&endpoint).await })
+    })
 }
 
 /// Creates an HTTP server listening on a free port, returning it and a URL to

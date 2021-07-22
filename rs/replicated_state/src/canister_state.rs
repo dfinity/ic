@@ -6,12 +6,13 @@ use crate::canister_state::system_state::{CanisterStatus, SystemState};
 use crate::StateError;
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_interfaces::messages::CanisterInputMessage;
+use ic_types::methods::SystemMethod;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
-    methods::SystemMethod,
+    methods::WasmMethod,
     xnet::QueueId,
     AccumulatedPriority, CanisterId, CanisterStatusType, ComputeAllocation, ExecutionRound,
-    NumBytes, PrincipalId, QueryAllocation, QueueIndex,
+    NumBytes, PrincipalId, QueueIndex,
 };
 use phantom_newtype::AmountOf;
 pub use queues::{CanisterQueues, QUEUE_INDEX_NONE};
@@ -34,10 +35,6 @@ pub struct SchedulerState {
     /// rounds. In the scheduler analysis documentation, this value is the entry
     /// in the vector d that corresponds to this canister.
     pub accumulated_priority: AccumulatedPriority,
-
-    /// How much cycles is the canister allowed to spend in given interval on
-    /// executing queries.
-    pub query_allocation: QueryAllocation,
 }
 
 impl Default for SchedulerState {
@@ -46,7 +43,6 @@ impl Default for SchedulerState {
             last_full_execution_round: ExecutionRound::from(0),
             compute_allocation: ComputeAllocation::default(),
             accumulated_priority: AccumulatedPriority::default(),
-            query_allocation: QueryAllocation::default(),
         }
     }
 }
@@ -76,8 +72,8 @@ impl CanisterState {
         scheduler_state: SchedulerState,
     ) -> Self {
         Self {
-            execution_state,
             system_state,
+            execution_state,
             scheduler_state,
         }
     }
@@ -135,9 +131,9 @@ impl CanisterState {
     }
 
     /// See `CanisterQueues::output_into_iter` for documentation.
-    pub fn output_into_iter<'a>(
-        &'a mut self,
-    ) -> impl std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)> + 'a {
+    pub fn output_into_iter(
+        &mut self,
+    ) -> impl std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)> + '_ {
         let canister_id = self.system_state.canister_id;
         self.system_state.queues_mut().output_into_iter(canister_id)
     }
@@ -156,8 +152,8 @@ impl CanisterState {
         scheduler_state: SchedulerState,
     ) -> Self {
         Self {
-            execution_state,
             system_state,
+            execution_state,
             scheduler_state,
         }
     }
@@ -182,11 +178,13 @@ impl CanisterState {
         self.scheduler_state.compute_allocation
     }
 
-    /// Returns true if the canister contains an exported update method with the
-    /// name provided, false otherwise.
-    pub fn exports_update_method(&self, method_name: String) -> bool {
+    /// Returns true if the canister exports the `canister_heartbeat` system
+    /// method.
+    pub fn exports_heartbeat_method(&self) -> bool {
         match &self.execution_state {
-            Some(execution_state) => execution_state.exports.has_update_method(method_name),
+            Some(execution_state) => {
+                execution_state.exports_method(&WasmMethod::System(SystemMethod::CanisterHeartbeat))
+            }
             None => false,
         }
     }
@@ -195,16 +193,9 @@ impl CanisterState {
     /// name provided, false otherwise.
     pub fn exports_query_method(&self, method_name: String) -> bool {
         match &self.execution_state {
-            Some(execution_state) => execution_state.exports.has_query_method(method_name),
-            None => false,
-        }
-    }
-
-    /// Returns true if the canister contains an exported system method with the
-    /// name provided, false otherwise.
-    pub fn exports_system_method(&self, method: SystemMethod) -> bool {
-        match &self.execution_state {
-            Some(execution_state) => execution_state.exports.has_system_method(method),
+            Some(execution_state) => {
+                execution_state.exports_method(&WasmMethod::Query(method_name))
+            }
             None => false,
         }
     }

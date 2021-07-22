@@ -154,52 +154,52 @@ fn export(path: &str, matches: &clap::ArgMatches) {
         match artifact {
             "RandomBeacon" => {
                 for x in consensus_pool.validated().random_beacon().get_all() {
-                    println!("{}", to_string(&x.to_message()));
+                    println!("{}", to_string(&x.into_message()));
                 }
             }
             "Finalization" => {
                 for x in consensus_pool.validated().finalization().get_all() {
-                    println!("{}", to_string(&x.to_message()));
+                    println!("{}", to_string(&x.into_message()));
                 }
             }
             "Notarization" => {
                 for x in consensus_pool.validated().notarization().get_all() {
-                    println!("{}", to_string(&x.to_message()));
+                    println!("{}", to_string(&x.into_message()));
                 }
             }
             "BlockProposal" => {
                 for x in consensus_pool.validated().block_proposal().get_all() {
-                    println!("{}", to_string(&x.to_message()));
+                    println!("{}", to_string(&x.into_message()));
                 }
             }
             "RandomBeaconShare" => {
                 for x in consensus_pool.validated().random_beacon_share().get_all() {
-                    println!("{}", to_string(&x.to_message()));
+                    println!("{}", to_string(&x.into_message()));
                 }
             }
             "NotarizationShare" => {
                 for x in consensus_pool.validated().notarization_share().get_all() {
-                    println!("{}", to_string(&x.to_message()));
+                    println!("{}", to_string(&x.into_message()));
                 }
             }
             "FinalizationShare" => {
                 for x in consensus_pool.validated().finalization_share().get_all() {
-                    println!("{}", to_string(&x.to_message()));
+                    println!("{}", to_string(&x.into_message()));
                 }
             }
             "RandomTape" => {
                 for x in consensus_pool.validated().random_tape().get_all() {
-                    println!("{}", to_string(&x.to_message()));
+                    println!("{}", to_string(&x.into_message()));
                 }
             }
             "RandomTapeShare" => {
                 for x in consensus_pool.validated().random_tape_share().get_all() {
-                    println!("{}", to_string(&x.to_message()));
+                    println!("{}", to_string(&x.into_message()));
                 }
             }
             "CatchUpPackage" => {
                 for x in consensus_pool.validated().catch_up_package().get_all() {
-                    println!("{}", to_string(&x.to_message()));
+                    println!("{}", to_string(&x.into_message()));
                 }
             }
             "CatchUpPackageShare" => {
@@ -208,7 +208,7 @@ fn export(path: &str, matches: &clap::ArgMatches) {
                     .catch_up_package_share()
                     .get_all()
                 {
-                    println!("{}", to_string(&x.to_message()));
+                    println!("{}", to_string(&x.into_message()));
                 }
             }
             "Certification" => {

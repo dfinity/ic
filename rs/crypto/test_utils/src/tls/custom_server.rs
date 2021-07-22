@@ -5,8 +5,9 @@ use crate::tls::set_peer_verification_cert_store;
 use crate::tls::x509_certificates::CertWithPrivateKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
-use openssl::ssl::{SslAcceptor, SslContextBuilder, SslMethod, SslVersion};
+use openssl::ssl::{Ssl, SslAcceptor, SslContextBuilder, SslMethod, SslVersion};
 use openssl::x509::X509;
+use std::pin::Pin;
 use tokio::net::TcpListener;
 
 const DEFAULT_MAX_PROTO_VERSION: SslVersion = SslVersion::TLS1_3;
@@ -105,6 +106,9 @@ impl CustomServer {
 
     /// Run this client asynchronously. This allows a client to connect.
     pub async fn run(self) {
+        self.listener
+            .set_nonblocking(true)
+            .expect("failed to make listener non-blocking");
         let mut tokio_tcp_listener = TcpListener::from_std(self.listener.try_clone().unwrap())
             .expect("failed to create tokio TcpListener");
         let (tcp_stream, _peer_address) = tokio_tcp_listener
@@ -113,7 +117,11 @@ impl CustomServer {
             .expect("failed to accept connection");
 
         let tls_acceptor = self.tls_acceptor();
-        let result = tokio_openssl::accept(&tls_acceptor, tcp_stream).await;
+        let tls_state = Ssl::new(tls_acceptor.context())
+            .expect("failed to convert TLS acceptor to state object");
+        let mut tls_stream = tokio_openssl::SslStream::new(tls_state, tcp_stream)
+            .expect("failed to create tokio_openssl::SslStream");
+        let result = Pin::new(&mut tls_stream).accept().await;
 
         if let Some(expected_error) = self.expected_error {
             let error = result.err().expect("expected error");

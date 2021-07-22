@@ -22,18 +22,35 @@ use ic_nns_governance::{
     pb::v1::{
         add_or_remove_node_provider::Change,
         claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
-        governance_error::ErrorType, governance_error::ErrorType::InsufficientFunds,
-        governance_error::ErrorType::PreconditionFailed, manage_neuron,
-        manage_neuron::configure::Operation, manage_neuron::disburse::Amount,
-        manage_neuron::Configure, manage_neuron::Disburse, manage_neuron::DisburseToNeuron,
-        manage_neuron::IncreaseDissolveDelay, manage_neuron::Spawn, manage_neuron::Split,
-        manage_neuron::StartDissolving, manage_neuron_response, neuron, neuron::DissolveState,
-        neuron::Followees, proposal, reward_node_provider, AddOrRemoveNodeProvider, Ballot,
-        BallotInfo, ClaimOrRefreshNeuronFromAccount, ExecuteNnsFunction,
-        Governance as GovernanceProto, GovernanceError, ListNeurons, ListNeuronsResponse,
-        ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron, NeuronStakeTransfer,
-        NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData, ProposalStatus,
-        RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
+        governance_error::ErrorType,
+        governance_error::ErrorType::InsufficientFunds,
+        governance_error::ErrorType::NotAuthorized,
+        governance_error::ErrorType::PreconditionFailed,
+        manage_neuron,
+        manage_neuron::claim_or_refresh::By,
+        manage_neuron::configure::Operation,
+        manage_neuron::disburse::Amount,
+        manage_neuron::ClaimOrRefresh,
+        manage_neuron::Command,
+        manage_neuron::Configure,
+        manage_neuron::Disburse,
+        manage_neuron::DisburseToNeuron,
+        manage_neuron::IncreaseDissolveDelay,
+        manage_neuron::NeuronIdOrSubaccount,
+        manage_neuron::SetDissolveTimestamp,
+        manage_neuron::Spawn,
+        manage_neuron::Split,
+        manage_neuron::StartDissolving,
+        manage_neuron_response, neuron,
+        neuron::DissolveState,
+        neuron::Followees,
+        proposal,
+        reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
+        AddOrRemoveNodeProvider, Ballot, BallotInfo, ClaimOrRefreshNeuronFromAccount,
+        ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ListNeurons,
+        ListNeuronsResponse, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron,
+        NeuronStakeTransfer, NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData,
+        ProposalStatus, RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
     },
 };
 use ledger_canister::{AccountIdentifier, ICPTs, Memo};
@@ -56,7 +73,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use ic_nns_governance::governance::{
-    MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
+    HeapGrowthPotential, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+    MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
 };
 use ic_nns_governance::pb::v1::governance_error::ErrorType::{NotFound, ResourceExhausted};
 use ic_nns_governance::pb::v1::proposal::Action;
@@ -254,8 +272,8 @@ impl Ledger for FakeDriver {
             from_subaccount,
         );
         println!(
-            "Issuing ledger transfer from account {:?} (subaccount {:?}) to account {:?} amount {} fee {}",
-            from_account, from_subaccount, to_account, amount_e8s, fee_e8s
+            "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
+            from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), ToString::to_string), to_account, amount_e8s, fee_e8s
         );
         let accounts = &mut self.state.try_lock().unwrap().accounts;
 
@@ -313,6 +331,10 @@ impl Environment for FakeDriver {
     ) -> Result<(), GovernanceError> {
         panic!("unexpected call")
     }
+
+    fn heap_growth_potential(&self) -> HeapGrowthPotential {
+        HeapGrowthPotential::NoIssue
+    }
 }
 
 /// Constructs a test principal id from an integer.
@@ -330,7 +352,8 @@ fn register_vote(
     vote: Vote,
 ) -> ManageNeuronResponse {
     let manage_neuron = ManageNeuron {
-        id: Some(neuron_id),
+        id: None,
+        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id)),
         command: Some(manage_neuron::Command::RegisterVote(
             manage_neuron::RegisterVote {
                 proposal: Some(pid),
@@ -442,12 +465,12 @@ fn check_proposal_status_after_voting_and_after_expiration(
     );
 }
 
-const LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE: Option<DissolveState> = Some(
+const NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE: Option<DissolveState> = Some(
     DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
 );
-const LOCKED_MAX_DISSOLVE_DELAY: Option<DissolveState> = Some(DissolveState::DissolveDelaySeconds(
-    MAX_DISSOLVE_DELAY_SECONDS,
-));
+const NOTDISSOLVING_MAX_DISSOLVE_DELAY: Option<DissolveState> = Some(
+    DissolveState::DissolveDelaySeconds(MAX_DISSOLVE_DELAY_SECONDS),
+);
 
 /// Here we test that, if there is a single neuron, any proposed proposal is
 /// accepted.
@@ -455,7 +478,7 @@ const LOCKED_MAX_DISSOLVE_DELAY: Option<DissolveState> = Some(DissolveState::Dis
 fn test_single_neuron_proposal() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![Neuron {
-            dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+            dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
             cached_neuron_stake_e8s: 1,
             ..Neuron::default()
         }],
@@ -472,12 +495,12 @@ fn test_two_neuron_agreement_proposal_should_be_accepted() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
@@ -495,12 +518,12 @@ fn test_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected()
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
@@ -519,12 +542,12 @@ fn test_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_sh
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
@@ -542,12 +565,12 @@ fn test_two_neuron_disagree_largest_stake_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 8,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 7,
                 ..Neuron::default()
             },
@@ -559,12 +582,12 @@ fn test_two_neuron_disagree_largest_stake_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 8,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 7,
                 ..Neuron::default()
             },
@@ -576,12 +599,12 @@ fn test_two_neuron_disagree_largest_stake_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 8,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 7,
                 ..Neuron::default()
             },
@@ -599,12 +622,12 @@ fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: LOCKED_MAX_DISSOLVE_DELAY,
+                dissolve_state: NOTDISSOLVING_MAX_DISSOLVE_DELAY,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
@@ -616,12 +639,12 @@ fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: LOCKED_MAX_DISSOLVE_DELAY,
+                dissolve_state: NOTDISSOLVING_MAX_DISSOLVE_DELAY,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
@@ -633,12 +656,12 @@ fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: LOCKED_MAX_DISSOLVE_DELAY,
+                dissolve_state: NOTDISSOLVING_MAX_DISSOLVE_DELAY,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
@@ -658,14 +681,14 @@ fn test_two_neuron_disagree_identical_stake_older_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 4,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS
                     - MAX_NEURON_AGE_FOR_AGE_BONUS,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 4,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                 ..Neuron::default()
@@ -678,14 +701,14 @@ fn test_two_neuron_disagree_identical_stake_older_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 4,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS
                     - MAX_NEURON_AGE_FOR_AGE_BONUS,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 4,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                 ..Neuron::default()
@@ -698,14 +721,14 @@ fn test_two_neuron_disagree_identical_stake_older_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 4,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS
                     - MAX_NEURON_AGE_FOR_AGE_BONUS,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                 cached_neuron_stake_e8s: 4,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                 ..Neuron::default()
@@ -721,9 +744,9 @@ fn test_two_neuron_disagree_identical_stake_older_wins() {
 ///
 /// - There are nine neurons: 1-9.
 ///
-/// - Every neuron has the same stake of 10 ICP and (locked) dissolution period
-///   of 1 year, so the same voting power. Thus, 5 out of 9 need to vote to
-///   reach a verdict.
+/// - Every neuron has the same stake of 10 ICP and (non-dissolving) dissolution
+///   period of 1 year, so the same voting power. Thus, 5 out of 9 need to vote
+///   to reach a verdict.
 ///
 /// - Neuron 2 follows 1, 3, 4 on topic Governance and neuron 3 follows 5, 6, 7
 ///   on topic Unknown = all topics without specific override
@@ -1125,7 +1148,8 @@ fn test_all_follow_proposer() {
         // Must match neuron 5's serialized_id.
         &principal(5),
         &ManageNeuron {
-            id: Some(NeuronId { id: 5 }),
+            id: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 5 })),
             command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
                 topic: Topic::Unspecified as i32,
                 followees: [NeuronId { id: 1 }].to_vec(),
@@ -1140,7 +1164,8 @@ fn test_all_follow_proposer() {
         // Must match neuron 6's serialized_id.
         &principal(6),
         &ManageNeuron {
-            id: Some(NeuronId { id: 6 }),
+            id: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 6 })),
             command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
                 topic: Topic::Unspecified as i32,
                 followees: [NeuronId { id: 1 }].to_vec(),
@@ -1450,7 +1475,8 @@ fn test_manage_neuron() {
         &principal(2),
         &Proposal {
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                id: Some(NeuronId { id: 1 }),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
+                id: None,
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
                     topic: Topic::NeuronManagement as i32,
                     followees: [NeuronId { id: 2 }].to_vec(),
@@ -1539,7 +1565,8 @@ fn test_manage_neuron() {
         &principal(2),
         &Proposal {
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                id: Some(NeuronId { id: 1 }),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
+                id: None,
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
                     topic: Topic::NeuronManagement as i32,
                     followees: [NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
@@ -1613,7 +1640,10 @@ fn test_sufficient_stake_for_manage_neuron() {
             &principal(2),
             &Proposal {
                 action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                    id: Some(NeuronId { id: 1 }),
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 1
+                    })),
+                    id: None,
                     command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
                         topic: Topic::NeuronManagement as i32,
                         followees: [NeuronId { id: 2 }].to_vec(),
@@ -1638,7 +1668,8 @@ fn test_sufficient_stake_for_manage_neuron() {
         &principal(2),
         &Proposal {
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                id: Some(NeuronId { id: 1 }),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
+                id: None,
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
                     topic: Topic::NeuronManagement as i32,
                     followees: [NeuronId { id: 2 }].to_vec(),
@@ -1882,7 +1913,8 @@ fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
         &principal(2),
         &Proposal {
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                id: Some(NeuronId { id: 1 }),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
+                id: None,
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
                     topic: Topic::NeuronManagement as i32,
                     followees: [NeuronId { id: 3 }].to_vec(),
@@ -1965,11 +1997,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
             .iter()
             .cloned()
             .collect(),
-            latest_tally: None,
-            decided_timestamp_seconds: 0,
-            executed_timestamp_seconds: 0,
-            failed_timestamp_seconds: 0,
-            reward_event_round: 0,
+            ..Default::default()
         },
     );
     let mut fake_driver = FakeDriver::default()
@@ -2350,7 +2378,7 @@ fn compute_maturities(
                         id: Some(NeuronId { id: i as u64 }),
                         controller: Some(principal(i as u64)),
                         cached_neuron_stake_e8s: *stake_e8s,
-                        dissolve_state: LOCKED_MIN_DISSOLVE_DELAY_TO_VOTE,
+                        dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
                         account: fake_driver.get_fake_env().random_byte_array().to_vec(),
                         ..Default::default()
                     },
@@ -2712,7 +2740,7 @@ fn test_get_neuron_ids_by_principal() {
     let gov = Governance::new(gov_proto, driver.get_fake_env(), driver.get_fake_ledger());
 
     let mut principal2_neuron_ids = gov.get_neuron_ids_by_principal(&principal2);
-    principal2_neuron_ids.sort();
+    principal2_neuron_ids.sort_unstable();
 
     assert_eq!(gov.get_neuron_ids_by_principal(&principal1), vec![1]);
     assert_eq!(principal2_neuron_ids, vec![2, 3, 4]);
@@ -3085,6 +3113,176 @@ fn test_top_up_stake() {
 }
 
 #[test]
+fn test_claim_or_top_up_neuron_from_notification_does_not_overflow() {
+    let (mut driver, mut gov, neuron) = create_mature_neuron();
+    let nid = neuron.id.unwrap();
+    let neuron = gov.get_neuron_mut(&nid).unwrap();
+    let account = neuron.account.clone();
+
+    // Increase the dissolve delay, this will make the neuron start aging from
+    // 'now'.
+    neuron
+        .configure(
+            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            driver.now(),
+            &Configure {
+                operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
+                    additional_dissolve_delay_seconds: 6
+                        * ic_nns_governance::governance::ONE_MONTH_SECONDS as u32,
+                })),
+            },
+        )
+        .unwrap();
+
+    // Advance the current time, so that the neuron has accumulated
+    // some age.
+    driver.advance_time_by(12 * ic_nns_governance::governance::ONE_MONTH_SECONDS);
+
+    assert_eq!(
+        neuron.aging_since_timestamp_seconds,
+        driver.now() - 12 * ic_nns_governance::governance::ONE_MONTH_SECONDS - 1,
+    );
+
+    let block_height = 543212234;
+    // Note that the nonce must match the nonce chosen in the original
+    // transfer.
+    let nonce = 1234u64;
+
+    // Double the stake of the existing neuron.
+    let nid_result = gov
+        .claim_or_top_up_neuron_from_notification(NeuronStakeTransfer {
+            transfer_timestamp: driver.now(),
+            from: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+            from_subaccount: Vec::new(),
+            to_subaccount: account,
+            neuron_stake_e8s: 100_000_000_000_000,
+            block_height,
+            memo: nonce,
+        })
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(nid_result, nid);
+    let neuron = gov.get_neuron_mut(&nid).unwrap();
+    assert_eq!(neuron.cached_neuron_stake_e8s, 100_000_100_000_000);
+}
+
+#[test]
+fn test_set_dissolve_delay() {
+    let (mut driver, _, mut neuron) = create_mature_neuron();
+
+    // Neuron should be dissolved
+    assert_eq!(neuron.state(driver.now()), NeuronState::Dissolved);
+
+    // Try to set the dissolve delay to a value before the current time, should
+    // fail.
+    assert!(neuron
+        .configure(
+            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            driver.now(),
+            &Configure {
+                operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
+                    dissolve_timestamp_seconds: driver.now() - 1,
+                })),
+            },
+        )
+        .is_err());
+
+    // Try to set the dissolve delay to a value in the future, should succeed.
+    neuron
+        .configure(
+            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            driver.now(),
+            &Configure {
+                operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
+                    dissolve_timestamp_seconds: driver.now()
+                        + 3 * ic_nns_governance::governance::ONE_MONTH_SECONDS,
+                })),
+            },
+        )
+        .unwrap();
+
+    // Since we set the dissolve delay, neuron should be non-dissolving.
+    assert_eq!(neuron.state(driver.now()), NeuronState::NotDissolving);
+
+    // Try to set the dissolve delay to a value that is smaller than the
+    // current one, should fail.
+    assert!(neuron
+        .configure(
+            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            driver.now(),
+            &Configure {
+                operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
+                    dissolve_timestamp_seconds: driver.now()
+                        + 2 * ic_nns_governance::governance::ONE_MONTH_SECONDS,
+                })),
+            },
+        )
+        .is_err());
+
+    // Try to set the dissolve dealy to a value that is bigger that the max u32,
+    // should fail.
+    assert!(neuron
+        .configure(
+            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            driver.now(),
+            &Configure {
+                operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
+                    dissolve_timestamp_seconds: driver.now()
+                        + 3 * ic_nns_governance::governance::ONE_MONTH_SECONDS
+                        + u32::MAX as u64
+                        + 1,
+                })),
+            },
+        )
+        .is_err());
+
+    // Try to increase the dissolve delay to a value that is bigger than 8 years,
+    // should cap the value to 8y, but succeed.
+    neuron
+        .configure(
+            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            driver.now(),
+            &Configure {
+                operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
+                    dissolve_timestamp_seconds: driver.now()
+                        + 3 * ic_nns_governance::governance::ONE_MONTH_SECONDS
+                        + u32::MAX as u64,
+                })),
+            },
+        )
+        .unwrap();
+
+    // Since we increased the dissolve delay, neuron should remain non-dissolving.
+    assert_eq!(neuron.state(driver.now()), NeuronState::NotDissolving);
+
+    // Set the neuron to dissolve
+    neuron
+        .configure(
+            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            driver.now(),
+            &Configure {
+                operation: Some(Operation::StartDissolving(StartDissolving {})),
+            },
+        )
+        .unwrap();
+
+    assert_eq!(neuron.state(driver.now()), NeuronState::Dissolving);
+
+    // Advance the time by almost the amount we set
+    driver.advance_time_by(8 * 12 * ic_nns_governance::governance::ONE_MONTH_SECONDS - 1);
+
+    // Neuron should still be dissolving.
+    assert_eq!(neuron.state(driver.now()), NeuronState::Dissolving);
+
+    // Advance the time by the last remaining second.
+    driver.advance_time_by(1);
+    // Now the neuron should be dissolved.
+    assert_eq!(neuron.state(driver.now()), NeuronState::Dissolved);
+}
+
+#[test]
 fn test_refresh_stake() {
     let (mut driver, mut gov, neuron) = create_mature_neuron();
     let nid = neuron.id.unwrap();
@@ -3210,6 +3408,103 @@ fn test_claim_neuron_from_account() {
 }
 
 #[test]
+fn test_claim_through_management() {
+    // Create the ledger with an account corresponding to a neuron stake event
+    // of which the governance canister was not notified.
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let memo = Memo(12345);
+    let stake = ICPTs::from_icpts(1000).unwrap();
+    let gov_subaccount = Subaccount::try_from(
+        &{
+            let mut state = Sha256::new();
+            state.write(&[0x0c]);
+            state.write(b"neuron-stake");
+            state.write(&owner.as_slice());
+            state.write(&memo.0.to_be_bytes());
+            state.finish()
+        }[..],
+    )
+    .expect("Couldn't build subaccount from hash.");
+    let driver = FakeDriver::default()
+        .at(56)
+        .with_ledger_accounts(vec![FakeAccount {
+            id: AccountIdentifier::new(
+                ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+                Some(gov_subaccount),
+            ),
+            amount_e8s: stake.get_e8s(),
+        }])
+        .with_supply(ICPTs::from_icpts(400_000_000).unwrap());
+
+    let mut gov = Governance::new(
+        empty_fixture(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+    );
+
+    // Check you can refresh by subaccount
+    let result = gov
+        .manage_neuron(
+            &owner,
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(
+                    gov_subaccount.to_vec(),
+                )),
+                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                    by: Some(By::Memo(memo.0)),
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap();
+
+    let nid = match result.command.unwrap() {
+        manage_neuron_response::Command::ClaimOrRefresh(
+            manage_neuron_response::ClaimOrRefreshResponse {
+                refreshed_neuron_id: Some(nid),
+            },
+        ) => {
+            let neuron = gov.get_neuron(&nid);
+            assert!(neuron.is_ok());
+            let neuron = neuron.unwrap();
+            assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
+            nid
+        }
+        _ => panic!("Unexpected response from ClaimOrRefresh"),
+    };
+
+    // Check you can refresh by neuron ID
+    let result = gov
+        .manage_neuron(
+            &owner,
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(nid)),
+                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                    by: Some(By::Memo(memo.0)),
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap();
+
+    match result.command.unwrap() {
+        manage_neuron_response::Command::ClaimOrRefresh(
+            manage_neuron_response::ClaimOrRefreshResponse {
+                refreshed_neuron_id: Some(nid),
+            },
+        ) => {
+            let neuron = gov.get_neuron(&nid);
+            assert!(neuron.is_ok());
+            let neuron = neuron.unwrap();
+            assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
+        }
+        _ => panic!("Unexpected response from ClaimOrRefresh"),
+    };
+}
+
+#[test]
 fn test_cant_disburse_without_paying_fees() {
     let (driver, mut gov, neuron) = create_mature_neuron();
 
@@ -3298,6 +3593,128 @@ fn test_cant_disburse_without_paying_fees() {
     );
 }
 
+/// Checks that split_neuron fails if the preconditions are not met. In
+/// particular, an attempt to split a neuron fails if:
+/// * 1. the neuron does not exist.
+/// * 2. the caller is not the neuron's controller.
+/// * 3. the parent neuron would be left with less than the minimum stake.
+/// * 4. the child neuron would have less than the minimum stake.
+/// In all these cases it must thus hold that:
+/// * the correct error is returned
+/// * the parent neuron is unchanged
+/// * the list of all neurons remained unchanged
+/// * the list of accounts is unchanged
+#[test]
+fn test_neuron_split_fails() {
+    let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    // Compute the subaccount to which the transfer would have been made
+    let nonce = 1234u64;
+
+    let block_height = 543212234;
+    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let neuron_stake_e8s = 1_000_000_000;
+
+    let (driver, mut gov, id, _) = governance_with_staked_neuron(
+        dissolve_delay_seconds,
+        neuron_stake_e8s,
+        block_height,
+        from,
+        nonce,
+    );
+
+    let neuron = gov.proto.neurons.get_mut(&id.id).unwrap();
+    let transaction_fee = gov.proto.economics.as_ref().unwrap().transaction_fee_e8s;
+    let min_neuron_stake = gov
+        .proto
+        .economics
+        .as_ref()
+        .unwrap()
+        .neuron_minimum_stake_e8s;
+
+    assert_eq!(
+        neuron.get_neuron_info(driver.now()).state(),
+        NeuronState::NotDissolving
+    );
+
+    let neuron_before = neuron.clone();
+
+    // 1. Attempt to split a neuron that does not exist
+
+    // make a nonexisting_neuron_id
+    let nonexisting_neuron_id = NeuronId { id: 12345 };
+    let split_res_1 = gov
+        .split_neuron(
+            &nonexisting_neuron_id,
+            &from,
+            &Split {
+                amount_e8s: 1_000_000,
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    assert_matches!(
+        split_res_1,
+        Err(GovernanceError{error_type: code, error_message: msg})
+        if code == NotFound as i32 && msg.to_lowercase().contains("neuron not found"));
+
+    // 2. Attempt to split a neuron as someone who is not the neuron's controller
+    let unauthorized_caller = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    let split_res_2 = gov
+        .split_neuron(
+            &id,
+            &unauthorized_caller,
+            &Split {
+                amount_e8s: 1_000_000,
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    assert_matches!(
+        split_res_2,
+        Err(GovernanceError{error_type: code, error_message: _msg})
+            if code == NotAuthorized as i32);
+
+    // 3. Attempt to split an amount that leaves the parent with less than min_stake
+    let split_res_3 = gov
+        .split_neuron(
+            &id,
+            &from,
+            &Split {
+                amount_e8s: 1_000_000_000 - min_neuron_stake + 1,
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    assert_matches!(
+        split_res_3,
+        Err(GovernanceError{error_type: code, error_message: msg})
+            if code == InsufficientFunds as i32 && msg.to_lowercase().contains("the parent has stake"));
+
+    // 4. Attempt to split an amount that results in a child neuron with less than
+    // min_stake
+    let split_res_4 = gov
+        .split_neuron(
+            &id,
+            &from,
+            &Split {
+                amount_e8s: min_neuron_stake - 1 + transaction_fee,
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    assert_matches!(
+       split_res_4,
+       Err(GovernanceError{error_type: code, error_message: msg})
+           if code == InsufficientFunds as i32 && msg.to_lowercase().contains("at the minimum, one needs the minimum neuron stake"));
+
+    // Parent neuron did not change
+    assert_eq!(*gov.get_neuron(&id).unwrap(), neuron_before);
+    // There is still only one neuron
+    assert_eq!(gov.proto.neurons.len(), 1);
+    //  There is still only one ledger account.
+    driver.assert_num_neuron_accounts_exist(1);
+}
+
 #[test]
 fn test_neuron_split() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
@@ -3321,7 +3738,7 @@ fn test_neuron_split() {
 
     assert_eq!(
         neuron.get_neuron_info(driver.now()).state(),
-        NeuronState::Locked
+        NeuronState::NotDissolving
     );
 
     let child_nid = gov
@@ -3379,9 +3796,9 @@ fn test_neuron_split() {
     );
 
     let mut neuron_ids = gov.get_neuron_ids_by_principal(&from);
-    neuron_ids.sort();
+    neuron_ids.sort_unstable();
     let mut expected_neuron_ids = vec![id.id, child_nid.id];
-    expected_neuron_ids.sort();
+    expected_neuron_ids.sort_unstable();
     assert_eq!(neuron_ids, expected_neuron_ids);
 }
 
@@ -3411,7 +3828,7 @@ fn test_neuron_spawn() {
 
     assert_eq!(
         neuron.get_neuron_info(driver.now()).state(),
-        NeuronState::Locked
+        NeuronState::NotDissolving
     );
 
     // Starts with too little maturity
@@ -3721,7 +4138,10 @@ fn test_not_for_profit_neurons() {
         &normal_neuron.controller.as_ref().unwrap(),
         &Proposal {
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                id: Some(normal_neuron.id.as_ref().unwrap().clone()),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                    normal_neuron.id.as_ref().unwrap().clone(),
+                )),
+                id: None,
                 command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
                     amount: None,
                     to_account: None,
@@ -3741,7 +4161,10 @@ fn test_not_for_profit_neurons() {
         &normal_neuron.controller.as_ref().unwrap(),
         &Proposal {
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                id: Some(not_for_profit_neuron.id.as_ref().unwrap().clone()),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                    not_for_profit_neuron.id.as_ref().unwrap().clone(),
+                )),
+                id: None,
                 command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
                     amount: None,
                     to_account: None,
@@ -3781,7 +4204,10 @@ fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
         .manage_neuron(
             &second_neuron.controller.as_ref().unwrap(),
             &ManageNeuron {
-                id: Some(first_neuron.id.as_ref().unwrap().clone()),
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                    first_neuron.id.as_ref().unwrap().clone(),
+                )),
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
                     topic: Topic::Governance as i32,
                     followees: vec![second_neuron.id.as_ref().unwrap().clone()],
@@ -3799,7 +4225,10 @@ fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
         .manage_neuron(
             &second_neuron.controller.as_ref().unwrap(),
             &ManageNeuron {
-                id: Some(first_neuron.id.as_ref().unwrap().clone()),
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                    first_neuron.id.as_ref().unwrap().clone(),
+                )),
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
                     topic: Topic::NeuronManagement as i32,
                     followees: vec![second_neuron.id.as_ref().unwrap().clone()],
@@ -3843,7 +4272,10 @@ fn test_add_and_remove_hot_key() {
         .manage_neuron(
             &neuron.controller.as_ref().unwrap(),
             &ManageNeuron {
-                id: Some(neuron.id.as_ref().unwrap().clone()),
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                    neuron.id.as_ref().unwrap().clone(),
+                )),
                 command: Some(manage_neuron::Command::Configure(
                     manage_neuron::Configure {
                         operation: Some(manage_neuron::configure::Operation::AddHotKey(
@@ -3871,7 +4303,10 @@ fn test_add_and_remove_hot_key() {
         .manage_neuron(
             &neuron.controller.as_ref().unwrap(),
             &ManageNeuron {
-                id: Some(neuron.id.as_ref().unwrap().clone()),
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                    neuron.id.as_ref().unwrap().clone(),
+                )),
                 command: Some(manage_neuron::Command::Configure(
                     manage_neuron::Configure {
                         operation: Some(manage_neuron::configure::Operation::RemoveHotKey(
@@ -3923,14 +4358,17 @@ fn test_manage_and_reward_node_providers() {
         .manage_neuron(
             &voter_pid,
             &ManageNeuron {
-                id: Some(voter_neuron.clone()),
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     summary: "Reward this NP...".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::RewardNodeProvider(RewardNodeProvider {
-                        create_neuron: None,
                         node_provider: Some(NodeProvider { id: Some(np_pid) }),
                         amount_e8s: 10 * 100_000_000,
+                        reward_mode: Some(RewardMode::RewardToAccount(RewardToAccount {
+                            to_account: None,
+                        })),
                     })),
                 }))),
             },
@@ -3946,9 +4384,15 @@ fn test_manage_and_reward_node_providers() {
     };
 
     // The proposal should have failed as the node provider doesn't exist.
+    let info = gov
+        .get_proposal_info(&PrincipalId::new_anonymous(), pid)
+        .unwrap();
+    assert_eq!(info.status(), ProposalStatus::Failed, "info: {:?}", info);
     assert_eq!(
-        gov.get_proposal_data(pid).unwrap().status(),
-        ProposalStatus::Failed
+        info.failure_reason.as_ref().unwrap().error_type,
+        ErrorType::NotFound as i32,
+        "info: {:?}",
+        info
     );
 
     // Now make a proposal to add the node provider.
@@ -3956,7 +4400,8 @@ fn test_manage_and_reward_node_providers() {
         .manage_neuron(
             &voter_pid,
             &ManageNeuron {
-                id: Some(voter_neuron.clone()),
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     summary: "Just want to add this NP.".to_string(),
                     url: "".to_string(),
@@ -3996,7 +4441,8 @@ fn test_manage_and_reward_node_providers() {
         .manage_neuron(
             &voter_pid,
             &ManageNeuron {
-                id: Some(voter_neuron.clone()),
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     summary: "Just want to add this NP.".to_string(),
                     url: "".to_string(),
@@ -4023,19 +4469,22 @@ fn test_manage_and_reward_node_providers() {
         ProposalStatus::Failed
     );
 
-    // Rewarding the node provider should now work.
+    // Rewarding the node provider to the default account should now work.
     let pid = match gov
         .manage_neuron(
             &voter_pid,
             &ManageNeuron {
-                id: Some(voter_neuron.clone()),
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     summary: "Reward this NP...".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::RewardNodeProvider(RewardNodeProvider {
-                        create_neuron: None,
                         node_provider: Some(NodeProvider { id: Some(np_pid) }),
                         amount_e8s: 10 * 100_000_000,
+                        reward_mode: Some(RewardMode::RewardToAccount(RewardToAccount {
+                            to_account: None,
+                        })),
                     })),
                 }))),
             },
@@ -4056,21 +4505,73 @@ fn test_manage_and_reward_node_providers() {
         ProposalStatus::Executed
     );
 
-    // Now reward the node provider with a neuron instead of liquid ICP.
+    driver.assert_account_contains(&AccountIdentifier::new(np_pid, None), 10 * 100_000_000);
+
+    let to_subaccount = Subaccount({
+        let mut sha = Sha256::new();
+        sha.write(b"my_account");
+        sha.finish()
+    });
+
+    // Rewarding the node provider to a specified account should also work.
     let pid = match gov
         .manage_neuron(
             &voter_pid,
             &ManageNeuron {
-                id: Some(voter_neuron.clone()),
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     summary: "Reward this NP...".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::RewardNodeProvider(RewardNodeProvider {
-                        create_neuron: Some(reward_node_provider::CreateNeuron {
-                            dissolve_delay_seconds: 10,
-                        }),
+                        node_provider: Some(NodeProvider { id: Some(np_pid) }),
+                        amount_e8s: 10 * 100_000_000,
+                        reward_mode: Some(RewardMode::RewardToAccount(RewardToAccount {
+                            to_account: Some(
+                                AccountIdentifier::new(np_pid, Some(to_subaccount)).into(),
+                            ),
+                        })),
+                    })),
+                }))),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .expect("Couldn't submit proposal.")
+        .command
+        .unwrap()
+    {
+        manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
+        _ => panic!("Invalid response"),
+    };
+
+    // The proposal should have been executed
+    assert_eq!(
+        gov.get_proposal_data(pid).unwrap().status(),
+        ProposalStatus::Executed
+    );
+
+    driver.assert_account_contains(
+        &AccountIdentifier::new(np_pid, Some(to_subaccount)),
+        10 * 100_000_000,
+    );
+
+    // Reward the node provider with a neuron instead of liquid ICP.
+    let pid = match gov
+        .manage_neuron(
+            &voter_pid,
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+                command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    summary: "Reward this NP...".to_string(),
+                    url: "".to_string(),
+                    action: Some(proposal::Action::RewardNodeProvider(RewardNodeProvider {
                         node_provider: Some(NodeProvider { id: Some(np_pid) }),
                         amount_e8s: 99_999_999,
+                        reward_mode: Some(RewardMode::RewardToNeuron(RewardToNeuron {
+                            dissolve_delay_seconds: 10,
+                        })),
                     })),
                 }))),
             },
@@ -4110,7 +4611,8 @@ fn test_manage_and_reward_node_providers() {
         .manage_neuron(
             &voter_pid,
             &ManageNeuron {
-                id: Some(voter_neuron),
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     summary: "Just want to remove this NP.".to_string(),
                     url: "".to_string(),
@@ -4169,7 +4671,8 @@ fn test_network_economics_proposal() {
         .manage_neuron(
             &voter_pid,
             &ManageNeuron {
-                id: Some(voter_neuron),
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     summary: "Just want to change this param.".to_string(),
                     url: "".to_string(),
@@ -4285,7 +4788,8 @@ fn test_default_followees() {
         .manage_neuron(
             &voter_pid,
             &ManageNeuron {
-                id: Some(voter_neuron),
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     summary: "Just want to change this param.".to_string(),
                     url: "".to_string(),
@@ -4740,7 +5244,10 @@ fn test_filter_proposals() {
                     proposal: Some(Proposal {
                         summary: "summary".to_string(),
                         action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                            id: Some(NeuronId { id: 5 }),
+                            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                                NeuronId { id: 5 },
+                            )),
+                            id: None,
                             command: Some(manage_neuron::Command::Disburse(
                                 manage_neuron::Disburse {
                                     amount: None,
@@ -5243,7 +5750,7 @@ fn test_max_number_of_proposals_with_ballots() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
     );
-    // Vote with neuron 1. It is smaller, so proposals are no auto-accepted.
+    // Vote with neuron 1. It is smaller, so proposals are not auto-accepted.
     for i in 0..MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS {
         gov.make_proposal(
             &NeuronId { id: 1 },
@@ -5276,12 +5783,30 @@ fn test_max_number_of_proposals_with_ballots() {
             ..Default::default()
         },
     ), Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
+    // Let's try a NnsCanisterUpgrade. This proposal type is whitelisted, so it can
+    // be submitted even though the max is reached.
+    assert_matches!(
+        gov.make_proposal(
+            &NeuronId { id: 1 },
+            // Must match neuron 1's serialized_id.
+            &principal(1),
+            &Proposal {
+                summary: "NnsCanisterUpgrade should go through despite the limit".to_string(),
+                action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
+                    nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+                    payload: Vec::new(),
+                })),
+                ..Default::default()
+            },
+        ),
+        Ok(_)
+    );
 
     fake_driver.advance_time_by(10);
     gov.run_periodic_tasks().now_or_never();
 
     // Now all proposals should have been rejected.
-    for i in 1_u64..MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS as u64 + 1 {
+    for i in 1_u64..MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS as u64 + 2 {
         assert_eq!(
             gov.get_proposal_data(ProposalId { id: i })
                 .unwrap()
@@ -5399,4 +5924,97 @@ fn test_proposal_gc() {
     driver.advance_time_by(60);
     // No GC should be induced.
     assert!(!gov.maybe_gc());
+}
+
+#[test]
+fn test_id_v1_works() {
+    let driver = FakeDriver::default();
+
+    let mut gov = Governance::new(
+        fixture_for_manage_neuron(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+    );
+    // Make a proposal to replace the list of followees (2-4) with just 2.
+    gov.make_proposal(
+        &NeuronId { id: 2 },
+        // Must match neuron 1's serialized_id.
+        &principal(2),
+        &Proposal {
+            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                neuron_id_or_subaccount: None,
+                id: Some(NeuronId { id: 1 }),
+                command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
+                    topic: Topic::NeuronManagement as i32,
+                    followees: [NeuronId { id: 2 }].to_vec(),
+                })),
+            }))),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        ProposalStatus::Open,
+        gov.get_proposal_data(ProposalId { id: 1 })
+            .unwrap()
+            .status()
+    );
+}
+
+#[test]
+fn test_can_follow_by_subaccount_and_neuron_id() {
+    fn test_can_follow_by(make_neuron_id: fn(&Neuron) -> NeuronIdOrSubaccount) {
+        let driver = FakeDriver::default();
+        let mut gov = Governance::new(
+            fixture_for_manage_neuron(),
+            driver.get_fake_env(),
+            driver.get_fake_ledger(),
+        );
+
+        let nid = NeuronId { id: 2 };
+        let folowee = NeuronId { id: 1 };
+
+        // Check that the neuron isn't following anyone beforehand
+        let neuron = gov.get_neuron(&nid).expect("Failed to get neuron");
+        let f = neuron.followees.get(&(Topic::Unspecified as i32));
+        assert_eq!(f, None);
+        let neuron_id_or_subaccount = make_neuron_id(neuron);
+
+        // Start following
+        gov.manage_neuron(
+            // Must match neuron 5's serialized_id.
+            &principal(2),
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(neuron_id_or_subaccount.clone()),
+                command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
+                    topic: Topic::Unspecified as i32,
+                    followees: [folowee.clone()].to_vec(),
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .expect("Manage neuron failed");
+
+        // Check that you're actually following
+        let neuron = gov.get_neuron(&nid).unwrap();
+
+        let f = neuron
+            .followees
+            .get(&(Topic::Unspecified as i32))
+            .unwrap()
+            .followees
+            .clone();
+        assert_eq!(
+            f,
+            vec![folowee.clone()],
+            "failed to start following neuron {:?} by {:?}",
+            folowee,
+            neuron_id_or_subaccount
+        );
+    }
+
+    test_can_follow_by(|n| NeuronIdOrSubaccount::NeuronId(n.id.as_ref().unwrap().clone()));
+    test_can_follow_by(|n| NeuronIdOrSubaccount::Subaccount(n.account.to_vec()));
 }

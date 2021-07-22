@@ -66,7 +66,7 @@ impl fmt::Debug for BinaryEncodedWasm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!(
             "BinaryEncodedWasm{{{}}}",
-            truncate_and_format(self.as_slice(), 40 as usize)
+            truncate_and_format(self.as_slice(), 40_usize)
         ))
     }
 }

@@ -13,7 +13,7 @@ use prost::{alloc::collections::BTreeSet, bytes::Buf, Message};
 use url::Url;
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use ic_crypto_key_validation::ValidNodePublicKeys;
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::{
     crypto::v1::NodePublicKeys,
     registry::{
@@ -31,7 +31,7 @@ use ic_registry_keys::{
     make_icp_xdr_conversion_rate_record_key, make_node_operator_record_key, make_node_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
     make_subnet_record_key, maybe_parse_crypto_node_key, maybe_parse_crypto_tls_cert_key,
-    CRYPTO_RECORD_KEY_PREFIX, CRYPTO_TLS_CERT_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, SUBNET_LIST_KEY,
+    CRYPTO_RECORD_KEY_PREFIX, CRYPTO_TLS_CERT_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
     SUBNET_RECORD_KEY_PREFIX,
 };
 use ic_registry_routing_table::RoutingTable;
@@ -465,16 +465,13 @@ impl Registry {
 
     fn assert_sha256(s: &str) {
         if s.len() != 64 {
-            panic!(format!(
+            panic!(
                 "Hash value should be 64 characters long. (actual len: {})",
                 s.len()
-            ));
+            );
         }
         if s.bytes().any(|x| !x.is_ascii_hexdigit()) {
-            panic!(format!(
-                "Hash contains at least one invalid character: `{}`",
-                s
-            ));
+            panic!("Hash contains at least one invalid character: `{}`", s);
         }
     }
 
@@ -554,7 +551,11 @@ impl Registry {
             // Subnet membership must contain registered nodes only
             subnet_members.retain(|&k| {
                 let node_key = make_node_record_key(k);
-                snapshot.contains_key(node_key.as_bytes())
+                let node_exists = snapshot.contains_key(node_key.as_bytes());
+                if !node_exists {
+                    panic!("Node {} does not exist in Subnet {}", k, subnet_id);
+                }
+                node_exists
             });
 
             // Each node appears at most once in a subnet membership
@@ -600,7 +601,7 @@ impl Registry {
 
 // Return list of subnet ids in the snapshot
 fn get_subnet_id_list(snapshot: &RegistrySnapshot) -> Vec<Vec<u8>> {
-    match snapshot.get(SUBNET_LIST_KEY.as_bytes()) {
+    match snapshot.get(make_subnet_list_record_key().as_bytes()) {
         Some(subnet_list_record_vec) => {
             decode_registry_value::<SubnetListRecord>((*subnet_list_record_vec).clone()).subnets
         }
@@ -961,27 +962,26 @@ fn mask_ipv6(addr: Ipv6Addr, mask: Ipv6Addr) -> Ipv6Addr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mutations::do_add_node::connection_endpoint_from_string;
-    use std::str::FromStr;
-
     use dfn_core::api::PrincipalId;
     use ic_crypto::utils::get_node_keys_or_generate_if_missing;
     use ic_nns_common::registry::encode_or_panic;
     use ic_nns_constants::ids::TEST_USER1_PRINCIPAL;
+    use ic_nns_test_utils::registry::invariant_compliant_mutation;
     use ic_protobuf::registry::{
         node::v1::FlowEndpoint, node_operator::v1::NodeOperatorRecord,
-        routing_table::v1::RoutingTable, subnet::v1::GossipConfig,
+        routing_table::v1::RoutingTable,
     };
     use ic_registry_keys::{
         make_crypto_node_key, make_crypto_tls_cert_key, make_node_operator_record_key,
-        make_node_record_key, make_routing_table_record_key, make_subnet_record_key,
+        make_node_record_key, make_routing_table_record_key,
     };
-    use ic_registry_transport::{
-        delete, insert,
-        pb::v1::{RegistryAtomicMutateRequest, RegistryMutation},
-        Error,
-    };
+    use ic_registry_transport::{delete, insert, pb::v1::RegistryMutation};
     use ic_test_utilities::crypto::temp_dir::temp_dir;
+
+    /// Shorthand to try a mutation
+    fn try_mutate(registry: &mut Registry, mutations: &[RegistryMutation]) {
+        registry.maybe_apply_mutation_internal(mutations.to_vec())
+    }
 
     #[test]
     #[should_panic(expected = "No routing table in snapshot")]
@@ -1000,129 +1000,8 @@ mod tests {
     /// This helper function creates a valid registry.
     fn create_valid_registry() -> Registry {
         let mut registry = Registry::new();
-        let key1 = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
-        let value1 = encode_or_panic(&NodeOperatorRecord {
-            node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
-            node_allowance: 0,
-            node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
-        });
-        let mutation1 = vec![insert(key1.as_bytes(), &value1)];
-        assert!(try_mutate(&mut registry, &mutation1).is_empty());
-
-        let snapshot = registry.take_latest_snapshot_with_mutations(&[]);
-
-        let snapshot_data = snapshot.get(key1.as_bytes());
-        assert!(snapshot_data.is_some());
-
-        let node_id = NodeId::from(
-            PrincipalId::from_str(
-                "2swaj-5toxl-53gkj-bl5z7-uophv-ok4yw-s5onf-nbf5h-uorsd-xnshe-aae",
-            )
-            .unwrap(),
-        );
-        let key2 = make_node_record_key(node_id);
-        let value2 = encode_or_panic(&NodeRecord {
-            node_operator_id: (*TEST_USER1_PRINCIPAL).to_vec(),
-            xnet: Some(connection_endpoint_from_string("127.0.0.1:1234")),
-            http: Some(connection_endpoint_from_string("127.0.0.1:8123")),
-            p2p_flow_endpoints: vec![],
-            public_api: vec![],
-            private_api: vec![],
-            xnet_api: vec![],
-            prometheus_metrics_http: Some(connection_endpoint_from_string("127.0.0.1:5555")),
-            prometheus_metrics: vec![],
-        });
-        let mutation2 = vec![insert(key2.as_bytes(), &value2)];
-        assert!(try_mutate(&mut registry, &mutation2).is_empty());
-
-        let routing_table = RoutingTable::default();
-        let key3 = make_routing_table_record_key();
-        let value3 = encode_or_panic(&routing_table);
-        let mutation3 = vec![insert(key3.as_bytes(), &value3)];
-        assert!(try_mutate(&mut registry, &mutation3).is_empty());
-
-        let subnet_id = SubnetId::from(
-            PrincipalId::from_str(
-                "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
-            )
-            .unwrap(),
-        );
-        let key4 = make_subnet_record_key(subnet_id);
-        let value4 = encode_or_panic(&SubnetRecord {
-            membership: vec![node_id]
-                .iter()
-                .map(|id| id.get().into_vec())
-                .collect::<Vec<_>>(),
-            initial_dkg_transcript: Some(Default::default()),
-            ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
-            max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_ingress_messages_per_block: 1000,
-            unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
-            replica_version_id: "version_42".to_string(),
-            dkg_interval_length: 0,
-            dkg_dealings_per_block: 1,
-            gossip_config: Some(GossipConfig {
-                max_artifact_streams_per_peer: 10,
-                max_chunk_wait_ms: 100,
-                max_duplicity: 2,
-                max_chunk_size: 10,
-                receive_check_cache_size: 1024,
-                pfn_evaluation_period_ms: 100,
-                registry_poll_period_ms: 100,
-                retransmission_request_ms: 100,
-            }),
-            start_as_nns: false,
-            subnet_type: SubnetType::System.into(),
-            is_halted: false,
-        });
-        let mutation4 = vec![insert(key4.as_bytes(), &value4)];
-        assert!(try_mutate(&mut registry, &mutation4).is_empty());
-
-        const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
-        let key5 = make_replica_version_key("version_42");
-        let value5 = encode_or_panic(&ReplicaVersionRecord {
-            sha256_hex: MOCK_HASH.into(),
-            binary_url: "http://megaupload.com/replica_version_42_definitely_not_a_scam"
-                .to_string(),
-            node_manager_binary_url: "http://nodemanager.tar.gz".into(),
-            node_manager_sha256_hex: MOCK_HASH.into(),
-            release_package_url: "http://release_package.tar.gz".into(),
-            release_package_sha256_hex: MOCK_HASH.into(),
-        });
-        let mutation5 = vec![insert(key5.as_bytes(), &value5)];
-        assert!(try_mutate(&mut registry, &mutation5).is_empty());
-
-        let mut subnet_list_record = SubnetListRecord::default();
-        subnet_list_record.subnets.push(subnet_id.get().to_vec());
-        let key6 = SUBNET_LIST_KEY;
-        let value6 = encode_or_panic(&subnet_list_record);
-        let mutation6 = vec![insert(key6.as_bytes(), &value6)];
-        assert!(try_mutate(&mut registry, &mutation6).is_empty());
+        try_mutate(&mut registry, &invariant_compliant_mutation());
         registry
-    }
-
-    #[test]
-    /// Create a minimal set of registry entries that pass the invariants check.
-    /// This includes a system type subnet with one node belonging to a node
-    /// operator with allowance 0, a subnet list with the aforementioned subnet
-    /// and an empty routing table.
-    fn invariants_hold() {
-        let registry = create_valid_registry();
-        registry.check_global_invariants(&[]);
-    }
-
-    /// Shorthand to try a mutation with no preconditions.
-    fn try_mutate(registry: &mut Registry, mutations: &[RegistryMutation]) -> Vec<Error> {
-        registry
-            .maybe_apply_mutations(RegistryAtomicMutateRequest {
-                preconditions: vec![],
-                mutations: mutations.to_vec(),
-            })
-            .errors
-            .into_iter()
-            .map(Error::from)
-            .collect()
     }
 
     #[test]
@@ -1137,13 +1016,11 @@ mod tests {
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
         });
 
-        let mutation1 = vec![insert(key1.as_bytes(), &value1)];
-        let mutation2 = vec![insert(key2.as_bytes(), &value2)];
-        let mut registry = Registry::new();
-        assert!(try_mutate(&mut registry, &mutation1).is_empty());
-        assert!(try_mutate(&mut registry, &mutation2).is_empty());
-
-        let snapshot = registry.take_latest_snapshot_with_mutations(&[]);
+        let mutations = vec![
+            insert(key1.as_bytes(), &value1),
+            insert(key2.as_bytes(), &value2),
+        ];
+        let snapshot = Registry::new().take_latest_snapshot_with_mutations(&mutations);
 
         let snapshot_data = snapshot.get(key1.as_bytes());
         assert!(snapshot_data.is_some());

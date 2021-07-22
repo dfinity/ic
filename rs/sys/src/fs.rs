@@ -81,7 +81,7 @@ fn clone_file_impl(src: &Path, dst: &Path) -> Result<(), FileCloneError> {
         () => {
             1074041865
         };
-    };
+    }
 
     let src_f = OpenOptions::new()
         .read(true)

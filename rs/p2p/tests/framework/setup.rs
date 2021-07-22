@@ -7,7 +7,7 @@ use ic_protobuf::registry::{
     subnet::{SubnetListRecord, SubnetRecord},
 };
 use ic_registry_common::{
-    keys::{make_node_record_key, make_subnet_record_key, SUBNET_LIST_KEY},
+    keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key},
     proto_registry_data_provider::ProtoRegistryDataProvider,
 };
 use ic_test_utilities::types::ids::node_test_id;
@@ -233,7 +233,7 @@ pub(crate) fn test_group_set_registry(
     // set subnet list
     data_provider
         .add(
-            SUBNET_LIST_KEY,
+            make_subnet_list_record_key.as_str(),
             version,
             Some(SubnetListRecord {
                 subnets: vec![subnet_id.get()],

@@ -95,20 +95,19 @@ fn remove_governance_service_args(did: &mut String) {
     *did = did.replace("service : (Governance) ->", "service :");
 }
 
+const GOVERNANCE_DID: &str = "../../governance/canister/governance.did";
+const ROOT_DID: &str = "../root/canister/root.did";
+
 fn compile_lifeline() -> Result<(), BuildError> {
     // Add symlinks to the .did files for foreign canisters
     let governance_args = create_did_alias(
-        "../../governance/canister/governance.did",
+        GOVERNANCE_DID,
         "governance",
         GOVERNANCE_CANISTER_ID,
         remove_governance_service_args,
     )?;
-    let root_args = create_did_alias(
-        "../root/canister/root.did",
-        "root",
-        ROOT_CANISTER_ID,
-        |_| {},
-    )?;
+
+    let root_args = create_did_alias(ROOT_DID, "root", ROOT_CANISTER_ID, |_| {})?;
 
     // Compile the lifeline to Wasm
     let output = Command::new("moc")
@@ -124,11 +123,6 @@ fn compile_lifeline() -> Result<(), BuildError> {
         // - is easy to embed in rust using `include_bytes!`
         .arg("-o")
         .arg("gen/lifeline.wasm")
-        // Setting the environment variable `MOC_UNLOCK_PRIM` to `yesplease` unlocks the primitive
-        // `serialize` (among others) that is necessary to externalise method call arguments into a
-        // `Blob`. This ability is considered test-only, but the Languages team is in the process of
-        // designing a mechanism that is user-facing (and supported) as well as more general.
-        .env("MOC_UNLOCK_PRIM", "yesplease")
         .output()?;
 
     if output.status.success() {
@@ -142,6 +136,8 @@ fn main() {
     println!("cargo:rerun-if-changed=lifeline.mo");
     println!("cargo:rerun-if-changed=lifeline.did");
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed={}", ROOT_DID);
+    println!("cargo:rerun-if-changed={}", GOVERNANCE_DID);
 
     compile_lifeline().unwrap_or_else(|e| {
         eprintln!("Could not build the Wasm for the lifeline canister. Error:");

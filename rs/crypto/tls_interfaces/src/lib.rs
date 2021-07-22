@@ -7,17 +7,137 @@ use core::fmt;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, RegistryVersion};
-use std::collections::BTreeSet;
+use openssl::hash::MessageDigest;
+use openssl::x509::X509;
+use serde::{Deserialize, Deserializer, Serialize};
+use std::collections::{BTreeSet, HashSet};
 use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tokio_openssl::SslStream;
 
 #[cfg(test)]
 mod tests;
+
+#[derive(Clone, Debug, Serialize)]
+/// An X.509 certificate
+pub struct TlsPublicKeyCert {
+    #[serde(skip_serializing)]
+    cert: X509,
+    // rename, to match previous serializations (which used X509PublicKeyCert)
+    #[serde(rename = "certificate_der")]
+    der_cached: Vec<u8>,
+    #[serde(skip_serializing)]
+    hash_cached: Vec<u8>,
+}
+
+impl TlsPublicKeyCert {
+    /// Creates a certificate from ASN.1 DER encoding
+    pub fn new_from_der(cert_der: Vec<u8>) -> Result<Self, TlsPublicKeyCertCreationError> {
+        let cert = X509::from_der(&cert_der).map_err(|e| TlsPublicKeyCertCreationError {
+            internal_error: format!("Error parsing DER: {}", e),
+        })?;
+
+        Ok(Self {
+            hash_cached: Self::hash(&cert)?,
+            cert,
+            der_cached: cert_der,
+        })
+    }
+
+    /// Creates a certificate from an existing OpenSSL struct
+    pub fn new_from_x509(cert: X509) -> Result<Self, TlsPublicKeyCertCreationError> {
+        let der_cached = cert.to_der().map_err(|e| TlsPublicKeyCertCreationError {
+            internal_error: format!("Error encoding DER: {}", e),
+        })?;
+
+        Ok(Self {
+            hash_cached: Self::hash(&cert)?,
+            cert,
+            der_cached,
+        })
+    }
+
+    /// Returns the certificate in DER format
+    pub fn as_der(&self) -> &Vec<u8> {
+        &self.der_cached
+    }
+
+    /// Returns the certificate as an OpenSSL struct
+    pub fn as_x509(&self) -> &X509 {
+        &self.cert
+    }
+
+    /// Returns the certificate in protobuf format
+    pub fn to_proto(&self) -> X509PublicKeyCert {
+        X509PublicKeyCert {
+            certificate_der: self.der_cached.clone(),
+        }
+    }
+
+    fn hash(cert: &X509) -> Result<Vec<u8>, TlsPublicKeyCertCreationError> {
+        let hash = cert
+            .digest(MessageDigest::sha256())
+            .map_err(|e| TlsPublicKeyCertCreationError {
+                internal_error: format!("Error hashing certificate: {}", e),
+            })?
+            .iter()
+            .cloned()
+            .collect();
+        Ok(hash)
+    }
+}
+
+impl PartialEq for TlsPublicKeyCert {
+    /// Equality is determined by comparison of the SHA256 hash byte arrays.
+    fn eq(&self, rhs: &Self) -> bool {
+        self.hash_cached == rhs.hash_cached
+    }
+}
+
+impl Eq for TlsPublicKeyCert {}
+
+impl Hash for TlsPublicKeyCert {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.hash_cached.hash(state)
+    }
+}
+
+impl<'de> Deserialize<'de> for TlsPublicKeyCert {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de;
+
+        // Only the `certificate_der` field is serialized for `TlsPublicKeyCert`.
+        #[derive(Deserialize)]
+        struct CertHelper {
+            certificate_der: Vec<u8>,
+        }
+
+        let helper: CertHelper = Deserialize::deserialize(deserializer)?;
+        TlsPublicKeyCert::new_from_der(helper.certificate_der).map_err(de::Error::custom)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// Errors encountered during creation of a `TlsPublicKeyCert`.
+pub struct TlsPublicKeyCertCreationError {
+    pub internal_error: String,
+}
+
+impl Display for TlsPublicKeyCertCreationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for TlsPublicKeyCertCreationError {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// Errors from a TLS handshake performed as the server. Please refer to the
@@ -77,9 +197,6 @@ impl From<MalformedPeerCertificateError> for TlsServerHandshakeError {
 pub enum PeerNotAllowedError {
     /// Validation of claimed identity against authorized identities failed.
     HandshakeCertificateNodeIdNotAllowed,
-    /// Failed to DER encode the peer's certificate
-    /// offered during the handshake.
-    CannotDerEncodePeerCertFromHandshake { internal_error: String },
     /// Peer's certificate offered during the handshake
     /// doesn't match the trusted certificate.
     CertificatesDiffer,
@@ -159,8 +276,8 @@ impl AsyncRead for TlsStream {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<tokio::io::Result<usize>> {
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<tokio::io::Result<()>> {
         Pin::new(&mut self.ssl_stream).poll_read(cx, buf)
     }
 }
@@ -201,8 +318,8 @@ impl AsyncRead for TlsReadHalf {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<tokio::io::Result<usize>> {
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<tokio::io::Result<()>> {
         Pin::new(&mut self.read_half).poll_read(cx, buf)
     }
 }
@@ -496,25 +613,22 @@ pub trait TlsHandshake {
 /// which can be `All` to allow any node to connect.
 pub struct AllowedClients {
     nodes: SomeOrAllNodes,
-    // Using `Vec` rather than `BTreeSet` because the protobuf struct `X509PublicKeyCert` does not
-    // implement `Ord`. The use of protobuf structs will be cleaned up as follows:
-    // TODO (CRP-773): create a domain object for X509 certificates and use it here
-    certs: Vec<X509PublicKeyCert>,
+    certs: HashSet<TlsPublicKeyCert>,
 }
 
 impl AllowedClients {
     pub fn new(
         nodes: SomeOrAllNodes,
-        certs: Vec<X509PublicKeyCert>,
-    ) -> Result<Self, ClientsEmptyError> {
+        certs: HashSet<TlsPublicKeyCert>,
+    ) -> Result<Self, AllowedClientsError> {
         let allowed_clients = Self { nodes, certs };
         Self::ensure_clients_not_empty(&allowed_clients)?;
         Ok(allowed_clients)
     }
 
     /// Create an `AllowedClients` with a set of nodes, but no certificates.
-    pub fn new_with_nodes(node_ids: BTreeSet<NodeId>) -> Result<Self, ClientsEmptyError> {
-        Self::new(SomeOrAllNodes::Some(node_ids), vec![])
+    pub fn new_with_nodes(node_ids: BTreeSet<NodeId>) -> Result<Self, AllowedClientsError> {
+        Self::new(SomeOrAllNodes::Some(node_ids), HashSet::new())
     }
 
     /// Access the allowed nodes.
@@ -523,15 +637,15 @@ impl AllowedClients {
     }
 
     /// Access the allowed certificates.
-    pub fn certs(&self) -> &Vec<X509PublicKeyCert> {
+    pub fn certs(&self) -> &HashSet<TlsPublicKeyCert> {
         &self.certs
     }
 
-    fn ensure_clients_not_empty(candidate: &Self) -> Result<(), ClientsEmptyError> {
+    fn ensure_clients_not_empty(candidate: &Self) -> Result<(), AllowedClientsError> {
         match &candidate.nodes {
             SomeOrAllNodes::Some(node_ids) => {
                 if node_ids.is_empty() && candidate.certs.is_empty() {
-                    return Err(ClientsEmptyError {});
+                    return Err(AllowedClientsError::ClientsEmpty);
                 }
             }
             SomeOrAllNodes::All => { /* All is considered non-empty */ }
@@ -540,10 +654,16 @@ impl AllowedClients {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-/// Attempted to create an `AllowedClients` with `Some` clients
-/// but empty nodes and certificates lists.
-pub struct ClientsEmptyError {}
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// The allowed clients could not be created.
+pub enum AllowedClientsError {
+    /// Attempted to create an `AllowedClients` with a malformed certificate
+    /// protobuf.
+    MalformedCertProto { internal_error: String },
+    /// Attempted to create an `AllowedClients` with `Some` clients
+    /// but empty nodes and certificates lists.
+    ClientsEmpty,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// A list of node IDs, or "all nodes"
@@ -566,7 +686,6 @@ pub enum Peer {
 pub enum AuthenticatedPeer {
     /// Authenticated Node ID
     Node(NodeId),
-    // TODO (CRP-773): create a domain object for X509 certificates and use it here
     /// Authenticated X.509 certificate
-    Cert(X509PublicKeyCert),
+    Cert(TlsPublicKeyCert),
 }

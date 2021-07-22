@@ -5,8 +5,8 @@ use ic_canister_client::Sender;
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_nns_constants::ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_test_utils::{
-    itest_helpers::{get_value, local_test_on_nns_subnet, set_up_registry_canister},
-    registry::invariant_compliant_mutation_as_atomic_req,
+    itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
+    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::{
     node::v1::NodeRecord,

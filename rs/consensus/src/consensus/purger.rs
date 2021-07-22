@@ -103,10 +103,10 @@ impl Purger {
             let unvalidated_pool = pool_reader.pool().unvalidated();
             fn below_range_max(h: Height, range: &Option<HeightRange>) -> bool {
                 range.as_ref().map(|r| h < r.max).unwrap_or(false)
-            };
+            }
             fn above_range_min(h: Height, range: &Option<HeightRange>) -> bool {
                 range.as_ref().map(|r| h > r.min).unwrap_or(false)
-            };
+            }
             // Skip purging if we have unprocessed but needed CatchUpPackage
             let unvalidated_catch_up_range = unvalidated_pool.catch_up_package().height_range();
             if below_range_max(catch_up_height, &unvalidated_catch_up_range)
@@ -123,8 +123,12 @@ impl Purger {
                 return;
             }
             *prev_expected_batch_height = expected_batch_height;
-            // artifacts below or equal to expected batch height can be purged.
-            changeset.push(ChangeAction::PurgeUnvalidatedBelow(expected_batch_height));
+            // Because random_beacon of expected_batch_height - 1 is required to
+            // make progress, we should only purge below expected_batch_height - 1.
+            // This is safe because expected_batch_height is always greater than 0.
+            changeset.push(ChangeAction::PurgeUnvalidatedBelow(
+                expected_batch_height.decrement(),
+            ));
             trace!(
                 self.log,
                 "Purge unvalidated pool below {:?}",
@@ -289,7 +293,9 @@ mod tests {
             assert_eq!(changeset.len(), 1);
             assert_eq!(
                 changeset[0],
-                ChangeAction::PurgeUnvalidatedBelow(*expected_batch_height.read().unwrap())
+                ChangeAction::PurgeUnvalidatedBelow(
+                    expected_batch_height.read().unwrap().decrement()
+                )
             );
 
             // No more purge action when called again
@@ -318,7 +324,9 @@ mod tests {
             assert_eq!(changeset.len(), 2);
             assert_eq!(
                 changeset[0],
-                ChangeAction::PurgeUnvalidatedBelow(*expected_batch_height.read().unwrap())
+                ChangeAction::PurgeUnvalidatedBelow(
+                    expected_batch_height.read().unwrap().decrement()
+                )
             );
             assert_eq!(
                 changeset[1],

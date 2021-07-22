@@ -89,6 +89,11 @@ pub struct SetAuthorizedSubnetworkListArgs {
     pub subnets: Vec<SubnetId>,
 }
 
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct RemoveSubnetFromAuthorizedSubnetListArgs {
+    pub subnet: SubnetId,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

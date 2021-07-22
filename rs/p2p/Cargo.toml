@@ -6,8 +6,7 @@ edition = "2018"
 [dependencies]
 futures = "0.3.10"
 async-trait = "0.1.36"
-actix = "0.10.0"
-tokio = { version = "0.2.22", features = ["full"] }
+tokio = { version = "1.2.0", features = ["full"] }
 enum-map = "0.6.2"
 lru = { version = "0.6.0", default-features = false }
 ic-base-thread = { path = "../base/thread" }
@@ -40,9 +39,13 @@ strum_macros = "0.18.0"
 ic-consensus-message = { path = "../consensus/message" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-registry-common = { path = "../registry/common" }
+ic-test-utilities = { path = "../test_utilities" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-logger = { path = "../monitoring/logger" }
 ic-transport = { path = "../transport" }
 mockall = "0.7.2"
 tempfile = "3.1.0"
 proptest = "0.9.4"
+
+[features]
+malicious_code = ["ic-artifact-manager/malicious_code"]

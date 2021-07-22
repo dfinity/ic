@@ -1,5 +1,4 @@
 use candid::Encode;
-use ic_nns_common::registry::SUBNET_LIST_KEY;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet_with_mutations,
@@ -9,7 +8,9 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
-use ic_registry_keys::{make_catch_up_package_contents_key, make_subnet_record_key};
+use ic_registry_keys::{
+    make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
+};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_recover_subnet::RecoverSubnetPayload,
 };
@@ -54,8 +55,8 @@ use registry_canister::{
 /// sync'd on the same node records.
 #[test]
 fn test_recover_subnet_with_replacement_nodes() {
-    let num_nodes_in_subnet = 4 as usize;
-    let num_unassigned_nodes = 5 as usize;
+    let num_nodes_in_subnet = 4_usize;
+    let num_unassigned_nodes = 5_usize;
     let (init_mutate, subnet_id, unassigned_node_ids, node_mutations) =
         prepare_registry(num_nodes_in_subnet, num_unassigned_nodes);
 
@@ -88,7 +89,8 @@ fn test_recover_subnet_with_replacement_nodes() {
 
             // Ensure that the subnet record is there
             let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, SUBNET_LIST_KEY.as_bytes()).await;
+                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
+                    .await;
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
@@ -116,7 +118,8 @@ fn test_recover_subnet_with_replacement_nodes() {
             );
 
             let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, SUBNET_LIST_KEY.as_bytes()).await;
+                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
+                    .await;
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =

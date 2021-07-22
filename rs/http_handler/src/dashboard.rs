@@ -7,7 +7,7 @@ use ic_config::http_handler::Config;
 use ic_interfaces::state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_types::Height;
+use ic_types::{Height, ReplicaVersion};
 use ic_utils::ic_features::cow_state_feature;
 
 // See build.rs
@@ -36,6 +36,7 @@ pub(crate) fn handle(
         replicated_state: labeled_state.get_ref(),
         canisters: &canisters,
         cow_memory_manager_enabled,
+        replica_version: ReplicaVersion::default(),
     };
 
     match dashboard.render() {

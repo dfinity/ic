@@ -706,12 +706,12 @@ impl CowMemoryManagerCommon<ReadOnly> {
         }
     }
 
-    fn open_state_file(state_root: &PathBuf) -> File {
-        let mut state_file = state_root.clone();
-        state_file.push("state_file");
+    fn open_state_file(state_root: &Path) -> File {
+        let state_file = state_root.join("state_file");
         assert!(
             state_file.exists(),
-            format!("state_file should exists {:?}", state_file)
+            "state_file should exists {:?}",
+            state_file
         );
 
         OpenOptions::new()
@@ -795,10 +795,8 @@ impl CowMemoryManagerCommon<ReadWrite> {
         }
     }
 
-    fn open_state_file(state_root: &PathBuf) -> File {
-        let mut state_file = state_root.clone();
-
-        state_file.push("state_file");
+    fn open_state_file(state_root: &Path) -> File {
+        let state_file = state_root.join("state_file");
         let file_exists = state_file.exists();
 
         if !file_exists {
@@ -870,11 +868,11 @@ impl std::fmt::Debug for CowMemoryManagerCommon<ReadWrite> {
     }
 }
 
-fn get_slot_mgr_base_path(state_root: &PathBuf) -> PathBuf {
+fn get_slot_mgr_base_path(state_root: &Path) -> PathBuf {
     state_root.join("slot_db")
 }
 
-fn get_slot_mgr(state_root: &PathBuf) -> Arc<SlotMgr> {
+fn get_slot_mgr(state_root: &Path) -> Arc<SlotMgr> {
     // We open slot managers lazily intentionally.
     // This is efficient as for inactive canisters.
     // For active canisters/states they are opened once and remain open
@@ -912,7 +910,7 @@ impl<T: AccessPolicy> CowMemoryManagerCommon<T> {
                 // see if the round exists, else we will return
                 // the current mappings
                 let mut completed_rounds = slot_mgr.get_completed_rounds();
-                completed_rounds.sort();
+                completed_rounds.sort_unstable();
                 let max_round = completed_rounds.pop();
                 if max_round.is_some() && round <= max_round.unwrap() {
                     slot_mgr.get_mappings_for_round(round)?

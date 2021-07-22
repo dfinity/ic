@@ -8,7 +8,7 @@ use ic_nns_test_utils::{
     registry::{get_value, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::conversion_rate::v1::IcpXdrConversionRateRecord;
-use ic_registry_keys::XDR_PER_ICP_KEY;
+use ic_registry_keys::make_icp_xdr_conversion_rate_record_key;
 use registry_canister::{
     init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder},
     mutations::do_update_icp_xdr_conversion_rate::UpdateIcpXdrConversionRatePayload,
@@ -49,7 +49,11 @@ fn test_anonymous_and_unauthorized_users_cannot_update_icp_xdr_coversion_rate() 
 
         // There should therefore be no new conversion rate record
         assert_eq!(
-            get_value::<IcpXdrConversionRateRecord>(&registry, &XDR_PER_ICP_KEY.as_bytes()).await,
+            get_value::<IcpXdrConversionRateRecord>(
+                &registry,
+                &make_icp_xdr_conversion_rate_record_key().as_bytes()
+            )
+            .await,
             IcpXdrConversionRateRecord::default()
         );
 
@@ -65,7 +69,11 @@ fn test_anonymous_and_unauthorized_users_cannot_update_icp_xdr_coversion_rate() 
         );
         // There should therefore be no new conversion rate record
         assert_eq!(
-            get_value::<IcpXdrConversionRateRecord>(&registry, &XDR_PER_ICP_KEY.as_bytes()).await,
+            get_value::<IcpXdrConversionRateRecord>(
+                &registry,
+                &make_icp_xdr_conversion_rate_record_key().as_bytes()
+            )
+            .await,
             IcpXdrConversionRateRecord::default()
         );
 
@@ -108,9 +116,12 @@ fn test_governance_canister_icp_xdr_conversion_rate() {
                 .await
             );
             assert_eq!(
-                get_value::<IcpXdrConversionRateRecord>(&registry, XDR_PER_ICP_KEY.as_bytes())
-                    .await
-                    .xdr_permyriad_per_icp,
+                get_value::<IcpXdrConversionRateRecord>(
+                    &registry,
+                    make_icp_xdr_conversion_rate_record_key().as_bytes()
+                )
+                .await
+                .xdr_permyriad_per_icp,
                 TEST_VAL1
             );
 
@@ -126,9 +137,12 @@ fn test_governance_canister_icp_xdr_conversion_rate() {
                 .await
             );
             assert_eq!(
-                get_value::<IcpXdrConversionRateRecord>(&registry, XDR_PER_ICP_KEY.as_bytes())
-                    .await
-                    .xdr_permyriad_per_icp,
+                get_value::<IcpXdrConversionRateRecord>(
+                    &registry,
+                    make_icp_xdr_conversion_rate_record_key().as_bytes()
+                )
+                .await
+                .xdr_permyriad_per_icp,
                 TEST_VAL2
             );
 

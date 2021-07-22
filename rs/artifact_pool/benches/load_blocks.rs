@@ -62,7 +62,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
                 .into(),
         );
         let proposal = BlockProposal::fake(block, node_test_id(i as u64));
-        changeset.push(ChangeAction::AddToValidated(proposal.to_message()));
+        changeset.push(ChangeAction::AddToValidated(proposal.into_message()));
     }
     let time_source = FastForwardTimeSource::new();
     pool.apply_changes(time_source.as_ref(), changeset);

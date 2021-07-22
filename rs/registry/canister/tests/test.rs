@@ -2,12 +2,14 @@ mod test {
     use assert_matches::assert_matches;
     use candid::Encode;
     use canister_test::{Canister, Project, Runtime};
-    use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree};
+    use ic_crypto_tree_hash::{flatmap, lookup_path, Label, LabeledTree, MixedHashTree};
+    use ic_nns_common::registry::encode_or_panic;
+    use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+    use ic_nns_test_utils::itest_helpers::{
+        forward_call_via_universal_canister, set_up_universal_canister,
+    };
     use ic_nns_test_utils::{
-        itest_helpers::{
-            local_test_on_nns_subnet, maybe_upgrade_to_self,
-            registry_init_payload_allow_anonymous_user_for_tests, UpgradeTestingScenario,
-        },
+        itest_helpers::{local_test_on_nns_subnet, maybe_upgrade_to_self, UpgradeTestingScenario},
         registry::invariant_compliant_mutation_as_atomic_req,
     };
     use ic_nns_test_utils_macros::parameterized_upgrades;
@@ -79,9 +81,19 @@ mod test {
         // Set up: install the registry canister
         let mut canister = install_registry_canister(
             runtime,
-            registry_init_payload_allow_anonymous_user_for_tests(),
+            RegistryCanisterInitPayloadBuilder::new()
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .build(),
         )
         .await;
+
+        // Sets up a universal canister in lieu of the governance canister so it can
+        // impersonate it.
+        let fake_governance_canister = set_up_universal_canister(runtime).await;
+        assert_eq!(
+            fake_governance_canister.canister_id(),
+            GOVERNANCE_CANISTER_ID
+        );
 
         // Exercise the "atomic_mutate" method
         let mutation_request = RegistryAtomicMutateRequest {
@@ -91,16 +103,14 @@ mod test {
             ],
             preconditions: vec![],
         };
-        let mutation_resp: RegistryAtomicMutateResponse = canister
-            .update_("atomic_mutate", protobuf, mutation_request)
+        assert!(
+            forward_call_via_universal_canister(
+                &fake_governance_canister,
+                &canister,
+                "atomic_mutate",
+                encode_or_panic(&mutation_request)
+            )
             .await
-            .unwrap();
-        assert_eq!(
-            mutation_resp,
-            RegistryAtomicMutateResponse {
-                errors: vec![],
-                version: 2 as u64,
-            }
         );
 
         maybe_upgrade_to_self(&mut canister, upgrade_scenario).await;
@@ -114,7 +124,7 @@ mod test {
             get_value_res,
             RegistryGetValueResponse {
                 error: None,
-                version: 2 as u64,
+                version: 2_u64,
                 value: b"portugal".to_vec()
             }
         );
@@ -126,29 +136,22 @@ mod test {
             .unwrap();
         assert_eq!(
             get_latest_version_resp,
-            RegistryGetLatestVersionResponse { version: 2 as u64 }
+            RegistryGetLatestVersionResponse { version: 2_u64 }
         );
 
         // Mutate an existing key to be able to test the existence of several values for
         // one key.
-        let atomic_mutate_resp: RegistryAtomicMutateResponse = canister
-            .update_(
+        assert!(
+            forward_call_via_universal_canister(
+                &fake_governance_canister,
+                &canister,
                 "atomic_mutate",
-                protobuf,
-                RegistryAtomicMutateRequest {
+                encode_or_panic(&RegistryAtomicMutateRequest {
                     mutations: vec![update("zurich", "die Schweiz")],
                     preconditions: vec![],
-                },
+                })
             )
             .await
-            .unwrap();
-
-        assert_eq!(
-            atomic_mutate_resp,
-            RegistryAtomicMutateResponse {
-                errors: vec![],
-                version: 3 as u64,
-            }
         );
 
         maybe_upgrade_to_self(&mut canister, upgrade_scenario).await;
@@ -174,7 +177,7 @@ mod test {
 
         assert_eq!(
             get_latest_version_res,
-            RegistryGetLatestVersionResponse { version: 3 as u64 }
+            RegistryGetLatestVersionResponse { version: 3_u64 }
         );
 
         // Try to get a non-existing key
@@ -210,25 +213,32 @@ mod test {
 
         let mut canister = install_registry_canister(
             runtime,
-            registry_init_payload_allow_anonymous_user_for_tests(),
+            RegistryCanisterInitPayloadBuilder::new()
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .build(),
         )
         .await;
+
+        // Sets up a universal canister in lieu of the governance canister so it can
+        // impersonate it.
+        let fake_governance_canister = set_up_universal_canister(runtime).await;
+        assert_eq!(
+            fake_governance_canister.canister_id(),
+            GOVERNANCE_CANISTER_ID
+        );
 
         let mutation_request = RegistryAtomicMutateRequest {
             mutations: vec![insert("key1", "value1")],
             preconditions: vec![],
         };
-        let mutation_res: RegistryAtomicMutateResponse = canister
-            .update_("atomic_mutate", protobuf, mutation_request)
+        assert!(
+            forward_call_via_universal_canister(
+                &fake_governance_canister,
+                &canister,
+                "atomic_mutate",
+                encode_or_panic(&mutation_request)
+            )
             .await
-            .unwrap();
-
-        assert_eq!(
-            mutation_res,
-            RegistryAtomicMutateResponse {
-                errors: vec![],
-                version: 2u64,
-            }
         );
 
         maybe_upgrade_to_self(&mut canister, upgrade_scenario).await;
@@ -253,9 +263,19 @@ mod test {
 
         let mut canister = install_registry_canister(
             runtime,
-            registry_init_payload_allow_anonymous_user_for_tests(),
+            RegistryCanisterInitPayloadBuilder::new()
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .build(),
         )
         .await;
+
+        // Sets up a universal canister in lieu of the governance canister so it can
+        // impersonate it.
+        let fake_governance_canister = set_up_universal_canister(runtime).await;
+        assert_eq!(
+            fake_governance_canister.canister_id(),
+            GOVERNANCE_CANISTER_ID
+        );
 
         let certified_response: CertifiedResponse = canister
             .query_("get_certified_changes_since", protobuf, changes_since(1))
@@ -273,18 +293,14 @@ mod test {
             mutations: vec![insert("key1", "value1")],
             preconditions: vec![],
         };
-
-        let mutation_res: RegistryAtomicMutateResponse = canister
-            .update_("atomic_mutate", protobuf, mutation_request.clone())
+        assert!(
+            forward_call_via_universal_canister(
+                &fake_governance_canister,
+                &canister,
+                "atomic_mutate",
+                encode_or_panic(&mutation_request)
+            )
             .await
-            .unwrap();
-
-        assert_eq!(
-            mutation_res,
-            RegistryAtomicMutateResponse {
-                errors: vec![],
-                version: 2u64,
-            }
         );
 
         maybe_upgrade_to_self(&mut canister, upgrade_scenario).await;
@@ -300,6 +316,63 @@ mod test {
                 Label::from("current_version") => T::Leaf(vec![0x02]),
             ))
         );
+    }
+
+    #[test]
+    fn test_does_not_return_more_than_1000_certified_deltas() {
+        fn count_deltas(tree: &LabeledTree<Vec<u8>>) -> usize {
+            match lookup_path(tree, &[&b"delta"[..]]).unwrap() {
+                LabeledTree::SubTree(children) => children.len(),
+                _ => panic!("unexpected data tree shape: {:?}", tree),
+            }
+        }
+        fn has_delta(tree: &LabeledTree<Vec<u8>>, version: u64) -> bool {
+            lookup_path(&tree, &[&b"delta"[..], &version.to_be_bytes()[..]]).is_some()
+        }
+
+        local_test_on_nns_subnet(|runtime| async move {
+            const MAX_VERSIONS_PER_QUERY: u64 = 1000;
+
+            let canister = install_registry_canister(&runtime, {
+                let mut builder = RegistryCanisterInitPayloadBuilder::new();
+                builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req());
+                for v in 1..(3 * MAX_VERSIONS_PER_QUERY / 2) {
+                    let mutation_request = RegistryAtomicMutateRequest {
+                        mutations: vec![insert(format!("key{}", v), "value")],
+                        preconditions: vec![],
+                    };
+                    builder.push_init_mutate_request(mutation_request);
+                }
+                builder.build()
+            })
+            .await;
+
+            let certified_response: CertifiedResponse = canister
+                .query_("get_certified_changes_since", protobuf, changes_since(0))
+                .await
+                .unwrap();
+
+            let tree = data_part(&certified_response);
+            assert_eq!(count_deltas(&tree), MAX_VERSIONS_PER_QUERY as usize);
+            assert!(has_delta(&tree, 1));
+            assert!(has_delta(&tree, MAX_VERSIONS_PER_QUERY));
+
+            let certified_response: CertifiedResponse = canister
+                .query_(
+                    "get_certified_changes_since",
+                    protobuf,
+                    changes_since(MAX_VERSIONS_PER_QUERY),
+                )
+                .await
+                .unwrap();
+
+            let tree = data_part(&certified_response);
+            assert_eq!(count_deltas(&tree), MAX_VERSIONS_PER_QUERY as usize / 2);
+            assert!(has_delta(&tree, MAX_VERSIONS_PER_QUERY + 1));
+            assert!(has_delta(&tree, 3 * MAX_VERSIONS_PER_QUERY / 2));
+
+            Ok(())
+        });
     }
 
     #[test]
@@ -335,7 +408,7 @@ mod test {
                 .update_("atomic_mutate", protobuf, mutation_request.clone())
                 .await;
             assert_matches!(response,
-                Err(s) if s.contains("is not authorized to call this method: atomic_mutate"));
+                Err(s) if s.contains("not authorized"));
 
             // Go through an upgrade cycle, and verify that it still works the same
             canister.upgrade_to_self_binary(vec![]).await.unwrap();
@@ -343,7 +416,7 @@ mod test {
                 .update_("atomic_mutate", protobuf, mutation_request.clone())
                 .await;
             assert_matches!(response,
-                Err(s) if s.contains("is not authorized to call this method: atomic_mutate"));
+                Err(s) if s.contains("not authorized"));
 
             Ok(())
         });
@@ -374,7 +447,7 @@ mod test {
             assert_eq!(
                 RegistryGetValueResponse {
                     error: None,
-                    version: 2 as u64,
+                    version: 2_u64,
                     value: b"4634 m".to_vec()
                 },
                 canister
@@ -389,7 +462,7 @@ mod test {
             assert_eq!(
                 RegistryGetValueResponse {
                     error: None,
-                    version: 2 as u64,
+                    version: 2_u64,
                     value: b"4545 m".to_vec()
                 },
                 canister
@@ -400,7 +473,7 @@ mod test {
             assert_eq!(
                 RegistryGetValueResponse {
                     error: None,
-                    version: 3 as u64,
+                    version: 3_u64,
                     value: b"4478 m".to_vec()
                 },
                 canister

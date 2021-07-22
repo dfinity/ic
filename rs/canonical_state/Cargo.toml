@@ -19,6 +19,7 @@ serde_bytes = "0.11"
 serde_cbor = "0.11.1"
 
 [dev-dependencies]
+ic-test-utilities = { path = "../test_utilities" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 ic-sys = {path = "../sys"}

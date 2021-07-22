@@ -9,9 +9,9 @@ pub mod protobuf;
 #[cfg(test)]
 mod tests;
 
-impl Into<SecretKey> for SecretKeyBytes {
-    fn into(self) -> SecretKey {
-        bls::fr_from_bytes(&self.0)
+impl From<SecretKeyBytes> for SecretKey {
+    fn from(val: SecretKeyBytes) -> Self {
+        bls::fr_from_bytes(&val.0)
     }
 }
 impl From<SecretKey> for SecretKeyBytes {
@@ -88,9 +88,9 @@ impl From<CombinedSignature> for CombinedSignatureBytes {
     }
 }
 
-impl Into<String> for IndividualSignatureBytes {
-    fn into(self) -> String {
-        base64::encode(&self.0[..])
+impl From<IndividualSignatureBytes> for String {
+    fn from(val: IndividualSignatureBytes) -> Self {
+        base64::encode(&val.0[..])
     }
 }
 impl TryFrom<&str> for IndividualSignatureBytes {
@@ -157,9 +157,9 @@ impl TryFrom<&String> for PopBytes {
     }
 }
 
-impl Into<String> for CombinedSignatureBytes {
-    fn into(self) -> String {
-        base64::encode(&self.0[..])
+impl From<CombinedSignatureBytes> for String {
+    fn from(val: CombinedSignatureBytes) -> Self {
+        base64::encode(&val.0[..])
     }
 }
 impl TryFrom<&str> for CombinedSignatureBytes {
@@ -193,9 +193,9 @@ impl TryFrom<&String> for CombinedSignatureBytes {
     }
 }
 
-impl Into<String> for PublicKeyBytes {
-    fn into(self) -> String {
-        base64::encode(&self.0[..])
+impl From<PublicKeyBytes> for String {
+    fn from(val: PublicKeyBytes) -> Self {
+        base64::encode(&val.0[..])
     }
 }
 impl TryFrom<&str> for PublicKeyBytes {
@@ -226,9 +226,9 @@ impl TryFrom<&String> for PublicKeyBytes {
     }
 }
 
-impl Into<String> for SecretKeyBytes {
-    fn into(self) -> String {
-        base64::encode(&self.0[..])
+impl From<SecretKeyBytes> for String {
+    fn from(val: SecretKeyBytes) -> Self {
+        base64::encode(&val.0[..])
     }
 }
 impl TryFrom<&str> for SecretKeyBytes {

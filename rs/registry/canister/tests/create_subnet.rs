@@ -5,7 +5,7 @@ use dfn_candid::candid;
 
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
-use ic_nns_common::registry::{encode_or_panic, SUBNET_LIST_KEY};
+use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
@@ -18,7 +18,7 @@ use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_node_key, make_node_record_key,
-    make_routing_table_record_key, make_subnet_record_key,
+    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
@@ -96,13 +96,15 @@ fn test_the_anonymous_user_cannot_create_a_subnet() {
         .await;
 
         let initial_subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, SUBNET_LIST_KEY.as_bytes()).await;
+            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
+                .await;
 
         let payload = CreateSubnetPayload {
             node_ids: node_ids.clone(),
             subnet_id_override: None,
             ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 6 * 1024 * 1024,
+            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
@@ -132,7 +134,8 @@ fn test_the_anonymous_user_cannot_create_a_subnet() {
 
         // .. And there should therefore be no new subnet record (any, actually)
         let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, SUBNET_LIST_KEY.as_bytes()).await;
+            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
+                .await;
         assert_eq!(subnet_list_record, initial_subnet_list_record);
 
         // Go through an upgrade cycle, and verify that it still works the same
@@ -143,7 +146,8 @@ fn test_the_anonymous_user_cannot_create_a_subnet() {
         assert_matches!(response,
             Err(s) if s.contains("is not authorized to call this method: create_subnet"));
         let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, SUBNET_LIST_KEY.as_bytes()).await;
+            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
+                .await;
         assert_eq!(subnet_list_record, initial_subnet_list_record);
 
         Ok(())
@@ -173,13 +177,15 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_create_a_subnet() {
         .await;
 
         let initial_subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, SUBNET_LIST_KEY.as_bytes()).await;
+            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
+                .await;
 
         let payload = CreateSubnetPayload {
             node_ids: node_ids.clone(),
             subnet_id_override: None,
             ingress_bytes_per_block_soft_cap: 3 * 1024 * 1024,
             max_ingress_bytes_per_message: 6 * 1024 * 1024,
+            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
@@ -212,7 +218,8 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_create_a_subnet() {
         );
         // .. And there should therefore be no new subnet record (any, actually)
         let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, SUBNET_LIST_KEY.as_bytes()).await;
+            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
+                .await;
         assert_eq!(subnet_list_record, initial_subnet_list_record);
 
         Ok(())
@@ -259,7 +266,8 @@ fn test_accepted_proposal_mutates_the_registry_no_subnet_apriori() {
 
         // first, ensure there is no subnet yet
         let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, SUBNET_LIST_KEY.as_bytes()).await;
+            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
+                .await;
         assert_eq!(subnet_list_record, SubnetListRecord::default());
 
         // create payload message
@@ -268,6 +276,7 @@ fn test_accepted_proposal_mutates_the_registry_no_subnet_apriori() {
             subnet_id_override: None,
             ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
@@ -300,7 +309,8 @@ fn test_accepted_proposal_mutates_the_registry_no_subnet_apriori() {
         // Now let's check directly in the registry that the mutation actually happened
         // by observing a new subnet in the subnet list
         let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, SUBNET_LIST_KEY.as_bytes()).await;
+            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
+                .await;
         assert_ne!(subnet_list_record, SubnetListRecord::default());
 
         let subnet_ids: Vec<SubnetId> = subnet_list_record
@@ -309,7 +319,7 @@ fn test_accepted_proposal_mutates_the_registry_no_subnet_apriori() {
             .map(|s| SubnetId::new(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
             .collect();
         assert_eq!(subnet_ids.len(), 1);
-        let subnet_id = subnet_ids[0 as usize];
+        let subnet_id = subnet_ids[0_usize];
 
         // Now let's check directly in the registry that the mutation actually happened
         let subnet_record =
@@ -372,7 +382,8 @@ fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
 
         // first, ensure there is no subnet yet
         let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, SUBNET_LIST_KEY.as_bytes()).await;
+            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
+                .await;
         assert_eq!(subnet_list_record, SubnetListRecord::default());
 
         // then, create a preexisting set of dummy subnets and insert in the
@@ -383,7 +394,12 @@ fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
         let subnet_list_record = SubnetListRecord {
             subnets: preexisting_subnets,
         };
-        insert_value(&registry, SUBNET_LIST_KEY.as_bytes(), &subnet_list_record).await;
+        insert_value(
+            &registry,
+            make_subnet_list_record_key().as_bytes(),
+            &subnet_list_record,
+        )
+        .await;
 
         // Add an empty routing table to the registry
         // This is needed to satisfy preconditions the create_subnet depends on,
@@ -397,7 +413,8 @@ fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
         .await;
 
         let former_subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, SUBNET_LIST_KEY.as_bytes()).await;
+            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
+                .await;
         assert_eq!(former_subnet_list_record.subnets.len(), 8);
 
         // create payload message
@@ -406,6 +423,7 @@ fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
             subnet_id_override: None,
             ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
@@ -438,7 +456,8 @@ fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
         // Now let's check directly in the registry that the mutation actually happened
         // by observing a new subnet in the subnet list
         let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, SUBNET_LIST_KEY.as_bytes()).await;
+            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
+                .await;
         assert_eq!(subnet_list_record.subnets.len(), 9);
 
         let fresh_subnet_ids: Vec<SubnetId> = subnet_list_record
@@ -448,7 +467,7 @@ fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
             .map(|s| SubnetId::new(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
             .collect();
         assert_eq!(fresh_subnet_ids.len(), 1);
-        let subnet_id = fresh_subnet_ids[0 as usize];
+        let subnet_id = fresh_subnet_ids[0_usize];
 
         // Now let's check directly in the registry that the mutation actually happened
         let subnet_record =

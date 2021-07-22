@@ -20,23 +20,29 @@ members = [
   "crypto/internal/crypto_lib/basic_sig/ecdsa_secp256_wycheproof_tests",
   "crypto/internal/crypto_lib/basic_sig/ed25519",
   "crypto/internal/crypto_lib/basic_sig/iccsa",
+  "crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
   "crypto/internal/crypto_lib/bls12_381/serde/miracl",
   "crypto/internal/crypto_lib/bls12_381/common",
   "crypto/internal/crypto_lib/fs_ni_dkg",
   "crypto/internal/crypto_lib/multi_sig/bls12_381",
+  "crypto/secrets_containers",
   "crypto/internal/crypto_lib/threshold_sig/bls12_381",
   "crypto/internal/crypto_lib/tls",
   "crypto/internal/crypto_lib/types",
   "crypto/internal/crypto_service_provider",
+  "crypto/internal/csp_test_utils",
   "crypto/internal/logmon",
   "crypto/internal/test_vectors",
-  "crypto/key_validation",
+  "crypto/node_key_validation",
   "crypto/sha256",
+  "crypto/test_utils",
+  "crypto/test_utils/threshold_sigs",
   "crypto/tls_interfaces",
   "crypto/tls",
   "crypto/tree_hash",
   "crypto/utils/basic_sig",
   "crypto/utils/threshold_sig",
+  "drun",
   "embedders",
   "execution_environment",
   "http_handler",
@@ -75,7 +81,6 @@ members = [
   "replicated_state",
   "rosetta-api/ledger_canister",
   "rosetta-api/cycles_minting_canister",
-  "runtime",
   "rust_canisters/dfn_core",
   "rust_canisters/dfn_candid",
   "rust_canisters/dfn_http",
@@ -89,13 +94,17 @@ members = [
   "state_layout",
   "sys",
   "system_api",
+  "test_utilities",
+  "test_utilities/artifact_pool",
   "transport",
   "tree_deserializer",
   "types/types",
+  "types/types_test_utils",
   "types/base_types",
   "types/error_types",
   "types/ic00_types",
   "types/wasm_types",
+  "universal_canister/lib",
   "utils",
   "validator",
   "wasm_utils",
@@ -115,11 +124,11 @@ debug = true
 # Optimise the miracl_core_bls12381 cryptographic library, or else NiDKG tests take 4 hours.
 opt-level = 3
 
-[patch.crates-io.ic-types]
-version = "0.1.2"
-git = "https://github.com/dfinity/agent-rs.git"
-rev = "6652a800969e7e09ecdf40ed16a2d78abecde7d3"
-
-
 [patch.crates-io]
 raw-cpuid812 = { package="raw-cpuid", version="8.1.2", git = "https://github.com/dfinity-lab/rust-cpuid.git", rev = "03c258337c387dbf559778ba3cb886d45ed46b24"}
+
+
+[patch.crates-io.oid-registry]
+version = "0.1.1"
+git = "https://github.com/dfinity/oid-registry.git"
+rev = "79a4482af85b364a137affd5848ef534e88a4176"

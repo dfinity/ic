@@ -141,7 +141,7 @@ fn induct_loopback_stream_reject_response() {
             },
             SignalConfig { end: 21 },
         );
-        let msg = loopback_stream.messages.iter().next().unwrap().1.clone();
+        let msg = loopback_stream.messages().iter().next().unwrap().1.clone();
 
         initial_state.put_canister_state(initial_canister_state);
         initial_state.put_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
@@ -160,9 +160,7 @@ fn induct_loopback_stream_reject_response() {
             RejectCode::DestinationInvalid,
             StateError::CanisterNotFound(*REMOTE_CANISTER).to_string(),
         );
-        expected_loopback_stream
-            .messages
-            .push(generate_reject_response(msg, context));
+        expected_loopback_stream.push(generate_reject_response(msg, context));
         expected_state.put_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
 
         let inducted_state = stream_handler.induct_loopback_stream(initial_state);
@@ -215,7 +213,7 @@ fn induct_loopback_stream_success() {
             *INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
-        for (_stream_index, msg) in loopback_stream.messages.iter() {
+        for (_stream_index, msg) in loopback_stream.messages().iter() {
             assert_eq!(
                 Ok(()),
                 expected_canister_state.push_input(QUEUE_INDEX_NONE, msg.clone())
@@ -461,7 +459,7 @@ fn enqueue_reject_response_queue_full() {
 
         // The expected output stream should have an extra reject `Response` appended.
         let mut expected_stream = stream.clone();
-        expected_stream.messages.push(
+        expected_stream.push(
             Response {
                 originator: msg.sender,
                 respondent: msg.receiver,
@@ -504,7 +502,7 @@ fn enqueue_reject_response_canister_not_found() {
 
         // The expected output stream should have an extra reject `Response` appended.
         let mut expected_stream = stream.clone();
-        expected_stream.messages.push(
+        expected_stream.push(
             Response {
                 originator: msg.sender,
                 respondent: msg.receiver,
@@ -597,8 +595,8 @@ fn induct_stream_slices_partial_success() {
         stream_slice.push_message(request_to_missing_canister.clone());
 
         // And expect one signal and one reject Response in the output stream.
-        expected_stream.signals_end.inc_assign();
-        expected_stream.messages.push(generate_reject_response(
+        expected_stream.increment_signals_end();
+        expected_stream.push(generate_reject_response(
             request_to_missing_canister,
             RejectContext::new(
                 RejectCode::DestinationInvalid,
@@ -611,21 +609,21 @@ fn induct_stream_slices_partial_success() {
             test_request(*LOCAL_CANISTER, *LOCAL_CANISTER).into();
         stream_slice.push_message(request_from_mismatched_subnet);
         // And expect one signal only (no reject Response) in the output stream.
-        expected_stream.signals_end.inc_assign();
+        expected_stream.increment_signals_end();
 
         // Push a request from a canister not on any known subnet.
         let request_from_mismatched_subnet: RequestOrResponse =
             test_request(*UNKNOWN_CANISTER, *LOCAL_CANISTER).into();
         stream_slice.push_message(request_from_mismatched_subnet);
         // And expect one signal only (no reject Response) in the output stream.
-        expected_stream.signals_end.inc_assign();
+        expected_stream.increment_signals_end();
 
         // Push a response addressed to a missing canister into the input stream.
         let response_to_missing_canister: RequestOrResponse =
             test_response(*REMOTE_CANISTER, *REMOTE_CANISTER).into();
         stream_slice.push_message(response_to_missing_canister);
         // And expect one signal in the output stream.
-        expected_stream.signals_end.inc_assign();
+        expected_stream.increment_signals_end();
 
         expected_state.put_canister_state(expected_canister_state);
         expected_state.put_streams(btreemap![REMOTE_SUBNET => expected_stream]);
@@ -761,7 +759,7 @@ fn process_certified_stream_slices_success() {
             NumSeconds::from(100_000),
         );
         // ...the 3 loopback messages...
-        for (_stream_index, msg) in loopback_stream.messages.iter() {
+        for (_stream_index, msg) in loopback_stream.messages().iter() {
             assert_eq!(
                 Ok(()),
                 expected_canister_state.push_input(QUEUE_INDEX_NONE, msg.clone())
@@ -913,13 +911,13 @@ fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> St
         )
         .build();
 
-    Stream {
-        messages: slice
+    Stream::new(
+        slice
             .messages()
             .cloned()
             .unwrap_or_else(|| StreamIndexedQueue::with_begin(msg_begin)),
-        signals_end: slice.header().signals_end,
-    }
+        slice.header().signals_end,
+    )
 }
 
 #[derive(Clone)]

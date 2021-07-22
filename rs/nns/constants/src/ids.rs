@@ -11,7 +11,7 @@ lazy_static! {
     // -- The keypairs/pubkeys/principals of the owners of test neurons
 
     pub static ref TEST_NEURON_1_OWNER_KEYPAIR: ed25519_dalek::Keypair = {
-        let mut rng = ChaChaRng::seed_from_u64(2000 as u64);
+        let mut rng = ChaChaRng::seed_from_u64(2000_u64);
         ed25519_dalek::Keypair::generate(&mut rng)
     };
     pub static ref TEST_NEURON_1_OWNER_PUBKEY : UserPublicKey = UserPublicKey {
@@ -21,7 +21,7 @@ lazy_static! {
     pub static ref TEST_NEURON_1_OWNER_PRINCIPAL: PrincipalId = PrincipalId::new_self_authenticating(
         &ed25519_public_key_to_der(TEST_NEURON_1_OWNER_PUBKEY.key.clone()));
     pub static ref TEST_NEURON_2_OWNER_KEYPAIR: ed25519_dalek::Keypair = {
-        let mut rng = ChaChaRng::seed_from_u64(3000 as u64);
+        let mut rng = ChaChaRng::seed_from_u64(3000_u64);
         ed25519_dalek::Keypair::generate(&mut rng)
     };
     pub static ref TEST_NEURON_2_OWNER_PUBKEY : UserPublicKey = UserPublicKey {
@@ -31,7 +31,7 @@ lazy_static! {
     pub static ref TEST_NEURON_2_OWNER_PRINCIPAL: PrincipalId = PrincipalId::new_self_authenticating(
         &ed25519_public_key_to_der(TEST_NEURON_2_OWNER_PUBKEY.key.clone()));
     pub static ref TEST_NEURON_3_OWNER_KEYPAIR: ed25519_dalek::Keypair = {
-        let mut rng = ChaChaRng::seed_from_u64(4000 as u64);
+        let mut rng = ChaChaRng::seed_from_u64(4000_u64);
         ed25519_dalek::Keypair::generate(&mut rng)
     };
     pub static ref TEST_NEURON_3_OWNER_PUBKEY : UserPublicKey = UserPublicKey {
@@ -43,7 +43,7 @@ lazy_static! {
 
     /// TEST_USER1 is a generic test identity that can be used for anything. It is not tied to any test neuron.
     pub static ref TEST_USER1_KEYPAIR: ed25519_dalek::Keypair = {
-        let mut rng = ChaChaRng::seed_from_u64(5000 as u64);
+        let mut rng = ChaChaRng::seed_from_u64(5000_u64);
         ed25519_dalek::Keypair::generate(&mut rng)
     };
     pub static ref TEST_USER1_PUBKEY : UserPublicKey = UserPublicKey {

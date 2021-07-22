@@ -245,10 +245,7 @@ pub enum PersistenceError {
 
 impl PersistenceError {
     pub fn is_invalid_heap_file(&self) -> bool {
-        match self {
-            PersistenceError::InvalidHeapFile { .. } => true,
-            _ => false,
-        }
+        matches!(self, PersistenceError::InvalidHeapFile { .. })
     }
 }
 

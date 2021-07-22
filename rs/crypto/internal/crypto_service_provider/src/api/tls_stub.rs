@@ -1,9 +1,9 @@
 use crate::api::tls_stub::tls_errors::{CspTlsClientHandshakeError, CspTlsServerHandshakeError};
 use crate::tls_stub::cert_chain::CspCertificateChain;
 use async_trait::async_trait;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::TlsStream;
-use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use openssl::x509::X509;
+use std::collections::HashSet;
 use tokio::net::TcpStream;
 
 pub mod tls_errors;
@@ -39,10 +39,6 @@ pub trait CspTlsServerHandshake {
     /// returned certificate chain is `None`.
     ///
     /// # Errors
-    /// * CspTlsServerHandshakeError::MalformedSelfCertificate if `self_cert` is
-    ///   malformed.
-    /// * CspTlsServerHandshakeError::MalformedClientCertificate if one of the
-    ///   `trusted_client_certs` is malformed.
     /// * CspTlsServerHandshakeError::CreateAcceptorError if there is a problem
     ///   configuring the server for accepting connections from clients.
     /// * CspTlsServerHandshakeError::HandshakeError if there is an error during
@@ -57,8 +53,8 @@ pub trait CspTlsServerHandshake {
     async fn perform_tls_server_handshake(
         &self,
         tcp_stream: TcpStream,
-        self_cert: X509PublicKeyCert,
-        trusted_client_certs: Vec<X509PublicKeyCert>,
+        self_cert: TlsPublicKeyCert,
+        trusted_client_certs: HashSet<TlsPublicKeyCert>,
     ) -> Result<(TlsStream, Option<CspCertificateChain>), CspTlsServerHandshakeError>;
 
     /// Transforms a TCP stream into a TLS stream by performing a TLS server
@@ -82,8 +78,6 @@ pub trait CspTlsServerHandshake {
     /// Returns the TLS stream.
     ///
     /// # Errors
-    /// * CspTlsServerHandshakeError::MalformedSelfCertificate if `self_cert` is
-    ///   malformed.
     /// * CspTlsServerHandshakeError::CreateAcceptorError if there is a problem
     ///   configuring the server for accepting connections from clients.
     /// * CspTlsServerHandshakeError::HandshakeError if there is an error during
@@ -95,10 +89,12 @@ pub trait CspTlsServerHandshake {
     /// * CspTlsServerHandshakeError::WrongSecretKeyType if the secret key
     ///   corresponding to `self_cert` has the wrong type in the secret key
     ///   store.
+    /// * CspTlsServerHandshakeError::MalformedClientCertificate if any
+    ///   certificate in the chain offered by the client is malformed.
     async fn perform_tls_server_handshake_without_client_auth(
         &self,
         tcp_stream: TcpStream,
-        self_cert: X509PublicKeyCert,
+        self_cert: TlsPublicKeyCert,
     ) -> Result<TlsStream, CspTlsServerHandshakeError>;
 }
 
@@ -122,10 +118,6 @@ pub trait CspTlsClientHandshake {
     /// the private key corresponding to `self_cert` or the TLS session keys.
     ///
     /// # Errors
-    /// * CspTlsClientHandshakeError::MalformedSelfCertificate if `self_cert` is
-    ///   malformed.
-    /// * CspTlsClientHandshakeError::MalformedServerCertificate if
-    ///   `trusted_server_cert` is malformed.
     /// * CspTlsClientHandshakeError::CreateConnectorError if there is a problem
     ///   configuring the TLS client for performing the handshake.
     /// * CspTlsClientHandshakeError::HandshakeError if there is an error during
@@ -137,10 +129,12 @@ pub trait CspTlsClientHandshake {
     /// * CspTlsClientHandshakeError::WrongSecretKeyType if the secret key
     ///   corresponding to `self_cert` has the wrong type in the secret key
     ///   store.
+    /// * CspTlsClientHandshakeError::MalformedServerCertificate if the
+    ///   certificate offered by the server is malformed.
     async fn perform_tls_client_handshake(
         &self,
         tcp_stream: TcpStream,
-        self_cert: X509PublicKeyCert,
-        trusted_server_cert: X509PublicKeyCert,
-    ) -> Result<(TlsStream, X509), CspTlsClientHandshakeError>;
+        self_cert: TlsPublicKeyCert,
+        trusted_server_cert: TlsPublicKeyCert,
+    ) -> Result<(TlsStream, TlsPublicKeyCert), CspTlsClientHandshakeError>;
 }

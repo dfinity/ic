@@ -41,6 +41,8 @@ pub fn miracl_fr_to_bytes(big: &BIG) -> FrBytes {
     FrBytes(buffer)
 }
 
+// TODO(IDX-1866)
+#[allow(clippy::result_unit_err)]
 /// Parses an `Fr` in a standard, library-independent form to a MIRACL `BIG`.
 ///
 /// # Errors
@@ -84,6 +86,8 @@ pub fn miracl_g1_to_bytes(ecp: &ECP) -> G1Bytes {
     G1Bytes(buffer)
 }
 
+// TODO(IDX-1866)
+#[allow(clippy::result_unit_err)]
 /// Parses a `G1` in a standard, library-independent form to a MIRACL `ECP`.
 ///
 /// Note: This does NOT verify that the parsed value is actually in `G1`.
@@ -96,7 +100,7 @@ pub fn miracl_g1_to_bytes(ecp: &ECP) -> G1Bytes {
 ///   - The point's x-coordinate is infinity, but the INFINITY flag is *not* set
 ///   - The INFINITY flag is set, but the encoded x-coordinate is *not*
 ///     all-zeroes
-fn miracl_g1_from_bytes_unchecked(bytes: &[u8; G1Bytes::SIZE]) -> Result<ECP, ()> {
+pub fn miracl_g1_from_bytes_unchecked(bytes: &[u8; G1Bytes::SIZE]) -> Result<ECP, ()> {
     if (bytes[G1Bytes::FLAG_BYTE_OFFSET] & G1Bytes::COMPRESSED_FLAG) == 0 {
         return Err(());
     }
@@ -138,6 +142,8 @@ fn miracl_g1_from_bytes_unchecked(bytes: &[u8; G1Bytes::SIZE]) -> Result<ECP, ()
     }
 }
 
+// TODO(IDX-1866)
+#[allow(clippy::result_unit_err)]
 /// Parses a `G1` in a standard, library-independent form to a MIRACL `ECP`.
 ///
 /// Also verifies that the point is in the correct prime order subgroup.
@@ -196,6 +202,8 @@ pub fn miracl_g2_to_bytes(ecp2: &ECP2) -> G2Bytes {
     G2Bytes(buffer)
 }
 
+// TODO(IDX-1866)
+#[allow(clippy::result_unit_err)]
 /// Parses a `G2` in a standard, library-independent form to a MIRACL `ECP2`.
 ///
 /// Note: This does NOT verify that the parsed value is actually in `G2`.
@@ -208,7 +216,7 @@ pub fn miracl_g2_to_bytes(ecp2: &ECP2) -> G2Bytes {
 ///   - The point's x-coordinate is infinity, but the INFINITY flag is *not* set
 ///   - The INFINITY flag is set, but the encoded x-coordinate is *not*
 ///     all-zeroes
-fn miracl_g2_from_bytes_unchecked(bytes: &[u8; G2Bytes::SIZE]) -> Result<ECP2, ()> {
+pub fn miracl_g2_from_bytes_unchecked(bytes: &[u8; G2Bytes::SIZE]) -> Result<ECP2, ()> {
     if (bytes[G2Bytes::FLAG_BYTE_OFFSET] & G2Bytes::COMPRESSED_FLAG) == 0 {
         return Err(());
     }
@@ -258,6 +266,8 @@ fn miracl_g2_from_bytes_unchecked(bytes: &[u8; G2Bytes::SIZE]) -> Result<ECP2, (
     }
 }
 
+// TODO(IDX-1866)
+#[allow(clippy::result_unit_err)]
 /// Parses a `G2` in a standard, library-independent form to a MIRACL `ECP2`.
 ///
 /// Also verifies that the point is in the correct prime order subgroup.

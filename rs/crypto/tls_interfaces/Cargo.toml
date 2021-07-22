@@ -7,8 +7,12 @@ edition = "2018"
 async-trait = "0.1.41"
 ic-types = { path = "../../types/types" }
 ic-protobuf = { path = "../../protobuf" }
-tokio = { version = "0.2", features = ["net", "io-util"] }
-tokio-openssl = "0.4.0"
+openssl = "0.10.29"
+serde = { version = "1.0.99", features = ["derive"] }
+tokio = { version = "1.2.0", features = ["net", "io-util"] }
+tokio-openssl = "0.6.0"
 
 [dev-dependencies]
+ic-crypto-test-utils = { path = "../test_utils" }
 maplit = "1.0"
+json5 = "0.2.7"

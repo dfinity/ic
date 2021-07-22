@@ -7,7 +7,7 @@ use crate::{
 };
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces::crypto::IngressSigVerifier;
-use ic_interfaces::execution_environment::ExecutionEnvironment;
+use ic_interfaces::execution_environment::IngressMessageFilter;
 use ic_interfaces::execution_environment::{HypervisorError, MessageAcceptanceError};
 use ic_interfaces::p2p::IngressEventHandler;
 use ic_interfaces::registry::RegistryClient;
@@ -17,9 +17,9 @@ use ic_registry_client::helper::{
     provisional_whitelist::ProvisionalWhitelistRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_replicated_state::CanisterState;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    malicious_flags::MaliciousFlags,
     messages::{HttpHandlerError, SignedIngress, SignedRequestBytes},
     time::current_time,
     CountBytes, SubnetId,
@@ -80,16 +80,13 @@ pub(crate) fn handle(
     log: &ReplicaLogger,
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    maliciously_disable_ingress_validation: bool,
     ingress_sender: &dyn IngressEventHandler,
     state_reader: &dyn StateReader<State = ReplicatedState>,
     validator: &dyn IngressSigVerifier,
-    execution_environment: &dyn ExecutionEnvironment<
-        State = ReplicatedState,
-        CanisterState = CanisterState,
-    >,
+    ingress_message_filter: &dyn IngressMessageFilter<State = ReplicatedState>,
     body: Vec<u8>,
     metrics: &HttpHandlerMetrics,
+    malicious_flags: &MaliciousFlags,
 ) -> (Response<Body>, ApiReqType) {
     use ApiReqType::*;
     // Actual parsing.
@@ -109,6 +106,11 @@ pub(crate) fn handle(
             );
         }
     };
+    metrics.observe_unreliable_request_acceptance_duration(
+        RequestType::Submit,
+        Call,
+        msg.expiry_time(),
+    );
 
     let message_id = msg.id();
 
@@ -151,13 +153,17 @@ pub(crate) fn handle(
         );
     };
     let registry_version = registry_client.get_latest_version();
-    if !maliciously_disable_ingress_validation {
-        let validity = validate_request(msg.as_ref(), validator, current_time(), registry_version);
-        if let Err(err) = validity {
-            let response = common::make_response_on_validation_error(message_id, err, log);
-            metrics.observe_forbidden_request(&RequestType::Submit, "SubmitReqAuthFailed");
-            return (response, Call);
-        }
+    let validity = validate_request(
+        msg.as_ref(),
+        validator,
+        current_time(),
+        registry_version,
+        malicious_flags,
+    );
+    if let Err(err) = validity {
+        let response = common::make_response_on_validation_error(message_id, err, log);
+        metrics.observe_forbidden_request(&RequestType::Submit, "SubmitReqAuthFailed");
+        return (response, Call);
     }
 
     {
@@ -177,7 +183,7 @@ pub(crate) fn handle(
             }
         };
         let state = state_reader.get_latest_state().take();
-        if let Err(err) = execution_environment.should_accept_ingress_message(
+        if let Err(err) = ingress_message_filter.should_accept_ingress_message(
             state,
             &provisional_whitelist,
             msg.content(),

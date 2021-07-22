@@ -47,7 +47,7 @@ impl Membership {
     fn get_nodes(&self, height: Height) -> Result<Vec<NodeId>, MembershipError> {
         use ic_registry_client::helper::subnet::SubnetRegistry;
         let registry_version = registry_version_at_height(self.consensus_cache.as_ref(), height)
-            .ok_or_else(|| MembershipError::UnableToRetrieveDkgSummary(height))?;
+            .ok_or(MembershipError::UnableToRetrieveDkgSummary(height))?;
 
         let list = self
             .registry_client
@@ -252,13 +252,13 @@ pub mod test {
             let block_makers: Vec<_> = subnet_members
                 .iter()
                 .filter(|node| {
-                    match Membership::get_block_maker_rank_from_shuffled_nodes(
-                        *node,
-                        &subnet_members,
-                    ) {
-                        Ok(Some(_)) => true,
-                        _ => false,
-                    }
+                    matches!(
+                        Membership::get_block_maker_rank_from_shuffled_nodes(
+                            *node,
+                            &subnet_members,
+                        ),
+                        Ok(Some(_))
+                    )
                 })
                 .collect();
             assert_eq!(

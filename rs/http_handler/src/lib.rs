@@ -23,19 +23,18 @@ use ic_config::http_handler::Config;
 use ic_crypto::CryptoComponent;
 use ic_crypto_tls_interfaces::{AllowedClients, SomeOrAllNodes, TlsHandshake};
 use ic_crypto_tree_hash::Path;
+use ic_interfaces::execution_environment::IngressMessageFilter;
 use ic_interfaces::{
-    consensus_pool::ConsensusPoolCache,
-    crypto::IngressSigVerifier,
-    execution_environment::{ExecutionEnvironment, QueryHandler},
-    p2p::IngressEventHandler,
-    registry::RegistryClient,
+    consensus_pool::ConsensusPoolCache, crypto::IngressSigVerifier,
+    execution_environment::QueryHandler, p2p::IngressEventHandler, registry::RegistryClient,
     state_manager::StateReader,
 };
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterState, NodeTopology, ReplicatedState};
+use ic_replicated_state::{NodeTopology, ReplicatedState};
 use ic_types::{
+    malicious_flags::MaliciousFlags,
     messages::CertificateDelegation,
     messages::{
         Blob, HttpReadContent, HttpReadState, HttpReadStateResponse, HttpRequestEnvelope,
@@ -46,6 +45,7 @@ use ic_types::{
 };
 use metrics::HttpHandlerMetrics;
 use rand::Rng;
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::io::{Error, ErrorKind, Write};
 use std::net::SocketAddr;
@@ -54,17 +54,20 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 use tempfile::NamedTempFile;
-use tokio::{net::TcpListener, net::TcpStream, time::timeout_at, time::Instant};
+use tokio::sync::Mutex;
+use tokio::{net::TcpListener, net::TcpStream, time::timeout, time::timeout_at, time::Instant};
 
 // Constants defining the limits of the HttpHandler.
 
-// In the HttpHandler we can have at most 'MAX_OUTSTANDING_REQUESTS'
-// requests executing concurrently. If we are at the limit, we won't
-// accept new tcp connections.
-// We choose to use the number of outstanding requests instead of
-// outstanding connections or tokio tasks, because ingress of downstream
-// systems is measured by number of requests.
-const MAX_OUTSTANDING_REQUESTS: usize = 30000;
+// In the HttpHandler we can have at most 'MAX_OUTSTANDING_CONNECTIONS'
+// live TCP connections. If we are at the limit, we won't
+// accept new TCP connections.
+const MAX_OUTSTANDING_CONNECTIONS: usize = 30000;
+
+// The maximum time we should wait for a peeking the first bytes on a TCP
+// connection. Effectively, if we can't read the first bytes within the
+// timeout the connection is broken.
+const MAX_TCP_PEEK_TIMEOUT_SECS: u64 = 5;
 
 // Request with body size bigger than 'MAX_REQUEST_SIZE_BYTES' will be rejected
 // and appropriate error code will be returned to the user.
@@ -80,6 +83,9 @@ const MAX_FETCH_DELEGATION_ATTEMPTS: u8 = 10;
 
 const HTTP_DASHBOARD_URL_PATH: &str = "/_/dashboard";
 
+// Placeholder used when we can't determine the approriate prometheus label.
+const UNKNOWN_LABEL: &str = "unknown";
+
 /// The struct that handles incoming HTTP requests for the IC replica.
 /// This is collection of thread-safe data members.
 struct HttpHandler {
@@ -89,22 +95,21 @@ struct HttpHandler {
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     log: ReplicaLogger,
-    maliciously_disable_ingress_validation: bool,
     ingress_sender: Arc<dyn IngressEventHandler>,
     query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    execution_environment:
-        Arc<dyn ExecutionEnvironment<State = ReplicatedState, CanisterState = CanisterState>>,
+    ingress_message_filter: Box<dyn IngressMessageFilter<State = ReplicatedState>>,
     subnet_type: SubnetType,
 
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
+    malicious_flags: MaliciousFlags,
     // Introduction of concurrent request processing caused a regression in FR.
     // This lock restores the serial processing(as a temporary measure) until the
     // regression is investigated further.
-    request_processing_lock: Arc<tokio::sync::Mutex<()>>,
+    request_processing_lock: Arc<Mutex<()>>,
 }
 
 // Crates a detached tokio blocking task that initializes the server (reading
@@ -208,11 +213,9 @@ pub async fn start_server(
     nns_subnet_id: SubnetId,
     log: ReplicaLogger,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    execution_environment: Arc<
-        dyn ExecutionEnvironment<State = ReplicatedState, CanisterState = CanisterState>,
-    >,
-    maliciously_disable_ingress_validation: bool,
+    ingress_message_filter: Box<dyn IngressMessageFilter<State = ReplicatedState>>,
     subnet_type: SubnetType,
+    malicious_flags: MaliciousFlags,
 ) -> Result<(), Error> {
     let metrics = Arc::new(HttpHandlerMetrics::new(&metrics_registry));
 
@@ -224,13 +227,13 @@ pub async fn start_server(
         subnet_type,
         nns_subnet_id,
         log.clone(),
-        maliciously_disable_ingress_validation,
         ingress_sender,
         query_handler,
         state_reader,
         Arc::clone(&crypto) as Arc<dyn IngressSigVerifier + Send + Sync>,
         consensus_pool_cache,
-        execution_environment,
+        ingress_message_filter,
+        malicious_flags,
     ));
 
     info!(log, "Starting HTTP server...");
@@ -243,7 +246,7 @@ pub async fn start_server(
     addr.set_port(listen_addr.port());
 
     info!(log, "Binding HTTP server to address {}", addr);
-    let mut tcp_listener = TcpListener::bind(addr).await?;
+    let tcp_listener = TcpListener::bind(addr).await?;
 
     // If addr == 0, then a random port will be assigned. In this case it
     // is useful to report the randomly assigned port by writing it to a file.
@@ -263,47 +266,78 @@ pub async fn start_server(
     );
 
     let http = Http::new();
-    let outstanding_requests = ObservableCountingSemaphore::new(
-        MAX_OUTSTANDING_REQUESTS,
-        Arc::clone(&metrics.inflight_requests),
+    let outstanding_connections = ObservableCountingSemaphore::new(
+        MAX_OUTSTANDING_CONNECTIONS,
+        Arc::clone(&metrics.connections),
     );
     loop {
         let http = http.clone();
         let log = log.clone();
         let http_handler = Arc::clone(&http_handler);
         let metrics = Arc::clone(&metrics);
-        let request_permit = outstanding_requests.acquire().await;
+        let request_permit = outstanding_connections.acquire().await;
         match tcp_listener.accept().await {
-            Ok((mut tcp_stream, _)) => {
+            Ok((tcp_stream, _)) => {
+                metrics.connections_total.inc();
                 // Start recording connection setup duration.
                 let connection_start_time = Instant::now();
 
                 tokio::task::spawn(async move {
                     // Do a move of the permit so it gets dropped at the end of the scope.
                     let _request_permit_deleter = request_permit;
-                    let mut b = [0 as u8; 1];
-                    if tcp_stream.peek(&mut b).await.is_ok() && b[0] == 22 {
-                        serve_secure_connection(
-                            metrics,
-                            http_handler,
-                            http,
-                            tcp_stream,
-                            connection_start_time,
-                            log,
-                        )
-                        .await;
-                    } else {
-                        // Either peeking failed or the first byte is not 22, then
-                        // fallback to HTTP.
-                        serve_unsecure_connection(
-                            metrics,
-                            http_handler,
-                            http,
-                            tcp_stream,
-                            connection_start_time,
-                            log,
-                        )
-                        .await;
+                    let mut b = [0_u8; 1];
+                    match timeout(
+                        Duration::from_secs(MAX_TCP_PEEK_TIMEOUT_SECS),
+                        tcp_stream.peek(&mut b),
+                    )
+                    .await
+                    {
+                        Ok(tcp_stream_peek_result) => match tcp_stream_peek_result {
+                            Ok(_) => {
+                                if b[0] == 22 {
+                                    serve_secure_connection(
+                                        metrics,
+                                        http_handler,
+                                        http,
+                                        tcp_stream,
+                                        connection_start_time,
+                                        log,
+                                    )
+                                    .await;
+                                } else {
+                                    // Either peeking failed or the first byte is not 22, then
+                                    // fallback to HTTP.
+                                    serve_unsecure_connection(
+                                        metrics,
+                                        http_handler,
+                                        http,
+                                        tcp_stream,
+                                        connection_start_time,
+                                        log,
+                                    )
+                                    .await;
+                                }
+                            }
+                            Err(err) => {
+                                warn!(log, "Connection error (can't peek) {}", err);
+                                metrics.observe_connection_error(
+                                    ConnectionError::Peek,
+                                    connection_start_time,
+                                );
+                            }
+                        },
+                        Err(err) => {
+                            metrics.observe_connection_error(
+                                ConnectionError::PeekTimeout,
+                                connection_start_time,
+                            );
+                            warn!(
+                                log,
+                                "Connection error (tcp peeking timeout after {}s) {}",
+                                MAX_TCP_PEEK_TIMEOUT_SECS,
+                                err
+                            );
+                        }
                     }
                 });
             }
@@ -327,15 +361,13 @@ impl HttpHandler {
         subnet_type: SubnetType,
         nns_subnet_id: SubnetId,
         log: ReplicaLogger,
-        maliciously_disable_ingress_validation: bool,
         ingress_sender: Arc<dyn IngressEventHandler>,
         query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         validator: Arc<dyn IngressSigVerifier + Send + Sync>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-        execution_environment: Arc<
-            dyn ExecutionEnvironment<State = ReplicatedState, CanisterState = CanisterState>,
-        >,
+        ingress_message_filter: Box<dyn IngressMessageFilter<State = ReplicatedState>>,
+        malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
             config,
@@ -345,16 +377,16 @@ impl HttpHandler {
             subnet_type,
             nns_subnet_id,
             log,
-            maliciously_disable_ingress_validation,
             ingress_sender,
             query_handler,
             state_reader,
             validator,
             consensus_pool_cache,
-            execution_environment,
+            ingress_message_filter,
             delegation_from_nns: Arc::new(RwLock::new(None)),
             health_status: Arc::new(RwLock::new(ReplicaHealthStatus::Starting)),
-            request_processing_lock: Arc::new(tokio::sync::Mutex::new(())),
+            malicious_flags,
+            request_processing_lock: Arc::new(Mutex::new(())),
         }
     }
 }
@@ -372,7 +404,7 @@ async fn serve_unsecure_connection(
         let http_handler = Arc::clone(&http_handler);
         let metrics_svc = Arc::clone(&metrics_svc);
         async move {
-            Ok::<_, Infallible>(route(metrics_svc, http_handler, AppLayer::HTTP, request).await)
+            Ok::<_, Infallible>(route(metrics_svc, http_handler, AppLayer::Http, request).await)
         }
     });
     if let Err(err) = http.serve_connection(tcp_stream, aservice_fn).await {
@@ -385,7 +417,7 @@ async fn serve_unsecure_connection(
             "Connection error (can't serve HTTP connection): {}", err
         );
     } else {
-        metrics.observe_connection_setup(AppLayer::HTTP, connection_start_time)
+        metrics.observe_connection_setup(AppLayer::Http, connection_start_time)
     }
 }
 
@@ -404,15 +436,15 @@ async fn serve_secure_connection(
         let metrics_svc = Arc::clone(&metrics_svc);
         async move {
             Ok::<_, Infallible>(
-                route(metrics_svc, http_handler_svc, AppLayer::HTTPS, request).await,
+                route(metrics_svc, http_handler_svc, AppLayer::Https, request).await,
             )
         }
     });
 
-    let mut clients_certs = Vec::new();
+    let mut clients_certs = HashSet::new();
     let mut clients_certs_exist = false;
     if let Some(http_handler_clients_x509_cert) = http_handler.config.clients_x509_cert.clone() {
-        clients_certs.push(http_handler_clients_x509_cert);
+        clients_certs.insert(http_handler_clients_x509_cert);
         clients_certs_exist = true;
     }
     let allowed_clients =
@@ -448,32 +480,21 @@ async fn serve_secure_connection(
                     "Connection error (can't serve HTTPS connection): {}", err
                 );
             } else {
-                metrics.observe_connection_setup(AppLayer::HTTPS, connection_start_time)
+                metrics.observe_connection_setup(AppLayer::Https, connection_start_time)
             }
         }
     };
 }
 
-fn is_blocking_request(request_type: &RequestType) -> bool {
-    match request_type {
-        RequestType::CatchUpPackage
-        | RequestType::Options
-        | RequestType::RedirectToDashboard
-        | RequestType::Dashboard
-        | RequestType::Status => false,
-        _ => true,
-    }
-}
-
 fn needs_all_preconditions(request_type: &RequestType) -> bool {
-    match request_type {
+    !matches!(
+        request_type,
         RequestType::CatchUpPackage
-        | RequestType::Options
-        | RequestType::RedirectToDashboard
-        | RequestType::Dashboard
-        | RequestType::Status => false,
-        _ => true,
-    }
+            | RequestType::Options
+            | RequestType::RedirectToDashboard
+            | RequestType::Dashboard
+            | RequestType::Status
+    )
 }
 
 async fn route(
@@ -486,80 +507,84 @@ async fn route(
     let request_start_time = Instant::now();
 
     let (parts, body) = request.into_parts();
-    match validate_parts(parts) {
-        Ok(req_type) => {
+    let (request_type, (response, api_req_type)) = match validate_parts(&parts) {
+        Ok(request_type) => {
             // Don't process requests for which preconditions are not met.
-            if needs_all_preconditions(&req_type)
+            if needs_all_preconditions(&request_type)
                 && *http_handler.health_status.read().unwrap() != ReplicaHealthStatus::Healthy
             {
-                return common::make_response(
-                    StatusCode::PRECONDITION_FAILED,
-                    "Replica is starting. Check the /api/v2/status for more information.",
-                );
-            }
-
-            metrics.observe_requests_per_app_layer(&req_type, &app_layer);
-            match parse_body(
-                &req_type,
-                body,
-                Instant::now() + Duration::from_secs(MAX_REQUEST_TIMEOUT_SECS),
-            )
-            .await
-            {
-                Ok(parsed_body) => {
-                    if is_blocking_request(&req_type) {
+                (
+                    request_type.as_str().to_string(),
+                    (
+                        common::make_response(
+                            StatusCode::PRECONDITION_FAILED,
+                            "Replica is starting. Check the /api/v2/status for more information.",
+                        ),
+                        ApiReqType::Unknown,
+                    ),
+                )
+            } else {
+                match parse_body(
+                    &request_type,
+                    body,
+                    Instant::now() + Duration::from_secs(MAX_REQUEST_TIMEOUT_SECS),
+                )
+                .await
+                {
+                    Ok(parsed_body) => {
                         // Serialize the processing
                         let _processing_lock = http_handler.request_processing_lock.lock().await;
                         match tokio::task::spawn_blocking({
                             let http_handler = Arc::clone(&http_handler);
                             let metrics = Arc::clone(&metrics);
-                            let request_type = req_type;
+                            let request_type = request_type;
                             move || {
-                                route_to_handlers(
-                                    metrics,
-                                    request_start_time,
-                                    http_handler,
-                                    parsed_body,
-                                    request_type,
-                                )
+                                route_to_handlers(metrics, http_handler, parsed_body, request_type)
                             }
                         })
                         .await
                         {
-                            Err(_err) => {
+                            Err(err) => {
                                 metrics.observe_internal_error(
-                                    &req_type,
+                                    &request_type,
                                     InternalError::ConcurrentTaskExecution,
                                 );
-                                common::empty_response()
+                                error!(http_handler.log, "route_to_handlers failed with: {}", err);
+                                (
+                                    request_type.as_str().to_string(),
+                                    (common::empty_response(), ApiReqType::Unknown),
+                                )
                             }
-                            Ok(response) => response,
+                            Ok(response) => (request_type.as_str().to_string(), response),
                         }
-                    } else {
-                        route_to_handlers(
-                            metrics,
-                            request_start_time,
-                            http_handler,
-                            parsed_body,
-                            req_type,
-                        )
                     }
+                    Err(err) => (
+                        request_type.as_str().to_string(),
+                        (err, ApiReqType::Unknown),
+                    ),
                 }
-                Err(err) => err,
             }
         }
-        Err(err) => err,
-    }
+        Err(err) => (UNKNOWN_LABEL.to_string(), (err, ApiReqType::Unknown)),
+    };
+    metrics.observe_request(
+        &request_start_time,
+        &request_type,
+        &api_req_type,
+        &response.status(),
+        &app_layer,
+        &parts.version,
+    );
+    response
 }
 
 fn route_to_handlers(
     metrics: Arc<HttpHandlerMetrics>,
-    request_start_time: Instant,
     http_handler: Arc<HttpHandler>,
     parsed_body: Vec<u8>,
     request_type: RequestType,
-) -> Response<Body> {
-    let (http_resp, api_req_type) = match request_type {
+) -> (Response<Body>, ApiReqType) {
+    match request_type {
         RequestType::Read => read::handle(
             &http_handler.log,
             http_handler.delegation_from_nns.read().unwrap().clone(),
@@ -569,18 +594,19 @@ fn route_to_handlers(
             http_handler.registry_client.get_latest_version(),
             parsed_body,
             metrics.as_ref(),
+            &http_handler.malicious_flags,
         ),
         RequestType::Submit => submit::handle(
             &http_handler.log,
             http_handler.subnet_id,
             http_handler.registry_client.as_ref(),
-            http_handler.maliciously_disable_ingress_validation,
             http_handler.ingress_sender.as_ref(),
             http_handler.state_reader.as_ref(),
             http_handler.validator.as_ref(),
-            http_handler.execution_environment.as_ref(),
+            http_handler.ingress_message_filter.as_ref(),
             parsed_body,
             metrics.as_ref(),
+            &http_handler.malicious_flags,
         ),
         RequestType::Status => (
             status::handle(
@@ -609,18 +635,7 @@ fn route_to_handlers(
             common::make_response(StatusCode::NO_CONTENT, ""),
             ApiReqType::Unknown,
         ),
-    };
-    // record request latency along dimensions (request type, status code, api
-    // request type)
-    metrics
-        .requests
-        .with_label_values(&[
-            request_type.as_str(),
-            &http_resp.status().to_string(),
-            api_req_type.as_str(),
-        ])
-        .observe(request_start_time.elapsed().as_secs_f64());
-    http_resp
+    }
 }
 
 // Fetches a delegation from the NNS subnet to allow this subnet to issue
@@ -768,13 +783,13 @@ fn get_random_node_from_nns_subnet(
 }
 
 async fn parse_body(
-    req_type: &RequestType,
+    request_type: &RequestType,
     mut body: Body,
     deadline: Instant,
 ) -> Result<Vec<u8>, Response<Body>> {
     // Read "content-length" bytes
     // Parse the body only when needed.
-    match req_type {
+    match request_type {
         RequestType::Options | RequestType::RedirectToDashboard => Ok(Vec::new()),
         _ => {
             let mut parsed_body = Vec::<u8>::new();
@@ -828,7 +843,7 @@ async fn parse_body(
 //  * Is the method correct, e.g. POST?
 //  * Is there a "content-type: application/cbor" header?
 //  * Is the path correct?
-fn validate_parts(parts: http::request::Parts) -> Result<RequestType, Response<Body>> {
+fn validate_parts(parts: &http::request::Parts) -> Result<RequestType, Response<Body>> {
     use http::{method::Method, HeaderMap};
     match parts.method {
         Method::POST => {
@@ -837,7 +852,7 @@ fn validate_parts(parts: http::request::Parts) -> Result<RequestType, Response<B
                 let view = hs.get_all(http::header::CONTENT_TYPE);
                 view.iter()
                     .any(|value| value.to_str().unwrap().to_lowercase() == "application/cbor")
-            };
+            }
 
             if !is_cbor(&parts.headers) {
                 return Err(common::make_response(
@@ -953,7 +968,7 @@ mod tests {
             .is_ok());
         // If we drop the sender here the test will fail because parse_body has all the
         // chunks so it won't timeout.
-        tokio::time::delay_until(deadline + Duration::from_secs(1)).await;
+        tokio::time::sleep_until(deadline + Duration::from_secs(1)).await;
         let response = jh
             .await
             .unwrap()

@@ -130,7 +130,6 @@
 /// distribute configuration information to all nodes of all
 /// subnetworks that participate in the Internet Computer (IC).
 pub mod governance;
-pub mod handler_utils;
 pub mod init;
 pub mod pb;
 pub mod proposal_submission;

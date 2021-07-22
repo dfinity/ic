@@ -3,23 +3,30 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;
-use std::iter::FromIterator;
 use std::string::ToString;
 
 use crate::pb::v1::{
     add_or_remove_node_provider::Change,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
     governance::neuron_in_flight_command::Command as InFlightCommand,
-    governance::NeuronInFlightCommand, governance_error::ErrorType, manage_neuron,
-    manage_neuron::Command, manage_neuron_response, neuron::DissolveState, neuron::Followees,
-    proposal, Ballot, BallotInfo, ClaimOrRefreshNeuronFromAccount,
-    ClaimOrRefreshNeuronFromAccountResponse, ExecuteNnsFunction, Governance as GovernanceProto,
-    GovernanceError, ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse,
-    ManageNeuron, ManageNeuronResponse, NetworkEconomics, Neuron, NeuronInfo, NeuronStakeTransfer,
-    NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData, ProposalInfo,
-    ProposalRewardStatus, ProposalStatus, RewardEvent, RewardNodeProvider, Tally, Topic, Vote,
+    governance::NeuronInFlightCommand,
+    governance_error::ErrorType,
+    manage_neuron,
+    manage_neuron::{claim_or_refresh::By, Command, NeuronIdOrSubaccount},
+    manage_neuron_response,
+    neuron::DissolveState,
+    neuron::Followees,
+    proposal,
+    reward_node_provider::RewardMode,
+    Ballot, BallotInfo, ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse,
+    ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ListNeurons,
+    ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
+    ManageNeuronResponse, NetworkEconomics, Neuron, NeuronInfo, NeuronStakeTransfer, NeuronState,
+    NnsFunction, NodeProvider, Proposal, ProposalData, ProposalInfo, ProposalRewardStatus,
+    ProposalStatus, RewardEvent, RewardNodeProvider, Tally, Topic, Vote,
 };
 use candid::Decode;
+use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha256::Sha256;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -34,11 +41,11 @@ use registry_canister::mutations::{
 };
 
 use async_trait::async_trait;
-use itertools::Itertools;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
+use crate::pb::v1::proposal::Action;
 use dfn_core::api::spawn;
 use ledger_canister::{ICPTs, ICP_SUBDIVIDABLE_BY};
 
@@ -87,27 +94,40 @@ pub const MAX_NEURON_RECENT_BALLOTS: usize = 100;
 pub const REWARD_DISTRIBUTION_PERIOD_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// The maximum number of neurons supported.
-const MAX_NUMBER_OF_NEURONS: usize = 200_000;
+pub const MAX_NUMBER_OF_NEURONS: usize = 200_000;
 
 /// The maximum number results returned by the method `list_proposals`.
-const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
+pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
 /// The number of e8s per ICPT;
 const E8S_PER_ICPT: u64 = ICP_SUBDIVIDABLE_BY;
 
 /// The max number of unsettled proposals -- that is proposals for which ballots
 /// are still stored.
-pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 350;
+pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 700;
 
 /// The max number of open manage neuron proposals.
 pub const MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS: usize = 100000;
+
+/// Max number of hot key for each neuron.
+pub const MAX_NUM_HOT_KEYS_PER_NEURON: usize = 10;
+
+const MAX_HEAP_SIZE_IN_KIB: usize = 4 * 1024 * 1024;
+const WASM32_PAGE_SIZE_IN_KIB: usize = 64;
+
+/// Max number of wasm32 pages for the heap after which we consider that there
+/// is a risk to the ability to grow the heap.
+///
+/// This is 7/8 of the maximum number of pages. This corresponds to 3.5 GiB.
+pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
+    MAX_HEAP_SIZE_IN_KIB / WASM32_PAGE_SIZE_IN_KIB * 7 / 8;
 
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 // The default values for network economics (until we initialize it).
 // Can't implement Default since it conflicts with Prost's.
 impl NetworkEconomics {
-    pub fn with_default_values() -> Self {
+    pub const fn with_default_values() -> Self {
         Self {
             reject_cost_e8s: E8S_PER_ICPT,                              // 1 ICP
             neuron_management_fee_per_proposal_e8s: 1_000_000,          // 0.01 ICP
@@ -194,12 +214,42 @@ impl Vote {
     }
 }
 
+impl ManageNeuron {
+    pub fn get_neuron_id_or_subaccount(
+        &self,
+    ) -> Result<Option<NeuronIdOrSubaccount>, GovernanceError> {
+        match (self.id.as_ref(), self.neuron_id_or_subaccount.as_ref()) {
+            (Some(_), Some(_)) => Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Both id and neuron_id_or_subaccount fields are set",
+            )),
+            (None, None) => Ok(None),
+            (None, Some(id)) => Ok(Some(id.clone())),
+            (Some(nid), None) => Ok(Some(NeuronIdOrSubaccount::NeuronId(nid.clone()))),
+        }
+    }
+}
+
+impl NnsFunction {
+    /// Returns whether proposals where the action is such an NnsFunction should
+    /// be allowed to be submitted when the heap growth potential is low.
+    fn allowed_when_resources_are_low(&self) -> bool {
+        matches!(
+            self,
+            NnsFunction::NnsRootUpgrade
+                | NnsFunction::NnsCanisterUpgrade
+                | NnsFunction::BlessReplicaVersion
+                | NnsFunction::UpdateSubnetReplicaVersion
+        )
+    }
+}
+
 impl ManageNeuronResponse {
     pub fn is_err(&self) -> bool {
-        match &self.command {
-            Some(manage_neuron_response::Command::Error(_)) => true,
-            _ => false,
-        }
+        matches!(
+            &self.command,
+            Some(manage_neuron_response::Command::Error(_))
+        )
     }
 
     pub fn err_ref(&self) -> Option<&GovernanceError> {
@@ -302,6 +352,17 @@ impl ManageNeuronResponse {
             )),
         }
     }
+
+    pub fn claim_or_refresh_neuron_response(refreshed_neuron_id: NeuronId) -> Self {
+        let refreshed_neuron_id = Some(refreshed_neuron_id);
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::ClaimOrRefresh(
+                manage_neuron_response::ClaimOrRefreshResponse {
+                    refreshed_neuron_id,
+                },
+            )),
+        }
+    }
 }
 
 impl NnsFunction {
@@ -341,6 +402,7 @@ impl NnsFunction {
             NnsFunction::SetFirewallConfig => (REGISTRY_CANISTER_ID, "set_firewall_config"),
             NnsFunction::StopOrStartNnsCanister => (ROOT_CANISTER_ID, "stop_or_start_nns_canister"),
             NnsFunction::RemoveNodes => (REGISTRY_CANISTER_ID, "remove_nodes"),
+            NnsFunction::UninstallCode => (CanisterId::ic_00(), "uninstall_code"),
         };
         Ok((canister_id, method))
     }
@@ -351,11 +413,11 @@ impl Neuron {
 
     /// Returns the state the neuron would be in a time
     /// `now_seconds`. See [NeuronState] for details.
-    fn state(&self, now_seconds: u64) -> NeuronState {
+    pub fn state(&self, now_seconds: u64) -> NeuronState {
         match self.dissolve_state {
             Some(DissolveState::DissolveDelaySeconds(d)) => {
                 if d > 0 {
-                    NeuronState::Locked
+                    NeuronState::NotDissolving
                 } else {
                     NeuronState::Dissolved
                 }
@@ -500,11 +562,11 @@ impl Neuron {
     // See the relevant protobuf for a high-level description of
     // these operations
 
-    /// If this method is called on a locked neuron, it remains
-    /// locked. If it is called on dissolving neuron, it remains
+    /// If this method is called on a non-dissolving neuron, it remains
+    /// non-dissolving. If it is called on dissolving neuron, it remains
     /// dissolving.
     ///
-    /// If it is called on a dissolved neuron, it becomes locked and
+    /// If it is called on a dissolved neuron, it becomes non-dissolving and
     /// its 'age' is reset to start counting from when it last entered
     /// the dissolved state, when applicable (that is, the Dissolved state
     /// was reached through explicit dissolution) --- or from `now` when not
@@ -529,10 +591,10 @@ impl Neuron {
                     MAX_DISSOLVE_DELAY_SECONDS,
                 );
                 // Note that if delay == 0, this neuron was
-                // dissolved and it now becomes locked.
+                // dissolved and it now becomes non-dissolving.
                 self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(new_delay));
                 if delay == 0 {
-                    // We transition from `Dissolved` to `Locked`: reset age.
+                    // We transition from `Dissolved` to `NotDissolving`: reset age.
                     self.aging_since_timestamp_seconds = now_seconds;
                 }
                 Ok(())
@@ -559,17 +621,17 @@ impl Neuron {
                     Ok(())
                 } else {
                     // ts <= now_seconds
-                    // This neuron is dissolved. Lock it up.
+                    // This neuron is dissolved. Set it to non-dissolving.
                     let new_delay = std::cmp::min(additional_delay, MAX_DISSOLVE_DELAY_SECONDS);
                     self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(new_delay));
-                    // We transition from `Dissolved` to `Locked`: reset age.
+                    // We transition from `Dissolved` to `NotDissolving`: reset age.
                     //
                     // We set the age to ts as, at this point in
                     // time, the neuron exited the dissolving
                     // state and entered the dissolved state.
                     //
                     // This way of setting the age of neuron
-                    // transitioning from dissolved to locked
+                    // transitioning from dissolved to non-dissolving
                     // creates an incentive to increase the
                     // dissolve delay of a dissolved neuron
                     // instead of dissolving it.
@@ -578,22 +640,22 @@ impl Neuron {
                 }
             }
             None => {
-                // This neuron is dissolved. Lock it up.
+                // This neuron is dissolved. Set it to non-dissolving.
                 let new_delay = std::cmp::min(additional_delay, MAX_DISSOLVE_DELAY_SECONDS);
                 self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(new_delay));
-                // We transition from `Dissolved` to `Locked`: reset age.
+                // We transition from `Dissolved` to `NotDissolving`: reset age.
                 self.aging_since_timestamp_seconds = now_seconds;
                 Ok(())
             }
         }
     }
 
-    /// If this neuron is locked, start dissolving it.
+    /// If this neuron is not dissolving, start dissolving it.
     ///
-    /// If the neuron is not locked, an error is returned.
+    /// If the neuron is dissolving or dissolved, an error is returned.
     fn start_dissolving(&mut self, now_seconds: u64) -> Result<(), GovernanceError> {
         if let Some(DissolveState::DissolveDelaySeconds(delay)) = self.dissolve_state {
-            // Neuron is actually locked.
+            // Neuron is actually not dissolving.
             if delay > 0 {
                 self.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(
                     delay + now_seconds,
@@ -608,15 +670,15 @@ impl Neuron {
                 Ok(())
             } else {
                 // Already dissolved - cannot start dissolving.
-                Err(GovernanceError::new(ErrorType::RequiresLocked))
+                Err(GovernanceError::new(ErrorType::RequiresNotDissolving))
             }
         } else {
             // Already dissolving or dissolved - cannot start dissolving.
-            Err(GovernanceError::new(ErrorType::RequiresLocked))
+            Err(GovernanceError::new(ErrorType::RequiresNotDissolving))
         }
     }
 
-    /// If this neuron is dissolving, lock it.
+    /// If this neuron is dissolving, set it to not dissolving.
     ///
     /// If the neuron is not dissolving, an error is returned.
     fn stop_dissolving(&mut self, now_seconds: u64) -> Result<(), GovernanceError> {
@@ -652,7 +714,7 @@ impl Neuron {
             }
         }
         // Allow at most 10 hot keys per neuron.
-        if self.hot_keys.len() >= 10 {
+        if self.hot_keys.len() >= MAX_NUM_HOT_KEYS_PER_NEURON {
             return Err(GovernanceError::new_with_message(
                 ErrorType::ResourceExhausted,
                 "Reached the maximum number of hotkeys.",
@@ -684,8 +746,8 @@ impl Neuron {
     ///
     /// Technically, each neuron has an internal `aging_since`
     /// field that is set to the current time when a neuron is
-    /// created in a locked state and reset when a neuron is
-    /// locked again after a call to `stop_dissolve`. While a
+    /// created in a non-dissolving state and reset when a neuron is
+    /// not dissolving again after a call to `stop_dissolve`. While a
     /// neuron is dissolving, `aging_since` is a value in the far
     /// future, effectively making its age zero.
     pub fn age_seconds(&self, now_seconds: u64) -> u64 {
@@ -696,7 +758,7 @@ impl Neuron {
         }
     }
 
-    /// Returns the dissolve delay of this neuron. For a locked
+    /// Returns the dissolve delay of this neuron. For a non-dissolving
     /// neuron, this is just the recorded dissolve delay; for a
     /// dissolving neuron, this is the the time left (from
     /// `now_seconds`) until the neuron becomes dissolved; for a
@@ -738,6 +800,34 @@ impl Neuron {
         match op {
             manage_neuron::configure::Operation::IncreaseDissolveDelay(d) => {
                 self.increase_dissolve_delay(now_seconds, d.additional_dissolve_delay_seconds)
+            }
+            manage_neuron::configure::Operation::SetDissolveTimestamp(d) => {
+                if now_seconds > d.dissolve_timestamp_seconds {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        "The dissolve delay must be set to a future time.",
+                    ));
+                }
+                let desired_dd = d.dissolve_timestamp_seconds - now_seconds;
+                let current_dd = self.dissolve_delay_seconds(now_seconds);
+
+                if current_dd > desired_dd {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        "Can't set a dissolve delay that is smaller than the current dissolve delay."
+                    ));
+                }
+
+                let dd_diff = desired_dd - current_dd;
+                self.increase_dissolve_delay(
+                    now_seconds,
+                    dd_diff.try_into().map_err(|_| {
+                        GovernanceError::new_with_message(
+                            ErrorType::InvalidCommand,
+                            "Can't convert u64 dissolve delay into u32.",
+                        )
+                    })?,
+                )
             }
             manage_neuron::configure::Operation::StartDissolving(_) => {
                 self.start_dissolving(now_seconds)
@@ -801,10 +891,12 @@ impl Proposal {
 
     /// If this is a [ManageNeuron] proposal, this returns the ID of
     /// the managed neuron.
-    pub fn managed_neuron(&self) -> Option<NeuronId> {
+    pub fn managed_neuron(&self) -> Option<NeuronIdOrSubaccount> {
         if let Some(action) = &self.action {
             match action {
-                proposal::Action::ManageNeuron(n) => n.id.clone(),
+                proposal::Action::ManageNeuron(n) => n
+                    .get_neuron_id_or_subaccount()
+                    .expect("Validation of managed neuron failed"),
                 _ => None,
             }
         } else {
@@ -846,6 +938,7 @@ impl Proposal {
                             NnsFunction::ClearProvisionalWhitelist => Topic::NetworkEconomics,
                             NnsFunction::SetAuthorizedSubnetworks => Topic::Governance,
                             NnsFunction::SetFirewallConfig => Topic::SubnetManagement,
+                            NnsFunction::UninstallCode => Topic::Governance,
                         }
                     } else {
                         Topic::Unspecified
@@ -857,6 +950,30 @@ impl Proposal {
             }
         } else {
             Topic::Unspecified
+        }
+    }
+
+    /// Returns whether such a proposal should be allowed to
+    /// be submitted when the heap growth potential is low.
+    fn allowed_when_resources_are_low(&self) -> bool {
+        self.action
+            .as_ref()
+            .map_or(false, |a| a.allowed_when_resources_are_low())
+    }
+}
+
+impl Action {
+    /// Returns whether proposals with such an action should be allowed to
+    /// be submitted when the heap growth potential is low.
+    fn allowed_when_resources_are_low(&self) -> bool {
+        match &self {
+            proposal::Action::ExecuteNnsFunction(update) => {
+                match NnsFunction::from_i32(update.nns_function) {
+                    Some(f) => f.allowed_when_resources_are_low(),
+                    None => false,
+                }
+            }
+            _ => false,
         }
     }
 }
@@ -1027,12 +1144,10 @@ impl ProposalStatus {
     /// Return true if this status is 'final' in the sense that no
     /// further state transitions are possible.
     pub fn is_final(&self) -> bool {
-        match self {
-            ProposalStatus::Rejected => true,
-            ProposalStatus::Executed => true,
-            ProposalStatus::Failed => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            ProposalStatus::Rejected | ProposalStatus::Executed | ProposalStatus::Failed
+        )
     }
 }
 
@@ -1040,11 +1155,10 @@ impl ProposalRewardStatus {
     /// Return true if this reward status is 'final' in the sense that
     /// no further state transitions are possible.
     pub fn is_final(&self) -> bool {
-        match self {
-            ProposalRewardStatus::Settled => true,
-            ProposalRewardStatus::Ineligible => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            ProposalRewardStatus::Settled | ProposalRewardStatus::Ineligible
+        )
     }
 }
 
@@ -1239,7 +1353,7 @@ pub trait Environment: Send + Sync {
     /// This number is the same in all replicas.
     fn random_byte_array(&mut self) -> [u8; 32];
 
-    /// Execute a `ExecuteNnsFunction`. The standard implementation is
+    /// Executes a `ExecuteNnsFunction`. The standard implementation is
     /// expected to call out to another canister and eventually report the
     /// result back
     fn execute_nns_function(
@@ -1247,6 +1361,22 @@ pub trait Environment: Send + Sync {
         proposal_id: u64,
         update: &ExecuteNnsFunction,
     ) -> Result<(), GovernanceError>;
+
+    /// Returns rough information as to how much the heap can grow.
+    ///
+    /// The intended use case is for the governance canister to avoid
+    /// non-essential memory-consuming operations when the potential for heap
+    /// growth becomes limited.
+    fn heap_growth_potential(&self) -> HeapGrowthPotential;
+}
+
+/// Rough buckets for how much the heap can still grow.
+pub enum HeapGrowthPotential {
+    /// The heap can grow without issue.
+    NoIssue,
+
+    /// The heap can still grow, but not by much.
+    LimitedAvailability,
 }
 
 #[async_trait]
@@ -1375,13 +1505,6 @@ impl Governance {
             ));
         }
 
-        if self.proto.authz.is_none() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Authz was not found",
-            ));
-        }
-
         // Make sure that subaccounts are not repeated across neurons.
         let mut subaccounts = HashSet::new();
         for n in self.proto.neurons.values() {
@@ -1433,22 +1556,47 @@ impl Governance {
         NeuronId { id }
     }
 
-    pub fn get_neuron(&self, id: &NeuronId) -> Result<&Neuron, GovernanceError> {
-        self.proto.neurons.get(&id.id).ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                &format!("Neuron not found: {}", id.id),
-            )
+    fn neuron_not_found_error(nid: &NeuronId) -> GovernanceError {
+        GovernanceError::new_with_message(
+            ErrorType::NotFound,
+            format!("Neuron not found: {:?}", nid),
+        )
+    }
+
+    fn no_neuron_for_subaccount_error(subaccount: &[u8]) -> GovernanceError {
+        GovernanceError::new_with_message(
+            ErrorType::NotFound,
+            format!("No neuron found for subaccount {:?}", subaccount),
+        )
+    }
+
+    fn bytes_to_subaccount(bytes: &[u8]) -> Result<ledger_canister::Subaccount, GovernanceError> {
+        bytes.try_into().map_err(|_| {
+            GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Invalid subaccount")
         })
     }
 
-    pub fn get_neuron_mut(&mut self, id: &NeuronId) -> Result<&mut Neuron, GovernanceError> {
-        self.proto.neurons.get_mut(&id.id).ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                &format!("Neuron not found: {}", id.id),
-            )
-        })
+    pub fn get_neuron(&self, nid: &NeuronId) -> Result<&Neuron, GovernanceError> {
+        self.proto
+            .neurons
+            .get(&nid.id)
+            .ok_or_else(|| Self::neuron_not_found_error(nid))
+    }
+
+    pub fn get_neuron_mut(&mut self, nid: &NeuronId) -> Result<&mut Neuron, GovernanceError> {
+        self.proto
+            .neurons
+            .get_mut(&nid.id)
+            .ok_or_else(|| Self::neuron_not_found_error(nid))
+    }
+
+    fn find_neuron(&self, find_by: &NeuronIdOrSubaccount) -> Result<&Neuron, GovernanceError> {
+        match find_by {
+            NeuronIdOrSubaccount::NeuronId(nid) => self.get_neuron(nid),
+            NeuronIdOrSubaccount::Subaccount(sid) => self
+                .get_neuron_by_subaccount(&Self::bytes_to_subaccount(sid)?)
+                .ok_or_else(|| Self::no_neuron_for_subaccount_error(sid)),
+        }
     }
 
     /// Locks a given neuron for a specific, signaling there is an ongoing
@@ -1545,6 +1693,9 @@ impl Governance {
                 ));
             }
         }
+
+        // New neurons are not allowed when the heap is too large.
+        self.check_heap_can_grow()?;
 
         if self.proto.neurons.len() + 1 > MAX_NUMBER_OF_NEURONS {
             return Err(GovernanceError::new_with_message(
@@ -1824,9 +1975,12 @@ impl Governance {
             neuron.cached_neuron_stake_e8s += transfer.neuron_stake_e8s;
             // Decrease the age in proportion to the added stake if not u64::MAX.
             if neuron.aging_since_timestamp_seconds != u64::MAX {
-                neuron.aging_since_timestamp_seconds +=
-                    ((now - neuron.aging_since_timestamp_seconds) * transfer.neuron_stake_e8s)
-                        / neuron.cached_neuron_stake_e8s;
+                // Use u128 to prevent overflows
+                let neuron_age: u128 = (now - neuron.aging_since_timestamp_seconds) as u128;
+                let neuron_age_increase: u128 = (neuron_age * transfer.neuron_stake_e8s as u128)
+                    / neuron.cached_neuron_stake_e8s as u128;
+
+                neuron.aging_since_timestamp_seconds += neuron_age_increase as u64;
             }
 
             Ok(nid.clone())
@@ -1834,7 +1988,8 @@ impl Governance {
         } else {
             // Check that we haven't reached the max number of neurons
             // allowed.
-            if self.proto.neurons.len() > MAX_NUMBER_OF_NEURONS {
+            let heap_growth_res = self.check_heap_can_grow();
+            if heap_growth_res.is_err() || self.proto.neurons.len() >= MAX_NUMBER_OF_NEURONS {
                 let return_msg = self
                     .return_funds(
                         gov_subaccount,
@@ -1844,10 +1999,14 @@ impl Governance {
                         nonce,
                     )
                     .await;
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    format!("Maximum number of neurons reached. {}", return_msg),
-                ));
+                let mut err = heap_growth_res.err().unwrap_or_else(|| {
+                    GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "Maximum number of neurons reached.".to_string(),
+                    )
+                });
+                err.error_message.push_str(return_msg.as_str());
+                return Err(err);
             }
 
             // TODO(NNS1-491): handle the case where `stake_e8s` is less than
@@ -2439,6 +2598,9 @@ impl Governance {
         caller: &PrincipalId,
         split: &manage_neuron::Split,
     ) -> Result<NeuronId, GovernanceError> {
+        // New neurons are not allowed when the heap is too large.
+        self.check_heap_can_grow()?;
+
         let min_stake = self
             .proto
             .economics
@@ -2639,6 +2801,9 @@ impl Governance {
         caller: &PrincipalId,
         spawn: &manage_neuron::Spawn,
     ) -> Result<NeuronId, GovernanceError> {
+        // New neurons are not allowed when the heap is too large.
+        self.check_heap_can_grow()?;
+
         let parent_neuron = self.get_neuron(id)?.clone();
         let parent_nid = parent_neuron.id.as_ref().expect("Neurons must have an id");
 
@@ -3064,15 +3229,17 @@ impl Governance {
                 assert!(proposal.status() == ProposalStatus::Adopted);
                 match result {
                     Ok(_) => {
+                        println!("Execution of proposal: {} succeeded.", pid);
                         // The proposal was executed 'now'.
                         proposal.executed_timestamp_seconds = self.env.now();
                         // If the proposal previously failed to be
                         // executed, it is no longer that case that the
                         // proposal failed to be executed.
                         proposal.failed_timestamp_seconds = 0;
-                        println!("Execution of proposal: {} succeeded.", pid);
+                        proposal.failure_reason = None;
                     }
                     Err(error) => {
+                        println!("Execution of proposal: {} failed. Reason: {:?}", pid, error);
                         // Only update the failure timestamp is there is
                         // not yet any report of success in executing this
                         // proposal. If success already has been reported,
@@ -3080,8 +3247,8 @@ impl Governance {
                         // the success, e.g., due to a retry.
                         if proposal.executed_timestamp_seconds == 0 {
                             proposal.failed_timestamp_seconds = self.env.now();
+                            proposal.failure_reason = Some(error);
                         }
-                        println!("Execution of proposal: {} failed. Reason: {:?}", pid, error);
                     }
                 }
             }
@@ -3272,6 +3439,7 @@ impl Governance {
             decided_timestamp_seconds: data.decided_timestamp_seconds,
             executed_timestamp_seconds: data.executed_timestamp_seconds,
             failed_timestamp_seconds: data.failed_timestamp_seconds,
+            failure_reason: data.failure_reason.clone(),
             reward_event_round: data.reward_event_round,
             topic: topic as i32,
             status: status as i32,
@@ -3290,9 +3458,8 @@ impl Governance {
         if let Some(ref managed_id) = info.proposal.as_ref().and_then(|x| x.managed_neuron()) {
             // mgr_ids: &Vec<NeuronId>
             if let Some(mgr_ids) = self
-                .proto
-                .neurons
-                .get(&managed_id.id)
+                .find_neuron(&managed_id)
+                .ok()
                 .and_then(|x| x.neuron_managers())
             {
                 // Find one ID in the list of manager IDs that is also
@@ -3355,10 +3522,10 @@ impl Governance {
             .principal_to_neuron_ids_index
             .get(caller)
             .unwrap_or(&empty);
-        let exclude_topic = HashSet::<i32>::from_iter(req.exclude_topic.iter().cloned());
-        let include_reward_status =
-            HashSet::<i32>::from_iter(req.include_reward_status.iter().cloned());
-        let include_status = HashSet::<i32>::from_iter(req.include_status.iter().cloned());
+        let exclude_topic: HashSet<i32> = req.exclude_topic.iter().cloned().collect();
+        let include_reward_status: HashSet<i32> =
+            req.include_reward_status.iter().cloned().collect();
+        let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
         let now = self.env.now();
         let filter_all = |data: &ProposalData| -> bool {
             let topic = data.topic();
@@ -3544,8 +3711,103 @@ impl Governance {
         spawn(governance.perform_action(pid, action.clone()));
     }
 
+    /// Mints node provider rewards to a neuron or to a ledger account.
+    async fn mint_reward_to_neuron_or_account(
+        &mut self,
+        np_principal: &PrincipalId,
+        reward: &RewardNodeProvider,
+    ) -> Result<(), GovernanceError> {
+        let now = self.env.now();
+        match reward.reward_mode.as_ref() {
+            None => Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Reward node provider proposal must have a reward mode.",
+            )),
+            Some(RewardMode::RewardToNeuron(reward_to_neuron)) => {
+                let to_subaccount = Subaccount(self.env.random_byte_array());
+                let block_height = self
+                    .ledger
+                    .transfer_funds(
+                        reward.amount_e8s,
+                        0, // Minting transfers don't pay transaction fees.
+                        None,
+                        AccountIdentifier::new(
+                            ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+                            Some(to_subaccount),
+                        ),
+                        now,
+                    )
+                    .await?;
+                let nid = self.new_neuron_id();
+                let dissolve_delay_seconds = std::cmp::min(
+                    reward_to_neuron.dissolve_delay_seconds,
+                    MAX_DISSOLVE_DELAY_SECONDS,
+                );
+                // Transfer successful.
+                let neuron = Neuron {
+                    id: Some(nid.clone()),
+                    account: to_subaccount.to_vec(),
+                    controller: Some(*np_principal),
+                    hot_keys: Vec::new(),
+                    cached_neuron_stake_e8s: reward.amount_e8s,
+                    neuron_fees_e8s: 0,
+                    created_timestamp_seconds: now,
+                    aging_since_timestamp_seconds: now,
+                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                        dissolve_delay_seconds,
+                    )),
+                    followees: self.proto.default_followees.clone(),
+                    recent_ballots: vec![],
+                    kyc_verified: true,
+                    transfer: Some(NeuronStakeTransfer {
+                        transfer_timestamp: now,
+                        from: Some(ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID)),
+                        from_subaccount: vec![],
+                        to_subaccount: to_subaccount.to_vec(),
+                        neuron_stake_e8s: reward.amount_e8s,
+                        block_height,
+                        memo: now,
+                    }),
+                    maturity_e8s_equivalent: 0,
+                    not_for_profit: false,
+                };
+                self.add_neuron(nid.id, neuron)
+            }
+            Some(RewardMode::RewardToAccount(reward_to_account)) => {
+                // We are not creating a neuron, just transferring funds.
+                let to_account = match &reward_to_account.to_account {
+                    Some(to_account) => AccountIdentifier::try_from(to_account).map_err(|e| {
+                        GovernanceError::new_with_message(
+                            ErrorType::InvalidCommand,
+                            format!("The recipient's subaccount is invalid due to: {}", e),
+                        )
+                    })?,
+                    None => AccountIdentifier::new(*np_principal, None),
+                };
+
+                self.ledger
+                    .transfer_funds(
+                        reward.amount_e8s,
+                        0, // Minting transfers don't pay transaction fees.
+                        None,
+                        to_account,
+                        now,
+                    )
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| {
+                        GovernanceError::new_with_message(
+                            ErrorType::PreconditionFailed,
+                            format!("Couldn't perform minting transfer: {}", e),
+                        )
+                    })
+            }
+        }
+    }
+
+    /// Rewards a node provider.
     async fn reward_node_provider(&mut self, pid: u64, reward: &RewardNodeProvider) {
-        if let Some(node_provider) = &reward.node_provider {
+        let result = if let Some(node_provider) = &reward.node_provider {
             if let Some(np_principal) = &node_provider.id {
                 if !self
                     .proto
@@ -3553,170 +3815,86 @@ impl Governance {
                     .iter()
                     .any(|np| np.id == node_provider.id)
                 {
-                    self.set_proposal_execution_status(
-                        pid,
-                        Err(GovernanceError::new_with_message(
-                            ErrorType::NotFound,
-                            format!("Node provider with id {} not found.", np_principal),
-                        )),
-                    );
-                    return;
-                }
-
-                // Check that the amount to distribute is not above
-                // than the maximum set in network economics.
-                let maximum_node_provider_rewards_e8s =
-                    self.economics().maximum_node_provider_rewards_e8s;
-                if reward.amount_e8s > maximum_node_provider_rewards_e8s {
-                    self.set_proposal_execution_status(
-                        pid,
+                    Err(GovernanceError::new_with_message(
+                        ErrorType::NotFound,
+                        format!("Node provider with id {} not found.", np_principal),
+                    ))
+                } else {
+                    // Check that the amount to distribute is not above
+                    // than the maximum set in network economics.
+                    let maximum_node_provider_rewards_e8s =
+                        self.economics().maximum_node_provider_rewards_e8s;
+                    if reward.amount_e8s > maximum_node_provider_rewards_e8s {
                         Err(GovernanceError::new_with_message(
                             ErrorType::PreconditionFailed,
                             format!(
                                 "Proposed reward {} greater than maximum {}",
                                 reward.amount_e8s, maximum_node_provider_rewards_e8s
                             ),
-                        )),
-                    );
-                    return;
-                }
-                let now = self.env.now();
-                // Does the proposal contain a request to create a
-                // neuron for the newly minted tokens?
-                if let Some(create_neuron) = &reward.create_neuron {
-                    let to_subaccount = Subaccount(self.env.random_byte_array());
-                    match self
-                        .ledger
-                        .transfer_funds(
-                            reward.amount_e8s,
-                            0, // Minting transfers don't pay transaction fees.
-                            None,
-                            AccountIdentifier::new(
-                                ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-                                Some(to_subaccount),
-                            ),
-                            now,
-                        )
-                        .await
-                    {
-                        Err(err) => {
-                            self.set_proposal_execution_status(pid, Err(err));
-                        }
-                        Ok(block_height) => {
-                            let nid = self.new_neuron_id();
-                            let dissolve_delay_seconds = std::cmp::min(
-                                create_neuron.dissolve_delay_seconds,
-                                MAX_DISSOLVE_DELAY_SECONDS,
-                            );
-                            // Transfer successful.
-                            let neuron = Neuron {
-                                id: Some(nid.clone()),
-                                account: to_subaccount.to_vec(),
-                                controller: Some(*np_principal),
-                                hot_keys: Vec::new(),
-                                cached_neuron_stake_e8s: reward.amount_e8s,
-                                neuron_fees_e8s: 0,
-                                created_timestamp_seconds: now,
-                                aging_since_timestamp_seconds: now,
-                                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                                    dissolve_delay_seconds,
-                                )),
-                                followees: self.proto.default_followees.clone(),
-                                recent_ballots: vec![],
-                                kyc_verified: true,
-                                transfer: Some(NeuronStakeTransfer {
-                                    transfer_timestamp: now,
-                                    from: Some(ic_base_types::PrincipalId::from(
-                                        GOVERNANCE_CANISTER_ID,
-                                    )),
-                                    from_subaccount: vec![],
-                                    to_subaccount: to_subaccount.to_vec(),
-                                    neuron_stake_e8s: reward.amount_e8s,
-                                    block_height,
-                                    memo: now,
-                                }),
-                                maturity_e8s_equivalent: 0,
-                                not_for_profit: false,
-                            };
-                            let err = self.add_neuron(nid.id, neuron);
-                            self.set_proposal_execution_status(pid, err);
-                        }
+                        ))
+                    } else {
+                        self.mint_reward_to_neuron_or_account(np_principal, reward)
+                            .await
                     }
-                } else {
-                    // We are not creating a neuron, just transferring funds.
-                    let err = self
-                        .ledger
-                        .transfer_funds(
-                            reward.amount_e8s,
-                            0, // Minting transfers don't pay transaction fees.
-                            None,
-                            AccountIdentifier::new(*np_principal, None),
-                            now,
-                        )
-                        .await
-                        .map(|_| ());
-                    self.set_proposal_execution_status(pid, err);
                 }
             } else {
-                self.set_proposal_execution_status(
-                    pid,
-                    Err(GovernanceError::new_with_message(
-                        ErrorType::PreconditionFailed,
-                        "Node provider has no ID.",
-                    )),
-                );
-            }
-        } else {
-            self.set_proposal_execution_status(
-                pid,
                 Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
-                    "Proposal was missing the node provider.",
-                )),
-            );
-        }
+                    "Node provider has no ID.",
+                ))
+            }
+        } else {
+            Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Proposal was missing the node provider.",
+            ))
+        };
+        self.set_proposal_execution_status(pid, result);
     }
 
     async fn perform_action(&mut self, pid: u64, action: proposal::Action) {
         match action {
-            proposal::Action::ManageNeuron(ref mgmt) => {
+            proposal::Action::ManageNeuron(mgmt) => {
                 // An adopted neuron management command is executed
                 // with the privileges of the controller of the
                 // neuron.
-                if let Some(ref managed_neuron_id) = mgmt.id {
-                    if let Some(controller) = self
-                        .proto
-                        .neurons
-                        .get(&managed_neuron_id.id)
-                        .and_then(|x| x.controller.as_ref())
-                        .copied()
-                    {
-                        let result = self.manage_neuron(&controller, mgmt).await;
-                        match result.command {
-                            Some(manage_neuron_response::Command::Error(err)) => {
-                                self.set_proposal_execution_status(pid, Err(err))
-                            }
-                            _ => self.set_proposal_execution_status(pid, Ok(())),
-                        };
-                    } else {
+                match mgmt.get_neuron_id_or_subaccount() {
+                    Ok(Some(ref managed_neuron_id)) => {
+                        if let Some(controller) = self
+                            .find_neuron(&managed_neuron_id)
+                            .ok()
+                            .and_then(|x| x.controller.as_ref())
+                            .copied()
+                        {
+                            let result = self.manage_neuron(&controller, &mgmt).await;
+                            match result.command {
+                                Some(manage_neuron_response::Command::Error(err)) => {
+                                    self.set_proposal_execution_status(pid, Err(err))
+                                }
+                                _ => self.set_proposal_execution_status(pid, Ok(())),
+                            };
+                        } else {
+                            self.set_proposal_execution_status(
+                                pid,
+                                Err(GovernanceError::new_with_message(
+                                    ErrorType::NotAuthorized,
+                                    "Couldn't execute manage neuron proposal.\
+                                          The neuron doesn't have a controller.",
+                                )),
+                            );
+                        }
+                    }
+                    Ok(None) => {
                         self.set_proposal_execution_status(
                             pid,
                             Err(GovernanceError::new_with_message(
-                                ErrorType::NotAuthorized,
+                                ErrorType::NotFound,
                                 "Couldn't execute manage neuron proposal.\
-                                          The neuron doesn't have a controller.",
+                                          The neuron was not found.",
                             )),
                         );
                     }
-                } else {
-                    self.set_proposal_execution_status(
-                        pid,
-                        Err(GovernanceError::new_with_message(
-                            ErrorType::NotFound,
-                            "Couldn't execute manage neuron proposal.\
-                                          The neuron was not found.",
-                        )),
-                    );
+                    Err(e) => self.set_proposal_execution_status(pid, Err(e)),
                 }
             }
             proposal::Action::ManageNetworkEconomics(ne) => {
@@ -3902,6 +4080,13 @@ impl Governance {
         summary: &str,
         url: &str,
     ) -> Result<ProposalId, GovernanceError> {
+        // Validate
+        let manage_neuron = ManageNeuron::from_proto(manage_neuron.clone()).map_err(|e| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                format!("Failed to validate ManageNeuron {}", e),
+            )
+        })?;
         let neuron_management_fee_per_proposal_e8s =
             self.economics().neuron_management_fee_per_proposal_e8s;
         // Find the proposing neuron.
@@ -3920,15 +4105,15 @@ impl Governance {
                 "Caller not authorized to propose.",
             ));
         }
-        let managed_id = manage_neuron.id.as_ref().ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                "Proposal must include a neuron to manage.",
-            )
-        })?;
-        let managed_neuron = self.proto.neurons.get(&managed_id.id).ok_or_else(|| {
-            GovernanceError::new_with_message(ErrorType::NotFound, "Neuron to manage not found.")
-        })?;
+        let managed_id = manage_neuron
+            .get_neuron_id_or_subaccount()?
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    "Proposal must include a neuron to manage.",
+                )
+            })?;
+        let managed_neuron = self.find_neuron(&managed_id)?;
 
         let command = manage_neuron.command.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
@@ -4046,7 +4231,7 @@ impl Governance {
                 summary: summary.to_string(),
                 url: url.to_string(),
                 action: Some(proposal::Action::ManageNeuron(Box::new(
-                    manage_neuron.clone(),
+                    manage_neuron.into_proto(),
                 ))),
             }),
             proposal_timestamp_seconds: now_seconds,
@@ -4098,6 +4283,10 @@ impl Governance {
     }
 
     fn validate_proposal(&mut self, proposal: &Proposal) -> Result<(), GovernanceError> {
+        if !proposal.allowed_when_resources_are_low() {
+            self.check_heap_can_grow()?;
+        }
+
         let error_str = if proposal.summary.len() > PROPOSAL_SUMMARY_BYTES_MAX {
             format!(
                 "The maximum proposal summary size is {} bytes, this proposal is: {} bytes",
@@ -4212,13 +4401,13 @@ impl Governance {
         // Validate proposal
         self.validate_proposal(proposal)?;
 
-        if let Some(proposal::Action::ManageNeuron(ref m)) = proposal.action {
+        if let Some(proposal::Action::ManageNeuron(m)) = &proposal.action {
             assert_eq!(topic, Topic::NeuronManagement);
             return self.make_manage_neuron_proposal(
                 proposer_id,
                 caller,
                 now_seconds,
-                m,
+                &m,
                 &proposal.summary,
                 &proposal.url,
             );
@@ -4279,6 +4468,7 @@ impl Governance {
             .filter(|info| !info.ballots.is_empty() && !info.is_manage_neuron())
             .count()
             >= MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS
+            && !proposal.allowed_when_resources_are_low()
         {
             return Err(GovernanceError::new_with_message(
                 ErrorType::ResourceExhausted,
@@ -4726,18 +4916,52 @@ impl Governance {
         caller: &PrincipalId,
         mgmt: &ManageNeuron,
     ) -> ManageNeuronResponse {
-        let id = match &mgmt.id {
-            None => {
-                return ManageNeuronResponse {
-                    command: Some(manage_neuron_response::Command::Error(
-                        GovernanceError::new_with_message(
-                            ErrorType::NotFound,
-                            "No neuron ID specified in the management request.",
-                        ),
-                    )),
+        // We run claim or refresh before we check whether a neuron exists because it
+        // may not in the case of the neuron being claimed
+        if let Some(manage_neuron::Command::ClaimOrRefresh(claim_or_refresh)) = &mgmt.command {
+            match claim_or_refresh.by {
+                Some(By::Memo(memo)) => {
+                    return self
+                        .claim_or_refresh_neuron_from_account_internal(Memo(memo), *caller)
+                        .await
+                        .map_or_else(
+                            ManageNeuronResponse::error,
+                            ManageNeuronResponse::claim_or_refresh_neuron_response,
+                        );
+                }
+                None => {
+                    return ManageNeuronResponse::error(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        "Can only claim or refresh a neuron by memo",
+                    ));
                 }
             }
-            Some(id) => id,
+        }
+
+        let id = match mgmt.get_neuron_id_or_subaccount() {
+            Err(e) => return ManageNeuronResponse::error(e),
+            Ok(None) => {
+                return ManageNeuronResponse::error(GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    "No neuron ID specified in the management request.",
+                ))
+            }
+            Ok(Some(NeuronIdOrSubaccount::NeuronId(id))) => id,
+            Ok(Some(NeuronIdOrSubaccount::Subaccount(sid))) => {
+                let subaccount = match Self::bytes_to_subaccount(&sid) {
+                    Ok(subaccount) => subaccount,
+                    Err(e) => return ManageNeuronResponse::error(e),
+                };
+                match self.get_neuron_by_subaccount(&subaccount) {
+                    Some(neuron) => neuron.id.clone().expect("neuron doesn't have an ID"),
+                    None => {
+                        return ManageNeuronResponse::error(GovernanceError::new_with_message(
+                            ErrorType::NotFound,
+                            "No neuron ID specified in the management request.",
+                        ))
+                    }
+                }
+            }
         };
 
         match &mgmt.command {
@@ -4786,6 +5010,9 @@ impl Governance {
                 .map_or_else(ManageNeuronResponse::error, |_| {
                     ManageNeuronResponse::register_vote_response()
                 }),
+            Some(manage_neuron::Command::ClaimOrRefresh(_)) => {
+                panic!("This should have already returned")
+            }
             None => panic!(),
         }
     }
@@ -4818,15 +5045,15 @@ impl Governance {
             return true;
         }
         // This data structure contains proposals grouped by topic.
-        let tmp: HashMap<Topic, BTreeSet<u64>> = self
-            .proto
-            .proposals
-            .iter()
-            .map(|(id, prop)| (prop.topic(), id))
-            .into_grouping_map()
-            .collect::<BTreeSet<u64>>();
+        let proposals_by_topic = {
+            let mut tmp: HashMap<Topic, Vec<u64>> = HashMap::new();
+            for (id, prop) in self.proto.proposals.iter() {
+                tmp.entry(prop.topic()).or_insert_with(Vec::new).push(*id);
+            }
+            tmp
+        };
         // Only keep the latest 'max_proposals' per topic.
-        for (topic, props) in tmp {
+        for (topic, props) in proposals_by_topic {
             let voting_period_seconds = self.voting_period_seconds()(topic);
             println!(
                 "{}GC - topic {:#?} max {} current {}",
@@ -4921,16 +5148,25 @@ impl Governance {
             self.ready_to_be_settled_proposal_ids().collect();
 
         // Construct map voters -> total _used_ voting rights for considered proposals
-        let voters_to_used_voting_right: HashMap<NeuronId, f64> = considered_proposals
-            .iter()
-            .flat_map(|pid| self.get_proposal_data(*pid))
-            .flat_map(|proposal| proposal.ballots.iter())
-            .filter(|(_, ballot)| Vote::from(ballot.vote).eligible_for_rewards())
-            .map(|(voter, ballot)| (NeuronId { id: *voter }, ballot.voting_power as f64))
-            .into_grouping_map()
-            .sum();
+        let (voters_to_used_voting_right, total_voting_rights) = {
+            let mut voters_to_used_voting_right: HashMap<NeuronId, f64> = HashMap::new();
+            let mut total_voting_rights = 0f64;
 
-        let total_voting_rights: f64 = voters_to_used_voting_right.values().sum();
+            for pid in considered_proposals.iter() {
+                if let Some(proposal) = self.get_proposal_data(*pid) {
+                    for (voter, ballot) in proposal.ballots.iter() {
+                        if !Vote::from(ballot.vote).eligible_for_rewards() {
+                            continue;
+                        }
+                        *voters_to_used_voting_right
+                            .entry(NeuronId { id: *voter })
+                            .or_insert(0f64) += ballot.voting_power as f64;
+                        total_voting_rights += ballot.voting_power as f64;
+                    }
+                }
+            }
+            (voters_to_used_voting_right, total_voting_rights)
+        };
 
         for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
             match self.get_neuron_mut(&neuron_id) {
@@ -5009,6 +5245,16 @@ impl Governance {
             } else {
                 normal
             }
+        }
+    }
+
+    fn check_heap_can_grow(&self) -> Result<(), GovernanceError> {
+        match self.env.heap_growth_potential() {
+            HeapGrowthPotential::NoIssue => Ok(()),
+            HeapGrowthPotential::LimitedAvailability => Err(GovernanceError::new_with_message(
+                ErrorType::ResourceExhausted,
+                "Heap size too large; governance canister is running is degraded mode.",
+            )),
         }
     }
 }

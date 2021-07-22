@@ -96,7 +96,7 @@ impl StateWithConfig {
                     "Wrong algorithm_id reported"
                 )
             }
-            Err(error) => panic!(format!("Incorrect error: {:?}", error)),
+            Err(error) => panic!("Incorrect error: {:?}", error),
         }
     }
 
@@ -138,7 +138,7 @@ impl StateWithConfig {
             match dealing {
                 Ok(_) => panic!("Dealing should fail with incorrect threshold.\n  Threshold: {}\n  Num receivers: {}", incorrect_threshold, num_receivers),
                 Err(CspDkgCreateReshareDealingError::InvalidThresholdError(_)) => (),
-                Err(error) => panic!(format!("Incorrect error: {:?}", error)),
+                Err(error) => panic!("Incorrect error: {:?}", error),
             }
         }
     }
@@ -184,7 +184,7 @@ impl StateWithConfig {
         match dealing {
             Ok(_) => panic!("Dealing should fail with indices: {:?}", incorrect_indices),
             Err(CspDkgCreateReshareDealingError::MisnumberedReceiverError { .. }) => (),
-            Err(error) => panic!(format!("Incorrect error: {:?}", error)),
+            Err(error) => panic!("Incorrect error: {:?}", error),
         }
     }
 

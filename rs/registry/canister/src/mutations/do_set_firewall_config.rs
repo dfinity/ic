@@ -47,12 +47,12 @@ pub struct SetFirewallConfigPayload {
     pub ipv6_prefixes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 
-impl Into<FirewallConfig> for SetFirewallConfigPayload {
-    fn into(self) -> FirewallConfig {
+impl From<SetFirewallConfigPayload> for FirewallConfig {
+    fn from(val: SetFirewallConfigPayload) -> Self {
         FirewallConfig {
-            firewall_config: self.firewall_config,
-            ipv4_prefixes: self.ipv4_prefixes,
-            ipv6_prefixes: self.ipv6_prefixes,
+            firewall_config: val.firewall_config,
+            ipv4_prefixes: val.ipv4_prefixes,
+            ipv6_prefixes: val.ipv6_prefixes,
         }
     }
 }

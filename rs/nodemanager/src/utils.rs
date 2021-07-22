@@ -5,6 +5,7 @@ use ic_logger::{info, ReplicaLogger};
 use std::env;
 use std::fs;
 use std::io;
+use std::path::Path;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
@@ -31,7 +32,7 @@ pub(crate) fn reexec_current_process(logger: &ReplicaLogger) -> NodeManagerError
 /// `exec` the given node manager binary with the same args that the current
 /// node manager process was invoked with
 pub(crate) fn exec_node_manager(
-    node_manager_binary: &PathBuf,
+    node_manager_binary: &Path,
     logger: &ReplicaLogger,
 ) -> NodeManagerError {
     let args: Vec<String> = env::args().collect();
@@ -47,7 +48,7 @@ pub(crate) fn exec_node_manager(
         .args(&args[1..])
         .exec();
 
-    NodeManagerError::ExecError(node_manager_binary.clone(), error)
+    NodeManagerError::ExecError(node_manager_binary.to_path_buf(), error)
 }
 
 /// Delete old files/directories in the given dir, keeping the
@@ -55,7 +56,7 @@ pub(crate) fn exec_node_manager(
 /// than `min_age`
 pub(crate) fn gc_dir(
     logger: &ReplicaLogger,
-    dir: &PathBuf,
+    dir: &Path,
     num_entries_to_keep: usize,
     min_age: Duration,
 ) -> io::Result<()> {
@@ -89,7 +90,7 @@ pub(crate) fn gc_dir(
 }
 
 /// Return the oldest created file or directory in `dir`
-pub(crate) fn get_oldest_entry(dir: &PathBuf) -> Option<PathBuf> {
+pub(crate) fn get_oldest_entry(dir: &Path) -> Option<PathBuf> {
     let mut oldest: Option<(SystemTime, PathBuf)> = None;
 
     for entry in fs::read_dir(dir).ok()? {
@@ -118,7 +119,7 @@ pub(crate) fn get_node_manager_binary_hash() -> NodeManagerResult<String> {
 }
 
 /// Compute the SHA256 of a file and return a hex-encoded string of the hash
-pub(crate) fn compute_sha256_hex(path: &PathBuf) -> NodeManagerResult<String> {
+pub(crate) fn compute_sha256_hex(path: &Path) -> NodeManagerResult<String> {
     let mut binary_file =
         fs::File::open(path).map_err(|e| NodeManagerError::file_open_error(path, e))?;
 
@@ -130,14 +131,14 @@ pub(crate) fn compute_sha256_hex(path: &PathBuf) -> NodeManagerResult<String> {
 }
 
 /// Assert that the given file has the given hash
-pub(crate) fn check_file_hash(path: &PathBuf, expected_sha256_hex: &str) -> NodeManagerResult<()> {
+pub(crate) fn check_file_hash(path: &Path, expected_sha256_hex: &str) -> NodeManagerResult<()> {
     let computed_sha256_hex = compute_sha256_hex(path)?;
 
     if computed_sha256_hex != expected_sha256_hex {
         Err(NodeManagerError::file_hash_mismatch_error(
             computed_sha256_hex,
             expected_sha256_hex.into(),
-            path.clone(),
+            path.to_path_buf(),
         ))
     } else {
         Ok(())

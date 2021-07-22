@@ -8,6 +8,7 @@ use ic_types::NodeId;
 use openssl::pkey::{PKey, Private};
 use openssl::ssl::{ConnectConfiguration, SslConnector, SslContextBuilder, SslMethod, SslVersion};
 use openssl::x509::X509;
+use std::pin::Pin;
 use tokio::io::{AsyncReadExt, ReadHalf};
 use tokio::net::TcpStream;
 use tokio_openssl::SslStream;
@@ -134,13 +135,14 @@ impl CustomClient {
         let tcp_stream = TcpStream::connect(("127.0.0.1", server_port))
             .await
             .expect("failed to connect");
+
         let tls_connector = self.tls_connector();
-        let result = tokio_openssl::connect(
-            tls_connector,
-            "domain is irrelevant, because hostname verification is disabled",
-            tcp_stream,
-        )
-        .await;
+        let tls_state = tls_connector
+            .into_ssl("domain is irrelevant, because hostname verification is disabled")
+            .expect("failed to convert TLS connector to state object");
+        let mut tls_stream = tokio_openssl::SslStream::new(tls_state, tcp_stream)
+            .expect("failed to create tokio_openssl::SslStream");
+        let result = Pin::new(&mut tls_stream).connect().await;
 
         if let Some(expected_error) = self.expected_error {
             let error = result.err().expect("expected error");
@@ -156,8 +158,8 @@ impl CustomClient {
                     "expected the client result to be ok but got error: {}",
                     error
                 ),
-                Ok(stream) => {
-                    let (mut tls_read_half, tls_write_half) = tokio::io::split(stream);
+                Ok(()) => {
+                    let (mut tls_read_half, tls_write_half) = tokio::io::split(tls_stream);
                     self.expect_msg_from_server_if_configured(&mut tls_read_half)
                         .await;
                 }

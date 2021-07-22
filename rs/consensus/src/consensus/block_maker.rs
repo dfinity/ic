@@ -15,10 +15,10 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{consensus::dkg, replica_config::ReplicaConfig, time::current_time, ReplicaVersion};
-use std::cmp::Ordering;
-use std::sync::Arc;
-use std::sync::{Mutex, RwLock};
-use std::time::Duration;
+use std::{
+    sync::{Arc, Mutex, RwLock},
+    time::Duration,
+};
 
 // Wait for VALIDATED_DEALING_AGE_THRESHOLD_MSECS (from the time an entry was
 // added to the validated pool) before selecting it for inclusion in a block.
@@ -197,91 +197,32 @@ impl BlockMaker {
             },
         };
 
-        match context.partial_cmp(&parent.context) {
-            None | Some(Ordering::Less) => {
-                // the values in our validation context are not monotonically increasing the
-                // values included in the parent block. To avoid proposing an
-                // invalid block, we simply do not propose a block now.
-                warn!(
-                    self.log,
-                    "Cannot propose block as the locally available validation context is \
+        if !context.greater_or_equal(&parent.context) {
+            // The values in our validation context are not monotonically increasing the
+            // values included in the parent block. To avoid proposing an invalid block, we
+            // simply do not propose a block now.
+            warn!(
+                self.log,
+                "Cannot propose block as the locally available validation context is \
                         smaller than the parent validation context \
                         (locally available={:?}, parent context={:?})",
-                    context,
-                    &parent.context
-                );
-                return None;
-            }
-            _ => {}
+                context,
+                &parent.context
+            );
+            return None;
         }
-
-        let batch_payload = {
-            // Use empty payload if the (agreed) replica_version is not supported.
-            if replica_version != ReplicaVersion::default() {
-                // if latest finalized CUP block has a version that is different,
-                // we should stop making blocks.
-                let finalized_replica_version = pool
-                    .get_replica_version_from_highest_catch_up_package(
-                        self.registry_client.as_ref(),
-                        &self.replica_config,
-                        &self.log,
-                    )?;
-                if finalized_replica_version != ReplicaVersion::default() {
-                    debug!(
-                        self.log,
-                        "Skip making blocks after the upgrade catch-up package has finalized."
-                    );
-                    return None;
-                }
-                BatchPayload::default()
-            } else {
-                let past_payloads =
-                    pool.get_payloads_from_height(certified_height.increment(), parent.clone());
-                match self.payload_builder.get_payload(
-                    height,
-                    ingress_pool,
-                    &past_payloads,
-                    &context,
-                ) {
-                    Ok(payload) => {
-                        self.metrics
-                            .get_payload_calls
-                            .with_label_values(&["success"])
-                            .inc();
-                        payload
-                    }
-                    Err(XNetPayloadError::Pending) => {
-                        // In case xnet payload builder has yet to finish preparing a payload, we
-                        // will try again later.
-                        //
-                        // The necessary context is remembered in a local cache so that we can use
-                        // the same context when trying again.
-                        *self.payload_context_cache.lock().unwrap() = Some((parent_hash, context));
-                        self.metrics
-                            .get_payload_calls
-                            .with_label_values(&["pending"])
-                            .inc();
-
-                        info!(
-                            self.log,
-                            "XNet payload builder has yet to finish. Blockmaker will try again later."
-                        );
-                        return None;
-                    }
-                }
-            }
-        };
 
         self.construct_block_proposal(
             pool,
+            ingress_pool,
             context,
             parent,
             parent_hash,
             height,
+            certified_height,
             rank,
             replica_version,
             registry_version,
-            batch_payload,
         )
     }
 
@@ -292,14 +233,15 @@ impl BlockMaker {
     fn construct_block_proposal(
         &self,
         pool: &PoolReader<'_>,
+        ingress_pool: &dyn IngressPoolSelect,
         context: ValidationContext,
         parent: Block,
         parent_hash: CryptoHashOf<Block>,
         height: Height,
+        certified_height: Height,
         rank: Rank,
         replica_version: ReplicaVersion,
         registry_version: RegistryVersion,
-        batch_payload: BatchPayload,
     ) -> Option<BlockProposal> {
         let max_dealings_per_block = dkg_dealings_per_block(
             &*self.registry_client,
@@ -315,7 +257,7 @@ impl BlockMaker {
             &*self.crypto,
             &pool,
             Arc::clone(&self.dkg_pool),
-            parent,
+            &parent,
             &*self.state_manager,
             &context,
             self.log.clone(),
@@ -325,19 +267,42 @@ impl BlockMaker {
         .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
         .ok()?;
 
+        // TODO: Once CountBytes is implemented for Summary and DKG, use these values
         let payload = Payload::new(
             ic_crypto::crypto_hash,
             match dkg_payload {
-                dkg::Payload::Summary(summary) => summary.into(),
+                dkg::Payload::Summary(summary) => {
+                    // Summary block does not have batch payload.
+                    self.metrics.report_byte_estimate_metrics(0, 0);
+                    summary.into()
+                }
                 dkg::Payload::Dealings(dealings) => {
+                    let batch_payload = match self.build_batch_payload(
+                        pool,
+                        ingress_pool,
+                        height,
+                        certified_height,
+                        &context,
+                        &parent,
+                        &parent_hash,
+                        &replica_version,
+                    ) {
+                        None => return None,
+                        Some(payload) => payload,
+                    };
                     if replica_version != ReplicaVersion::default() {
                         // Use empty DKG dealings if the (agreed) replica_version is not supported.
-                        (
-                            batch_payload,
-                            dkg::Dealings::new_empty(dealings.start_height),
-                        )
-                            .into()
+                        let new_dealings = dkg::Dealings::new_empty(dealings.start_height);
+                        self.metrics.report_byte_estimate_metrics(
+                            batch_payload.xnet.count_bytes(),
+                            batch_payload.ingress.count_bytes(),
+                        );
+                        (batch_payload, new_dealings).into()
                     } else {
+                        self.metrics.report_byte_estimate_metrics(
+                            batch_payload.xnet.count_bytes(),
+                            batch_payload.ingress.count_bytes(),
+                        );
                         (batch_payload, dealings).into()
                     }
                 }
@@ -356,6 +321,74 @@ impl BlockMaker {
             Err(err) => {
                 error!(self.log, "Couldn't create a signature: {:?}", err);
                 None
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn build_batch_payload(
+        &self,
+        pool: &PoolReader<'_>,
+        ingress_pool: &dyn IngressPoolSelect,
+        height: Height,
+        certified_height: Height,
+        context: &ValidationContext,
+        parent: &Block,
+        parent_hash: &CryptoHashOf<Block>,
+        replica_version: &ReplicaVersion,
+    ) -> Option<BatchPayload> {
+        // Use empty payload if the (agreed) replica_version is not supported.
+        if *replica_version != ReplicaVersion::default() {
+            // if latest finalized CUP block has a version that is different,
+            // we should stop making blocks.
+            let finalized_replica_version = pool
+                .get_replica_version_from_highest_catch_up_package(
+                    self.registry_client.as_ref(),
+                    &self.replica_config,
+                    &self.log,
+                )?;
+            if finalized_replica_version != ReplicaVersion::default() {
+                debug!(
+                    self.log,
+                    "Skip making blocks after the upgrade catch-up package has finalized."
+                );
+                None
+            } else {
+                Some(BatchPayload::default())
+            }
+        } else {
+            let past_payloads =
+                pool.get_payloads_from_height(certified_height.increment(), parent.clone());
+            match self
+                .payload_builder
+                .get_payload(height, ingress_pool, &past_payloads, context)
+            {
+                Ok(payload) => {
+                    self.metrics
+                        .get_payload_calls
+                        .with_label_values(&["success"])
+                        .inc();
+                    Some(payload)
+                }
+                Err(XNetPayloadError::Pending) => {
+                    // In case xnet payload builder has yet to finish preparing a payload,
+                    // we will try again later.
+                    //
+                    // The necessary context is remembered in a local cache so that we can
+                    // use the same context when trying again.
+                    *self.payload_context_cache.lock().unwrap() =
+                        Some((parent_hash.clone(), context.clone()));
+                    self.metrics
+                        .get_payload_calls
+                        .with_label_values(&["pending"])
+                        .inc();
+
+                    info!(
+                        self.log,
+                        "XNet payload builder has yet to finish. Blockmaker will try again later."
+                    );
+                    None
+                }
             }
         }
     }
@@ -422,7 +455,6 @@ impl BlockMaker {
         use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
             MaliciousBehaviour, MaliciousBehaviourLogEntry,
         };
-        use std::time::Duration;
         trace!(self.log, "maliciously_propose_blocks");
         let number_of_proposals = 5;
 
@@ -456,7 +488,7 @@ impl BlockMaker {
             if !already_proposed(pool, height, my_node_id) {
                 // If maliciously_propose_empty_blocks is set, propose only empty blocks.
                 let maybe_proposal = match maliciously_propose_empty_blocks {
-                    true => self.maliciously_propose_empty_block(pool, rank, parent),
+                    true => self.maliciously_propose_empty_block(pool, ingress_pool, rank, parent),
                     false => self.propose_block(pool, ingress_pool, rank, parent),
                 };
 
@@ -519,11 +551,13 @@ impl BlockMaker {
     fn maliciously_propose_empty_block(
         &self,
         pool: &PoolReader<'_>,
+        ingress_pool: &dyn IngressPoolSelect,
         rank: Rank,
         parent: Block,
     ) -> Option<BlockProposal> {
         let parent_hash = ic_crypto::crypto_hash(&parent);
         let height = parent.height.increment();
+        let certified_height = self.state_manager.latest_certified_height();
         let context = parent.context.clone();
 
         // Note that we will skip blockmaking if registry versions or replica_versions
@@ -538,14 +572,15 @@ impl BlockMaker {
 
         self.construct_block_proposal(
             pool,
+            ingress_pool,
             context,
             parent,
             parent_hash,
             height,
+            certified_height,
             rank,
             replica_version,
             registry_version,
-            BatchPayload::default(),
         )
     }
 }
@@ -581,12 +616,10 @@ fn dkg_dealings_per_block(
     registry_client
         .get_dkg_dealings_per_block(subnet_id, version)
         .map_err(|err| format!("Registry error: {:?}", err))?
-        .ok_or_else(|| {
-            panic!(
-                "No subnet record found for registry version={:?} and subnet_id={:?}",
-                version, subnet_id,
-            )
-        })
+        .ok_or(format!(
+            "No subnet record found for registry version={:?} and subnet_id={:?}",
+            version, subnet_id,
+        ))
 }
 
 #[cfg(test)]

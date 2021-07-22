@@ -18,7 +18,10 @@ use ic_protobuf::{
 };
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
-use std::convert::{From, TryFrom, TryInto};
+use std::{
+    convert::{From, TryFrom, TryInto},
+    mem::size_of,
+};
 
 /// The contents of a signed ingress message.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -50,6 +53,10 @@ impl SignedIngressContent {
 
     pub fn nonce(&self) -> Option<&Vec<u8>> {
         self.nonce.as_ref()
+    }
+
+    pub fn ingress_expiry(&self) -> Time {
+        Time::from_nanos_since_unix_epoch(self.ingress_expiry)
     }
 }
 
@@ -350,6 +357,12 @@ impl TryFrom<pb_ingress::Ingress> for Ingress {
             message_id: item.message_id.as_slice().try_into()?,
             expiry_time: Time::from_nanos_since_unix_epoch(item.expiry_time_nanos),
         })
+    }
+}
+
+impl CountBytes for Ingress {
+    fn count_bytes(&self) -> usize {
+        size_of::<Ingress>() + self.method_name.len() + self.method_payload.len()
     }
 }
 

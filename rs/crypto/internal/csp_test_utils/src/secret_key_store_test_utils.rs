@@ -42,7 +42,7 @@ impl TempSecretKeyStore {
     pub fn new() -> Self {
         let tempdir = mk_temp_dir_with_permissions(0o700);
         let store = ProtoSecretKeyStore::open(tempdir.path(), None);
-        TempSecretKeyStore { tempdir, store }
+        TempSecretKeyStore { store, tempdir }
     }
 }
 

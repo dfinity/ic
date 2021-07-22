@@ -349,11 +349,7 @@ impl<T: Clone> IntMap<T> {
     ///
     /// Complexity: O(1)
     pub fn is_empty(&self) -> bool {
-        if let Tree::Empty = self.0 {
-            true
-        } else {
-            false
-        }
+        matches!(self.0, Tree::Empty)
     }
 }
 

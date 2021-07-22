@@ -9,7 +9,6 @@ pub use ic_interfaces::registry::{
 use ic_metrics::MetricsRegistry;
 use ic_registry_common::local_store::LocalStoreImpl;
 use ic_registry_common::{
-    bootstrap_registry_data_provider::BootstrapRegistryDataProvider,
     data_provider::{CertifiedNnsDataProvider, NnsDataProvider},
     proto_registry_data_provider::ProtoRegistryDataProvider,
     registry::RegistryCanister,
@@ -62,6 +61,8 @@ impl RegistryClientImpl {
     /// spawned that continuously polls for updates.
     /// The background task is stopped when the object is dropped.
     pub fn fetch_and_start_polling(&self) -> Result<(), RegistryClientError> {
+        // TODO(IDX-1862)
+        #[allow(deprecated)]
         if self
             .started
             .compare_and_swap(false, true, Ordering::Relaxed)
@@ -75,7 +76,7 @@ impl RegistryClientImpl {
         let self_ = self.clone();
         tokio::spawn(async move {
             while !cancelled.load(Ordering::Relaxed) {
-                tokio::time::delay_for(POLLING_PERIOD).await;
+                tokio::time::sleep(POLLING_PERIOD).await;
                 if let Ok(()) = self_.poll_once() {}
             }
         });
@@ -91,16 +92,21 @@ impl RegistryClientImpl {
     pub fn poll_once(&self) -> Result<(), RegistryClientError> {
         let (records, version) = {
             let latest_version = self.cache.read().unwrap().latest_version;
-            match self
+            let records = match self
                 .data_provider
                 .get_updates_since(latest_version)
             {
-                Ok((records, version)) if version > latest_version => {
-                    (records, version)
-                }
+                Ok(records) if !records.is_empty() => records,
                 Ok(_) /*if version == cache_state.latest_version*/ => return Ok(()),
                 Err(e) => return Err(RegistryClientError::from(e)),
-            }
+            };
+            let new_version = records
+                .iter()
+                .max_by_key(|r| r.version)
+                .map(|r| r.version)
+                .unwrap_or(latest_version);
+
+            (records, new_version)
         };
 
         // Ensure exclusive access to the cache.
@@ -114,6 +120,33 @@ impl RegistryClientImpl {
             cache_state.update(records, version);
         }
         Ok(())
+    }
+
+    /// Calls poll_once() at most `retries` many times or until
+    /// `get_latest_version()` reports the same version at least twice.
+    ///
+    /// This method can be used in situations where the registry client is
+    /// backed by a data provider that fetches changelogs from the registry
+    /// canister directly and the client needs to be updated to the current
+    /// version without starting a background thread.
+    ///
+    /// # Errors
+    ///
+    /// Errors of poll_once() are propagated.
+    ///
+    /// If the same latest version cannot be observed after `retries` retries, a
+    /// `RegistryClientError::PollingLatestVersionFailed` is returned.
+    pub fn try_polling_latest_version(&self, retries: usize) -> Result<(), RegistryClientError> {
+        let mut last_version = self.get_latest_version();
+        for _ in 0..retries {
+            self.poll_once()?;
+            let new_version = self.get_latest_version();
+            if new_version == last_version {
+                return Ok(());
+            }
+            last_version = new_version;
+        }
+        Err(RegistryClientError::PollingLatestVersionFailed { retries })
     }
 
     fn check_version(
@@ -157,17 +190,9 @@ pub fn create_data_provider(
             Arc::new(ProtoRegistryDataProvider::load_from_file(path))
         }
         DataProviderConfig::Bootstrap {
-            initial_registry_file,
-            registry_canister_url,
-        } => {
-            let dp = BootstrapRegistryDataProvider::new(
-                Arc::new(ProtoRegistryDataProvider::load_from_file(
-                    initial_registry_file,
-                )),
-                nns_data_provider(registry_canister_url.clone()),
-            );
-            Arc::new(dp)
-        }
+            initial_registry_file: _,
+            registry_canister_url: _,
+        } => panic!("The Bootstrap Registry Data Provider is deprecated!"),
         DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
     }
 }
@@ -285,8 +310,10 @@ impl RegistryClient for RegistryClientImpl {
                 let is_set = r.value.is_some();
                 // if this record indicates a removal for the last key in the list, we need to
                 // remove that key.
-                if !is_set && acc.last().map(|k| k == &r.key).unwrap_or(false) {
-                    acc.pop();
+                if acc.last().map(|k| k == &r.key).unwrap_or(false) {
+                    if !is_set {
+                        acc.pop();
+                    }
                 } else if is_set {
                     acc.push(r.key.clone());
                 }
@@ -316,9 +343,9 @@ pub struct EmptyRegistryDataProvider();
 impl RegistryDataProvider for EmptyRegistryDataProvider {
     fn get_updates_since(
         &self,
-        version: RegistryVersion,
-    ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion), RegistryDataProviderError> {
-        Ok((vec![], version))
+        _version: RegistryVersion,
+    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+        Ok(vec![])
     }
 }
 
@@ -326,6 +353,7 @@ impl RegistryDataProvider for EmptyRegistryDataProvider {
 #[allow(dead_code, unused_imports)]
 mod tests {
     use super::*;
+    use assert_matches::assert_matches;
     use ic_interfaces::registry::ZERO_REGISTRY_VERSION;
     use ic_registry_common::{
         pb::test_protos::v1::TestProto, proto_registry_data_provider::ProtoRegistryDataProvider,
@@ -387,6 +415,7 @@ mod tests {
         }
         for v in (1..8).step_by(4) {
             set("FA_2", v);
+            set("FA_2", v + 1);
             rem("FA_2", v + 2);
         }
         set("FA_3", 1);
@@ -426,12 +455,14 @@ mod tests {
         assert!(get("B2", latest_version + 1).is_err());
 
         let test_family = |key_prefix: &str, version: u64, exp_result: &[&str]| {
+            let actual_res = family(key_prefix, version).unwrap();
+            let actual_set = actual_res
+                .iter()
+                .map(ToString::to_string)
+                .collect::<HashSet<_>>();
+            assert_eq!(actual_res.len(), actual_set.len());
             assert_eq!(
-                family(key_prefix, version)
-                    .unwrap()
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<HashSet<_>>(),
+                actual_set,
                 exp_result
                     .iter()
                     .map(ToString::to_string)
@@ -496,12 +527,92 @@ mod tests {
         if let Err(e) = registry.fetch_and_start_polling() {
             panic!("fetch_and_start_polling failed: {}", e);
         }
-        tokio::time::delay_for(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
         std::mem::drop(registry);
 
         assert!(data_provider.poll_counter.load(Ordering::Relaxed) > 0);
     }
 
+    #[test]
+    fn polling_for_latest_version_fails_for_insufficient_retries() {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        let changelog_size_limit = RegistryVersion::from(2);
+        let limiting_data_provider = Arc::new(LimitingDataProvider::new(
+            changelog_size_limit,
+            data_provider.clone(),
+        ));
+        let registry = RegistryClientImpl::new(limiting_data_provider, None);
+        // let get = |key: &str, t: u64| registry.get_test_proto(key,
+        // RegistryVersion::new(t));
+        let set = |key: &str, ver: u64| data_provider.add(key, v(ver), Some(value(ver))).unwrap();
+        let rem = |key: &str, ver: u64| data_provider.add::<TestProto>(key, v(ver), None).unwrap();
+
+        set("A", 1);
+        set("A", 3);
+        set("A", 6);
+        set("B", 6);
+        set("B2", 5);
+        rem("B2", 6);
+        set("B3", 5);
+        set("C", 6);
+        set("D", 7);
+
+        let try_poll_res = registry.try_polling_latest_version(3);
+        assert_matches!(
+            try_poll_res,
+            Err(RegistryClientError::PollingLatestVersionFailed { .. })
+        )
+    }
+
+    #[test]
+    fn polling_for_latest_version_succeeds() {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        let changelog_size_limit = RegistryVersion::from(2);
+        let limiting_data_provider = Arc::new(LimitingDataProvider::new(
+            changelog_size_limit,
+            data_provider.clone(),
+        ));
+        let registry = RegistryClientImpl::new(limiting_data_provider, None);
+        let get = |key: &str, t: u64| registry.get_test_proto(key, RegistryVersion::new(t));
+        let set = |key: &str, ver: u64| data_provider.add(key, v(ver), Some(value(ver))).unwrap();
+        let rem = |key: &str, ver: u64| data_provider.add::<TestProto>(key, v(ver), None).unwrap();
+
+        set("A", 1);
+        set("A", 3);
+        set("A", 6);
+        set("B", 6);
+        set("B2", 5);
+        rem("B2", 6);
+        set("C", 7);
+
+        assert!(registry.try_polling_latest_version(5).is_ok());
+        let latest_version = registry.get_latest_version().get();
+
+        assert!(get("A", 0).unwrap().is_none());
+        assert_eq!(get("A", 1).unwrap(), Some(value(1)));
+        assert_eq!(get("A", 2).unwrap(), Some(value(1)));
+        assert_eq!(get("A", 3).unwrap(), Some(value(3)));
+        assert_eq!(get("A", 4).unwrap(), Some(value(3)));
+        assert_eq!(get("A", 5).unwrap(), Some(value(3)));
+        assert_eq!(get("A", 6).unwrap(), Some(value(6)));
+        assert_eq!(get("A", 7).unwrap(), Some(value(6)));
+        assert!(get("A", latest_version + 1).is_err());
+
+        for t in 0..6 {
+            assert!(get("B", t).unwrap().is_none());
+        }
+        assert_eq!(get("B", 6).unwrap(), Some(value(6)));
+        assert!(get("B", latest_version + 1).is_err());
+
+        for t in 0..5 {
+            assert!(get("B2", t).unwrap().is_none());
+        }
+        assert_eq!(get("B2", 5).unwrap(), Some(value(5)));
+        assert!(get("B2", 6).unwrap().is_none());
+        assert!(get("B2", latest_version + 1).is_err());
+
+        assert_eq!(get("C", 7).unwrap(), Some(value(7)));
+    }
     #[cfg(test)]
     mod metrics {
         use ic_test_utilities::metrics::fetch_int_gauge;
@@ -539,9 +650,7 @@ mod tests {
     }
 
     fn value(v: u64) -> TestProto {
-        let mut test_proto = TestProto::default();
-        test_proto.test_value = v;
-        test_proto
+        TestProto { test_value: v }
     }
 
     struct FakeDataProvider {
@@ -552,10 +661,37 @@ mod tests {
         fn get_updates_since(
             &self,
             _version: RegistryVersion,
-        ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion), RegistryDataProviderError>
-        {
+        ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
             self.poll_counter.fetch_add(1, Ordering::Relaxed);
-            Ok((vec![], ZERO_REGISTRY_VERSION))
+            Ok(vec![])
+        }
+    }
+
+    struct LimitingDataProvider {
+        changelog_size: RegistryVersion,
+        data_provider: Arc<dyn RegistryDataProvider>,
+    }
+
+    impl LimitingDataProvider {
+        fn new(
+            changelog_size: RegistryVersion,
+            data_provider: Arc<dyn RegistryDataProvider>,
+        ) -> Self {
+            Self {
+                changelog_size,
+                data_provider,
+            }
+        }
+    }
+
+    impl RegistryDataProvider for LimitingDataProvider {
+        fn get_updates_since(
+            &self,
+            version: RegistryVersion,
+        ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+            let mut res = self.data_provider.get_updates_since(version)?;
+            res.retain(|r| r.version <= version + self.changelog_size);
+            Ok(res)
         }
     }
 }

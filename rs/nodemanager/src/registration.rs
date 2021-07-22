@@ -156,7 +156,7 @@ impl NodeRegistration {
                     ),
                     _ => {}
                 };
-                tokio::time::delay_for(Duration::from_secs(30)).await;
+                tokio::time::sleep(Duration::from_secs(30)).await;
             }
         }
     }
@@ -166,7 +166,7 @@ impl NodeRegistration {
         let mut version = self.registry_client.get_latest_version();
         while version == ZERO_REGISTRY_VERSION {
             warn!(self.log, "Registry cache is still at version 0.");
-            tokio::time::delay_for(Duration::from_secs(10)).await;
+            tokio::time::sleep(Duration::from_secs(10)).await;
             version = self.registry_client.get_latest_version();
         }
 
@@ -235,7 +235,7 @@ impl NodeRegistration {
             if self.is_node_registered() {
                 return;
             }
-            tokio::time::delay_for(Duration::from_secs(2)).await;
+            tokio::time::sleep(Duration::from_secs(2)).await;
         };
         // we have the public key
 
@@ -258,7 +258,7 @@ impl NodeRegistration {
             {
                 warn!(self.log, "Error when sending add node request: {:?}", e);
             };
-            tokio::time::delay_for(Duration::from_secs(2)).await;
+            tokio::time::sleep(Duration::from_secs(2)).await;
         }
     }
 
@@ -435,20 +435,21 @@ mod tests {
 
     #[test]
     fn transport_config_endpoints_succeeds() {
-        let mut transport_config = TransportConfig::default();
-        transport_config.node_ip = "::1".to_string();
-        transport_config.p2p_flows = vec![
-            TransportFlowConfig {
-                flow_tag: 1337,
-                server_port: 23,
-                queue_size: 1,
-            },
-            TransportFlowConfig {
-                flow_tag: 1338,
-                server_port: 24,
-                queue_size: 1,
-            },
-        ];
+        let transport_config = TransportConfig {
+            node_ip: "::1".to_string(),
+            p2p_flows: vec![
+                TransportFlowConfig {
+                    flow_tag: 1337,
+                    server_port: 23,
+                    queue_size: 1,
+                },
+                TransportFlowConfig {
+                    flow_tag: 1338,
+                    server_port: 24,
+                    queue_size: 1,
+                },
+            ],
+        };
 
         with_test_replica_logger(|log| {
             assert_eq!(

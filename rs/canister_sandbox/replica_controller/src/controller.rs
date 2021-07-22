@@ -16,10 +16,10 @@ use ic_canister_sandbox_common::{
     process::{build_sandbox_binary_relative_path, spawn_canister_sandbox_process},
     protocol, rpc, transport,
 };
-use ic_config::embedders::{Config, EmbedderType};
+use ic_config::embedders::Config;
 use ic_embedders::{
-    Embedder, ExecutionResult, Instance, ResumeToken, WasmExecutionInput, WasmExecutionOutput,
-    WasmExecutionResult, WasmtimeEmbedder,
+    Embedder, Instance, WasmExecutionInput, WasmExecutionOutput, WasmExecutionResult,
+    WasmtimeEmbedder,
 };
 use ic_embedders::{QueueConfig, ReturnToken, RunnerConfig, RunnerInput};
 use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
@@ -448,7 +448,6 @@ impl SandboxedExecutionController {
         let return_token = ReturnToken {
             output_sender,
             output_receiver: output_receiver.clone(),
-            extra_worker_handle: None,
             num_msgs: self.num_msgs.clone(),
         };
         // We increment the number of messages. This might end up

@@ -15,7 +15,6 @@ use ic_types::{
 };
 use lazy_static::lazy_static;
 use maplit::btreeset;
-use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
 use std::{collections::BTreeSet, sync::Arc};
@@ -88,7 +87,7 @@ pub struct SystemState {
 }
 
 /// A wrapper around the different canister statuses.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum CanisterStatus {
     Running {
         call_context_manager: CallContextManager,

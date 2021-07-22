@@ -31,10 +31,7 @@ enum GarbleResponse {
 
 impl GarbleResponse {
     fn should_drop_version(&self, version: u64) -> bool {
-        match self {
-            Self::DropVersion(v) if *v == version => true,
-            _ => false,
-        }
+        matches!(self, Self::DropVersion(v) if *v == version)
     }
 }
 
@@ -298,6 +295,32 @@ fn test_decode_bad_sig() {
         Err(CertificationError::InvalidSignature(_)) => (),
         other => panic!("Expected InvalidSignature error, got {:?}", other),
     }
+}
+
+#[test]
+fn test_missing_tail_is_ok() {
+    let (cid, pk, payload) = make_certified_delta(
+        vec![
+            make_change(vec![upsert("key1", "value1")]),
+            make_change(vec![upsert("key2", "value2")]),
+            make_change(vec![upsert("key3", "value3")]),
+            make_change(vec![upsert("key4", "value4")]),
+        ],
+        1..=4,
+        GarbleResponse::DropVersion(4),
+    );
+    assert_eq!(
+        decode_certified_deltas(0, &cid, &pk, &payload[..]).unwrap(),
+        (
+            vec![
+                set_key(1, "key1", "value1"),
+                set_key(2, "key2", "value2"),
+                set_key(3, "key3", "value3"),
+            ],
+            RegistryVersion::from(4u64),
+            Time::from_nanos_since_unix_epoch(REPLICA_TIME),
+        ),
+    )
 }
 
 #[test]

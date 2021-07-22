@@ -7,7 +7,7 @@ use ic_interfaces::{
     state_manager::*,
 };
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::{NumWasmPages, PageMap, Stream};
+use ic_replicated_state::{NumWasmPages, PageMap, ReplicatedState, Stream};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
@@ -30,12 +30,31 @@ use ic_types::{
 };
 use proptest::prelude::*;
 use std::convert::{TryFrom, TryInto};
+use std::path::Path;
 use std::sync::Arc;
 use tempfile::Builder;
 
 pub mod common;
 use common::*;
 use ic_registry_subnet_type::SubnetType;
+
+fn make_mutable(path: &Path) -> std::io::Result<()> {
+    let mut perms = std::fs::metadata(path)?.permissions();
+    perms.set_readonly(false);
+    std::fs::set_permissions(path, perms)?;
+    Ok(())
+}
+
+fn write_at(path: &Path, buf: &[u8], offset: u64) -> std::io::Result<()> {
+    use std::os::unix::fs::FileExt;
+
+    let f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(path)?;
+    f.write_at(buf, offset)?;
+    Ok(())
+}
 
 fn tree_payload(t: MixedHashTree) -> LabeledTree<Vec<u8>> {
     t.try_into().unwrap()
@@ -561,6 +580,39 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
 }
 
 #[test]
+fn can_remove_below_future_states_once_reached() {
+    state_manager_test(|state_manager| {
+        let commit_state = |h| {
+            let (_height, state) = state_manager.take_tip();
+            state_manager.commit_and_certify(state, height(h), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(h));
+        };
+
+        commit_state(1);
+        commit_state(2);
+        commit_state(3);
+        assert!(state_manager.get_state_at(height(2)).is_ok());
+
+        state_manager.remove_states_below(height(5));
+
+        assert_eq!(
+            state_manager.get_state_at(height(2)),
+            Err(StateManagerError::StateRemoved(height(2)))
+        );
+        assert_eq!(state_manager.latest_state_height(), height(3));
+
+        commit_state(4);
+        commit_state(5);
+
+        assert_eq!(
+            state_manager.get_state_at(height(4)),
+            Err(StateManagerError::StateRemoved(height(4)))
+        );
+        assert_eq!(state_manager.latest_state_height(), height(5));
+    });
+}
+
+#[test]
 fn latest_certified_state_is_updated_on_state_removal() {
     state_manager_test(|state_manager| {
         let (_height, state) = state_manager.take_tip();
@@ -1005,6 +1057,163 @@ fn can_state_sync_based_on_old_checkpoint() {
 }
 
 #[test]
+fn can_recover_from_corruption_on_state_sync() {
+    use ic_replicated_state::page_map::{PageDelta, PageIndex};
+    use ic_state_layout::{CheckpointLayout, RwPolicy};
+    use ic_sys::PAGE_SIZE;
+
+    fn populate_original_state(state: &mut ReplicatedState) {
+        insert_dummy_canister(state, canister_test_id(90));
+        insert_dummy_canister(state, canister_test_id(100));
+
+        let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state.page_map.update(PageDelta::from(
+            &[
+                (PageIndex::new(1), &vec![99u8; *PAGE_SIZE][..]),
+                (PageIndex::new(300), &vec![99u8; *PAGE_SIZE][..]),
+            ][..],
+        ));
+
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        canister_state
+            .system_state
+            .stable_memory
+            .update(PageDelta::from(
+                &[(PageIndex::new(0), &vec![255u8; *PAGE_SIZE][..])][..],
+            ));
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state.page_map.update(PageDelta::from(
+            &[
+                (PageIndex::new(1), &vec![100u8; *PAGE_SIZE][..]),
+                (PageIndex::new(300), &vec![100u8; *PAGE_SIZE][..]),
+            ][..],
+        ));
+    }
+
+    state_manager_test(|src_state_manager| {
+        // Create initial state with a single canister.
+        let (_height, mut state) = src_state_manager.take_tip();
+        populate_original_state(&mut state);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+        let hash_1 = wait_for_checkpoint(&src_state_manager, height(1));
+
+        // Create another state with an extra canister.
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(200));
+
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        // Add a new page much further in the file so that the first one could
+        // be re-used as a chunk.
+        execution_state.page_map.update(PageDelta::from(
+            &[(PageIndex::new(300), &vec![2u8; *PAGE_SIZE][..])][..],
+        ));
+
+        let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        // Add a new page much further in the file so that the first one could
+        // be re-used as a chunk.
+        execution_state.page_map.update(PageDelta::from(
+            &[(PageIndex::new(300), &vec![3u8; *PAGE_SIZE][..])][..],
+        ));
+
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+
+        let hash_2 = wait_for_checkpoint(&src_state_manager, height(2));
+        let id = StateSyncArtifactId {
+            height: height(2),
+            hash: hash_2,
+        };
+        let msg = src_state_manager
+            .get_validated_by_identifier(&id)
+            .expect("failed to get state sync message");
+
+        state_manager_test(|dst_state_manager| {
+            let (_height, mut state) = dst_state_manager.take_tip();
+            populate_original_state(&mut state);
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+            let hash_dst_1 = wait_for_checkpoint(&dst_state_manager, height(1));
+            assert_eq!(hash_1, hash_dst_1);
+
+            // Corrupt some files in the destination checkpoint.
+            let state_layout = dst_state_manager.state_layout();
+            let mutable_cp_layout = CheckpointLayout::<RwPolicy>::new(
+                state_layout
+                    .checkpoint(height(1))
+                    .unwrap()
+                    .raw_path()
+                    .to_path_buf(),
+                height(1),
+            )
+            .unwrap();
+
+            // There are 5 types of ways to trigger corruption recovery:
+            //
+            //   * The file should be fully copied, but some chunks don't pass validation.
+            //
+            //   * The file should be fully copied, but it's larger than stated in the
+            //     manifest.
+            //
+            //   * The file should be fully copied, but it's so corrupted that some chunks
+            //     are out of range.
+            //
+            //   * The file should be reused partially, but some chunks don't pass
+            //     validation.
+            //
+            //   * The file should be reused partially, but it's so corrupted that some
+            //     chunks are out of range.
+            //
+            // The code below prepares all 5 types of corruption.
+
+            let canister_90_layout = mutable_cp_layout.canister(&canister_test_id(90)).unwrap();
+            let canister_90_memory = canister_90_layout.vmemory_0();
+            make_mutable(&canister_90_memory).unwrap();
+            std::fs::write(&canister_90_memory, b"Garbage").unwrap();
+
+            let canister_90_raw_pb = canister_90_layout.canister().raw_path().to_path_buf();
+            make_mutable(&canister_90_raw_pb).unwrap();
+            write_at(&canister_90_raw_pb, b"Garbage", 0).unwrap();
+
+            let canister_100_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
+
+            let canister_100_memory = canister_100_layout.vmemory_0();
+            make_mutable(&canister_100_memory).unwrap();
+            write_at(&canister_100_memory, &vec![3u8; *PAGE_SIZE][..], 4).unwrap();
+
+            let canister_100_stable_memory = canister_100_layout.stable_memory_blob();
+            make_mutable(&canister_100_stable_memory).unwrap();
+            write_at(
+                &canister_100_stable_memory,
+                &vec![3u8; *PAGE_SIZE][..],
+                *PAGE_SIZE as u64,
+            )
+            .unwrap();
+
+            let canister_100_raw_pb = canister_100_layout.canister().raw_path().to_path_buf();
+            make_mutable(&canister_100_raw_pb).unwrap();
+            std::fs::write(&canister_100_raw_pb, b"Garbage").unwrap();
+
+            let chunkable = dst_state_manager.create_chunkable_state(&id);
+            let dst_msg = pipe_state_sync(msg, chunkable);
+            dst_state_manager
+                .check_artifact_acceptance(dst_msg, &node_test_id(0))
+                .expect("failed to process state sync artifact");
+
+            let expected_state = src_state_manager.get_latest_state();
+
+            assert_eq!(dst_state_manager.get_latest_state(), expected_state);
+            assert_eq!(
+                dst_state_manager.take_tip().1,
+                *expected_state.take().as_ref()
+            );
+        })
+    });
+}
+
+#[test]
 fn can_commit_below_state_sync() {
     state_manager_test(|src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
@@ -1396,10 +1605,7 @@ proptest! {
 
                     let signals_end = decoded_slice.header().signals_end;
 
-                    Stream {
-                        messages,
-                        signals_end,
-                    }
+                    Stream::new(messages, signals_end)
                 })
             }
         );
@@ -1433,10 +1639,7 @@ proptest! {
                         }
                     }
 
-                    Stream {
-                        messages,
-                        signals_end,
-                    }
+                    Stream::new(messages, signals_end)
                 })
             }
         );
@@ -1462,10 +1665,7 @@ proptest! {
                         .unwrap_or(&StreamIndexedQueue::default()).clone();
                     let signals_end = decoded_slice.header().signals_end + 99999.into();
 
-                    Stream {
-                        messages,
-                        signals_end,
-                    }
+                    Stream::new(messages, signals_end)
                 })
             }
         );
@@ -1493,10 +1693,7 @@ proptest! {
 
                     signals_end.inc_assign();
 
-                    Stream {
-                        messages,
-                        signals_end,
-                    }
+                    Stream::new(messages, signals_end)
                 })
             }
         );

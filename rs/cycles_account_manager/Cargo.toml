@@ -13,4 +13,5 @@ ic-types = { path = "../types/types" }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 
 [dev-dependencies]
+ic-test-utilities = { path = "../test_utilities" }
 ic-wasm-types = { path = "../types/wasm_types" }

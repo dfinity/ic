@@ -80,7 +80,7 @@ mod sign_threshold {
     #[test]
     fn should_return_signature_from_csp_if_csp_returns_ok() {
         let csp_sig = individual_csp_threshold_sig([42; IndividualSignatureBytes::SIZE]);
-        let csp = csp_with_sign_returning_once(Ok(csp_sig));
+        let csp = csp_with_sign_returning_once(Ok(csp_sig.clone()));
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs(pub_coeffs(), DkgId::IDkgId(I_DKG_ID));
 
@@ -739,7 +739,7 @@ mod combine_threshold_sig_shares {
             threshold_sig_share(vec![1; IndividualSignatureBytes::SIZE]),
         )]);
         let indices = indices(vec![(NODE_1, 0)]);
-        let csp = csp_with_combine_sigs_returning_once(Ok(csp_combined_sig));
+        let csp = csp_with_combine_sigs_returning_once(Ok(csp_combined_sig.clone()));
         let threshold_sig_data_store =
             threshold_sig_data_store_with(DkgId::IDkgId(I_DKG_ID), pub_coeffs(), indices);
 
@@ -984,7 +984,7 @@ mod combine_threshold_sig_shares {
     #[test]
     #[should_panic(expected = "Illegal state: unexpected error from the CSP")]
     fn should_panic_if_csp_returns_unexpected_error() {
-        let indices = indices(vec![(NODE_1, 0 as NodeIndex)]);
+        let indices = indices(vec![(NODE_1, 0_u32)]);
         let shares = shares(vec![(
             NODE_1,
             threshold_sig_share(vec![1; IndividualSignatureBytes::SIZE]),
@@ -1265,7 +1265,7 @@ mod verify_combined_threshold_sig_by_public_key {
         let csp_1 = csp_with_threshold_verify_combined_signature_expecting_once(
             expected_alg_id,
             expected_msg.clone(),
-            expected_sig,
+            expected_sig.clone(),
             expected_coeffs.clone(),
         );
         // Ideally, this test would use a single CSP instance. The mock CSP cannot be

@@ -3,6 +3,12 @@ use prometheus::{
     IntCounterVec, IntGauge, IntGaugeVec, Opts,
 };
 
+/// A wrapper around `prometheus::Registry` with helpers for creating metrics
+///
+/// We do not use the static metrics of Prometheus to allow simpler testing of
+/// the metrics. Besides that, passing the registry around explicitly is useful
+/// for detecting the situation when two different versions of Prometheus are
+/// are used in different packages.
 #[derive(Debug, Clone, Default)]
 pub struct MetricsRegistry {
     registry: prometheus::Registry,
