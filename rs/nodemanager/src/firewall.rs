@@ -7,9 +7,8 @@ use ic_config::firewall::{Config as FirewallConfig, FIREWALL_FILE_DEFAULT_PATH};
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_protobuf::registry::firewall::v1::FirewallConfig as FirewallConfigPB;
 use ic_types::RegistryVersion;
-use ic_utils::fs::write_atomically;
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use ic_utils::fs::write_string_using_tmp_file;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -135,7 +134,9 @@ impl Firewall {
                     "No firewall configuration found. Node manager will not write any config to a file."
                 );
             } else {
-                Self::write_to_file(&self.configuration.config_file, content.as_str())?;
+                let f = &self.configuration.config_file;
+                write_string_using_tmp_file(f, content.as_str())
+                    .map_err(|e| NodeManagerError::file_write_error(f, e))?;
                 self.compiled_config = content;
             }
             self.must_write = false;
@@ -156,13 +157,6 @@ impl Firewall {
                 "<< ipv6_prefixes >>",
                 &Self::sanitize_prefixes(&self.configuration.ipv6_prefixes).join(",\n"),
             )
-    }
-
-    /// Writes a given content to a file at the given path
-    fn write_to_file(file_path: &Path, content: &str) -> NodeManagerResult<()> {
-        write_atomically(file_path, |f| f.write_all(content.as_bytes()))
-            .map_err(|e| NodeManagerError::file_write_error(file_path, e))?;
-        Ok(())
     }
 
     fn sanitize_prefixes(prefixes: &[String]) -> Vec<String> {

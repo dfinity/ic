@@ -90,7 +90,7 @@ pub fn insert_initial_dkg_transcript(
         .iter()
         .map(|n| NodeId::from(PrincipalId::try_from(&n[..]).unwrap()))
         .collect();
-    let mut transcripts = empty_ni_dkg_transcripts_with_committee(committee);
+    let mut transcripts = empty_ni_dkg_transcripts_with_committee(committee, version);
     let high_threshold_transcript = initial_ni_dkg_transcript_record_from_transcript(
         transcripts
             .remove(&NiDkgTag::HighThreshold)
@@ -162,6 +162,9 @@ pub fn test_subnet_record() -> SubnetRecord {
         start_as_nns: false,
         subnet_type: SubnetType::Application.into(),
         is_halted: false,
+        max_instructions_per_message: 5_000_000_000,
+        max_instructions_per_round: 7_000_000_000,
+        max_instructions_per_install_code: 200_000_000_000,
     }
 }
 

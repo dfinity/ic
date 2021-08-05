@@ -28,7 +28,7 @@ dfn_candid = {path="../../../rust_canisters/dfn_candid"}
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 dfn_macro = { path = "../../../rust_canisters/dfn_macro" }
 on_wire = { path = "../../../rust_canisters/on_wire"}
-ic-cdk = { version = "0.2.4", default-features = false }
+ic-cdk = { version = "0.3.0", default-features = false }
 ic-protobuf = { path = "../../../protobuf" }
 prost = "0.7.0"
 ic-registry-keys = { path = "../../../registry/keys" }

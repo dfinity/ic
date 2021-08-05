@@ -4,7 +4,7 @@
 //! implementation details.
 
 use super::*;
-use secp256k1::curve::Affine;
+use libsecp256k1::curve::Affine;
 use std::fmt;
 
 #[cfg(test)]

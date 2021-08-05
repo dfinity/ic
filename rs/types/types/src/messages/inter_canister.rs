@@ -1,4 +1,4 @@
-use crate::{ingress::WasmResult, CanisterId, CountBytes, Funds, NumBytes};
+use crate::{ingress::WasmResult, CanisterId, CountBytes, Cycles, Funds, NumBytes};
 use ic_error_types::{RejectCode, UserError};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -27,7 +27,7 @@ pub struct Request {
     pub receiver: CanisterId,
     pub sender: CanisterId,
     pub sender_reply_callback: CallbackId,
-    pub payment: Funds,
+    pub payment: Cycles,
     pub method_name: String,
     #[serde(with = "serde_bytes")]
     pub method_payload: Vec<u8>,
@@ -40,7 +40,7 @@ impl Request {
     }
 
     /// Takes the payment out of this `Request`.
-    pub fn take_funds(&mut self) -> Funds {
+    pub fn take_cycles(&mut self) -> Cycles {
         self.payment.take()
     }
 
@@ -141,7 +141,7 @@ pub struct Response {
     pub originator: CanisterId,
     pub respondent: CanisterId,
     pub originator_reply_callback: CallbackId,
-    pub refund: Funds,
+    pub refund: Cycles,
     pub response_payload: Payload,
 }
 
@@ -199,9 +199,10 @@ impl From<&Request> for pb_queues::Request {
             receiver: Some(pb_types::CanisterId::from(req.receiver)),
             sender: Some(pb_types::CanisterId::from(req.sender)),
             sender_reply_callback: req.sender_reply_callback.get(),
-            payment: Some((&req.payment).into()),
+            payment: Some((&Funds::new(req.payment)).into()),
             method_name: req.method_name.clone(),
             method_payload: req.method_payload.clone(),
+            cycles_payment: Some((req.payment).into()),
         }
     }
 }
@@ -210,11 +211,19 @@ impl TryFrom<pb_queues::Request> for Request {
     type Error = ProxyDecodeError;
 
     fn try_from(req: pb_queues::Request) -> Result<Self, Self::Error> {
+        // To maintain backwards compatibility we fall back to reading from `payment` if
+        // `cycles_payment` is not set.
+        let payment = match try_from_option_field(req.cycles_payment, "Request::cycles_payment") {
+            Ok(res) => res,
+            Err(_) => try_from_option_field::<_, Funds, _>(req.payment, "Request::payment")
+                .map(|mut res| res.take_cycles())?,
+        };
+
         Ok(Self {
             receiver: try_from_option_field(req.receiver, "Request::receiver")?,
             sender: try_from_option_field(req.sender, "Request::sender")?,
             sender_reply_callback: req.sender_reply_callback.into(),
-            payment: try_from_option_field(req.payment, "Request::payment")?,
+            payment,
             method_name: req.method_name,
             method_payload: req.method_payload,
         })
@@ -251,8 +260,9 @@ impl From<&Response> for pb_queues::Response {
             originator: Some(pb_types::CanisterId::from(rep.originator)),
             respondent: Some(pb_types::CanisterId::from(rep.respondent)),
             originator_reply_callback: rep.originator_reply_callback.get(),
-            refund: Some((&rep.refund).into()),
+            refund: Some((&Funds::new(rep.refund)).into()),
             response_payload: Some(p),
+            cycles_refund: Some((rep.refund).into()),
         }
     }
 }
@@ -268,11 +278,20 @@ impl TryFrom<pb_queues::Response> for Response {
             pb_queues::response::ResponsePayload::Data(d) => Payload::Data(d),
             pb_queues::response::ResponsePayload::Reject(r) => Payload::Reject(r.try_into()?),
         };
+
+        // To maintain backwards compatibility we fall back to reading from `refund` if
+        // `cycles_refund` is not set.
+        let refund = match try_from_option_field(rep.cycles_refund, "Response::cycles_refund") {
+            Ok(res) => res,
+            Err(_) => try_from_option_field::<_, Funds, _>(rep.refund, "Response::refund")
+                .map(|mut res| res.take_cycles())?,
+        };
+
         Ok(Self {
             originator: try_from_option_field(rep.originator, "Response::originator")?,
             respondent: try_from_option_field(rep.respondent, "Response::respondent")?,
             originator_reply_callback: rep.originator_reply_callback.into(),
-            refund: try_from_option_field(rep.refund, "Response::refund")?,
+            refund,
             response_payload,
         })
     }

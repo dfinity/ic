@@ -1,3 +1,5 @@
+#[rustfmt::skip]
+mod unformatted {
 //! <h1>Overview</h1>
 //!
 //! The *Artifact Manager* stores artifacts in the artifact pool. These
@@ -39,8 +41,60 @@
 //!     unvalidated part to the validated part of the pool
 //!   * When artifacts are added to the validated part of the artifact pool, the
 //!     Artifact Manager notifies Gossip of adverts to send to peers.
+//!
+//! <h1>High Level View</h1>
+//!
+//!
+//!#                                                                 --------------------------
+//!#                                                                 | ArtifactManagerBackend |
+//!#                                                           |->   |     (Consensus)        |
+//!#                                                           |     -------------------------
+//!#                                                           |     --------------------------
+//!#                                                           |     | ArtifactManagerBackend |
+//!#                                                           |->   |       (Dkg)            |
+//!#                                                           |     -------------------------
+//!#     --------------          ------------------------      |     --------------------------
+//!#     |   P2P      | <------> |  ArtifactManagerImpl |  ----|->   | ArtifactManagerBackend |
+//!#     --------------          ------------------------      |     |     (Certification)    |
+//!#                                                           |     --------------------------
+//!#                                                           |     --------------------------
+//!#                                                           |     | ArtifactManagerBackend |
+//!#                                                           |->   |     (Ingress)          |
+//!#                                                           |     -------------------------
+//!#                                                           |     --------------------------
+//!#                                                           |     | ArtifactManagerBackend |
+//!#                                                           |->   |     (State Sync)       |
+//!#                                                                 -------------------------
+//!
+//!  The main components are:
+//!   * Front end
+//!     manager::ArtifactManagerImpl implements the ArtifactManager trait and talks
+//!     to P2P. It maintains the map of backends, one for each client: consensus, DKG,
+//!     certification, ingress, state sync. It is just a light weight layer that routes the
+//!     requests to the appropriate backend
+//!
+//!   * Back ends
+//!     clients::ArtifactManagerBackend is a per-client wrapper that has two parts:
+//!     1. Sync: Requests that can be served in the caller's context are processed by the
+//!        sync part (e.g) has_artifact(), get_validated_by_identifier() that only need to
+//!        look up the artifact pool
+//!
+//!        clients::ConsensusClient, etc implement the per-client sync part
+//!
+//!     2. Async: Processes the received artifacts via on_artifact(). The new artifacts are
+//!        queued to a background worker thread. The thread runs a loop that calls into the
+//!        per-client ArtifactProcessor implementation with the newly received artifacts
+//!
+//!        a. processors::ArtifactProcessorManager manages the life cycle of these back ground
+//!           threads, and queues the requests to the background thread via a crossbeam channel
+//!        b. processors::ConsensusProcessor, etc implement the per-client ArtifactProcessor
+//!           logic called by the threads. These roughly perform the sequence: add the new
+//!           artifacts to the unvalidated pool, call the client.on_state_change(), apply the
+//!           returned changes(mutations) to the artifact pools
+//!
+}
 
-pub mod actors;
 pub mod artifact;
 pub mod clients;
 pub mod manager;
+pub mod processors;

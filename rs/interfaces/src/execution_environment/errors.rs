@@ -3,7 +3,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     methods::WasmMethod, user_error::UserError, CanisterId, CanisterStatusType, Cycles,
 };
-use ic_wasm_types::{WasmInstrumentationError, WasmValidationError};
+use ic_wasm_types::{WasmEngineError, WasmInstrumentationError, WasmValidationError};
 use serde::{Deserialize, Serialize};
 
 /// Various traps that a canister can create.
@@ -131,6 +131,7 @@ pub enum HypervisorError {
         callback_err: Box<HypervisorError>,
         cleanup_err: Box<HypervisorError>,
     },
+    WasmEngineError(WasmEngineError),
 }
 
 impl From<WasmInstrumentationError> for HypervisorError {
@@ -142,6 +143,12 @@ impl From<WasmInstrumentationError> for HypervisorError {
 impl From<WasmValidationError> for HypervisorError {
     fn from(err: WasmValidationError) -> Self {
         Self::InvalidWasm(err)
+    }
+}
+
+impl From<WasmEngineError> for HypervisorError {
+    fn from(err: WasmEngineError) -> Self {
+        Self::WasmEngineError(err)
     }
 }
 
@@ -278,6 +285,12 @@ impl HypervisorError {
                     )
                 )
             }
+            Self::WasmEngineError(err) => UserError::new(
+                E::CanisterWasmEngineError,
+                format!(
+                    "Canister {} encountered a Wasm engine error: {}", canister_id, err
+                ),
+            ),
         }
     }
 
@@ -302,6 +315,7 @@ impl HypervisorError {
             HypervisorError::MessageRejected => "MessageRejected",
             HypervisorError::InsufficientCyclesBalance { .. } => "InsufficientCyclesBalance",
             HypervisorError::Cleanup { .. } => "Cleanup",
+            HypervisorError::WasmEngineError(_) => "WasmEngineError",
         }
     }
 }

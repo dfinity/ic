@@ -8,7 +8,7 @@ mod query;
 mod read_state;
 mod webauthn;
 
-use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Funds, NumBytes, UserId};
+use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
 pub use blob::Blob;
 pub use http::{
     Authentication, Certificate, CertificateDelegation, Delegation, HasCanisterId,
@@ -77,10 +77,10 @@ pub enum StopCanisterContext {
     Canister {
         sender: CanisterId,
         reply_callback: CallbackId,
-        /// The funds that the request to stop the canister contained.  Stored
+        /// The cycles that the request to stop the canister contained.  Stored
         /// here so that they can be returned to the caller in the eventual
         /// reply.
-        funds: Funds,
+        cycles: Cycles,
     },
 }
 
@@ -92,10 +92,10 @@ impl StopCanisterContext {
         }
     }
 
-    pub fn take_funds(&mut self) -> Funds {
+    pub fn take_cycles(&mut self) -> Cycles {
         match self {
-            StopCanisterContext::Ingress { .. } => Funds::zero(),
-            StopCanisterContext::Canister { funds, .. } => funds.take(),
+            StopCanisterContext::Ingress { .. } => Cycles::zero(),
+            StopCanisterContext::Canister { cycles, .. } => cycles.take(),
         }
     }
 }
@@ -114,13 +114,14 @@ impl From<&StopCanisterContext> for pb::StopCanisterContext {
             StopCanisterContext::Canister {
                 sender,
                 reply_callback,
-                funds,
+                cycles,
             } => Self {
                 context: Some(pb::stop_canister_context::Context::Canister(
                     pb::stop_canister_context::Canister {
                         sender: Some(pb_types::CanisterId::from(*sender)),
                         reply_callback: reply_callback.get(),
-                        funds: Some(funds.into()),
+                        funds: Some((&Funds::new(*cycles)).into()),
+                        cycles: Some((*cycles).into()),
                     },
                 )),
             },
@@ -147,12 +148,34 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         sender,
                         reply_callback,
                         funds,
+                        cycles,
                     },
-                ) => StopCanisterContext::Canister {
-                    sender: try_from_option_field(sender, "StopCanisterContext::Canister::sender")?,
-                    reply_callback: CallbackId::from(reply_callback),
-                    funds: try_from_option_field(funds, "StopCanisterContext::Canister::funds")?,
-                },
+                ) => {
+                    // To maintain backwards compatibility we fall back to reading from `funds` if
+                    // `cycles` is not set.
+                    let cycles = match try_from_option_field(
+                        cycles,
+                        "StopCanisterContext::Canister::cycles",
+                    ) {
+                        Ok(cycles) => cycles,
+                        Err(_) => {
+                            let mut funds: Funds = try_from_option_field(
+                                funds,
+                                "StopCanisterContext::Canister::funds",
+                            )?;
+                            funds.take_cycles()
+                        }
+                    };
+
+                    StopCanisterContext::Canister {
+                        sender: try_from_option_field(
+                            sender,
+                            "StopCanisterContext::Canister::sender",
+                        )?,
+                        reply_callback: CallbackId::from(reply_callback),
+                        cycles,
+                    }
+                }
             };
         Ok(stop_canister_context)
     }

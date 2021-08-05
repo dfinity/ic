@@ -23,8 +23,8 @@ impl std::fmt::Display for ParityWasmError {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 /// Different errors that be returned by `validate_wasm_binary`
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WasmValidationError {
     /// Failure in party_wasm when deserializing the wasm module.  
     ParityDeserializeError(ParityWasmError),
@@ -38,8 +38,6 @@ pub enum WasmValidationError {
     InvalidExportSection(String),
     /// Module contains an invalid data section
     InvalidDataSection(String),
-    /// Failure when trying to compile in Lucet
-    LucetCompilerErr(String),
     /// Module contains too many globals.
     TooManyGlobals { defined: usize, allowed: usize },
     /// Module contains too many functions.
@@ -67,11 +65,6 @@ impl std::fmt::Display for WasmValidationError {
             Self::InvalidDataSection(err) => {
                 write!(f, "Wasm module has an invalid data section. {}", err)
             }
-            Self::LucetCompilerErr(err) => write!(
-                f,
-                "Validation failed due to \"{}\" compile error in Lucet",
-                err
-            ),
             Self::TooManyGlobals { defined, allowed } => write!(
                 f,
                 "Wasm module defined {} globals which exceeds the maximum number allowed {}.",
@@ -86,8 +79,8 @@ impl std::fmt::Display for WasmValidationError {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 /// Different errors that can be returned by `instrument`
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WasmInstrumentationError {
     /// Failure in party_wasm when deserializing the wasm module
     ParityDeserializeError(ParityWasmError),
@@ -111,6 +104,34 @@ impl std::fmt::Display for WasmInstrumentationError {
                 "Wasm module has {} memory sections but should have had {}",
                 got, expected
             ),
+        }
+    }
+}
+
+/// Different errors that be returned by the Wasm engine
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum WasmEngineError {
+    FailedToInitializeEngine,
+    FailedToInstantiateModule,
+    FailedToSetAsyncStack,
+    FailedToSetWasmStack,
+}
+
+impl std::fmt::Display for WasmEngineError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::FailedToInitializeEngine => {
+                write!(f, "Failed to initialize engine")
+            }
+            Self::FailedToInstantiateModule => {
+                write!(f, "Failed to instantiate module")
+            }
+            Self::FailedToSetWasmStack => {
+                write!(f, "Failed to set Wasm stack")
+            }
+            Self::FailedToSetAsyncStack => {
+                write!(f, "Failed to set async stack")
+            }
         }
     }
 }

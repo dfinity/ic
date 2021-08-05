@@ -156,7 +156,7 @@ pub struct CanisterStateBits {
     pub compute_allocation: ComputeAllocation,
     pub accumulated_priority: AccumulatedPriority,
     pub execution_state_bits: Option<ExecutionStateBits>,
-    pub memory_allocation: Option<MemoryAllocation>,
+    pub memory_allocation: MemoryAllocation,
     pub freeze_threshold: NumSeconds,
     pub cycles_balance: Cycles,
     pub status: CanisterStatus,
@@ -691,10 +691,6 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
         self.canister_root.join("stable_memory.bin")
     }
 
-    pub fn stable_memory_proto(&self) -> ProtoFileWith<pb_metadata::StableMemory, Permissions> {
-        self.canister_root.join("stable_memory.pbuf").into()
-    }
-
     pub fn tombstone(&self) -> PathBuf {
         self.canister_root.join("tombstone")
     }
@@ -939,11 +935,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             compute_allocation: item.compute_allocation.as_percent(),
             accumulated_priority: item.accumulated_priority.value(),
             execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
-            // Per the public spec, a memory allocation of zero = no memory allocation set.
-            memory_allocation: match item.memory_allocation {
-                Some(memory_allocation) => memory_allocation.get().get(),
-                None => 0,
-            },
+            memory_allocation: item.memory_allocation.bytes().get(),
             freeze_threshold: item.freeze_threshold.get(),
             cycles_balance: Some(item.cycles_balance.into()),
             cycles_account: Some(item.cycles_balance.into()),
@@ -1016,19 +1008,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             )?,
             accumulated_priority: value.accumulated_priority.into(),
             execution_state_bits,
-            // Per the public spec, a memory allocation of zero = no memory allocation set.
-            memory_allocation: if value.memory_allocation == 0 {
-                None
-            } else {
-                Some(
-                    MemoryAllocation::try_from(NumBytes::from(value.memory_allocation)).map_err(
-                        |e| ProxyDecodeError::ValueOutOfRange {
-                            typ: "MemoryAllocation",
-                            err: format!("{:?}", e),
-                        },
-                    )?,
-                )
-            },
+            memory_allocation: MemoryAllocation::try_from(NumBytes::from(value.memory_allocation))
+                .map_err(|e| ProxyDecodeError::ValueOutOfRange {
+                    typ: "MemoryAllocation",
+                    err: format!("{:?}", e),
+                })?,
             freeze_threshold: NumSeconds::from(value.freeze_threshold),
             cycles_balance,
             status: try_from_option_field(
@@ -1100,7 +1084,7 @@ mod test {
             compute_allocation: ComputeAllocation::try_from(0).unwrap(),
             accumulated_priority: AccumulatedPriority::from(0),
             execution_state_bits: None,
-            memory_allocation: None,
+            memory_allocation: MemoryAllocation::default(),
             freeze_threshold: NumSeconds::from(0),
             cycles_balance: Cycles::from(0),
             status: CanisterStatus::Stopped,
@@ -1138,7 +1122,7 @@ mod test {
             compute_allocation: ComputeAllocation::try_from(0).unwrap(),
             accumulated_priority: AccumulatedPriority::from(0),
             execution_state_bits: None,
-            memory_allocation: None,
+            memory_allocation: MemoryAllocation::default(),
             freeze_threshold: NumSeconds::from(0),
             cycles_balance: Cycles::from(0),
             status: CanisterStatus::Stopped,
@@ -1178,7 +1162,7 @@ mod test {
             compute_allocation: ComputeAllocation::try_from(0).unwrap(),
             accumulated_priority: AccumulatedPriority::from(0),
             execution_state_bits: None,
-            memory_allocation: None,
+            memory_allocation: MemoryAllocation::default(),
             freeze_threshold: NumSeconds::from(0),
             cycles_balance: Cycles::from(0),
             status: CanisterStatus::Stopped,

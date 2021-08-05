@@ -5,6 +5,7 @@ edition = "2018"
 
 [dependencies]
 hex = "0.4.2"
+lazy_static = "1.4.0"
 miracl_core = { version = "4.1.0", package = "miracl_core_bls12381" }
 rand_chacha = "0.2.2"
 zeroize = "1.1.1"
@@ -15,3 +16,4 @@ ic-crypto-sha256 = { path = "../../../sha256" }
 
 [dev-dependencies]
 proptest = "0.9.4"
+rand = "0.7.3"

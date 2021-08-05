@@ -237,6 +237,10 @@ fn main() {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
+        "ic_nns_governance.pb.v1.RewardNodeProviders",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.SetDefaultFollowees",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );

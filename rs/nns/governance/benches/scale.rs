@@ -204,6 +204,7 @@ fn fixture_for_scale(num_neurons: u32, linear_following: bool) -> GovernanceProt
         }
         // Use i as neuron ID.
         let n = Neuron {
+            id: Some(NeuronId { id: i }),
             // 10 + i ICP
             cached_neuron_stake_e8s: (10 + i) * 100_000_000,
             // One year

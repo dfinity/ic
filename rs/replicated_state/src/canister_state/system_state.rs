@@ -15,6 +15,7 @@ use ic_types::{
 };
 use lazy_static::lazy_static;
 use maplit::btreeset;
+use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
 use std::{collections::BTreeSet, sync::Arc};
@@ -52,9 +53,8 @@ pub struct SystemState {
     pub queues: CanisterQueues,
     pub stable_memory_size: NumWasmPages,
     pub stable_memory: PageMap,
-    /// The canister's memory allocation. A canister is allowed to grow its
-    /// memory usage up to this value.
-    pub memory_allocation: Option<MemoryAllocation>,
+    /// The canister's memory allocation.
+    pub memory_allocation: MemoryAllocation,
     pub freeze_threshold: NumSeconds,
     /// The status of the canister: Running, Stopping, or Stopped.
     /// Different statuses allow for different behaviors on the SystemState.
@@ -87,7 +87,7 @@ pub struct SystemState {
 }
 
 /// A wrapper around the different canister statuses.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CanisterStatus {
     Running {
         call_context_manager: CallContextManager,
@@ -230,7 +230,7 @@ impl SystemState {
             stable_memory_size: NumWasmPages::new(0),
             stable_memory: PageMap::default(),
             cycles_balance: initial_cycles,
-            memory_allocation: None,
+            memory_allocation: MemoryAllocation::BestEffort,
             freeze_threshold,
             status,
             certified_data: Default::default(),

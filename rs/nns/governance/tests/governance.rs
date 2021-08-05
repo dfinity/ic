@@ -80,7 +80,7 @@ use ic_nns_governance::pb::v1::governance_error::ErrorType::{NotFound, ResourceE
 use ic_nns_governance::pb::v1::proposal::Action;
 use ic_nns_governance::pb::v1::ProposalRewardStatus::{AcceptVotes, ReadyToSettle};
 use ic_nns_governance::pb::v1::ProposalStatus::Rejected;
-use ic_nns_governance::pb::v1::{ManageNeuronResponse, ProposalRewardStatus};
+use ic_nns_governance::pb::v1::{ManageNeuronResponse, ProposalRewardStatus, RewardNodeProviders};
 use ledger_canister::Subaccount;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
@@ -4642,6 +4642,347 @@ fn test_manage_and_reward_node_providers() {
 
     // There should no longer be a noder provider.
     assert_eq!(gov.get_node_providers().len(), 0);
+}
+
+#[test]
+fn test_manage_and_reward_multiple_node_providers() {
+    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let mut builder = GovernanceCanisterInitPayloadBuilder::new();
+    let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
+
+    let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
+
+    let voter_neuron = init_neurons[&42].id.as_ref().unwrap().clone();
+    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(DissolveState::DissolveDelaySeconds(
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+    ));
+    let np_pid_0 = PrincipalId::new_self_authenticating(&[14]);
+    let np_pid_1 = PrincipalId::new_self_authenticating(&[15]);
+    let np_pid_2 = PrincipalId::new_self_authenticating(&[16]);
+
+    let (driver, mut gov) =
+        governance_with_neurons(&init_neurons.values().cloned().collect::<Vec<Neuron>>());
+
+    println!(
+        "Ledger {:?}\n",
+        driver.state.as_ref().try_lock().unwrap().accounts,
+    );
+
+    // Submit a proposal to reward a node provider which doesn't exist.
+    // The submitter neuron votes automatically and that should be enough
+    // to have it accepted
+    let pid = match gov
+        .manage_neuron(
+            &voter_pid,
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+                command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    summary: "Reward this NP...".to_string(),
+                    url: "".to_string(),
+                    action: Some(proposal::Action::RewardNodeProvider(RewardNodeProvider {
+                        node_provider: Some(NodeProvider { id: Some(np_pid_1) }),
+                        amount_e8s: 10 * 100_000_000,
+                        reward_mode: Some(RewardMode::RewardToAccount(RewardToAccount {
+                            to_account: None,
+                        })),
+                    })),
+                }))),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .expect("Couldn't submit proposal.")
+        .command
+        .unwrap()
+    {
+        manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
+        _ => panic!("Invalid response"),
+    };
+
+    // The proposal should have failed as the node provider doesn't exist
+    let info = gov
+        .get_proposal_info(&PrincipalId::new_anonymous(), pid)
+        .unwrap();
+    assert_eq!(info.status(), ProposalStatus::Failed, "info: {:?}", info);
+    assert_eq!(
+        info.failure_reason.as_ref().unwrap().error_type,
+        ErrorType::NotFound as i32,
+        "info: {:?}",
+        info
+    );
+
+    let np_pid_vec = vec![np_pid_0, np_pid_1, np_pid_2];
+
+    // Now make proposals to add the real node providers
+    for np_pid in np_pid_vec.clone() {
+        let prop_id = match gov
+            .manage_neuron(
+                &voter_pid,
+                &ManageNeuron {
+                    id: None,
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                        voter_neuron.clone(),
+                    )),
+                    command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                        summary: "Just want to add this other NP.".to_string(),
+                        url: "".to_string(),
+                        action: Some(proposal::Action::AddOrRemoveNodeProvider(
+                            AddOrRemoveNodeProvider {
+                                change: Some(Change::ToAdd(NodeProvider { id: Some(np_pid) })),
+                            },
+                        )),
+                    }))),
+                },
+            )
+            .now_or_never()
+            .unwrap()
+            .expect("Couldn't submit proposal.")
+            .command
+            .unwrap()
+        {
+            manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
+            _ => panic!("Invalid response"),
+        };
+
+        // The proposal should have been executed
+        assert_eq!(
+            gov.get_proposal_data(prop_id).unwrap().status(),
+            ProposalStatus::Executed
+        );
+
+        assert_eq!(
+            gov.get_node_providers()[0],
+            NodeProvider { id: Some(np_pid_0) }
+        );
+    }
+
+    assert_eq!(gov.get_node_providers().len(), 3);
+
+    // Adding any of the same node providers again should fail
+    for np_pid in np_pid_vec {
+        let prop_id = match gov
+            .manage_neuron(
+                &voter_pid,
+                &ManageNeuron {
+                    id: None,
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                        voter_neuron.clone(),
+                    )),
+                    command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                        summary: "Just want to add this other NP.".to_string(),
+                        url: "".to_string(),
+                        action: Some(proposal::Action::AddOrRemoveNodeProvider(
+                            AddOrRemoveNodeProvider {
+                                change: Some(Change::ToAdd(NodeProvider { id: Some(np_pid) })),
+                            },
+                        )),
+                    }))),
+                },
+            )
+            .now_or_never()
+            .unwrap()
+            .expect("Couldn't submit proposal.")
+            .command
+            .unwrap()
+        {
+            manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
+            _ => panic!("Invalid response"),
+        };
+
+        // The proposal should have failed
+        assert_eq!(
+            gov.get_proposal_data(prop_id).unwrap().status(),
+            ProposalStatus::Failed
+        );
+    }
+
+    let to_subaccount = Subaccount({
+        let mut sha = Sha256::new();
+        sha.write(b"my_account");
+        sha.finish()
+    });
+
+    let manage_neuron_cmd = ManageNeuron {
+        id: None,
+        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+        command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+            summary: "Reward these NPs...".to_string(),
+            url: "".to_string(),
+            action: Some(proposal::Action::RewardNodeProviders(RewardNodeProviders {
+                rewards: vec![
+                    RewardNodeProvider {
+                        node_provider: Some(NodeProvider { id: Some(np_pid_0) }),
+                        amount_e8s: 10 * 100_000_000,
+                        reward_mode: Some(RewardMode::RewardToAccount(RewardToAccount {
+                            to_account: Some(AccountIdentifier::new(np_pid_0, None).into()),
+                        })),
+                    },
+                    RewardNodeProvider {
+                        node_provider: Some(NodeProvider { id: Some(np_pid_1) }),
+                        amount_e8s: 10 * 100_000_000,
+                        reward_mode: Some(RewardMode::RewardToAccount(RewardToAccount {
+                            to_account: Some(
+                                AccountIdentifier::new(np_pid_1, Some(to_subaccount)).into(),
+                            ),
+                        })),
+                    },
+                    RewardNodeProvider {
+                        node_provider: Some(NodeProvider { id: Some(np_pid_2) }),
+                        amount_e8s: 99_999_999,
+                        reward_mode: Some(RewardMode::RewardToNeuron(RewardToNeuron {
+                            dissolve_delay_seconds: 10,
+                        })),
+                    },
+                ],
+            })),
+        }))),
+    };
+
+    // Repeat the above steps with two new NPs:
+    // * Reward np_pid_1 with 10 * 100_000_000 to their default account
+    // * Reward np_pid_2 with 10 * 100_000_000 to a specific sub-account
+    // * Reward np_pid_3 with 99_999_999 to a neuron instead of liquid ICP
+    let prop_id = match gov
+        .manage_neuron(&voter_pid, &manage_neuron_cmd)
+        .now_or_never()
+        .unwrap()
+        .expect("Couldn't submit proposal.")
+        .command
+        .unwrap()
+    {
+        manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
+        _ => panic!("Invalid response"),
+    };
+
+    // The proposal should have been executed
+    assert_eq!(
+        gov.get_proposal_data(prop_id).unwrap().status(),
+        ProposalStatus::Executed
+    );
+
+    // Check first reward
+    driver.assert_account_contains(&AccountIdentifier::new(np_pid_0, None), 10 * 100_000_000);
+
+    // Check second reward
+    driver.assert_account_contains(
+        &AccountIdentifier::new(np_pid_1, Some(to_subaccount)),
+        10 * 100_000_000,
+    );
+
+    // Check third reward
+    // Find the neuron...
+    let (_, neuron) = gov
+        .proto
+        .neurons
+        .iter()
+        .find(|(_, x)| x.controller == Some(np_pid_2) && x.transfer.is_some())
+        .unwrap();
+    assert_eq!(neuron.stake_e8s(), 99_999_999);
+    // Find the transaction in the ledger...
+    driver.assert_account_contains(
+        &AccountIdentifier::new(
+            GOVERNANCE_CANISTER_ID.get(),
+            Some(Subaccount::try_from(&neuron.account[..]).unwrap()),
+        ),
+        99_999_999,
+    );
+
+    // Remove the first and third NPs
+    let prop_id = match gov
+        .manage_neuron(
+            &voter_pid,
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+                command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    summary: "Just want to remove this NP.".to_string(),
+                    url: "".to_string(),
+                    action: Some(proposal::Action::AddOrRemoveNodeProvider(
+                        AddOrRemoveNodeProvider {
+                            change: Some(Change::ToRemove(NodeProvider { id: Some(np_pid_0) })),
+                        },
+                    )),
+                }))),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .expect("Couldn't submit proposal.")
+        .command
+        .unwrap()
+    {
+        manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
+        _ => panic!("Invalid response"),
+    };
+
+    // The proposal should have been executed
+    assert_eq!(
+        gov.get_proposal_data(prop_id).unwrap().status(),
+        ProposalStatus::Executed
+    );
+
+    let prop_id = match gov
+        .manage_neuron(
+            &voter_pid,
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
+                command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    summary: "Just want to remove this NP.".to_string(),
+                    url: "".to_string(),
+                    action: Some(proposal::Action::AddOrRemoveNodeProvider(
+                        AddOrRemoveNodeProvider {
+                            change: Some(Change::ToRemove(NodeProvider { id: Some(np_pid_2) })),
+                        },
+                    )),
+                }))),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .expect("Couldn't submit proposal.")
+        .command
+        .unwrap()
+    {
+        manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
+        _ => panic!("Invalid response"),
+    };
+
+    // The proposal should have been executed
+    assert_eq!(
+        gov.get_proposal_data(prop_id).unwrap().status(),
+        ProposalStatus::Executed
+    );
+
+    // There should only be one node provider left
+    assert_eq!(gov.get_node_providers().len(), 1);
+
+    // Send the same command as before, target all three NPs (two do not exist
+    // anymore)
+    let prop_id = match gov
+        .manage_neuron(&voter_pid, &manage_neuron_cmd)
+        .now_or_never()
+        .unwrap()
+        .expect("Couldn't submit proposal.")
+        .command
+        .unwrap()
+    {
+        manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
+        _ => panic!("Invalid response"),
+    };
+
+    // The proposal should have been executed
+    assert_eq!(
+        gov.get_proposal_data(prop_id).unwrap().status(),
+        ProposalStatus::Executed
+    );
+
+    // Check reward
+    driver.assert_account_contains(
+        &AccountIdentifier::new(np_pid_1, Some(to_subaccount)),
+        10 * 200_000_000,
+    );
 }
 
 #[test]

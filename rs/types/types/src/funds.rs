@@ -12,8 +12,6 @@ use serde::{Deserialize, Serialize};
 use std::convert::{From, TryFrom};
 
 /// A struct to hold various types of funds.
-//
-// TODO(EXC-240): ICP tokens are handled via the ledger canister and should be removed from here.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Funds {
     cycles: Cycles,

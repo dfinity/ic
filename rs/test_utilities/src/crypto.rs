@@ -142,6 +142,7 @@ pub fn empty_dkg_transcript() -> crypto::dkg::Transcript {
 
 pub fn empty_ni_dkg_transcripts_with_committee(
     committee: Vec<NodeId>,
+    registry_version: u64,
 ) -> std::collections::BTreeMap<NiDkgTag, NiDkgTranscript> {
     vec![
         (
@@ -150,6 +151,7 @@ pub fn empty_ni_dkg_transcripts_with_committee(
                 committee.clone(),
                 NiDkgTag::LowThreshold,
                 NiDkgTag::LowThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                registry_version,
             ),
         ),
         (
@@ -158,6 +160,7 @@ pub fn empty_ni_dkg_transcripts_with_committee(
                 committee.clone(),
                 NiDkgTag::HighThreshold,
                 NiDkgTag::HighThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                registry_version,
             ),
         ),
     ]
@@ -166,7 +169,7 @@ pub fn empty_ni_dkg_transcripts_with_committee(
 }
 
 pub fn empty_ni_dkg_transcripts() -> std::collections::BTreeMap<NiDkgTag, NiDkgTranscript> {
-    empty_ni_dkg_transcripts_with_committee(vec![node_test_id(0)])
+    empty_ni_dkg_transcripts_with_committee(vec![node_test_id(0)], 0)
 }
 
 #[derive(Default)]
@@ -334,6 +337,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
             config.receivers().get().clone().into_iter().collect(),
             config.dkg_id().dkg_tag,
             config.threshold().get().get() as u32,
+            config.registry_version().get(),
         );
         transcript.dkg_id = config.dkg_id();
         Ok(transcript)

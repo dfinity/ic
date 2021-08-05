@@ -47,7 +47,7 @@ enum ConnectStatus {
 /// Implementation for the transport control plane
 impl TransportImpl {
     /// Starts connection to a peer
-    pub fn start_peer_connections(
+    pub(crate) fn start_peer_connections(
         &self,
         peer_id: &NodeId,
         peer_record: &NodeRecord,
@@ -75,7 +75,7 @@ impl TransportImpl {
     }
 
     /// Stops connection to a peer
-    pub fn stop_peer_connections(
+    pub(crate) fn stop_peer_connections(
         &self,
         client_type: TransportClientType,
         peer_id: &NodeId,
@@ -480,7 +480,7 @@ impl TransportImpl {
     }
 
     /// Retries to establish a connection
-    pub fn retry_connection(&self, flow_id: &FlowId) -> Result<(), TransportErrorCode> {
+    pub(crate) fn retry_connection(&self, flow_id: &FlowId) -> Result<(), TransportErrorCode> {
         warn!(
             self.log,
             "ControlPlane::retry_connection(): node_id = {:?}, flow = {:?}", self.node_id, flow_id,
@@ -490,63 +490,64 @@ impl TransportImpl {
             .with_label_values(&[&flow_id.peer_id.to_string(), &flow_id.flow_tag.to_string()])
             .inc();
 
-        let socket_addr: SocketAddr;
-        {
-            // Don't hold the lock across await points
-            let mut client_map = self.client_map.write().unwrap();
-            let client_state = client_map
-                .get_mut(&flow_id.client_type)
-                .ok_or(TransportErrorCode::TransportClientNotFound)?;
-            let peer_state = client_state
-                .peer_map
-                .get_mut(&flow_id.peer_id)
-                .ok_or(TransportErrorCode::PeerNotFound)?;
-            let flow_state = peer_state
-                .flow_map
-                .get_mut(&flow_id.flow_tag)
-                .ok_or(TransportErrorCode::FlowNotFound)?;
+        let mut client_map = self.client_map.write().unwrap();
+        let client_state = client_map
+            .get_mut(&flow_id.client_type)
+            .ok_or(TransportErrorCode::TransportClientNotFound)?;
+        let peer_state = client_state
+            .peer_map
+            .get_mut(&flow_id.peer_id)
+            .ok_or(TransportErrorCode::PeerNotFound)?;
+        let flow_state = peer_state
+            .flow_map
+            .get_mut(&flow_id.flow_tag)
+            .ok_or(TransportErrorCode::FlowNotFound)?;
 
-            if Self::connection_role(&self.node_id, &flow_id.peer_id) == ConnectionRole::Server {
-                // We are the server, wait for the peer to connect
-                flow_state.update(ConnectionState::Listening);
+        let sa = match &flow_state.connection_state {
+            ConnectionState::Connected(sa) => sa,
+            _ => {
+                // Flow is already disconnected/reconnecting, skip reconnect processing
+                return Err(TransportErrorCode::FlowConnectionDown);
+            }
+        };
+
+        if Self::connection_role(&self.node_id, &flow_id.peer_id) == ConnectionRole::Server {
+            // We are the server, wait for the peer to connect
+            flow_state.update(ConnectionState::Listening);
+            warn!(
+                self.log,
+                "ControlPlane::process_disconnect(): node_id = {:?}, flow = {:?}, \
+                    waiting for peer to reconnect",
+                self.node_id,
+                flow_id,
+            );
+        } else {
+            // reconnect if we have a listener
+            if client_state.accept_ports.contains_key(&flow_id.flow_tag) {
+                let socket_addr = sa.peer_addr;
+                let connecting_task = self.spawn_connect_task(
+                    flow_id.client_type,
+                    flow_id.flow_tag,
+                    flow_id.peer_id,
+                    socket_addr.ip(),
+                    ServerPort::from(socket_addr.port()),
+                );
+                let connecting_state = Connecting {
+                    peer_addr: socket_addr,
+                    connecting_task,
+                };
+                flow_state.update(ConnectionState::Connecting(connecting_state));
+
                 warn!(
                     self.log,
-                    "ControlPlane::process_disconnect(): node_id = {:?}, flow = {:?}, \
-                        waiting for peer to reconnect",
+                    "ControlPlane::process_disconnect(): spawning reconnect task: node_id = {:?}, \
+                flow = {:?}, local_addr = {:?}, peer_addr = {:?}, peer_port = {:?}",
                     self.node_id,
                     flow_id,
+                    self.node_ip,
+                    socket_addr.ip(),
+                    socket_addr.port(),
                 );
-                return Ok(());
-            }
-
-            // reconnect if we have a listener
-            if let ConnectionState::Connected(sa) = &flow_state.connection_state {
-                if client_state.accept_ports.contains_key(&flow_id.flow_tag) {
-                    socket_addr = sa.peer_addr;
-                    let connecting_task = self.spawn_connect_task(
-                        flow_id.client_type,
-                        flow_id.flow_tag,
-                        flow_id.peer_id,
-                        socket_addr.ip(),
-                        ServerPort::from(socket_addr.port()),
-                    );
-                    let connecting_state = Connecting {
-                        peer_addr: socket_addr,
-                        connecting_task,
-                    };
-                    flow_state.update(ConnectionState::Connecting(connecting_state));
-
-                    warn!(
-                        self.log,
-                        "ControlPlane::process_disconnect(): spawning reconnect task: node_id = {:?}, \
-                        flow = {:?}, local_addr = {:?}, peer_addr = {:?}, peer_port = {:?}",
-                        self.node_id,
-                        flow_id,
-                        self.node_ip,
-                        socket_addr.ip(),
-                        socket_addr.port(),
-                    );
-                }
             }
         }
 
@@ -902,7 +903,7 @@ impl TransportImpl {
     }
 
     /// Initilizes a client
-    pub fn init_client(
+    pub(crate) fn init_client(
         &self,
         client_type: TransportClientType,
         event_handler: Arc<dyn AsyncTransportEventHandler>,
@@ -1124,8 +1125,8 @@ mod tests {
     }
 
     struct RegistryAndDataProvider {
-        pub data_provider: Arc<ProtoRegistryDataProvider>,
-        pub registry: Arc<FakeRegistryClient>,
+        data_provider: Arc<ProtoRegistryDataProvider>,
+        registry: Arc<FakeRegistryClient>,
     }
 
     fn temp_crypto_component_with_tls_keys_in_registry(

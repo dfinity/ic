@@ -66,6 +66,7 @@
 
 use ic_interfaces::registry::RegistryClient;
 use ic_interfaces::{artifact_manager::ArtifactManager, transport::Transport};
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::p2p::v1 as pb;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_types::{
@@ -81,13 +82,13 @@ use crate::{
     artifact_download_list::{ArtifactDownloadList, ArtifactDownloadListImpl},
     download_prioritization::{
         AdvertTracker, AdvertTrackerFinalAction, DownloadAttemptTracker, DownloadPrioritizer,
+        DownloadPrioritizerImpl,
     },
     event_handler::P2PEventHandlerControl,
-    event_handler::P2PEventHandlerImpl,
     gossip_protocol::{
         GossipChunk, GossipChunkRequest, GossipMessage, GossipRetransmissionRequest,
     },
-    metrics::DownloadManagementMetrics,
+    metrics::{DownloadManagementMetrics, DownloadPrioritizerMetrics},
     utils::FlowMapper,
     P2PError, P2PErrorCode, P2PResult,
 };
@@ -827,15 +828,13 @@ impl DownloadManagerImpl {
         registry_client: Arc<dyn RegistryClient>,
         artifact_manager: Arc<dyn ArtifactManager>,
         transport: Arc<dyn Transport>,
-        event_handler: Arc<P2PEventHandlerImpl>,
+        event_handler: Arc<dyn P2PEventHandlerControl>,
         flow_mapper: Arc<FlowMapper>,
         log: ReplicaLogger,
-        prioritizer: Arc<dyn DownloadPrioritizer>,
-        metrics: DownloadManagementMetrics,
-    ) -> Result<Self, String> {
+        metrics_registry: &MetricsRegistry,
+    ) -> Self {
         let transport_client_type = TransportClientType::P2P;
-        let gossip_config =
-            crate::p2p::P2P::fetch_gossip_config(registry_client.clone(), subnet_id);
+        let gossip_config = crate::p2p::fetch_gossip_config(registry_client.clone(), subnet_id);
 
         let current_peers = Arc::new(Mutex::new(PeerContextDictionary::default()));
         let peer_manager = Arc::new(PeerManagerImpl {
@@ -845,6 +844,11 @@ impl DownloadManagerImpl {
             transport_client_type,
             current_peers: current_peers.clone(),
         });
+
+        let prioritizer = Arc::new(DownloadPrioritizerImpl::new(
+            artifact_manager.as_ref(),
+            DownloadPrioritizerMetrics::new(&metrics_registry),
+        ));
 
         let download_manager = DownloadManagerImpl {
             node_id,
@@ -859,20 +863,15 @@ impl DownloadManagerImpl {
             transport_client_type,
             artifacts_under_construction: RwLock::new(ArtifactDownloadListImpl::new(log.clone())),
             log,
-            metrics,
+            metrics: DownloadManagementMetrics::new(&metrics_registry),
             gossip_config,
             receive_check_caches: RwLock::new(HashMap::new()),
             pfn_invocation_instant: Mutex::new(Instant::now()),
             registry_refresh_instant: Mutex::new(Instant::now()),
             retransmission_request_instant: Mutex::new(Instant::now()),
         };
-        transport
-            .register_client(TransportClientType::P2P, event_handler.clone())
-            .map_err(|e| format!("transport registration failed: {:?}", e))
-            .map(|_| {
-                download_manager.refresh_registry(&(event_handler as Arc<_>));
-                download_manager
-            })
+        download_manager.refresh_registry(&event_handler);
+        download_manager
     }
 
     /// This helper method returns a list of tasks to be performed by this timer
@@ -1467,9 +1466,8 @@ impl PeerManager for PeerManagerImpl {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::download_prioritization::{DownloadPrioritizerError, DownloadPrioritizerImpl};
+    use crate::download_prioritization::DownloadPrioritizerError;
     use crate::event_handler::{tests::new_test_event_handler, MAX_ADVERT_BUFFER};
-    use crate::metrics::DownloadPrioritizerMetrics;
     use ic_interfaces::artifact_manager::OnArtifactError;
     use ic_logger::LoggerImpl;
     use ic_metrics::MetricsRegistry;
@@ -1673,10 +1671,6 @@ pub mod tests {
 
         // Set up the prioritizer.
         let metrics_registry = MetricsRegistry::new();
-        let prioritizer = Arc::new(DownloadPrioritizerImpl::new(
-            &artifact_manager,
-            DownloadPrioritizerMetrics::new(&metrics_registry),
-        ));
 
         let flow_tags = vec![FlowTag::from(0)];
         let flow_mapper = Arc::new(FlowMapper::new(flow_tags));
@@ -1693,10 +1687,8 @@ pub mod tests {
             event_handler,
             flow_mapper,
             log,
-            prioritizer,
-            DownloadManagementMetrics::new(&metrics_registry),
+            &metrics_registry,
         )
-        .unwrap()
     }
 
     fn new_test_download_manager(num_replicas: u32, logger: &LoggerImpl) -> DownloadManagerImpl {

@@ -35,7 +35,7 @@ use ic_types::{
     messages::{CallbackId, Payload, RejectContext, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
     user_error::RejectCode,
-    CanisterId, ComputeAllocation, Cycles, Funds, MemoryAllocation, NumBytes, NumInstructions,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     PrincipalId, SubnetId, Time, UserId,
 };
 use ic_utils::ic_features::cow_state_feature;
@@ -147,7 +147,7 @@ fn execute_update(
         payload,
         caller,
         MAX_NUM_INSTRUCTIONS,
-        None,
+        NumBytes::from(0),
         mock_time(),
         canister_root,
     )
@@ -161,7 +161,7 @@ fn execute_update_with_cycles_memory_time(
     payload: Vec<u8>,
     caller: Option<PrincipalId>,
     instructions_limit: NumInstructions,
-    memory_allocation: Option<NumBytes>,
+    bytes: NumBytes,
     time: Time,
     canister_root: std::path::PathBuf,
 ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
@@ -174,8 +174,7 @@ fn execute_update_with_cycles_memory_time(
     )
     .expect("Failed to create execution state.");
     let mut canister = canister_from_exec_state(execution_state);
-    canister.system_state.memory_allocation =
-        memory_allocation.map(|bytes| MemoryAllocation::try_from(bytes).unwrap());
+    canister.system_state.memory_allocation = MemoryAllocation::try_from(bytes).unwrap();
 
     let req = IngressBuilder::new()
         .method_name(method.to_string())
@@ -224,7 +223,7 @@ fn execute_update_for_request(
         .method_payload(payload)
         .sender(caller)
         .receiver(canister.canister_id())
-        .payment(Funds::new(payment))
+        .payment(payment)
         .build();
 
     let (_, _, routing_table, subnet_records) = setup();
@@ -599,6 +598,80 @@ fn exercise_stable_memory_delta() {
 }
 
 #[test]
+fn exercise_stable_memory_delta_2() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        let wasm_module = r#"
+                (module
+                    (import "ic0" "stable_size" (func $stable_size (result i32)))
+                    (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+                    (import "ic0" "stable_write"
+                        (func $stable_write (param $offset i32) (param $src i32) (param $size i32)))
+                    (import "ic0" "msg_reply" (func $msg_reply))
+
+                    (func $grow
+                        (if (i32.ne (call $stable_grow (i32.const 1)) (i32.const 0))
+                            (then (unreachable))
+                        )
+                        (if (i32.ne (call $stable_size) (i32.const 1))
+                            (then (unreachable))
+                        )
+                        (call $msg_reply)
+                    )
+
+                    (func $write
+                        (if (i32.ne (call $stable_grow (i32.const 1)) (i32.const 0))
+                            (then (unreachable))
+                        )
+                        (if (i32.ne (call $stable_size) (i32.const 1))
+                            (then (unreachable))
+                        )
+                        (call $stable_write (i32.const 0) (i32.const 0) (i32.const 8192))
+                        (call $msg_reply)
+                    )
+
+                    (memory $memory 1)
+                    (export "memory" (memory $memory))
+                    (export "canister_update write" (func $write))
+                    (export "canister_update grow" (func $grow)))"#;
+
+        let (_, _, action, delta) = execute_update(
+            &hypervisor,
+            wasm_module,
+            "grow",
+            EMPTY_PAYLOAD,
+            None,
+            tmp_path.clone(),
+        );
+        assert_eq!(
+            action,
+            CallContextAction::Reply {
+                payload: vec![],
+                refund: Cycles::from(0),
+            },
+        );
+        assert_eq!(delta, NumBytes::from(0));
+
+        let (_, _, action, delta) = execute_update(
+            &hypervisor,
+            wasm_module,
+            "write",
+            EMPTY_PAYLOAD,
+            None,
+            tmp_path,
+        );
+        assert_eq!(
+            action,
+            CallContextAction::Reply {
+                payload: vec![],
+                refund: Cycles::from(0),
+            },
+        );
+        // We wrote exactly two pages, so we should get a 2 page delta.
+        assert_eq!(delta, NumBytes::from(8192));
+    });
+}
+
+#[test]
 fn sys_api_call_stable_grow_too_many_pages() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
@@ -909,6 +982,45 @@ fn sys_api_call_stable_write_traps_when_heap_out_of_bounds() {
 }
 
 #[test]
+fn sys_api_call_stable_write_at_max_size_handled_gracefully() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_grow"
+                        (func $stable_grow (param $additional_pages i32) (result i32)))
+                    (import "ic0" "stable_write"
+                        (func $stable_write (param $offset i32) (param $src i32) (param $size i32)))
+                    (import "ic0" "msg_reply" (func $msg_reply))
+
+                    (func $test
+                        ;; Grow stable memory to maximum size.
+                        (drop (call $stable_grow (i32.const 65536)))
+                        ;; Write to stable memory from position 10 till the end (including).
+                        (call $stable_write (i32.const 4294967286) (i32.const 0) (i32.const 10))
+                        (call $msg_reply)
+                    )
+
+                    (memory 65536)
+                    (data (i32.const 0) "abcdefgh")  ;; Initial contents of the heap.
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Reply {
+                payload: vec![],
+                refund: Cycles::from(0),
+            }
+        );
+    });
+}
+
+#[test]
 fn sys_api_call_stable_read_does_not_trap_at_end_of_page() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
@@ -985,6 +1097,45 @@ fn sys_api_call_stable_read_traps_beyond_end_of_page() {
 }
 
 #[test]
+fn sys_api_call_stable_read_at_max_size_handled_gracefully() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_grow"
+                        (func $stable_grow (param $additional_pages i32) (result i32)))
+                    (import "ic0" "stable_read"
+                        (func $stable_read (param $dst i32) (param $offset i32) (param $size i32)))
+                    (import "ic0" "msg_reply" (func $msg_reply))
+
+                    (func $test
+                        ;; Grow stable memory to maximum size.
+                        (drop (call $stable_grow (i32.const 65536)))
+                        ;; Read from position at index 10 till the end of stable memory (including).
+                        (call $stable_read (i32.const 0) (i32.const 4294967286) (i32.const 10))
+                        (call $msg_reply)
+                    )
+
+                    (memory 65536)
+                    (data (i32.const 0) "abcdefgh")  ;; Initial contents of the heap.
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Reply {
+                payload: vec![],
+                refund: Cycles::from(0),
+            }
+        );
+    });
+}
+
+#[test]
 fn sys_api_call_time_with_5_nanoseconds() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
@@ -1009,7 +1160,7 @@ fn sys_api_call_time_with_5_nanoseconds() {
                 EMPTY_PAYLOAD,
                 None,
                 MAX_NUM_INSTRUCTIONS,
-                Some(MEMORY_ALLOCATION),
+                MEMORY_ALLOCATION,
                 // Five nanoseconds
                 mock_time() + Duration::new(0, 5),
                 tmp_path,
@@ -1047,7 +1198,7 @@ fn sys_api_call_time_with_5_seconds() {
                 EMPTY_PAYLOAD,
                 None,
                 MAX_NUM_INSTRUCTIONS,
-                Some(MEMORY_ALLOCATION),
+                MEMORY_ALLOCATION,
                 // Five seconds
                 mock_time() + Duration::new(5, 0),
                 tmp_path,
@@ -2279,7 +2430,7 @@ fn sys_api_call_out_of_cycles() {
                 None,
                 // this is not enough for 4 instructions
                 NumInstructions::from(3),
-                Some(MEMORY_ALLOCATION),
+                MEMORY_ALLOCATION,
                 mock_time(),
                 tmp_path,
             )
@@ -2315,7 +2466,7 @@ fn sys_api_call_update_available_memory_1() {
                 None,
                 MAX_NUM_INSTRUCTIONS,
                 // Only 9 pages available
-                Some(ic_replicated_state::num_bytes_from(NumWasmPages::from(9))),
+                ic_replicated_state::num_bytes_from(NumWasmPages::from(9)),
                 mock_time(),
                 tmp_path,
             )

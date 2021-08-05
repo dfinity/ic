@@ -17,6 +17,7 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-protobuf = { path = "../protobuf" }
 ic-types = { path = "../types/types" }
+ic-utils = { path = "../utils" }
 hex = "0.4.2"
 num-integer = "0.1.41"
 phantom_newtype = { path = "../phantom_newtype" }

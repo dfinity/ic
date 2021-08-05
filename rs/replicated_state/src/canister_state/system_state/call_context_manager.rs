@@ -8,11 +8,12 @@ use ic_types::{
     methods::Callback,
     user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, UserId,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom, TryInto};
 
 /// Call context contains all context information related to an incoming call.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CallContext {
     /// Tracks relevant information about who sent the request that created the
     /// CallContext needed to form the eventual reply.
@@ -181,7 +182,7 @@ pub enum CallContextAction {
 /// with the serialization of these pointers. In the future we might consider
 /// introducing an intermediate layer between the serialization and the actual
 /// working data structure, to separate these concerns.
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CallContextManager {
     next_call_context_id: u64,
     next_callback_id: u64,
@@ -190,7 +191,7 @@ pub struct CallContextManager {
     callbacks: BTreeMap<CallbackId, Callback>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CallOrigin {
     Ingress(UserId, MessageId),
     CanisterUpdate(CanisterId, CallbackId),

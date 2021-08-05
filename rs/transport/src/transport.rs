@@ -86,7 +86,7 @@ use tokio::runtime::Handle;
 
 impl TransportImpl {
     /// Creates a new Transport instance
-    pub fn new(
+    fn new(
         node_id: NodeId,
         config: TransportConfig,
         registry_version: RegistryVersion,

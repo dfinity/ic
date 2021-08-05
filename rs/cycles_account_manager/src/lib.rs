@@ -26,7 +26,7 @@ use ic_types::{
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     nominal_cycles::NominalCycles,
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
 };
 use std::{str::FromStr, time::Duration};
 
@@ -155,8 +155,8 @@ impl CyclesAccountManager {
 
         let memory_fee = {
             let memory = match system_state.memory_allocation {
-                Some(memory) => memory.get(),
-                None => memory_usage,
+                MemoryAllocation::Reserved(bytes) => bytes,
+                MemoryAllocation::BestEffort => memory_usage,
             };
             Cycles::from(
                 (memory.get() as u128
@@ -620,42 +620,25 @@ impl CyclesAccountManager {
         mut canister: CanisterState,
         duration_between_blocks: Duration,
     ) -> Result<CanisterState, CanisterState> {
-        match canister.memory_allocation() {
+        let bytes_to_charge = match canister.memory_allocation() {
             // The canister has explicitly asked for a memory allocation, so charge
             // based on it accordingly.
-            Some(memory_allocation) => {
-                if let Err(err) = self.charge_for_memory(
-                    &mut canister.system_state,
-                    memory_allocation,
-                    duration_between_blocks,
-                ) {
-                    info!(
-                        log,
-                        "Charging canister {} for memory allocation failed with {}",
-                        canister.canister_id(),
-                        err
-                    );
-                    return Err(canister);
-                }
-            }
-            // The canister has not requested a memory allocation, so charge according
-            // to its current memory usage.
-            None => {
-                let memory_usage = canister.memory_usage();
-                if let Err(err) = self.charge_for_memory(
-                    &mut canister.system_state,
-                    memory_usage,
-                    duration_between_blocks,
-                ) {
-                    info!(
-                        log,
-                        "Charging canister {} for memory usage failed with {}",
-                        canister.canister_id(),
-                        err
-                    );
-                    return Err(canister);
-                }
-            }
+            MemoryAllocation::Reserved(bytes) => bytes,
+            // The canister uses best-effort memory allocation, so charge based on current usage.
+            MemoryAllocation::BestEffort => canister.memory_usage(),
+        };
+        if let Err(err) = self.charge_for_memory(
+            &mut canister.system_state,
+            bytes_to_charge,
+            duration_between_blocks,
+        ) {
+            info!(
+                log,
+                "Charging canister {} for memory allocation/usage failed with {}",
+                canister.canister_id(),
+                err
+            );
+            return Err(canister);
         }
 
         let compute_allocation = canister.compute_allocation();

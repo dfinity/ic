@@ -2,7 +2,6 @@ pub mod v1 {
     use prost::Message;
     use std::fs::File;
     use std::io::Read;
-    use std::io::Write;
     use std::path::Path;
 
     include!(std::concat!("../gen/types/types.v1.rs"));
@@ -25,17 +24,6 @@ pub mod v1 {
                 .read_to_end(&mut buf)
                 .map_err(|e| format!("read failed: {:?}", e))?;
             Self::decode(&buf[..]).map_err(|e| format!("protobuf decode failed: {:?}", e))
-        }
-
-        /// Write the protobuf to the provided file.
-        pub fn write_to_file<P: AsRef<Path> + std::fmt::Debug>(
-            &self,
-            filepath: P,
-        ) -> Result<(), std::io::Error> {
-            let mut buf = Vec::<u8>::new();
-            self.encode(&mut buf).expect("CUP should serialize");
-            let mut cup_file = File::create(&filepath)?;
-            cup_file.write(&buf).map(|_| ())
         }
     }
 

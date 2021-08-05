@@ -87,7 +87,7 @@ pub type ModuleRegistry = HashMap<String, (Instance, HashMap<String, usize>)>;
 impl WasmtimeSimple {
     pub fn new() -> Self {
         let config = Config::default();
-        let engine = Engine::new(&config);
+        let engine = Engine::new(&config).expect("Failed to initialize Wasmtime engine");
         let store = Store::new(&engine);
         Self { engine, store }
     }

@@ -22,7 +22,7 @@ use ic_types::{
     methods::{FuncRef, WasmMethod},
     NumInstructions,
 };
-use ic_wasm_types::BinaryEncodedWasm;
+use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::SigsegvMemoryTracker;
 use signal_stack::WasmtimeSignalStack;
 use std::cell::RefCell;
@@ -102,11 +102,50 @@ impl WasmtimeEmbedder {
             .static_memory_maximum_size(
                 wasmtime_environ::WASM_PAGE_SIZE as u64 * wasmtime_environ::WASM_MAX_PAGES as u64,
             )
-            .cranelift_nan_canonicalization(true)
-            .max_wasm_stack(self.max_wasm_stack_size);
-        let engine = wasmtime::Engine::new(&config);
-        let module = wasmtime::Module::new(&engine, wasm_binary.as_slice())
-            .expect("failed to instantiate module");
+            .cranelift_nan_canonicalization(true);
+
+        // Wasmtime requires that the async stack is larger than the Wasm stack.
+        // Since both `config.async_stack_size()` and `config.max_wasm_stack()` check
+        // for that condition and we cannot query the default values, we have to
+        // try calling the setters in two different orders and expect that one of them
+        // succeeds.
+        //
+        // Since by default the async stack size is 2x of the wasm stack size,
+        // we set the new value for the async stack size correspondingly.
+        let async_stack_size = self.max_wasm_stack_size * 2;
+        match config.async_stack_size(async_stack_size) {
+            Ok(_) => {
+                // The new `async_stack_size` is larger than the default `max_wasm_stack`,
+                // the following should succeed.
+                config
+                    .max_wasm_stack(self.max_wasm_stack_size)
+                    .map_err(|_| {
+                        HypervisorError::WasmEngineError(WasmEngineError::FailedToSetWasmStack)
+                    })?
+            }
+            Err(_) => {
+                // The new `async_stack_size` is smaller than `max_wasm_stack`, which in turn
+                // is smaller than the default `async_stack_size`. This means that the new
+                // `max_wasm_stack` is smaller than the default `async_stack_size`, so the
+                // following should succeed.
+                config
+                    .max_wasm_stack(self.max_wasm_stack_size)
+                    .map_err(|_| {
+                        HypervisorError::WasmEngineError(WasmEngineError::FailedToSetWasmStack)
+                    })?
+                    .async_stack_size(async_stack_size)
+                    .map_err(|_| {
+                        HypervisorError::WasmEngineError(WasmEngineError::FailedToSetAsyncStack)
+                    })?
+            }
+        };
+
+        let engine = wasmtime::Engine::new(&config).map_err(|_| {
+            HypervisorError::WasmEngineError(WasmEngineError::FailedToInitializeEngine)
+        })?;
+        let module = wasmtime::Module::new(&engine, wasm_binary.as_slice()).map_err(|_| {
+            HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule)
+        })?;
         Ok(EmbedderCache::new((module, cached_mem_creator)))
     }
 

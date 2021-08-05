@@ -156,12 +156,12 @@ pub fn subnet_id_into_protobuf(id: SubnetId) -> pb::SubnetId {
 /// From its protobuf definition convert to a SubnetId.  Normally, we would
 /// use `impl TryFrom<pb::SubnetId> for SubnetId` here however we cannot as
 /// both `Id` and `pb::SubnetId` are defined in other crates.
-pub fn subnet_id_try_from_protobuf(
-    value: pb::SubnetId,
-) -> Result<SubnetId, PrincipalIdBlobParseError> {
-    // All fields in Protobuf definition are required hence they are encoded in
-    // `Option`.  We simply treat them as required here though.
-    let principal_id = PrincipalId::try_from(value.principal_id.unwrap())?;
+pub fn subnet_id_try_from_protobuf(value: pb::SubnetId) -> Result<SubnetId, ProxyDecodeError> {
+    let principal_id = PrincipalId::try_from(
+        value
+            .principal_id
+            .ok_or(ProxyDecodeError::MissingField("SubnetId::principal_id"))?,
+    )?;
     Ok(SubnetId::from(principal_id))
 }
 

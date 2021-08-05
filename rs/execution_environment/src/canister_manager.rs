@@ -29,7 +29,7 @@ use ic_types::{
         StopCanisterContext,
     },
     user_error::{ErrorCode, RejectCode, UserError},
-    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, Funds, Height, InstallCodeContext,
+    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, Height, InstallCodeContext,
     MemoryAllocation, NumBytes, NumInstructions, PrincipalId, SubnetId, Time, UserId,
 };
 use ic_utils::ic_features::cow_state_feature;
@@ -41,13 +41,13 @@ use std::{collections::BTreeSet, convert::TryFrom, mem, str::FromStr, sync::Arc}
 /// The different return types from `stop_canister()` function below.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum StopCanisterResult {
-    /// The call failed.  The error and the unconsumed funds are returned.
+    /// The call failed.  The error and the unconsumed cycles are returned.
     Failure {
         error: CanisterManagerError,
-        funds_to_return: Funds,
+        cycles_to_return: Cycles,
     },
-    /// The canister is already stopped.  The unconsumed funds are returned.
-    AlreadyStopped { funds_to_return: Funds },
+    /// The canister is already stopped.  The unconsumed cycles are returned.
+    AlreadyStopped { cycles_to_return: Cycles },
     /// The request was successfully accepted.  A response will follow
     /// eventually when the canister does stop.
     RequestAccepted,
@@ -206,17 +206,15 @@ impl CanisterManager {
         &self,
         settings: CanisterSettings,
         total_subnet_compute_allocation_used: u64,
-        total_subnet_memory_allocation_used: NumBytes,
+        total_subnet_memory_taken: NumBytes,
     ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
         if let Some(memory_allocation) = settings.memory_allocation() {
-            let requested_allocation: NumBytes = memory_allocation.get();
-            if requested_allocation + total_subnet_memory_allocation_used
-                > self.config.subnet_memory_capacity
+            let requested_allocation: NumBytes = memory_allocation.bytes();
+            if requested_allocation + total_subnet_memory_taken > self.config.subnet_memory_capacity
             {
                 return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
                     requested: requested_allocation,
-                    available: self.config.subnet_memory_capacity
-                        - total_subnet_memory_allocation_used,
+                    available: self.config.subnet_memory_capacity - total_subnet_memory_taken,
                 });
             }
         }
@@ -261,7 +259,24 @@ impl CanisterManager {
             canister.scheduler_state.compute_allocation = compute_allocation;
         }
         if let Some(memory_allocation) = settings.memory_allocation {
-            canister.system_state.memory_allocation = Some(memory_allocation);
+            // This should not happen normally because:
+            //   1. `do_update_settings` is called during canister creation when the
+            //       canister is empty and it should hold that memory usage of the
+            //       canister is 0 and thus any number for memory allocation is bigger.
+            //   2. When updating settings we have validated this holds.
+            //
+            // However, log an error in case it happens for visibility.
+            if let MemoryAllocation::Reserved(bytes) = memory_allocation {
+                if bytes < canister.memory_usage() {
+                    error!(
+                        self.log,
+                        "Requested memory allocation of {} which is smaller than current canister memory usage {}",
+                        bytes,
+                        canister.memory_usage(),
+                    );
+                }
+            }
+            canister.system_state.memory_allocation = memory_allocation;
         }
         if let Some(freezing_threshold) = settings.freezing_threshold {
             canister.system_state.freeze_threshold = freezing_threshold;
@@ -276,7 +291,7 @@ impl CanisterManager {
         settings: CanisterSettings,
         canister: &mut CanisterState,
         total_subnet_compute_allocation_used: u64,
-        total_subnet_memory_allocation_used: NumBytes,
+        total_subnet_memory_taken: NumBytes,
     ) -> Result<(), CanisterManagerError> {
         // Verify controller.
         self.validate_controller(&canister, &sender)?;
@@ -286,7 +301,7 @@ impl CanisterManager {
             settings.compute_allocation(),
         )?;
         self.validate_memory_allocation(
-            total_subnet_memory_allocation_used,
+            total_subnet_memory_taken,
             &canister,
             settings.memory_allocation(),
         )?;
@@ -305,10 +320,10 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         sender_subnet_id: SubnetId,
-        funds: Funds,
+        cycles: Cycles,
         settings: CanisterSettings,
         state: &mut ReplicatedState,
-    ) -> (Result<CanisterId, CanisterManagerError>, Funds) {
+    ) -> (Result<CanisterId, CanisterManagerError>, Cycles) {
         // Creating a canister is possible only in the following cases:
         // 1. sender is on NNS => it can create canister on any subnet
         // 2. sender is not NNS => can create canister only if sender is on
@@ -318,18 +333,17 @@ impl CanisterManager {
         {
             return (
                 Err(CanisterManagerError::InvalidSenderSubnet(sender_subnet_id)),
-                funds,
+                cycles,
             );
         }
 
-        let cycles = funds.cycles();
         if cycles < self.cycles_account_manager.canister_creation_fee() {
             return (
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
                     sent: cycles,
                     required: self.cycles_account_manager.canister_creation_fee(),
                 }),
-                funds,
+                cycles,
             );
         }
 
@@ -337,21 +351,21 @@ impl CanisterManager {
         match self.validate_settings(
             settings,
             state.total_compute_allocation(),
-            state.total_memory_allocation_used(),
+            state.total_memory_taken(),
         ) {
-            Err(err) => (Err(err), funds),
+            Err(err) => (Err(err), cycles),
             Ok(validate_settings) => {
                 let canister_id = match self.create_canister_helper(
                     sender,
-                    funds.cycles(),
+                    cycles,
                     self.cycles_account_manager.canister_creation_fee(),
                     validate_settings,
                     state,
                 ) {
                     Ok(canister_id) => canister_id,
-                    Err(err) => return (Err(err), funds),
+                    Err(err) => return (Err(err), cycles),
                 };
-                (Ok(canister_id), Funds::zero())
+                (Ok(canister_id), Cycles::zero())
             }
         }
     }
@@ -389,7 +403,7 @@ impl CanisterManager {
         let time = state.time();
         let canister_layout_path = state.path().to_path_buf();
         let compute_allocation_used = state.total_compute_allocation();
-        let memory_allocation_used = state.total_memory_allocation_used();
+        let memory_taken = state.total_memory_taken();
 
         // Perform a battery of validation checks.
         let old_canister = match state.canister_state_mut(&context.canister_id) {
@@ -408,11 +422,9 @@ impl CanisterManager {
         ) {
             return (instructions_limit, Err(err));
         }
-        if let Err(err) = self.validate_memory_allocation(
-            memory_allocation_used,
-            &old_canister,
-            context.memory_allocation,
-        ) {
+        if let Err(err) =
+            self.validate_memory_allocation(memory_taken, &old_canister, context.memory_allocation)
+        {
             return (instructions_limit, Err(err));
         }
         if let Err(err) = self.validate_controller(&old_canister, &context.sender) {
@@ -559,7 +571,7 @@ impl CanisterManager {
             None => {
                 return StopCanisterResult::Failure {
                     error: CanisterManagerError::CanisterNotFound(canister_id),
-                    funds_to_return: stop_context.take_funds(),
+                    cycles_to_return: stop_context.take_cycles(),
                 }
             }
             Some(canister) => canister,
@@ -568,12 +580,12 @@ impl CanisterManager {
         let result = match self.validate_controller(&canister, stop_context.sender()) {
             Err(err) => StopCanisterResult::Failure {
                 error: err,
-                funds_to_return: stop_context.take_funds(),
+                cycles_to_return: stop_context.take_cycles(),
             },
             Ok(()) => {
                 match &mut canister.system_state.status {
                     CanisterStatus::Stopped => StopCanisterResult::AlreadyStopped {
-                        funds_to_return: stop_context.take_funds(),
+                        cycles_to_return: stop_context.take_cycles(),
                     },
 
                     CanisterStatus::Stopping { stop_contexts, .. } => {
@@ -672,10 +684,7 @@ impl CanisterManager {
             canister.memory_usage(),
             canister.system_state.cycles_balance.get(),
             canister.scheduler_state.compute_allocation.as_percent(),
-            canister
-                .system_state
-                .memory_allocation
-                .map(|allocation| allocation.get().get()),
+            Some(canister.memory_allocation().bytes().get()),
             canister.system_state.freeze_threshold.get(),
         ))
     }
@@ -690,7 +699,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
     ) -> Result<(), CanisterManagerError> {
         let compute_allocation_used = state.total_compute_allocation();
-        let memory_allocation_used = state.total_memory_allocation_used();
+        let memory_taken = state.total_memory_taken();
         let canister = state
             .canister_state_mut(&canister_id)
             .ok_or(CanisterManagerError::CanisterNotFound(canister_id))?;
@@ -701,7 +710,7 @@ impl CanisterManager {
             settings,
             canister,
             compute_allocation_used,
-            memory_allocation_used,
+            memory_taken,
         )
     }
 
@@ -711,7 +720,7 @@ impl CanisterManager {
     /// can delete it. The controller must be a canister and the canister
     /// cannot be its own controller.
     ///
-    /// Any remaining funds in the canister are transferred to its controller.
+    /// Any remaining cycles in the canister are transferred to its controller.
     ///
     /// #Errors
     /// CanisterManagerError::DeleteCanisterSelf is the canister attempts to
@@ -842,12 +851,12 @@ impl CanisterManager {
         // While the memory allocation can still be included in the context, we need to
         // try to take it from there. Otherwise, we should use the current memory
         // allocation of the canister.
-        let some_desired_memory_allocation = match context.memory_allocation {
-            Some(allocation) => Some(allocation),
+        let desired_memory_allocation = match context.memory_allocation {
+            Some(allocation) => allocation,
             None => new_canister.system_state.memory_allocation,
         };
-        if let Some(desired_memory_allocation) = some_desired_memory_allocation {
-            if desired_memory_allocation.get() < new_canister.memory_usage() {
+        if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
+            if bytes < new_canister.memory_usage() {
                 return (
                     instructions_limit,
                     Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
@@ -857,8 +866,8 @@ impl CanisterManager {
                     }),
                 );
             }
-            new_canister.system_state.memory_allocation = Some(desired_memory_allocation);
         }
+        new_canister.system_state.memory_allocation = desired_memory_allocation;
 
         let mut total_heap_delta = NumBytes::from(0);
 
@@ -964,12 +973,12 @@ impl CanisterManager {
         // While the memory allocation can still be included in the context, we need to
         // try to take it from there. Otherwise, we should use the current memory
         // allocation of the canister.
-        let some_desired_memory_allocation = match context.memory_allocation {
-            Some(allocation) => Some(allocation),
+        let desired_memory_allocation = match context.memory_allocation {
+            Some(allocation) => allocation,
             None => new_canister.system_state.memory_allocation,
         };
-        if let Some(desired_memory_allocation) = some_desired_memory_allocation {
-            if desired_memory_allocation.get() < new_canister.memory_usage() {
+        if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
+            if bytes < new_canister.memory_usage() {
                 return (
                     instructions_limit,
                     Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
@@ -979,8 +988,8 @@ impl CanisterManager {
                     }),
                 );
             }
-            new_canister.system_state.memory_allocation = Some(desired_memory_allocation);
         }
+        new_canister.system_state.memory_allocation = desired_memory_allocation;
 
         // Run (start)
         let (new_canister, instructions_limit, result) = self.hypervisor.execute_canister_start(
@@ -1015,14 +1024,14 @@ impl CanisterManager {
         (instructions_left, Ok((total_heap_delta, new_canister)))
     }
 
-    /// Creates a new canister with the fund amounts specified and inserts it
+    /// Creates a new canister with the cycles amount specified and inserts it
     /// into `ReplicatedState`.
     ///
     /// Note that this method is meant to only be invoked in local development
-    /// or, for Sodium, by a list of whitelisted principals.
+    /// by a list of whitelisted principals.
     ///
     /// Returns the auto-generated id the new canister that has been created.
-    pub(crate) fn create_canister_with_funds(
+    pub(crate) fn create_canister_with_cycles(
         &self,
         sender: PrincipalId,
         cycles_amount: Option<u64>,
@@ -1044,7 +1053,7 @@ impl CanisterManager {
         match self.validate_settings(
             settings,
             state.total_compute_allocation(),
-            state.total_memory_allocation_used(),
+            state.total_memory_taken(),
         ) {
             Err(err) => Err(err),
             Ok(validated_settings) => self.create_canister_helper(
@@ -1185,30 +1194,31 @@ impl CanisterManager {
     // canister.
     fn validate_memory_allocation(
         &self,
-        total_subnet_memory_allocation_used: NumBytes,
+        total_subnet_memory_taken: NumBytes,
         canister: &CanisterState,
         memory_allocation: Option<MemoryAllocation>,
     ) -> Result<(), CanisterManagerError> {
         if let Some(memory_allocation) = memory_allocation {
-            let requested_allocation: NumBytes = memory_allocation.get();
-            let canister_current_allocation = canister
-                .memory_allocation()
-                .unwrap_or_else(|| canister.memory_usage());
-            if requested_allocation < canister.memory_usage() {
-                return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                    canister_id: canister.canister_id(),
-                    memory_allocation_given: memory_allocation,
-                    memory_usage_needed: canister.memory_usage(),
-                });
+            if let MemoryAllocation::Reserved(requested_allocation) = memory_allocation {
+                if requested_allocation < canister.memory_usage() {
+                    return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
+                        canister_id: canister.canister_id(),
+                        memory_allocation_given: memory_allocation,
+                        memory_usage_needed: canister.memory_usage(),
+                    });
+                }
             }
-            if requested_allocation + total_subnet_memory_allocation_used
-                - canister_current_allocation
+            let canister_current_allocation = match canister.memory_allocation() {
+                MemoryAllocation::Reserved(bytes) => bytes,
+                MemoryAllocation::BestEffort => canister.memory_usage(),
+            };
+            if memory_allocation.bytes() + total_subnet_memory_taken - canister_current_allocation
                 > self.config.subnet_memory_capacity
             {
                 return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                    requested: requested_allocation,
+                    requested: memory_allocation.bytes(),
                     available: self.config.subnet_memory_capacity
-                        - total_subnet_memory_allocation_used
+                        - total_subnet_memory_taken
                         - canister_current_allocation,
                 });
             }
@@ -1575,7 +1585,7 @@ pub fn uninstall_canister(
                         originator: *caller_canister_id,
                         respondent: canister_id,
                         originator_reply_callback: *callback_id,
-                        refund: Funds::from(call_context.available_cycles()),
+                        refund: call_context.available_cycles(),
                         response_payload: Payload::Reject(RejectContext {
                             code: RejectCode::CanisterReject,
                             message: String::from("Canister has been uninstalled."),

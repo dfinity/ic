@@ -7,6 +7,8 @@ members = [
   "base/thread",
   "canister_client",
   "cycles_account_manager",
+  "canister_sandbox/common",
+  "canister_sandbox/replica_controller",
   "canonical_state",
   "certified_vars",
   "config",
@@ -123,10 +125,6 @@ debug = true
 [profile.dev.package.miracl_core_bls12381]
 # Optimise the miracl_core_bls12381 cryptographic library, or else NiDKG tests take 4 hours.
 opt-level = 3
-
-[patch.crates-io]
-raw-cpuid812 = { package="raw-cpuid", version="8.1.2", git = "https://github.com/dfinity-lab/rust-cpuid.git", rev = "03c258337c387dbf559778ba3cb886d45ed46b24"}
-
 
 [patch.crates-io.oid-registry]
 version = "0.1.1"

@@ -23,8 +23,8 @@ use ic_types::{
     ingress::WasmResult,
     messages::Payload,
     methods::{Callback, FuncRef, SystemMethod, WasmMethod},
-    CanisterStatusType, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
-    SubnetId, Time,
+    CanisterStatusType, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, SubnetId, Time,
 };
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::{collections::BTreeMap, sync::Arc};
@@ -123,8 +123,7 @@ impl Hypervisor {
     ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
         debug!(self.log, "execute_update: method {}", request.method_name());
 
-        let received_funds = request.take_funds();
-        let incoming_cycles = received_funds.cycles();
+        let incoming_cycles = request.take_cycles();
 
         // Validate that the canister is running.
         if CanisterStatusType::Running != canister.status() {
@@ -133,7 +132,7 @@ impl Hypervisor {
                 instructions_limit,
                 CallContextAction::Fail {
                     error: HypervisorError::CanisterStopped,
-                    refund: received_funds.cycles(),
+                    refund: incoming_cycles,
                 },
                 NumBytes::from(0),
             );
@@ -152,7 +151,7 @@ impl Hypervisor {
                     instructions_limit,
                     CallContextAction::Fail {
                         error: HypervisorError::WasmModuleNotFound,
-                        refund: received_funds.cycles(),
+                        refund: incoming_cycles,
                     },
                     NumBytes::from(0),
                 );
@@ -167,7 +166,7 @@ impl Hypervisor {
                 instructions_limit,
                 CallContextAction::Fail {
                     error: HypervisorError::MethodNotFound(method),
-                    refund: received_funds.cycles(),
+                    refund: incoming_cycles,
                 },
                 NumBytes::from(0),
             );
@@ -176,7 +175,7 @@ impl Hypervisor {
         let call_context_id = system_state
             .call_context_manager_mut()
             .unwrap()
-            .new_call_context(CallOrigin::from(&request), received_funds.cycles());
+            .new_call_context(CallOrigin::from(&request), incoming_cycles);
 
         let api_type = ApiType::update(
             time,
@@ -1073,8 +1072,8 @@ impl Hypervisor {
     /// Returns the maximum amount of memory that the Canister can use.
     fn canister_memory_limit(&self, canister: &CanisterState) -> NumBytes {
         match canister.memory_allocation() {
-            Some(memory_allocation) => memory_allocation,
-            None => self.config.max_canister_memory_size,
+            MemoryAllocation::Reserved(bytes) => bytes,
+            MemoryAllocation::BestEffort => self.config.max_canister_memory_size,
         }
     }
 }

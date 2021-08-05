@@ -15,6 +15,7 @@ mod clib {
     pub use crate::api::keygen as threshold_keygen;
     pub use crate::types::SecretKeyBytes as ThresholdSecretKeyBytes;
 }
+use super::conversions::trusted_secret_key_into_miracl;
 use super::*;
 use internal_types::Epoch;
 
@@ -52,18 +53,21 @@ fn epoch_of_a_new_key_should_be_zero() {
 #[test]
 fn single_stepping_a_key_should_increment_current_epoch() {
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0u8, 5u8, 0u8, 5u8];
-    let FsEncryptionKeySetWithPop { mut secret_key, .. } =
+    let FsEncryptionKeySetWithPop { secret_key, .. } =
         create_forward_secure_key_pair(Randomness::from([89u8; 32]), KEY_GEN_ASSOCIATED_DATA);
+    let mut secret_key = trusted_secret_key_into_miracl(&secret_key);
     for epoch in 4..8 {
         let secret_key_epoch = Epoch::from(epoch);
-        secret_key =
-            update_forward_secure_epoch(&secret_key, secret_key_epoch, Randomness::from([9u8; 32]));
-        let key_epoch =
-            epoch_from_miracl_secret_key(&trusted_secret_key_into_miracl(&secret_key)).get();
+        update_key_inplace_to_epoch(
+            &mut secret_key,
+            secret_key_epoch,
+            Randomness::from([9u8; 32]),
+        );
+        let key_epoch = epoch_from_miracl_secret_key(&secret_key).get();
         assert_eq!(
             key_epoch, epoch,
-            "Deleted epoch {} but key epoch is {}\n  {:?}",
-            epoch, key_epoch, secret_key
+            "Deleted epoch {} but key epoch is {}\n",
+            epoch, key_epoch
         );
     }
 }
@@ -211,10 +215,18 @@ fn encrypted_messages_should_decrypt() {
     )
     .expect("Test failure: Failed to encrypt");
 
-    let secret_keys = forward_secure_keys.iter().map(|key| &key.secret_key);
+    let secret_keys = forward_secure_keys
+        .iter()
+        .map(|key| trusted_secret_key_into_miracl(&key.secret_key));
     let messages = key_message_pairs.iter().map(|key_message| &key_message.1);
     for ((secret_key, message), node_index) in secret_keys.zip(messages).zip(0..) {
-        let plaintext_maybe = decrypt(&ciphertext, secret_key, node_index, epoch, &associated_data);
+        let plaintext_maybe = decrypt(
+            &ciphertext,
+            &secret_key,
+            node_index,
+            epoch,
+            &associated_data,
+        );
         assert_eq!(
             plaintext_maybe.as_ref(),
             Ok(message),
@@ -274,13 +286,15 @@ fn decryption_should_fail_below_epoch() {
         })
         .collect();
 
-    let secret_keys = forward_secure_keys.iter().map(|key| &key.secret_key);
+    let secret_keys = forward_secure_keys
+        .iter()
+        .map(|key| trusted_secret_key_into_miracl(&key.secret_key));
     let messages = key_message_pairs.iter().map(|key_message| &key_message.1);
     #[allow(clippy::iter_next_loop)] // We test just one of the receivers
-    for ((secret_key, message), node_index) in secret_keys.zip(messages).zip(0..).next() {
+    for ((mut secret_key, message), node_index) in secret_keys.zip(messages).zip(0..).next() {
         // Delete keys below epoch
-        let secret_key = update_forward_secure_epoch(
-            &secret_key,
+        update_key_inplace_to_epoch(
+            &mut secret_key,
             secret_key_epoch,
             Randomness::from(rng.gen::<[u8; 32]>()),
         );

@@ -74,6 +74,10 @@ pub struct UpdateSubnetPayload {
     pub subnet_type: Option<SubnetType>,
 
     pub is_halted: Option<bool>,
+
+    pub max_instructions_per_message: Option<u64>,
+    pub max_instructions_per_round: Option<u64>,
+    pub max_instructions_per_install_code: Option<u64>,
 }
 
 #[macro_use]
@@ -140,6 +144,9 @@ fn merge_subnet_record(
         start_as_nns,
         subnet_type,
         is_halted,
+        max_instructions_per_message,
+        max_instructions_per_round,
+        max_instructions_per_install_code,
     } = payload;
 
     maybe_set!(subnet_record, ingress_bytes_per_block_soft_cap);
@@ -173,6 +180,9 @@ fn merge_subnet_record(
 
     maybe_set!(subnet_record, is_halted);
 
+    maybe_set!(subnet_record, max_instructions_per_message);
+    maybe_set!(subnet_record, max_instructions_per_round);
+    maybe_set!(subnet_record, max_instructions_per_install_code);
     subnet_record
 }
 
@@ -210,6 +220,9 @@ mod tests {
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
+            max_instructions_per_message: 5_000_000_000,
+            max_instructions_per_round: 7_000_000_000,
+            max_instructions_per_install_code: 200_000_000_000,
         };
 
         let payload = UpdateSubnetPayload {
@@ -238,6 +251,9 @@ mod tests {
             start_as_nns: Some(true),
             subnet_type: Some(SubnetType::System),
             is_halted: Some(true),
+            max_instructions_per_message: Some(6_000_000_000),
+            max_instructions_per_round: Some(8_000_000_000),
+            max_instructions_per_install_code: Some(300_000_000_000),
         };
 
         assert_eq!(
@@ -266,6 +282,9 @@ mod tests {
                 start_as_nns: true,
                 subnet_type: SubnetType::System.into(),
                 is_halted: true,
+                max_instructions_per_message: 6_000_000_000,
+                max_instructions_per_round: 8_000_000_000,
+                max_instructions_per_install_code: 300_000_000_000,
             }
         );
     }
@@ -296,6 +315,9 @@ mod tests {
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
+            max_instructions_per_message: 5_000_000_000,
+            max_instructions_per_round: 7_000_000_000,
+            max_instructions_per_install_code: 200_000_000_000,
         };
 
         let payload = UpdateSubnetPayload {
@@ -324,6 +346,9 @@ mod tests {
             start_as_nns: None,
             subnet_type: Some(SubnetType::System),
             is_halted: None,
+            max_instructions_per_message: None,
+            max_instructions_per_round: Some(8_000_000_000),
+            max_instructions_per_install_code: None,
         };
 
         assert_eq!(
@@ -352,6 +377,9 @@ mod tests {
                 start_as_nns: false,
                 subnet_type: SubnetType::System.into(),
                 is_halted: false,
+                max_instructions_per_message: 5_000_000_000,
+                max_instructions_per_round: 8_000_000_000,
+                max_instructions_per_install_code: 200_000_000_000,
             }
         );
     }
@@ -377,6 +405,9 @@ mod tests {
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
+            max_instructions_per_message: 5_000_000_000,
+            max_instructions_per_round: 7_000_000_000,
+            max_instructions_per_install_code: 200_000_000_000,
         };
 
         let payload = UpdateSubnetPayload {
@@ -405,6 +436,9 @@ mod tests {
             start_as_nns: None,
             subnet_type: Some(SubnetType::System),
             is_halted: None,
+            max_instructions_per_message: None,
+            max_instructions_per_round: None,
+            max_instructions_per_install_code: None,
         };
 
         merge_subnet_record(subnet_record, payload);
@@ -427,6 +461,9 @@ mod tests {
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
+            max_instructions_per_message: 5_000_000_000,
+            max_instructions_per_round: 7_000_000_000,
+            max_instructions_per_install_code: 200_000_000_000,
         };
 
         let payload = UpdateSubnetPayload {
@@ -455,6 +492,9 @@ mod tests {
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
+            max_instructions_per_message: None,
+            max_instructions_per_round: None,
+            max_instructions_per_install_code: None,
         };
 
         assert_eq!(
@@ -483,6 +523,9 @@ mod tests {
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
+                max_instructions_per_message: 5_000_000_000,
+                max_instructions_per_round: 7_000_000_000,
+                max_instructions_per_install_code: 200_000_000_000,
             }
         );
     }

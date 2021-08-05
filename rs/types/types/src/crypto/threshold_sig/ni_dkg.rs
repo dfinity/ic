@@ -238,6 +238,7 @@ impl NiDkgTranscript {
         committee: Vec<NodeId>,
         dkg_tag: NiDkgTag,
         threshold: u32,
+        registry_version: u64,
     ) -> Self {
         Self {
             dkg_id: NiDkgId {
@@ -250,7 +251,7 @@ impl NiDkgTranscript {
                 .expect("Couldn't create a non-interactive DKG threshold."),
             committee: NiDkgReceivers::new(committee.into_iter().collect())
                 .expect("Couldn't create non-interactive DKG committee"),
-            registry_version: RegistryVersion::from(0),
+            registry_version: RegistryVersion::from(registry_version),
             internal_csp_transcript: CspNiDkgTranscript::placeholder_to_delete(),
         }
     }
@@ -259,6 +260,7 @@ impl NiDkgTranscript {
             vec![NodeId::from(PrincipalId::new_node_test_id(0))],
             NiDkgTag::LowThreshold,
             1,
+            0,
         )
     }
 }

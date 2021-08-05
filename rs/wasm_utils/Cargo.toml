@@ -6,7 +6,7 @@ edition = "2018"
 [dependencies]
 ic-wasm-types = { path = "../types/wasm_types" }
 parity-wasm = { version = "0.40.0", default-features = true }
-wasmtime = "0.22.0"
+wasmtime = { git = "https://github.com/dfinity-lab/wasmtime", rev = "60d36d996dfbd335ac18ee6c36e1f10acfaf0c30", features = ["posix-signals-on-macos"] }
 
 [dev-dependencies]
 assert_matches = "1.3.0"

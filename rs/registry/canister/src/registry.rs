@@ -58,16 +58,28 @@ impl Registry {
         Self::default()
     }
 
-    /// Returns the deltas applied since 'version', exclusive.
-    pub fn get_changes_since(&self, version: u64) -> Vec<RegistryDelta> {
+    /// Returns the deltas applied since `version`, exclusive; optionally
+    /// limited to the subsequent `max_versions` (i.e. changes applied in
+    /// versions `(version, version + max_versions]`).
+    pub fn get_changes_since(
+        &self,
+        version: u64,
+        max_versions: Option<usize>,
+    ) -> Vec<RegistryDelta> {
+        let max_version = match max_versions {
+            Some(max_versions) => version.saturating_add(max_versions as u64),
+            None => std::u64::MAX,
+        };
+
         self.store
             .iter()
-            // For every key create a delta with values versioned above `version`
+            // For every key create a delta with values versioned `(version, max_version]`.
             .map(|(key, values)| RegistryDelta {
                 key: key.clone(),
                 values: values
                     .iter()
                     .rev()
+                    .skip_while(|value| value.version > max_version)
                     .take_while(|value| value.version > version)
                     .cloned()
                     .collect(),
@@ -474,7 +486,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_all_changes_since() {
+    fn test_get_changes_since() {
         let mut registry = Registry::new();
         let key1 = vec![1, 2, 3, 4];
         let key2 = vec![5, 6, 7, 8];
@@ -505,9 +517,7 @@ mod tests {
         // a total of 2 keys:
         // key 1 with three values (@1 value1, @2 value2, @3 delete, @4 value1)
         // key 2 with three values (@2 value1, @3 value2)
-        let mut deltas = registry.get_changes_since(0);
-        // Sort the keys as they might not come sorted from the hashmap.
-        deltas.sort_by(|a, b| a.key.cmp(&b.key));
+        let deltas = registry.get_changes_since(0, None);
         // Assert that we got the right thing, and test a few values
         assert_eq!(deltas.len(), 2);
         let key1_values = &deltas.get(0).unwrap().values;
@@ -519,15 +529,35 @@ mod tests {
         assert_eq!(key1_values[1].deletion_marker, true);
         assert_eq!(key1_values[1].version, 3);
 
+        assert_eq!(deltas, registry.get_changes_since(0, Some(4)));
+        assert_eq!(deltas, registry.get_changes_since(0, Some(9)));
+
+        // Fetch all mutations for 2 versions after version 1 (i.e. versions 2 and 3).
+        let deltas = registry.get_changes_since(1, Some(2));
+        // Assert that we got the right thing, and test the values.
+        assert_eq!(deltas.len(), 2);
+        let key1_values = &deltas.get(0).unwrap().values;
+        let key2_values = &deltas.get(1).unwrap().values;
+        assert_eq!(key1_values.len(), 2);
+        assert_eq!(key2_values.len(), 2);
+        assert_eq!(key1_values[0].deletion_marker, true);
+        assert_eq!(key1_values[0].version, 3);
+        assert_eq!(key1_values[1].value, value2);
+        assert_eq!(key1_values[1].version, 2);
+        assert_eq!(key2_values[0].value, value2);
+        assert_eq!(key2_values[0].version, 3);
+        assert_eq!(key2_values[1].value, value1);
+        assert_eq!(key2_values[1].version, 2);
+
         // Now try getting a couple of other versions
         // Version 4 should be empty (versions to get changes from are exclusive)
-        let deltas = registry.get_changes_since(4);
+        let deltas = registry.get_changes_since(4, None);
         assert_eq!(deltas.len(), 0);
         // Changes since version 3 for should include key 1
-        let deltas = registry.get_changes_since(3);
+        let deltas = registry.get_changes_since(3, None);
         assert_eq!(deltas.len(), 1);
         // Changes since version 2 for should include both keys
-        let deltas = registry.get_changes_since(2);
+        let deltas = registry.get_changes_since(2, None);
         assert_eq!(deltas.len(), 2);
 
         serialize_then_deserialize(registry);
@@ -816,7 +846,7 @@ mod tests {
             );
         }
         // Let's print out some stats to make sure we have the diversity we want
-        let changes = registry.get_changes_since(0);
+        let changes = registry.get_changes_since(0, None);
         let num_registry_values: usize = changes.iter().map(|delta| delta.values.len()).sum();
         eprintln!(
             "\

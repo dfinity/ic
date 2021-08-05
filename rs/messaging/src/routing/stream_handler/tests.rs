@@ -27,7 +27,7 @@ use ic_test_utilities::{
 use ic_types::{
     messages::{CallbackId, Payload, Request},
     xnet::{testing::StreamSliceTesting, StreamIndex, StreamIndexedQueue},
-    CanisterId, Cycles, Funds,
+    CanisterId, Cycles,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -989,7 +989,7 @@ fn test_request(sender: CanisterId, receiver: CanisterId) -> Request {
         .receiver(receiver)
         .sender(sender)
         .sender_reply_callback(CallbackId::from(0))
-        .payment(Funds::zero())
+        .payment(Cycles::zero())
         .method_name("name".to_string())
         .method_payload(Vec::new())
         .build()
@@ -999,7 +999,7 @@ fn test_response(respondent: CanisterId, originator: CanisterId) -> Response {
     ResponseBuilder::new()
         .respondent(respondent)
         .originator(originator)
-        .refund(Funds::zero())
+        .refund(Cycles::zero())
         .response_payload(Payload::Data(Vec::new()))
         .build()
 }

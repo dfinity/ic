@@ -298,3 +298,135 @@ fn deserialize_invalid_point() {
     let y = ECP::frombytes(&buf);
     assert!(y.is_infinity(), "invalid point deserializes as infinity");
 }
+
+mod multipairing_api_usage {
+    // These tests show how to use the  MIRACL multipairing API
+    // and ensure its consistency with the computation of individual pairings.
+
+    use super::*;
+    use miracl_core::bls12381::ecp::ECP;
+    use miracl_core::bls12381::ecp2::ECP2;
+
+    #[test]
+    fn multipairing_should_equal_iterated() {
+        use miracl_core::bls12381::pair;
+
+        let num_of_repetitions = 50;
+        for points in gen_points_for_pairings(num_of_repetitions) {
+            let iterated_p = {
+                let mut iterated_p = pair::fexp(&pair::ate(&points.g2_point1, &points.g1_point1));
+                iterated_p.mul(&pair::fexp(&pair::ate(
+                    &points.g2_point2,
+                    &points.g1_point2,
+                )));
+                iterated_p.mul(&pair::fexp(&pair::ate(
+                    &points.g2_point3,
+                    &points.g1_point3,
+                )));
+                iterated_p
+            };
+
+            let multi_p = {
+                let mut r = pair::initmp();
+
+                pair::another(&mut r, &points.g2_point1, &points.g1_point1);
+                pair::another(&mut r, &points.g2_point2, &points.g1_point2);
+                pair::another(&mut r, &points.g2_point3, &points.g1_point3);
+
+                let v = pair::miller(&mut r);
+                pair::fexp(&v)
+            };
+
+            assert!(
+            multi_p.equals(&iterated_p),
+            "Multipairing and iterated-pairing not-equal\nIterated:{}\nMultipairing:{}\nPoints:{:?}",
+            iterated_p,
+            multi_p,
+            points
+        );
+        }
+    }
+
+    #[test]
+    fn multipairing_with_precomp_should_equal_multipairing() {
+        use miracl_core::bls12381::ecp::G2_TABLE;
+        use miracl_core::bls12381::fp4::FP4;
+        use miracl_core::bls12381::pair;
+
+        let num_of_repetitions = 50;
+        for points in gen_points_for_pairings(num_of_repetitions) {
+            let multi_p = {
+                let mut r = pair::initmp();
+
+                pair::another(&mut r, &points.g2_point1, &points.g1_point1);
+                pair::another(&mut r, &points.g2_point2, &points.g1_point2);
+                pair::another(&mut r, &points.g2_point3, &points.g1_point3);
+
+                let v = pair::miller(&mut r);
+                pair::fexp(&v)
+            };
+
+            // Precompute the G2 point of the first pairing.
+            let precomp_p = {
+                let mut precomp_point: [FP4; G2_TABLE] = [FP4::new(); G2_TABLE];
+                // The multipairing and the precomputation assume (undocumented)
+                // that the points are in affine form.
+                let mut g2_point1 = points.g2_point1.clone();
+                g2_point1.affine();
+                pair::precomp(&mut precomp_point, &g2_point1);
+
+                let mut r = pair::initmp();
+
+                pair::another_pc(&mut r, &precomp_point, &points.g1_point1);
+                pair::another(&mut r, &points.g2_point2, &points.g1_point2);
+                pair::another(&mut r, &points.g2_point3, &points.g1_point3);
+
+                let v = pair::miller(&mut r);
+                pair::fexp(&v)
+            };
+
+            assert!(
+            multi_p.equals(&precomp_p),
+            "Multipairing and precomputed-multipairing not-equal\nMultipairing:{}\nPrecomputed-multipairing:{}\npoints:{:?}",
+            multi_p,
+            precomp_p,
+            points
+        );
+        }
+    }
+
+    // We test 3-way multipairing
+    // (i.e. e(p1, q1) * e(p2, q2) * e(p3, q3))
+    #[derive(Debug)]
+    struct ThreewayPairingPoints {
+        g1_point1: ECP,
+        g2_point1: ECP2,
+        g1_point2: ECP,
+        g2_point2: ECP2,
+        g1_point3: ECP,
+        g2_point3: ECP2,
+    }
+
+    fn gen_points_for_pairings(num_of_repetitions: usize) -> Vec<ThreewayPairingPoints> {
+        use miracl_core::bls12381::big::BIG;
+        use miracl_core::bls12381::rom;
+
+        use rand::Rng;
+
+        let seed = rand::thread_rng().gen::<[u8; 32]>();
+        let rng = &mut RAND_ChaCha20::new(seed);
+
+        let curve_order = BIG::new_ints(&rom::CURVE_ORDER);
+
+        (1..num_of_repetitions)
+            .map(|_i| ThreewayPairingPoints {
+                g1_point1: ECP::generator().mul(&BIG::randomnum(&curve_order, rng)),
+                g2_point1: ECP2::generator().mul(&BIG::randomnum(&curve_order, rng)),
+                g1_point2: ECP::generator().mul(&BIG::randomnum(&curve_order, rng)),
+                g2_point2: ECP2::generator().mul(&BIG::randomnum(&curve_order, rng)),
+                g1_point3: ECP::generator().mul(&BIG::randomnum(&curve_order, rng)),
+                g2_point3: ECP2::generator().mul(&BIG::randomnum(&curve_order, rng)),
+            })
+            .collect()
+    }
+}

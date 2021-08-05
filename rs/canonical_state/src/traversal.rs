@@ -374,7 +374,10 @@ mod tests {
                 edge(subnet_test_id(5).get_ref().to_vec()),
                 E::StartSubtree,
                 edge("header"),
-                E::VisitBlob(encode_stream_header(&header)),
+                E::VisitBlob(encode_stream_header(
+                    &header,
+                    state.metadata.certification_version
+                )),
                 edge("messages"),
                 E::StartSubtree,
                 E::EndSubtree, // messages

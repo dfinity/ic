@@ -13,7 +13,7 @@ use ic_interfaces::{
 use ic_logger::ReplicaLogger;
 use ic_messaging::{MessageRoutingImpl, XNetPayloadBuilderImpl};
 use ic_messaging::{XNetEndpoint, XNetEndpointConfig};
-use ic_p2p::p2p::{P2PStateSyncClient, P2P};
+use ic_p2p::p2p::{create_p2p, P2PStateSyncClient};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
@@ -148,7 +148,7 @@ pub fn construct_p2p_stack(
         ))
     });
 
-    let (p2p_event_handler, p2p_runner, consensus_pool_cache) = P2P::new(
+    let (p2p_event_handler, p2p_runner, consensus_pool_cache) = create_p2p(
         tokio::runtime::Handle::current(),
         config.malicious_behaviour.malicious_flags,
         node_id,
@@ -183,7 +183,7 @@ pub fn construct_p2p_stack(
         crypto,
         state_manager,
         Arc::clone(&http_query_handler) as Arc<_>,
-        Box::new(p2p_runner),
+        p2p_runner,
         p2p_event_handler,
         consensus_pool_cache,
         ingress_message_filter,

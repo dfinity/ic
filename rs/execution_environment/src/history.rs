@@ -248,5 +248,6 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         UnknownManagementMessage => "Unknown management method",
         InvalidManagementPayload => "Invalid management message payload",
         InsufficientCyclesInCall => "Canister tried to keep more cycles than available in the call",
+        CanisterWasmEngineError => "Wasm engine error",
     }
 }

@@ -213,18 +213,19 @@ pub struct CatchUpPackageParam {
 /// the ordering of the struct fields.
 impl PartialOrd for CatchUpPackageParam {
     fn partial_cmp(&self, other: &CatchUpPackageParam) -> Option<Ordering> {
-        match self.height.cmp(&other.height) {
-            Ordering::Greater => Some(Ordering::Greater),
-            _ => self.registry_version.partial_cmp(&other.registry_version),
-        }
-    }
-}
-
-impl Ord for CatchUpPackageParam {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.height.cmp(&other.height) {
-            Ordering::Equal => self.registry_version.cmp(&other.registry_version),
-            o => o,
+        match (
+            self.height.cmp(&other.height),
+            self.registry_version.partial_cmp(&other.registry_version),
+        ) {
+            // If height is less, registry version needs to be less or equal
+            (Ordering::Less, Some(x)) if x != Ordering::Greater => Some(Ordering::Less),
+            // If height is equal, registry version decides ordering
+            (Ordering::Equal, Some(x)) => Some(x),
+            // If height is greater, registry version needs to be equal or greater
+            (Ordering::Greater, Some(x)) if x != Ordering::Less => Some(Ordering::Greater),
+            // All other combinations of height and registry versions are incomparable
+            // This also covers the case, that the registry versions themselves are incomparable
+            _ => None,
         }
     }
 }
@@ -288,13 +289,25 @@ fn test_catch_up_package_param_partial_ord() {
         height: Height::from(2),
         registry_version: RegistryVersion::from(2),
     };
+    let c4 = CatchUpPackageParam {
+        height: Height::from(1),
+        registry_version: RegistryVersion::from(2),
+    };
+    let c5 = CatchUpPackageParam {
+        height: Height::from(0),
+        registry_version: RegistryVersion::from(2),
+    };
     // c2 > c1
-    assert_eq!(c2.cmp(&c1), Ordering::Greater);
+    assert_eq!(c2.partial_cmp(&c1), Some(Ordering::Greater));
     // c3 > c1
-    assert_eq!(c3.cmp(&c1), Ordering::Greater);
+    assert_eq!(c3.partial_cmp(&c1), Some(Ordering::Greater));
     // c3 > c2. This can happen when we want to recover a stuck subnet
     // with a new CatchUpPackage.
-    assert_eq!(c3.cmp(&c2), Ordering::Greater);
+    assert_eq!(c3.partial_cmp(&c2), Some(Ordering::Greater));
     // c3 == c3
-    assert_eq!(c3.cmp(&c3), Ordering::Equal);
+    assert_eq!(c3.partial_cmp(&c3), Some(Ordering::Equal));
+    // c4 > c1
+    assert_eq!(c4.partial_cmp(&c1), Some(Ordering::Greater));
+    // c5 does not compare to c1
+    assert_eq!(c5.partial_cmp(&c1), None);
 }

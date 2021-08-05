@@ -3,15 +3,15 @@
 //! Specifically, it constructs all the artifact pools and the Consensus/P2P
 //! time source.
 
-use crate::event_handler::{AdvertSubscriber, P2PEventHandlerControl, P2PEventHandlerImpl};
 use crate::gossip_protocol::{Gossip, GossipImpl};
-use crate::metrics::{DownloadManagementMetrics, DownloadPrioritizerMetrics, P2PMetrics};
-use crate::utils::FlowMapper;
-use crate::{download_management::DownloadManagerImpl, event_handler::IngressThrottler};
+use crate::metrics::P2PMetrics;
 use crate::{
-    download_prioritization::DownloadPrioritizerImpl, event_handler::IngressEventHandlerImpl,
+    event_handler::IngressEventHandlerImpl,
+    event_handler::{
+        AdvertSubscriber, IngressThrottler, P2PEventHandlerControl, P2PEventHandlerImpl,
+    },
 };
-use ic_artifact_manager::{actors, manager};
+use ic_artifact_manager::{manager, processors};
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl,
     dkg_pool::DkgPoolImpl, ensure_persistent_pool_replica_version_compatibility,
@@ -51,7 +51,7 @@ use ic_types::{
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     p2p,
     replica_config::ReplicaConfig,
-    transport::FlowTag,
+    transport::{FlowTag, TransportClientType},
     NodeId, SubnetId,
 };
 use std::sync::{
@@ -69,37 +69,14 @@ use ic_types::malicious_flags::MaliciousFlags;
 /// component.
 const P2P_TIMER_DURATION_MS: u64 = 100;
 
-/// A helper service to run the P2P component.
-pub struct P2PService {
-    p2p: Option<P2P>,
-}
-
-impl Drop for P2PService {
-    /// The method drops the P2PService.
-    fn drop(&mut self) {
-        if let Some(p2p) = self.p2p.take() {
-            std::mem::drop(p2p);
-        }
-    }
-}
-
-impl P2PRunner for P2PService {
-    /// The method starts the run loop of the P2P service.
-    fn run(&mut self) {
-        self.p2p.as_mut().unwrap().start_timer();
-    }
-}
-
 /// The P2P struct, which encapsulates all relevant components including gossip
 /// and event handler control.
 #[allow(unused)]
-pub struct P2P {
+struct P2P {
     /// The logger.
     pub(crate) log: ReplicaLogger,
     /// Handle to the Tokio runtime to be used by p2p.
     rt_handle: tokio::runtime::Handle,
-    /// The time source.
-    time_source: Arc<SysTimeSource>,
     /// The *Gossip* struct with automatic reference counting.
     gossip: Arc<GossipImpl>,
     /// The task handles.
@@ -126,149 +103,135 @@ pub enum P2PStateSyncClient {
     ),
 }
 
-impl P2P {
-    /// Fetch the Gossip configuration from the registry.
-    pub fn fetch_gossip_config(
-        registry_client: Arc<dyn RegistryClient>,
-        subnet_id: SubnetId,
-    ) -> GossipConfig {
-        if let Ok(Some(Some(gossip_config))) =
-            registry_client.get_gossip_config(subnet_id, registry_client.get_latest_version())
-        {
-            gossip_config
-        } else {
-            p2p::build_default_gossip_config()
-        }
+/// Fetch the Gossip configuration from the registry.
+pub(crate) fn fetch_gossip_config(
+    registry_client: Arc<dyn RegistryClient>,
+    subnet_id: SubnetId,
+) -> GossipConfig {
+    if let Ok(Some(Some(gossip_config))) =
+        registry_client.get_gossip_config(subnet_id, registry_client.get_latest_version())
+    {
+        gossip_config
+    } else {
+        p2p::build_default_gossip_config()
     }
+}
 
-    /// The function constructs a P2P instance. Currently, it constructs all the
-    /// artifact pools and the Consensus/P2P time source. Artifact
-    /// clients are constructed and run in their separate actors.
-    #[allow(
-        clippy::too_many_arguments,
-        clippy::type_complexity,
-        clippy::new_ret_no_self
-    )]
-    pub fn new(
-        rt_handle: tokio::runtime::Handle,
-        malicious_flags: MaliciousFlags,
-        node_id: NodeId,
-        subnet_id: SubnetId,
-        transport: Arc<dyn Transport>,
-        flow_tags: Vec<FlowTag>,
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        state_sync_client: P2PStateSyncClient,
-        xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
-        message_router: Arc<dyn MessageRouting>,
-        crypto: Arc<dyn Crypto + Send + Sync>,
-        consensus_crypto: Arc<dyn ConsensusCrypto + Send + Sync>,
-        certifier_crypto: Arc<dyn certification::CertificationCrypto + Send + Sync>,
-        ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
-        registry_client: Arc<dyn RegistryClient>,
-        ingress_history_reader: Box<dyn IngressHistoryReader>,
-        artifact_pool_config: ArtifactPoolConfig,
-        consensus_config: ConsensusConfig,
-        metrics_registry: MetricsRegistry,
-        log: ReplicaLogger,
-        catch_up_package: CUPWithOriginalProtobuf,
-        cycles_account_manager: Arc<CyclesAccountManager>,
-        local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
-        registry_poll_delay_duration_ms: u64,
-    ) -> Result<
-        (
-            Arc<dyn IngressEventHandler>,
-            P2PService,
-            Arc<dyn ConsensusPoolCache>,
-        ),
-        String,
-    > {
-        let p2p_metrics = P2PMetrics::new(&metrics_registry);
-        let flow_mapper = Arc::new(FlowMapper::new(flow_tags));
-        // Initialize the time source.
-        let time_source = SysTimeSource::new();
-        let time_source = Arc::new(time_source);
-        let task_handles = Vec::new();
-        let killed = Arc::new(AtomicBool::new(false));
+/// The function constructs a P2P instance. Currently, it constructs all the
+/// artifact pools and the Consensus/P2P time source. Artifact
+/// clients are constructed and run in their separate actors.
+#[allow(
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::new_ret_no_self
+)]
+pub fn create_p2p(
+    rt_handle: tokio::runtime::Handle,
+    malicious_flags: MaliciousFlags,
+    node_id: NodeId,
+    subnet_id: SubnetId,
+    transport: Arc<dyn Transport>,
+    flow_tags: Vec<FlowTag>,
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_sync_client: P2PStateSyncClient,
+    xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
+    message_router: Arc<dyn MessageRouting>,
+    crypto: Arc<dyn Crypto + Send + Sync>,
+    consensus_crypto: Arc<dyn ConsensusCrypto + Send + Sync>,
+    certifier_crypto: Arc<dyn certification::CertificationCrypto + Send + Sync>,
+    ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
+    registry_client: Arc<dyn RegistryClient>,
+    ingress_history_reader: Box<dyn IngressHistoryReader>,
+    artifact_pool_config: ArtifactPoolConfig,
+    consensus_config: ConsensusConfig,
+    metrics_registry: MetricsRegistry,
+    log: ReplicaLogger,
+    catch_up_package: CUPWithOriginalProtobuf,
+    cycles_account_manager: Arc<CyclesAccountManager>,
+    local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
+    registry_poll_delay_duration_ms: u64,
+) -> Result<
+    (
+        Arc<dyn IngressEventHandler>,
+        Box<dyn P2PRunner>,
+        Arc<dyn ConsensusPoolCache>,
+    ),
+    String,
+> {
+    let event_handler = Arc::new(P2PEventHandlerImpl::new(
+        rt_handle.clone(),
+        node_id,
+        log.clone(),
+        &metrics_registry,
+        fetch_gossip_config(registry_client.clone(), subnet_id),
+    ));
+    transport
+        .register_client(TransportClientType::P2P, event_handler.clone())
+        .map_err(|e| format!("transport registration failed: {:?}", e))?;
 
-        // Now we setup the Artifact Pools and the manager.
-        let (artifact_manager, consensus_pool_cache, event_handler, ingress_throttle) =
-            setup_artifact_manager(
-                rt_handle.clone(),
-                node_id,
-                Arc::clone(&crypto) as Arc<_>,
-                Arc::clone(&consensus_crypto) as Arc<_>,
-                Arc::clone(&certifier_crypto) as Arc<_>,
-                Arc::clone(&ingress_sig_crypto) as Arc<_>,
-                subnet_id,
-                Arc::clone(&time_source),
-                artifact_pool_config,
-                consensus_config,
-                log.clone(),
-                metrics_registry.clone(),
-                Arc::clone(&registry_client),
-                state_manager,
-                state_sync_client,
-                xnet_payload_builder,
-                message_router,
-                ingress_history_reader,
-                catch_up_package,
-                malicious_flags.clone(),
-                cycles_account_manager,
-                local_store_time_reader,
-                registry_poll_delay_duration_ms,
-            )
-            .unwrap();
+    // Now we setup the Artifact Pools and the manager.
+    let (artifact_manager, consensus_pool_cache, ingress_throttle) = setup_artifact_manager(
+        rt_handle.clone(),
+        node_id,
+        Arc::clone(&crypto) as Arc<_>,
+        Arc::clone(&consensus_crypto) as Arc<_>,
+        Arc::clone(&certifier_crypto) as Arc<_>,
+        Arc::clone(&ingress_sig_crypto) as Arc<_>,
+        subnet_id,
+        artifact_pool_config,
+        consensus_config,
+        log.clone(),
+        metrics_registry.clone(),
+        Arc::clone(&registry_client),
+        state_manager,
+        state_sync_client,
+        xnet_payload_builder,
+        message_router,
+        ingress_history_reader,
+        catch_up_package,
+        malicious_flags.clone(),
+        cycles_account_manager,
+        local_store_time_reader,
+        registry_poll_delay_duration_ms,
+        Arc::clone(&event_handler) as Arc<_>,
+    )
+    .unwrap();
 
-        let download_prioritizer = Arc::new(DownloadPrioritizerImpl::new(
-            artifact_manager.as_ref(),
-            DownloadPrioritizerMetrics::new(&metrics_registry),
-        ));
+    let gossip = Arc::new(GossipImpl::new(
+        node_id,
+        subnet_id,
+        registry_client.clone(),
+        artifact_manager.clone(),
+        transport.clone(),
+        event_handler.clone(),
+        flow_tags,
+        log.clone(),
+        &metrics_registry,
+        malicious_flags,
+    ));
+    event_handler.start(gossip.clone());
 
-        let download_manager = DownloadManagerImpl::new(
-            node_id,
-            subnet_id,
-            registry_client.clone(),
-            artifact_manager.clone(),
-            transport.clone(),
-            event_handler.clone(),
-            flow_mapper,
-            log.clone(),
-            Arc::clone(&download_prioritizer) as Arc<_>,
-            DownloadManagementMetrics::new(&metrics_registry),
-        )?;
+    let p2p = P2P {
+        log,
+        rt_handle,
+        gossip: gossip.clone(),
+        metrics: P2PMetrics::new(&metrics_registry),
+        task_handles: Vec::new(),
+        killed: Arc::new(AtomicBool::new(false)),
+        event_handler,
+    };
 
-        let gossip = Arc::new(GossipImpl::new(
-            download_manager,
-            Arc::clone(&artifact_manager),
-            log.clone(),
-            &metrics_registry,
-            malicious_flags,
-        ));
+    let ingress_handler = Arc::from(IngressEventHandlerImpl::new(
+        ingress_throttle,
+        gossip,
+        node_id,
+    ));
+    Ok((ingress_handler, Box::new(p2p), consensus_pool_cache))
+}
 
-        event_handler.start(gossip.clone());
-
-        let p2p = P2P {
-            log,
-            rt_handle,
-            gossip: gossip.clone(),
-            time_source,
-            metrics: p2p_metrics,
-            task_handles,
-            killed,
-            event_handler,
-        };
-
-        let p2p_runner = P2PService { p2p: Some(p2p) };
-        let ingress_handler = Arc::from(IngressEventHandlerImpl::new(
-            ingress_throttle,
-            gossip,
-            node_id,
-        ));
-        Ok((ingress_handler as Arc<_>, p2p_runner, consensus_pool_cache))
-    }
-
+impl P2PRunner for P2P {
     /// The method starts the P2P timer task in the background.
-    fn start_timer(&mut self) {
+    fn run(&mut self) {
         let gossip = self.gossip.clone();
         let event_handler = self.event_handler.clone();
         let log = self.log.clone();
@@ -311,7 +274,6 @@ fn setup_artifact_manager(
     certifier_crypto: Arc<dyn certification::CertificationCrypto>,
     ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
     subnet_id: SubnetId,
-    time_source: Arc<SysTimeSource>,
     artifact_pool_config: ArtifactPoolConfig,
     consensus_config: ConsensusConfig,
     replica_logger: ReplicaLogger,
@@ -327,12 +289,15 @@ fn setup_artifact_manager(
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
     registry_poll_delay_duration_ms: u64,
+    event_handler: Arc<dyn AdvertSubscriber + Send + Sync>,
 ) -> std::io::Result<(
     Arc<dyn ArtifactManager>,
     Arc<dyn ConsensusPoolCache>,
-    Arc<P2PEventHandlerImpl>,
     IngressThrottler,
 )> {
+    // Initialize the time source.
+    let time_source = Arc::new(SysTimeSource::new());
+
     let mut artifact_manager_maker = manager::ArtifactManagerMaker::new(time_source.clone());
 
     ensure_persistent_pool_replica_version_compatibility(
@@ -347,23 +312,15 @@ fn setup_artifact_manager(
         catch_up_package,
     );
 
-    let event_handler = Arc::new(P2PEventHandlerImpl::new(
-        rt_handle.clone(),
-        node_id,
-        replica_logger.clone(),
-        &metrics_registry,
-        P2P::fetch_gossip_config(registry_client.clone(), subnet_id),
-    ));
-
     let consensus_cache = consensus_pool.read().unwrap().get_cache();
 
     if let P2PStateSyncClient::TestChunkingPool(client, client_on_state_change) = state_sync_client
     {
-        let c_event_handler = event_handler.clone();
-        let addr = actors::ClientActor::new(
+        let c_event_handler = event_handler;
+        let addr = processors::ArtifactProcessorManager::new(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry,
-            actors::BoxOrArcClient::ArcClient(client_on_state_change),
+            processors::BoxOrArcClient::ArcClient(client_on_state_change),
             move |advert| c_event_handler.broadcast_advert(advert.into()),
             rt_handle,
         );
@@ -371,16 +328,15 @@ fn setup_artifact_manager(
         return Ok((
             artifact_manager_maker.finish(),
             consensus_cache,
-            event_handler,
             ingress_pool as Arc<_>,
         ));
     }
     if let P2PStateSyncClient::Client(state_sync_client) = state_sync_client {
         let event_handler = event_handler.clone();
-        let addr = actors::ClientActor::new(
+        let addr = processors::ArtifactProcessorManager::new(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry.clone(),
-            actors::BoxOrArcClient::ArcClient(Arc::clone(&state_sync_client) as Arc<_>),
+            processors::BoxOrArcClient::ArcClient(Arc::clone(&state_sync_client) as Arc<_>),
             move |advert| event_handler.broadcast_advert(advert.into()),
             rt_handle.clone(),
         );
@@ -412,7 +368,7 @@ fn setup_artifact_manager(
     {
         // Create the consensus client.
         let event_handler = event_handler.clone();
-        let (consensus_client, actor) = actors::ConsensusProcessor::build(
+        let (consensus_client, actor) = processors::ConsensusProcessor::build(
             move |advert| event_handler.broadcast_advert(advert.into()),
             || {
                 ic_consensus::consensus::setup(
@@ -447,7 +403,7 @@ fn setup_artifact_manager(
     {
         // Create the ingress client.
         let event_handler = event_handler.clone();
-        let (ingress_client, actor) = actors::IngressProcessor::build(
+        let (ingress_client, actor) = processors::IngressProcessor::build(
             move |advert| event_handler.broadcast_advert(advert.into()),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&ingress_pool),
@@ -463,7 +419,7 @@ fn setup_artifact_manager(
     {
         // Create the certification client.
         let event_handler = event_handler.clone();
-        let (certification_client, actor) = actors::CertificationProcessor::build(
+        let (certification_client, actor) = processors::CertificationProcessor::build(
             move |advert| event_handler.broadcast_advert(advert.into()),
             || {
                 certification::setup(
@@ -486,8 +442,8 @@ fn setup_artifact_manager(
     }
 
     {
-        let event_handler = event_handler.clone();
-        let (dkg_client, actor) = actors::DkgProcessor::build(
+        let event_handler = event_handler;
+        let (dkg_client, actor) = processors::DkgProcessor::build(
             move |advert| event_handler.broadcast_advert(advert.into()),
             || {
                 (
@@ -513,7 +469,6 @@ fn setup_artifact_manager(
     Ok((
         artifact_manager_maker.finish(),
         consensus_cache,
-        event_handler,
         ingress_pool as Arc<_>,
     ))
 }

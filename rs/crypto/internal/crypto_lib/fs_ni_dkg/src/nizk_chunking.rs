@@ -349,23 +349,25 @@ pub fn verify_chunking(
     e.iter().zip(nizk.z_r.iter()).for_each(|(e_i, z_ri)| {
         let mut lhs = nizk.dd[delta_idx].clone();
         delta_idx += 1;
-        instance
-            .randomizers_r
+        let e_ijk_polynomials: Vec<BIG> = e_i
             .iter()
-            .zip(e_i.iter())
-            .for_each(|(rr_j, e_ij)| {
-                let mut xpow = x;
+            .map(|e_ij| {
                 let mut acc = BIG::new_int(0);
-                e_ij.iter().for_each(|e_ijk| {
+                e_ij.iter().enumerate().for_each(|(k, e_ijk)| {
                     acc = BIG::modadd(
                         &acc,
-                        &BIG::modmul(&BIG::new_int(*e_ijk as isize), &xpow, &spec_p),
+                        &BIG::modmul(&BIG::new_int(*e_ijk as isize), &xpowers[k], &spec_p),
                         &spec_p,
                     );
-                    xpow = BIG::modmul(&xpow, &x, &spec_p);
                 });
-                lhs.add(&rr_j.mul(&acc));
-            });
+                acc
+            })
+            .collect();
+        lhs.add(&ECP::muln(
+            spec_m,
+            &instance.randomizers_r,
+            &e_ijk_polynomials,
+        ));
         let rhs = g1.mul(&z_ri);
         verifies = verifies && lhs.equals(&rhs);
     });
@@ -388,21 +390,26 @@ pub fn verify_chunking(
     let mut lhs = ECP::muln(NUM_ZK_REPETITIONS, &nizk.cc, &xpowers);
     lhs.add(&nizk.yy);
 
-    let mut cij_to_eijks = Vec::new();
-    for k in 0..NUM_ZK_REPETITIONS {
-        let mut acc = ECP::new();
-        acc.inf();
-        instance
-            .ciphertext_chunks
-            .iter()
-            .zip(e.iter())
-            .for_each(|(chunk_i, e_i)| {
-                chunk_i.iter().zip(e_i.iter()).for_each(|(chunk_ij, e_ij)| {
-                    acc.add(&chunk_ij.mul(&BIG::new_int(e_ij[k] as isize)));
-                })
-            });
-        cij_to_eijks.push(acc);
-    }
+    let cij_to_eijks: Vec<ECP> = (0..NUM_ZK_REPETITIONS)
+        .map(|k| {
+            let c_ij_s: Vec<ECP> = instance
+                .ciphertext_chunks
+                .iter()
+                .cloned()
+                .flatten()
+                .collect();
+            let e_ijk_s: Vec<BIG> = e
+                .iter()
+                .flatten()
+                .map(|e_ij| BIG::new_int(e_ij[k] as isize))
+                .collect();
+            if c_ij_s.len() != spec_m * spec_n || e_ijk_s.len() != spec_m * spec_n {
+                return Err(ZkProofChunkingError::InvalidProof);
+            }
+            Ok(ECP::muln(spec_m * spec_n, &c_ij_s, &e_ijk_s))
+        })
+        .collect::<Result<Vec<ECP>, _>>()?;
+
     lhs.add(&ECP::muln(NUM_ZK_REPETITIONS, &cij_to_eijks, &xpowers));
 
     let mut acc = BIG::new_int(0);

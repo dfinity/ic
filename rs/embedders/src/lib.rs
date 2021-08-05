@@ -1,14 +1,8 @@
 pub mod cow_memory_creator;
-mod dispatcher;
 mod signal_handler;
 pub mod wasm_executor;
 pub mod wasmtime_embedder;
 
-pub use dispatcher::QueueConfig;
-pub use dispatcher::ReturnToken;
-pub use dispatcher::RunnerConfig;
-pub use dispatcher::RunnerInput;
-pub use dispatcher::RunnerOutput;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{HypervisorError, InstanceStats, SubnetAvailableMemory};
 use ic_replicated_state::{
@@ -20,27 +14,6 @@ use ic_types::{
 };
 use std::sync::Arc;
 pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
-
-// An async result of wasm execution.
-// Cannot be cloned. Can only be consumed.
-pub struct WasmExecutionResult {
-    pub output_receiver: crossbeam_channel::Receiver<RunnerOutput>,
-}
-
-impl WasmExecutionResult {
-    pub fn get(self) -> WasmExecutionOutput {
-        let res = self
-            .output_receiver
-            .recv()
-            .expect("Recv failed: WasmRunner apparently died");
-
-        WasmExecutionResult::on_result(res)
-    }
-
-    fn on_result(res: RunnerOutput) -> WasmExecutionOutput {
-        res.output
-    }
-}
 
 pub struct WasmExecutionInput {
     pub api_type: ApiType,

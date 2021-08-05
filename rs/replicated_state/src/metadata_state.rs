@@ -153,7 +153,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
         // Currently, initialise nns_subnet_id with dummy value in case not found
         let nns_subnet_id =
             match try_from_option_field(item.nns_subnet_id, "NetworkTopology::nns_subnet_id") {
-                Ok(subnet_id) => subnet_id_try_from_protobuf(subnet_id).unwrap(),
+                Ok(subnet_id) => subnet_id_try_from_protobuf(subnet_id)?,
                 Err(_) => SubnetId::new(PrincipalId::new_anonymous()),
             };
 

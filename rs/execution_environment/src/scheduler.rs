@@ -1,5 +1,10 @@
 use crate::{
-    canister_manager::uninstall_canister, execution_environment::ExecutionEnvironment,
+    canister_manager::uninstall_canister,
+    execution_environment::ExecutionEnvironment,
+    metrics::{
+        duration_histogram, instructions_histogram, messages_histogram, MeasurementScope,
+        ScopedMetrics,
+    },
     util::process_responses,
 };
 use ic_config::subnet_config::SchedulerConfig;
@@ -19,15 +24,15 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, CanisterStatus, ReplicatedState};
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     ic00::{EmptyBlob, InstallCodeArgs, Payload as _, IC_00},
     ingress::{IngressStatus, WasmResult},
     messages::{Ingress, MessageId, Payload, Response, StopCanisterContext},
     user_error::{ErrorCode, UserError},
     AccumulatedPriority, CanisterId, CanisterStatusType, ComputeAllocation, ExecutionRound,
-    InstallCodeContext, NumBytes, NumInstructions, Randomness, SubnetId, Time,
+    InstallCodeContext, MemoryAllocation, NumBytes, NumInstructions, Randomness, SubnetId, Time,
 };
+use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
 use prometheus::{Gauge, Histogram, IntCounter, IntGauge, IntGaugeVec};
 use std::{
@@ -64,6 +69,12 @@ struct SchedulerMetrics {
     inner_loop_consumed_non_zero_instructions_count: IntCounter,
     inner_round_loop_consumed_max_instructions: IntCounter,
     num_canisters_uninstalled_out_of_cycles: IntCounter,
+    round: ScopedMetrics,
+    round_consensus_queue: ScopedMetrics,
+    round_subnet_queue: ScopedMetrics,
+    round_inner: ScopedMetrics,
+    round_inner_iteration: ScopedMetrics,
+    round_inner_iteration_thread: ScopedMetrics,
 }
 
 pub const LABEL_MESSAGE_KIND: &str = "kind";
@@ -186,6 +197,117 @@ impl SchedulerMetrics {
                 "scheduler_num_canisters_uninstalled_out_of_cycles",
                 "The number of canisters that were uninstalled because they ran out of cycles."
             ),
+            round: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_duration_seconds",
+                    "The duration of an execution round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_instructions",
+                    "The number of instructions executed in an execution round",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_round_messages",
+                    "The number of messages executed in an execution round",
+                    metrics_registry,
+                ),
+            },
+            round_consensus_queue: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_consensus_queue_duration_seconds",
+                    "The duration of consensus queue processing in \
+                          an execution round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_consensus_queue_instructions",
+                    "The number of instructions executed during consensus \
+                          queue processing in an execution round",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_round_consensus_queue_messages",
+                    "The number of messages executed during consensus \
+                          queue processing in an execution round",
+                    metrics_registry,
+                ),
+            },
+            round_subnet_queue: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_subnet_queue_duration_seconds",
+                    "The duration of subnet queue processing in \
+                          an execution round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_subnet_queue_instructions",
+                    "The number of instructions executed during subnet \
+                          queue processing in an execution round",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_round_subnet_queue_messages",
+                    "The number of messages executed during subnet \
+                          queue processing in an execution round",
+                    metrics_registry,
+                ),
+            },
+            round_inner: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_inner_duration_seconds",
+                    "The duration of an inner round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_inner_instructions",
+                    "The number of instructions executed in an inner round",
+                    metrics_registry,
+                ),
+                messages: instructions_histogram(
+                    "execution_round_inner_messages",
+                    "The number of messages executed in an inner round",
+                    metrics_registry,
+                ),
+            },
+            round_inner_iteration: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_inner_iteration_duration_seconds",
+                    "The duration of an iteration of an inner round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_inner_iteration_instructions",
+                    "The number of instructions executed in an iteration of an inner round",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_round_inner_iteration_messages",
+                    "The number of messages executed in an iteration of an inner round",
+                    metrics_registry,
+                ),
+            },
+            round_inner_iteration_thread: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_inner_iteration_thread_duration_seconds",
+                    "The duration of a thread spawned by an iteration of \
+                          an inner round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_inner_iteration_thread_instructions",
+                    "The number of instructions executed in a thread spawned \
+                          by an iteration of an inner round",
+                    metrics_registry,
+                ),
+                messages: instructions_histogram(
+                    "execution_round_inner_iteration_thread_messages",
+                    "The number of messages executed in a thread spawned \
+                          by an iteration of an inner round",
+                    metrics_registry,
+                ),
+            },
         }
     }
 
@@ -403,13 +525,15 @@ impl SchedulerImpl {
     // limit per round is reached or the canisters become idle. The canisters
     // are executed in parallel using the thread pool.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-    fn inner_round(
-        &self,
+    fn inner_round<'a>(
+        &'a self,
         mut state: ReplicatedState,
         ordered_canister_ids: &[CanisterId],
         current_round: ExecutionRound,
-        mut total_instructions_consumed: NumInstructions,
+        measurement_scope: &MeasurementScope<'a>,
     ) -> ReplicatedState {
+        let measurement_scope =
+            MeasurementScope::nested(&self.metrics.round_inner, &measurement_scope);
         let mut executable_canister_ids = BTreeSet::new();
         let mut ingress_execution_results = Vec::new();
         let mut is_first_iteration = true;
@@ -417,16 +541,13 @@ impl SchedulerImpl {
         // Keep executing till either the execution of a round does not actually
         // consume any additional instructions or the maximum allowed instructions
         // per round have been consumed.
+        let mut total_instructions_consumed = NumInstructions::from(0);
         let mut state = loop {
+            let measurement_scope =
+                MeasurementScope::nested(&self.metrics.round_inner_iteration, &measurement_scope);
             let mut loop_config = self.config.clone();
 
-            // Depending on what was executed before `inner_round`,
-            // `total_instructions_consumed` can be already larger than the limit.
-            // That's why we take `min` here to avoid underflows.
-            loop_config.max_instructions_per_round -= std::cmp::min(
-                total_instructions_consumed,
-                loop_config.max_instructions_per_round,
-            );
+            loop_config.max_instructions_per_round -= total_instructions_consumed;
 
             // We execute heartbeat methods only in the first iteration.
             let heartbeat_handling = if is_first_iteration {
@@ -478,6 +599,7 @@ impl SchedulerImpl {
                 Arc::new(state.metadata.network_topology.routing_table.clone()),
                 subnet_records,
                 heartbeat_handling,
+                &measurement_scope,
             );
 
             state.metadata.heap_delta_estimate += heap_delta;
@@ -566,6 +688,7 @@ impl SchedulerImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         heartbeat_handling: HeartbeatHandling,
+        measurement_scope: &MeasurementScope,
     ) -> (
         Vec<CanisterState>,
         Vec<(MessageId, IngressStatus)>,
@@ -635,7 +758,10 @@ impl SchedulerImpl {
         for mut result in results_by_thread.into_iter() {
             canisters.append(&mut result.canisters);
             ingress_results.append(&mut result.ingress_results);
-            instructions_consumed += result.instructions_consumed;
+            instructions_consumed += result.instructions_executed;
+            // Propagate the metrics from `execution_round_inner_iteration_thread`
+            // to `execution_round_inner_iteration`.
+            measurement_scope.add(result.instructions_executed, result.messages_executed);
             heap_delta += result.heap_delta;
         }
         self.metrics
@@ -689,7 +815,7 @@ impl SchedulerImpl {
                         StopCanisterContext::Canister {
                             sender,
                             reply_callback,
-                            funds,
+                            cycles,
                         } => {
                             // Responding to stop_canister request from a canister.
                             let subnet_id_as_canister_id = CanisterId::from(self.own_subnet_id);
@@ -697,7 +823,7 @@ impl SchedulerImpl {
                                 originator: sender,
                                 respondent: subnet_id_as_canister_id,
                                 originator_reply_callback: reply_callback,
-                                refund: funds,
+                                refund: cycles,
                                 response_payload: Payload::Data(EmptyBlob::encode()),
                             };
                             state.subnet_queues.push_output_response(response);
@@ -760,6 +886,7 @@ impl SchedulerImpl {
             .duration_between_batches(time_of_previous_batch);
 
         let canisters = state.take_canister_states();
+        // TODO(EXC-382): Remove this map altogether.
         let mut canisters_to_keep = BTreeMap::new();
 
         for (_, canister) in canisters.into_iter() {
@@ -784,7 +911,7 @@ impl SchedulerImpl {
                         uninstall_canister(&self.log, &mut canister, state.path(), state.time());
                     process_responses(rejects, state, Arc::clone(&self.ingress_history_writer));
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
-                    canister.system_state.memory_allocation = None;
+                    canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
                     canisters_to_keep.insert(canister.canister_id(), canister);
                 }
             }
@@ -806,6 +933,7 @@ impl Scheduler for SchedulerImpl {
         current_round: ExecutionRound,
         provisional_whitelist: ProvisionalWhitelist,
     ) -> ReplicatedState {
+        let measurement_scope = MeasurementScope::root(&self.metrics.round);
         let round_log = new_logger!(self.log; messaging.round => current_round.get());
         let subnet_available_memory =
             SubnetAvailableMemory::new(self.exec_env.subnet_available_memory(&state));
@@ -854,49 +982,72 @@ impl Scheduler for SchedulerImpl {
             &ExecutionThread(self.config.scheduler_cores as u32),
         );
 
-        // The consensus queue has to be emptied in each round, so we process
-        // it fully without applying the per-round instruction limit.
-        // For now, we assume all subnet messages need the entire replicated
-        // state. That can be changed in the future as we optimize scheduling.
-        while let Some(response) = state.consensus_queue.pop() {
-            let (new_state, _) = self.exec_env.execute_subnet_message(
-                CanisterInputMessage::Response(response),
-                state,
-                self.config.max_instructions_per_message,
-                &mut csprng,
-                &provisional_whitelist,
-                subnet_available_memory.clone(),
-            );
-            state = new_state;
+        {
+            // Drain the consensus queue.
+            let measurement_scope =
+                MeasurementScope::nested(&self.metrics.round_consensus_queue, &measurement_scope);
+
+            // The consensus queue has to be emptied in each round, so we process
+            // it fully without applying the per-round instruction limit.
+            // For now, we assume all subnet messages need the entire replicated
+            // state. That can be changed in the future as we optimize scheduling.
+            while let Some(response) = state.consensus_queue.pop() {
+                let (new_state, instructions_left) = self.exec_env.execute_subnet_message(
+                    CanisterInputMessage::Response(response),
+                    state,
+                    self.config.max_instructions_per_message,
+                    &mut csprng,
+                    &provisional_whitelist,
+                    subnet_available_memory.clone(),
+                );
+                state = new_state;
+                let instructions_consumed =
+                    self.config.max_instructions_per_message - instructions_left;
+                measurement_scope.add(instructions_consumed, NumMessages::from(1));
+            }
         }
 
-        // To ensure progress for both subnet messages and canister messages, we give
-        // subnet messages half of the per-round instruction limit.
-        let max_instructions_per_round_for_subnet_messages =
-            self.config.max_instructions_per_round / 2;
-        let mut total_instructions_consumed = NumInstructions::from(0);
+        {
+            // Drain the subnet queues.
+            let measurement_scope =
+                MeasurementScope::nested(&self.metrics.round_subnet_queue, &measurement_scope);
 
-        while let Some(msg) = state.subnet_queues.pop_input() {
-            let instructions_limit_per_message =
-                get_instructions_limit_for_subnet_message(&self.config, &msg);
-            let (new_state, instructions_left) = self.exec_env.execute_subnet_message(
-                msg,
-                state,
-                instructions_limit_per_message,
-                &mut csprng,
-                &provisional_whitelist,
-                subnet_available_memory.clone(),
-            );
-            state = new_state;
-            total_instructions_consumed += instructions_limit_per_message - instructions_left;
-            // We check for the limit after the subnet message execution to ensure progress
-            // in the case when `instruction_limit_per_message` >
-            // `max_instructions_per_round_for_subnet_messages`.
-            // This means that we will exceed the limit by at most
-            // `instruction_limit_per_message` and that is okay since the limit was set as
-            // a heuristic anyway.
-            if total_instructions_consumed >= max_instructions_per_round_for_subnet_messages {
-                break;
+            // Ideally we would split the per-round limit between subnet messages and
+            // canister messages, so that their sum cannot exceed the limit. That would
+            // make the limit for canister messages variable, which would break assumptions
+            // of the scheduling algorithm. The next best thing we can do is to limit
+            // subnet messages on top of the fixed limit for canister messages.
+            // The value of the limit for subnet messages is chosen quite arbitrarily
+            // as a quarter of the fixed limit. Any other value in the same ballpark would
+            // work here.
+            let max_instructions_per_round_for_subnet_messages =
+                self.config.max_instructions_per_round / 4;
+            let mut total_instructions_consumed = NumInstructions::from(0);
+
+            while let Some(msg) = state.subnet_queues.pop_input() {
+                let instructions_limit_per_message =
+                    get_instructions_limit_for_subnet_message(&self.config, &msg);
+                let (new_state, instructions_left) = self.exec_env.execute_subnet_message(
+                    msg,
+                    state,
+                    instructions_limit_per_message,
+                    &mut csprng,
+                    &provisional_whitelist,
+                    subnet_available_memory.clone(),
+                );
+                state = new_state;
+                let instructions_consumed = instructions_limit_per_message - instructions_left;
+                total_instructions_consumed += instructions_consumed;
+                measurement_scope.add(instructions_consumed, NumMessages::from(1));
+                // We check for the limit after the subnet message execution to ensure progress
+                // in the case when `instruction_limit_per_message` >
+                // `max_instructions_per_round_for_subnet_messages`.
+                // This means that we will exceed the limit by at most
+                // `instruction_limit_per_message` and that is okay since the limit was set as
+                // a heuristic anyway.
+                if total_instructions_consumed >= max_instructions_per_round_for_subnet_messages {
+                    break;
+                }
             }
         }
 
@@ -925,7 +1076,7 @@ impl Scheduler for SchedulerImpl {
             state,
             &ordered_canister_ids,
             current_round,
-            total_instructions_consumed,
+            &measurement_scope,
         );
 
         // NOTE: The logic for deleting canisters assumes that transitioning
@@ -966,7 +1117,8 @@ fn observe_instructions_consumed_per_message(
 struct ExecutionThreadResult {
     canisters: Vec<CanisterState>,
     ingress_results: Vec<(MessageId, IngressStatus)>,
-    instructions_consumed: NumInstructions,
+    instructions_executed: NumInstructions,
+    messages_executed: NumMessages,
     heap_delta: NumBytes,
 }
 
@@ -989,16 +1141,21 @@ fn execute_canisters_on_thread(
     subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
     heartbeat_handling: HeartbeatHandling,
 ) -> ExecutionThreadResult {
+    // Since this function runs on a helper thread, we cannot use a nested scope
+    // here. Instead, we propagate metrics to the outer scope manually via
+    // `ExecutionThreadResult`.
+    let measurement_scope = MeasurementScope::root(&metrics.round_inner_iteration_thread);
     // These variables accumulate the results and will be returned at the end.
     let mut canisters = vec![];
     let mut ingress_results = vec![];
-    let mut total_instructions_consumed = NumInstructions::from(0);
+    let mut total_instructions_executed = NumInstructions::from(0);
+    let mut total_messages_executed = NumMessages::from(0);
     let mut total_heap_delta = NumBytes::from(0);
 
     for (rank, mut canister) in canisters_to_execute.into_iter().enumerate() {
         // If there are not enough instructions to execute a message,
         // then skip the execution of the canister and keep its old state.
-        if total_instructions_consumed + instruction_limit_per_message > total_instruction_limit {
+        if total_instructions_executed + instruction_limit_per_message > total_instruction_limit {
             canisters.push(canister);
             continue;
         }
@@ -1027,7 +1184,8 @@ fn execute_canisters_on_thread(
                 instruction_limit_per_message,
             );
             canister = new_canister;
-            total_instructions_consumed += instructions_consumed;
+            total_instructions_executed += instructions_consumed;
+            total_messages_executed.inc_assign();
             total_heap_delta += heap_delta;
             drop(timer);
         }
@@ -1036,7 +1194,7 @@ fn execute_canisters_on_thread(
         // - either its input queue is empty.
         // - or the instruction limit is reached.
         while canister.has_input() {
-            if total_instructions_consumed + instruction_limit_per_message > total_instruction_limit
+            if total_instructions_executed + instruction_limit_per_message > total_instruction_limit
             {
                 canister
                     .system_state
@@ -1064,7 +1222,8 @@ fn execute_canisters_on_thread(
             );
             canister = result.canister;
             ingress_results.extend(result.ingress_status);
-            total_instructions_consumed += instructions_consumed;
+            total_instructions_executed += instructions_consumed;
+            total_messages_executed.inc_assign();
             total_heap_delta += result.heap_delta;
             drop(timer);
         }
@@ -1079,15 +1238,17 @@ fn execute_canisters_on_thread(
         canister.system_state.canister_metrics.executed += 1;
         canisters.push(canister);
     }
+    measurement_scope.add(total_instructions_executed, total_messages_executed);
 
     metrics
         .compute_utilization_per_core
-        .observe(total_instructions_consumed.get() as f64 / total_instruction_limit.get() as f64);
+        .observe(total_instructions_executed.get() as f64 / total_instruction_limit.get() as f64);
 
     ExecutionThreadResult {
         canisters,
         ingress_results,
-        instructions_consumed: total_instructions_consumed,
+        instructions_executed: total_instructions_executed,
+        messages_executed: total_messages_executed,
         heap_delta: total_heap_delta,
     }
 }

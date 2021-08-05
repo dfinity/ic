@@ -162,13 +162,16 @@ where
 #[derive(Clone)]
 struct StreamQueueFork<'a, T> {
     queue: &'a StreamIndexedQueue<T>,
-    mk_tree: fn(StreamIndex, &'a T) -> LazyTree<'a>,
+    certification_version: u32,
+    mk_tree: fn(StreamIndex, &'a T, u32) -> LazyTree<'a>,
 }
 
 impl<'a, T> LazyFork<'a> for StreamQueueFork<'a, T> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         let idx = StreamIndex::from_label(label.as_bytes())?;
-        self.queue.get(idx).map(move |v| (self.mk_tree)(idx, v))
+        self.queue
+            .get(idx)
+            .map(move |v| (self.mk_tree)(idx, v, self.certification_version))
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
@@ -232,21 +235,24 @@ fn streams_as_tree(streams: &Streams, certification_version: u32) -> LazyTree<'_
     fork(MapTransformFork {
         map: &*streams,
         certification_version,
-        mk_tree: |_subnet_id, stream, _certification_version| {
+        mk_tree: |_subnet_id, stream, certification_version| {
             fork(
                 FiniteMap::default()
                     .with_tree(
                         "header",
                         blob(move || {
                             let stream_header: StreamHeader = stream.header();
-                            encode_stream_header(&stream_header)
+                            encode_stream_header(&stream_header, certification_version)
                         }),
                     )
                     .with_tree(
                         "messages",
                         fork(StreamQueueFork {
                             queue: stream.messages(),
-                            mk_tree: |_idx, msg| blob(move || encode_message(msg)),
+                            certification_version,
+                            mk_tree: |_idx, msg, certification_version| {
+                                blob(move || encode_message(msg, certification_version))
+                            },
                         }),
                     ),
             )

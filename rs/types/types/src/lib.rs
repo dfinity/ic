@@ -178,6 +178,10 @@ pub struct NumInstructionsTag;
 /// respective amount of `Cycles` on a canister's balance for message execution.
 pub type NumInstructions = AmountOf<NumInstructionsTag, u64>;
 
+pub struct NumMessagesTag;
+/// Represents the number of messages.
+pub type NumMessages = AmountOf<NumMessagesTag, u64>;
+
 pub struct QueueIndexTag;
 /// Index into a queue; used in the context of `InputQueue` / `OutputQueue` to
 /// define message order.
@@ -422,21 +426,43 @@ fn display_canister_id() {
     );
 }
 
-/// `MemoryAllocation` is a number of bytes between 0 and 2^48 inclusively that
-/// represents the memory allocation requested by a user during a canister
-/// installation/upgrade.
+/// Represents the memory allocaton of a canister.
 #[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Hash)]
-pub struct MemoryAllocation(NumBytes);
+pub enum MemoryAllocation {
+    /// A reserved number of bytes between 0 and 2^48 inclusively that is
+    /// guaranteed to be available to the canister. Charging happens based on
+    /// the reserved amount of memory, regardless of how much of it is in use.
+    Reserved(NumBytes),
+    /// Memory growth of the canister happens dynamically and is subject to the
+    /// available memory of the subnet. The canister will be charged for the
+    /// memory it's using at any given time.
+    BestEffort,
+}
 
 impl MemoryAllocation {
-    pub fn get(&self) -> NumBytes {
-        self.0
+    /// Returns the number of bytes associated with this memory allocation.
+    pub fn bytes(&self) -> NumBytes {
+        match self {
+            MemoryAllocation::Reserved(bytes) => *bytes,
+            // A best-effort memory allocation is equivalent to a zero memory allocation per the
+            // interface spec.
+            MemoryAllocation::BestEffort => NumBytes::from(0),
+        }
     }
 }
 
 impl fmt::Display for MemoryAllocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}B", self.0.get())
+        match self {
+            MemoryAllocation::Reserved(bytes) => write!(f, "{}", bytes.display()),
+            MemoryAllocation::BestEffort => write!(f, "best-effort"),
+        }
+    }
+}
+
+impl Default for MemoryAllocation {
+    fn default() -> Self {
+        MemoryAllocation::BestEffort
     }
 }
 
@@ -471,7 +497,13 @@ impl TryFrom<NumBytes> for MemoryAllocation {
                 bytes.get(),
             )));
         }
-        Ok(MemoryAllocation(bytes))
+        // A memory allocation of 0 means that the canister's memory growth will be
+        // best-effort.
+        if bytes.get() == 0 {
+            Ok(MemoryAllocation::BestEffort)
+        } else {
+            Ok(MemoryAllocation::Reserved(bytes))
+        }
     }
 }
 

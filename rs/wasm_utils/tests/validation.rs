@@ -1,7 +1,8 @@
 use assert_matches::assert_matches;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use ic_wasm_utils::validation::{
-    validate_wasm_binary, WasmValidationDetails, WasmValidationLimits, RESERVED_SYMBOLS,
+    validate_wasm_binary, WasmImportsDetails, WasmValidationDetails, WasmValidationLimits,
+    RESERVED_SYMBOLS,
 };
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wabt::Error> {
@@ -17,11 +18,11 @@ fn can_validate_valid_import_section() {
                 (import "ic0" "msg_reply" (func $reply)))"#,
     )
     .unwrap();
-    assert_matches!(
+    assert_eq!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
-            imports_call_simple: false,
+            imports_details: WasmImportsDetails::default(),
         })
     );
 }
@@ -66,11 +67,12 @@ fn can_validate_valid_export_section() {
                   (export "canister_query read" (func $x)))"#,
     )
     .unwrap();
-    assert_matches!(
+
+    assert_eq!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
-            imports_call_simple: false,
+            imports_details: WasmImportsDetails::default(),
         })
     );
 }
@@ -90,11 +92,11 @@ fn can_validate_valid_export_section_with_reserved_functions() {
                   (export "canister_foo_is_reserved" (func $x)))"#,
     )
     .unwrap();
-    assert_matches!(
+    assert_eq!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 2,
-            imports_call_simple: false,
+            imports_details: WasmImportsDetails::default(),
         })
     );
 }
@@ -249,11 +251,11 @@ fn can_validate_canister_query_update_method_name_with_whitespace() {
                     (export "canister_update my_func y" (func $x)))"#,
     )
     .unwrap();
-    assert_matches!(
+    assert_eq!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
-            imports_call_simple: false,
+            imports_details: WasmImportsDetails::default(),
         })
     );
 }
@@ -269,11 +271,11 @@ fn can_validate_valid_data_section() {
             "#,
     )
     .unwrap();
-    assert_matches!(
+    assert_eq!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
-            imports_call_simple: false,
+            imports_details: WasmImportsDetails::default(),
         })
     );
 }
@@ -303,11 +305,11 @@ fn can_validate_invalid_offset_expression_in_data_section() {
 fn can_validate_module_with_import_func() {
     // Accepts `msg_reply` from ic0 module.
     let wasm = wat2wasm(r#"(module (import "ic0" "msg_reply" (func $msg_reply)))"#).unwrap();
-    assert_matches!(
+    assert_eq!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
-            imports_call_simple: false,
+            imports_details: WasmImportsDetails::default(),
         })
     );
 }
@@ -460,11 +462,41 @@ fn can_validate_module_with_call_simple_import() {
     ))"#,
     )
     .unwrap();
-    assert_matches!(
+
+    assert_eq!(
         validate_wasm_binary(&wasm, WasmValidationLimits::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
-            imports_call_simple: true,
+            imports_details: WasmImportsDetails {
+                imports_call_simple: true,
+                ..Default::default()
+            },
+        })
+    );
+}
+
+#[test]
+fn can_validate_module_cycles_related_imports() {
+    // Instruments imports from `ic0`.
+    let wasm = wat2wasm(
+        r#"(module
+        (import "ic0" "call_cycles_add" (func $ic0_call_cycles_add (param $amount i64)))
+        (import "ic0" "canister_cycle_balance" (func $ic0_canister_cycle_balance (result i64)))
+        (import "ic0" "msg_cycles_accept" (func $ic0_msg_cycles_accept (param $amount i64) (result i64)))
+    )"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        Ok(WasmValidationDetails {
+            reserved_exports: 0,
+            imports_details: WasmImportsDetails {
+                imports_call_cycles_add: true,
+                imports_canister_cycle_balance: true,
+                imports_msg_cycles_accept: true,
+                ..Default::default()
+            },
         })
     );
 }

@@ -7,7 +7,7 @@ use chrono::{TimeZone, Utc};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::time::Duration;
 
@@ -66,6 +66,23 @@ impl Time {
     /// A private function to cast from [Duration] to [Time].
     fn from_duration(t: Duration) -> Self {
         Time(t.as_nanos() as u64)
+    }
+}
+
+impl TryFrom<Duration> for Time {
+    type Error = &'static str;
+    fn try_from(d: Duration) -> Result<Self, Self::Error> {
+        u64::try_from(d.as_nanos())
+            .or(Err(
+                "Duration is too large to be converted into a u64 of nanoseconds!",
+            ))
+            .map(Time)
+    }
+}
+
+impl From<Time> for Duration {
+    fn from(val: Time) -> Self {
+        Duration::from_nanos(val.0)
     }
 }
 

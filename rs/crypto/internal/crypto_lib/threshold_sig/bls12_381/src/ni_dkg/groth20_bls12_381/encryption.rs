@@ -3,7 +3,7 @@
 //! This file translates to and from an external library that does the
 //! mathematics.
 
-use super::types::{FsEncryptionKeySetWithPop, FsEncryptionSecretKey};
+use super::types::FsEncryptionKeySetWithPop;
 use super::ALGORITHM_ID;
 use crate::api::ni_dkg_errors::CspDkgVerifyDealingError;
 use crate::api::ni_dkg_errors::{
@@ -13,8 +13,7 @@ use conversions::{
     chunking_proof_from_miracl, chunking_proof_into_miracl, ciphertext_from_miracl,
     ciphertext_into_miracl, epoch_from_miracl_secret_key, plaintext_from_bytes, plaintext_to_bytes,
     public_coefficients_to_miracl, public_key_from_miracl, public_key_into_miracl,
-    secret_key_from_miracl, sharing_proof_from_miracl, sharing_proof_into_miracl,
-    trusted_secret_key_into_miracl, Tau,
+    secret_key_from_miracl, sharing_proof_from_miracl, sharing_proof_into_miracl, Tau,
 };
 use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_from_bytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
@@ -112,30 +111,28 @@ pub fn verify_forward_secure_key(
     }
 }
 
-/// Forgets keys before the given epoch.
+/// Updates the provided key.
 ///
 /// Note: If the lowest supported epoch of the secret key is greater than or
 /// equal to the threshold cutoff epoch, the secret key is unchanged.
+///
+/// This mutates the key inplace,
+/// to avoid copying the sensitive information in memory.
 ///
 /// # Arguments
 /// * `secret_key` - The forward-secure encryption key to be updated.
 /// * `epoch` - The earliest epoch at which to retain keys.
 /// * `seed` - Randomness used in updating the secret key to the given `epoch`.
-///
-/// # Returns
-/// A new `FsEncryptionSecretKey`, with keys only at or after the given epoch.
-pub fn update_forward_secure_epoch(
-    secret_key: &FsEncryptionSecretKey,
+pub fn update_key_inplace_to_epoch(
+    secret_key: &mut crypto::SecretKey,
     epoch: Epoch,
     seed: Randomness,
-) -> FsEncryptionSecretKey {
+) {
     let mut rng = crypto::RAND_ChaCha20::new(seed.get());
-    let mut secret_key = trusted_secret_key_into_miracl(secret_key);
     let tau = Tau::from(epoch);
-    if epoch_from_miracl_secret_key(&secret_key) < epoch {
+    if epoch_from_miracl_secret_key(secret_key) < epoch {
         secret_key.update_to(&tau.0, &SYS_PARAMS, &mut rng);
     }
-    secret_key_from_miracl(&secret_key)
 }
 
 /// Encrypts several messages to several recipients
@@ -268,7 +265,7 @@ pub fn encrypt_and_prove(
 /// This will return an error if the `epoch` is below the `secret_key` epoch.
 pub fn decrypt(
     ciphertext: &FsEncryptionCiphertext,
-    secret_key: &FsEncryptionSecretKey,
+    secret_key: &crypto::SecretKey,
     node_index: NodeIndex,
     epoch: Epoch,
     associated_data: &[u8],
@@ -284,7 +281,6 @@ pub fn decrypt(
             node_index,
         });
     }
-    let secret_key = trusted_secret_key_into_miracl(secret_key);
     if epoch < epoch_from_miracl_secret_key(&secret_key) {
         return Err(DecryptError::EpochTooOld {
             ciphertext_epoch: epoch,

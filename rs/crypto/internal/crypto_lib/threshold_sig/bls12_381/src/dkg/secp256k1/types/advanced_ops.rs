@@ -30,14 +30,14 @@ impl CLibTranscriptBytes {
 impl EphemeralPublicKey {
     /// Returns the public key corresponding to the secret key 1.
     pub fn one() -> Self {
-        EphemeralPublicKey(secp256k1::curve::Jacobian::from_ge(
-            &secp256k1::curve::AFFINE_G,
+        EphemeralPublicKey(libsecp256k1::curve::Jacobian::from_ge(
+            &libsecp256k1::curve::AFFINE_G,
         ))
     }
 
     /// Returns the point at infinity.
     pub fn infinity() -> Self {
-        let mut ans = secp256k1::curve::Jacobian::default();
+        let mut ans = libsecp256k1::curve::Jacobian::default();
         ans.set_infinity();
         EphemeralPublicKey(ans)
     }
@@ -69,12 +69,12 @@ impl EphemeralPublicKey {
 impl EphemeralSecretKey {
     /// Returns the additive identity
     pub fn zero() -> Self {
-        Self(secp256k1::curve::Scalar::from_int(0))
+        Self(libsecp256k1::curve::Scalar::from_int(0))
     }
 
     /// Returns the multiplicative identity
     pub fn one() -> Self {
-        Self(secp256k1::curve::Scalar::from_int(1))
+        Self(libsecp256k1::curve::Scalar::from_int(1))
     }
 
     pub fn random<R: Rng + CryptoRng>(rng: &mut R) -> EphemeralSecretKey {

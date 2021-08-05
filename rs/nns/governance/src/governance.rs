@@ -945,7 +945,8 @@ impl Proposal {
                     }
                 }
                 proposal::Action::AddOrRemoveNodeProvider(_) => Topic::ParticipantManagement,
-                proposal::Action::RewardNodeProvider(_) => Topic::NodeProviderRewards,
+                proposal::Action::RewardNodeProvider(_)
+                | proposal::Action::RewardNodeProviders(_) => Topic::NodeProviderRewards,
                 proposal::Action::SetDefaultFollowees(_) => Topic::Governance,
             }
         } else {
@@ -2143,14 +2144,20 @@ impl Governance {
                         // Note that old_stake < new_stake
                         let old_stake = neuron.cached_neuron_stake_e8s as u128;
                         let new_stake = balance.get_e8s() as u128;
+                        assert!(new_stake > 0);
                         let old_age =
                             now.saturating_sub(neuron.aging_since_timestamp_seconds) as u128;
                         let new_age = (old_age * old_stake) / new_stake;
-                        // This means new_age * new_stake is equal to
-                        // old_age * old_stake. That is, the age is
-                        // adjusted in proportion to the stake. Thus,
-                        // the age bonus, which is a constant times
-                        // age times stake, remains constant.
+                        // new_age * new_stake = old_age * old_stake -
+                        // (old_stake * old_age) % new_stake. That is, age is
+                        // adjusted in proportion to the stake, but due to the
+                        // discrete nature of u64 numbers, some resolution is
+                        // lost due to the division above. This means the age
+                        // bonus is derived from a constant times age times
+                        // stake, minus up to new_stake - 1 each time the
+                        // neuron is refreshed. Only if old_age * old_stake is
+                        // a multiple of new_stake does the age remain
+                        // constant after the refresh operation.
                         neuron.aging_since_timestamp_seconds = now.saturating_sub(new_age as u64);
                         // Note that if new_stake == old_stake, then
                         // new_age == old_age, and
@@ -3805,9 +3812,11 @@ impl Governance {
         }
     }
 
-    /// Rewards a node provider.
-    async fn reward_node_provider(&mut self, pid: u64, reward: &RewardNodeProvider) {
-        let result = if let Some(node_provider) = &reward.node_provider {
+    async fn reward_node_provider_helper(
+        &mut self,
+        reward: &RewardNodeProvider,
+    ) -> Result<(), GovernanceError> {
+        if let Some(node_provider) = &reward.node_provider {
             if let Some(np_principal) = &node_provider.id {
                 if !self
                     .proto
@@ -3848,7 +3857,29 @@ impl Governance {
                 ErrorType::PreconditionFailed,
                 "Proposal was missing the node provider.",
             ))
-        };
+        }
+    }
+
+    /// Rewards a node provider.
+    async fn reward_node_provider(&mut self, pid: u64, reward: &RewardNodeProvider) {
+        let result = self.reward_node_provider_helper(reward).await;
+        self.set_proposal_execution_status(pid, result);
+    }
+
+    /// Rewards multiple node providers.
+    async fn reward_node_providers(&mut self, pid: u64, rewards: Vec<RewardNodeProvider>) {
+        let mut result = Ok(());
+        for reward in rewards {
+            let reward_result = self.reward_node_provider_helper(&reward).await;
+            if reward_result.is_err() {
+                println!(
+                    "Rewarding {:?} failed. Reason: {:}",
+                    reward,
+                    reward_result.clone().unwrap_err()
+                );
+            }
+            result = result.or(reward_result);
+        }
         self.set_proposal_execution_status(pid, result);
     }
 
@@ -4051,6 +4082,9 @@ impl Governance {
                 }
                 self.proto.default_followees = proposal.default_followees.clone();
                 self.set_proposal_execution_status(pid, Ok(()));
+            }
+            proposal::Action::RewardNodeProviders(proposal) => {
+                self.reward_node_providers(pid, proposal.rewards).await;
             }
         }
     }

@@ -41,10 +41,10 @@ fn process_err(api: &mut dyn SystemApi, e: HypervisorError) -> wasmtime::Trap {
     t
 }
 
-fn update_num_instructions_global(
+fn update_num_instructions_global<T: Into<u64>>(
     num_instructions_global_rc: &std::rc::Weak<RefCell<Option<wasmtime::Global>>>,
     api: &mut dyn SystemApi,
-    num_bytes: u32,
+    num_bytes: T,
 ) -> Result<(), Trap> {
     let num_instructions_global = num_instructions_global_rc.upgrade().unwrap();
     let num_instructions_global_ref = num_instructions_global.borrow_mut();
@@ -53,7 +53,7 @@ fn update_num_instructions_global(
     match num_instructions_global.get() {
         Val::I64(current_instructions) => {
             let num_instructions = api
-                .get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64))
+                .get_num_instructions_from_bytes(NumBytes::from(num_bytes.into()))
                 .get() as i64;
             if current_instructions < num_instructions {
                 return Err(process_err(api, HypervisorError::OutOfInstructions));
@@ -574,6 +574,7 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "stable_write", {
             let api = api.clone();
+            let num_instructions_global = num_instructions_global.clone();
             move |caller: Caller<'_>, offset: i32, src: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
@@ -584,6 +585,70 @@ pub(crate) fn syscalls(
                     size as u32,
                 )?;
                 api.ic0_stable_write(offset as u32, src as u32, size as u32, memory)
+                    .map_err(|e| process_err(&mut *api, e))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func("ic0", "stable_size64", {
+            let api = api.clone();
+            move || {
+                let mut api = api.get_system_api();
+                api.ic0_stable_size64()
+                    .map_err(|e| process_err(&mut *api, e))
+                    .and_then(|s| {
+                        i64::try_from(s).map_err(|e| {
+                            wasmtime::Trap::new(format!("ic0_stable_size64 failed: {}", e))
+                        })
+                    })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func("ic0", "stable_grow64", {
+            let api = api.clone();
+            move |additional_pages: i64| {
+                let mut api = api.get_system_api();
+                api.ic0_stable_grow64(additional_pages as u64)
+                    .map_err(|e| process_err(&mut *api, e))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func("ic0", "stable_read64", {
+            let api = api.clone();
+            let num_instructions_global = num_instructions_global.clone();
+            move |caller: Caller<'_>, dst: i64, offset: i64, size: i64| {
+                let mut api = api.get_system_api();
+                let mem = get_memory(caller, &mut *api)?;
+                let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    size as u64,
+                )?;
+                api.ic0_stable_read64(dst as u64, offset as u64, size as u64, memory)
+                    .map_err(|e| process_err(&mut *api, e))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func("ic0", "stable_write64", {
+            let api = api.clone();
+            move |caller: Caller<'_>, offset: i64, src: i64, size: i64| {
+                let mut api = api.get_system_api();
+                let mem = get_memory(caller, &mut *api)?;
+                let memory = unsafe { mem.data_unchecked_mut() };
+                update_num_instructions_global(
+                    num_instructions_global.borrow(),
+                    api.deref_mut(),
+                    size as u64,
+                )?;
+                api.ic0_stable_write64(offset as u64, src as u64, size as u64, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
         })

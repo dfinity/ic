@@ -171,6 +171,10 @@ impl Registry {
             subnet_type: payload.subnet_type.into(),
 
             is_halted: payload.is_halted,
+
+            max_instructions_per_message: payload.max_instructions_per_message,
+            max_instructions_per_round: payload.max_instructions_per_round,
+            max_instructions_per_install_code: payload.max_instructions_per_install_code,
         };
 
         // 4. Update registry with the new subnet data
@@ -253,6 +257,10 @@ pub struct CreateSubnetPayload {
     pub subnet_type: SubnetType,
 
     pub is_halted: bool,
+
+    pub max_instructions_per_message: u64,
+    pub max_instructions_per_round: u64,
+    pub max_instructions_per_install_code: u64,
 }
 
 impl From<CreateSubnetPayload> for SubnetRecord {
@@ -290,6 +298,10 @@ impl From<CreateSubnetPayload> for SubnetRecord {
             subnet_type: val.subnet_type.into(),
 
             is_halted: val.is_halted,
+
+            max_instructions_per_message: val.max_instructions_per_message,
+            max_instructions_per_round: val.max_instructions_per_round,
+            max_instructions_per_install_code: val.max_instructions_per_install_code,
         }
     }
 }

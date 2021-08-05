@@ -1,7 +1,7 @@
 pub mod certification;
 pub mod common;
 pub mod init;
-pub mod invariants;
+mod invariants;
 pub mod mutations;
 pub mod pb;
 pub mod proto_on_wire;

@@ -53,12 +53,16 @@
 
 use crate::{
     download_management::{DownloadManager, DownloadManagerImpl},
+    event_handler::P2PEventHandlerControl,
     metrics::GossipMetrics,
+    use_gossip_malicious_behavior_on_chunk_request,
+    utils::FlowMapper,
     P2PError, P2PErrorCode, P2PResult,
 };
-
 use ic_artifact_manager::artifact::IngressArtifact;
 use ic_interfaces::artifact_manager::{ArtifactManager, OnArtifactError};
+use ic_interfaces::registry::RegistryClient;
+use ic_interfaces::transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::p2p::v1 as pb;
@@ -68,22 +72,16 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeErr
 use ic_types::{
     artifact::{Artifact, ArtifactFilter, ArtifactId, ArtifactKind},
     chunkable::{ArtifactChunk, ArtifactChunkData, ChunkId},
+    malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     p2p::GossipAdvert,
     transport::{FlowTag, TransportError, TransportNotification, TransportStateChange},
-    NodeId,
+    NodeId, SubnetId,
 };
-
-use std::convert::{TryFrom, TryInto};
-use std::sync::Arc;
 
 use bincode::{deserialize, serialize};
-
-// Import of the malicious flags definition.
-use crate::{
-    event_handler::P2PEventHandlerControl, use_gossip_malicious_behavior_on_chunk_request,
-};
-use ic_types::malicious_flags::MaliciousFlags;
+use std::convert::{TryFrom, TryInto};
+use std::sync::Arc;
 
 /// The main *Gossip* trait, specifying the P2P gossip functionality.
 pub(crate) trait Gossip {
@@ -221,13 +219,13 @@ impl From<&GossipMessage> for FlowTag {
 /// The canonical implementation of the `GossipMessage` trait.
 pub(crate) struct GossipImpl {
     /// The download manager used to initiate and track downloads.
-    pub download_manager: DownloadManagerImpl,
+    download_manager: DownloadManagerImpl,
     /// The artifact manager used to handle received artifacts.
-    pub artifact_manager: Arc<dyn ArtifactManager>,
+    artifact_manager: Arc<dyn ArtifactManager>,
     /// The replica logger.
     log: ReplicaLogger,
     /// The *Gossip* metrics.
-    pub metrics: GossipMetrics,
+    metrics: GossipMetrics,
     /// Flags for malicious behavior used in testing.
     malicious_flags: MaliciousFlags,
 }
@@ -238,13 +236,30 @@ impl GossipImpl {
     /// The *Gossip* component interacts with the download manager
     /// component, which initiates and tracks downloads of artifacts
     /// from a peer group.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        download_manager: DownloadManagerImpl,
+        node_id: NodeId,
+        subnet_id: SubnetId,
+        registry_client: Arc<dyn RegistryClient>,
         artifact_manager: Arc<dyn ArtifactManager>,
+        transport: Arc<dyn Transport>,
+        event_handler: Arc<dyn P2PEventHandlerControl>,
+        flow_tags: Vec<FlowTag>,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
         malicious_flags: MaliciousFlags,
     ) -> Self {
+        let download_manager = DownloadManagerImpl::new(
+            node_id,
+            subnet_id,
+            registry_client.clone(),
+            artifact_manager.clone(),
+            transport.clone(),
+            event_handler,
+            Arc::new(FlowMapper::new(flow_tags)),
+            log.clone(),
+            metrics_registry,
+        );
         GossipImpl {
             malicious_flags,
             download_manager,

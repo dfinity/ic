@@ -5,6 +5,7 @@ mod execution_environment_metrics;
 mod history;
 mod hypervisor;
 mod ingress_message_filter;
+mod metrics;
 mod query_handler;
 mod scheduler;
 mod types;

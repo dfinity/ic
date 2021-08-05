@@ -50,6 +50,7 @@ use std::thread::sleep;
 const BATCH_QUEUE_BUFFER_SIZE: usize = 16;
 
 const METRIC_DELIVER_BATCH_COUNT: &str = "mr_deliver_batch_count";
+const METRIC_EXPECTED_BATCH_HEIGHT: &str = "mr_expected_batch_height";
 pub(crate) const METRIC_TIME_IN_BACKLOG: &str = "mr_time_in_backlog";
 pub(crate) const METRIC_TIME_IN_STREAM: &str = "mr_time_in_stream";
 
@@ -192,6 +193,8 @@ impl LatencyMetrics {
 pub(crate) struct MessageRoutingMetrics {
     /// Number of `deliver_batch()` calls, by status.
     deliver_batch_count: IntCounterVec,
+    /// Expected batch height.
+    expected_batch_height: IntGauge,
     /// Batch processing durations.
     process_batch_duration: Histogram,
     /// Batch processing phase durations, by phase.
@@ -220,6 +223,10 @@ impl MessageRoutingMetrics {
                 "Batch processing durations.",
                 // 1ms - 50s
                 decimal_buckets(-3, 1),
+            ),
+            expected_batch_height: metrics_registry.int_gauge(
+                METRIC_EXPECTED_BATCH_HEIGHT,
+                "Height of the batch that MR expects to be delivered next.",
             ),
             process_batch_phase_duration: metrics_registry.histogram_vec(
                 METRIC_PROCESS_BATCH_PHASE_DURATION,
@@ -847,6 +854,9 @@ impl MessageRouting for MessageRoutingImpl {
     fn deliver_batch(&self, batch: Batch) -> Result<(), MessageRoutingError> {
         let batch_number = batch.batch_number;
         let expected_number = self.expected_batch_height();
+        self.metrics
+            .expected_batch_height
+            .set(expected_number.get() as i64);
         if batch_number != expected_number {
             self.inc_deliver_batch(STATUS_IGNORED);
             info!(

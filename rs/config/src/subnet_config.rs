@@ -6,10 +6,24 @@ use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, NumInstructions};
 
+const B: u64 = 1_000_000_000;
+
 // We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU one message has
 // approximately 2.5 seconds to be processed.
-pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions =
-    NumInstructions::new((1 << 30) * 5);
+//
+// Note that decreasing this value may break existing canisters that run
+// long messages.
+pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(5 * B);
+
+// If messages are short, then we expect about 2B=(7B - 5B) instructions to run
+// in a round in about 1 second. Short messages followed by one long message
+// would cause the longest possible round of 7B instructions or 3.5 seconds.
+//
+// In general, the round limit should be close to
+// `message_limit + 2B * (1 / finalization_rate)` which ensures that
+// 1) execution does not slow down finalization.
+// 2) execution does not waste the time available per round.
+const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(7 * B);
 
 // Limit per `install_code` message. It's bigger than the limit for a regular
 // update call to allow for canisters with bigger state to be upgraded.
@@ -19,7 +33,7 @@ pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions =
 // The value is picked to allow roughly for 4GB of state to be stored to stable
 // memory during upgrade. We know that we hit `MAX_INSTRUCTIONS_PER_MESSAGE`
 // with roughly 100MB of state, so we set the limit to 40x.
-const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new((1 << 30) * 5 * 40);
+const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new(40 * 5 * B);
 
 // The factor to bump the instruction limit for system subnets.
 const SYSTEM_SUBNET_INSTRUCTIONS_FACTOR: u64 = 10;
@@ -61,14 +75,14 @@ impl SchedulerConfig {
             scheduler_cores: 32,
 
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            max_instructions_per_round: MAX_INSTRUCTIONS_PER_MESSAGE * 5,
+            max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
         }
     }
 
     pub fn system_subnet() -> Self {
-        let max_instructions_per_install_code = NumInstructions::from(1_000_000_000_000u64);
+        let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         Self {
             // The gen 1 production machines should have 64 cores. We expect
             // that up to half might be needed for the IC protocol so we
@@ -77,9 +91,8 @@ impl SchedulerConfig {
             scheduler_cores: 32,
 
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            max_instructions_per_round: MAX_INSTRUCTIONS_PER_MESSAGE
-                * SYSTEM_SUBNET_INSTRUCTIONS_FACTOR
-                * 5,
+            max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND
+                * SYSTEM_SUBNET_INSTRUCTIONS_FACTOR,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE
                 * SYSTEM_SUBNET_INSTRUCTIONS_FACTOR,
             max_instructions_per_install_code,
@@ -95,9 +108,17 @@ impl SchedulerConfig {
             scheduler_cores: 32,
 
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            max_instructions_per_round: MAX_INSTRUCTIONS_PER_MESSAGE * 5,
+            max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
-            max_instructions_per_install_code: NumInstructions::from(1_000_000_000_000u64),
+            max_instructions_per_install_code: NumInstructions::from(1_000 * B),
+        }
+    }
+
+    pub fn default_for_subnet_type(subnet_type: SubnetType) -> Self {
+        match subnet_type {
+            SubnetType::Application => Self::application_subnet(),
+            SubnetType::System => Self::system_subnet(),
+            SubnetType::VerifiedApplication => Self::verified_application_subnet(),
         }
     }
 }

@@ -6,8 +6,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     messages::{CallContextId, Request},
     methods::{Callback, WasmClosure},
-    CanisterId, Cycles, Funds, NumBytes, PrincipalId, SubnetId,
+    CanisterId, Cycles, NumBytes, PrincipalId, SubnetId,
 };
+use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
 
 /// Represents an under construction `Request`.
@@ -28,7 +29,7 @@ use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
 /// does not make much sense, actually -- it never needs to be transferred
 /// across processes. It should probably be moved out of ApiType (such that
 /// "mutable" bits are not part of it).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RequestInPrep {
     sender: CanisterId,
     callee: PrincipalId,
@@ -163,7 +164,6 @@ pub(crate) fn into_request(
     own_subnet_type: SubnetType,
     system_state_accessor: &dyn SystemStateAccessor,
 ) -> HypervisorResult<Request> {
-    let payment = Funds::new(cycles);
     let (destination_canister, destination_subnet) = if callee == IC_00.get() {
         // This is a request to ic:00. Update `callee` to be the appropriate
         // subnet.
@@ -245,7 +245,7 @@ pub(crate) fn into_request(
         method_name,
         method_payload,
         sender_reply_callback: callback_id,
-        payment,
+        payment: cycles,
     })
 }
 

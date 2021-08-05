@@ -1,8 +1,6 @@
 use ic_base_types::NumBytes;
 use ic_interfaces::execution_environment::HypervisorResult;
-use ic_replicated_state::{
-    canister_state::system_state::CanisterStatus, StableMemoryError, StateError,
-};
+use ic_replicated_state::{canister_state::system_state::CanisterStatus, StateError};
 use ic_types::{
     messages::{CallContextId, CallbackId, Request},
     methods::Callback,
@@ -46,16 +44,33 @@ pub trait SystemStateAccessor {
         offset: u32,
         size: u32,
         heap: &mut [u8],
-    ) -> Result<(), StableMemoryError>;
+    ) -> HypervisorResult<()>;
 
     /// Writes from heap to stable memory.
-    fn stable_write(
+    fn stable_write(&self, offset: u32, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+
+    /// Determines size of stable memory in Web assembly pages.
+    fn stable_size64(&self) -> u64;
+
+    /// Grows stable memory by specified amount.
+    fn stable_grow64(&self, additional_pages: u64) -> i64;
+
+    /// Reads from stable memory back to heap.
+    ///
+    /// Supports bigger stable memory indexed by 64 bit pointers.
+    fn stable_read64(
         &self,
-        offset: u32,
-        src: u32,
-        size: u32,
-        heap: &[u8],
-    ) -> Result<(), StableMemoryError>;
+        dst: u64,
+        offset: u64,
+        size: u64,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Writes from heap to stable memory.
+    ///
+    /// Supports bigger stable memory indexed by 64 bit pointers.
+    fn stable_write64(&self, offset: u64, src: u64, size: u64, heap: &[u8])
+        -> HypervisorResult<()>;
 
     /// Current cycles balance of the canister.
     fn canister_cycles_balance(&self) -> Cycles;

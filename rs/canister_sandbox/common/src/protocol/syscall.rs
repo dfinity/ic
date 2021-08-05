@@ -1,11 +1,9 @@
 use ic_interfaces::execution_environment::HypervisorResult;
-use ic_replicated_state::{
-    canister_state::system_state::CanisterStatus, StableMemoryError, StateError,
-};
+use ic_replicated_state::{canister_state::system_state::CanisterStatus, StateError};
 use ic_types::{
     messages::{CallContextId, CallbackId},
     methods::Callback,
-    CanisterId, ComputeAllocation, Cycles, NumBytes, PrincipalId,
+    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -63,6 +61,15 @@ pub struct StableSizeReply {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+pub struct GetNumInstructionsFromBytesRequest {
+    pub num_bytes: NumBytes,
+}
+#[derive(Serialize, Deserialize, Clone)]
+pub struct GetNumInstructionsFromBytesReply {
+    pub result: NumInstructions,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct StableGrowRequest {
     pub additional_pages: u32,
 }
@@ -78,7 +85,7 @@ pub struct StableReadRequest {
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct StableReadReply {
-    pub result: Result<Vec<u8>, StableMemoryError>,
+    pub result: HypervisorResult<Vec<u8>>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -88,7 +95,7 @@ pub struct StableWriteRequest {
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct StableWriteReply {
-    pub result: Result<(), StableMemoryError>,
+    pub result: HypervisorResult<()>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -130,8 +137,20 @@ pub struct RegisterCallbackRequest {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RegisterCallbackReply {
-    pub result: HypervisorResult<CallbackId>,
+    pub result: CallbackId,
 }
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct UnregisterCallbackRequest {
+    pub callback_id: CallbackId,
+}
+
+// Note: upstream "unregister" function actually returns
+// the callback (if one was removed) -- I do however not see a
+// point returning it to the canister code, it doesn't do anything
+// with it.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct UnregisterCallbackReply {}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PushOutputMessageRequest {
@@ -160,6 +179,7 @@ pub enum Request {
     MintCycles(MintCyclesRequest),
     MsgCyclesAccept(MsgCyclesAcceptRequest),
     MsgCyclesAvailable(MsgCyclesAvailableRequest),
+    GetNumInstructionsFromBytes(GetNumInstructionsFromBytesRequest),
     StableSize(StableSizeRequest),
     StableGrow(StableGrowRequest),
     StableRead(StableReadRequest),
@@ -169,6 +189,7 @@ pub enum Request {
     CanisterCyclesRefund(CanisterCyclesRefundRequest),
     SetCertifiedData(SetCertifiedDataRequest),
     RegisterCallback(RegisterCallbackRequest),
+    UnregisterCallback(UnregisterCallbackRequest),
     PushOutputMessage(PushOutputMessageRequest),
     CanisterStatus(CanisterStatusRequest),
 }
@@ -179,6 +200,7 @@ pub enum Reply {
     MintCycles(MintCyclesReply),
     MsgCyclesAccept(MsgCyclesAcceptReply),
     MsgCyclesAvailable(MsgCyclesAvailableReply),
+    GetNumInstructionsFromBytes(GetNumInstructionsFromBytesReply),
     StableSize(StableSizeReply),
     StableGrow(StableGrowReply),
     StableRead(StableReadReply),
@@ -188,6 +210,7 @@ pub enum Reply {
     CanisterCyclesRefund(CanisterCyclesRefundReply),
     SetCertifiedData(SetCertifiedDataReply),
     RegisterCallback(RegisterCallbackReply),
+    UnregisterCallback(UnregisterCallbackReply),
     PushOutputMessage(PushOutputMessageReply),
     CanisterStatus(CanisterStatusReply),
 }

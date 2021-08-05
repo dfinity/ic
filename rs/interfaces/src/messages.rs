@@ -1,7 +1,7 @@
 //! Messages used in various components.
 use ic_types::{
     messages::{Ingress, Request, Response, StopCanisterContext},
-    Funds, PrincipalId,
+    Cycles, PrincipalId,
 };
 use std::convert::TryFrom;
 
@@ -42,11 +42,11 @@ impl RequestOrIngress {
         }
     }
 
-    /// Extracts the funds received with this message.
-    pub fn take_funds(&mut self) -> Funds {
+    /// Extracts the cycles received with this message.
+    pub fn take_cycles(&mut self) -> Cycles {
         match self {
             RequestOrIngress::Request(Request { payment, .. }) => payment.take(),
-            RequestOrIngress::Ingress(Ingress { .. }) => Funds::zero(),
+            RequestOrIngress::Ingress(Ingress { .. }) => Cycles::zero(),
         }
     }
 }
@@ -58,7 +58,7 @@ impl From<RequestOrIngress> for StopCanisterContext {
             RequestOrIngress::Request(mut req) => StopCanisterContext::Canister {
                 sender: req.sender,
                 reply_callback: req.sender_reply_callback,
-                funds: req.payment.take(),
+                cycles: req.payment.take(),
             },
             RequestOrIngress::Ingress(ingress) => StopCanisterContext::Ingress {
                 sender: ingress.source,

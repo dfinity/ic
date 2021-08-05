@@ -500,6 +500,10 @@ message RewardNodeProvider {
   reserved "create_neuron";
 }
 
+message RewardNodeProviders {
+  repeated RewardNodeProvider rewards = 1;
+}
+
 // Changes the default followees to match the one provided.
 // This completely replaces the default followees so entries for all
 // Topics (except ManageNeuron) must be provided on each proposal.
@@ -573,6 +577,8 @@ message Proposal {
     RewardNodeProvider reward_node_provider = 17;
     // Set the default following
     SetDefaultFollowees set_default_followees = 18;
+    // Reward multiple NodeProvider
+    RewardNodeProviders reward_node_providers = 19;
   }
 }
 

@@ -1,6 +1,7 @@
 use crate::state_layout::CheckpointManager;
 use crate::utils::do_copy;
 use ic_logger::ReplicaLogger;
+use ic_utils::fs::{sync_and_mark_files_readonly, sync_path};
 use std::io::Error;
 use std::{
     fs, io,
@@ -122,7 +123,8 @@ impl BasicCheckpointManager {
                 scratchpad.as_path(),
                 FilePermissions::ReadOnly,
             )?;
-            std::fs::rename(&scratchpad, &dst)
+            std::fs::rename(&scratchpad, &dst)?;
+            sync_path(&dst)
         };
 
         match copy_atomically() {
@@ -140,14 +142,18 @@ impl BasicCheckpointManager {
         // We first move the checkpoint directory into a temporary directory to
         // maintain the invariant that <root>/checkpoints/<height> are always
         // internally consistent.
-        match std::fs::rename(&path, &tmp_path) {
-            Ok(_) => (),
+        match std::fs::rename(path, tmp_path) {
+            Ok(_) => {
+                if let Some(parent) = path.parent() {
+                    sync_path(parent)?;
+                }
+            }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 return Ok(());
             }
             Err(err) => return Err(err),
         }
-        std::fs::remove_dir_all(&tmp_path)
+        std::fs::remove_dir_all(tmp_path)
     }
 }
 
@@ -196,8 +202,7 @@ impl CheckpointManager for BasicCheckpointManager {
         let cp_path = self.checkpoints().join(cp_name);
         let tmp_path = self.tmp().join(cp_name);
 
-        self.atomically_remove_via_path(&cp_path, &tmp_path)?;
-        sync_path(&self.checkpoints())
+        self.atomically_remove_via_path(&cp_path, &tmp_path)
     }
 
     fn mark_checkpoint_diverged(&self, name: &str) -> std::io::Result<()> {
@@ -374,49 +379,4 @@ fn copy_recursively_respecting_tombstones(
     // Note that the directory is synced after all the files and directories in
     // it had been recursively synced.
     sync_path(dst)
-}
-
-/// Recursively set permissions to readonly for all files under the given
-/// `path`.
-fn sync_and_mark_files_readonly(path: &Path) -> std::io::Result<()> {
-    let metadata = path.metadata()?;
-
-    if metadata.is_dir() {
-        let entries = path.read_dir()?;
-
-        for entry_result in entries {
-            let entry = entry_result?;
-            sync_and_mark_files_readonly(&entry.path())?;
-        }
-    } else {
-        // We keep directories writable to be able to rename them or delete the
-        // files.
-        let mut permissions = metadata.permissions();
-        permissions.set_readonly(true);
-        fs::set_permissions(path, permissions).map_err(|e| {
-            Error::new(
-                e.kind(),
-                format!(
-                    "failed to set readonly permissions for file {}: {}",
-                    path.display(),
-                    e
-                ),
-            )
-        })?;
-    }
-    sync_path(path)
-}
-
-/// Invokes sync_all on the file or directory located at given path.
-fn sync_path(path: &Path) -> std::io::Result<()> {
-    // There is no special API for syncing directories, so we do the same thing
-    // for both files and directories. This works because directories are just
-    // files treated in a special way by the kernel.
-    let f = std::fs::File::open(path)?;
-    f.sync_all().map_err(|e| {
-        Error::new(
-            e.kind(),
-            format!("failed to sync path {}: {}", path.display(), e),
-        )
-    })
 }

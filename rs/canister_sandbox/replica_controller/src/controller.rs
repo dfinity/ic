@@ -5,6 +5,7 @@ use crate::canister_descriptor_table::{CanisterDescriptorTable, WasmObjectGenera
 use crate::controller_service;
 use crate::process_watcher::ProcessWatcher;
 use crate::session_nonce::{session_to_string, CallContextNonce};
+use crate::{QueueConfig, ReturnToken, RunnerConfig, RunnerInput, WasmExecutionResult};
 use ic_canister_sandbox_common::protocol::sbxsvc::CloseStateRequest;
 use ic_canister_sandbox_common::protocol::{ctlsvc, sbxsvc};
 use ic_canister_sandbox_common::sandbox_client_stub::SandboxClientStub;
@@ -17,11 +18,7 @@ use ic_canister_sandbox_common::{
     protocol, rpc, transport,
 };
 use ic_config::embedders::Config;
-use ic_embedders::{
-    Embedder, Instance, WasmExecutionInput, WasmExecutionOutput, WasmExecutionResult,
-    WasmtimeEmbedder,
-};
-use ic_embedders::{QueueConfig, ReturnToken, RunnerConfig, RunnerInput};
+use ic_embedders::{WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder};
 use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_replicated_state::{PageDelta, PageIndex};
@@ -122,9 +119,9 @@ impl ProcessHandle {
         Self {
             sandbox_handle,
             controller_server,
+            safe_shutdown,
             pid,
             recv_thread_handle,
-            safe_shutdown,
         }
     }
     /// Checks if there are any active session states or running

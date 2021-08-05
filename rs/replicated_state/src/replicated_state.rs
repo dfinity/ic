@@ -11,13 +11,14 @@ use ic_types::{
     ingress::IngressStatus,
     messages::MessageId,
     user_error::{ErrorCode, UserError},
-    CanisterId, Cycles, NumBytes, QueueIndex, SubnetId, Time,
+    CanisterId, Cycles, MemoryAllocation, NumBytes, QueueIndex, SubnetId, Time,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum StateError {
     /// Message enqueuing failed due to no matching canister ID.
     CanisterNotFound(CanisterId),
@@ -297,12 +298,16 @@ impl ReplicatedState {
             .sum()
     }
 
-    pub fn total_memory_allocation_used(&self) -> NumBytes {
+    /// Returns the total memory taken by canisters in bytes.
+    ///
+    /// Either the memory allocation that has been reserved is taken into
+    /// account or the logical memory used in case no memory allocation has
+    /// been reserved explicitly.
+    pub fn total_memory_taken(&self) -> NumBytes {
         self.canisters_iter()
-            .map(|canister| {
-                canister
-                    .memory_allocation()
-                    .unwrap_or_else(|| canister.memory_usage())
+            .map(|canister| match canister.memory_allocation() {
+                MemoryAllocation::Reserved(bytes) => bytes,
+                MemoryAllocation::BestEffort => canister.memory_usage(),
             })
             .sum()
     }

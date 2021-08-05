@@ -81,7 +81,7 @@ pub struct CanisterStateBuilder {
     cycles: Cycles,
     stable_memory: Option<Vec<u8>>,
     wasm: Option<Vec<u8>>,
-    memory_allocation: Option<MemoryAllocation>,
+    memory_allocation: MemoryAllocation,
     compute_allocation: ComputeAllocation,
     ingress_queue: Vec<Ingress>,
     status: CanisterStatusType,
@@ -122,7 +122,7 @@ impl CanisterStateBuilder {
     }
 
     pub fn with_memory_allocation<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
-        self.memory_allocation = Some(MemoryAllocation::try_from(num_bytes.into()).unwrap());
+        self.memory_allocation = MemoryAllocation::try_from(num_bytes.into()).unwrap();
         self
     }
 
@@ -247,7 +247,7 @@ impl Default for CanisterStateBuilder {
             cycles: INITIAL_CYCLES,
             stable_memory: None,
             wasm: None,
-            memory_allocation: None,
+            memory_allocation: MemoryAllocation::BestEffort,
             compute_allocation: ComputeAllocation::zero(),
             ingress_queue: Vec::default(),
             status: CanisterStatusType::Running,
@@ -299,7 +299,7 @@ impl SystemStateBuilder {
 
     pub fn memory_allocation(mut self, memory_allocation: NumBytes) -> Self {
         self.system_state.memory_allocation =
-            Some(MemoryAllocation::try_from(memory_allocation).unwrap());
+            MemoryAllocation::try_from(memory_allocation).unwrap();
         self
     }
 

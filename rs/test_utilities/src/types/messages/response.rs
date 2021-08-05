@@ -1,7 +1,7 @@
 use crate::types::ids::canister_test_id;
 use ic_types::{
     messages::{CallbackId, Payload, Response},
-    CanisterId, Funds,
+    CanisterId, Cycles,
 };
 
 pub struct ResponseBuilder {
@@ -17,7 +17,7 @@ impl Default for ResponseBuilder {
                 originator: canister_test_id(0),
                 respondent: canister_test_id(1),
                 originator_reply_callback: CallbackId::from(0),
-                refund: Funds::zero(),
+                refund: Cycles::zero(),
                 response_payload: rpb.build(),
             },
         }
@@ -48,7 +48,7 @@ impl ResponseBuilder {
     }
 
     /// Sets the refund field.
-    pub fn refund(mut self, refund: Funds) -> Self {
+    pub fn refund(mut self, refund: Cycles) -> Self {
         self.response.refund = refund;
         self
     }

@@ -5,6 +5,7 @@ use ic_config::registry_client::DataProviderConfig;
 use ic_config::{subnet_config::SubnetConfigs, Config};
 use ic_crypto_sha256::Sha256;
 use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_interfaces::crypto::IngressSigVerifier;
 use ic_interfaces::registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::info;
 use ic_metrics::MetricsRegistry;
@@ -12,7 +13,7 @@ use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_replica::{args::ReplicaArgs, setup};
 use ic_transport::transport::create_transport;
-use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, SubnetId};
+use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion, SubnetId};
 use ic_utils::ic_features::*;
 use nix::unistd::{setpgid, Pid};
 use static_assertions::assert_eq_size;
@@ -163,7 +164,23 @@ async fn run() -> io::Result<()> {
 
     let node_id = crypto.get_node_id();
     let cup_with_proto = setup::get_catch_up_package(&replica_args, &logger);
+
+    // Set the replica verison and report as metric
     setup::set_replica_version(&replica_args, &logger);
+    {
+        let g = metrics_registry.int_gauge_vec(
+            "ic_replica_info",
+            "version info for the internet computer replica running.",
+            &["ic_active_version", "ic_replica_binary_hash"],
+        );
+        g.with_label_values(&[
+            &ReplicaVersion::default().to_string(),
+            &get_replica_binary_hash()
+                .map(|x| x.1)
+                .unwrap_or_else(|_| "na".to_string()),
+        ])
+        .set(1);
+    }
     let subnet_id = match &replica_args {
         Ok(args) => {
             if let Some(subnet) = args.force_subnet.as_ref() {
@@ -313,7 +330,8 @@ async fn run() -> io::Result<()> {
         query_handler,
         state_manager,
         registry,
-        crypto,
+        Arc::clone(&crypto) as Arc<dyn TlsHandshake + Send + Sync>,
+        Arc::clone(&crypto) as Arc<dyn IngressSigVerifier + Send + Sync>,
         subnet_id,
         root_subnet_id,
         logger.clone(),

@@ -234,7 +234,9 @@ impl TransportImpl {
                 );
 
                 if let Err(ReadError::SocketReadTimeOut) = ret {
-                    let _ = event_handler.error(flow_id, TransportErrorCode::TimeoutExpired);
+                    event_handler
+                        .error(flow_id, TransportErrorCode::TimeoutExpired)
+                        .await;
                     metrics
                         .socket_heart_beat_timeouts
                         .with_label_values(&[&flow_label, &flow_tag])
@@ -340,12 +342,13 @@ impl TransportImpl {
     }
 
     /// Handle peer disconnect.
-    pub async fn on_disconnect(&self, flow_id: FlowId) {
+    async fn on_disconnect(&self, flow_id: FlowId) {
         if let Err(e) = self.retry_connection(&flow_id) {
             warn!(
                 self.log,
                 "DataPlane::on_disconnect(): retry_connection error {:?}: flow: {:?}", flow_id, e
             );
+            return;
         }
         let event_handler = {
             let mut cl_map = self.client_map.write().unwrap();

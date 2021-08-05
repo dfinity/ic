@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn should_redact_ephemeral_secret_key_debug() {
-    let esk = EphemeralSecretKey(secp256k1::curve::Scalar([1u32; 8]));
+    let esk = EphemeralSecretKey(libsecp256k1::curve::Scalar([1u32; 8]));
     assert_eq!(format!("{:?}", esk), "REDACTED");
 }
 

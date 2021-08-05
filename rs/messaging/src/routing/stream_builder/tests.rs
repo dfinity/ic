@@ -23,7 +23,7 @@ use ic_types::{
     messages::{CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response},
     user_error::RejectCode,
     xnet::{StreamIndex, StreamIndexedQueue},
-    CanisterId, Cycles, Funds, SubnetId,
+    CanisterId, Cycles, SubnetId,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -515,7 +515,7 @@ fn generate_message_for_test(
         .sender(sender)
         .receiver(receiver)
         .method_name(method_name)
-        .payment(Funds::new(payment))
+        .payment(payment)
         .sender_reply_callback(CallbackId::from(999))
         .build()
 }

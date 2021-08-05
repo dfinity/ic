@@ -22,7 +22,7 @@ use std::collections::btree_map::BTreeMap;
 use zeroize::Zeroize;
 
 #[derive(Clone, Eq, PartialEq)]
-pub struct EphemeralSecretKey(secp256k1::curve::Scalar);
+pub struct EphemeralSecretKey(libsecp256k1::curve::Scalar);
 
 #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
 pub struct EphemeralSecretKeyBytes(pub [u8; EphemeralSecretKeyBytes::SIZE]);
@@ -37,7 +37,7 @@ pub const SECP256K1_SECRET_KEY_ONE: EphemeralSecretKeyBytes = EphemeralSecretKey
 ]);
 
 #[derive(Clone, Debug)]
-pub struct EphemeralPublicKey(secp256k1::curve::Jacobian);
+pub struct EphemeralPublicKey(libsecp256k1::curve::Jacobian);
 
 pub const SECP256K1_PUBLIC_KEY_ONE: EphemeralPublicKeyBytes = EphemeralPublicKeyBytes([
     2, 121, 190, 102, 126, 249, 220, 187, 172, 85, 160, 98, 149, 206, 135, 11, 7, 2, 155, 252, 219,

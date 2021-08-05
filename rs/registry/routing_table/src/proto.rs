@@ -21,8 +21,12 @@ impl TryFrom<pb::CanisterIdRange> for CanisterIdRange {
 
     fn try_from(src: pb::CanisterIdRange) -> Result<Self, Self::Error> {
         Ok(Self {
-            start: CanisterId::try_from(src.start_canister_id.unwrap())?,
-            end: CanisterId::try_from(src.end_canister_id.unwrap())?,
+            start: CanisterId::try_from(src.start_canister_id.ok_or(
+                ProxyDecodeError::MissingField("CanisterIdRange::start_canister_id"),
+            )?)?,
+            end: CanisterId::try_from(src.end_canister_id.ok_or(
+                ProxyDecodeError::MissingField("CanisterIdRange::end_canister_id"),
+            )?)?,
         })
     }
 }
@@ -68,7 +72,9 @@ impl TryFrom<pb::RoutingTable> for RoutingTable {
         let mut map = BTreeMap::new();
         for entry in src.entries {
             let range = try_from_option_field(entry.range, "RoutingTable::Entry::range")?;
-            let subnet_id = subnet_id_try_from_protobuf(entry.subnet_id.unwrap())?;
+            let subnet_id =
+                try_from_option_field(entry.subnet_id, "RoutingTable::Entry::subnet_id")?;
+            let subnet_id = subnet_id_try_from_protobuf(subnet_id)?;
             if let Some(prev_subnet_id) = map.insert(range, subnet_id) {
                 return Err(ProxyDecodeError::DuplicateEntry {
                     key: format!("{:?}", range),

@@ -107,6 +107,7 @@ message StopCanisterContext {
     types.v1.CanisterId sender = 1;
     uint64 reply_callback = 2;
     state.queues.v1.Funds funds = 3;
+    state.queues.v1.Cycles cycles = 4;
   }
 
   oneof context {

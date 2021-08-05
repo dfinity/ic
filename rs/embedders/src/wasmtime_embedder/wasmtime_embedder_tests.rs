@@ -23,7 +23,7 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 #[test]
 fn test_wasmtime_system_api() {
     let config = Config::default();
-    let engine = Engine::new(&config);
+    let engine = Engine::new(&config).expect("Failed to initialize Wasmtime engine");
     let store = Store::new(&engine);
     let system_api_handle = system_api::SystemApiHandle::new();
     let canister_memory_limit = NumBytes::from(4 << 30);

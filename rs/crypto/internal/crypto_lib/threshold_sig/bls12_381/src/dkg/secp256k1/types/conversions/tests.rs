@@ -308,9 +308,9 @@ mod serde {
     fn test_public_key_serialisation_should_match_libsecp256k1(number: u32) {
         if number != 0 {
             let scalar = Scalar::from_int(number);
-            let libsecp_secret_key = secp256k1::SecretKey::try_from(scalar.clone())
+            let libsecp_secret_key = libsecp256k1::SecretKey::try_from(scalar)
                 .expect("Should be able to obtain a libsecp secret_key from a non-zero scalar");
-            let libsecp_public_key = secp256k1::PublicKey::from_secret_key(&libsecp_secret_key);
+            let libsecp_public_key = libsecp256k1::PublicKey::from_secret_key(&libsecp_secret_key);
             let libsecp_bytes = libsecp_public_key.serialize_compressed();
             let this_secret_key = EphemeralSecretKey(scalar);
             let this_public_key = EphemeralPublicKey::from(&this_secret_key);

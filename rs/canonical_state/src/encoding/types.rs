@@ -113,8 +113,8 @@ pub struct SystemMetadata {
     pub prev_state_hash: Option<Vec<u8>>,
 }
 
-impl From<&ic_types::xnet::StreamHeader> for StreamHeader {
-    fn from(header: &ic_types::xnet::StreamHeader) -> Self {
+impl From<(&ic_types::xnet::StreamHeader, u32)> for StreamHeader {
+    fn from((header, _certification_version): (&ic_types::xnet::StreamHeader, u32)) -> Self {
         Self {
             begin: header.begin.get(),
             end: header.end.get(),
@@ -133,17 +133,19 @@ impl From<StreamHeader> for ic_types::xnet::StreamHeader {
     }
 }
 
-impl From<&ic_types::messages::RequestOrResponse> for RequestOrResponse {
-    fn from(message: &ic_types::messages::RequestOrResponse) -> Self {
+impl From<(&ic_types::messages::RequestOrResponse, u32)> for RequestOrResponse {
+    fn from(
+        (message, certification_version): (&ic_types::messages::RequestOrResponse, u32),
+    ) -> Self {
         use ic_types::messages::RequestOrResponse::*;
         match message {
             Request(request) => Self {
-                request: Some(request.into()),
+                request: Some((request, certification_version).into()),
                 response: None,
             },
             Response(response) => Self {
                 request: None,
-                response: Some(response.into()),
+                response: Some((response, certification_version).into()),
             },
         }
     }
@@ -170,13 +172,17 @@ impl TryFrom<RequestOrResponse> for ic_types::messages::RequestOrResponse {
     }
 }
 
-impl From<&ic_types::messages::Request> for Request {
-    fn from(request: &ic_types::messages::Request) -> Self {
+impl From<(&ic_types::messages::Request, u32)> for Request {
+    fn from((request, certification_version): (&ic_types::messages::Request, u32)) -> Self {
+        let funds = Funds {
+            cycles: (&request.payment, certification_version).into(),
+            icp: 0,
+        };
         Self {
             receiver: request.receiver.get().to_vec(),
             sender: request.sender.get().to_vec(),
             sender_reply_callback: request.sender_reply_callback.get(),
-            payment: (&request.payment).into(),
+            payment: funds,
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
         }
@@ -191,21 +197,25 @@ impl TryFrom<Request> for ic_types::messages::Request {
             receiver: ic_types::CanisterId::new(request.receiver.as_slice().try_into()?)?,
             sender: ic_types::CanisterId::new(request.sender.as_slice().try_into()?)?,
             sender_reply_callback: request.sender_reply_callback.into(),
-            payment: request.payment.try_into()?,
+            payment: request.payment.cycles.try_into()?,
             method_name: request.method_name,
             method_payload: request.method_payload,
         })
     }
 }
 
-impl From<&ic_types::messages::Response> for Response {
-    fn from(response: &ic_types::messages::Response) -> Self {
+impl From<(&ic_types::messages::Response, u32)> for Response {
+    fn from((response, certification_version): (&ic_types::messages::Response, u32)) -> Self {
+        let funds = Funds {
+            cycles: (&response.refund, certification_version).into(),
+            icp: 0,
+        };
         Self {
             originator: response.originator.get().to_vec(),
             respondent: response.respondent.get().to_vec(),
             originator_reply_callback: response.originator_reply_callback.get(),
-            refund: (&response.refund).into(),
-            response_payload: (&response.response_payload).into(),
+            refund: funds,
+            response_payload: (&response.response_payload, certification_version).into(),
         }
     }
 }
@@ -218,14 +228,14 @@ impl TryFrom<Response> for ic_types::messages::Response {
             originator: ic_types::CanisterId::new(response.originator.as_slice().try_into()?)?,
             respondent: ic_types::CanisterId::new(response.respondent.as_slice().try_into()?)?,
             originator_reply_callback: response.originator_reply_callback.into(),
-            refund: response.refund.try_into()?,
+            refund: response.refund.cycles.try_into()?,
             response_payload: response.response_payload.try_into()?,
         })
     }
 }
 
-impl From<&ic_types::funds::Cycles> for Cycles {
-    fn from(cycles: &ic_types::funds::Cycles) -> Self {
+impl From<(&ic_types::funds::Cycles, u32)> for Cycles {
+    fn from((cycles, _certification_version): (&ic_types::funds::Cycles, u32)) -> Self {
         let (high, low) = cycles.into_parts();
         Self {
             low,
@@ -249,10 +259,10 @@ impl TryFrom<Cycles> for ic_types::funds::Cycles {
     }
 }
 
-impl From<&ic_types::funds::Funds> for Funds {
-    fn from(funds: &ic_types::funds::Funds) -> Self {
+impl From<(&ic_types::funds::Funds, u32)> for Funds {
+    fn from((funds, certification_version): (&ic_types::funds::Funds, u32)) -> Self {
         Self {
-            cycles: (&funds.cycles()).into(),
+            cycles: (&funds.cycles(), certification_version).into(),
             icp: 0,
         }
     }
@@ -266,8 +276,8 @@ impl TryFrom<Funds> for ic_types::funds::Funds {
     }
 }
 
-impl From<&ic_types::messages::Payload> for Payload {
-    fn from(payload: &ic_types::messages::Payload) -> Self {
+impl From<(&ic_types::messages::Payload, u32)> for Payload {
+    fn from((payload, certification_version): (&ic_types::messages::Payload, u32)) -> Self {
         use ic_types::messages::Payload::*;
         match payload {
             Data(data) => Self {
@@ -276,7 +286,7 @@ impl From<&ic_types::messages::Payload> for Payload {
             },
             Reject(reject) => Self {
                 data: None,
-                reject: Some(reject.into()),
+                reject: Some((reject, certification_version).into()),
             },
         }
     }
@@ -303,8 +313,8 @@ impl TryFrom<Payload> for ic_types::messages::Payload {
     }
 }
 
-impl From<&ic_types::messages::RejectContext> for RejectContext {
-    fn from(context: &ic_types::messages::RejectContext) -> Self {
+impl From<(&ic_types::messages::RejectContext, u32)> for RejectContext {
+    fn from((context, _certification_version): (&ic_types::messages::RejectContext, u32)) -> Self {
         Self {
             code: context.code as u8,
             message: context.message.clone(),

@@ -1649,16 +1649,11 @@ impl StateManager for StateManagerImpl {
                 fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
             });
 
-        let last_checkpoint = checkpoint_heights.last();
-
-        // The last checkpoint and higher states will be kept.
-        let last_height_to_keep = last_checkpoint
-            .map(|h| (*h).min(requested_height))
-            .unwrap_or(requested_height);
+        let last_checkpoint_height = checkpoint_heights.last();
 
         let heights_to_remove = std::ops::Range {
             start: Height::new(1),
-            end: last_height_to_keep,
+            end: requested_height,
         };
 
         let mut states = self.states.write();
@@ -1674,10 +1669,10 @@ impl StateManager for StateManagerImpl {
             }
         };
 
-        let (removed, retained) = states
-            .snapshots
-            .drain(0..)
-            .partition(|snapshot| heights_to_remove.contains(&snapshot.height));
+        let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
+            heights_to_remove.contains(&snapshot.height)
+                && Some(&snapshot.height) != last_checkpoint_height
+        });
         states.snapshots = retained;
 
         self.metrics
@@ -1693,9 +1688,13 @@ impl StateManager for StateManagerImpl {
         self.latest_state_height
             .store(latest_height.get(), Ordering::Relaxed);
 
+        let min_resident_height = last_checkpoint_height
+            .map(|h| (*h).min(requested_height))
+            .unwrap_or(requested_height);
+
         self.metrics
             .min_resident_height
-            .set(last_height_to_keep.get() as i64);
+            .set(min_resident_height.get() as i64);
         self.metrics
             .max_resident_height
             .set(latest_height.get() as i64);
@@ -1703,20 +1702,32 @@ impl StateManager for StateManagerImpl {
         // Send removed snapshot to deallocator thread
         deallocate(Box::new(removed));
 
-        for (_, ref metadata) in states.states_metadata.range(heights_to_remove) {
+        for (height, ref metadata) in states.states_metadata.range(heights_to_remove) {
+            if Some(height) == last_checkpoint_height {
+                continue;
+            }
             if let Some(ref checkpoint_ref) = metadata.checkpoint_ref {
                 checkpoint_ref.mark_deleted();
             }
         }
 
-        let mut certifications_metadata = states
-            .certifications_metadata
-            .split_off(&last_height_to_keep);
+        let mut certifications_metadata =
+            states.certifications_metadata.split_off(&requested_height);
+
+        let certification_metadata_at_last_checkpoint_height = last_checkpoint_height
+            .map(|height| states.certifications_metadata.remove_entry(height))
+            .unwrap_or(None);
 
         std::mem::swap(
             &mut certifications_metadata,
             &mut states.certifications_metadata,
         );
+
+        if let Some((height, state_metadata)) = certification_metadata_at_last_checkpoint_height {
+            states
+                .certifications_metadata
+                .insert(height, state_metadata);
+        }
 
         // Send removed certification metadata to deallocator thread
         deallocate(Box::new(certifications_metadata));
@@ -1738,7 +1749,16 @@ impl StateManager for StateManagerImpl {
         // TODO: send states_metadata through deallocation channel too. But then
         // checkpoint removal becomes asynchronous, which requires more careful
         // handling.
-        states.states_metadata = states.states_metadata.split_off(&last_height_to_keep);
+        let states_metadata = states.states_metadata.split_off(&requested_height);
+
+        let state_metadata_at_last_checkpoint_height = last_checkpoint_height
+            .map(|height| states.states_metadata.remove_entry(height))
+            .unwrap_or(None);
+
+        states.states_metadata = states_metadata;
+        if let Some((height, state_metadata)) = state_metadata_at_last_checkpoint_height {
+            states.states_metadata.insert(height, state_metadata);
+        }
 
         self.persist_metadata_or_die(&states.states_metadata);
     }

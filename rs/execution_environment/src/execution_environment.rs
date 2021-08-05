@@ -39,7 +39,7 @@ use ic_types::{
         Response, SignedIngressContent, StopCanisterContext,
     },
     user_error::{ErrorCode, RejectCode, UserError},
-    CanisterId, CanisterStatusType, Cycles, Funds, InstallCodeContext, NumBytes, NumInstructions,
+    CanisterId, CanisterStatusType, Cycles, InstallCodeContext, NumBytes, NumInstructions,
     SubnetId, Time, UserId,
 };
 #[cfg(test)]
@@ -184,21 +184,21 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     (Some((Err(UserError::new(
                         ErrorCode::CanisterMethodNotFound,
                         "create_canister can only be called by other canisters, not via ingress messages.")),
-                          Funds::zero(),
+                          Cycles::zero(),
                     )), instructions_limit),
                     RequestOrIngress::Request(req) => {
-                        let funds = req.take_funds();
+                        let cycles = req.take_cycles();
                         match CreateCanisterArgs::decode(req.method_payload()) {
-                            Err(err) => (Some((Err(err), funds)), instructions_limit),
+                            Err(err) => (Some((Err(err), cycles)), instructions_limit),
                             Ok(args) => {
                                 let settings = match args.settings {
                                     None => CanisterSettingsArgs::default(),
                                     Some(settings) => settings,
                                 };
                                 match CanisterSettings::try_from(settings) {
-                                    Err(err) => (Some((Err(err.into()), funds)), instructions_limit),
+                                    Err(err) => (Some((Err(err.into()), cycles)), instructions_limit),
                                     Ok(settings) =>
-                                        (Some(self.create_canister(*msg.sender(), funds, settings, &mut state)), instructions_limit)
+                                        (Some(self.create_canister(*msg.sender(), cycles, settings, &mut state)), instructions_limit)
                                 }
                             }
                         }
@@ -226,7 +226,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         },
                     },
                 };
-                (Some((res, msg.take_funds())), instructions_left)
+                (Some((res, msg.take_cycles())), instructions_left)
             },
 
             Ok(Ic00Method::UninstallCode) => {
@@ -238,7 +238,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         .map(|()| EmptyBlob::encode())
                         .map_err(|err| err.into()),
                 };
-                (Some((res, msg.take_funds())), instructions_limit)
+                (Some((res, msg.take_cycles())), instructions_limit)
             },
 
             Ok(Ic00Method::UpdateSettings) => {
@@ -256,7 +256,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     }
 
                 };
-                (Some((res, msg.take_funds())), instructions_limit)
+                (Some((res, msg.take_cycles())), instructions_limit)
             },
 
             Ok(Ic00Method::SetController) => {
@@ -273,7 +273,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         .map(|()| EmptyBlob::encode())
                         .map_err(|err| err.into()),
                 };
-                (Some((res, msg.take_funds())), instructions_limit)
+                (Some((res, msg.take_cycles())), instructions_limit)
             },
 
             Ok(Ic00Method::CanisterStatus) => {
@@ -281,7 +281,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     Err(err) => Err(err.into()),
                     Ok(args) => self.get_canister_status(*msg.sender(), args.get_canister_id(),  &mut state)
                 };
-                (Some((res, msg.take_funds())), instructions_limit)
+                (Some((res, msg.take_cycles())), instructions_limit)
             },
 
             Ok(Ic00Method::StartCanister) => {
@@ -290,11 +290,11 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     Ok(args) =>
                         self.start_canister(args.get_canister_id(), *msg.sender(), &mut state)
                 };
-                (Some((res, msg.take_funds())), instructions_limit)
+                (Some((res, msg.take_cycles())), instructions_limit)
             },
 
             Ok(Ic00Method::StopCanister) => match CanisterIdRecord::decode(payload) {
-                Err(err) => (Some((Err(err.into()), msg.take_funds())), instructions_limit),
+                Err(err) => (Some((Err(err.into()), msg.take_cycles())), instructions_limit),
                 Ok(args) =>
                    (self.stop_canister(args.get_canister_id(), &msg, &mut state), instructions_limit)
             },
@@ -308,7 +308,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         .map(|()| EmptyBlob::encode())
                         .map_err(|err| err.into()),
                 };
-                (Some((res, msg.take_funds())), instructions_limit)
+                (Some((res, msg.take_cycles())), instructions_limit)
             },
 
             Ok(Ic00Method::RawRand) => {
@@ -320,11 +320,11 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         Ok(Encode!(&buffer).unwrap())
                     }
                 };
-                (Some((res, msg.take_funds())), instructions_limit)
+                (Some((res, msg.take_cycles())), instructions_limit)
             },
 
             Ok(Ic00Method::DepositCycles) => match CanisterIdRecord::decode(payload) {
-                Err(err) => (Some((Err(err.into()), msg.take_funds())), instructions_limit),
+                Err(err) => (Some((Err(err.into()), msg.take_cycles())), instructions_limit),
                 Ok(args) =>
                     (Some(self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state)), instructions_limit)
             },
@@ -333,10 +333,10 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 match &msg {
                     RequestOrIngress::Request(request) =>
                         match SetupInitialDKGArgs::decode(payload) {
-                            Err(err) => (Some((Err(err.into()), msg.take_funds())), instructions_limit),
+                            Err(err) => (Some((Err(err.into()), msg.take_cycles())), instructions_limit),
                             Ok(args) => {
                                 let res = self.setup_initial_dkg(*msg.sender(),&args, request, &mut state, rng)
-                                    .map_or_else(|err| Some((Err(err), msg.take_funds())), |()| None);
+                                    .map_or_else(|err| Some((Err(err), msg.take_cycles())), |()| None);
                                 (res, instructions_limit)
                             }
                     },
@@ -347,7 +347,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                             "{} is called by {}. It can only be called by NNS.",
                             Ic00Method::SetupInitialDKG.to_string(),
                             msg.sender())
-                    )), msg.take_funds()));
+                    )), msg.take_cycles()));
                         (res, instructions_limit)
                     }
                 }
@@ -362,7 +362,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                             Ok(settings) => {
                                 self
                                     .canister_manager
-                                    .create_canister_with_funds(
+                                    .create_canister_with_cycles(
                                         *msg.sender(),
                                         cycles_amount,
                                         settings,
@@ -376,7 +376,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         }
                     }
                 };
-                (Some((res, Funds::zero())), instructions_limit)
+                (Some((res, Cycles::zero())), instructions_limit)
             },
 
             Ok(Ic00Method::ProvisionalTopUpCanister) => {
@@ -388,7 +388,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                                 &mut state,
                                                 provisional_whitelist)
                 };
-                (Some((res, Funds::zero())), instructions_limit)
+                (Some((res, Cycles::zero())), instructions_limit)
             },
 
             Err(ParseError::VariantNotFound) => {
@@ -396,7 +396,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     ErrorCode::CanisterMethodNotFound,
                     format!("Management canister has no method '{}'", msg.method_name()),
                 ));
-                (Some((res, msg.take_funds())), instructions_limit)
+                (Some((res, msg.take_cycles())), instructions_limit)
             }
         };
 
@@ -663,26 +663,26 @@ impl ExecutionEnvironmentImpl {
     fn create_canister(
         &self,
         sender: PrincipalId,
-        funds: Funds,
+        cycles: Cycles,
         settings: CanisterSettings,
         state: &mut ReplicatedState,
-    ) -> (Result<Vec<u8>, UserError>, Funds) {
+    ) -> (Result<Vec<u8>, UserError>, Cycles) {
         match state.find_subnet_id(sender) {
             Ok(sender_subnet_id) => {
-                let (res, funds) = self.canister_manager.create_canister(
+                let (res, cycles) = self.canister_manager.create_canister(
                     sender,
                     sender_subnet_id,
-                    funds,
+                    cycles,
                     settings,
                     state,
                 );
                 (
                     res.map(|new_canister_id| CanisterIdRecord::from(new_canister_id).encode())
                         .map_err(|err| err.into()),
-                    funds,
+                    cycles,
                 )
             }
-            Err(err) => (Err(err), funds),
+            Err(err) => (Err(err), cycles),
         }
     }
 
@@ -694,7 +694,7 @@ impl ExecutionEnvironmentImpl {
         state: &mut ReplicatedState,
     ) -> Result<Vec<u8>, UserError> {
         let compute_allocation_used = state.total_compute_allocation();
-        let memory_allocation_used = state.total_memory_allocation_used();
+        let memory_allocation_used = state.total_memory_taken();
 
         let mut canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
@@ -734,24 +734,21 @@ impl ExecutionEnvironmentImpl {
         canister_id: CanisterId,
         msg: &mut RequestOrIngress,
         state: &mut ReplicatedState,
-    ) -> (Result<Vec<u8>, UserError>, Funds) {
-        let mut msg_funds = msg.take_funds();
-
+    ) -> (Result<Vec<u8>, UserError>, Cycles) {
         match state.canister_state_mut(&canister_id) {
             None => (
                 Err(UserError::new(
                     ErrorCode::CanisterNotFound,
                     format!("Canister {} not found.", &canister_id),
                 )),
-                msg.take_funds(),
+                msg.take_cycles(),
             ),
 
             Some(canister_state) => {
                 let cycles_to_return = self
                     .canister_manager
-                    .deposit_cycles(canister_state, msg_funds.take_cycles());
-                msg_funds.add_cycles(cycles_to_return);
-                (Ok(EmptyBlob::encode()), msg_funds)
+                    .deposit_cycles(canister_state, msg.take_cycles());
+                (Ok(EmptyBlob::encode()), cycles_to_return)
             }
         }
     }
@@ -775,7 +772,7 @@ impl ExecutionEnvironmentImpl {
         canister_id: CanisterId,
         msg: &RequestOrIngress,
         state: &mut ReplicatedState,
-    ) -> Option<(Result<Vec<u8>, UserError>, Funds)> {
+    ) -> Option<(Result<Vec<u8>, UserError>, Cycles)> {
         match self.canister_manager.stop_canister(
             canister_id,
             StopCanisterContext::from(msg.clone()),
@@ -784,10 +781,10 @@ impl ExecutionEnvironmentImpl {
             StopCanisterResult::RequestAccepted => None,
             StopCanisterResult::Failure {
                 error,
-                funds_to_return,
-            } => Some((Err(error.into()), funds_to_return)),
-            StopCanisterResult::AlreadyStopped { funds_to_return } => {
-                Some((Ok(EmptyBlob::encode()), funds_to_return))
+                cycles_to_return,
+            } => Some((Err(error.into()), cycles_to_return)),
+            StopCanisterResult::AlreadyStopped { cycles_to_return } => {
+                Some((Ok(EmptyBlob::encode()), cycles_to_return))
             }
         }
     }
@@ -910,18 +907,18 @@ impl ExecutionEnvironmentImpl {
         // Therefore, the number of cycles in the response should always
         // be <= to the cycles in the request. If this is not the case,
         // then that indiciates (potential malicious) faults.
-        let refunded_cycles = if resp.refund.cycles() > callback.cycles_sent {
+        let refunded_cycles = if resp.refund > callback.cycles_sent {
             error!(
                 self.log,
                 "Canister got a response with too many cycles.  originator {} respondent {} max cycles expected {} got {}.",
                 resp.originator,
                 resp.respondent,
                 callback.cycles_sent,
-                resp.refund.cycles(),
+                resp.refund,
             );
             callback.cycles_sent
         } else {
-            resp.refund.take_cycles()
+            resp.refund
         };
         self.cycles_account_manager
             .add_cycles(&mut canister.system_state, refunded_cycles);
@@ -1145,7 +1142,7 @@ impl ExecutionEnvironmentImpl {
             originator: req.sender,
             respondent: canister.canister_id(),
             originator_reply_callback: req.sender_reply_callback,
-            refund: Funds::zero(),
+            refund: Cycles::zero(),
             response_payload,
         });
         ExecuteMessageResult {
@@ -1381,7 +1378,7 @@ impl ExecutionEnvironmentImpl {
         msg: RequestOrIngress,
         mut state: ReplicatedState,
         result: Result<Vec<u8>, UserError>,
-        refund: Funds,
+        refund: Cycles,
     ) -> ReplicatedState {
         match msg {
             RequestOrIngress::Request(req) => {
@@ -1403,8 +1400,8 @@ impl ExecutionEnvironmentImpl {
                 state
             }
             RequestOrIngress::Ingress(ingress) => {
-                // No funds can be included with an ingress message.
-                assert_eq!(refund, Funds::zero());
+                // No cycles can be included with an ingress message.
+                assert_eq!(refund, Cycles::zero());
                 let status = match result {
                     Ok(payload) => IngressStatus::Completed {
                         receiver: ingress.receiver.get(),
@@ -1457,7 +1454,7 @@ impl ExecutionEnvironmentImpl {
                 StopCanisterContext::Canister {
                     sender,
                     reply_callback,
-                    funds,
+                    cycles,
                 } => {
                     // Rejecting a stop_canister request from a canister.
                     let subnet_id_as_canister_id = CanisterId::from(self.own_subnet_id);
@@ -1465,7 +1462,7 @@ impl ExecutionEnvironmentImpl {
                         originator: sender,
                         respondent: subnet_id_as_canister_id,
                         originator_reply_callback: reply_callback,
-                        refund: funds,
+                        refund: cycles,
                         response_payload: Payload::Reject(RejectContext {
                             code: RejectCode::CanisterReject,
                             message: format!("Canister {}'s stop request cancelled", canister_id),
@@ -1574,12 +1571,11 @@ fn produce_inter_canister_response(
         }
     };
     if let Some((response_payload, refund)) = response_payload_and_refund {
-        let refunded_funds = Funds::new(refund);
         canister.push_output_response(Response {
             originator,
             respondent: canister.canister_id(),
             originator_reply_callback: reply_callback_id,
-            refund: refunded_funds,
+            refund,
             response_payload,
         });
     }

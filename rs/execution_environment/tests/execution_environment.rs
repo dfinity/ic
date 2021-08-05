@@ -55,7 +55,7 @@ use ic_types::{
     },
     methods::{Callback, WasmClosure},
     user_error::{ErrorCode, RejectCode, UserError},
-    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, Funds, NumBytes, NumInstructions,
+    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, NumBytes, NumInstructions,
     PrincipalId, QueueIndex, RegistryVersion, SubnetId,
 };
 use ic_wasm_utils::validation::WasmValidationLimits;
@@ -382,7 +382,6 @@ fn assert_correct_request(system_state: &mut SystemState) {
 // Canister gets an ingress message, produces one outgoing request
 fn test_ingress_message_side_effects_1() {
     let mut system_state = SystemStateBuilder::default().build();
-    system_state.memory_allocation = None;
     system_state.freeze_threshold = NumSeconds::from(0);
     inject_ingress(&mut system_state);
     test_outgoing_messages(
@@ -414,7 +413,6 @@ fn test_ingress_message_side_effects_1() {
 // Canister gets an ingress message, produces one outgoing request and replies
 fn test_ingress_message_side_effects_2() {
     let mut system_state = SystemStateBuilder::default().build();
-    system_state.memory_allocation = None;
     system_state.freeze_threshold = NumSeconds::from(0);
     inject_ingress(&mut system_state);
     test_outgoing_messages(
@@ -455,7 +453,6 @@ fn test_ingress_message_side_effects_2() {
 // Canister gets a request message and rejects it
 fn test_ingress_message_side_effects_3() {
     let mut system_state = SystemStateBuilder::default().build();
-    system_state.memory_allocation = None;
     system_state.freeze_threshold = NumSeconds::from(0);
     inject_ingress(&mut system_state);
     test_outgoing_messages(system_state, REJECT_WAT, |execute_message_result| {
@@ -492,7 +489,6 @@ fn test_ingress_message_side_effects_3() {
 // Canister gets a request message and produces one outgoing request
 fn test_request_message_side_effects_1() {
     let mut system_state = SystemStateBuilder::default().build();
-    system_state.memory_allocation = None;
     system_state.freeze_threshold = NumSeconds::from(0);
     inject_request(&mut system_state);
     test_outgoing_messages(
@@ -529,7 +525,6 @@ fn test_request_message_side_effects_2() {
     let mut system_state = SystemStateBuilder::default()
         .canister_id(canister_id)
         .build();
-    system_state.memory_allocation = None;
     system_state.freeze_threshold = NumSeconds::from(0);
     inject_request(&mut system_state);
     test_outgoing_messages(
@@ -578,7 +573,6 @@ fn test_request_message_side_effects_3() {
     let mut system_state = SystemStateBuilder::default()
         .canister_id(canister_id)
         .build();
-    system_state.memory_allocation = None;
     system_state.freeze_threshold = NumSeconds::from(0);
     inject_request(&mut system_state);
     test_outgoing_messages(system_state, REJECT_WAT, |mut execute_message_result| {
@@ -776,11 +770,10 @@ fn stopping_canister_rejects_requests() {
             // that is running and enqueue the request in it.
             let mut canister = get_running_canister(canister_test_id(0));
 
-            let cycles = 40;
-            let funds = Funds::new(Cycles::from(cycles));
+            let cycles = Cycles::from(40);
             let req = RequestBuilder::new()
                 .sender(canister_test_id(13))
-                .payment(funds)
+                .payment(cycles)
                 .build();
             let reply_callback = req.sender_reply_callback;
             canister
@@ -842,7 +835,7 @@ fn stopping_canister_rejects_requests() {
                     originator: canister_test_id(13),
                     respondent: canister_test_id(0),
                     originator_reply_callback: reply_callback,
-                    refund: Funds::new(Cycles::from(cycles)),
+                    refund: cycles,
                     response_payload: Payload::Reject(RejectContext {
                         code: RejectCode::SysFatal,
                         message: format!("Canister {} is not running", canister_id),
@@ -904,7 +897,7 @@ fn stopped_canister_rejects_requests() {
             let cycles = 30;
             let req = RequestBuilder::new()
                 .sender(canister_test_id(13))
-                .payment(Funds::new(Cycles::from(cycles)))
+                .payment(Cycles::from(cycles))
                 .build();
             let reply_callback = req.sender_reply_callback;
             canister
@@ -938,7 +931,7 @@ fn stopped_canister_rejects_requests() {
                     originator: canister_test_id(13),
                     respondent: canister_test_id(0),
                     originator_reply_callback: reply_callback,
-                    refund: Funds::new(Cycles::from(cycles)),
+                    refund: Cycles::from(cycles),
                     response_payload: Payload::Reject(RejectContext {
                         code: RejectCode::SysFatal,
                         message: format!("Canister {} is not running", canister_id),
@@ -1157,7 +1150,7 @@ fn test_canister_status_helper(
                         .receiver(CanisterId::from(subnet_id))
                         .method_name(Method::CanisterStatus)
                         .method_payload(payload)
-                        .payment(Funds::new(Cycles::from(cycles)))
+                        .payment(Cycles::from(cycles))
                         .build(),
                 ),
             )
@@ -1212,7 +1205,7 @@ fn test_request_nonexistent_canister(method: Method) {
                         .receiver(CanisterId::from(subnet_id))
                         .method_name(method)
                         .method_payload(payload)
-                        .payment(Funds::new(Cycles::from(cycles)))
+                        .payment(Cycles::from(cycles))
                         .build(),
                 ),
             )
@@ -1243,7 +1236,7 @@ fn test_request_nonexistent_canister(method: Method) {
                         code: RejectCode::DestinationInvalid,
                         message: format!("Canister {} not found.", &canister_id)
                     }))
-                    .refund(Funds::new(Cycles::from(cycles)))
+                    .refund(Cycles::from(cycles))
                     .build()
             )
         );
@@ -1363,7 +1356,7 @@ fn start_canister_from_another_canister() {
                         .receiver(CanisterId::from(subnet_id))
                         .method_name(Method::StartCanister)
                         .method_payload(payload)
-                        .payment(Funds::new(Cycles::from(cycles)))
+                        .payment(Cycles::from(cycles))
                         .build(),
                 ),
             )
@@ -1391,7 +1384,7 @@ fn start_canister_from_another_canister() {
                     .originator(controller)
                     .respondent(CanisterId::new(subnet_id.get()).unwrap())
                     .response_payload(Payload::Data(EmptyBlob::encode()))
-                    .refund(Funds::new(Cycles::from(cycles)))
+                    .refund(Cycles::from(cycles))
                     .build()
             )
         );
@@ -1430,7 +1423,7 @@ fn stop_canister_from_another_canister() {
                         .receiver(CanisterId::from(subnet_id))
                         .method_name(Method::StopCanister)
                         .method_payload(payload)
-                        .payment(Funds::new(Cycles::from(cycles)))
+                        .payment(Cycles::from(cycles))
                         .build(),
                 ),
             )
@@ -1455,7 +1448,7 @@ fn stop_canister_from_another_canister() {
                 stop_contexts: vec![StopCanisterContext::Canister {
                     sender: controller,
                     reply_callback: CallbackId::from(0),
-                    funds: Funds::new(Cycles::from(cycles)),
+                    cycles: Cycles::from(cycles),
                 }],
                 call_context_manager: CallContextManager::default()
             }
@@ -1600,7 +1593,7 @@ fn subnet_canister_request_unknown_method() {
                         .receiver(receiver)
                         .method_name("non_existing_method".to_string())
                         .method_payload(EmptyBlob::encode())
-                        .payment(Funds::new(Cycles::from(cycles)))
+                        .payment(Cycles::from(cycles))
                         .build(),
                 ),
             )
@@ -1623,7 +1616,7 @@ fn subnet_canister_request_unknown_method() {
                 originator: sender,
                 respondent: receiver,
                 originator_reply_callback: CallbackId::new(0),
-                refund: Funds::new(Cycles::from(cycles)),
+                refund: Cycles::from(cycles),
                 response_payload: Payload::Reject(RejectContext {
                     code: RejectCode::DestinationInvalid,
                     message: "Management canister has no method \'non_existing_method\'"
@@ -1699,7 +1692,7 @@ fn subnet_canister_request_bad_candid_payload() {
                         .receiver(receiver)
                         .method_name(Method::InstallCode)
                         .method_payload(vec![1, 2, 3]) // Invalid candid
-                        .payment(Funds::new(Cycles::from(cycles)))
+                        .payment(Cycles::from(cycles))
                         .build(),
                 ),
             )
@@ -1722,7 +1715,7 @@ fn subnet_canister_request_bad_candid_payload() {
                 originator: sender,
                 respondent: receiver,
                 originator_reply_callback: CallbackId::new(0),
-                refund: Funds::new(Cycles::from(cycles)),
+                refund: Cycles::from(cycles),
                 response_payload: Payload::Reject(RejectContext {
                     code: RejectCode::CanisterError,
                     message: "Error decoding candid: wrong magic number [1, 2, 3, 0]".to_string()
@@ -1811,7 +1804,7 @@ fn execute_create_canister_request(
                     .receiver(receiver)
                     .method_name(Method::CreateCanister)
                     .method_payload(EmptyBlob::encode())
-                    .payment(Funds::new(Cycles::from(cycles.get())))
+                    .payment(Cycles::from(cycles.get()))
                     .build(),
             ),
         )
@@ -1852,7 +1845,7 @@ fn check_create_canister_fails(
             originator: sender,
             respondent: CanisterId::from(own_subnet_id),
             originator_reply_callback: CallbackId::new(0),
-            refund: Funds::new(CANISTER_CREATION_FEE + Cycles::from(1)),
+            refund: CANISTER_CREATION_FEE + Cycles::from(1),
             response_payload: Payload::Reject(RejectContext {
                 code: RejectCode::CanisterError,
                 message:
@@ -1925,7 +1918,7 @@ fn check_create_canister_succeeds(
         RequestOrResponse::Response(response) => {
             assert_eq!(response.originator, sender);
             assert_eq!(response.respondent, CanisterId::from(own_subnet_id));
-            assert_eq!(response.refund, Funds::new(Cycles::from(0)));
+            assert_eq!(response.refund, Cycles::from(0));
             match response.response_payload {
                 Payload::Data(_) => (),
                 _ => panic!("Failed creating the canister."),
@@ -2026,7 +2019,7 @@ fn execute_setup_initial_dkg_request(
                     .receiver(receiver)
                     .method_name(Method::SetupInitialDKG)
                     .method_payload(Encode!(&request_payload).unwrap())
-                    .payment(Funds::new(Cycles::from(cycles.get())))
+                    .payment(Cycles::from(cycles.get()))
                     .build(),
             ),
         )
@@ -2091,7 +2084,7 @@ fn setup_initial_dkg_sender_not_on_nns() {
                 originator: sender,
                 respondent: CanisterId::from(own_subnet_id),
                 originator_reply_callback: CallbackId::new(0),
-                refund: Funds::new(CANISTER_CREATION_FEE),
+                refund: CANISTER_CREATION_FEE,
                 response_payload: Payload::Reject(RejectContext {
                     code: RejectCode::CanisterError,
                     message: format!(
@@ -2372,7 +2365,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
             let cycles = 50;
             let req = RequestBuilder::new()
                 .sender(canister_test_id(13))
-                .payment(Funds::new(Cycles::from(cycles)))
+                .payment(Cycles::from(cycles))
                 .build();
             let reply_callback = req.sender_reply_callback;
             canister
@@ -2400,7 +2393,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
                 originator: canister_test_id(13),
                 respondent: canister_test_id(0),
                 originator_reply_callback: reply_callback,
-                refund: Funds::new(Cycles::from(cycles)),
+                refund: Cycles::from(cycles),
                 response_payload: Payload::Reject(RejectContext {
                     code: RejectCode::SysTransient,
                     message: format!(

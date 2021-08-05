@@ -1,9 +1,10 @@
 //! The module contains implementations of the artifact client trait.
 
 use crate::artifact::*;
+use crate::processors::ArtifactProcessorManager;
 use ic_interfaces::{
-    artifact_manager::{ArtifactAcceptance, ArtifactClient},
-    artifact_pool::{ArtifactPoolError, ReplicaVersionMismatch},
+    artifact_manager::{AdvertMismatchError, ArtifactAcceptance, ArtifactClient, OnArtifactError},
+    artifact_pool::{ArtifactPoolError, ReplicaVersionMismatch, UnvalidatedArtifact},
     certification::{CertificationPool, CertifierGossip},
     consensus::ConsensusGossip,
     consensus_pool::{ConsensusPool, ConsensusPoolCache},
@@ -14,6 +15,7 @@ use ic_interfaces::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_types::{
+    artifact,
     artifact::*,
     chunkable::*,
     consensus::{
@@ -23,10 +25,203 @@ use ic_types::{
     ingress::MAX_INGRESS_TTL,
     malicious_flags::MaliciousFlags,
     messages::{SignedIngress, SignedRequestBytes},
-    NodeId, ReplicaVersion,
+    p2p, NodeId, ReplicaVersion,
 };
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::sync::{Arc, RwLock};
+
+/// In order to let the artifact manager manage artifact clients, which can be
+/// parameterized by different artifact types, it has to use trait objects.
+/// Consequently, there has to be a translation between various artifact
+/// sub-types to the top-level enum types. The trait `ArtifactManagerBackend`
+/// achieves both goals by acting as a middleman.
+///
+/// The trick of this translation is to erase the type parameter from all
+/// interface functions. As a result, member functions of this trait mostly
+/// resemble those of `ArtifactClient`, but use top-level artifact types. The
+/// translation is mostly handled via `From/Into`, `TryFrom/Into`, `AsMut` and
+/// `AsRef` traits that are automatically derived between artifact subtypes and
+/// the top-level types.
+pub(crate) trait ArtifactManagerBackend: Send + Sync {
+    /// The method is called when an artifact is received.
+    fn on_artifact(
+        &self,
+        time_source: &dyn TimeSource,
+        msg: artifact::Artifact,
+        advert: p2p::GossipAdvert,
+        peer_id: NodeId,
+    ) -> Result<(), OnArtifactError<artifact::Artifact>>;
+
+    /// The method indicates whether an artifact exists.
+    fn has_artifact(&self, msg_id: &artifact::ArtifactId) -> Result<bool, ()>;
+
+    /// The method returns a validated artifact with the given ID, or an error.
+    fn get_validated_by_identifier(
+        &self,
+        msg_id: &artifact::ArtifactId,
+    ) -> Result<Option<Box<dyn ChunkableArtifact>>, ()>;
+
+    /// The method adds the client's filter to the given artifact filter.
+    fn get_filter(&self, filter: &mut artifact::ArtifactFilter);
+
+    /// The method returns all validated artifacts that match the given filter.
+    fn get_all_validated_by_filter(
+        &self,
+        filter: &artifact::ArtifactFilter,
+    ) -> Vec<p2p::GossipAdvert>;
+
+    /// The method returns the remaining quota for a given peer and artifact
+    /// tag.
+    fn get_remaining_quota(&self, tag: artifact::ArtifactTag, peer_id: NodeId) -> Option<usize>;
+
+    /// The method returns a priority function for a given artifact tag.
+    fn get_priority_function(&self, tag: artifact::ArtifactTag) -> Option<ArtifactPriorityFn>;
+
+    /// The method returns a chunk tracker for a given artifact ID.
+    fn get_chunk_tracker(
+        &self,
+        id: &artifact::ArtifactId,
+    ) -> Option<Box<dyn Chunkable + Send + Sync>>;
+}
+
+/// Implementation struct for `ArtifactManagerBackend`.
+pub(crate) struct ArtifactManagerBackendImpl<Artifact: ArtifactKind + 'static> {
+    /// Reference to the artifact client.
+    pub client: Arc<dyn ArtifactClient<Artifact>>,
+    /// The artifact processor front end.
+    pub processor: ArtifactProcessorManager<Artifact>,
+}
+
+/// Trait implementation for `ArtifactManagerBackend`.
+impl<Artifact: ArtifactKind> ArtifactManagerBackend for ArtifactManagerBackendImpl<Artifact>
+where
+    Artifact::SerializeAs: TryFrom<artifact::Artifact, Error = artifact::Artifact>,
+    Artifact::Message: ChunkableArtifact + Send + 'static,
+    Advert<Artifact>:
+        Into<p2p::GossipAdvert> + TryFrom<p2p::GossipAdvert, Error = p2p::GossipAdvert> + Eq,
+    for<'a> &'a Artifact::Id: TryFrom<&'a artifact::ArtifactId, Error = &'a artifact::ArtifactId>,
+    artifact::ArtifactFilter: AsMut<Artifact::Filter> + AsRef<Artifact::Filter>,
+    for<'a> &'a Artifact::Attribute:
+        TryFrom<&'a artifact::ArtifactAttribute, Error = &'a artifact::ArtifactAttribute>,
+    Artifact::Attribute: 'static,
+    Artifact::Id: 'static,
+{
+    /// The method is called when the given artifact is received.
+    fn on_artifact(
+        &self,
+        time_source: &dyn TimeSource,
+        artifact: artifact::Artifact,
+        advert: p2p::GossipAdvert,
+        peer_id: NodeId,
+    ) -> Result<(), OnArtifactError<artifact::Artifact>> {
+        match (artifact.try_into(), advert.try_into()) {
+            (Ok(msg), Ok(advert)) => {
+                let result = self
+                    .client
+                    .as_ref()
+                    .check_artifact_acceptance(msg, &peer_id)?;
+                match result {
+                    ArtifactAcceptance::Processed => (),
+                    ArtifactAcceptance::AcceptedForProcessing(message) => {
+                        Artifact::check_advert(&message, &advert).map_err(|expected| {
+                            AdvertMismatchError {
+                                received: advert.into(),
+                                expected: expected.into(),
+                            }
+                        })?;
+                        // this sends to an unbounded channel, which is what we want here
+                        self.processor.on_artifact(UnvalidatedArtifact {
+                            message,
+                            peer_id,
+                            timestamp: time_source.get_relative_time(),
+                        })
+                    }
+                };
+                Ok(())
+            }
+            (Err(artifact), _) => Err(OnArtifactError::NotProcessed(Box::new(artifact))),
+            (_, Err(advert)) => Err(OnArtifactError::MessageConversionfailed(advert)),
+        }
+    }
+
+    /// The method checks if the artifact with the given ID is available.
+    fn has_artifact(&self, msg_id: &artifact::ArtifactId) -> Result<bool, ()> {
+        match msg_id.try_into() {
+            Ok(id) => Ok(self.client.as_ref().has_artifact(id)),
+            Err(_) => Err(()),
+        }
+    }
+
+    /// The method returns the validated artifact for the given ID.
+    fn get_validated_by_identifier(
+        &self,
+        msg_id: &artifact::ArtifactId,
+    ) -> Result<Option<Box<dyn ChunkableArtifact>>, ()> {
+        match msg_id.try_into() {
+            Ok(id) => Ok(self
+                .client
+                .as_ref()
+                .get_validated_by_identifier(id)
+                .map(|x| Box::new(x) as Box<dyn ChunkableArtifact>)),
+            Err(_) => Err(()),
+        }
+    }
+
+    /// The method gets the client's filter and adds it to the artifact filter.
+    fn get_filter(&self, filter: &mut artifact::ArtifactFilter) {
+        *filter.as_mut() = self.client.as_ref().get_filter()
+    }
+
+    /// The method returns all validated adverts.
+    fn get_all_validated_by_filter(
+        &self,
+        filter: &artifact::ArtifactFilter,
+    ) -> Vec<p2p::GossipAdvert> {
+        self.client
+            .as_ref()
+            .get_all_validated_by_filter(filter.as_ref())
+            .into_iter()
+            .map(|x| x.into())
+            .collect::<Vec<_>>()
+    }
+
+    /// The method returns the remaining quota for the peer with the given ID.s
+    fn get_remaining_quota(&self, tag: artifact::ArtifactTag, peer_id: NodeId) -> Option<usize> {
+        if tag == Artifact::TAG {
+            Some(self.client.as_ref().get_remaining_quota(peer_id))
+        } else {
+            None
+        }
+    }
+
+    /// The method returns the priority function.
+    fn get_priority_function(&self, tag: artifact::ArtifactTag) -> Option<ArtifactPriorityFn> {
+        if tag == Artifact::TAG {
+            let func = self.client.as_ref().get_priority_function()?;
+            Some(Box::new(
+                move |id: &'_ artifact::ArtifactId, attribute: &'_ artifact::ArtifactAttribute| {
+                    match (id.try_into(), attribute.try_into()) {
+                        (Ok(idd), Ok(attr)) => func(idd, attr),
+                        _ => panic!("Priority function called on wrong id or attribute!"),
+                    }
+                },
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// The method returns the artifact chunk tracker.
+    fn get_chunk_tracker(
+        &self,
+        artifact_id: &artifact::ArtifactId,
+    ) -> Option<Box<dyn Chunkable + Send + Sync>> {
+        match artifact_id.try_into() {
+            Ok(artifact_id) => Some(self.client.as_ref().get_chunk_tracker(artifact_id)),
+            Err(_) => None,
+        }
+    }
+}
 
 /// The *Consensus* `ArtifactClient` to be managed by the `ArtifactManager`.
 pub struct ConsensusClient<Pool> {

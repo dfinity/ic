@@ -1,6 +1,6 @@
 use super::{PrincipalId, PrincipalIdBlobParseError, PrincipalIdParseError, SubnetId};
 use candid::CandidType;
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
@@ -174,12 +174,15 @@ impl From<CanisterId> for pb::CanisterId {
 }
 
 impl TryFrom<pb::CanisterId> for CanisterId {
-    type Error = PrincipalIdBlobParseError;
+    type Error = ProxyDecodeError;
 
-    fn try_from(id: pb::CanisterId) -> Result<Self, Self::Error> {
-        // All fields in Protobuf definition are required hence they are encoded in
-        // `Option`.  We simply treat them as required here though.
-        let principal_id = PrincipalId::try_from(id.principal_id.unwrap())?;
+    fn try_from(canister_id: pb::CanisterId) -> Result<Self, Self::Error> {
+        let principal_id = PrincipalId::try_from(
+            canister_id
+                .principal_id
+                .ok_or(ProxyDecodeError::MissingField("CanisterId::principal_id"))?,
+        )
+        .map_err(|err| ProxyDecodeError::InvalidPrincipalId(Box::new(err)))?;
         Ok(CanisterId(principal_id))
     }
 }

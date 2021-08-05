@@ -228,6 +228,19 @@ impl Summary {
     ) -> &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>> {
         &self.transcripts_for_new_subnets
     }
+
+    /// Returns the oldest registry version that is still relevant to DKG.
+    ///
+    /// P2P should keep up connections to all nodes registered in any registry
+    /// between the one returned from this function and the current
+    /// `RegistryVersion`.
+    pub fn get_subnet_membership_version(&self) -> RegistryVersion {
+        self.current_transcripts()
+            .iter()
+            .map(|(_id, transcript)| transcript.registry_version)
+            .min()
+            .expect("No current transcripts available")
+    }
 }
 
 fn build_tagged_transcripts_vec(

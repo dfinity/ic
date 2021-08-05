@@ -36,7 +36,7 @@
 //!  --message_size: size of the exchanged messages (default: 1K)
 //!  --rps: number of requests/sec (default: off, no rate limit)
 
-pub mod test_utils;
+mod test_utils;
 
 use async_trait::async_trait;
 use bincode::{deserialize, serialize};

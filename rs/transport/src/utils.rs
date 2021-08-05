@@ -9,7 +9,7 @@ use ic_types::NodeId;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use tokio::sync::mpsc::{channel, error::TrySendError, Receiver, Sender};
 use tokio::time::Duration;
 use tokio::time::{timeout_at, Instant};
@@ -53,20 +53,21 @@ impl ReceiveEndContainer {
         }
     }
 
-    /// Sets up receive_end state for use by reader.
-    /// Returns true if the receive end was updated.
-    fn on_reader_start(&self, receive_end: ReceiveEnd) -> bool {
+    /// Set the receive_end state for use by reader.
+    /// Returns `None` if the receive_end was successfully set.
+    /// Returns `Some(receive_end)` if a state was already present.
+    fn try_update(&self, receive_end: ReceiveEnd) -> Result<(), ReceiveEnd> {
         let mut state = self.state.lock().unwrap();
         if state.is_some() {
             // Continue using the current channel, so that the send requests
             // queued so far(before the connection was established) are not
             // dropped
-            false
+            Err(receive_end)
         } else {
             // Writer task took ownership of the last created channel and exited,
             // accept the new channel
             *state = Some(receive_end);
-            true
+            Ok(())
         }
     }
 
@@ -94,9 +95,9 @@ pub(crate) struct SendQueueImpl {
     /// Size of queue
     queue_size: QueueSize,
 
-    /// A Mutex is needed around the send/receive end tuples, as they
+    /// A lock is needed around the send/receive end tuples, as they
     /// need to be updated in sync.
-    channel_ends: Mutex<(SendEnd, Arc<ReceiveEndContainer>)>,
+    channel_ends: RwLock<(SendEnd, Arc<ReceiveEndContainer>)>,
 
     /// Error flag
     error: Arc<AtomicBool>,
@@ -121,7 +122,7 @@ impl SendQueueImpl {
             flow_tag: flow_tag.to_string(),
             error: Arc::new(AtomicBool::new(false)),
             queue_size,
-            channel_ends: Mutex::new((send_end, Arc::new(receieve_end_wrapper))),
+            channel_ends: RwLock::new((send_end, Arc::new(receieve_end_wrapper))),
             metrics,
         }
     }
@@ -131,8 +132,8 @@ impl SendQueueImpl {
 impl SendQueue for SendQueueImpl {
     fn get_reader(&self) -> Box<dyn SendQueueReader + Send + Sync> {
         let (send_end, receive_end) = channel(self.queue_size.get());
-        let mut channel_ends = self.channel_ends.lock().unwrap();
-        if channel_ends.1.on_reader_start(receive_end) {
+        let mut channel_ends = self.channel_ends.write().unwrap();
+        if channel_ends.1.try_update(receive_end).is_ok() {
             // Receive end was updated, so update send end as well.
             channel_ends.0 = send_end;
         }
@@ -158,7 +159,7 @@ impl SendQueue for SendQueueImpl {
             .with_label_values(&[&self.flow_label, &self.flow_tag])
             .inc_by(message.0.len() as u64);
 
-        let channel_ends = self.channel_ends.lock().unwrap();
+        let channel_ends = self.channel_ends.read().unwrap();
         match channel_ends.0.try_send((Instant::now(), message)) {
             Ok(_) => None,
             Err(TrySendError::Full((_, unsent))) => {
@@ -183,7 +184,7 @@ impl SendQueue for SendQueueImpl {
     fn clear(&self) {
         let (send_end, receive_end) = channel(self.queue_size.get());
         {
-            let mut channel_ends = self.channel_ends.lock().unwrap();
+            let mut channel_ends = self.channel_ends.write().unwrap();
             channel_ends.0 = send_end;
             channel_ends.1.update(receive_end);
         }

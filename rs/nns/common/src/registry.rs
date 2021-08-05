@@ -24,6 +24,10 @@ pub fn encode_or_panic<T: Message>(msg: &T) -> Vec<u8> {
     buf
 }
 
+pub fn decode_or_panic<T: Message + Default>(msg: Vec<u8>) -> T {
+    T::decode(msg.as_slice()).expect("could not decode byte vector as PB Message")
+}
+
 /// Returns the deserialized value associated with the given key and version.
 /// If the version is `None`, then the "latest" version is returned.
 ///

@@ -1,4 +1,4 @@
-use ic_artifact_manager::{actors, manager};
+use ic_artifact_manager::{manager, processors};
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_message::make_genesis;
@@ -29,7 +29,7 @@ fn setup_manager(
     );
 
     // Create consensus client
-    let (consensus_client, actor) = actors::ConsensusProcessor::build(
+    let (consensus_client, actor) = processors::ConsensusProcessor::build(
         |_| {},
         || {
             let mut consensus = MockConsensus::new();

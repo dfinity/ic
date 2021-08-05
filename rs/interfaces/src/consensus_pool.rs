@@ -1,8 +1,10 @@
 //! The consensus pool public interface.
+
 use crate::{
     artifact_pool::{UnvalidatedArtifact, ValidatedArtifact},
     time_source::TimeSource,
 };
+use ic_base_types::RegistryVersion;
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     artifact::ConsensusMessageId,
@@ -277,6 +279,22 @@ pub trait ConsensusPoolCache: Send + Sync {
     /// yet made a catch-up package, this will be different than the block
     /// in the latest catch-up package.
     fn summary_block(&self) -> Block;
+
+    /// Returns the oldest registry version that is still relevant to DKG.
+    ///
+    /// P2P should keep up connections to all nodes registered in any registry
+    /// between the one returned from this function and the current
+    /// `RegistryVersion`.
+    fn get_subnet_membership_version(&self) -> RegistryVersion {
+        self.catch_up_package()
+            .content
+            .block
+            .get_value()
+            .payload
+            .as_ref()
+            .as_summary()
+            .get_subnet_membership_version()
+    }
 }
 
 /// An iterator for block ancestors.

@@ -6,7 +6,7 @@ use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::{registry::RegistryClient, transport::Transport};
 use ic_logger::{debug, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_p2p::p2p::P2P;
+use ic_p2p::p2p::create_p2p;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::{
@@ -81,7 +81,7 @@ fn execute_test(
             subnet_config.cycles_account_manager_config,
         ));
 
-        let (_, p2p_runner, _) = P2P::new(
+        let (_, p2p_runner, _) = create_p2p(
             tokio::runtime::Handle::current(),
             Default::default(),
             node_id,
@@ -116,7 +116,7 @@ fn execute_test(
             subnet_id,
             metrics_registry,
             test_synchronizer.clone(),
-            Box::new(p2p_runner),
+            p2p_runner,
         );
 
         std::thread::sleep(Duration::from_millis(400));
@@ -232,7 +232,7 @@ fn execute_test_chunking_pool(
             subnet_config.cycles_account_manager_config,
         ));
 
-        let (_a, p2p_runner, _) = P2P::new(
+        let (_a, p2p_runner, _) = create_p2p(
             tokio::runtime::Handle::current(),
             Default::default(),
             node_id,
@@ -267,7 +267,7 @@ fn execute_test_chunking_pool(
             subnet_id,
             metrics_registry,
             test_synchronizer.clone(),
-            Box::new(p2p_runner),
+            p2p_runner,
         );
 
         std::thread::sleep(Duration::from_millis(1000));

@@ -1,4 +1,4 @@
-//! The module runs `ArtifactProcessor` as actors.
+//! The tokio thread based implementation of `ArtifactProcessor`
 
 use crate::{artifact::*, clients};
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
@@ -56,8 +56,8 @@ impl<Artifact: ArtifactKind> BoxOrArcClient<Artifact> {
     }
 }
 
-/// Metrics for a client actor.
-struct ClientActorMetrics {
+/// Metrics for a client artifact processor.
+struct ArtifactProcessorMetrics {
     /// The processing time histogram.
     processing_time: Histogram,
     /// The processing interval histogram.
@@ -66,8 +66,8 @@ struct ClientActorMetrics {
     last_update: std::time::Instant,
 }
 
-impl ClientActorMetrics {
-    /// The constructor creates a `ClientActorMetrics` instance.
+impl ArtifactProcessorMetrics {
+    /// The constructor creates a `ArtifactProcessorMetrics` instance.
     fn new(metrics_registry: MetricsRegistry, client: String) -> Self {
         let processing_time = metrics_registry.register(
             Histogram::with_opts(histogram_opts!(
@@ -111,10 +111,12 @@ impl ClientActorMetrics {
     }
 }
 
-/// Pokes the actor to run on_state_change()
+/// Pokes the thread to run on_state_change()
 struct ProcessRequest;
 
-pub struct ClientActor<Artifact: ArtifactKind + 'static> {
+/// Manages the life cycle of the client specific artifact processor thread.
+/// Also serves as the front end to enqueue requests to the processor thread.
+pub struct ArtifactProcessorManager<Artifact: ArtifactKind + 'static> {
     /// The list of unvalidated artifacts.
     pending_artifacts: Arc<Mutex<Vec<UnvalidatedArtifact<Artifact::Message>>>>,
     /// To send the process requests
@@ -126,7 +128,7 @@ pub struct ClientActor<Artifact: ArtifactKind + 'static> {
     shutdown: Arc<AtomicBool>,
 }
 
-impl<Artifact: ArtifactKind + 'static> ClientActor<Artifact> {
+impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
     pub fn new<S: Fn(Advert<Artifact>) + Send + 'static>(
         time_source: Arc<SysTimeSource>,
         metrics_registry: MetricsRegistry,
@@ -141,6 +143,7 @@ impl<Artifact: ArtifactKind + 'static> ClientActor<Artifact> {
         let (sender, receiver) = crossbeam_channel::unbounded();
         let shutdown = Arc::new(AtomicBool::new(false));
 
+        // Spawn the processor thread
         let sender_cl = sender.clone();
         let pending_artifacts_cl = pending_artifacts.clone();
         let shutdown_cl = shutdown.clone();
@@ -152,7 +155,7 @@ impl<Artifact: ArtifactKind + 'static> ClientActor<Artifact> {
                 Box::new(send_advert),
                 sender_cl,
                 receiver,
-                ClientActorMetrics::new(metrics_registry, Artifact::TAG.to_string()),
+                ArtifactProcessorMetrics::new(metrics_registry, Artifact::TAG.to_string()),
                 shutdown_cl,
             );
         });
@@ -173,6 +176,7 @@ impl<Artifact: ArtifactKind + 'static> ClientActor<Artifact> {
             .unwrap_or_else(|err| panic!("Failed to send request: {:?}", err));
     }
 
+    // The artifact processor thread loop
     #[allow(clippy::too_many_arguments)]
     fn process_messages<S: Fn(Advert<Artifact>) + Send + 'static>(
         pending_artifacts: Arc<Mutex<Vec<UnvalidatedArtifact<Artifact::Message>>>>,
@@ -181,7 +185,7 @@ impl<Artifact: ArtifactKind + 'static> ClientActor<Artifact> {
         send_advert: Box<S>,
         sender: Sender<ProcessRequest>,
         receiver: Receiver<ProcessRequest>,
-        mut metrics: ClientActorMetrics,
+        mut metrics: ArtifactProcessorMetrics,
         shutdown: Arc<AtomicBool>,
     ) {
         let recv_timeout = std::time::Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC);
@@ -220,7 +224,7 @@ impl<Artifact: ArtifactKind + 'static> ClientActor<Artifact> {
     }
 }
 
-impl<Artifact: ArtifactKind + 'static> Drop for ClientActor<Artifact> {
+impl<Artifact: ArtifactKind + 'static> Drop for ArtifactProcessorManager<Artifact> {
     fn drop(&mut self) {
         if let Some(handle) = self.handle.take() {
             self.shutdown.store(true, SeqCst);
@@ -251,11 +255,6 @@ impl<
         PoolIngress: IngressPoolSelect + Send + Sync + 'static,
     > ConsensusProcessor<PoolConsensus, PoolIngress>
 {
-    /// The functions runs *Consensus* `on_state_change` as an actor in the
-    /// given arbiter.
-    ///
-    /// It returns both a `client::ConsensusClient` and an actor address, which
-    /// are to be managed by the `ArtifactManager`.
     #[allow(clippy::too_many_arguments)]
     pub fn build<
         C: Consensus + 'static,
@@ -273,7 +272,7 @@ impl<
         metrics_registry: MetricsRegistry,
     ) -> (
         clients::ConsensusClient<PoolConsensus>,
-        ClientActor<ConsensusArtifact>,
+        ArtifactProcessorManager<ConsensusArtifact>,
     ) {
         let (consensus, consensus_gossip) = setup();
         let client = Self {
@@ -286,7 +285,7 @@ impl<
             ),
             log,
         };
-        let actor = ClientActor::new(
+        let manager = ArtifactProcessorManager::new(
             time_source,
             metrics_registry,
             BoxOrArcClient::BoxClient(Box::new(client)),
@@ -295,7 +294,7 @@ impl<
         );
         (
             clients::ConsensusClient::new(consensus_pool, consensus_gossip),
-            actor,
+            manager,
         )
     }
 }
@@ -411,9 +410,6 @@ pub struct IngressProcessor<Pool> {
 }
 
 impl<Pool: MutableIngressPool + Send + Sync + 'static> IngressProcessor<Pool> {
-    /// The function runs ingress `on_state_change` as an actor in the given
-    /// arbiter. It returns both a `client::IngressClient` and an actor
-    /// address, both of which are to be managed by the 'ArtifactManager'.
     #[allow(clippy::too_many_arguments)]
     pub fn build<S: Fn(Advert<IngressArtifact>) + Send + 'static>(
         send_advert: S,
@@ -424,12 +420,15 @@ impl<Pool: MutableIngressPool + Send + Sync + 'static> IngressProcessor<Pool> {
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
         malicious_flags: MaliciousFlags,
-    ) -> (clients::IngressClient<Pool>, ClientActor<IngressArtifact>) {
+    ) -> (
+        clients::IngressClient<Pool>,
+        ArtifactProcessorManager<IngressArtifact>,
+    ) {
         let client = Self {
             ingress_pool: ingress_pool.clone(),
             client: ingress_handler,
         };
-        let actor = ClientActor::new(
+        let manager = ArtifactProcessorManager::new(
             time_source.clone(),
             metrics_registry,
             BoxOrArcClient::BoxClient(Box::new(client)),
@@ -438,7 +437,7 @@ impl<Pool: MutableIngressPool + Send + Sync + 'static> IngressProcessor<Pool> {
         );
         (
             clients::IngressClient::new(time_source, ingress_pool, log, malicious_flags),
-            actor,
+            manager,
         )
     }
 }
@@ -504,10 +503,6 @@ pub struct CertificationProcessor<PoolCertification> {
 impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
     CertificationProcessor<PoolCertification>
 {
-    /// The function runs certification `on_state_change` as an actor in the
-    /// given arbiter. It returns both a `client::CertificationClient` and
-    /// an actor address, both of which are to be managed by the
-    /// `ArtifactManager`.
     #[allow(clippy::too_many_arguments)]
     pub fn build<
         C: Certifier + 'static,
@@ -525,7 +520,7 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
         metrics_registry: MetricsRegistry,
     ) -> (
         clients::CertificationClient<PoolCertification>,
-        ClientActor<CertificationArtifact>,
+        ArtifactProcessorManager<CertificationArtifact>,
     ) {
         let (certifier, certifier_gossip) = setup();
         let client = Self {
@@ -538,7 +533,7 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
             ),
             log,
         };
-        let actor = ClientActor::new(
+        let manager = ArtifactProcessorManager::new(
             time_source,
             metrics_registry,
             BoxOrArcClient::BoxClient(Box::new(client)),
@@ -551,7 +546,7 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
                 certification_pool,
                 certifier_gossip,
             ),
-            actor,
+            manager,
         )
     }
 }
@@ -622,9 +617,6 @@ pub struct DkgProcessor<PoolDkg> {
 }
 
 impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
-    /// The functino runs DKG `on_state_change` as an actor in the given
-    /// arbiter. It returns both `client::DkgClient` and an actor address,
-    /// both of which are to be managed by the `ArtifactManager`.
     #[allow(clippy::too_many_arguments)]
     pub fn build<
         C: Dkg + 'static,
@@ -639,7 +631,10 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
         rt_handle: tokio::runtime::Handle,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
-    ) -> (clients::DkgClient<PoolDkg>, ClientActor<DkgArtifact>) {
+    ) -> (
+        clients::DkgClient<PoolDkg>,
+        ArtifactProcessorManager<DkgArtifact>,
+    ) {
         let (dkg, dkg_gossip) = setup();
         let client = Self {
             dkg_pool: dkg_pool.clone(),
@@ -650,14 +645,14 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
             ),
             log,
         };
-        let actor = ClientActor::new(
+        let manager = ArtifactProcessorManager::new(
             time_source,
             metrics_registry,
             BoxOrArcClient::BoxClient(Box::new(client)),
             send_advert,
             rt_handle,
         );
-        (clients::DkgClient::new(dkg_pool, dkg_gossip), actor)
+        (clients::DkgClient::new(dkg_pool, dkg_gossip), manager)
     }
 }
 

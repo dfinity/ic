@@ -67,6 +67,15 @@ impl SubnetAvailableMemory {
             })
         }
     }
+
+    pub fn increment(&self, amount: NumBytes) {
+        let mut available = self.0.write().unwrap();
+        *available += amount;
+    }
+
+    pub fn get(self) -> NumBytes {
+        *self.0.read().unwrap()
+    }
 }
 
 /// The data structure returned by
@@ -417,6 +426,57 @@ pub trait SystemApi {
         offset: u32,
         src: u32,
         size: u32,
+        heap: &[u8],
+    ) -> HypervisorResult<()>;
+
+    /// Returns the current size of the stable memory in WebAssembly pages.
+    ///
+    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
+    ///
+    /// Note: This API is not fully implemented yet.
+    fn ic0_stable_size64(&self) -> HypervisorResult<u64>;
+
+    /// Tries to grow the stable memory by additional_pages many pages
+    /// containing zeros.
+    /// If successful, returns the previous size of the memory (in pages).
+    /// Otherwise, returns -1
+    ///
+    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
+    ///
+    /// Note: This API is not fully implemented yet.
+    fn ic0_stable_grow64(&mut self, additional_pages: u64) -> HypervisorResult<i64>;
+
+    /// Copies the data from location [offset, offset+size) of the stable memory
+    /// to the location [dst, dst+size) in the canister memory.
+    ///
+    /// This system call traps if dst+size exceeds the size of the WebAssembly
+    /// memory or offset+size exceeds the size of the stable memory.
+    ///
+    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
+    ///
+    /// Note: This API is not fully implemented yet.
+    fn ic0_stable_read64(
+        &self,
+        dst: u64,
+        offset: u64,
+        size: u64,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Copies the data from location [src, src+size) of the canister memory to
+    /// location [offset, offset+size) in the stable memory.
+    ///
+    /// This system call traps if src+size exceeds the size of the WebAssembly
+    /// memory or offset+size exceeds the size of the stable memory.
+    ///
+    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
+    ///
+    /// Note: This API is not fully implemented yet.
+    fn ic0_stable_write64(
+        &mut self,
+        offset: u64,
+        src: u64,
+        size: u64,
         heap: &[u8],
     ) -> HypervisorResult<()>;
 

@@ -4,7 +4,7 @@ use ic_types::RegistryVersion;
 use ic_types::{
     messages::{CallbackId, Request},
     time::UNIX_EPOCH,
-    CanisterId, Cycles, Funds, Height, IDkgId, NodeId, SubnetId, Time, UserId,
+    CanisterId, Cycles, Height, IDkgId, NodeId, SubnetId, Time, UserId,
 };
 use proptest::prelude::*;
 use std::time::Duration;
@@ -126,7 +126,7 @@ prop_compose! {
             receiver,
             sender,
             sender_reply_callback: CallbackId::from(callback),
-            payment: Funds::new(Cycles::from(cycles_payment)),
+            payment: Cycles::from(cycles_payment),
             method_name,
             method_payload,
         }

@@ -12,7 +12,7 @@ use ic_types::{
     methods::WasmMethod,
     xnet::QueueId,
     AccumulatedPriority, CanisterId, CanisterStatusType, ComputeAllocation, ExecutionRound,
-    NumBytes, PrincipalId, QueueIndex,
+    MemoryAllocation, NumBytes, PrincipalId, QueueIndex,
 };
 use phantom_newtype::AmountOf;
 pub use queues::{CanisterQueues, QUEUE_INDEX_NONE};
@@ -166,11 +166,9 @@ impl CanisterState {
             + self.system_state.memory_usage()
     }
 
-    /// Returns the current memory allocation of the canister in bytes.
-    pub fn memory_allocation(&self) -> Option<NumBytes> {
-        self.system_state
-            .memory_allocation
-            .map(|memory| memory.get())
+    /// Returns the current memory allocation of the canister.
+    pub fn memory_allocation(&self) -> MemoryAllocation {
+        self.system_state.memory_allocation
     }
 
     /// Returns the current compute allocation for the canister.

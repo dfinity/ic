@@ -1,7 +1,7 @@
 use crate::types::ids::canister_test_id;
 use ic_types::{
     messages::{CallbackId, Request},
-    CanisterId, Funds,
+    CanisterId, Cycles,
 };
 
 pub struct RequestBuilder {
@@ -17,7 +17,7 @@ impl Default for RequestBuilder {
                 receiver: canister_test_id(0),
                 sender: canister_test_id(1),
                 sender_reply_callback: CallbackId::from(0),
-                payment: Funds::zero(),
+                payment: Cycles::zero(),
                 method_name: name.to_string(),
                 method_payload: Vec::new(),
             },
@@ -50,7 +50,7 @@ impl RequestBuilder {
     }
 
     /// Sets the payment attribute.
-    pub fn payment(mut self, payment: Funds) -> Self {
+    pub fn payment(mut self, payment: Cycles) -> Self {
         self.request.payment = payment;
         self
     }

@@ -72,3 +72,26 @@ fn test_distinct_hashes_yield_distinct_fr() {
         .collect();
     assert_eq!(number_of_scalars, scalars.len(), "Collisions found");
 }
+
+/// Verifies that hash_to_fr produces the expected output
+///
+/// hash_to_fr must forever produce the same output for the same input.
+/// This test checks this invariant. See CRP-1063 for background.
+#[test]
+fn test_hash_to_fr_produces_same_output_for_same_input() {
+    let mut hash = Sha256::new();
+    hash.write(b"A test input");
+    let fr_bytes = fr_to_bytes(&FrRepr::from(hash_to_fr(hash)));
+    assert_eq!(
+        hex::encode(fr_bytes),
+        "630fcb163218d5cd34f3ee5dc68bdbeda20975a54e08b130f3457afc6728d1d5"
+    );
+
+    let mut hash = Sha256::new();
+    hash.write(b"A second unrelated test input");
+    let fr_bytes = fr_to_bytes(&FrRepr::from(hash_to_fr(hash)));
+    assert_eq!(
+        hex::encode(fr_bytes),
+        "699ed6764b14e1ae3ff73686399084f4fbbd51b972f85c49e4ef0954b36921af"
+    );
+}

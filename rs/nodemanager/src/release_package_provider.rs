@@ -95,6 +95,7 @@ impl ReleasePackageProvider {
                 .await
                 .map_err(NodeManagerError::from)?;
         } else {
+            // This is legacy code and not used in production.
             info!(
                 self.logger,
                 "Downloading release for replica version {} from {} and {}",

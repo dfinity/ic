@@ -36,6 +36,7 @@ message Request {
     Funds payment = 4;
     string method_name = 5;
     bytes method_payload = 6;
+    Cycles cycles_payment = 7;
 }
 
 message RejectContext {
@@ -52,6 +53,7 @@ message Response {
         bytes data = 5;
         RejectContext reject = 6;
     }
+    Cycles cycles_refund = 7;
 }
 
 message RequestOrResponse {

@@ -1,5 +1,6 @@
 use super::*;
-use secp256k1::curve::{Scalar, ECMULT_CONTEXT};
+use libsecp256k1::curve::Scalar;
+use libsecp256k1::ECMULT_CONTEXT;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg};
 
 #[cfg(test)]
@@ -11,7 +12,7 @@ mod tests;
 impl MulAssign<&EphemeralSecretKey> for EphemeralPublicKey {
     fn mul_assign(&mut self, other: &EphemeralSecretKey) {
         if !self.is_infinity() {
-            let point = self.0.clone();
+            let point = self.0;
             ECMULT_CONTEXT.ecmult(&mut self.0, &point, &other.0, &Scalar::from_int(0));
         }
     }
@@ -39,7 +40,7 @@ impl AddAssign<&EphemeralSecretKey> for EphemeralPublicKey {
         if self.is_infinity() {
             self.0 = EphemeralPublicKey::from(other).0;
         } else {
-            let point = self.0.clone();
+            let point = self.0;
             ECMULT_CONTEXT.ecmult(&mut self.0, &point, &Scalar::from_int(1), &other.0);
         }
     }

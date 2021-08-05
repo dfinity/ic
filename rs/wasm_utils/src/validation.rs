@@ -600,14 +600,32 @@ fn validate_function_signature(
     Ok(())
 }
 
+fn set_imports_details(import_details: &mut WasmImportsDetails, import_module: &str, field: &str) {
+    if import_module != API_VERSION_IC0 {
+        return;
+    }
+    match field {
+        "call_simple" => import_details.imports_call_simple = true,
+        "call_cycles_add" => import_details.imports_call_cycles_add = true,
+        "canister_cycle_balance" => import_details.imports_canister_cycle_balance = true,
+        "msg_cycles_available" => import_details.imports_msg_cycles_available = true,
+        "msg_cycles_refunded" => import_details.imports_msg_cycles_refunded = true,
+        "msg_cycles_accept" => import_details.imports_msg_cycles_accept = true,
+        "mint_cycles" => import_details.imports_mint_cycles = true,
+        _ => {}
+    }
+}
+
 // Performs the following checks for the import section:
 // * If we import memory or table, we can only import from “env”.
 // * Any imported functions that appear in `valid_system_apis` have the correct
 //   signatures.
 //
-// Returns true if the module imports `ic0.call_simple`, false otherwise.
-fn validate_import_section(module: &Module) -> Result<bool, WasmValidationError> {
-    let mut imports_call_simple = false;
+// Returns information about what IC0 methods are imported via
+// `WasmImportsDetails`.
+fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmValidationError> {
+    let mut imports_details = WasmImportsDetails::default();
+
     if let Some(section) = module.import_section() {
         let valid_system_apis = get_valid_system_apis();
         for entry in section.entries() {
@@ -615,9 +633,7 @@ fn validate_import_section(module: &Module) -> Result<bool, WasmValidationError>
             let field = entry.field();
             match entry.external() {
                 External::Function(index) => {
-                    if import_module == API_VERSION_IC0 && field == "call_simple" {
-                        imports_call_simple = true;
-                    }
+                    set_imports_details(&mut imports_details, import_module, field);
                     match valid_system_apis.get(field) {
                         Some(signatures) => {
                             match signatures.get(import_module) {
@@ -665,7 +681,7 @@ fn validate_import_section(module: &Module) -> Result<bool, WasmValidationError>
             }
         }
     }
-    Ok(imports_call_simple)
+    Ok(imports_details)
 }
 
 // Performs the following checks:
@@ -800,7 +816,9 @@ fn validate_function_section(
 
 fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
     let config = wasmtime::Config::default();
-    let engine = wasmtime::Engine::new(&config);
+    let engine = wasmtime::Engine::new(&config).map_err(|_| {
+        WasmValidationError::WasmtimeValidation(String::from("Failed to initialize Wasm engine"))
+    })?;
     wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|err| {
         WasmValidationError::WasmtimeValidation(format!(
             "wasmtime::Module::validate() failed with {}",
@@ -809,16 +827,27 @@ fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
     })
 }
 
+#[derive(Debug, PartialEq, Eq, Default)]
+pub struct WasmImportsDetails {
+    // True if the module imports these IC0 methods.
+    pub imports_call_simple: bool,
+    pub imports_call_cycles_add: bool,
+    pub imports_canister_cycle_balance: bool,
+    pub imports_msg_cycles_available: bool,
+    pub imports_msg_cycles_refunded: bool,
+    pub imports_msg_cycles_accept: bool,
+    pub imports_mint_cycles: bool,
+}
+
 /// Returned as a result of `validate_wasm_binary` and provides
 /// additional information about the validation.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub struct WasmValidationDetails {
     // The number of exported functions that are not in the list of
     // allowed exports and whose name starts with the reserved
     // "canister_" prefix.
     pub reserved_exports: usize,
-    // True if the module imports `ic0.call_simple`.
-    pub imports_call_simple: bool,
+    pub imports_details: WasmImportsDetails,
 }
 
 /// Validates a Wasm binary against the requirements of the interface spec
@@ -842,13 +871,13 @@ pub fn validate_wasm_binary(
     can_compile(&wasm)?;
     let module = parity_wasm::deserialize_buffer::<Module>(wasm.as_slice())
         .map_err(|err| WasmValidationError::ParityDeserializeError(into_parity_wasm_error(err)))?;
-    let imports_call_simple = validate_import_section(&module)?;
+    let imports_details = validate_import_section(&module)?;
     let reserved_exports = validate_export_section(&module)?;
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
     Ok(WasmValidationDetails {
         reserved_exports,
-        imports_call_simple,
+        imports_details,
     })
 }

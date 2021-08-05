@@ -20,7 +20,6 @@ use hyper::{server::conn::Http, service::service_fn};
 use hyper::{Body, Request, Response, StatusCode};
 use ic_base_thread::ObservableCountingSemaphore;
 use ic_config::http_handler::Config;
-use ic_crypto::CryptoComponent;
 use ic_crypto_tls_interfaces::{AllowedClients, SomeOrAllNodes, TlsHandshake};
 use ic_crypto_tree_hash::Path;
 use ic_interfaces::execution_environment::IngressMessageFilter;
@@ -208,7 +207,8 @@ pub async fn start_server(
     query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     registry_client: Arc<dyn RegistryClient>,
-    crypto: Arc<CryptoComponent>,
+    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     log: ReplicaLogger,
@@ -222,7 +222,7 @@ pub async fn start_server(
     let http_handler = Arc::new(HttpHandler::new(
         config,
         registry_client,
-        Arc::clone(&crypto) as Arc<dyn TlsHandshake + Send + Sync>,
+        tls_handshake,
         subnet_id,
         subnet_type,
         nns_subnet_id,
@@ -230,7 +230,7 @@ pub async fn start_server(
         ingress_sender,
         query_handler,
         state_reader,
-        Arc::clone(&crypto) as Arc<dyn IngressSigVerifier + Send + Sync>,
+        ingress_verifier,
         consensus_pool_cache,
         ingress_message_filter,
         malicious_flags,

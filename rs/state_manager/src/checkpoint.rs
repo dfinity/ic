@@ -2,8 +2,7 @@ use crate::CheckpointError;
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    page_map::PageMap, CanisterMetrics, CanisterState, ExecutionState, NumWasmPages,
-    ReplicatedState,
+    page_map::PageMap, CanisterMetrics, CanisterState, ExecutionState, ReplicatedState,
 };
 use ic_replicated_state::{SchedulerState, SystemState};
 use ic_state_layout::{
@@ -172,29 +171,8 @@ pub fn load_checkpoint<P: ReadPolicy>(
         };
 
         let stable_memory_bin_file = canister_layout.stable_memory_blob();
-        let (stable_memory, stable_memory_size) = if stable_memory_bin_file.exists() {
-            (
-                PageMap::open(&stable_memory_bin_file)?,
-                canister_state_bits.stable_memory_size,
-            )
-        } else {
-            let stable_mem = ic_replicated_state::StableMemory::try_from(
-                canister_layout.stable_memory_proto().deserialize()?,
-            )
-            .map_err(|err| {
-                into_checkpoint_error(
-                    format!(
-                        "canister_states[{}]::system_state::stable_memory",
-                        canister_id
-                    ),
-                    err,
-                )
-            })?;
-            (
-                PageMap::from(stable_mem.as_bytes()),
-                NumWasmPages::from(stable_mem.page_count()),
-            )
-        };
+        let stable_memory = PageMap::open(&stable_memory_bin_file)?;
+        let stable_memory_size = canister_state_bits.stable_memory_size;
 
         let queues =
             ic_replicated_state::CanisterQueues::try_from(canister_layout.queues().deserialize()?)

@@ -7,10 +7,10 @@ use super::dealing::{
 use super::encryption::decrypt;
 use crate::api::ni_dkg_errors;
 use crate::crypto::x_for_index;
-use crate::ni_dkg::groth20_bls12_381::types::FsEncryptionSecretKey;
 use crate::types as threshold_types;
 use ff::{Field, PrimeField};
 use ic_crypto_internal_bls12381_common::fr_from_bytes;
+use ic_crypto_internal_fs_ni_dkg::forward_secure::SecretKey as ForwardSecureSecretKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20;
 use ic_types::{NodeIndex, NumberOfNodes};
 use pairing::bls12_381::Fr;
@@ -234,7 +234,7 @@ fn compute_transcript(
 pub fn compute_threshold_signing_key(
     transcript: &g20::Transcript,
     receiver_index: NodeIndex,
-    fs_secret_key: &FsEncryptionSecretKey,
+    fs_secret_key: &ForwardSecureSecretKey,
     epoch: g20::Epoch,
 ) -> Result<threshold_types::SecretKeyBytes, ni_dkg_errors::CspDkgLoadPrivateKeyError> {
     // Get my shares

@@ -60,6 +60,9 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
+            max_instructions_per_message: Some(6_000_000_000),
+            max_instructions_per_round: Some(8_000_000_000),
+            max_instructions_per_install_code: Some(300_000_000_000),
         };
 
         // The anonymous end-user tries to update a subnet's configuration, bypassing
@@ -127,6 +130,9 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_update_a_subnets_con
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
+            max_instructions_per_message: 5_000_000_000,
+            max_instructions_per_round: 7_000_000_000,
+            max_instructions_per_install_code: 200_000_000_000,
         };
 
         // An attacker got a canister that is trying to pass for the proposals
@@ -175,6 +181,9 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_update_a_subnets_con
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
+            max_instructions_per_message: Some(6_000_000_000),
+            max_instructions_per_round: Some(8_000_000_000),
+            max_instructions_per_install_code: Some(300_000_000_000),
         };
 
         // The attacker canister tries to update the subnet's configuration, pretending
@@ -243,6 +252,9 @@ fn test_the_proposals_canister_can_update_a_subnets_configuration() {
                             start_as_nns: false,
                             subnet_type: SubnetType::Application.into(),
                             is_halted: false,
+                            max_instructions_per_message: 5_000_000_000,
+                            max_instructions_per_round: 7_000_000_000,
+                            max_instructions_per_install_code: 200_000_000_000,
                         }),
                     )],
                     preconditions: vec![],
@@ -282,6 +294,9 @@ fn test_the_proposals_canister_can_update_a_subnets_configuration() {
             start_as_nns: None,
             subnet_type: Some(SubnetType::System),
             is_halted: Some(true),
+            max_instructions_per_message: Some(6_000_000_000),
+            max_instructions_per_round: Some(8_000_000_000),
+            max_instructions_per_install_code: Some(300_000_000_000),
         };
 
         // Attempt to update the subnet's configuration. Since the update happens from
@@ -326,6 +341,9 @@ fn test_the_proposals_canister_can_update_a_subnets_configuration() {
                 start_as_nns: false,
                 subnet_type: SubnetType::System.into(),
                 is_halted: true,
+                max_instructions_per_message: 6_000_000_000,
+                max_instructions_per_round: 8_000_000_000,
+                max_instructions_per_install_code: 300_000_000_000,
             }
         );
 

@@ -6,10 +6,10 @@ use ff::PrimeField;
 use ic_crypto_internal_bls12381_common::{fr_from_bytes, fr_to_bytes};
 use ic_types::crypto::AlgorithmId;
 use ic_types::Randomness;
+use libsecp256k1::curve::{Affine, Field, Jacobian, Scalar};
 use pairing::bls12_381::FrRepr;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
-use secp256k1::curve::{Affine, Field, Jacobian, Scalar};
 use serialisation::{TAG_PUBKEY_EVEN, TAG_PUBKEY_INFINITE, TAG_PUBKEY_ODD};
 use std::convert::{TryFrom, TryInto};
 

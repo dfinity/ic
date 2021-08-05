@@ -1,4 +1,5 @@
-use std::{fs, io, path::Path};
+use std::ffi::{OsStr, OsString};
+use std::{fs, fs::File, io, io::Error, io::Write, path::Path, path::PathBuf};
 
 /// The character length of the random string used for temporary file names.
 const TMP_NAME_LEN: usize = 7;
@@ -80,7 +81,6 @@ where
     PDst: AsRef<Path>,
     PTmp: AsRef<Path>,
 {
-    use std::io::Write;
     let mut cleanup = OnScopeExit::new(|| {
         let _ = fs::remove_file(tmp.as_ref());
     });
@@ -88,6 +88,7 @@ where
     let f = fs::OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(true) // Otherwise we'd overwrite existing content
         .open(tmp.as_ref())?;
     {
         let mut w = io::BufWriter::new(&f);
@@ -96,9 +97,62 @@ where
     }
     f.sync_all()?;
     fs::rename(tmp.as_ref(), dst.as_ref())?;
+    sync_path(dst.as_ref().parent().unwrap_or_else(|| Path::new("/")))?;
 
     cleanup.deactivate();
     Ok(())
+}
+
+/// Invokes sync_all on the file or directory located at given path.
+pub fn sync_path<P>(path: P) -> std::io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    // There is no special API for syncing directories, so we do the same thing
+    // for both files and directories. This works because directories are just
+    // files treated in a special way by the kernel.
+    let f = std::fs::File::open(path.as_ref())?;
+    f.sync_all().map_err(|e| {
+        Error::new(
+            e.kind(),
+            format!("failed to sync path {}: {}", path.as_ref().display(), e),
+        )
+    })
+}
+
+/// Recursively set permissions to readonly for all files under the given
+/// `path`.
+pub fn sync_and_mark_files_readonly<P>(path: P) -> std::io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    let path = path.as_ref();
+    let metadata = path.metadata()?;
+
+    if metadata.is_dir() {
+        let entries = path.read_dir()?;
+
+        for entry_result in entries {
+            let entry = entry_result?;
+            sync_and_mark_files_readonly(&entry.path())?;
+        }
+    } else {
+        // We keep directories writable to be able to rename them or delete the
+        // files.
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(path, permissions).map_err(|e| {
+            Error::new(
+                e.kind(),
+                format!(
+                    "failed to set readonly permissions for file {}: {}",
+                    path.display(),
+                    e
+                ),
+            )
+        })?;
+    }
+    sync_path(path)
 }
 
 #[cfg(any(target_os = "linux"))]
@@ -110,8 +164,8 @@ where
 /// is a metadata operation and is extremely efficient   
 pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
     use cvt::*;
-    use fs::{File, OpenOptions};
-    use io::{Error, ErrorKind, Read, Write};
+    use fs::OpenOptions;
+    use io::{ErrorKind, Read};
     use libc::{ftruncate64, lseek64};
     use std::os::unix::{
         fs::{OpenOptionsExt, PermissionsExt},
@@ -321,6 +375,86 @@ where
         .join(tmp_name());
 
     write_atomically_using_tmp_file(dst, tmp_path.as_path(), action)
+}
+
+/// Append .tmp to given file path
+///
+/// Examples:
+/// bla.txt -> bla.txt.tmp
+/// /tmp/bla.txt -> /tmp/bla.txt.tmp
+/// /tmp/bla -> /tmp/bla.tmp
+/// /tmp/ -> /tmp.tmp
+pub fn get_tmp_for_path<P>(path: P) -> PathBuf
+where
+    P: AsRef<Path>,
+{
+    let extension = match path.as_ref().extension() {
+        None => OsString::from("tmp"),
+        Some(extension) => {
+            let mut extension = OsString::from(extension);
+            extension.push(OsStr::new(".tmp"));
+            extension
+        }
+    };
+    path.as_ref().with_extension(extension)
+}
+
+/// Write the given string to file `dest` in a crash-safe mannger
+pub fn write_string_using_tmp_file<P>(dest: P, content: &str) -> io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    write_using_tmp_file(dest, |f| f.write_all(content.as_bytes()))
+}
+
+/// Serialize given protobuf message to file `dest` in a crash-safe manner
+pub fn write_protobuf_using_tmp_file<P>(dest: P, message: &impl prost::Message) -> io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    write_using_tmp_file(dest, |writer| {
+        let mut buf = Vec::<u8>::new();
+        message
+            .encode(&mut buf)
+            .expect("Protobuf serialization failed in write_protobuf_using_tmp_file");
+        writer.write_all(&buf)?;
+        Ok(())
+    })
+}
+
+/// Write to file `dest` using `action` in a crash-safe manner
+///
+/// A new temporary file `dest.tmp` will be created (and truncated if it
+/// already exists). The file will then be opened and `action` executed with
+/// the BufWriter to that file.
+///
+/// The buffer and file will then be fsynced followed by renaming the
+/// `dest.tmp` to `dest`. Target file `dest` will be overwritten in that
+/// process if it already exists.
+///
+/// After renaming, the parent directory of `dest` will be fsynced.
+///
+/// The function will fail if `dest` exists but is a directory.
+pub fn write_using_tmp_file<P, F>(dest: P, action: F) -> io::Result<()>
+where
+    P: AsRef<Path>,
+    F: FnOnce(&mut io::BufWriter<&fs::File>) -> io::Result<()>,
+{
+    let dest_tmp = get_tmp_for_path(&dest);
+
+    {
+        let file = File::create(dest_tmp.as_path())?;
+        let mut w = io::BufWriter::new(&file);
+        action(&mut w)?;
+        w.flush()?;
+        file.sync_all()?;
+    }
+
+    let dest = dest.as_ref();
+    fs::rename(dest_tmp.as_path(), dest)?;
+
+    sync_path(dest.parent().unwrap_or_else(|| Path::new("/")))?;
+    Ok(())
 }
 
 #[cfg(target_family = "unix")]

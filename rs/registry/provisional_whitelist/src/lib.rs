@@ -50,12 +50,12 @@ impl TryFrom<pb::ProvisionalWhitelist> for ProvisionalWhitelist {
         if src.list_type == pb::provisional_whitelist::ListType::All as i32 {
             Ok(Self::All)
         } else if src.list_type == pb::provisional_whitelist::ListType::Set as i32 {
-            Ok(Self::Set(
-                src.set
-                    .into_iter()
-                    .map(|id| PrincipalId::try_from(id).unwrap())
-                    .collect(),
-            ))
+            let mut set = BTreeSet::new();
+            for id in src.set.into_iter() {
+                let principal_id = PrincipalId::try_from(id)?;
+                set.insert(principal_id);
+            }
+            Ok(Self::Set(set))
         } else {
             Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "ProvisionalWhitelist::ListType",

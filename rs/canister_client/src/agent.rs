@@ -667,8 +667,8 @@ mod tests {
         // Set up an arbitrary legal input
         let (sk, pk) = {
             let mut rng = ChaChaRng::seed_from_u64(89_u64);
-            let sk = secp256k1::SecretKey::random(&mut rng);
-            let pk = secp256k1::PublicKey::from_secret_key(&sk);
+            let sk = libsecp256k1::SecretKey::random(&mut rng);
+            let pk = libsecp256k1::PublicKey::from_secret_key(&sk);
             (sk.serialize(), pk.serialize())
         };
         let sender_id = UserId::from(PrincipalId::new_self_authenticating(
@@ -805,8 +805,8 @@ mod tests {
         // Set up an arbitrary legal input
         let (sk, pk) = {
             let mut rng = ChaChaRng::seed_from_u64(89_u64);
-            let sk = secp256k1::SecretKey::random(&mut rng);
-            let pk = secp256k1::PublicKey::from_secret_key(&sk);
+            let sk = libsecp256k1::SecretKey::random(&mut rng);
+            let pk = libsecp256k1::PublicKey::from_secret_key(&sk);
             (sk.serialize(), pk.serialize())
         };
 

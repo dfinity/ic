@@ -30,7 +30,7 @@ use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
 use std::time;
 
-pub mod test_utils;
+mod test_utils;
 
 use ic_config::logger::Config as LoggerConfig;
 use ic_config::logger::LogTarget;
@@ -41,7 +41,6 @@ use ic_protobuf::registry::node::v1::{
     connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
 };
 use ic_transport::transport::create_transport;
-// use ic_transport::transport::TransportImpl;
 use ic_types::transport::TransportErrorCode;
 use ic_types::{
     transport::{
@@ -83,7 +82,7 @@ enum Role {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum TestClientErrorCode {
+enum TestClientErrorCode {
     TransportError(TransportErrorCode),
     MessageMismatch,
     NotAllFlowsUp,
@@ -615,7 +614,6 @@ async fn task_main(
     println!("starting transport...");
     println!("starting transport... [Node: {}]", node_id_val);
     let transport = create_transport(
-        // let transport = TransportImpl::new(
         node_id,
         config_and_records.config.clone(),
         registry_version,

@@ -526,7 +526,7 @@ fn can_remove_checkpoints() {
 }
 
 #[test]
-fn can_keep_last_checkpoint_and_higher_states_after_removal() {
+fn can_keep_last_checkpoint_after_removal() {
     state_manager_restart_test(
         |state_manager| {
             let mut heights = vec![height(0)];
@@ -557,15 +557,19 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
                     Err(StateManagerError::StateRemoved(height(h)))
                 );
             }
+            assert_eq!(
+                state_manager.get_state_at(height(9)),
+                Err(StateManagerError::StateNotCommittedYet(height(9)))
+            );
 
             assert_eq!(
                 state_manager.list_state_heights(CERT_ANY),
-                vec![height(0), height(8), height(9)],
+                vec![height(0), height(8)],
             );
 
-            assert_eq!(height(9), state_manager.latest_state_height());
+            assert_eq!(height(8), state_manager.latest_state_height());
             let latest_state = state_manager.get_latest_state();
-            assert_eq!(height(9), latest_state.height());
+            assert_eq!(height(8), latest_state.height());
         },
         |state_manager, _| {
             assert_eq!(

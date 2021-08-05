@@ -140,12 +140,7 @@
         </td>
         <td class="text">{{ c.system_state.status_string() }}</td>
         <td class="number">
-        {% match c.memory_allocation() %}
-          {% when Some with (memory_allocation) %}
-	    {{ memory_allocation.display() }}
-          {% when None %}
-        None
-        {% endmatch %}
+	    {{ c.memory_allocation() }}
         </td>
         <td class="number">{{ c.scheduler_state.last_full_execution_round }}</td>
     </tr>

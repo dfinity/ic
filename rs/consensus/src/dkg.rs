@@ -19,15 +19,14 @@ use ic_registry_client::helper::{
     subnet::SubnetRegistry,
 };
 use ic_replicated_state::ReplicatedState;
-use ic_types::batch::ValidationContext;
-use ic_types::consensus::get_faults_tolerated;
 use ic_types::{
     artifact::{DkgMessageAttribute, DkgMessageId, Priority, PriorityFn},
+    batch::ValidationContext,
     consensus::{
         dkg,
         dkg::{DealingContent, Message, Summary},
-        Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon,
-        Payload, RandomBeaconContent, Rank, ThresholdSignature,
+        get_faults_tolerated, Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock,
+        HashedRandomBeacon, Payload, RandomBeaconContent, Rank, ThresholdSignature,
     },
     crypto::{
         threshold_sig::ni_dkg::{
@@ -48,10 +47,11 @@ use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash}
 use phantom_newtype::Id;
 use prometheus::{Histogram, IntCounterVec};
 use rayon::prelude::*;
-use std::collections::BTreeSet;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 // The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
@@ -620,10 +620,19 @@ fn create_summary_payload(
         get_dkg_interval_length(registry_client, registry_version, subnet_id)?;
     // Current transcripts come from next transcripts of the last_summary.
     let current_transcripts = last_summary.into_next_transcripts();
+
     // If the config for the currently computed DKG intervals requires a transcript
     // resharing (currently for high-threshold DKG only), we are going to re-share
-    // the _current_ transcripts, as they are the newest ones, which are finalized.
-    let reshared_transcripts = &current_transcripts;
+    // the next transcripts, as they are the newest ones.
+    // If `next_transcripts` does not contain the required transcripts (due to
+    // failed DKGs in the past interval) we reshare the current transcripts.
+    let reshared_transcripts = if next_transcripts.contains_key(&NiDkgTag::LowThreshold)
+        && next_transcripts.contains_key(&NiDkgTag::HighThreshold)
+    {
+        &next_transcripts
+    } else {
+        &current_transcripts
+    };
 
     configs.append(&mut get_configs_for_local_transcripts(
         subnet_id,
@@ -1290,11 +1299,13 @@ mod tests {
     use ic_interfaces::{
         artifact_pool::UnvalidatedArtifact, consensus_pool::ConsensusPool, dkg::MutableDkgPool,
     };
+    use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_replicated_state::metadata_state::SubnetCallContext;
     use ic_test_utilities::{
         consensus::fake::FakeContentSigner,
         crypto::CryptoReturningOk,
+        mock_time,
         registry::{add_subnet_record, SubnetRecordBuilder},
         state_manager::RefMockStateManager,
         types::ids::{node_test_id, subnet_test_id},
@@ -1490,8 +1501,6 @@ mod tests {
                 _ => panic!("Unexpected DKG payload."),
             };
 
-            let mut prev_summary: Option<Summary> = None;
-
             // Simulate 3 intervals
             for interval in 0..3 {
                 // Let's ensure we have no summaries for the whole DKG interval.
@@ -1560,9 +1569,8 @@ mod tests {
                     if interval > 0 {
                         if tag == &NiDkgTag::HighThreshold {
                             assert_eq!(
-                                prev_summary
+                                summary
                                     .clone()
-                                    .unwrap()
                                     .next_transcript(&NiDkgTag::HighThreshold)
                                     .unwrap(),
                                 &conf.resharing_transcript().clone().unwrap()
@@ -1572,7 +1580,92 @@ mod tests {
                         }
                     }
                 }
-                prev_summary = Some(summary);
+            }
+        });
+    }
+
+    /// Tests, which transcripts get reshared, when DKG succeded or failed.
+    #[test]
+    fn test_transcript_resharing() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let nodes: Vec<_> = (7..14).map(node_test_id).collect();
+            let dkg_interval_len = 3;
+            let subnet_id = subnet_test_id(222);
+            let initial_registry_version = 112;
+            let Dependencies {
+                crypto,
+                registry,
+                mut pool,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_id,
+                vec![(
+                    initial_registry_version,
+                    SubnetRecordBuilder::from(&nodes)
+                        .with_dkg_interval_length(dkg_interval_len)
+                        .build(),
+                )],
+            );
+            let mut genesis_summary = make_genesis_summary(&*registry, subnet_id, None);
+
+            // Let's ensure we have no summaries for the whole DKG interval.
+            for _ in 0..dkg_interval_len {
+                pool.advance_round_normal_operation();
+                let block = pool.get_cache().finalized_block();
+                assert!(!BlockPayload::from(block.payload).is_summary());
+            }
+
+            let latest_block = pool.get_cache().finalized_block();
+            let create_summary_payload = |last_summary: &Summary| {
+                create_summary_payload(
+                    subnet_test_id(222),
+                    registry.as_ref(),
+                    crypto.as_ref(),
+                    &PoolReader::new(&pool),
+                    last_summary.clone(),
+                    &latest_block,
+                    RegistryVersion::from(112),
+                    state_manager.as_ref(),
+                    &ValidationContext {
+                        registry_version: RegistryVersion::from(112),
+                        certified_height: Height::from(3),
+                        time: mock_time(),
+                    },
+                    no_op_logger(),
+                )
+                .unwrap()
+            };
+
+            // Test the regular case (Both DKGs succeeded)
+            let next_summary = create_summary_payload(&genesis_summary);
+            for (_, conf) in next_summary.configs.iter() {
+                if conf.dkg_id().dkg_tag == NiDkgTag::HighThreshold {
+                    assert_eq!(
+                        next_summary
+                            .clone()
+                            .next_transcript(&NiDkgTag::HighThreshold)
+                            .unwrap(),
+                        &conf.resharing_transcript().clone().unwrap()
+                    )
+                }
+            }
+
+            // Remove configs from `genesis_summary`. This emulates the
+            // behaviour of DKG failing validations.
+            // In this case, the `current_transcripts` are being reshared.
+            genesis_summary.configs.clear();
+            let next_summary = create_summary_payload(&genesis_summary);
+            for (_, conf) in next_summary.configs.iter() {
+                if conf.dkg_id().dkg_tag == NiDkgTag::HighThreshold {
+                    assert_eq!(
+                        next_summary
+                            .clone()
+                            .current_transcript(&NiDkgTag::HighThreshold),
+                        &conf.resharing_transcript().clone().unwrap()
+                    )
+                }
             }
         });
     }
@@ -1585,6 +1678,7 @@ mod tests {
             prev_committee.clone(),
             NiDkgTag::HighThreshold,
             NiDkgTag::HighThreshold.threshold_for_subnet_of_size(prev_committee.len()) as u32,
+            888,
         ));
         let receivers: BTreeSet<_> = (3..8).map(node_test_id).collect();
         let start_block_height = Height::from(777);
@@ -2939,6 +3033,10 @@ mod tests {
             let summary = BlockPayload::from(dkg_block.payload).into_summary();
             assert_eq!(summary.registry_version, RegistryVersion::from(5));
             assert_eq!(summary.height, Height::from(0));
+            assert_eq!(
+                summary.get_subnet_membership_version(),
+                RegistryVersion::from(5)
+            );
             for tag in TAGS.iter() {
                 let current_transcript = summary.current_transcript(tag);
                 assert_eq!(
@@ -2982,6 +3080,10 @@ mod tests {
             // context of the previous summary.
             assert_eq!(summary.registry_version, RegistryVersion::from(5));
             assert_eq!(summary.height, Height::from(5));
+            assert_eq!(
+                summary.get_subnet_membership_version(),
+                RegistryVersion::from(5)
+            );
             for tag in TAGS.iter() {
                 // We reused the transcript.
                 let current_transcript = summary.current_transcript(tag);
@@ -3028,6 +3130,10 @@ mod tests {
             // context of the previous summary.
             assert_eq!(summary.registry_version, RegistryVersion::from(6));
             assert_eq!(summary.height, Height::from(10));
+            assert_eq!(
+                summary.get_subnet_membership_version(),
+                RegistryVersion::from(5)
+            );
             for tag in TAGS.iter() {
                 let (_, conf) = summary
                     .configs
@@ -3062,6 +3168,10 @@ mod tests {
             // context of the previous summary.
             assert_eq!(summary.registry_version, RegistryVersion::from(10));
             assert_eq!(summary.height, Height::from(15));
+            assert_eq!(
+                summary.get_subnet_membership_version(),
+                RegistryVersion::from(5)
+            );
             for tag in TAGS.iter() {
                 let (_, conf) = summary
                     .configs
@@ -3079,6 +3189,43 @@ mod tests {
                 );
                 let next_transcript = summary.next_transcript(tag).unwrap();
                 assert_eq!(next_transcript.dkg_id.start_block_height, Height::from(10));
+            }
+
+            // Skip till the next DKG round
+            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
+            let dkg_block = PoolReader::new(&pool).get_highest_summary_block();
+            assert_eq!(
+                dkg_block.context.registry_version,
+                RegistryVersion::from(10),
+                "The latest registry version is used."
+            );
+            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            // This registry version corresponds to the registry version from the block
+            // context of the previous summary.
+            assert_eq!(summary.registry_version, RegistryVersion::from(10));
+            assert_eq!(summary.height, Height::from(20));
+            assert_eq!(
+                summary.get_subnet_membership_version(),
+                // The current DKGs finally use `RegistryVersion` 6
+                RegistryVersion::from(6)
+            );
+            for tag in TAGS.iter() {
+                let (_, conf) = summary
+                    .configs
+                    .iter()
+                    .find(|(id, _)| id.dkg_tag == *tag)
+                    .unwrap();
+                assert_eq!(
+                    conf.receivers().get(),
+                    &committee3.clone().into_iter().collect::<BTreeSet<_>>()
+                );
+                let current_transcript = summary.current_transcript(tag);
+                assert_eq!(
+                    current_transcript.dkg_id.start_block_height,
+                    Height::from(10)
+                );
+                let next_transcript = summary.next_transcript(tag).unwrap();
+                assert_eq!(next_transcript.dkg_id.start_block_height, Height::from(15));
             }
         });
     }

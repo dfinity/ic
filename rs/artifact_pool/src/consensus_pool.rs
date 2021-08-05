@@ -302,6 +302,12 @@ impl ConsensusPoolImpl {
                 log,
             )
         });
+
+        // Initial update to the metrics, such that they always report the state, even
+        // when a subnet is halted.
+        pool.validated_metrics.update(pool.validated.pool_section());
+        pool.unvalidated_metrics
+            .update(pool.unvalidated.pool_section());
         pool
     }
 

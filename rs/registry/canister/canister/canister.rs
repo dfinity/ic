@@ -206,7 +206,7 @@ fn get_changes_since() {
             RegistryGetChangesSinceResponse {
                 error: None,
                 version: registry.latest_version(),
-                deltas: registry.get_changes_since(version),
+                deltas: registry.get_changes_since(version, Some(MAX_VERSIONS_PER_QUERY)),
             }
         }
         Err(error) => RegistryGetChangesSinceResponse {
@@ -280,7 +280,7 @@ fn get_value() {
         }
         Err(error) => RegistryGetValueResponse {
             error: Some(RegistryError {
-                code: Code::KeyNotPresent as i32,
+                code: Code::MalformedMessage as i32,
                 key: Vec::<u8>::default(),
                 reason: error.to_string(),
             }),

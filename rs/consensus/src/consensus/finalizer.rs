@@ -499,7 +499,7 @@ pub fn generate_responses_to_subnet_calls(
                     originator: CanisterId::ic_00(),
                     respondent: CanisterId::ic_00(),
                     originator_reply_callback: *callback_id,
-                    refund: Funds::zero(),
+                    refund: Cycles::zero(),
                     response_payload: messages::Payload::Data(initial_transcript_records.encode()),
                 });
             }
@@ -513,16 +513,24 @@ mod tests {
     //! Finalizer unit tests
     use super::*;
     use crate::consensus::mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_interfaces::state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_registry_subnet_type::SubnetType;
+    use ic_replicated_state::{metadata_state::SubnetCallContext, SystemMetadata};
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector,
         message_routing::FakeMessageRouting,
         registry::SubnetRecordBuilder,
-        state_manager::FakeStateManager,
+        state_manager::{FakeStateManager, MockStateManager},
         types::ids::{node_test_id, subnet_test_id},
     };
-    use std::sync::Arc;
+    use ic_types::{
+        crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
+        ic00::SetupInitialDKGResponse,
+        messages::{CallbackId, Request},
+    };
+    use std::{collections::BTreeSet, path::PathBuf, str::FromStr, sync::Arc};
 
     /// Given a single block, just finalize it
     #[test]
@@ -723,5 +731,99 @@ mod tests {
                 block_proposal.height().increment(),
             );
         })
+    }
+
+    #[test]
+    fn test_generate_responsens_to_subnet_calls() {
+        const TARGET_ID: NiDkgTargetId = NiDkgTargetId::new([8; 32]);
+
+        // Create a replicated state
+        let mut replicated_state = ReplicatedState::new_rooted_at(
+            subnet_test_id(0),
+            SubnetType::System,
+            PathBuf::from("/tmp"),
+        );
+
+        // Manually create `SystemMetadata` with custom context
+        let mut metadata = SystemMetadata::new(subnet_test_id(0), SubnetType::System);
+        metadata.subnet_call_context_manager.contexts = vec![(
+            CallbackId::from(0),
+            // NOTE: From this struct we only need the target id, therefore we will initialize the
+            // rest with dummy data
+            SubnetCallContext::SetupInitialDKGContext {
+                request: Request {
+                    receiver: CanisterId::from(0),
+                    sender: CanisterId::from(0),
+                    sender_reply_callback: CallbackId::from(0),
+                    payment: Cycles::zero(),
+                    method_name: "".to_string(),
+                    method_payload: vec![],
+                },
+                nodes_in_target_subnet: BTreeSet::new(),
+                target_id: TARGET_ID,
+                registry_version: RegistryVersion::from(1),
+            },
+        )]
+        .drain(..)
+        .collect::<BTreeMap<_, _>>();
+        replicated_state.set_system_metadata(metadata);
+
+        // Build a `MockStateManager`, that returns the state with the custom context
+        let mut state_manager = MockStateManager::new();
+        state_manager
+            .expect_get_state_at()
+            .return_const(Ok(Labeled::new(
+                Height::from(0),
+                Arc::new(replicated_state),
+            )));
+
+        // Build some transcipts with matching ids and tags
+        let transcripts_for_new_subnets = vec![
+            (
+                NiDkgId {
+                    start_block_height: Height::from(0),
+                    dealer_subnet: subnet_test_id(0),
+                    dkg_tag: NiDkgTag::LowThreshold,
+                    target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
+                },
+                Ok(NiDkgTranscript::dummy_transcript_for_tests()),
+            ),
+            (
+                NiDkgId {
+                    start_block_height: Height::from(0),
+                    dealer_subnet: subnet_test_id(0),
+                    dkg_tag: NiDkgTag::HighThreshold,
+                    target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
+                },
+                Ok(NiDkgTranscript::dummy_transcript_for_tests()),
+            ),
+        ]
+        .drain(..)
+        .collect::<BTreeMap<_, _>>();
+
+        // Run the function
+        let result = generate_responses_to_subnet_calls(
+            &state_manager,
+            Height::from(1),
+            &transcripts_for_new_subnets,
+            &no_op_logger(),
+        );
+        assert_eq!(result.len(), 1);
+
+        // Deserialize the `SetupInitialDKGResponse` and check the subnet id
+        let payload = match &result[0].response_payload {
+            messages::Payload::Data(data) => data,
+            messages::Payload::Reject(_) => panic!("Payload was rejected unexpectedly"),
+        };
+        let initial_transcript_records = SetupInitialDKGResponse::decode(payload).unwrap();
+        assert_eq!(
+            initial_transcript_records.fresh_subnet_id,
+            SubnetId::from(
+                PrincipalId::from_str(
+                    "wqwyc-qwfhw-xd535-3ic5a-jqn3j-okdfe-vlasr-ulpoq-xiirw-xpeoc-iae"
+                )
+                .unwrap()
+            )
+        );
     }
 }

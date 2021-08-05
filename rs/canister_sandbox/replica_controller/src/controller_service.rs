@@ -1,23 +1,21 @@
 use crate::canister_descriptor_table::WasmObjectGeneration;
-use crate::sandbox_fsm::FSM;
+use crate::sandbox_fsm::Fsm;
 use crate::session_nonce::session_to_string;
+use crate::{ReturnToken, RunnerInput};
 use ic_canister_sandbox_common::controller_service::ControllerService;
 use ic_canister_sandbox_common::protocol::ctlsvc::*;
 use ic_canister_sandbox_common::protocol::logging::{LogLevel, LogRequest};
 use ic_canister_sandbox_common::protocol::sbxsvc::*;
-use ic_canister_sandbox_common::protocol::structs::Round;
+use ic_canister_sandbox_common::protocol::structs::{ExecInput, ExecOutput, Round};
 use ic_canister_sandbox_common::rpc::Call;
 use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_canister_sandbox_common::{protocol, rpc};
-use ic_embedders::WasmExecutionOutput;
-use ic_embedders::{ReturnToken, RunnerInput};
+use ic_embedders::{WasmExecutionInput, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{HypervisorError, TrapCode::StableMemoryOutOfBounds};
 use ic_logger::{debug, info, trace, ReplicaLogger};
-use ic_replicated_state::{
-    stable_memory::StableMemoryError, EmbedderCache, ExecutionState, SystemState,
-};
+use ic_replicated_state::{EmbedderCache, ExecutionState, SystemState};
 use ic_system_api::{ApiType, SystemStateAccessor, SystemStateAccessorDirect};
 use ic_types::methods::{FuncRef, WasmMethod};
-use protocol::structs::ExecInput;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
@@ -61,10 +59,44 @@ pub(crate) struct ControllerServer {
     // most efficient way is to use directly a Mutex instead of a
     // read/write lock.
     sessions: Arc<Mutex<SessionState>>,
-    sessions_state_machines: Arc<Mutex<HashMap<String, FSM>>>,
+    sessions_state_machines: Arc<Mutex<HashMap<String, Fsm>>>,
     session_state: Arc<Mutex<HashSet<String>>>,
     state: Arc<Mutex<HashMap<String, RunningExec>>>,
     log: ReplicaLogger,
+}
+
+fn to_rpc_exec_input(input: &WasmExecutionInput) -> ExecInput {
+    ExecInput {
+        func_ref: input.func_ref.clone(),
+        api_type: input.api_type.clone(),
+        instructions_limit: input.instructions_limit,
+        globals: input.execution_state.exported_globals.clone(),
+        canister_memory_limit: input.canister_memory_limit,
+        canister_current_memory_usage: input.canister_current_memory_usage,
+        subnet_available_memory: input.subnet_available_memory.clone(),
+        compute_allocation: input.compute_allocation,
+    }
+}
+
+pub fn from_rpc_exec_output(
+    mut execution_state: ExecutionState,
+    ExecOutput {
+        wasm_result,
+        num_instructions_left,
+        globals,
+        instance_stats,
+    }: ExecOutput,
+    system_state: SystemState,
+) -> WasmExecutionOutput {
+    execution_state.exported_globals = globals;
+
+    WasmExecutionOutput {
+        wasm_result,
+        num_instructions_left,
+        system_state,
+        execution_state,
+        instance_stats,
+    }
 }
 
 impl ControllerServer {
@@ -140,7 +172,7 @@ impl ControllerServer {
             .into_string()
             .expect("Invalid OS String: not UTF-8");
         let wasm_src = msg.execution_state.wasm_binary.as_slice().to_vec();
-        let exec_input = ExecInput::from(msg);
+        let exec_input = to_rpc_exec_input(msg);
         let round = Round(round);
 
         let session_nonce = msg
@@ -279,7 +311,7 @@ impl ControllerServer {
             .open_state(open_state_req)
             .sync()
             .expect("Failed to message OpenState the sandbox!");
-        let fsm = FSM::Executing(*to_commit);
+        let fsm = Fsm::Executing(*to_commit);
         self.sessions_state_machines.lock().unwrap().insert(id, fsm);
         sandbox_handle
             .open_execution(open_execution_req)
@@ -426,7 +458,7 @@ impl ControllerService for ControllerServer {
         };
 
         let wasm_execution_output =
-            WasmExecutionOutput::from_exec_output(past_execution_state, exec_output, system_state);
+            from_rpc_exec_output(past_execution_state, exec_output, system_state);
 
         let state_guard = Arc::clone(&self.session_state);
         // We spawn a task to ensure. N.B. We ensure we return the result after
@@ -533,6 +565,13 @@ impl ControllerService for ControllerServer {
                         let result = system_state_accessor.stable_grow(req.additional_pages);
                         Reply::StableGrow(StableGrowReply { result })
                     }
+                    Request::GetNumInstructionsFromBytes(req) => {
+                        let result =
+                            system_state_accessor.get_num_instructions_from_bytes(req.num_bytes);
+                        Reply::GetNumInstructionsFromBytes(GetNumInstructionsFromBytesReply {
+                            result,
+                        })
+                    }
                     Request::StableRead(req) => {
                         let mut buf = Vec::<u8>::new();
                         buf.resize(req.size as usize, 0);
@@ -550,7 +589,7 @@ impl ControllerService for ControllerServer {
                                 &req.data,
                             )
                         } else {
-                            Err(StableMemoryError::StableMemoryOutOfBounds)
+                            Err(HypervisorError::Trapped(StableMemoryOutOfBounds))
                         };
                         Reply::StableWrite(StableWriteReply { result })
                     }
@@ -577,6 +616,10 @@ impl ControllerService for ControllerServer {
                     Request::RegisterCallback(req) => {
                         let result = system_state_accessor.register_callback(req.callback);
                         Reply::RegisterCallback(RegisterCallbackReply { result })
+                    }
+                    Request::UnregisterCallback(req) => {
+                        system_state_accessor.unregister_callback(req.callback_id);
+                        Reply::UnregisterCallback(UnregisterCallbackReply {})
                     }
                     Request::PushOutputMessage(req) => {
                         let result = system_state_accessor.push_output_request(

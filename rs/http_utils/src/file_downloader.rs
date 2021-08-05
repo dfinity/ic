@@ -57,6 +57,10 @@ impl FileDownloader {
     ///
     /// Deletes an existing file with an incorrect file hash or no
     /// hash is given to this function.
+    ///
+    /// Since existing files get deleted if they have an incorrect hash,
+    /// this code will also work if a crash happens throughout execution
+    /// leading to inconsistent data.
     pub async fn download_file(
         &self,
         url: &str,

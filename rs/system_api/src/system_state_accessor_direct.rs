@@ -1,9 +1,11 @@
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult,
+    TrapCode::{HeapOutOfBounds, StableMemoryOutOfBounds},
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::CanisterStatus, page_map, NumWasmPages, StableMemoryError,
-    StateError, SystemState,
+    canister_state::system_state::CanisterStatus, page_map, NumWasmPages, StateError, SystemState,
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, Request},
@@ -145,15 +147,15 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
         offset: u32,
         size: u32,
         heap: &mut [u8],
-    ) -> Result<(), StableMemoryError> {
+    ) -> HypervisorResult<()> {
         let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
 
-        if offset + size > (self.stable_size() * WASM_PAGE_SIZE_IN_BYTES) as usize {
-            return Err(StableMemoryError::StableMemoryOutOfBounds);
+        if offset + size > (self.stable_size() as usize * WASM_PAGE_SIZE_IN_BYTES as usize) {
+            return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
         }
 
         if dst + size > heap.len() {
-            return Err(StableMemoryError::HeapOutOfBounds);
+            return Err(HypervisorError::Trapped(HeapOutOfBounds));
         }
         self.stable_memory_buffer
             .borrow()
@@ -161,26 +163,48 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
         Ok(())
     }
 
-    fn stable_write(
-        &self,
-        offset: u32,
-        src: u32,
-        size: u32,
-        heap: &[u8],
-    ) -> Result<(), StableMemoryError> {
+    fn stable_write(&self, offset: u32, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
         let (src, offset, size) = (src as usize, offset as usize, size as usize);
 
-        if offset + size > (self.stable_size() * WASM_PAGE_SIZE_IN_BYTES) as usize {
-            return Err(StableMemoryError::StableMemoryOutOfBounds);
+        if offset + size > (self.stable_size() as usize * WASM_PAGE_SIZE_IN_BYTES as usize) {
+            return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
         }
 
         if src + size > heap.len() {
-            return Err(StableMemoryError::HeapOutOfBounds);
+            return Err(HypervisorError::Trapped(HeapOutOfBounds));
         }
 
         self.stable_memory_buffer
             .borrow_mut()
             .write(&heap[src..src + size], offset);
+        Ok(())
+    }
+
+    fn stable_size64(&self) -> u64 {
+        0
+    }
+
+    fn stable_grow64(&self, _additional_pages: u64) -> i64 {
+        -1
+    }
+
+    fn stable_read64(
+        &self,
+        _dst: u64,
+        _offset: u64,
+        _size: u64,
+        _heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        Ok(())
+    }
+
+    fn stable_write64(
+        &self,
+        _offset: u64,
+        _src: u64,
+        _size: u64,
+        _heap: &[u8],
+    ) -> HypervisorResult<()> {
         Ok(())
     }
 

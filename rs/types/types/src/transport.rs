@@ -121,6 +121,9 @@ pub enum TransportErrorCode {
     /// Flow is already in connected state
     FlowConnectionUp,
 
+    /// Flow is already in disconnected state
+    FlowConnectionDown,
+
     /// Unable to find config for the client type.
     TransportClientConfigNotFound,
 

@@ -16,7 +16,7 @@ use ic_test_utilities::{
 use ic_types::{
     messages::{CallbackId, Payload, RequestOrResponse},
     xnet::StreamIndex,
-    Cycles, Funds,
+    Cycles,
 };
 use std::convert::TryFrom;
 
@@ -36,7 +36,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
                             .receiver(canister_test_id(i))
                             .sender(canister_test_id(i))
                             .sender_reply_callback(CallbackId::from(i))
-                            .payment(Funds::new(Cycles::from(10)))
+                            .payment(Cycles::from(10))
                             .method_name("test".to_string())
                             .method_payload(vec![1; 100])
                             .build(),
@@ -47,7 +47,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
                             .originator(canister_test_id(i))
                             .respondent(canister_test_id(i))
                             .originator_reply_callback(CallbackId::from(i))
-                            .refund(Funds::new(Cycles::from(10)))
+                            .refund(Cycles::from(10))
                             .response_payload(Payload::Data(vec![2, 100]))
                             .build(),
                     )

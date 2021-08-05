@@ -12,6 +12,9 @@ use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as clib;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
+    secret_key_from_miracl, trusted_secret_key_into_miracl,
+};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -104,29 +107,35 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> NiDkgCspClient for Csp<R, S> {
     ) -> Result<(), ni_dkg_errors::CspDkgUpdateFsEpochError> {
         debug!(self.logger; crypto.method_name => "update_forward_secure_epoch", crypto.dkg_epoch => epoch.get());
 
-        // Get state
-        let seed = Randomness::from(self.rng_write_lock().gen::<[u8; 32]>());
         let key_id = self.dkg_dealing_encryption_key_id();
-        let key_set = self.sks_read_lock().get(&key_id).ok_or_else(|| {
-            ni_dkg_errors::CspDkgUpdateFsEpochError::FsKeyNotInSecretKeyStoreError(
-                ni_dkg_errors::KeyNotFoundError {
-                    internal_error: "Cannot update forward secure key if it is missing".to_string(),
-                    key_id,
-                },
-            )
-        })?;
-        let key_set = specialise::fs_key_set(key_set).expect("Not a forward secure secret key; it should be impossible to retrieve a key of the wrong type.");
 
-        // Specialise
-        let key_set = match algorithm_id {
+        let updated_key_set = match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
+                // Retrieve key from key store
+                let key_set = self.sks_read_lock().get(&key_id).ok_or_else(|| {
+                    ni_dkg_errors::CspDkgUpdateFsEpochError::FsKeyNotInSecretKeyStoreError(
+                        ni_dkg_errors::KeyNotFoundError {
+                            internal_error: "Cannot update forward secure key if it is missing"
+                                .to_string(),
+                            key_id,
+                        },
+                    )
+                })?;
+
                 // Specialise to Groth20
+                let key_set = specialise::fs_key_set(key_set)
+                    .expect("Not a forward secure secret key; it should be impossible to retrieve a key of the wrong type.");
                 let mut key_set = specialise::groth20::fs_key_set(key_set)
                     .expect("If key generation is correct, it should be impossible to retrieve a key of the wrong type.");
-                // Call lib:
-                let secret_key =
-                    clib::update_forward_secure_epoch(&key_set.secret_key, epoch, seed);
-                key_set.secret_key = secret_key;
+
+                // Update secret key to new epoch (deserialize key first)
+                let mut secret_key = trusted_secret_key_into_miracl(&key_set.secret_key);
+                let seed = Randomness::from(self.rng_write_lock().gen::<[u8; 32]>());
+                clib::update_key_inplace_to_epoch(&mut secret_key, epoch, seed);
+
+                // Replace secret key in key set (serialize key first)
+                key_set.secret_key = secret_key_from_miracl(&secret_key);
+
                 // Generalise:
                 Ok(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set))
             }
@@ -136,7 +145,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> NiDkgCspClient for Csp<R, S> {
         // Save state
         if let Err(err) = self.sks_write_lock().insert_or_replace(
             key_id,
-            CspSecretKey::FsEncryption(key_set?),
+            CspSecretKey::FsEncryption(updated_key_set?),
             Some(NIDKG_FS_SCOPE),
         ) {
             match err {
@@ -379,7 +388,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> NiDkgCspClient for Csp<R, S> {
                 }
 
                 // Compute the key
-                let fs_key_encryption_key = {
+                let fs_decryption_key = {
                     let key_id = self.dkg_dealing_encryption_key_id();
                     let key_set = self.sks_read_lock().get(&key_id).ok_or_else(||
                       ni_dkg_errors::CspDkgLoadPrivateKeyError::KeyNotFoundError( // TODO (CRP-820): This name is inconsistent with the other error enums, where this is now called FsKeyNotInSecretKeyStoreError or some such paragraph-of-a-name.
@@ -389,15 +398,19 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> NiDkgCspClient for Csp<R, S> {
                         },
                       )
                     )?;
-                    let key_set = specialise::fs_key_set(key_set).expect("Not a forward secure secret key; it should be impossible to retrieve a key of the wrong type.");
-                    specialise::groth20::fs_key_set(key_set)
-                    .expect("If key generation is correct, it should be impossible to retrieve a key of the wrong type.")
+
+                    let raw_fs_key_set =
+                        specialise::groth20::fs_key_set(
+                            specialise::fs_key_set(key_set).expect("Not a forward secure secret key; it should be impossible to retrieve a key of the wrong type.")
+                        ).expect("If key generation is correct, it should be impossible to retrieve a key of the wrong type.");
+
+                    trusted_secret_key_into_miracl(&raw_fs_key_set.secret_key)
                 };
 
                 let csp_secret_key = clib::compute_threshold_signing_key(
                     &transcript,
                     receiver_index,
-                    &fs_key_encryption_key.secret_key,
+                    &fs_decryption_key,
                     epoch,
                 )
                 .map(CspSecretKey::ThresBls12_381)?;

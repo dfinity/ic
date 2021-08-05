@@ -51,7 +51,7 @@ use ic_types::{
         UserQuery,
     },
     user_error::{ErrorCode, RejectCode, UserError},
-    CanisterId, Cycles, Funds, PrincipalId, QueryAllocation, SubnetId,
+    CanisterId, Cycles, PrincipalId, QueryAllocation, SubnetId,
 };
 use std::{
     collections::BTreeMap,
@@ -80,7 +80,7 @@ fn generate_response(request: Request, payload: Payload) -> Response {
         respondent: request.receiver,
         originator_reply_callback: request.sender_reply_callback,
         response_payload: payload,
-        refund: Funds::zero(),
+        refund: Cycles::zero(),
     }
 }
 
@@ -650,7 +650,7 @@ impl<'a> QueryContext<'a> {
                 respondent: canister_id,
                 originator_reply_callback: callback_id,
                 response_payload: payload,
-                refund: Funds::zero(),
+                refund: Cycles::zero(),
             };
             self.outstanding_response = Some(response);
         };

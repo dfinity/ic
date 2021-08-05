@@ -65,8 +65,8 @@ where
 }
 
 /// Encodes a `RequestOrResponse` into canonical CBOR representation.
-pub fn encode_message(msg: &RequestOrResponse) -> Vec<u8> {
-    types::RequestOrResponse::proxy_encode(msg).unwrap()
+pub fn encode_message(msg: &RequestOrResponse, certification_version: u32) -> Vec<u8> {
+    types::RequestOrResponse::proxy_encode((msg, certification_version)).unwrap()
 }
 
 /// Decodes a `RequestOrResponse` from canonical CBOR representation.
@@ -75,8 +75,8 @@ pub fn decode_message(bytes: &[u8]) -> Result<RequestOrResponse, ProxyDecodeErro
 }
 
 /// Encodes a `StreamHeader` into canonical CBOR representation.
-pub fn encode_stream_header(header: &StreamHeader) -> Vec<u8> {
-    types::StreamHeader::proxy_encode(header).unwrap()
+pub fn encode_stream_header(header: &StreamHeader, certification_version: u32) -> Vec<u8> {
+    types::StreamHeader::proxy_encode((header, certification_version)).unwrap()
 }
 
 /// Decodes a `StreamHeader` from canonical CBOR representation.

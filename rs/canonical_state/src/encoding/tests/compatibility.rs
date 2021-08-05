@@ -8,7 +8,7 @@
 //! (and ideally forwards) compatibility with one or more preceeding
 //! protocol versions.
 
-use crate::encoding::*;
+use crate::{encoding::*, CURRENT_CERTIFICATION_VERSION};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::SystemMetadata;
 use ic_test_utilities::types::{
@@ -60,7 +60,10 @@ fn canonical_encoding_stream_header() {
 
     assert_eq!(
         "A3 00 17 01 18 19 02 19 01 00",
-        as_hex(&encode_stream_header(&header))
+        as_hex(&encode_stream_header(
+            &header,
+            CURRENT_CERTIFICATION_VERSION
+        ))
     );
 }
 
@@ -72,7 +75,7 @@ fn canonical_encoding_stream_header() {
 ///         receiver: canister_test_id(1),
 ///         sender: canister_test_id(2),
 ///         sender_reply_callback: CallbackId::from(3),
-///         payment: Funds::new(Cycles::new(3)),
+///         payment: Cycles::new(3),
 ///         method_name: "test".to_string(),
 ///         method_payload: vec![6],
 ///     }
@@ -114,7 +117,7 @@ fn canonical_encoding_request() {
             .receiver(canister_test_id(1))
             .sender(canister_test_id(2))
             .sender_reply_callback(CallbackId::from(3))
-            .payment(Funds::new(Cycles::new(4)))
+            .payment(Cycles::new(4))
             .method_name("test".to_string())
             .method_payload(vec![6])
             .build(),
@@ -122,7 +125,7 @@ fn canonical_encoding_request() {
 
     assert_eq!(
         "A1 00 A6 00 4A 00 00 00 00 00 00 00 01 01 01 01 4A 00 00 00 00 00 00 00 02 01 01 02 03 03 A1 00 A1 00 04 04 64 74 65 73 74 05 41 06",
-        as_hex(&encode_message(&request))
+        as_hex(&encode_message(&request, CURRENT_CERTIFICATION_VERSION))
     );
 }
 
@@ -178,7 +181,7 @@ fn canonical_encoding_request_u128() {
             .receiver(canister_test_id(1))
             .sender(canister_test_id(2))
             .sender_reply_callback(CallbackId::from(3))
-            .payment(Funds::new(Cycles::new(123456789012345678901234567890)))
+            .payment(Cycles::new(123456789012345678901234567890))
             .method_name("test".to_string())
             .method_payload(vec![6])
             .build(),
@@ -186,7 +189,7 @@ fn canonical_encoding_request_u128() {
 
     assert_eq!(
         "A1 00 A6 00 4A 00 00 00 00 00 00 00 01 01 01 01 4A 00 00 00 00 00 00 00 02 01 01 02 03 03 A1 00 A2 00 1B C3 73 E0 EE 4E 3F 0A D2 01 1B 00 00 00 01 8E E9 0F F6 04 64 74 65 73 74 05 41 06",
-        as_hex(&encode_message(&request))
+        as_hex(&encode_message(&request, CURRENT_CERTIFICATION_VERSION))
     );
 }
 
@@ -198,7 +201,7 @@ fn canonical_encoding_request_u128() {
 ///         originator: canister_test_id(5),
 ///         respondent: canister_test_id(4),
 ///         originator_reply_callback: CallbackId::from(3),
-///         refund: Funds::new(Cycles::new(2)),
+///         refund: Cycles::new(2),
 ///         response_payload: Payload::Data(vec![1]),
 ///     }
 /// )
@@ -238,14 +241,14 @@ fn canonical_encoding_response() {
             .originator(canister_test_id(5))
             .respondent(canister_test_id(4))
             .originator_reply_callback(CallbackId::from(3))
-            .refund(Funds::new(Cycles::new(2)))
+            .refund(Cycles::new(2))
             .response_payload(Payload::Data(vec![1]))
             .build(),
     );
 
     assert_eq!(
         "A1 01 A5 00 4A 00 00 00 00 00 00 00 05 01 01 01 4A 00 00 00 00 00 00 00 04 01 01 02 03 03 A1 00 A1 00 02 04 A1 00 41 01",
-        as_hex(&encode_message(&response))
+        as_hex(&encode_message(&response, CURRENT_CERTIFICATION_VERSION))
     );
 }
 
@@ -300,14 +303,14 @@ fn canonical_encoding_response_u128() {
             .originator(canister_test_id(5))
             .respondent(canister_test_id(4))
             .originator_reply_callback(CallbackId::from(3))
-            .refund(Funds::new(Cycles::new(123456789012345678901234567890)))
+            .refund(Cycles::new(123456789012345678901234567890))
             .response_payload(Payload::Data(vec![1]))
             .build(),
     );
 
     assert_eq!(
         "A1 01 A5 00 4A 00 00 00 00 00 00 00 05 01 01 01 4A 00 00 00 00 00 00 00 04 01 01 02 03 03 A1 00 A2 00 1B C3 73 E0 EE 4E 3F 0A D2 01 1B 00 00 00 01 8E E9 0F F6 04 A1 00 41 01",
-        as_hex(&encode_message(&response))
+        as_hex(&encode_message(&response, CURRENT_CERTIFICATION_VERSION))
     );
 }
 
@@ -319,7 +322,7 @@ fn canonical_encoding_response_u128() {
 ///         originator: canister_test_id(6),
 ///         respondent: canister_test_id(5),
 ///         originator_reply_callback: CallbackId::from(4),
-///         refund: Funds::new(Cycles::new(3)),
+///         refund: Cycles::new(3),
 ///         response_payload: Payload::Reject(RejectContext {
 ///             code: RejectCode::SysFatal,
 ///             message: "Oops".into(),
@@ -365,7 +368,7 @@ fn canonical_encoding_reject_response() {
             .originator(canister_test_id(6))
             .respondent(canister_test_id(5))
             .originator_reply_callback(CallbackId::from(4))
-            .refund(Funds::new(Cycles::new(3)))
+            .refund(Cycles::new(3))
             .response_payload(Payload::Reject(RejectContext {
                 code: RejectCode::SysFatal,
                 message: "Oops".into(),
@@ -375,7 +378,7 @@ fn canonical_encoding_reject_response() {
 
     assert_eq!(
         "A1 01 A5 00 4A 00 00 00 00 00 00 00 06 01 01 01 4A 00 00 00 00 00 00 00 05 01 01 02 04 03 A1 00 A1 00 03 04 A1 01 A2 00 01 01 64 4F 6F 70 73",
-        as_hex(&encode_message(&reject_response))
+        as_hex(&encode_message(&reject_response, CURRENT_CERTIFICATION_VERSION))
     );
 }
 
@@ -416,7 +419,11 @@ fn canonical_encoding_system_metadata() {
 #[test]
 #[should_panic(expected = "expected field index 0 <= i < 2")]
 fn invalid_message_extra_field() {
-    let bytes = types::RequestOrResponse::encode_with_extra_field(&request_message()).unwrap();
+    let bytes = types::RequestOrResponse::encode_with_extra_field((
+        &request_message(),
+        CURRENT_CERTIFICATION_VERSION,
+    ))
+    .unwrap();
 
     let _: RequestOrResponse = types::RequestOrResponse::proxy_decode(&bytes).unwrap();
 }
@@ -426,7 +433,11 @@ fn invalid_message_extra_field() {
     expected = "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `RequestOrResponse { request: None, response: None }`"
 )]
 fn invalid_message_empty() {
-    let bytes = types::RequestOrResponse::encode_without_field(&request_message(), 0).unwrap();
+    let bytes = types::RequestOrResponse::encode_without_field(
+        (&request_message(), CURRENT_CERTIFICATION_VERSION),
+        0,
+    )
+    .unwrap();
 
     let _: RequestOrResponse = types::RequestOrResponse::proxy_decode(&bytes).unwrap();
 }
@@ -438,7 +449,7 @@ fn invalid_message_empty() {
 #[test]
 fn valid_request() {
     let request = request();
-    let bytes = types::Request::proxy_encode(&request).unwrap();
+    let bytes = types::Request::proxy_encode((&request, CURRENT_CERTIFICATION_VERSION)).unwrap();
 
     assert_eq!(request, types::Request::proxy_decode(&bytes).unwrap());
 }
@@ -446,7 +457,9 @@ fn valid_request() {
 #[test]
 #[should_panic(expected = "expected field index 0 <= i < 6")]
 fn invalid_request_extra_field() {
-    let bytes = types::Request::encode_with_extra_field(&request()).unwrap();
+    let bytes =
+        types::Request::encode_with_extra_field((&request(), CURRENT_CERTIFICATION_VERSION))
+            .unwrap();
 
     let _: Request = types::Request::proxy_decode(&bytes).unwrap();
 }
@@ -454,7 +467,9 @@ fn invalid_request_extra_field() {
 #[test]
 #[should_panic(expected = "missing field `receiver`")]
 fn invalid_request_missing_receiver() {
-    let bytes = types::Request::encode_without_field(&request(), 0).unwrap();
+    let bytes =
+        types::Request::encode_without_field((&request(), CURRENT_CERTIFICATION_VERSION), 0)
+            .unwrap();
 
     let _: Request = types::Request::proxy_decode(&bytes).unwrap();
 }
@@ -462,7 +477,9 @@ fn invalid_request_missing_receiver() {
 #[test]
 #[should_panic(expected = "missing field `sender`")]
 fn invalid_request_missing_sender() {
-    let bytes = types::Request::encode_without_field(&request(), 1).unwrap();
+    let bytes =
+        types::Request::encode_without_field((&request(), CURRENT_CERTIFICATION_VERSION), 1)
+            .unwrap();
 
     let _: Request = types::Request::proxy_decode(&bytes).unwrap();
 }
@@ -470,7 +487,9 @@ fn invalid_request_missing_sender() {
 #[test]
 #[should_panic(expected = "missing field `sender_reply_callback`")]
 fn invalid_request_missing_sender_reply_callback() {
-    let bytes = types::Request::encode_without_field(&request(), 2).unwrap();
+    let bytes =
+        types::Request::encode_without_field((&request(), CURRENT_CERTIFICATION_VERSION), 2)
+            .unwrap();
 
     let _: Request = types::Request::proxy_decode(&bytes).unwrap();
 }
@@ -478,7 +497,9 @@ fn invalid_request_missing_sender_reply_callback() {
 #[test]
 #[should_panic(expected = "missing field `payment`")]
 fn invalid_request_missing_payment() {
-    let bytes = types::Request::encode_without_field(&request(), 3).unwrap();
+    let bytes =
+        types::Request::encode_without_field((&request(), CURRENT_CERTIFICATION_VERSION), 3)
+            .unwrap();
 
     let _: Request = types::Request::proxy_decode(&bytes).unwrap();
 }
@@ -486,7 +507,9 @@ fn invalid_request_missing_payment() {
 #[test]
 #[should_panic(expected = "missing field `method_name`")]
 fn invalid_request_missing_method_name() {
-    let bytes = types::Request::encode_without_field(&request(), 4).unwrap();
+    let bytes =
+        types::Request::encode_without_field((&request(), CURRENT_CERTIFICATION_VERSION), 4)
+            .unwrap();
 
     let _: Request = types::Request::proxy_decode(&bytes).unwrap();
 }
@@ -494,7 +517,9 @@ fn invalid_request_missing_method_name() {
 #[test]
 #[should_panic(expected = "missing field `method_payload`")]
 fn invalid_request_missing_method_payload() {
-    let bytes = types::Request::encode_without_field(&request(), 5).unwrap();
+    let bytes =
+        types::Request::encode_without_field((&request(), CURRENT_CERTIFICATION_VERSION), 5)
+            .unwrap();
 
     let _: Request = types::Request::proxy_decode(&bytes).unwrap();
 }
@@ -506,7 +531,7 @@ fn invalid_request_missing_method_payload() {
 #[test]
 fn valid_response() {
     let response = response();
-    let bytes = types::Response::proxy_encode(&response).unwrap();
+    let bytes = types::Response::proxy_encode((&response, CURRENT_CERTIFICATION_VERSION)).unwrap();
 
     assert_eq!(response, types::Response::proxy_decode(&bytes).unwrap());
 }
@@ -514,7 +539,9 @@ fn valid_response() {
 #[test]
 #[should_panic(expected = "expected field index 0 <= i < 5")]
 fn invalid_response_extra_field() {
-    let bytes = types::Response::encode_with_extra_field(&response()).unwrap();
+    let bytes =
+        types::Response::encode_with_extra_field((&response(), CURRENT_CERTIFICATION_VERSION))
+            .unwrap();
 
     let _: Response = types::Response::proxy_decode(&bytes).unwrap();
 }
@@ -522,7 +549,9 @@ fn invalid_response_extra_field() {
 #[test]
 #[should_panic(expected = "missing field `originator`")]
 fn invalid_response_missing_originator() {
-    let bytes = types::Response::encode_without_field(&response(), 0).unwrap();
+    let bytes =
+        types::Response::encode_without_field((&response(), CURRENT_CERTIFICATION_VERSION), 0)
+            .unwrap();
 
     let _: Response = types::Response::proxy_decode(&bytes).unwrap();
 }
@@ -530,7 +559,9 @@ fn invalid_response_missing_originator() {
 #[test]
 #[should_panic(expected = "missing field `respondent`")]
 fn invalid_response_missing_respondent() {
-    let bytes = types::Response::encode_without_field(&response(), 1).unwrap();
+    let bytes =
+        types::Response::encode_without_field((&response(), CURRENT_CERTIFICATION_VERSION), 1)
+            .unwrap();
 
     let _: Response = types::Response::proxy_decode(&bytes).unwrap();
 }
@@ -538,7 +569,9 @@ fn invalid_response_missing_respondent() {
 #[test]
 #[should_panic(expected = "missing field `originator_reply_callback`")]
 fn invalid_response_missing_originator_reply_callback() {
-    let bytes = types::Response::encode_without_field(&response(), 2).unwrap();
+    let bytes =
+        types::Response::encode_without_field((&response(), CURRENT_CERTIFICATION_VERSION), 2)
+            .unwrap();
 
     let _: Response = types::Response::proxy_decode(&bytes).unwrap();
 }
@@ -546,7 +579,9 @@ fn invalid_response_missing_originator_reply_callback() {
 #[test]
 #[should_panic(expected = "missing field `refund`")]
 fn invalid_response_missing_refund() {
-    let bytes = types::Response::encode_without_field(&response(), 3).unwrap();
+    let bytes =
+        types::Response::encode_without_field((&response(), CURRENT_CERTIFICATION_VERSION), 3)
+            .unwrap();
 
     let _: Response = types::Response::proxy_decode(&bytes).unwrap();
 }
@@ -554,7 +589,9 @@ fn invalid_response_missing_refund() {
 #[test]
 #[should_panic(expected = "missing field `response_payload`")]
 fn invalid_response_missing_response_payload() {
-    let bytes = types::Response::encode_without_field(&response(), 4).unwrap();
+    let bytes =
+        types::Response::encode_without_field((&response(), CURRENT_CERTIFICATION_VERSION), 4)
+            .unwrap();
 
     let _: Response = types::Response::proxy_decode(&bytes).unwrap();
 }
@@ -566,7 +603,7 @@ fn invalid_response_missing_response_payload() {
 #[test]
 fn valid_funds() {
     let funds = funds();
-    let bytes = types::Funds::proxy_encode(&funds).unwrap();
+    let bytes = types::Funds::proxy_encode((&funds, CURRENT_CERTIFICATION_VERSION)).unwrap();
 
     assert_eq!(funds, types::Funds::proxy_decode(&bytes).unwrap());
 }
@@ -574,7 +611,8 @@ fn valid_funds() {
 #[test]
 #[should_panic(expected = "expected field index 0 <= i < 2")]
 fn invalid_funds_extra_field() {
-    let bytes = types::Funds::encode_with_extra_field(&funds()).unwrap();
+    let bytes =
+        types::Funds::encode_with_extra_field((&funds(), CURRENT_CERTIFICATION_VERSION)).unwrap();
 
     let _: Funds = types::Funds::proxy_decode(&bytes).unwrap();
 }
@@ -582,7 +620,8 @@ fn invalid_funds_extra_field() {
 #[test]
 #[should_panic(expected = "missing field `cycles`")]
 fn invalid_funds_missing_cycles() {
-    let bytes = types::Funds::encode_without_field(&funds(), 0).unwrap();
+    let bytes =
+        types::Funds::encode_without_field((&funds(), CURRENT_CERTIFICATION_VERSION), 0).unwrap();
 
     let _: Funds = types::Funds::proxy_decode(&bytes).unwrap();
 }
@@ -594,7 +633,7 @@ fn invalid_funds_missing_cycles() {
 #[test]
 fn valid_data_payload() {
     let payload = data_payload();
-    let bytes = types::Payload::proxy_encode(&payload).unwrap();
+    let bytes = types::Payload::proxy_encode((&payload, CURRENT_CERTIFICATION_VERSION)).unwrap();
 
     assert_eq!(payload, types::Payload::proxy_decode(&bytes).unwrap());
 }
@@ -602,7 +641,7 @@ fn valid_data_payload() {
 #[test]
 fn valid_reject_payload() {
     let payload = reject_payload();
-    let bytes = types::Payload::proxy_encode(&payload).unwrap();
+    let bytes = types::Payload::proxy_encode((&payload, CURRENT_CERTIFICATION_VERSION)).unwrap();
 
     assert_eq!(payload, types::Payload::proxy_decode(&bytes).unwrap());
 }
@@ -610,7 +649,9 @@ fn valid_reject_payload() {
 #[test]
 #[should_panic(expected = "expected field index 0 <= i < 2")]
 fn invalid_payload_extra_field() {
-    let bytes = types::Payload::encode_with_extra_field(&data_payload()).unwrap();
+    let bytes =
+        types::Payload::encode_with_extra_field((&data_payload(), CURRENT_CERTIFICATION_VERSION))
+            .unwrap();
 
     let _: Payload = types::Payload::proxy_decode(&bytes).unwrap();
 }
@@ -620,7 +661,9 @@ fn invalid_payload_extra_field() {
     expected = "Payload: expected exactly one of `data` or `reject` to be `Some(_)`, got `Payload { data: None, reject: None }`"
 )]
 fn invalid_payload_empty() {
-    let bytes = types::Payload::encode_without_field(&data_payload(), 0).unwrap();
+    let bytes =
+        types::Payload::encode_without_field((&data_payload(), CURRENT_CERTIFICATION_VERSION), 0)
+            .unwrap();
 
     let _: Payload = types::Payload::proxy_decode(&bytes).unwrap();
 }
@@ -632,7 +675,8 @@ fn invalid_payload_empty() {
 #[test]
 fn valid_reject_context() {
     let context = reject_context();
-    let bytes = types::RejectContext::proxy_encode(&context).unwrap();
+    let bytes =
+        types::RejectContext::proxy_encode((&context, CURRENT_CERTIFICATION_VERSION)).unwrap();
 
     assert_eq!(context, types::RejectContext::proxy_decode(&bytes).unwrap());
 }
@@ -640,7 +684,11 @@ fn valid_reject_context() {
 #[test]
 #[should_panic(expected = "expected field index 0 <= i < 2")]
 fn invalid_reject_context_extra_field() {
-    let bytes = types::RejectContext::encode_with_extra_field(&reject_context()).unwrap();
+    let bytes = types::RejectContext::encode_with_extra_field((
+        &reject_context(),
+        CURRENT_CERTIFICATION_VERSION,
+    ))
+    .unwrap();
 
     let _: RejectContext = types::RejectContext::proxy_decode(&bytes).unwrap();
 }
@@ -648,7 +696,11 @@ fn invalid_reject_context_extra_field() {
 #[test]
 #[should_panic(expected = "missing field `code`")]
 fn invalid_reject_context_missing_code() {
-    let bytes = types::RejectContext::encode_without_field(&reject_context(), 0).unwrap();
+    let bytes = types::RejectContext::encode_without_field(
+        (&reject_context(), CURRENT_CERTIFICATION_VERSION),
+        0,
+    )
+    .unwrap();
 
     let _: RejectContext = types::RejectContext::proxy_decode(&bytes).unwrap();
 }
@@ -656,7 +708,11 @@ fn invalid_reject_context_missing_code() {
 #[test]
 #[should_panic(expected = "missing field `message`")]
 fn invalid_reject_context_missing_message() {
-    let bytes = types::RejectContext::encode_without_field(&reject_context(), 1).unwrap();
+    let bytes = types::RejectContext::encode_without_field(
+        (&reject_context(), CURRENT_CERTIFICATION_VERSION),
+        1,
+    )
+    .unwrap();
 
     let _: RejectContext = types::RejectContext::proxy_decode(&bytes).unwrap();
 }
@@ -749,7 +805,7 @@ fn request() -> Request {
         .receiver(canister_test_id(1))
         .sender(canister_test_id(2))
         .sender_reply_callback(CallbackId::from(3))
-        .payment(funds())
+        .payment(cycles())
         .method_name("test".to_string())
         .method_payload(vec![6])
         .build()
@@ -760,13 +816,17 @@ fn response() -> Response {
         .originator(canister_test_id(6))
         .respondent(canister_test_id(5))
         .originator_reply_callback(CallbackId::from(4))
-        .refund(funds())
+        .refund(cycles())
         .response_payload(data_payload())
         .build()
 }
 
 fn funds() -> Funds {
     Funds::new(Cycles::new(3))
+}
+
+fn cycles() -> Cycles {
+    Cycles::new(3)
 }
 
 fn data_payload() -> Payload {

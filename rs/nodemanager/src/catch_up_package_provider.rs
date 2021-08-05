@@ -13,6 +13,7 @@ use ic_types::{
     crypto::*,
     RegistryVersion, SubnetId,
 };
+use ic_utils::fs::write_protobuf_using_tmp_file;
 use std::convert::TryFrom;
 use std::{fs::File, path::PathBuf};
 use std::{io, sync::Arc};
@@ -161,6 +162,8 @@ impl CatchUpPackageProvider {
     /// manager never goes back in time.  It will always find a CUP
     /// that is at least as high as the one it has previously
     /// discovered.
+    ///
+    /// Follows guidelines for DFINITY thread-safe I/O.
     pub(crate) fn persist_cup(
         &self,
         cup: &CUPWithOriginalProtobuf,
@@ -174,12 +177,13 @@ impl CatchUpPackageProvider {
             cup.cup.content.registry_version(),
             cup.cup.height()
         );
-        cup.protobuf.write_to_file(&cup_file_path).map_err(|e| {
+        write_protobuf_using_tmp_file(&cup_file_path, &cup.protobuf).map_err(|e| {
             NodeManagerError::IoError(
-                format!("Failed to write protobuf to disk: {:?}", &cup_file_path),
+                format!("Failed to serialize protobuf to disk: {:?}", &cup_file_path),
                 e,
             )
         })?;
+
         Ok(cup_file_path)
     }
 

@@ -31,7 +31,6 @@ use ic_test_utilities::{
 };
 use ic_types::messages::RequestOrResponse;
 use ic_types::methods::SystemMethod;
-use ic_types::Funds;
 use ic_types::{
     ingress::WasmResult,
     methods::WasmMethod,
@@ -149,9 +148,7 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
     let exec_env = Arc::new(default_exec_env_mock(
         &scheduler_test_fixture,
         2,
-        scheduler_test_fixture
-            .scheduler_config
-            .max_instructions_per_message,
+        NumInstructions::from(10),
         NumBytes::new(4096),
     ));
     let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(2));
@@ -681,7 +678,10 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
                     canister.scheduler_state.compute_allocation,
                     ComputeAllocation::zero()
                 );
-                assert!(canister.system_state.memory_allocation.is_none());
+                assert_eq!(
+                    canister.system_state.memory_allocation,
+                    MemoryAllocation::BestEffort
+                );
             }
             assert_eq!(
                 scheduler
@@ -1054,11 +1054,13 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
 
 #[test]
 fn subnet_messages_respect_instruction_limit_per_round() {
-    // In this test we have a canister with one input message and 20 subnet
-    // messsage. Each message execution consumes 10 instructions and the round
+    // In this test we have a canister with 10 input messages and 20 subnet
+    // messsages. Each message execution consumes 10 instructions and the round
     // limit is set to 100 instructions.
-    // The test expects that only the half of the instruction limit is spent on
-    // subnet messages and the canister can process its input message.
+    // The test expects that subnet messages use about a quarter of the round limit
+    // and the input messages get the full round limit. More specifically:
+    // - 3 subnet messages should run (using 30 out of 100 instructions).
+    // - 10 input messages should run (using 100 out of 100 instructions).
 
     let scheduler_test_fixture = SchedulerTestFixture {
         scheduler_config: SchedulerConfig {
@@ -1069,12 +1071,12 @@ fn subnet_messages_respect_instruction_limit_per_round() {
         },
         metrics_registry: MetricsRegistry::new(),
         canister_num: 1,
-        message_num_per_canister: 1,
+        message_num_per_canister: 10,
     };
 
     let mut exec_env = default_exec_env_mock(
         &scheduler_test_fixture,
-        1,
+        10,
         scheduler_test_fixture
             .scheduler_config
             .max_instructions_per_message,
@@ -1083,12 +1085,12 @@ fn subnet_messages_respect_instruction_limit_per_round() {
 
     exec_env
         .expect_execute_subnet_message()
-        .times(5)
+        .times(3)
         .returning(move |_, state, _, _, _, _| (state, NumInstructions::from(0)));
 
     let exec_env = Arc::new(exec_env);
 
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(1));
+    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(10));
 
     scheduler_test(
         &scheduler_test_fixture,
@@ -1117,7 +1119,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
                                 .receiver(CanisterId::from(subnet_id))
                                 .method_name(Method::CanisterStatus)
                                 .method_payload(payload.clone())
-                                .payment(Funds::new(Cycles::from(cycles)))
+                                .payment(Cycles::from(cycles))
                                 .build(),
                         ),
                     )
@@ -1451,6 +1453,8 @@ fn can_record_metrics_single_scheduler_thread() {
             log,
         );
 
+        let measurement_scope = MeasurementScope::root(&scheduler.metrics.round_inner_iteration);
+
         scheduler.execute_canisters_in_inner_round(
             vec![vec![canister_state]],
             scheduler_config,
@@ -1460,6 +1464,7 @@ fn can_record_metrics_single_scheduler_thread() {
             Arc::new(RoutingTable::default()),
             subnet_records,
             HeartbeatHandling::Execute,
+            &measurement_scope,
         );
 
         let cycles_consumed_per_message_stats = fetch_histogram_stats(
@@ -1881,6 +1886,178 @@ fn replicated_state_metrics_nothing_exported() {
             (&[("status", "stopping")], 0),
             (&[("status", "stopped")], 0),
         ]),
+    );
+}
+
+#[test]
+fn execution_round_metrics_are_recorded() {
+    // In this test we have 2 canisters with 5 input messages each. There are two
+    // scheduler cores, so each canister gets its own thread for running.
+    // Besides canister messages, there are three subnet messages.
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config: SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(10),
+            ..SchedulerConfig::application_subnet()
+        },
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: 2,
+        message_num_per_canister: 5,
+    };
+    let mut exec_env = default_exec_env_mock(
+        &scheduler_test_fixture,
+        10,
+        NumInstructions::from(10),
+        NumBytes::new(0),
+    );
+
+    exec_env
+        .expect_execute_subnet_message()
+        .times(3)
+        .returning(move |_, state, _, _, _, _| (state, NumInstructions::from(0)));
+
+    let exec_env = Arc::new(exec_env);
+
+    let ingress_history_writer = default_ingress_history_writer_mock(10);
+    let ingress_history_writer = Arc::new(ingress_history_writer);
+    scheduler_test(
+        &scheduler_test_fixture,
+        |scheduler| {
+            let mut state = get_initial_state(
+                scheduler_test_fixture.canister_num,
+                scheduler_test_fixture.message_num_per_canister,
+            );
+            let canister = state.canisters_iter().next().unwrap();
+            let controller_id = canister.system_state.controllers.iter().next().unwrap();
+            let controller = CanisterId::new(*controller_id).unwrap();
+            let canister_id = canister.canister_id();
+            let subnet_id = state.metadata.own_subnet_id;
+            let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+            let cycles = 1000000;
+            for _ in 0..3 {
+                state
+                    .subnet_queues
+                    .push_input(
+                        QUEUE_INDEX_NONE,
+                        RequestOrResponse::Request(
+                            RequestBuilder::new()
+                                .sender(controller)
+                                .receiver(CanisterId::from(subnet_id))
+                                .method_name(Method::CanisterStatus)
+                                .method_payload(payload.clone())
+                                .payment(Cycles::from(cycles))
+                                .build(),
+                        ),
+                    )
+                    .unwrap();
+            }
+            scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                UNIX_EPOCH,
+                ExecutionRound::from(1),
+                ProvisionalWhitelist::Set(BTreeSet::new()),
+            );
+            assert_eq!(1, scheduler.metrics.round.duration.get_sample_count(),);
+            assert_eq!(1, scheduler.metrics.round.instructions.get_sample_count(),);
+            assert_eq!(
+                130,
+                scheduler.metrics.round.instructions.get_sample_sum() as u64
+            );
+            assert_eq!(1, scheduler.metrics.round.messages.get_sample_count());
+            assert_eq!(13, scheduler.metrics.round.messages.get_sample_sum() as u64);
+            assert_eq!(
+                30,
+                scheduler
+                    .metrics
+                    .round_subnet_queue
+                    .instructions
+                    .get_sample_sum() as u64,
+            );
+            assert_eq!(
+                3,
+                scheduler
+                    .metrics
+                    .round_subnet_queue
+                    .messages
+                    .get_sample_sum() as u64,
+            );
+            assert_eq!(
+                100,
+                scheduler.metrics.round_inner.instructions.get_sample_sum() as u64,
+            );
+            assert_eq!(
+                10,
+                scheduler.metrics.round_inner.messages.get_sample_sum() as u64,
+            );
+            assert_eq!(
+                1,
+                scheduler
+                    .metrics
+                    .round_inner_iteration
+                    .instructions
+                    .get_sample_count(),
+            );
+            assert_eq!(
+                100,
+                scheduler
+                    .metrics
+                    .round_inner_iteration
+                    .instructions
+                    .get_sample_sum() as u64,
+            );
+            assert_eq!(
+                1,
+                scheduler
+                    .metrics
+                    .round_inner_iteration
+                    .messages
+                    .get_sample_count(),
+            );
+            assert_eq!(
+                10,
+                scheduler
+                    .metrics
+                    .round_inner_iteration
+                    .messages
+                    .get_sample_sum() as u64,
+            );
+            assert_eq!(
+                2,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread
+                    .instructions
+                    .get_sample_count(),
+            );
+            assert_eq!(
+                100,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread
+                    .instructions
+                    .get_sample_sum() as u64,
+            );
+            assert_eq!(
+                2,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread
+                    .messages
+                    .get_sample_count(),
+            );
+            assert_eq!(
+                10,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread
+                    .messages
+                    .get_sample_sum() as u64,
+            );
+        },
+        ingress_history_writer,
+        exec_env,
     );
 }
 

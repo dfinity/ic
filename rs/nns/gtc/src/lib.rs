@@ -8,7 +8,7 @@ use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::GovernanceError;
-use secp256k1::{PublicKey, PublicKeyFormat};
+use libsecp256k1::{PublicKey, PublicKeyFormat};
 use sha3::{Digest, Keccak256};
 use simple_asn1::ASN1Block::{BitString, ObjectIdentifier, Sequence};
 use simple_asn1::{oid, to_der};
@@ -313,8 +313,8 @@ pub mod test_constants {
     use super::{decode_hex_public_key, public_key_to_gtc_address, public_key_to_principal};
     use ic_base_types::PrincipalId;
     use ic_crypto_sha256::Sha256;
-    use secp256k1::{sign, Message};
-    use secp256k1::{PublicKey, PublicKeyFormat, SecretKey};
+    use libsecp256k1::{sign, Message};
+    use libsecp256k1::{PublicKey, PublicKeyFormat, SecretKey};
     use std::str::FromStr;
 
     /// An identity used to make calls to the GTC canister in tests

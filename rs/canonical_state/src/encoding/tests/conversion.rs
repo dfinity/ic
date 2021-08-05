@@ -1,5 +1,5 @@
 use super::test_fixtures::*;
-use crate::encoding::types;
+use crate::{encoding::types, CURRENT_CERTIFICATION_VERSION};
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     messages::{Payload, RejectContext, RequestOrResponse},
@@ -13,7 +13,9 @@ fn roundtrip_conversion_stream_header() {
 
     assert_eq!(
         header,
-        types::StreamHeader::from(&header).try_into().unwrap()
+        types::StreamHeader::from((&header, CURRENT_CERTIFICATION_VERSION))
+            .try_into()
+            .unwrap()
     );
 }
 
@@ -23,7 +25,9 @@ fn roundtrip_conversion_request() {
 
     assert_eq!(
         request,
-        types::RequestOrResponse::from(&request).try_into().unwrap()
+        types::RequestOrResponse::from((&request, CURRENT_CERTIFICATION_VERSION))
+            .try_into()
+            .unwrap()
     );
 }
 
@@ -33,7 +37,7 @@ fn roundtrip_conversion_response() {
 
     assert_eq!(
         response,
-        types::RequestOrResponse::from(&response)
+        types::RequestOrResponse::from((&response, CURRENT_CERTIFICATION_VERSION))
             .try_into()
             .unwrap()
     );
@@ -45,7 +49,7 @@ fn roundtrip_conversion_reject_response() {
 
     assert_eq!(
         response,
-        types::RequestOrResponse::from(&response)
+        types::RequestOrResponse::from((&response, CURRENT_CERTIFICATION_VERSION))
             .try_into()
             .unwrap()
     );

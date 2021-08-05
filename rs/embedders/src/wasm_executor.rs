@@ -12,6 +12,7 @@ use ic_types::{
     methods::{FuncRef, SystemMethod, WasmMethod},
     NumInstructions,
 };
+use ic_wasm_utils::validation::WasmImportsDetails;
 use ic_wasm_utils::{
     instrumentation::{instrument, InstructionCostTable},
     validation::{validate_wasm_binary, WasmValidationLimits},
@@ -39,6 +40,14 @@ struct WasmExecutorMetrics {
     // TODO(EXC-365): Remove this metric once we confirm that no module imports `ic0.call_simple`
     // anymore.
     imports_call_simple: IntCounter,
+    // TODO(EXC-376): Remove these metrics once we confirm that no module imports these IC0 methods
+    // anymore.
+    imports_call_cycles_add: IntCounter,
+    imports_canister_cycle_balance: IntCounter,
+    imports_msg_cycles_available: IntCounter,
+    imports_msg_cycles_refunded: IntCounter,
+    imports_msg_cycles_accept: IntCounter,
+    imports_mint_cycles: IntCounter,
 }
 
 impl WasmExecutorMetrics {
@@ -52,6 +61,30 @@ impl WasmExecutorMetrics {
             imports_call_simple: metrics_registry.int_counter(
                 "execution_wasm_imports_call_simple_total",
                 "The number of Wasm modules that import ic0.call_simple",
+            ),
+            imports_call_cycles_add: metrics_registry.int_counter(
+                "execution_wasm_imports_call_cycles_add",
+                "The number of Wasm modules that import ic0.call_cycles_add",
+            ),
+            imports_canister_cycle_balance: metrics_registry.int_counter(
+                "execution_wasm_imports_canister_cycle_balance",
+                "The number of Wasm modules that import ic0.canister_cycle_balance",
+            ),
+            imports_msg_cycles_available: metrics_registry.int_counter(
+                "execution_wasm_imports_msg_cycles_available",
+                "The number of Wasm modules that import ic0.msg_cycles_available",
+            ),
+            imports_msg_cycles_refunded: metrics_registry.int_counter(
+                "execution_wasm_imports_msg_cycles_refunded",
+                "The number of Wasm modules that import ic0.msg_cycles_refunded",
+            ),
+            imports_msg_cycles_accept: metrics_registry.int_counter(
+                "execution_wasm_imports_msg_cycles_accept",
+                "The number of Wasm modules that import ic0.msg_cycles_accept",
+            ),
+            imports_mint_cycles: metrics_registry.int_counter(
+                "execution_wasm_imports_mint_cycles",
+                "The number of Wasm modules that import ic0.mint_cycles",
             ),
         }
     }
@@ -75,6 +108,30 @@ impl WasmExecutor {
             wasm_embedder,
             config: WasmExecutorConfig::new(max_globals, max_functions),
             metrics: WasmExecutorMetrics::new(metrics_registry),
+        }
+    }
+
+    pub fn observe_metrics(&self, imports_details: &WasmImportsDetails) {
+        if imports_details.imports_call_simple {
+            self.metrics.imports_call_simple.inc();
+        }
+        if imports_details.imports_call_cycles_add {
+            self.metrics.imports_call_cycles_add.inc();
+        }
+        if imports_details.imports_canister_cycle_balance {
+            self.metrics.imports_canister_cycle_balance.inc();
+        }
+        if imports_details.imports_msg_cycles_available {
+            self.metrics.imports_msg_cycles_available.inc();
+        }
+        if imports_details.imports_msg_cycles_accept {
+            self.metrics.imports_msg_cycles_accept.inc();
+        }
+        if imports_details.imports_msg_cycles_refunded {
+            self.metrics.imports_msg_cycles_refunded.inc();
+        }
+        if imports_details.imports_mint_cycles {
+            self.metrics.imports_mint_cycles.inc();
         }
     }
 
@@ -119,9 +176,7 @@ impl WasmExecutor {
                         .reserved_exports
                         .inc_by(details.reserved_exports as u64);
                 }
-                if details.imports_call_simple {
-                    self.metrics.imports_call_simple.inc();
-                }
+                self.observe_metrics(&details.imports_details);
                 instrument(&execution_state.wasm_binary, &InstructionCostTable::new())
                     .map_err(HypervisorError::from)
             })

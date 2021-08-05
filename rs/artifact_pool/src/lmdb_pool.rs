@@ -298,11 +298,11 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         let type_keys = Artifact::type_keys();
         let mut builder = Environment::new();
         let mut builder_flags = EnvironmentFlags::NO_TLS;
-        let mut permission = 0o600;
+        let mut permission = 0o644;
         if read_only {
             builder_flags |= EnvironmentFlags::READ_ONLY;
             builder_flags |= EnvironmentFlags::NO_LOCK;
-            permission = 0o400;
+            permission = 0o444;
         }
         builder.set_flags(builder_flags);
         builder.set_max_readers(MAX_READERS);

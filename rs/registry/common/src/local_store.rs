@@ -7,11 +7,11 @@ use ic_interfaces::registry::{
 };
 use ic_types::registry::RegistryDataProviderError;
 use ic_types::RegistryVersion;
-use ic_utils::fs::write_atomically;
+use ic_utils::fs::write_protobuf_using_tmp_file;
 use prost::Message;
 use std::{
     convert::TryFrom,
-    io::{self, Write},
+    io,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -123,11 +123,7 @@ impl LocalStoreImpl {
         // version == 1 || version-1 exists
         let path = self.get_path(version);
         std::fs::create_dir_all(path.parent().unwrap())?;
-        write_atomically(path, |f| {
-            let mut buf: Vec<u8> = vec![];
-            pb.encode(&mut buf).expect("encode cannot fail.");
-            f.write_all(buf.as_slice())
-        })
+        write_protobuf_using_tmp_file(path, &pb)
     }
 
     fn certified_time_path(&self) -> PathBuf {
@@ -189,11 +185,7 @@ impl LocalStoreWriter for LocalStoreImpl {
     fn update_certified_time(&self, unix_epoch_nanos: u64) -> io::Result<()> {
         let path = self.certified_time_path();
         let pb = PbCertifiedTime { unix_epoch_nanos };
-        write_atomically(path, |f| {
-            let mut buf: Vec<u8> = vec![];
-            pb.encode(&mut buf).expect("cannot fail!");
-            f.write_all(buf.as_slice())
-        })
+        write_protobuf_using_tmp_file(path, &pb)
     }
 }
 

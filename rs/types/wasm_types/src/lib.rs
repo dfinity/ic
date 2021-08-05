@@ -2,7 +2,7 @@
 //! Internet Computer.
 mod errors;
 
-pub use errors::{ParityWasmError, WasmInstrumentationError, WasmValidationError};
+pub use errors::{ParityWasmError, WasmEngineError, WasmInstrumentationError, WasmValidationError};
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use std::{
     fmt,

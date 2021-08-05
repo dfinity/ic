@@ -25,6 +25,10 @@ impl Cycles {
         Self((high as u128) << 64 | low as u128)
     }
 
+    pub fn zero() -> Self {
+        Self(0)
+    }
+
     pub fn get(self) -> u128 {
         self.0
     }
@@ -39,6 +43,12 @@ impl Cycles {
 
     pub fn low64(&self) -> u64 {
         (self.0 & 0xffff_ffff_ffff_ffff) as u64
+    }
+
+    pub fn take(&mut self) -> Cycles {
+        let amount = self.0;
+        self.0 = 0;
+        Cycles(amount)
     }
 }
 

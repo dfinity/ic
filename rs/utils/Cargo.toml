@@ -7,6 +7,7 @@ edition = "2018"
 features = "0.10.0"
 bitflags = "1.2.1"
 hex = "0.4.2"
+prost = "0.7.0"
 
 [target.'cfg(target_family = "unix")'.dependencies]
 rand = "0.8.3"
