@@ -3,7 +3,7 @@ FROM ubuntu:20.04
 ARG rust_version=1.52.1
 # make sure the motoko_version corresponds to the same version in nix/sources.json
 ARG motoko_version=0.5.10
-ARG sdk_version=0.7.7
+ARG sdk_version=0.8.0
 
 # The image expects the following volumes mounted from the host:
 # /cache - holding the sccache artifacts
@@ -40,7 +40,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         dosfstools mtools fakeroot faketime android-sdk-ext4-utils policycoreutils \
         python3 python3-requests python3-pip python3-gflags python3-cbor \
         shellcheck sudo docker-ce-cli \
-        asciidoctor plantuml graphviz cpio && gem install asciidoctor-diagram rouge
+        asciidoctor plantuml graphviz cpio nodejs npm && gem install asciidoctor-diagram rouge
 
 # Add the `ubuntu` user, and the required folders
 RUN useradd -ms /bin/bash -u 1000 ubuntu && \
@@ -125,4 +125,4 @@ RUN mkdir --mode=0700 /home/ubuntu/.ssh && \
 
 WORKDIR /
 
-ENTRYPOINT ["/usr/bin/dumb-init", "--"] 
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]

@@ -1718,7 +1718,7 @@ fn subnet_canister_request_bad_candid_payload() {
                 refund: Cycles::from(cycles),
                 response_payload: Payload::Reject(RejectContext {
                     code: RejectCode::CanisterError,
-                    message: "Error decoding candid: wrong magic number [1, 2, 3, 0]".to_string()
+                    message: "Error decoding candid: Cannot parse header 010203".to_string()
                 })
             })
         );

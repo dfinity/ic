@@ -125,6 +125,10 @@ fn main() {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuron.MergeMaturity",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.ManageNeuron.Split",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
@@ -174,6 +178,10 @@ fn main() {
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.ManageNeuronResponse.SpawnResponse",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuronResponse.MergeMaturityResponse",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(

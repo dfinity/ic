@@ -6,7 +6,16 @@ version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a55f82cfe485775d02112886f4169bde0c5894d75e79ead7eafe7e40a25e45f7"
 dependencies = [
- "gimli",
+ "gimli 0.23.0",
+]
+
+[[package]]
+name = "addr2line"
+version = "0.15.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7a2e47a1fbe209ee101dd6d61285226744c6c8d3c21c8dc878ba6cb9f467f3a"
+dependencies = [
+ "gimli 0.24.0",
 ]
 
 [[package]]
@@ -255,11 +264,11 @@ version = "0.3.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d117600f438b1707d4e4ae15d3595657288f8235a0eb593e80ecc98ab34e1bc"
 dependencies = [
- "addr2line",
+ "addr2line 0.14.1",
  "cfg-if 1.0.0",
  "libc",
  "miniz_oxide",
- "object",
+ "object 0.23.0",
  "rustc-demangle",
 ]
 
@@ -344,6 +353,28 @@ dependencies = [
  "rustc-hash",
  "shlex",
  "which 3.1.1",
+]
+
+[[package]]
+name = "binread"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a883c66db6f3c86b19210ceed1b2b18de64b617c92cb0f0bc90b8c05f18dba87"
+dependencies = [
+ "binread_derive",
+ "lazy_static",
+]
+
+[[package]]
+name = "binread_derive"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c575d9a28eb4c2d61747b23d50271c6699b941448c35a738af35267f90b3d4d2"
+dependencies = [
+ "either",
+ "proc-macro2 1.0.27",
+ "quote 1.0.7",
+ "syn 1.0.73",
 ]
 
 [[package]]
@@ -492,20 +523,22 @@ checksum = "b700ce4376041dcd0a327fd0097c41095743c4c8af8887265942faf1100bd040"
 
 [[package]]
 name = "candid"
-version = "0.6.21"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65f05b872d010281c905c4e6ff2079c1341d1e527e05f3bfab88d49ea3269def"
+checksum = "ea807b020171a8d890e2280f54947b0ef38d70b5041d15e8a9a00a94e5f36d78"
 dependencies = [
+ "anyhow",
+ "binread",
  "byteorder",
  "candid_derive",
  "codespan-reporting",
  "hex",
- "ic-types 0.1.5",
+ "ic-types 0.2.1",
  "lalrpop",
  "lalrpop-util",
  "leb128",
  "logos",
- "num-bigint 0.3.1",
+ "num-bigint 0.4.0",
  "num-traits",
  "num_enum",
  "paste 1.0.5",
@@ -517,9 +550,9 @@ dependencies = [
 
 [[package]]
 name = "candid_derive"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d7232a5dd836d83ae9ffd79061b42d729afab6f11bfaba7dc2a82575b686ae2"
+checksum = "2e02c03c4d547674a3f3f3109538fb49871fbe636216daa019f06a62faca9061"
 dependencies = [
  "lazy_static",
  "proc-macro2 1.0.27",
@@ -672,9 +705,9 @@ dependencies = [
 
 [[package]]
 name = "codespan-reporting"
-version = "0.9.5"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e0762455306b1ed42bc651ef6a2197aabda5e1d4a43c34d5eab5c1a3634e81d"
+checksum = "3538270d33cc669650c4b093848450d380def10c331d38c768e34cac80576e6e"
 dependencies = [
  "termcolor",
  "unicode-width",
@@ -756,35 +789,33 @@ checksum = "6d375c433320f6c5057ae04a04376eef4d04ce2801448cf8863a78da99107be4"
 
 [[package]]
 name = "cranelift-bforest"
-version = "0.73.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.74.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "cranelift-entity",
 ]
 
 [[package]]
 name = "cranelift-codegen"
-version = "0.73.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.74.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
- "byteorder",
  "cranelift-bforest",
  "cranelift-codegen-meta",
  "cranelift-codegen-shared",
  "cranelift-entity",
- "gimli",
+ "gimli 0.24.0",
  "log",
  "regalloc",
  "serde",
  "smallvec",
  "target-lexicon 0.12.0",
- "thiserror",
 ]
 
 [[package]]
 name = "cranelift-codegen-meta"
-version = "0.73.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.74.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "cranelift-codegen-shared",
  "cranelift-entity",
@@ -792,24 +823,24 @@ dependencies = [
 
 [[package]]
 name = "cranelift-codegen-shared"
-version = "0.73.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.74.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "cranelift-entity"
-version = "0.73.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.74.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "cranelift-frontend"
-version = "0.73.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.74.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "cranelift-codegen",
  "log",
@@ -819,8 +850,8 @@ dependencies = [
 
 [[package]]
 name = "cranelift-native"
-version = "0.73.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.74.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "cranelift-codegen",
  "target-lexicon 0.12.0",
@@ -828,8 +859,8 @@ dependencies = [
 
 [[package]]
 name = "cranelift-wasm"
-version = "0.73.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.74.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
@@ -1196,7 +1227,7 @@ dependencies = [
 [[package]]
 name = "derive_more"
 version = "0.99.8-alpha.0"
-source = "git+https://github.com/dfinity-lab/derive_more#9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da"
+source = "git+https://github.com/dfinity-lab/derive_more?branch=master#9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da"
 dependencies = [
  "proc-macro2 1.0.27",
  "quote 1.0.7",
@@ -1501,12 +1532,12 @@ dependencies = [
 
 [[package]]
 name = "escargot"
-version = "0.5.0"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74cf96bec282dcdb07099f7e31d9fed323bca9435a09aba7b6d99b7617bca96d"
+checksum = "44bb3f795fe1b9d34f089c7fab034c2b757998d65361d95ef008045b57665262"
 dependencies = [
- "lazy_static",
  "log",
+ "once_cell 1.5.2",
  "serde",
  "serde_json",
 ]
@@ -1873,6 +1904,12 @@ name = "gimli"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6503fe142514ca4799d4c26297c4248239fe8838d827db6bd6065c6ed29a6ce"
+
+[[package]]
+name = "gimli"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e4075386626662786ddb0ec9081e7c7eeb1ba31951f447ca780ef9f5d568189"
 dependencies = [
  "fallible-iterator",
  "indexmap",
@@ -2303,13 +2340,12 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f385e97263deb4469938ba1bbbb0a0259294132ca2523e20a971225571d5485"
+checksum = "59ff298314d235dd2c150f74157df5bbcdbd48604b895425840c2fe9225c9a3a"
 dependencies = [
  "candid",
  "cfg-if 0.1.10",
- "ic-types 0.1.5",
  "serde",
 ]
 
@@ -4037,9 +4073,9 @@ dependencies = [
 
 [[package]]
 name = "ic-types"
-version = "0.1.5"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94dd8ec75019bc7159efe6ca2de5392e14a8e82c02ec6dae6d1b32af5337acd1"
+checksum = "471541b20b3d2bb26dd81ac0c44c66eabeaa2ba3641e96606b6c66f86a035a27"
 dependencies = [
  "base32",
  "crc32fast",
@@ -5266,6 +5302,12 @@ name = "object"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a9a7ab5d64814df0fe4a4b5ead45ed6c5f181ee3ff04ba344313a6c80446c5d4"
+
+[[package]]
+name = "object"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a5b3dd1c072ee7963717671d1ca129f1048fda25edea6b752bfc71ac8854170"
 dependencies = [
  "crc32fast",
  "indexmap",
@@ -5286,7 +5328,7 @@ version = "0.8.0"
 [[package]]
 name = "once_cell"
 version = "1.4.0-alpha.0"
-source = "git+https://github.com/dfinity-lab/once_cell#854095347d356e006ea29b7750637a14a20a6dae"
+source = "git+https://github.com/dfinity-lab/once_cell?branch=master#854095347d356e006ea29b7750637a14a20a6dae"
 
 [[package]]
 name = "once_cell"
@@ -6392,6 +6434,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "candid",
+ "cycles-minting-canister",
  "dfn_candid",
  "dfn_core",
  "ic-base-types",
@@ -7852,14 +7895,14 @@ checksum = "d7cff876b8f18eed75a66cf49b65e7f967cb354a7aa16003fb55dbfd25b44b4f"
 
 [[package]]
 name = "wasmparser"
-version = "0.77.0"
+version = "0.78.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b35c86d22e720a07d954ebbed772d01180501afe7d03d464f413bb5f8914a8d6"
+checksum = "52144d4c78e5cf8b055ceab8e5fa22814ce4315d6002ad32cfd914f37c12fd65"
 
 [[package]]
 name = "wasmtime"
-version = "0.26.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.27.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "anyhow",
  "backtrace",
@@ -7890,8 +7933,8 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-cache"
-version = "0.26.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.27.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "anyhow",
  "base64 0.13.0",
@@ -7910,26 +7953,27 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-cranelift"
-version = "0.26.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.27.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
  "cranelift-frontend",
  "cranelift-wasm",
+ "target-lexicon 0.12.0",
  "wasmparser",
  "wasmtime-environ",
 ]
 
 [[package]]
 name = "wasmtime-debug"
-version = "0.26.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.27.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "anyhow",
- "gimli",
+ "gimli 0.24.0",
  "more-asserts",
- "object",
+ "object 0.24.0",
  "target-lexicon 0.12.0",
  "thiserror",
  "wasmparser",
@@ -7938,19 +7982,17 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-environ"
-version = "0.26.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.27.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
- "anyhow",
  "cfg-if 1.0.0",
  "cranelift-codegen",
  "cranelift-entity",
  "cranelift-wasm",
- "gimli",
+ "gimli 0.24.0",
  "indexmap",
  "log",
  "more-asserts",
- "region",
  "serde",
  "thiserror",
  "wasmparser",
@@ -7958,8 +8000,8 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-fiber"
-version = "0.26.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.27.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "cc",
  "libc",
@@ -7968,10 +8010,10 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-jit"
-version = "0.26.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.27.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
- "addr2line",
+ "addr2line 0.15.2",
  "anyhow",
  "cfg-if 1.0.0",
  "cranelift-codegen",
@@ -7979,10 +8021,10 @@ dependencies = [
  "cranelift-frontend",
  "cranelift-native",
  "cranelift-wasm",
- "gimli",
+ "gimli 0.24.0",
  "log",
  "more-asserts",
- "object",
+ "object 0.24.0",
  "rayon",
  "region",
  "serde",
@@ -8000,12 +8042,12 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-obj"
-version = "0.26.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.27.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "anyhow",
  "more-asserts",
- "object",
+ "object 0.24.0",
  "target-lexicon 0.12.0",
  "wasmtime-debug",
  "wasmtime-environ",
@@ -8013,15 +8055,15 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-profiling"
-version = "0.26.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.27.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "anyhow",
  "cfg-if 1.0.0",
- "gimli",
+ "gimli 0.24.0",
  "lazy_static",
  "libc",
- "object",
+ "object 0.24.0",
  "scroll",
  "serde",
  "target-lexicon 0.12.0",
@@ -8031,8 +8073,8 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-runtime"
-version = "0.26.1"
-source = "git+https://github.com/dfinity-lab/wasmtime?rev=60d36d996dfbd335ac18ee6c36e1f10acfaf0c30#60d36d996dfbd335ac18ee6c36e1f10acfaf0c30"
+version = "0.27.0"
+source = "git+https://github.com/dfinity-lab/wasmtime?rev=3b3326ca0bc3059acb27811dd5a7e0be1065a59d#3b3326ca0bc3059acb27811dd5a7e0be1065a59d"
 dependencies = [
  "anyhow",
  "backtrace",

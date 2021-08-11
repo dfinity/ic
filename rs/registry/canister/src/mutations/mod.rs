@@ -6,6 +6,7 @@ pub mod do_add_nodes_to_subnet;
 pub mod do_bless_replica_version;
 pub mod do_clear_provisional_whitelist;
 pub mod do_create_subnet;
+pub mod do_delete_subnet;
 pub mod do_recover_subnet;
 pub mod do_remove_node_directly;
 pub mod do_remove_nodes;

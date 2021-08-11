@@ -45,6 +45,7 @@ use async_trait::async_trait;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
+use crate::pb::v1::manage_neuron_response::MergeMaturityResponse;
 use crate::pb::v1::proposal::Action;
 use dfn_core::api::spawn;
 use ledger_canister::{ICPTs, ICP_SUBDIVIDABLE_BY};
@@ -307,6 +308,12 @@ impl ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::Spawn(
                 manage_neuron_response::SpawnResponse { created_neuron_id },
             )),
+        }
+    }
+
+    pub fn merge_maturity_response(response: MergeMaturityResponse) -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::MergeMaturity(response)),
         }
     }
 
@@ -879,6 +886,41 @@ impl Neuron {
         } else {
             0
         }
+    }
+
+    /// Update the stake of this neuron to `new_stake` and adjust this neuron's
+    /// age accordingly
+    pub fn update_stake(&mut self, new_stake_e8s: u64, now: u64) {
+        // If this neuron has an age and its stake is being increased, adjust this
+        // neuron's age
+        if self.aging_since_timestamp_seconds < now && self.cached_neuron_stake_e8s <= new_stake_e8s
+        {
+            let old_stake = self.cached_neuron_stake_e8s as u128;
+            let old_age = now.saturating_sub(self.aging_since_timestamp_seconds) as u128;
+            let new_age = (old_age * old_stake) / (new_stake_e8s as u128);
+
+            // new_age * new_stake = old_age * old_stake -
+            // (old_stake * old_age) % new_stake. That is, age is
+            // adjusted in proportion to the stake, but due to the
+            // discrete nature of u64 numbers, some resolution is
+            // lost due to the division above. This means the age
+            // bonus is derived from a constant times age times
+            // stake, minus up to new_stake - 1 each time the
+            // neuron is refreshed. Only if old_age * old_stake is
+            // a multiple of new_stake does the age remain
+            // constant after the refresh operation. However, in
+            // the end, the most that can be lost due to rounding
+            // from the actual age, is always less 1 second, so
+            // this is not a problem.
+            self.aging_since_timestamp_seconds = now.saturating_sub(new_age as u64);
+            // Note that if new_stake == old_stake, then
+            // new_age == old_age, and
+            // now - new_age =
+            // now-(now-neuron.aging_since_timestamp_seconds)
+            // = neuron.aging_since_timestamp_seconds.
+        }
+
+        self.cached_neuron_stake_e8s = new_stake_e8s as u64;
     }
 }
 
@@ -1970,20 +2012,12 @@ impl Governance {
 
         // Lets figure out if the neuron already exists so that we can choose whether
         // to refresh the stake or create a new neuron.
-        if let Some(mut neuron) = self.get_neuron_by_subaccount_mut(&gov_subaccount) {
+        if let Some(neuron) = self.get_neuron_by_subaccount_mut(&gov_subaccount) {
+            let new_stake = neuron
+                .cached_neuron_stake_e8s
+                .saturating_add(transfer.neuron_stake_e8s);
+            neuron.update_stake(new_stake, now);
             let nid = neuron.id.as_ref().expect("Neuron must have an id");
-            // Increase the stake according to the new transfer.
-            neuron.cached_neuron_stake_e8s += transfer.neuron_stake_e8s;
-            // Decrease the age in proportion to the added stake if not u64::MAX.
-            if neuron.aging_since_timestamp_seconds != u64::MAX {
-                // Use u128 to prevent overflows
-                let neuron_age: u128 = (now - neuron.aging_since_timestamp_seconds) as u128;
-                let neuron_age_increase: u128 = (neuron_age * transfer.neuron_stake_e8s as u128)
-                    / neuron.cached_neuron_stake_e8s as u128;
-
-                neuron.aging_since_timestamp_seconds += neuron_age_increase as u64;
-            }
-
             Ok(nid.clone())
         // ... else we're creating a new neuron.
         } else {
@@ -2139,34 +2173,7 @@ impl Governance {
                     neuron.cached_neuron_stake_e8s = balance.get_e8s();
                 }
                 Ordering::Less => {
-                    // If the neuron has an age, adjust it.
-                    if neuron.aging_since_timestamp_seconds != u64::MAX {
-                        // Note that old_stake < new_stake
-                        let old_stake = neuron.cached_neuron_stake_e8s as u128;
-                        let new_stake = balance.get_e8s() as u128;
-                        assert!(new_stake > 0);
-                        let old_age =
-                            now.saturating_sub(neuron.aging_since_timestamp_seconds) as u128;
-                        let new_age = (old_age * old_stake) / new_stake;
-                        // new_age * new_stake = old_age * old_stake -
-                        // (old_stake * old_age) % new_stake. That is, age is
-                        // adjusted in proportion to the stake, but due to the
-                        // discrete nature of u64 numbers, some resolution is
-                        // lost due to the division above. This means the age
-                        // bonus is derived from a constant times age times
-                        // stake, minus up to new_stake - 1 each time the
-                        // neuron is refreshed. Only if old_age * old_stake is
-                        // a multiple of new_stake does the age remain
-                        // constant after the refresh operation.
-                        neuron.aging_since_timestamp_seconds = now.saturating_sub(new_age as u64);
-                        // Note that if new_stake == old_stake, then
-                        // new_age == old_age, and
-                        // now - new_age =
-                        // now-(now-neuron.aging_since_timestamp_seconds)
-                        // = neuron.aging_since_timestamp_seconds.
-                    }
-                    // Update the cached stake - after the age has been adjusted.
-                    neuron.cached_neuron_stake_e8s = balance.get_e8s();
+                    neuron.update_stake(balance.get_e8s(), now);
                 }
                 // If the stake is the same as the account balance,
                 // just return the neuron id (this way this method
@@ -2960,6 +2967,116 @@ impl Governance {
         });
 
         Ok(child_nid)
+    }
+
+    /// Merges the maturity of a neuron into the neuron's stake.
+    ///
+    /// This method allows a neuron controller to merge the currently
+    /// existing maturity of a neuron into the neuron's stake. The
+    /// caller can choose a percentage of maturity to merge.
+    ///
+    /// Pre-conditions:
+    /// - The neuron is controlled by `caller`
+    /// - The neuron has some maturity to merge.
+    /// - The e8s equivalent of the amount of maturity to merge must be more
+    ///   than the transaction fee.
+    pub async fn merge_maturity_of_neuron(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        merge_maturity: &manage_neuron::MergeMaturity,
+    ) -> Result<MergeMaturityResponse, GovernanceError> {
+        let neuron = self.get_neuron(id)?.clone();
+        let nid = neuron.id.as_ref().expect("Neurons must have an id");
+        let subaccount = subaccount_from_slice(&neuron.account)?.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Neuron subaccount not present.",
+            )
+        })?;
+
+        if !neuron.is_controlled_by(caller) {
+            return Err(GovernanceError::new(ErrorType::NotAuthorized));
+        }
+
+        if merge_maturity.percentage_to_merge > 100 || merge_maturity.percentage_to_merge == 0 {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "The percentage of maturity to merge must be a value between 0 (exclusive) and 1 (inclusive)."));
+        }
+
+        let economics = self
+            .proto
+            .economics
+            .as_ref()
+            .expect("Governance does not have NetworkEconomics")
+            .clone();
+
+        let mut maturity_to_merge =
+            (neuron.maturity_e8s_equivalent * merge_maturity.percentage_to_merge as u64) / 100;
+
+        // Converting u64 to f64 can cause the u64 to be "rounded up", so we
+        // need to account for this possibility.
+        if maturity_to_merge > neuron.maturity_e8s_equivalent {
+            maturity_to_merge = neuron.maturity_e8s_equivalent;
+        }
+
+        if maturity_to_merge <= economics.transaction_fee_e8s {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Tried to merge {} e8s, but can't merge an amount less than the transaction fee of {} e8s",
+                    maturity_to_merge,
+                    economics.transaction_fee_e8s
+                ),
+            ));
+        }
+
+        let now = self.env.now();
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: now,
+            command: Some(InFlightCommand::MergeMaturity(merge_maturity.clone())),
+        };
+
+        // Lock the neuron so that no other operation can change the maturity while we
+        // mint and merge the new stake from the maturity.
+        let _neuron_lock = self.lock_neuron_for_command(nid.id, in_flight_command.clone())?;
+
+        // Do the transfer, this is a minting transfer, from the governance canister's
+        // (which is also the minting canister) main account into the neuron's
+        // subaccount.
+        let _block_height: u64 = self
+            .ledger
+            .transfer_funds(
+                maturity_to_merge,
+                0, // Minting transfer don't pay a fee.
+                None,
+                AccountIdentifier::new(
+                    ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+                    Some(subaccount),
+                ),
+                id.id,
+            )
+            .await?;
+
+        // Adjust the maturity, stake and age of the neuron
+        let neuron = self
+            .get_neuron_mut(&nid)
+            .expect("Expected the neuron to exist");
+
+        neuron.maturity_e8s_equivalent = neuron
+            .maturity_e8s_equivalent
+            .saturating_sub(maturity_to_merge);
+        let new_stake = neuron
+            .cached_neuron_stake_e8s
+            .saturating_add(maturity_to_merge);
+        neuron.update_stake(new_stake, now);
+        let new_stake_e8s = neuron.cached_neuron_stake_e8s;
+
+        Ok(MergeMaturityResponse {
+            merged_maturity_e8s: maturity_to_merge,
+            new_stake_e8s,
+        })
     }
 
     /// Disburse part of the stake of a neuron into a new neuron, possibly
@@ -5016,6 +5133,13 @@ impl Governance {
                     ManageNeuronResponse::spawn_response,
                 )
             }
+            Some(manage_neuron::Command::MergeMaturity(m)) => self
+                .merge_maturity_of_neuron(&id, caller, m)
+                .await
+                .map_or_else(
+                    ManageNeuronResponse::error,
+                    ManageNeuronResponse::merge_maturity_response,
+                ),
             Some(manage_neuron::Command::Split(s)) => {
                 self.split_neuron(&id, caller, s).await.map_or_else(
                     ManageNeuronResponse::error,

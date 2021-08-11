@@ -1,4 +1,8 @@
-use ic_base_types::CanisterId;
+use std::str::FromStr;
+
+use lazy_static::lazy_static;
+
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 
 #[cfg(target_arch = "x86_64")]
 pub mod ids;
@@ -41,6 +45,13 @@ pub const NNS_CANISTER_WASMS: [&str; 9] = [
     "identity-canister",
     "nns-ui-canister",
 ];
+
+lazy_static! {
+    pub static ref NNS_SUBNET_ID: SubnetId = SubnetId::new(
+        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap()
+    );
+}
 
 pub const NUM_NNS_CANISTERS: usize = NNS_CANISTER_WASMS.len();
 

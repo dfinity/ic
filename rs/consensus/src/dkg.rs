@@ -883,7 +883,12 @@ fn compute_remote_dkg_data(
                 expected_configs.push(config)
             }
         }
-        config_groups.push(expected_configs);
+
+        // If some configs are added into the expected_configs in the end, add this
+        // group of config(s) into the config_groups.
+        if !expected_configs.is_empty() {
+            config_groups.push(expected_configs);
+        }
     }
 
     // Retain not more than `MAX_REMOTE_DKGS_PER_INTERVAL` config groups, each
@@ -1248,6 +1253,20 @@ pub fn make_registry_cup(
     } else {
         versioned_record.version
     };
+    let replica_version = match registry.get_replica_version(subnet_id, registry_version) {
+        Ok(Some(replica_version)) => replica_version,
+        err => {
+            if let Some(logger) = logger {
+                warn!(
+                    logger,
+                    "Failed to retrieve subnet replica version at registry version {:?}: {:?}",
+                    registry_version,
+                    err
+                );
+            }
+            return None;
+        }
+    };
     let dkg_summary = make_genesis_summary(registry, subnet_id, Some(registry_version));
     let cup_height = Height::new(cup_contents.height);
 
@@ -1257,7 +1276,8 @@ pub fn make_registry_cup(
     let high_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::HighThreshold)
         .dkg_id;
-    let block = Block::new(
+    let block = Block::new_with_replica_version(
+        replica_version.clone(),
         Id::from(CryptoHash(Vec::new())),
         Payload::new(crypto_hash, dkg_summary.into()),
         cup_height,
@@ -1269,7 +1289,11 @@ pub fn make_registry_cup(
         },
     );
     let random_beacon = Signed {
-        content: RandomBeaconContent::new(cup_height, Id::from(CryptoHash(Vec::new()))),
+        content: RandomBeaconContent::new_with_replica_version(
+            replica_version,
+            cup_height,
+            Id::from(CryptoHash(Vec::new())),
+        ),
         signature: ThresholdSignature {
             signer: low_dkg_id,
             signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),

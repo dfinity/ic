@@ -38,7 +38,7 @@ impl Registry {
         let cup_contents_key = make_catch_up_package_contents_key(subnet_id).into_bytes();
         let RegistryValue {
             value: cup_contents_vec,
-            version: _,
+            version: cup_version,
             deletion_marker: _,
         } = self.get(&cup_contents_key, self.latest_version()).unwrap();
         let mut cup_contents =
@@ -88,6 +88,19 @@ impl Registry {
             )
             .await
             .unwrap();
+
+            let RegistryValue {
+                value: _,
+                version: new_cup_version,
+                deletion_marker: _,
+            } = self.get(&cup_contents_key, self.latest_version()).unwrap();
+
+            if cup_version != new_cup_version {
+                panic!(
+                    "CUP for Subnet {} was updated during the `setup_initial_dkg` call",
+                    subnet_id
+                );
+            }
 
             let dkg_response = SetupInitialDKGResponse::decode(&response_bytes).unwrap();
 

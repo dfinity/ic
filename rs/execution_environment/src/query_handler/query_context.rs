@@ -36,7 +36,11 @@
 //! requests.
 
 use super::query_allocations::QueryAllocationsUsed;
-use crate::{hypervisor::Hypervisor, QueryExecutionType};
+use crate::{
+    hypervisor::Hypervisor,
+    metrics::{MeasurementScope, QueryHandlerMetrics},
+    QueryExecutionType,
+};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory,
 };
@@ -51,7 +55,7 @@ use ic_types::{
         UserQuery,
     },
     user_error::{ErrorCode, RejectCode, UserError},
-    CanisterId, Cycles, PrincipalId, QueryAllocation, SubnetId,
+    CanisterId, Cycles, NumMessages, PrincipalId, QueryAllocation, SubnetId,
 };
 use std::{
     collections::BTreeMap,
@@ -144,18 +148,28 @@ impl<'a> QueryContext<'a> {
     /// - If it does not produce a response and produces additional
     /// inter-canister queries, process them till there is a response or the
     /// call graph finishes with no reply.
-    pub(super) fn run(&mut self, query: UserQuery) -> Result<WasmResult, UserError> {
+    pub(super) fn run<'b>(
+        &mut self,
+        query: UserQuery,
+        metrics: &'b QueryHandlerMetrics,
+        measurement_scope: &MeasurementScope<'b>,
+    ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         debug!(self.log, "Executing query for {}", canister_id);
         let canister = self.get_canister_from_state(&canister_id)?;
         let call_origin = CallOrigin::Query(query.source);
-        let (mut canister, result) = self.execute_query(
-            canister,
-            call_origin,
-            query.method_name.as_str(),
-            query.method_payload.as_slice(),
-            query.source.clone().get(),
-        );
+        let (mut canister, result) = {
+            let measurement_scope =
+                MeasurementScope::nested(&metrics.query_initial_call, measurement_scope);
+            self.execute_query(
+                canister,
+                call_origin,
+                query.method_name.as_str(),
+                query.method_payload.as_slice(),
+                query.source.clone().get(),
+                &measurement_scope,
+            )
+        };
 
         match result {
             // If the canister produced a result or if execution failed then it
@@ -184,7 +198,7 @@ impl<'a> QueryContext<'a> {
 
                 EnqueueRequestsResult::MessagesEnqueued => {
                     self.canisters.insert(canister.canister_id(), canister);
-                    self.run_loop(canister_id)
+                    self.run_loop(canister_id, metrics, measurement_scope)
                 }
             },
         }
@@ -192,13 +206,20 @@ impl<'a> QueryContext<'a> {
 
     // Keep processing the call graph till a result is achieved or no more
     // outstanding calls are left.
-    fn run_loop(&mut self, starting_canister_id: CanisterId) -> Result<WasmResult, UserError> {
+    fn run_loop<'b>(
+        &mut self,
+        starting_canister_id: CanisterId,
+        metrics: &'b QueryHandlerMetrics,
+        measurement_scope: &MeasurementScope<'b>,
+    ) -> Result<WasmResult, UserError> {
+        let measurement_scope =
+            MeasurementScope::nested(&metrics.query_spawned_calls, measurement_scope);
         loop {
             if let Some(response) = self.outstanding_response.take() {
                 debug!(self.log, "Executing response for {}", response.originator);
                 // Any result returned by `handle_response` is a query context
                 // terminating response and can be returned.
-                if let Some(result) = self.handle_response(response) {
+                if let Some(result) = self.handle_response(response, &measurement_scope) {
                     return result;
                 }
                 continue;
@@ -206,7 +227,7 @@ impl<'a> QueryContext<'a> {
 
             if let Some(request) = self.outstanding_requests.pop() {
                 debug!(self.log, "Executing request for {}", request.receiver);
-                if let Some(err) = self.handle_request(request) {
+                if let Some(err) = self.handle_request(request, &measurement_scope) {
                     return Err(err);
                 }
                 continue;
@@ -332,14 +353,16 @@ impl<'a> QueryContext<'a> {
         method_name: &str,
         method_payload: &[u8],
         source: PrincipalId,
+        measurement_scope: &MeasurementScope,
     ) -> (CanisterState, HypervisorResult<Option<WasmResult>>) {
         let call_context_id = self.new_call_context(&mut canister, call_origin);
-        let allocation_before = self
+        let instruction_limit = self
             .query_allocations_used
             .write()
             .unwrap()
-            .allocation_before_execution(&canister);
-        let (canister, cycles_left, result) = self.hypervisor.execute_query(
+            .allocation_before_execution(&canister)
+            .into();
+        let (canister, instructions_left, result) = self.hypervisor.execute_query(
             QueryExecutionType::NonReplicated {
                 call_context_id,
                 routing_table: self.routing_table.clone(),
@@ -347,17 +370,19 @@ impl<'a> QueryContext<'a> {
             method_name,
             method_payload,
             source,
-            allocation_before.into(),
+            instruction_limit,
             canister,
             Some(self.data_certificate.clone()),
             self.state.time(),
         );
+        let instructions_executed = instruction_limit - instructions_left;
+        measurement_scope.add(instructions_executed, NumMessages::from(1));
         self.query_allocations_used
             .write()
             .unwrap()
             .update_allocation_after_execution(
                 &canister,
-                allocation_before - QueryAllocation::from(cycles_left),
+                QueryAllocation::from(instructions_executed),
             );
         (canister, result)
     }
@@ -366,6 +391,7 @@ impl<'a> QueryContext<'a> {
         &mut self,
         mut canister: CanisterState,
         response: Response,
+        measurement_scope: &MeasurementScope,
     ) -> (
         CanisterState,
         CallContextId,
@@ -403,12 +429,13 @@ impl<'a> QueryContext<'a> {
         subnet_records.insert(self.own_subnet_id, self.own_subnet_type);
         let subnet_records = Arc::new(subnet_records);
 
-        let allocation_before = self
+        let instruction_limit = self
             .query_allocations_used
             .write()
             .unwrap()
-            .allocation_before_execution(&canister);
-        let (canister, cycles_left, _heap_delta, execution_result) =
+            .allocation_before_execution(&canister)
+            .into();
+        let (canister, instructions_left, _heap_delta, execution_result) =
             self.hypervisor.execute_callback(
                 canister,
                 &call_origin,
@@ -416,18 +443,20 @@ impl<'a> QueryContext<'a> {
                 response.response_payload,
                 // No cycles are refunded in a response to a query call.
                 Cycles::from(0),
-                allocation_before.into(),
+                instruction_limit,
                 self.state.time(),
                 self.routing_table.clone(),
                 subnet_records,
                 self.subnet_available_memory.clone(),
             );
+        let instructions_executed = instruction_limit - instructions_left;
+        measurement_scope.add(instructions_executed, NumMessages::from(1));
         self.query_allocations_used
             .write()
             .unwrap()
             .update_allocation_after_execution(
                 &canister,
-                allocation_before - QueryAllocation::from(cycles_left),
+                QueryAllocation::from(instructions_executed),
             );
         (canister, call_context_id, call_origin, execution_result)
     }
@@ -460,7 +489,11 @@ impl<'a> QueryContext<'a> {
 
     // Executes a query sent from one canister to another. If a loop in the call
     // graph is detected, then an error is returned.
-    fn handle_request(&mut self, request: Request) -> Option<UserError> {
+    fn handle_request(
+        &mut self,
+        request: Request,
+        measurement_scope: &MeasurementScope,
+    ) -> Option<UserError> {
         // we are always prioritising responses over requests so when we execute
         // a request, there should not be any outstanding responses.
         assert!(self.outstanding_response.is_none());
@@ -486,6 +519,7 @@ impl<'a> QueryContext<'a> {
             request.method_name.as_str(),
             request.method_payload.as_slice(),
             request.sender.clone().get(),
+            measurement_scope,
         );
 
         match result {
@@ -729,7 +763,11 @@ impl<'a> QueryContext<'a> {
     // executing the response produces another response that terminates the
     // query context, it is returned; otherwise, None is returned.  Any other
     // intermediate requests or response are enqueued by the function.
-    fn handle_response(&mut self, response: Response) -> Option<Result<WasmResult, UserError>> {
+    fn handle_response(
+        &mut self,
+        response: Response,
+        measurement_scope: &MeasurementScope,
+    ) -> Option<Result<WasmResult, UserError>> {
         assert!(self.outstanding_response.is_none());
         let canister_id = response.originator;
         // As we are executing a response, we must have executed a request on
@@ -744,7 +782,7 @@ impl<'a> QueryContext<'a> {
         });
 
         let (canister, call_context_id, call_origin, execution_result) =
-            self.execute_callback(canister, response);
+            self.execute_callback(canister, response, measurement_scope);
 
         match call_origin {
             CallOrigin::Query(_) => {

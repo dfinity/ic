@@ -1992,7 +1992,7 @@ fn execution_round_metrics_are_recorded() {
                 scheduler.metrics.round_inner.messages.get_sample_sum() as u64,
             );
             assert_eq!(
-                1,
+                2,
                 scheduler
                     .metrics
                     .round_inner_iteration
@@ -2008,7 +2008,7 @@ fn execution_round_metrics_are_recorded() {
                     .get_sample_sum() as u64,
             );
             assert_eq!(
-                1,
+                2,
                 scheduler
                     .metrics
                     .round_inner_iteration
@@ -2024,7 +2024,7 @@ fn execution_round_metrics_are_recorded() {
                     .get_sample_sum() as u64,
             );
             assert_eq!(
-                2,
+                4,
                 scheduler
                     .metrics
                     .round_inner_iteration_thread
@@ -2040,7 +2040,7 @@ fn execution_round_metrics_are_recorded() {
                     .get_sample_sum() as u64,
             );
             assert_eq!(
-                2,
+                4,
                 scheduler
                     .metrics
                     .round_inner_iteration_thread
@@ -2053,6 +2053,195 @@ fn execution_round_metrics_are_recorded() {
                     .metrics
                     .round_inner_iteration_thread
                     .messages
+                    .get_sample_sum() as u64,
+            );
+            assert_eq!(
+                10,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread_message
+                    .instructions
+                    .get_sample_count(),
+            );
+            assert_eq!(
+                100,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread_message
+                    .instructions
+                    .get_sample_sum() as u64,
+            );
+            assert_eq!(
+                10,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread_message
+                    .messages
+                    .get_sample_count(),
+            );
+            assert_eq!(
+                10,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread_message
+                    .messages
+                    .get_sample_sum() as u64,
+            );
+        },
+        ingress_history_writer,
+        exec_env,
+    );
+}
+
+#[test]
+fn heartbeat_metrics_are_recorded() {
+    // This test sets up a canister on a system subnet with a heartbeat method.
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config: SchedulerConfig {
+            scheduler_cores: 1,
+            max_instructions_per_round: NumInstructions::from(1000),
+            max_instructions_per_message: NumInstructions::from(100),
+            ..SchedulerConfig::system_subnet()
+        },
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: 1,
+        message_num_per_canister: 1,
+    };
+    let mut exec_env = default_exec_env_mock(
+        &scheduler_test_fixture,
+        1,
+        NumInstructions::from(1),
+        NumBytes::new(0),
+    );
+    exec_env
+        .expect_execute_canister_heartbeat()
+        .times(1)
+        .returning(move |canister, _, _, _, _, _| {
+            (canister, NumInstructions::from(0), Ok(NumBytes::new(1)))
+        });
+    let exec_env = Arc::new(exec_env);
+
+    let ingress_history_writer = default_ingress_history_writer_mock(1);
+    let ingress_history_writer = Arc::new(ingress_history_writer);
+    scheduler_test(
+        &scheduler_test_fixture,
+        |scheduler| {
+            let mut state = get_initial_state(
+                scheduler_test_fixture.canister_num,
+                scheduler_test_fixture.message_num_per_canister,
+            );
+            for canister in state.canisters_iter_mut() {
+                if let Some(ref mut execution_state) = canister.execution_state {
+                    execution_state.exports = ExportedFunctions::new(
+                        [WasmMethod::System(SystemMethod::CanisterHeartbeat)]
+                            .iter()
+                            .cloned()
+                            .collect(),
+                    );
+                }
+            }
+            scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                UNIX_EPOCH,
+                ExecutionRound::from(1),
+                ProvisionalWhitelist::Set(BTreeSet::new()),
+            );
+            assert_eq!(
+                1,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread_heartbeat
+                    .instructions
+                    .get_sample_count(),
+            );
+            assert_eq!(
+                100,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread_heartbeat
+                    .instructions
+                    .get_sample_sum() as u64,
+            );
+            assert_eq!(
+                1,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread_heartbeat
+                    .messages
+                    .get_sample_count(),
+            );
+            assert_eq!(
+                1,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread_heartbeat
+                    .messages
+                    .get_sample_sum() as u64,
+            )
+        },
+        ingress_history_writer,
+        exec_env,
+    );
+}
+
+#[test]
+fn execution_round_does_not_too_early() {
+    // In this test we have 2 canisters with 10 input messages that execute 10
+    // instructions each. There are two scheduler cores, so each canister gets
+    // its own thread for running. With the round limit of 150 instructions and
+    // each canister executing 100 instructions, we expect two iterations
+    // because the canisters are executing in parallel.
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config: SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(150),
+            max_instructions_per_message: NumInstructions::from(10),
+            ..SchedulerConfig::application_subnet()
+        },
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: 2,
+        message_num_per_canister: 10,
+    };
+    let exec_env = default_exec_env_mock(
+        &scheduler_test_fixture,
+        20,
+        NumInstructions::from(10),
+        NumBytes::new(0),
+    );
+
+    let exec_env = Arc::new(exec_env);
+
+    let ingress_history_writer = default_ingress_history_writer_mock(20);
+    let ingress_history_writer = Arc::new(ingress_history_writer);
+    scheduler_test(
+        &scheduler_test_fixture,
+        |scheduler| {
+            let state = get_initial_state(
+                scheduler_test_fixture.canister_num,
+                scheduler_test_fixture.message_num_per_canister,
+            );
+            scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                UNIX_EPOCH,
+                ExecutionRound::from(1),
+                ProvisionalWhitelist::Set(BTreeSet::new()),
+            );
+            assert_eq!(
+                2,
+                scheduler
+                    .metrics
+                    .round_inner_iteration
+                    .instructions
+                    .get_sample_count(),
+            );
+            assert_eq!(
+                200,
+                scheduler
+                    .metrics
+                    .round_inner_iteration
+                    .instructions
                     .get_sample_sum() as u64,
             );
         },

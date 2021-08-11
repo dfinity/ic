@@ -18,7 +18,7 @@ use ic_interfaces::{
     consensus_pool::{ConsensusPool, HeightRange},
     time_source::TimeSource,
 };
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     consensus::{
@@ -140,10 +140,12 @@ impl Backup {
             let log = self.log.clone();
             let io_errors = self.metrics.io_errors.clone();
             let handle = std::thread::spawn(move || {
-                if let Err(err) = purge(threshold, path) {
+                let start = std::time::Instant::now();
+                if let Err(err) = purge(threshold, path, log.clone()) {
                     error!(log, "Backup purging failed: {:?}", err);
                     io_errors.inc();
                 }
+                info!(log, "Backup purging finished in {:?}", start.elapsed());
             });
             *self.pending_backup.write().unwrap() = Some(handle);
             *self.time_of_last_purge.write().unwrap() = time_source.get_relative_time();
@@ -198,15 +200,26 @@ fn store_artifacts(artifacts: Vec<ConsensusMessage>, path: PathBuf) -> Result<()
 // Traverses the whole backup directory and finds all leaf directories
 // (containing no other directories). Then it purges all leaves older than the
 // specified retention time.
-fn purge(threshold_secs: Duration, path: PathBuf) -> Result<(), io::Error> {
+fn purge(threshold_secs: Duration, path: PathBuf, log: ReplicaLogger) -> Result<(), io::Error> {
     let mut leaves = Vec::new();
     get_leaves(&path, &mut leaves)?;
     for path in leaves {
-        let age = path
-            .metadata()?
-            .modified()?
-            .elapsed()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))?;
+        let age = match path.metadata()?.modified()?.elapsed() {
+            Ok(time) => time,
+            // According to the documentation of `elapsed` this function may fail as
+            // "the underlying system clock is susceptible to drift and updates". Those
+            // errors are transient and safe to ignore. As they are very rare it's ok to
+            // log a warning.
+            Err(err) => {
+                warn!(
+                    log,
+                    "Skipping {:?}, because the modified timestamp couldn't be computed: {:?}",
+                    &path,
+                    err
+                );
+                continue;
+            }
+        };
         if age > threshold_secs {
             fs::remove_dir_all(path)?;
         }

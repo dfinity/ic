@@ -28,6 +28,7 @@ use std::sync::Arc;
 /// The Purger sub-component.
 pub struct Purger {
     prev_expected_batch_height: RefCell<Height>,
+    prev_finalized_certified_height: RefCell<Height>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     message_routing: Arc<dyn MessageRouting>,
     log: ReplicaLogger,
@@ -44,6 +45,7 @@ impl Purger {
         Self {
             // expected_batch_height starts from 1
             prev_expected_batch_height: RefCell::new(Height::from(1)),
+            prev_finalized_certified_height: RefCell::new(Height::from(1)),
             state_manager,
             message_routing,
             log,
@@ -60,11 +62,8 @@ impl Purger {
     pub fn on_state_change(&self, pool: &PoolReader<'_>) -> ChangeSet {
         let mut changeset = ChangeSet::new();
         self.purge_unvalidated_pool_by_expected_batch_height(pool, &mut changeset);
-        if self.purge_validated_pool_by_catch_up_package(pool, &mut changeset) {
-            // When we do purge consensus artifacts, we also want to purge state too.
-            // NOTE: Unlike changeset, this function has an immediate side-effect.
-            self.purge_replicated_state_by_catch_up_height(pool);
-        }
+        self.purge_validated_pool_by_catch_up_package(pool, &mut changeset);
+        self.purge_replicated_state_by_finalized_certified_height(pool);
         changeset
     }
 
@@ -174,24 +173,25 @@ impl Purger {
     }
 
     /// Ask state manager to purge all states below the certified height
-    /// recorded in the block in the latest CatchUpPackage.
-    fn purge_replicated_state_by_catch_up_height(&self, pool_reader: &PoolReader<'_>) {
-        let catch_up_package = pool_reader.get_highest_catch_up_package();
-        let state_purge_height = catch_up_package
-            .content
-            .block
-            .as_ref()
-            .context
-            .certified_height;
-        self.state_manager.remove_states_below(state_purge_height);
-        trace!(
-            self.log,
-            "Purge replicated states below {:?}",
-            state_purge_height
-        );
+    /// recorded in the block in the latest finalized block.
+    fn purge_replicated_state_by_finalized_certified_height(&self, pool_reader: &PoolReader<'_>) {
+        let finalized_tip = pool_reader.get_finalized_tip();
+        let finalized_certified_height = finalized_tip.context.certified_height;
+        let prev_finalized_certified_height = self
+            .prev_finalized_certified_height
+            .replace(finalized_certified_height);
+        if finalized_certified_height > prev_finalized_certified_height {
+            self.state_manager
+                .remove_states_below(finalized_certified_height);
+            trace!(
+                self.log,
+                "Purge replicated states below {:?}",
+                finalized_certified_height
+            );
+        }
         self.metrics
             .replicated_state_purge_height
-            .set(state_purge_height.get() as i64);
+            .set(finalized_certified_height.get() as i64);
     }
 }
 

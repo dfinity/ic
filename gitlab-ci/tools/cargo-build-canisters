@@ -13,7 +13,7 @@ rm -rf "$CI_PROJECT_DIR/artifacts/canisters"
 mkdir -p "$CI_PROJECT_DIR/artifacts/canisters"
 cd "$CI_PROJECT_DIR/rs" || exit 1
 
-wasm_canister_list=(
+wasm_canister_build_list=(
     registry-canister
     governance-canister
     root-canister
@@ -25,9 +25,14 @@ wasm_canister_list=(
     xnet-test-canister
     statesync-test-canister
 )
+declare -A wasm_canister_copy_list=(
+    ["cow_safety.wasm"]="rs/tests/src"
+    ["counter.wat"]="rs/workload_generator/src"
+)
+
 function wasm_canisters_cargo_args() {
     # returns a list of wasm_canisters prefixed with "--bin"
-    for c in "${wasm_canister_list[@]}"; do
+    for c in "${wasm_canister_build_list[@]}"; do
         echo -n " --bin $c"
     done
 }
@@ -44,12 +49,25 @@ echo "Building of Wasm canisters finished"
 
 cd "$CI_PROJECT_DIR" || exit 1
 
-for tgt in "${wasm_canister_list[@]}"; do
-    tgt_filename="$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/$tgt.wasm"
-    if [[ -r "$tgt_filename" ]]; then
-        ic-cdk-optimizer -o "artifacts/canisters/$tgt.wasm" "$tgt_filename"
+for wasm in "${wasm_canister_build_list[@]}"; do
+    src_filename="$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/$wasm.wasm"
+    if [[ -r "$src_filename" ]]; then
+        ic-cdk-optimizer -o "artifacts/canisters/$wasm.wasm" "$src_filename"
     else
-        echo "ERROR: target canister Wasm binary does not exist: ${tgt_filename}"
+        echo "ERROR: target canister Wasm binary does not exist: ${src_filename}"
+        exit 1
+    fi
+done
+
+# Copy/optimize prebuilt canisters
+for can in "${!wasm_canister_copy_list[@]}"; do
+    src_filename="${wasm_canister_copy_list[$can]}/$can"
+    if [[ $can == *.wasm ]]; then
+        ic-cdk-optimizer -o "$CI_PROJECT_DIR/artifacts/canisters/$can" "$CI_PROJECT_DIR/$src_filename"
+    elif [[ $can == *.wat ]]; then
+        cp "$CI_PROJECT_DIR/$src_filename" "$CI_PROJECT_DIR/artifacts/canisters/$can"
+    else
+        echo "ERROR: unknown (not .wat or .wasm) canister type: ${src_filename}"
         exit 1
     fi
 done

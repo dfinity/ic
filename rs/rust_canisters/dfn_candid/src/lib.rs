@@ -1,6 +1,9 @@
 use candid::de::IDLDeserialize;
 use candid::CandidType;
-pub use candid::{de::ArgumentDecoder, decode_args, encode_args, encode_one, ser::ArgumentEncoder};
+pub use candid::{
+    decode_args, encode_args, encode_one,
+    utils::{ArgumentDecoder, ArgumentEncoder},
+};
 use on_wire::witness;
 use on_wire::{FromWire, IntoWire, NewType};
 use serde::de::DeserializeOwned;
@@ -48,7 +51,7 @@ impl<T: CandidType> IntoWire for CandidOne<T> {
     }
 }
 
-impl<A1: DeserializeOwned> FromWire for CandidOne<A1> {
+impl<A1: DeserializeOwned + CandidType> FromWire for CandidOne<A1> {
     fn from_bytes(bytes: Vec<u8>) -> Result<Self, String> {
         let mut de = IDLDeserialize::new(&bytes[..]).map_err(|e| e.to_string())?;
         let res = de.get_value().map_err(|e| e.to_string())?;

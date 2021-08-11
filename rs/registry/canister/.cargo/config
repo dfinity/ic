@@ -2,3 +2,8 @@
 target = "wasm32-unknown-unknown"
 # Enables nightly compiler features which are used by rocket
 #rustflags = ["-Z", "unstable-options"]
+
+# We use `lto` to shrink the binary size to fit within the current max_ingress_bytes_per_message of 3145728.
+[profile.release]
+lto = true
+opt-level = "z"

@@ -43,9 +43,7 @@ impl Registry {
         into_registry_mutation(routing_table, 1)
     }
 
-    /// Handle removing a subnet from the routing table.  Marked as dead_code as
-    /// the canister does not currently support removing subnets.
-    #[allow(dead_code)]
+    /// Handle removing a subnet from the routing table.
     pub fn remove_subnet_from_routing_table(
         &self,
         version: u64,

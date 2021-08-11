@@ -77,6 +77,8 @@ use ic_nns_governance::governance::{
     MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
 };
 use ic_nns_governance::pb::v1::governance_error::ErrorType::{NotFound, ResourceExhausted};
+use ic_nns_governance::pb::v1::manage_neuron::MergeMaturity;
+use ic_nns_governance::pb::v1::manage_neuron_response::MergeMaturityResponse;
 use ic_nns_governance::pb::v1::proposal::Action;
 use ic_nns_governance::pb::v1::ProposalRewardStatus::{AcceptVotes, ReadyToSettle};
 use ic_nns_governance::pb::v1::ProposalStatus::Rejected;
@@ -2824,9 +2826,11 @@ fn governance_with_staked_neuron(
     (driver, gov, nid, to_subaccount)
 }
 
-// Creates a neuron that has been dissolved and has a accumulated some
-// maturity.
-fn create_mature_neuron() -> (FakeDriver, Governance, Neuron) {
+/// Creates a neuron that has accumulated some maturity.
+///
+/// If `dissolved` is true, the returned neuron is in the "dissolved" state,
+/// otherwise the returned neuron is in the "not-dissolving" state.
+fn create_mature_neuron(dissolved: bool) -> (FakeDriver, Governance, Neuron) {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
     let nonce = 1234u64;
@@ -2871,25 +2875,29 @@ fn create_mature_neuron() -> (FakeDriver, Governance, Neuron) {
 
     let neuron = gov.proto.neurons.get_mut(&id.id).unwrap();
 
-    // Now set the neuron to start dissolving
-    neuron
-        .configure(
-            &from,
-            driver.now(),
-            &Configure {
-                operation: Some(Operation::StartDissolving(StartDissolving {})),
-            },
-        )
-        .unwrap();
-    // Advance the time in the env
-    driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
+    // Dissolve the neuron if `dissolved` is true
+    if dissolved {
+        neuron
+            .configure(
+                &from,
+                driver.now(),
+                &Configure {
+                    operation: Some(Operation::StartDissolving(StartDissolving {})),
+                },
+            )
+            .unwrap();
+        // Advance the time in the env
+        driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
 
-    // The neuron state should now be "Dissolved", meaning we can
-    // now disburse the neuron.
-    assert_eq!(
-        neuron.get_neuron_info(driver.now()).state(),
-        NeuronState::Dissolved
-    );
+        // The neuron state should now be "Dissolved", meaning we can
+        // now disburse the neuron.
+        assert_eq!(
+            neuron.get_neuron_info(driver.now()).state(),
+            NeuronState::Dissolved
+        );
+    } else {
+        driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
+    }
 
     let neuron_fees_e8s = 50_000_000; // 0.5 ICPT
     let neuron_maturity = 25_000_000;
@@ -2905,7 +2913,7 @@ fn create_mature_neuron() -> (FakeDriver, Governance, Neuron) {
 
 #[test]
 fn test_neuron_lifecycle() {
-    let (driver, mut gov, neuron) = create_mature_neuron();
+    let (driver, mut gov, neuron) = create_mature_neuron(true);
 
     let id = neuron.id.unwrap();
     let from = neuron.controller.unwrap();
@@ -2937,7 +2945,7 @@ fn test_neuron_lifecycle() {
 
 #[test]
 fn test_disburse_to_subaccount() {
-    let (driver, mut gov, neuron) = create_mature_neuron();
+    let (driver, mut gov, neuron) = create_mature_neuron(true);
 
     let id = neuron.id.unwrap();
     let from = neuron.controller.unwrap();
@@ -2975,7 +2983,7 @@ fn test_disburse_to_subaccount() {
 
 #[test]
 fn test_nns1_520() {
-    let (driver, mut gov, neuron) = create_mature_neuron();
+    let (driver, mut gov, neuron) = create_mature_neuron(true);
 
     let id = neuron.id.unwrap();
     let from = neuron.controller.unwrap();
@@ -3022,7 +3030,7 @@ fn test_nns1_520() {
 
 #[test]
 fn test_disburse_to_main_acccount() {
-    let (driver, mut gov, neuron) = create_mature_neuron();
+    let (driver, mut gov, neuron) = create_mature_neuron(true);
 
     let id = neuron.id.unwrap();
     let from = neuron.controller.unwrap();
@@ -3054,7 +3062,7 @@ fn test_disburse_to_main_acccount() {
 
 #[test]
 fn test_top_up_stake() {
-    let (mut driver, mut gov, neuron) = create_mature_neuron();
+    let (mut driver, mut gov, neuron) = create_mature_neuron(true);
     let nid = neuron.id.unwrap();
     let neuron = gov.get_neuron_mut(&nid).unwrap();
     let account = neuron.account.clone();
@@ -3108,13 +3116,13 @@ fn test_top_up_stake() {
     assert_eq!(neuron.cached_neuron_stake_e8s, 200_000_000);
     assert_eq!(
         neuron.aging_since_timestamp_seconds,
-        driver.now() - 3 * ic_nns_governance::governance::ONE_MONTH_SECONDS - 1
+        driver.now() - 3 * ic_nns_governance::governance::ONE_MONTH_SECONDS
     );
 }
 
 #[test]
 fn test_claim_or_top_up_neuron_from_notification_does_not_overflow() {
-    let (mut driver, mut gov, neuron) = create_mature_neuron();
+    let (mut driver, mut gov, neuron) = create_mature_neuron(true);
     let nid = neuron.id.unwrap();
     let neuron = gov.get_neuron_mut(&nid).unwrap();
     let account = neuron.account.clone();
@@ -3170,7 +3178,7 @@ fn test_claim_or_top_up_neuron_from_notification_does_not_overflow() {
 
 #[test]
 fn test_set_dissolve_delay() {
-    let (mut driver, _, mut neuron) = create_mature_neuron();
+    let (mut driver, _, mut neuron) = create_mature_neuron(true);
 
     // Neuron should be dissolved
     assert_eq!(neuron.state(driver.now()), NeuronState::Dissolved);
@@ -3284,7 +3292,7 @@ fn test_set_dissolve_delay() {
 
 #[test]
 fn test_refresh_stake() {
-    let (mut driver, mut gov, neuron) = create_mature_neuron();
+    let (mut driver, mut gov, neuron) = create_mature_neuron(true);
     let nid = neuron.id.unwrap();
     let neuron = gov.get_neuron_mut(&nid).unwrap();
     let account = neuron.account.clone();
@@ -3506,7 +3514,7 @@ fn test_claim_through_management() {
 
 #[test]
 fn test_cant_disburse_without_paying_fees() {
-    let (driver, mut gov, neuron) = create_mature_neuron();
+    let (driver, mut gov, neuron) = create_mature_neuron(true);
 
     let id = neuron.id.clone().unwrap();
     let from = neuron.controller.clone().unwrap();
@@ -6358,4 +6366,175 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
 
     test_can_follow_by(|n| NeuronIdOrSubaccount::NeuronId(n.id.as_ref().unwrap().clone()));
     test_can_follow_by(|n| NeuronIdOrSubaccount::Subaccount(n.account.to_vec()));
+}
+
+#[test]
+fn test_merge_maturity_of_neuron() {
+    let (driver, mut gov, neuron) = create_mature_neuron(false);
+
+    let id = neuron.id.clone().unwrap();
+    let controller = neuron.controller.clone().unwrap();
+    let neuron_stake_e8s = neuron.cached_neuron_stake_e8s;
+    let account = AccountIdentifier::new(
+        ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+        Some(Subaccount::try_from(neuron.account.as_slice()).unwrap()),
+    );
+    let account_balance = driver
+        .account_balance(account)
+        .now_or_never()
+        .unwrap()
+        .unwrap()
+        .get_e8s();
+    assert_eq!(neuron_stake_e8s, account_balance);
+
+    {
+        let maturity = 25_000_000;
+        let neuron = gov.get_neuron_mut(&id).unwrap();
+        neuron.maturity_e8s_equivalent = maturity;
+    }
+
+    // Assert that maturity can't be merged by someone who doesn't control the
+    // neuron
+    assert!(merge_maturity(&mut gov, id.clone(), &*TEST_NEURON_2_OWNER_PRINCIPAL, 10).is_err());
+
+    // Assert percents outside of (0, 100] are rejected
+    assert!(merge_maturity(&mut gov, id.clone(), &controller, 0).is_err());
+    assert!(merge_maturity(&mut gov, id.clone(), &controller, 250).is_err());
+
+    // Assert that 10% of a neuron's maturity can be merged successfully
+    assert_merge_maturity_executes_as_expected(
+        &mut gov,
+        id.clone(),
+        &controller,
+        10,
+        2_500_000,
+        &driver,
+    );
+
+    // Assert that 50% of a neuron's maturity can be merged successfully
+    assert_merge_maturity_executes_as_expected(
+        &mut gov,
+        id.clone(),
+        &controller,
+        50,
+        11_250_000,
+        &driver,
+    );
+
+    // Assert that 100% of a neuron's maturity can be merged successfully
+    assert_merge_maturity_executes_as_expected(
+        &mut gov,
+        id.clone(),
+        &controller,
+        100,
+        11_250_000,
+        &driver,
+    );
+
+    // Assert that merging a neuron with no maturity fails
+    assert!(merge_maturity(&mut gov, id, &controller, 10).is_err());
+}
+
+/// Merge the maturity for a given neuron and assert that the neuron's stake,
+/// maturity and account balance were correctly modified
+fn assert_merge_maturity_executes_as_expected(
+    gov: &mut Governance,
+    id: NeuronId,
+    controller: &PrincipalId,
+    percentage_to_merge: u32,
+    expected_merged_maturity: u64,
+    driver: &FakeDriver,
+) {
+    let neuron = gov.get_neuron(&id).unwrap().clone();
+    let account = AccountIdentifier::new(
+        ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+        Some(Subaccount::try_from(neuron.account.as_slice()).unwrap()),
+    );
+    let response = merge_maturity(gov, id.clone(), &controller, percentage_to_merge).unwrap();
+    let merged_maturity = response.merged_maturity_e8s;
+    assert_eq!(merged_maturity, expected_merged_maturity);
+    let expected_resulting_maturity = neuron.maturity_e8s_equivalent - merged_maturity;
+    let expected_resulting_stake = neuron.cached_neuron_stake_e8s + merged_maturity;
+    let post_merge_account_balance = driver
+        .account_balance(account)
+        .now_or_never()
+        .unwrap()
+        .unwrap()
+        .get_e8s();
+    let merged_neuron = gov.get_neuron(&id).unwrap();
+    assert_eq!(
+        merged_neuron.maturity_e8s_equivalent,
+        expected_resulting_maturity
+    );
+    assert_eq!(
+        merged_neuron.cached_neuron_stake_e8s,
+        expected_resulting_stake
+    );
+    assert_eq!(
+        merged_neuron.cached_neuron_stake_e8s,
+        post_merge_account_balance
+    );
+
+    assert!(neuron.aging_since_timestamp_seconds < merged_neuron.aging_since_timestamp_seconds);
+}
+
+/// A helper to merge the maturity of a neuron
+fn merge_maturity(
+    gov: &mut Governance,
+    id: NeuronId,
+    controller: &PrincipalId,
+    percentage_to_merge: u32,
+) -> Result<MergeMaturityResponse, GovernanceError> {
+    let result = gov
+        .manage_neuron(
+            controller,
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(id)),
+                command: Some(Command::MergeMaturity(MergeMaturity {
+                    percentage_to_merge,
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .command
+        .unwrap();
+
+    match result {
+        manage_neuron_response::Command::Error(e) => Err(e),
+        manage_neuron_response::Command::MergeMaturity(response) => Ok(response),
+        _ => panic!("Merge maturity command returned unexpected response"),
+    }
+}
+
+#[test]
+fn test_update_stake() {
+    // Assert that doubling a neuron's stake halves its age
+    let mut neuron = Neuron::default();
+    let now = 10;
+    neuron.cached_neuron_stake_e8s = ICPTs::new(5, 0).unwrap().get_e8s();
+    neuron.aging_since_timestamp_seconds = 0;
+    neuron.update_stake(ICPTs::new(10, 0).unwrap().get_e8s(), now);
+    assert_eq!(neuron.aging_since_timestamp_seconds, 5);
+    assert_eq!(
+        neuron.cached_neuron_stake_e8s,
+        ICPTs::new(10, 0).unwrap().get_e8s()
+    );
+
+    // Increase the stake by a random amount
+    let mut neuron = Neuron::default();
+    let now = 10000;
+    neuron.cached_neuron_stake_e8s = ICPTs::new(50, 0).unwrap().get_e8s();
+    neuron.aging_since_timestamp_seconds = 0;
+    neuron.update_stake(ICPTs::new(58, 0).unwrap().get_e8s(), now);
+    let expected_aging_since_timestamp_seconds = 1380;
+    assert_eq!(
+        neuron.aging_since_timestamp_seconds,
+        expected_aging_since_timestamp_seconds
+    );
+    assert_eq!(
+        neuron.cached_neuron_stake_e8s,
+        ICPTs::new(58, 0).unwrap().get_e8s()
+    );
 }

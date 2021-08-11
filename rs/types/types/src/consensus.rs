@@ -289,6 +289,25 @@ impl Block {
         }
     }
 
+    /// Create a new block of a particular replica version
+    pub fn new_with_replica_version(
+        version: ReplicaVersion,
+        parent: CryptoHashOf<Block>,
+        payload: Payload,
+        height: Height,
+        rank: Rank,
+        context: ValidationContext,
+    ) -> Self {
+        Block {
+            version,
+            parent,
+            payload,
+            height,
+            rank,
+            context,
+        }
+    }
+
     /// Create a BlockLogEntry from this block
     pub fn log_entry(&self, block_hash: String) -> BlockLogEntry {
         BlockLogEntry {
@@ -533,6 +552,19 @@ impl RandomBeaconContent {
     pub fn new(height: Height, parent: CryptoHashOf<RandomBeacon>) -> Self {
         RandomBeaconContent {
             version: ReplicaVersion::default(),
+            height,
+            parent,
+        }
+    }
+
+    /// Create a new RandomBeaconContent with a given replica version
+    pub fn new_with_replica_version(
+        version: ReplicaVersion,
+        height: Height,
+        parent: CryptoHashOf<RandomBeacon>,
+    ) -> Self {
+        RandomBeaconContent {
+            version,
             height,
             parent,
         }

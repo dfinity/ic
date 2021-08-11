@@ -162,6 +162,10 @@ unsafe impl<M: LinearMemory> wasmtime::LinearMemory for WasmtimeMemory<M> {
         *self.used.borrow()
     }
 
+    fn maximum(&self) -> Option<u32> {
+        Some(self.maximum)
+    }
+
     fn grow(&self, delta: u32) -> Option<u32> {
         let prev_pages: u32 = *self.used.borrow();
         let new_pages = match prev_pages.checked_add(delta) {

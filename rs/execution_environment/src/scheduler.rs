@@ -75,6 +75,8 @@ struct SchedulerMetrics {
     round_inner: ScopedMetrics,
     round_inner_iteration: ScopedMetrics,
     round_inner_iteration_thread: ScopedMetrics,
+    round_inner_iteration_thread_heartbeat: ScopedMetrics,
+    round_inner_iteration_thread_message: ScopedMetrics,
 }
 
 pub const LABEL_MESSAGE_KIND: &str = "kind";
@@ -305,6 +307,46 @@ impl SchedulerMetrics {
                     "execution_round_inner_iteration_thread_messages",
                     "The number of messages executed in a thread spawned \
                           by an iteration of an inner round",
+                    metrics_registry,
+                ),
+            },
+            round_inner_iteration_thread_heartbeat: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_inner_iteration_thread_heartbeat_duration_seconds",
+                    "The duration of executing a heartbeat in a thread \
+                          spawned by an iteration of an inner round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_inner_iteration_thread_heartbeat_instructions",
+                    "The number of instructions executed in a heartbeat \
+                          in a thread spawned by an iteration of an inner round",
+                    metrics_registry,
+                ),
+                messages: instructions_histogram(
+                    "execution_round_inner_iteration_thread_heartbeat_messages",
+                    "The number of messages executed in a heartbeat in a \
+                          thread spawned by an iteration of an inner round",
+                    metrics_registry,
+                ),
+            },
+            round_inner_iteration_thread_message: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_inner_iteration_thread_message_duration_seconds",
+                    "The duration of executing a message in a thread \
+                          spawned by an iteration of an inner round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_inner_iteration_thread_message_instructions",
+                    "The number of instructions executed in a message \
+                          in a thread spawned by an iteration of an inner round",
+                    metrics_registry,
+                ),
+                messages: instructions_histogram(
+                    "execution_round_inner_iteration_thread_message_messages",
+                    "The number of messages executed in a message in a \
+                          thread spawned by an iteration of an inner round",
                     metrics_registry,
                 ),
             },
@@ -677,6 +719,11 @@ impl SchedulerImpl {
     //
     // The function is invoked in each iteration of `inner_round`.
     // The given `canisters_by_thread` defines the priority of canisters.
+    // Returns:
+    // - the new states of the canisters,
+    // - the ingress results,
+    // - the maximum number of instructions executed on a thread,
+    // - the total heap delta.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn execute_canisters_in_inner_round(
         &self,
@@ -753,12 +800,17 @@ impl SchedulerImpl {
         // Aggregate `results_by_thead` to get the result of this function.
         let mut canisters = Vec::new();
         let mut ingress_results = Vec::new();
-        let mut instructions_consumed = NumInstructions::from(0);
+        let mut total_instructions_executed = NumInstructions::from(0);
+        let mut max_instructions_executed_per_thread = NumInstructions::from(0);
         let mut heap_delta = NumBytes::from(0);
         for mut result in results_by_thread.into_iter() {
             canisters.append(&mut result.canisters);
             ingress_results.append(&mut result.ingress_results);
-            instructions_consumed += result.instructions_executed;
+            total_instructions_executed += result.instructions_executed;
+            max_instructions_executed_per_thread = std::cmp::max(
+                max_instructions_executed_per_thread,
+                result.instructions_executed,
+            );
             // Propagate the metrics from `execution_round_inner_iteration_thread`
             // to `execution_round_inner_iteration`.
             measurement_scope.add(result.instructions_executed, result.messages_executed);
@@ -766,11 +818,11 @@ impl SchedulerImpl {
         }
         self.metrics
             .instructions_consumed_per_round
-            .observe(instructions_consumed.get() as f64);
+            .observe(total_instructions_executed.get() as f64);
         (
             canisters,
             ingress_results,
-            instructions_consumed,
+            max_instructions_executed_per_thread,
             heap_delta,
         )
     }
@@ -1163,6 +1215,10 @@ fn execute_canisters_on_thread(
         // Run heartbeat before processing the messages. Otherwise, if there are many
         // messages, we may reach the instruciton limit before running heartbeat.
         if heartbeat_handling == HeartbeatHandling::Execute && canister.exports_heartbeat_method() {
+            let measurement_scope = MeasurementScope::nested(
+                &metrics.round_inner_iteration_thread_heartbeat,
+                &measurement_scope,
+            );
             let timer = metrics.msg_execution_duration.start_timer();
             let (new_canister, num_instructions_left, result) = exec_env
                 .execute_canister_heartbeat(
@@ -1178,6 +1234,7 @@ fn execute_canisters_on_thread(
                 Err(_) => NumBytes::from(0),
             };
             let instructions_consumed = instruction_limit_per_message - num_instructions_left;
+            measurement_scope.add(instructions_consumed, NumMessages::from(1));
             observe_instructions_consumed_per_message(
                 &metrics,
                 instructions_consumed,
@@ -1202,6 +1259,10 @@ fn execute_canisters_on_thread(
                     .interruped_during_execution += 1;
                 break;
             }
+            let measurement_scope = MeasurementScope::nested(
+                &metrics.round_inner_iteration_thread_message,
+                &measurement_scope,
+            );
             let message = canister.pop_input().unwrap();
             let timer = metrics.msg_execution_duration.start_timer();
             let result = exec_env.execute_canister_message(
@@ -1215,6 +1276,7 @@ fn execute_canisters_on_thread(
             );
             let instructions_consumed =
                 instruction_limit_per_message - result.num_instructions_left;
+            measurement_scope.add(instructions_consumed, NumMessages::from(1));
             observe_instructions_consumed_per_message(
                 &metrics,
                 instructions_consumed,
@@ -1238,7 +1300,6 @@ fn execute_canisters_on_thread(
         canister.system_state.canister_metrics.executed += 1;
         canisters.push(canister);
     }
-    measurement_scope.add(total_instructions_executed, total_messages_executed);
 
     metrics
         .compute_utilization_per_core

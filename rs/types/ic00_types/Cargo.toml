@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-candid = "0.6.15"
+candid = "0.7.4"
 ic-base-types = { path = "../base_types" }
 ic-error-types = { path = "../error_types" }
 ic-protobuf = { path = "../../protobuf" }

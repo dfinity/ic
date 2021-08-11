@@ -3,36 +3,23 @@
 
 mod query_allocations;
 mod query_context;
+#[cfg(test)]
+mod tests;
 
-use crate::hypervisor::Hypervisor;
+use crate::{
+    hypervisor::Hypervisor,
+    metrics::{MeasurementScope, QueryHandlerMetrics},
+};
 use ic_interfaces::execution_environment::{QueryHandler, SubnetAvailableMemory};
 use ic_logger::ReplicaLogger;
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     ingress::WasmResult, messages::UserQuery, user_error::UserError, NumBytes, SubnetId,
 };
-use prometheus::Histogram;
 use query_allocations::QueryAllocationsUsed;
 use std::sync::{Arc, RwLock};
-
-pub struct HttpQueryHandlerMetrics {
-    query_execution_duration: Histogram,
-}
-
-impl HttpQueryHandlerMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
-        Self {
-            query_execution_duration: metrics_registry.histogram(
-                "execution_query_duration_seconds",
-                "Canister query execution duration, in seconds.",
-                // 10µs, 20µs, 50µs, 100µs, ..., 1s, 2s, 5s
-                decimal_buckets(-5, 0),
-            ),
-        }
-    }
-}
 
 /// Struct that is responsible for handling queries sent by user.
 pub struct HttpQueryHandlerImpl {
@@ -42,7 +29,7 @@ pub struct HttpQueryHandlerImpl {
     own_subnet_type: SubnetType,
     query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
     subnet_memory_capacity: NumBytes,
-    metrics: HttpQueryHandlerMetrics,
+    metrics: QueryHandlerMetrics,
 }
 
 impl HttpQueryHandlerImpl {
@@ -61,7 +48,7 @@ impl HttpQueryHandlerImpl {
             own_subnet_type,
             query_allocations_used: Arc::new(RwLock::new(QueryAllocationsUsed::new())),
             subnet_memory_capacity,
-            metrics: HttpQueryHandlerMetrics::new(metrics_registry),
+            metrics: QueryHandlerMetrics::new(metrics_registry),
         }
     }
 }
@@ -75,7 +62,7 @@ impl QueryHandler for HttpQueryHandlerImpl {
         state: Arc<Self::State>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        let _timer = self.metrics.query_execution_duration.start_timer();
+        let measurement_scope = MeasurementScope::root(&self.metrics.query);
         // Note that This assumes that the QueryHandler is always called with the
         // "latest" state.  If and when we start supporting queries against older
         // versions of the state, we will need the caller of the QueryHandler to
@@ -100,6 +87,6 @@ impl QueryHandler for HttpQueryHandlerImpl {
             self.query_allocations_used.clone(),
             subnet_available_memory,
         );
-        context.run(query)
+        context.run(query, &self.metrics, &measurement_scope)
     }
 }

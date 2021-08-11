@@ -8,9 +8,10 @@ name = "registry-canister"
 path = "canister/canister.rs"
 
 [dependencies]
+candid = "0.7.4"
+cycles-minting-canister = {path = "../../rosetta-api/cycles_minting_canister"}
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-candid = "0.6.15"
 ic-base-types = { path = "../../types/base_types/" }
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }

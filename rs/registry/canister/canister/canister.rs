@@ -29,7 +29,8 @@ use registry_canister::{
         do_add_node::AddNodePayload, do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_bless_replica_version::BlessReplicaVersionPayload,
-        do_create_subnet::CreateSubnetPayload, do_recover_subnet::RecoverSubnetPayload,
+        do_create_subnet::CreateSubnetPayload, do_delete_subnet::DeleteSubnetPayload,
+        do_recover_subnet::RecoverSubnetPayload,
         do_remove_node_directly::RemoveNodeDirectlyPayload, do_remove_nodes::RemoveNodesPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_update_icp_xdr_conversion_rate::UpdateIcpXdrConversionRatePayload,
@@ -421,6 +422,15 @@ fn add_nodes_to_subnet() {
     check_caller_is_governance_and_log("add_nodes_to_subnet");
     over(candid_one, |payload: AddNodesToSubnetPayload| {
         registry_mut().do_add_nodes_to_subnet(payload);
+        recertify_registry();
+    });
+}
+
+#[export_name = "canister_update delete_subnet"]
+fn delete_subnet() {
+    check_caller_is_governance_and_log("delete_subnet");
+    over_async(candid_one, |payload: DeleteSubnetPayload| async move {
+        registry_mut().do_delete_subnet(payload).await;
         recertify_registry();
     });
 }

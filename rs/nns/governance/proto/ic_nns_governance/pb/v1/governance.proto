@@ -673,6 +673,15 @@ message ManageNeuron {
     ic_base_types.pb.v1.PrincipalId new_controller = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
 
+  // Merge the maturity of a neuron into the current stake.
+  // The caller can choose a percentage of the current maturity to merge into
+  // the existing stake. The resulting amount to merge must be greater than
+  // or equal to the transaction fee.
+  message MergeMaturity {
+    // The percentage to merge, from 1 to 100
+    uint32 percentage_to_merge = 1;
+  }
+
   // Disburse a portion of this neuron's stake into another neuron.
   // This allows to split a neuron but with a new dissolve delay
   // and owned by someone else.
@@ -739,6 +748,7 @@ message ManageNeuron {
     Split split = 8;
     DisburseToNeuron disburse_to_neuron = 9;
     ClaimOrRefresh claim_or_refresh = 10;
+    MergeMaturity merge_maturity = 13;
   }
 }
 
@@ -756,6 +766,11 @@ message ManageNeuronResponse {
   message SpawnResponse {
     // The ID of the Neuron created from spawning a Neuron
     ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
+  }
+
+  message MergeMaturityResponse {
+    uint64 merged_maturity_e8s = 1;
+    uint64 new_stake_e8s = 2;
   }
 
   message FollowResponse {}
@@ -792,6 +807,7 @@ message ManageNeuronResponse {
     SplitResponse split = 8;
     DisburseToNeuronResponse disburse_to_neuron = 9;
     ClaimOrRefreshResponse claim_or_refresh = 10;
+    MergeMaturityResponse merge_maturity = 11;
   }
 }
 
@@ -1153,6 +1169,7 @@ message Governance {
       ManageNeuron.Spawn spawn = 4;
       ManageNeuron.DisburseToNeuron disburse_to_neuron = 5;
       ClaimOrRefreshNeuronFromAccount claim_or_refresh = 6;
+      ManageNeuron.MergeMaturity merge_maturity = 7;
     }
   }
 

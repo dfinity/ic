@@ -34,6 +34,7 @@ type Command = variant {
   RegisterVote : RegisterVote;
   DisburseToNeuron : DisburseToNeuron;
   MakeProposal : Proposal;
+  MergeMaturity : MergeMaturity;
   Disburse : Disburse;
 };
 type Command_1 = variant {
@@ -46,6 +47,7 @@ type Command_1 = variant {
   RegisterVote : record {};
   DisburseToNeuron : SpawnResponse;
   MakeProposal : MakeProposalResponse;
+  MergeMaturity : MergeMaturityResponse;
   Disburse : DisburseResponse;
 };
 type Command_2 = variant {
@@ -53,6 +55,7 @@ type Command_2 = variant {
   Split : Split;
   ClaimOrRefresh : ClaimOrRefreshNeuronFromAccount;
   DisburseToNeuron : DisburseToNeuron;
+  MergeMaturity : MergeMaturity;
   Disburse : Disburse;
 };
 type Configure = record { operation : opt Operation };
@@ -115,6 +118,11 @@ type ManageNeuron = record {
   neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
 };
 type ManageNeuronResponse = record { command : opt Command_1 };
+type MergeMaturity = record { percentage_to_merge : nat32 };
+type MergeMaturityResponse = record {
+  merged_maturity_e8s : nat64;
+  new_stake_e8s : nat64;
+};
 type Motion = record { motion_text : text };
 type NetworkEconomics = record {
   neuron_minimum_stake_e8s : nat64;

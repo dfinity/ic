@@ -4,6 +4,75 @@ use ic_types::{NumInstructions, NumMessages};
 use prometheus::{Histogram, HistogramTimer};
 use std::{cell::RefCell, rc::Rc};
 
+pub(crate) struct QueryHandlerMetrics {
+    pub query: ScopedMetrics,
+    pub query_initial_call: ScopedMetrics,
+    pub query_spawned_calls: ScopedMetrics,
+}
+
+impl QueryHandlerMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            query: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_query_duration_seconds",
+                    "The duration of query handling",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_query_instructions",
+                    "The number of instructions executed in query handling",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_query_messages",
+                    "The number of messages executed in query handling",
+                    metrics_registry,
+                ),
+            },
+            query_initial_call: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_query_initial_call_duration_seconds",
+                    "The duration of the initial call in query handling",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_query_initial_call_instructions",
+                    "The number of instructions executed in the initial call \
+                    in query handling",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_query_initial_call_messages",
+                    "The number of messages executed in the initial call in \
+                    query handling",
+                    metrics_registry,
+                ),
+            },
+            query_spawned_calls: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_query_spawned_calls_duration_seconds",
+                    "The duration of executing all calls spawned by the \
+                    initial call in query handling",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_query_spawned_calls_instructions",
+                    "The number of instructions executed in calls spawned \
+                    by the initial call in query handling",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_query_spawned_calls_messages",
+                    "The number of messages executed in calls spawned by \
+                    the initial calls in query handling",
+                    metrics_registry,
+                ),
+            },
+        }
+    }
+}
+
 /// A common set of metrics for various phases of execution
 ///
 /// Currently the set includes:

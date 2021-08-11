@@ -1,0 +1,12 @@
+# WebAssembly engine embedders 
+
+This crate defines helpers for embedding WebAssembly engines. Currently only the [Wasmtime](https://github.com/bytecodealliance/wasmtime) is supported.
+
+## Nondeterminism
+
+See [Nondeterminism in WebAssembly](https://github.com/WebAssembly/design/blob/main/Nondeterminism.md) for general description of sources of nondeterminism.
+We use the following config flags to ensure deterministic execution in Wasmtime:
+
+- Threads: `wasmtime::Config::wasm_threads(false)`.
+- SIMD: `wasmtime::Config::wasm_simd(false)`.
+- NaN values: `wasmtime::Config::cranelift_nan_canonicalization(true)`.

@@ -1,7 +1,7 @@
 //! This module is responsible for validating the wasm binaries that are
 //! installed on the Internet Computer.
 
-use crate::errors::into_parity_wasm_error;
+use crate::{ensure_determinism, errors::into_parity_wasm_error};
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use parity_wasm::elements::{
     DataSegment, External, ImportCountType,
@@ -737,6 +737,9 @@ fn validate_export_section(module: &Module) -> Result<usize, WasmValidationError
                     // The function section contains only the functions defined locally in the
                     // module, so we need to subtract the number of imported functions to get the
                     // correct index from the general function space.
+                    // Note: parity-wasm provides a well defined order of the sections in the
+                    // module. Due to this, indices of exported functions will
+                    // always be greater or equal than the number of imports.
                     let actual_fn_index =
                         *fn_index as usize - module.import_count(ImportCountType::Function);
                     let type_index =
@@ -815,7 +818,8 @@ fn validate_function_section(
 }
 
 fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
-    let config = wasmtime::Config::default();
+    let mut config = wasmtime::Config::default();
+    ensure_determinism(&mut config);
     let engine = wasmtime::Engine::new(&config).map_err(|_| {
         WasmValidationError::WasmtimeValidation(String::from("Failed to initialize Wasm engine"))
     })?;

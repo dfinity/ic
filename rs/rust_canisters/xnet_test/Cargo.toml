@@ -8,7 +8,7 @@ name = "xnet-test-canister"
 path = "src/main.rs"
 
 [dependencies]
-candid = "0.6.15"
+candid = "0.7.4"
 dfn_core = { path = "../dfn_core" }
 rand = "0.7.3"
 rand_pcg = "0.2.1"

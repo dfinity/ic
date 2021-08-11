@@ -80,6 +80,7 @@ impl WasmtimeEmbedder {
         wasm_binary: &BinaryEncodedWasm,
     ) -> HypervisorResult<EmbedderCache> {
         let mut config = wasmtime::Config::default();
+        ic_wasm_utils::ensure_determinism(&mut config);
         let cached_mem_creator = match persistence_type {
             PersistenceType::Sigsegv => {
                 let raw_creator = MmapMemoryCreator {};
@@ -101,8 +102,7 @@ impl WasmtimeEmbedder {
             // the memory is always static.
             .static_memory_maximum_size(
                 wasmtime_environ::WASM_PAGE_SIZE as u64 * wasmtime_environ::WASM_MAX_PAGES as u64,
-            )
-            .cranelift_nan_canonicalization(true);
+            );
 
         // Wasmtime requires that the async stack is larger than the Wasm stack.
         // Since both `config.async_stack_size()` and `config.max_wasm_stack()` check
