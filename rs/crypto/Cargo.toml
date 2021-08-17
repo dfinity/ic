@@ -67,6 +67,7 @@ prost-build = "0.7.0"
 criterion = "0.3.4"
 ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
+ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig/rsa_pkcs1" }
 ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
 ic-crypto-test-utils = { path = "test_utils" }
 ic-crypto-test-utils-threshold-sigs = { path = "test_utils/threshold_sigs" }
@@ -76,6 +77,7 @@ maplit = "1.0.2"
 mockall = "0.8.3"
 proptest = "0.9.4"
 proptest-derive = "0.1.0"
+rsa = "0.3.0"
 
 [[bench]]
 name = "basic_sig"

@@ -9,12 +9,13 @@ pub mod tree_diff;
 pub mod tree_hash;
 
 use crossbeam_channel::{unbounded, Sender};
+use ic_canonical_state::{
+    hash_tree::{hash_lazy_tree, HashTree},
+    lazy_tree::{materialize::materialize_partial, LazyTree},
+};
 use ic_config::state_manager::Config;
 use ic_cow_state::CowMemoryManager;
-use ic_crypto_tree_hash::{
-    recompute_digest, Digest, HashTree, LabeledTree, MixedHashTree, WitnessGenerator,
-    WitnessGeneratorImpl,
-};
+use ic_crypto_tree_hash::{recompute_digest, Digest, LabeledTree, MixedHashTree, Witness};
 use ic_interfaces::{
     certification::Verifier,
     certified_stream_store::{CertifiedStreamStore, DecodeStreamError, EncodeStreamError},
@@ -44,7 +45,7 @@ use ic_utils::{ic_features::*, thread::JoinOnDrop};
 use prometheus::{HistogramVec, IntCounterVec, IntGauge};
 use prost::Message;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::convert::TryFrom;
+use std::convert::{From, TryFrom};
 use std::fmt;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -352,9 +353,6 @@ struct SharedState {
     fetch_state: Option<(Height, CryptoHashOfState)>,
     // State representing the on disk mutable state
     tip: Option<(Height, ReplicatedState)>,
-    // The last witness generator used. Cached because creating a
-    // `WitnessGenerator` from a `HashTree` is expensive.
-    last_witness_generator: Option<Arc<WitnessGeneratorImpl>>,
 }
 
 impl SharedState {
@@ -666,7 +664,6 @@ impl StateManagerImpl {
             last_advertised: Self::INITIAL_STATE_HEIGHT,
             fetch_state: None,
             tip: Some(height_and_state),
-            last_witness_generator: None,
         }));
 
         let (compute_manifest_request_sender, compute_manifest_request_receiver) = unbounded();
@@ -1008,7 +1005,7 @@ impl StateManagerImpl {
         state: &ReplicatedState,
     ) -> CertificationMetadata {
         let started_hashing_at = Instant::now();
-        let hash_tree = tree_hash::hash_state(&state);
+        let hash_tree = hash_lazy_tree(&LazyTree::from(state));
         let elapsed = started_hashing_at.elapsed();
         debug!(log, "Computed hash tree in {:?}", elapsed);
 
@@ -1108,9 +1105,9 @@ impl StateManagerImpl {
         if prev_height == Self::INITIAL_STATE_HEIGHT {
             // This code is executed at most once per subnet, no need to
             // optimize this.
-            let hash_tree = tree_hash::hash_state(
+            let hash_tree = hash_lazy_tree(&LazyTree::from(
                 initial_state(self.own_subnet_id, self.own_subnet_type).get_ref(),
-            );
+            ));
             state.metadata.prev_state_hash = Some(CryptoHashOfPartialState::from(
                 crypto_hash_of_tree(&hash_tree),
             ));
@@ -1186,33 +1183,6 @@ impl StateManagerImpl {
         }
     }
 
-    fn get_witness_generator(&self, hash_tree: &HashTree) -> Arc<WitnessGeneratorImpl> {
-        let last_witness_generator =
-            { self.states.read().last_witness_generator.as_ref().cloned() };
-
-        match last_witness_generator {
-            Some(witness_generator)
-                if crypto_hash_of_tree(witness_generator.hash_tree())
-                    == crypto_hash_of_tree(&hash_tree) =>
-            {
-                // The cached witness generator corresponds to the given `hash_tree`.
-                witness_generator
-            }
-            _ => {
-                // The cached witness generator doesn't exist or doesn't correspond to the given
-                // `hash_tree`. Compute and cache a new witness generator.
-                let witness_generator = WitnessGeneratorImpl::try_from(hash_tree.clone())
-                    .expect("Failed to construct witness generator");
-                let witness_generator = Arc::new(witness_generator);
-                {
-                    let mut states = self.states.write();
-                    states.last_witness_generator = Some(witness_generator.clone());
-                }
-                witness_generator
-            }
-        }
-    }
-
     fn clone_checkpoint(&self, from: Height, to: Height) -> Result<(), LayoutError> {
         let target_layout = self.state_layout.checkpoint_to_scratchpad(from)?;
         self.state_layout
@@ -1275,7 +1245,7 @@ impl StateManagerImpl {
             }
         }
 
-        let hash_tree = crate::tree_hash::hash_state(&state);
+        let hash_tree = hash_lazy_tree(&LazyTree::from(&state));
 
         states.snapshots.push_back(Snapshot {
             height,
@@ -1328,7 +1298,7 @@ fn initial_state(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Labele
 }
 
 fn crypto_hash_of_tree(t: &HashTree) -> CryptoHash {
-    CryptoHash(t.digest().0.to_vec())
+    CryptoHash(t.root_hash().0.to_vec())
 }
 
 fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
@@ -1393,6 +1363,12 @@ impl StateManager for StateManagerImpl {
     }
 
     fn take_tip(&self) -> (Height, ReplicatedState) {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["take_tip"])
+            .start_timer();
+
         let mut states = self.states.write();
         let (tip_height, tip) = states.tip.take().expect("failed to get TIP");
         let checkpoints = self
@@ -1416,6 +1392,12 @@ impl StateManager for StateManagerImpl {
     }
 
     fn take_tip_at(&self, height: Height) -> StateManagerResult<ReplicatedState> {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["take_tip_at"])
+            .start_timer();
+
         let (tip_height, state) = self.take_tip();
 
         let mut states = self.states.write();
@@ -1863,18 +1845,12 @@ impl StateManager for StateManagerImpl {
         // validate that hashes agree to spot bugs causing non-determinism as
         // early as possible.
         if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
-            use crate::tree_diff::{diff, PrettyPrintedChanges};
-
             let prev_hash = &prev_metadata.certified_state_hash;
             let hash = &certification_metadata.certified_state_hash;
             assert_eq!(
                 prev_hash, hash,
-                "Committed state @{} twice with different hashes: first with {:?}, then with {:?}, old/new tree diff: {:?}",
+                "Committed state @{} twice with different hashes: first with {:?}, then with {:?}",
                 height, prev_hash, hash,
-                match (prev_metadata.hash_tree.as_ref(), certification_metadata.hash_tree.as_ref()) {
-                    (Some(l), Some(r)) => PrettyPrintedChanges(&diff(l, r)).to_string(),
-                    _ => "unknown".to_string(),
-                }
             );
         }
 
@@ -1950,7 +1926,12 @@ impl StateManager for StateManagerImpl {
     }
 
     fn report_diverged_state(&self, height: Height) {
-        let start = Instant::now();
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["report_diverged_state"])
+            .start_timer();
+
         let mut states = self.states.write();
         let mut heights = self
             .state_layout
@@ -1974,11 +1955,6 @@ impl StateManager for StateManagerImpl {
 
         states.states_metadata.split_off(&height);
         self.persist_metadata_or_die(&states.states_metadata);
-
-        self.metrics
-            .api_call_duration
-            .with_label_values(&["report_diverged_state"])
-            .observe(start.elapsed().as_secs_f64());
 
         fatal!(self.log, "Replica diverged at height {}", height)
     }
@@ -2059,15 +2035,17 @@ impl StateReader for StateManagerImpl {
         &self,
         paths: &LabeledTree<()>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
-        use ic_canonical_state::lazy_tree::materialize::materialize_partial;
-        use ic_canonical_state::lazy_tree::LazyTree;
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["read_certified_state"])
+            .start_timer();
 
         let (state, certification, hash_tree) = self.latest_certified_state()?;
         let mixed_hash_tree = {
             let lazy_tree = LazyTree::from(&*state);
             let partial_tree = materialize_partial(&lazy_tree, paths)?;
-            let witness_generator = self.get_witness_generator(hash_tree.as_ref());
-            witness_generator.mixed_hash_tree(&partial_tree).ok()?
+            hash_tree.witness::<MixedHashTree>(&partial_tree)
         };
 
         Some((state, mixed_hash_tree, certification))
@@ -2128,17 +2106,12 @@ impl CertifiedStreamStore for StateManagerImpl {
             .filter(|end| end <= &stream.messages_end())
             .unwrap_or_else(|| stream.messages_end());
 
-        let witness_generator = WitnessGeneratorImpl::try_from(hash_tree.as_ref().clone())
-            .expect("Failed to construct witness generator");
-
         let (slice_as_tree, to) =
             stream_encoding::encode_stream_slice(&state, remote_subnet, msg_from, to, byte_limit);
 
         let witness_partial_tree =
             stream_encoding::stream_slice_partial_tree(remote_subnet, witness_from, to);
-        let witness = witness_generator
-            .witness(&witness_partial_tree)
-            .expect("Failed to generate witness.");
+        let witness = hash_tree.witness::<Witness>(&witness_partial_tree);
 
         Ok(CertifiedStreamSlice {
             payload: stream_encoding::encode_tree(slice_as_tree),

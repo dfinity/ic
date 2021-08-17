@@ -1,5 +1,5 @@
-use ic_crypto_internal_csp::hash::Sha256Hasher;
 use ic_crypto_internal_types::context::Context;
+use ic_crypto_sha256::Sha256;
 
 pub fn main(args: &[String]) -> Result<(), (String, i32)> {
     match args {
@@ -15,9 +15,10 @@ fn usage() -> Result<(), (String, i32)> {
 fn core(domain_separator: &str, message: &str) -> Result<(), (String, i32)> {
     let context = domain_separator.as_bytes();
     let data = message.as_bytes();
-    let mut state = Sha256Hasher::new(&ByteWrapper::new(&context));
-    state.update(data);
-    let digest = state.finalize();
+    let mut state = Sha256::new();
+    state.write(ByteWrapper::new(&context).as_bytes());
+    state.write(&data);
+    let digest = state.finish();
     // TODO(DFN-1350): Digest doesn't provide a default stringification. Use base64.
     println!("Hash: {:?}", digest);
     Ok(())

@@ -1,4 +1,5 @@
-use super::{PrincipalId, PrincipalIdBlobParseError, PrincipalIdParseError, SubnetId};
+use super::{PrincipalId, PrincipalIdError, SubnetId};
+use crate::ic_types::PrincipalError;
 use candid::CandidType;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::de::Error;
@@ -16,7 +17,7 @@ pub enum CanisterIdError {
     /// An invalid [`PrincipalId`] was given.
     InvalidPrincipalId(String),
     /// The input string could not be parsed into a [`PrincipalId`].
-    PrincipalIdParseError(PrincipalIdParseError),
+    PrincipalIdParseError(PrincipalIdError),
 }
 
 impl fmt::Display for CanisterIdError {
@@ -29,6 +30,18 @@ impl fmt::Display for CanisterIdError {
 }
 
 impl std::error::Error for CanisterIdError {}
+
+impl From<PrincipalIdError> for CanisterIdError {
+    fn from(v: PrincipalIdError) -> CanisterIdError {
+        CanisterIdError::PrincipalIdParseError(v)
+    }
+}
+
+impl From<PrincipalError> for CanisterIdError {
+    fn from(v: PrincipalError) -> CanisterIdError {
+        CanisterIdError::PrincipalIdParseError(PrincipalIdError(v))
+    }
+}
 
 impl CanisterId {
     /// Returns the id of the management canister
@@ -104,53 +117,28 @@ impl TryFrom<PrincipalId> for CanisterId {
     }
 }
 
-/// Represents an error that can occur when parsing a blob into a
-/// [`CanisterId`].
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub enum CanisterIdBlobParseError {
-    PrincipalIdBlobParseError(PrincipalIdBlobParseError),
-    CanisterIdError(CanisterIdError),
-}
-
 impl TryFrom<&[u8]> for CanisterId {
-    type Error = CanisterIdBlobParseError;
+    type Error = CanisterIdError;
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         Self::try_from(
-            PrincipalId::try_from(bytes)
-                .map_err(CanisterIdBlobParseError::PrincipalIdBlobParseError)?,
+            PrincipalId::try_from(bytes).map_err(CanisterIdError::PrincipalIdParseError)?,
         )
-        .map_err(CanisterIdBlobParseError::CanisterIdError)
     }
 }
 
 impl TryFrom<&Vec<u8>> for CanisterId {
-    type Error = CanisterIdBlobParseError;
+    type Error = CanisterIdError;
     fn try_from(bytes: &Vec<u8>) -> Result<Self, Self::Error> {
         Self::try_from(bytes.as_slice())
     }
 }
 
 impl TryFrom<Vec<u8>> for CanisterId {
-    type Error = CanisterIdBlobParseError;
+    type Error = CanisterIdError;
     fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-        Self::try_from(
-            PrincipalId::try_from(bytes)
-                .map_err(CanisterIdBlobParseError::PrincipalIdBlobParseError)?,
-        )
-        .map_err(CanisterIdBlobParseError::CanisterIdError)
+        Self::try_from(bytes.as_slice())
     }
 }
-
-impl fmt::Display for CanisterIdBlobParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::CanisterIdError(err) => write!(f, "CanisterIdError: {}", err.to_string()),
-            Self::PrincipalIdBlobParseError(err) => write!(f, "Could not parse principal: {}", err),
-        }
-    }
-}
-
-impl std::error::Error for CanisterIdBlobParseError {}
 
 // TODO(EXC-241)
 impl From<SubnetId> for CanisterId {

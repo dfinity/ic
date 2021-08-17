@@ -53,7 +53,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 use tempfile::NamedTempFile;
-use tokio::sync::Mutex;
+
 use tokio::{net::TcpListener, net::TcpStream, time::timeout, time::timeout_at, time::Instant};
 
 // Constants defining the limits of the HttpHandler.
@@ -99,16 +99,12 @@ struct HttpHandler {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    ingress_message_filter: Box<dyn IngressMessageFilter<State = ReplicatedState>>,
+    ingress_message_filter: Arc<dyn IngressMessageFilter<State = ReplicatedState>>,
     subnet_type: SubnetType,
 
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
     malicious_flags: MaliciousFlags,
-    // Introduction of concurrent request processing caused a regression in FR.
-    // This lock restores the serial processing(as a temporary measure) until the
-    // regression is investigated further.
-    request_processing_lock: Arc<Mutex<()>>,
 }
 
 // Crates a detached tokio blocking task that initializes the server (reading
@@ -213,7 +209,7 @@ pub async fn start_server(
     nns_subnet_id: SubnetId,
     log: ReplicaLogger,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    ingress_message_filter: Box<dyn IngressMessageFilter<State = ReplicatedState>>,
+    ingress_message_filter: Arc<dyn IngressMessageFilter<State = ReplicatedState>>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
 ) -> Result<(), Error> {
@@ -366,7 +362,7 @@ impl HttpHandler {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         validator: Arc<dyn IngressSigVerifier + Send + Sync>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-        ingress_message_filter: Box<dyn IngressMessageFilter<State = ReplicatedState>>,
+        ingress_message_filter: Arc<dyn IngressMessageFilter<State = ReplicatedState>>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
@@ -386,7 +382,6 @@ impl HttpHandler {
             delegation_from_nns: Arc::new(RwLock::new(None)),
             health_status: Arc::new(RwLock::new(ReplicaHealthStatus::Starting)),
             malicious_flags,
-            request_processing_lock: Arc::new(Mutex::new(())),
         }
     }
 }
@@ -531,33 +526,16 @@ async fn route(
                 )
                 .await
                 {
-                    Ok(parsed_body) => {
-                        // Serialize the processing
-                        let _processing_lock = http_handler.request_processing_lock.lock().await;
-                        match tokio::task::spawn_blocking({
-                            let http_handler = Arc::clone(&http_handler);
-                            let metrics = Arc::clone(&metrics);
-                            let request_type = request_type;
-                            move || {
-                                route_to_handlers(metrics, http_handler, parsed_body, request_type)
-                            }
-                        })
-                        .await
-                        {
-                            Err(err) => {
-                                metrics.observe_internal_error(
-                                    &request_type,
-                                    InternalError::ConcurrentTaskExecution,
-                                );
-                                error!(http_handler.log, "route_to_handlers failed with: {}", err);
-                                (
-                                    request_type.as_str().to_string(),
-                                    (common::empty_response(), ApiReqType::Unknown),
-                                )
-                            }
-                            Ok(response) => (request_type.as_str().to_string(), response),
-                        }
-                    }
+                    Ok(parsed_body) => (
+                        request_type.as_str().to_string(),
+                        route_to_handlers(
+                            Arc::clone(&metrics),
+                            http_handler,
+                            parsed_body,
+                            request_type,
+                        )
+                        .await,
+                    ),
                     Err(err) => (
                         request_type.as_str().to_string(),
                         (err, ApiReqType::Unknown),
@@ -578,36 +556,42 @@ async fn route(
     response
 }
 
-fn route_to_handlers(
+async fn route_to_handlers(
     metrics: Arc<HttpHandlerMetrics>,
     http_handler: Arc<HttpHandler>,
     parsed_body: Vec<u8>,
     request_type: RequestType,
 ) -> (Response<Body>, ApiReqType) {
     match request_type {
-        RequestType::Read => read::handle(
-            &http_handler.log,
-            http_handler.delegation_from_nns.read().unwrap().clone(),
-            http_handler.query_handler.as_ref(),
-            http_handler.state_reader.as_ref(),
-            http_handler.validator.as_ref(),
-            http_handler.registry_client.get_latest_version(),
-            parsed_body,
-            metrics.as_ref(),
-            &http_handler.malicious_flags,
-        ),
-        RequestType::Submit => submit::handle(
-            &http_handler.log,
-            http_handler.subnet_id,
-            http_handler.registry_client.as_ref(),
-            http_handler.ingress_sender.as_ref(),
-            http_handler.state_reader.as_ref(),
-            http_handler.validator.as_ref(),
-            http_handler.ingress_message_filter.as_ref(),
-            parsed_body,
-            metrics.as_ref(),
-            &http_handler.malicious_flags,
-        ),
+        RequestType::Read => {
+            read::handle(
+                &http_handler.log,
+                &http_handler.delegation_from_nns,
+                http_handler.query_handler.as_ref(),
+                http_handler.state_reader.as_ref(),
+                http_handler.validator.as_ref(),
+                http_handler.registry_client.get_latest_version(),
+                parsed_body,
+                metrics.as_ref(),
+                &http_handler.malicious_flags,
+            )
+            .await
+        }
+        RequestType::Submit => {
+            submit::handle(
+                metrics,
+                http_handler.log.clone(),
+                http_handler.subnet_id,
+                Arc::clone(&http_handler.registry_client),
+                Arc::clone(&http_handler.state_reader),
+                Arc::clone(&http_handler.validator),
+                Arc::clone(&http_handler.ingress_sender),
+                http_handler.malicious_flags.clone(),
+                Arc::clone(&http_handler.ingress_message_filter),
+                parsed_body,
+            )
+            .await
+        }
         RequestType::Status => (
             status::handle(
                 &http_handler.log,

@@ -114,9 +114,7 @@ impl RegistryClientImpl {
 
         // Check version again under write lock, to prevent race conditions.
         if version > cache_state.latest_version {
-            self.metrics
-                .ic_registry_client_registry_version
-                .set(version.get() as i64);
+            self.metrics.registry_version.set(version.get() as i64);
             cache_state.update(records, version);
         }
         Ok(())
@@ -240,6 +238,12 @@ impl RegistryClient for RegistryClientImpl {
         key: &str,
         version: RegistryVersion,
     ) -> RegistryClientVersionedResult<Vec<u8>> {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["get_versioned_value"])
+            .start_timer();
+
         if version == ZERO_REGISTRY_VERSION {
             return Ok(empty_zero_registry_record(key));
         }
@@ -268,6 +272,12 @@ impl RegistryClient for RegistryClientImpl {
         key_prefix: &str,
         version: RegistryVersion,
     ) -> Result<Vec<String>, RegistryClientError> {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["get_key_family"])
+            .start_timer();
+
         if version == ZERO_REGISTRY_VERSION {
             return Ok(vec![]);
         }
@@ -323,11 +333,21 @@ impl RegistryClient for RegistryClientImpl {
     }
 
     fn get_latest_version(&self) -> RegistryVersion {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["get_latest_version"])
+            .start_timer();
         let cache_state = self.cache.read().unwrap();
         cache_state.latest_version
     }
 
     fn get_version_timestamp(&self, registry_version: RegistryVersion) -> Option<Time> {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["get_version_timestamp"])
+            .start_timer();
         self.cache
             .read()
             .unwrap()

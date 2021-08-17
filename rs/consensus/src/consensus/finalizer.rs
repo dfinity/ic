@@ -461,46 +461,71 @@ pub fn generate_responses_to_subnet_calls(
                     .last()
             };
 
-            if let (Some(Ok(low_threshold_transcript)), Some(Ok(high_threshold_transcript))) = (
+            let payload = match (
                 transcript(NiDkgTag::LowThreshold),
                 transcript(NiDkgTag::HighThreshold),
             ) {
-                info!(
-                    log,
-                    "Found transcripts for other subnets with ids {:?} and {:?}",
-                    low_threshold_transcript.dkg_id,
-                    high_threshold_transcript.dkg_id
-                );
-                let low_threshold_transcript_record =
-                    initial_ni_dkg_transcript_record_from_transcript(
-                        low_threshold_transcript.clone(),
+                (Some(Ok(low_threshold_transcript)), Some(Ok(high_threshold_transcript))) => {
+                    info!(
+                        log,
+                        "Found transcripts for other subnets with ids {:?} and {:?}",
+                        low_threshold_transcript.dkg_id,
+                        high_threshold_transcript.dkg_id
                     );
-                let high_threshold_transcript_record =
-                    initial_ni_dkg_transcript_record_from_transcript(
-                        high_threshold_transcript.clone(),
-                    );
+                    let low_threshold_transcript_record =
+                        initial_ni_dkg_transcript_record_from_transcript(
+                            low_threshold_transcript.clone(),
+                        );
+                    let high_threshold_transcript_record =
+                        initial_ni_dkg_transcript_record_from_transcript(
+                            high_threshold_transcript.clone(),
+                        );
 
-                // This is what we expect consensus to reply with.
-                let threshold_sig_pk = high_threshold_transcript.public_key();
-                let subnet_threshold_public_key = PublicKeyProto::from(threshold_sig_pk);
-                let key_der: Vec<u8> =
-                    ic_crypto::threshold_sig_public_key_to_der(threshold_sig_pk).unwrap();
-                let fresh_subnet_id =
-                    SubnetId::new(PrincipalId::new_self_authenticating(key_der.as_slice()));
+                    // This is what we expect consensus to reply with.
+                    let threshold_sig_pk = high_threshold_transcript.public_key();
+                    let subnet_threshold_public_key = PublicKeyProto::from(threshold_sig_pk);
+                    let key_der: Vec<u8> =
+                        ic_crypto::threshold_sig_public_key_to_der(threshold_sig_pk).unwrap();
+                    let fresh_subnet_id =
+                        SubnetId::new(PrincipalId::new_self_authenticating(key_der.as_slice()));
 
-                let initial_transcript_records = SetupInitialDKGResponse {
-                    low_threshold_transcript_record,
-                    high_threshold_transcript_record,
-                    fresh_subnet_id,
-                    subnet_threshold_public_key,
-                };
+                    let initial_transcript_records = SetupInitialDKGResponse {
+                        low_threshold_transcript_record,
+                        high_threshold_transcript_record,
+                        fresh_subnet_id,
+                        subnet_threshold_public_key,
+                    };
 
+                    Some(messages::Payload::Data(initial_transcript_records.encode()))
+                }
+                (Some(Err(err_str1)), Some(Err(err_str2))) => {
+                    Some(messages::Payload::Reject(messages::RejectContext {
+                        code: ic_types::user_error::RejectCode::CanisterReject,
+                        message: format!("{}{}", err_str1, err_str2),
+                    }))
+                }
+                (Some(Err(err_str)), _) => {
+                    Some(messages::Payload::Reject(messages::RejectContext {
+                        code: ic_types::user_error::RejectCode::CanisterReject,
+                        message: err_str.to_string(),
+                    }))
+                }
+                (_, Some(Err(err_str))) => {
+                    Some(messages::Payload::Reject(messages::RejectContext {
+                        code: ic_types::user_error::RejectCode::CanisterReject,
+                        message: err_str.to_string(),
+                    }))
+                }
+                _ => None,
+            };
+
+            if let Some(response_payload) = payload {
                 consensus_responses.push(Response {
                     originator: CanisterId::ic_00(),
                     respondent: CanisterId::ic_00(),
                     originator_reply_callback: *callback_id,
                     refund: Cycles::zero(),
-                    response_payload: messages::Payload::Data(initial_transcript_records.encode()),
+                    response_payload,
                 });
             }
         }

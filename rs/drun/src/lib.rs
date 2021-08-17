@@ -6,8 +6,7 @@ use ic_config::{subnet_config::SubnetConfigs, Config};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::{setup_execution, IngressHistoryReaderImpl};
 use ic_interfaces::{
-    execution_environment::{IngressHistoryReader, QueryHandler},
-    messaging::MessageRouting,
+    execution_environment::IngressHistoryReader, messaging::MessageRouting,
     state_manager::StateReader,
 };
 use ic_messaging::MessageRoutingImpl;

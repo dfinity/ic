@@ -2480,6 +2480,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-basic-sig-iccsa",
+ "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-csp",
  "ic-crypto-internal-csp-test-utils",
  "ic-crypto-internal-fs-ni-dkg",
@@ -2522,11 +2523,12 @@ dependencies = [
  "rand 0.7.3",
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
+ "rsa 0.3.0",
  "serde",
  "serde_bytes",
  "serde_cbor",
  "serde_json",
- "simple_asn1",
+ "simple_asn1 0.5.4",
  "slog",
  "slog-scope",
  "strum 0.18.0",
@@ -2550,7 +2552,7 @@ dependencies = [
  "openssl",
  "serde",
  "serde_cbor",
- "simple_asn1",
+ "simple_asn1 0.5.4",
 ]
 
 [[package]]
@@ -2560,7 +2562,7 @@ dependencies = [
  "hex",
  "ic-crypto-internal-test-vectors",
  "ic-types 0.8.0",
- "simple_asn1",
+ "simple_asn1 0.5.4",
 ]
 
 [[package]]
@@ -2579,7 +2581,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "simple_asn1",
+ "simple_asn1 0.5.4",
  "strum 0.18.0",
  "zeroize",
 ]
@@ -2599,7 +2601,7 @@ dependencies = [
  "proptest-derive",
  "serde",
  "serde_bytes",
- "simple_asn1",
+ "simple_asn1 0.5.4",
  "strum 0.18.0",
  "zeroize",
 ]
@@ -2637,7 +2639,7 @@ dependencies = [
  "rand_core 0.5.1",
  "serde",
  "serde_cbor",
- "simple_asn1",
+ "simple_asn1 0.5.4",
  "strum 0.18.0",
  "zeroize",
 ]
@@ -2661,7 +2663,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "simple_asn1",
+ "simple_asn1 0.5.4",
 ]
 
 [[package]]
@@ -2674,10 +2676,10 @@ dependencies = [
  "ic-types 0.8.0",
  "num-bigint 0.4.0",
  "num-traits",
- "rsa",
+ "rsa 0.4.0",
  "serde",
  "serde_json",
- "simple_asn1",
+ "simple_asn1 0.5.4",
 ]
 
 [[package]]
@@ -2755,7 +2757,7 @@ dependencies = [
  "rand_core 0.5.1",
  "serde",
  "serde_cbor",
- "simple_asn1",
+ "simple_asn1 0.5.4",
  "slog",
  "strum 0.18.0",
  "strum_macros 0.18.0",
@@ -2873,7 +2875,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
- "simple_asn1",
+ "simple_asn1 0.5.4",
  "strum_macros 0.18.0",
  "zeroize",
 ]
@@ -2943,6 +2945,7 @@ dependencies = [
 name = "ic-crypto-sha256"
 version = "0.8.0"
 dependencies = [
+ "ic-crypto-internal-types",
  "openssl",
  "sha2 0.9.3",
 ]
@@ -3037,7 +3040,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-types",
- "simple_asn1",
+ "simple_asn1 0.5.4",
 ]
 
 [[package]]
@@ -3196,6 +3199,7 @@ dependencies = [
  "prometheus",
  "proptest 0.9.6",
  "rand 0.7.3",
+ "rayon",
  "reqwest",
  "scoped_threadpool",
  "serde",
@@ -3211,11 +3215,8 @@ dependencies = [
 name = "ic-http-handler"
 version = "0.8.0"
 dependencies = [
- "ascii",
  "askama",
  "bytes 1.0.1",
- "candid",
- "dfn_http",
  "futures",
  "futures-util",
  "hex",
@@ -3229,7 +3230,6 @@ dependencies = [
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
- "ic-protobuf",
  "ic-registry-client",
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-type",
@@ -3238,15 +3238,12 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-utils",
  "ic-validator",
- "lazy_static",
  "maplit",
- "phantom_newtype",
  "pretty_assertions 0.7.1",
  "prometheus",
  "proptest 1.0.0",
  "prost 0.7.0",
  "rand 0.8.3",
- "regex",
  "reqwest",
  "serde",
  "serde_cbor",
@@ -3525,7 +3522,7 @@ dependencies = [
  "rand_core 0.5.1",
  "serde",
  "sha3",
- "simple_asn1",
+ "simple_asn1 0.5.4",
 ]
 
 [[package]]
@@ -5196,6 +5193,25 @@ dependencies = [
 
 [[package]]
 name = "num-bigint-dig"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d51546d704f52ef14b3c962b5776e53d5b862e5790e40a350d366c209bd7f7a"
+dependencies = [
+ "autocfg 0.1.7",
+ "byteorder",
+ "lazy_static",
+ "libm",
+ "num-integer",
+ "num-iter",
+ "num-traits",
+ "rand 0.7.3",
+ "serde",
+ "smallvec",
+ "zeroize",
+]
+
+[[package]]
+name = "num-bigint-dig"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4547ee5541c18742396ae2c895d0717d0f886d8823b8399cdaf7b07d63ad0480"
@@ -6329,9 +6345,9 @@ checksum = "5c4777eb47471c2a42bee8b553b22b8e5c496f657dc6f8b8e29bd69662f31e7e"
 
 [[package]]
 name = "rayon"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b0d8e0819fadc20c74ea8373106ead0600e3a67ef1fe8da56e39b9ae7275674"
+checksum = "c06aca804d41dbc8ba42dfd964f0d01334eceb64314b9ecf7c5fad5188a06d90"
 dependencies = [
  "autocfg 1.0.0",
  "crossbeam-deque 0.8.0",
@@ -6341,9 +6357,9 @@ dependencies = [
 
 [[package]]
 name = "rayon-core"
-version = "1.9.0"
+version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ab346ac5921dc62ffa9f89b7a773907511cdfa5490c572ae9be1be33e8afa4a"
+checksum = "d78120e2c850279833f1dd3582f730c4ab53ed95aeaaaa862a2a5c71b1656d8e"
 dependencies = [
  "crossbeam-channel 0.5.1",
  "crossbeam-deque 0.8.0",
@@ -6526,6 +6542,28 @@ dependencies = [
 
 [[package]]
 name = "rsa"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3648b669b10afeab18972c105e284a7b953a669b0be3514c27f9b17acab2f9cd"
+dependencies = [
+ "byteorder",
+ "digest 0.9.0",
+ "lazy_static",
+ "num-bigint-dig 0.6.1",
+ "num-integer",
+ "num-iter",
+ "num-traits",
+ "pem",
+ "rand 0.7.3",
+ "sha2 0.9.3",
+ "simple_asn1 0.4.1",
+ "subtle",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
+name = "rsa"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68ef841a26fc5d040ced0417c6c6a64ee851f42489df11cdf0218e545b6f8d28"
@@ -6533,13 +6571,13 @@ dependencies = [
  "byteorder",
  "digest 0.9.0",
  "lazy_static",
- "num-bigint-dig",
+ "num-bigint-dig 0.7.0",
  "num-integer",
  "num-iter",
  "num-traits",
  "pem",
  "rand 0.8.3",
- "simple_asn1",
+ "simple_asn1 0.5.4",
  "subtle",
  "zeroize",
 ]
@@ -6912,6 +6950,17 @@ name = "signature"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29f060a7d147e33490ec10da418795238fd7545bba241504d6b31a409f2e6210"
+
+[[package]]
+name = "simple_asn1"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "692ca13de57ce0613a363c8c2f1de925adebc81b04c923ac60c5488bb44abe4b"
+dependencies = [
+ "chrono",
+ "num-bigint 0.2.6",
+ "num-traits",
+]
 
 [[package]]
 name = "simple_asn1"

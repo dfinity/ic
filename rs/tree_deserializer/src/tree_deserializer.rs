@@ -174,6 +174,10 @@ impl<'de> SeqAccess<'de> for ByteSeqAccess<'de> {
 impl<'de> Deserializer<'de> for LabeledTreeDeserializer<'de> {
     type Error = Error;
 
+    fn is_human_readable(&self) -> bool {
+        false
+    }
+
     unsupported_type!(deserialize_unit, "unit");
     unsupported_type!(deserialize_bool, "bool");
     unsupported_type!(deserialize_char, "char");
@@ -432,6 +436,10 @@ struct LabelDeserializer<'a>(&'a [u8]);
 impl<'de> Deserializer<'de> for LabelDeserializer<'de> {
     type Error = Error;
 
+    fn is_human_readable(&self) -> bool {
+        false
+    }
+
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
@@ -539,6 +547,10 @@ struct ByteSerializer<'de>(u8, PhantomData<&'de u8>);
 
 impl<'de> Deserializer<'de> for ByteSerializer<'de> {
     type Error = Error;
+
+    fn is_human_readable(&self) -> bool {
+        false
+    }
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where

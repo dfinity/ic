@@ -3,7 +3,7 @@
 use super::*;
 use crate::{
     crypto::threshold_sig::ni_dkg::{
-        config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTranscript,
+        config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
     },
     ReplicaVersion,
 };
@@ -108,6 +108,8 @@ pub struct Summary {
     pub next_interval_length: Height,
     /// The height of the block conatining that summary.
     pub height: Height,
+    /// The number of intervals a DKG for the given remote target was attempted.
+    pub initial_dkg_attempts: BTreeMap<NiDkgTargetId, u32>,
 }
 
 impl Summary {
@@ -122,6 +124,7 @@ impl Summary {
         interval_length: Height,
         next_interval_length: Height,
         height: Height,
+        initial_dkg_attempts: BTreeMap<NiDkgTargetId, u32>,
     ) -> Self {
         Self {
             configs: configs
@@ -135,6 +138,7 @@ impl Summary {
             interval_length,
             next_interval_length,
             height,
+            initial_dkg_attempts,
         }
     }
 
@@ -278,6 +282,17 @@ fn build_ided_transcripts_vec(
         .collect()
 }
 
+fn build_initial_dkg_attempts_vec(
+    map: &BTreeMap<NiDkgTargetId, u32>,
+) -> Vec<pb::InitialDkgAttemptCount> {
+    map.iter()
+        .map(|(target_id, attempt_no)| pb::InitialDkgAttemptCount {
+            target_id: target_id.to_vec(),
+            attempt_no: *attempt_no,
+        })
+        .collect()
+}
+
 impl From<&Summary> for pb::Summary {
     fn from(summary: &Summary) -> Self {
         Self {
@@ -295,6 +310,7 @@ impl From<&Summary> for pb::Summary {
             transcripts_for_new_subnets: build_ided_transcripts_vec(
                 &summary.transcripts_for_new_subnets,
             ),
+            initial_dkg_attempts: build_initial_dkg_attempts_vec(&summary.initial_dkg_attempts),
         }
     }
 }
@@ -342,6 +358,23 @@ fn build_ided_transcripts_map(
     Ok(transcripts_for_new_subnets)
 }
 
+fn build_initial_dkg_attempts_map(
+    vec: &[pb::InitialDkgAttemptCount],
+) -> BTreeMap<NiDkgTargetId, u32> {
+    vec.iter()
+        .map(|item| {
+            let mut id = [0u8; NiDkgTargetId::SIZE];
+            // Safely convert the received slice to a fixed-size slice.
+            let mut v = Vec::<u8>::new();
+            v.extend_from_slice(&item.target_id);
+            v.resize(NiDkgTargetId::SIZE, 0u8);
+            id.copy_from_slice(&v);
+            // Return the key-value pair.
+            (NiDkgTargetId::new(id), item.attempt_no)
+        })
+        .collect()
+}
+
 fn build_transcript_result(
     transcript_result: &pb::NiDkgTranscriptResult,
 ) -> Result<Result<NiDkgTranscript, String>, String> {
@@ -379,6 +412,7 @@ impl TryFrom<pb::Summary> for Summary {
             transcripts_for_new_subnets: build_ided_transcripts_map(
                 summary.transcripts_for_new_subnets,
             )?,
+            initial_dkg_attempts: build_initial_dkg_attempts_map(&summary.initial_dkg_attempts),
         })
     }
 }

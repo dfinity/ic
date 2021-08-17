@@ -20,7 +20,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 const SKS_DATA_FILENAME: &str = "sks_data.pb";
-const TEMP_SKS_DATA_FILENAME: &str = "sks_data.pb.temp";
 const CURRENT_SKS_VERSION: u32 = 2;
 
 // TODO(CRP-523): turn this to FromStr-trait once KeyId is not public.
@@ -218,19 +217,8 @@ impl ProtoSecretKeyStore {
     }
 
     fn write_secret_keys_to_disk(sks_data_file: &Path, secret_keys: &SecretKeys) {
-        let mut tmp_data_file = sks_data_file.to_owned();
-        tmp_data_file.set_file_name(TEMP_SKS_DATA_FILENAME);
         let sks_proto = ProtoSecretKeyStore::secret_keys_to_sks_proto(secret_keys);
-        let mut buf = Vec::new();
-        match sks_proto.encode(&mut buf) {
-            Ok(_) => match fs::write(&tmp_data_file, &buf) {
-                Ok(_) => {
-                    fs::rename(&tmp_data_file, sks_data_file).expect("Could not update SKS file.")
-                }
-                Err(err) => panic!("IO error {}", err),
-            },
-            Err(err) => panic!("Error serializing data: {}", err),
-        }
+        ic_utils::fs::write_protobuf_using_tmp_file(sks_data_file, &sks_proto).unwrap();
     }
 
     fn check_path(path: &Path) {

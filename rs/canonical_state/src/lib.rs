@@ -1,6 +1,7 @@
 //! Conversion, filtering and encoding of Replicated State as Canonical State.
 
 pub mod encoding;
+pub mod hash_tree;
 pub mod lazy_tree;
 pub mod size_limit_visitor;
 pub mod subtree_visitor;

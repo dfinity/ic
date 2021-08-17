@@ -157,24 +157,58 @@ fn query_metrics_are_reported() {
             vec![],
         );
         assert_eq!(output, Ok(WasmResult::Reply(b"pong".to_vec())));
-        assert_eq!(1, query_handler.metrics.query.duration.get_sample_count());
         assert_eq!(
             1,
-            query_handler.metrics.query.instructions.get_sample_count()
+            query_handler
+                .internal
+                .metrics
+                .query
+                .duration
+                .get_sample_count()
         );
-        assert!(0 < query_handler.metrics.query.instructions.get_sample_sum() as u64);
-        assert_eq!(1, query_handler.metrics.query.messages.get_sample_count());
+        assert_eq!(
+            1,
+            query_handler
+                .internal
+                .metrics
+                .query
+                .instructions
+                .get_sample_count()
+        );
+        assert!(
+            0 < query_handler
+                .internal
+                .metrics
+                .query
+                .instructions
+                .get_sample_sum() as u64
+        );
+        assert_eq!(
+            1,
+            query_handler
+                .internal
+                .metrics
+                .query
+                .messages
+                .get_sample_count()
+        );
         // We expect three messages:
         // - canister_a.query()
         // - canister_b.query()
         // - canister_a.on_reply()
         assert_eq!(
             3,
-            query_handler.metrics.query.messages.get_sample_sum() as u64
+            query_handler
+                .internal
+                .metrics
+                .query
+                .messages
+                .get_sample_sum() as u64
         );
         assert_eq!(
             1,
             query_handler
+                .internal
                 .metrics
                 .query_initial_call
                 .duration
@@ -182,6 +216,7 @@ fn query_metrics_are_reported() {
         );
         assert!(
             0 < query_handler
+                .internal
                 .metrics
                 .query_initial_call
                 .instructions
@@ -190,6 +225,7 @@ fn query_metrics_are_reported() {
         assert_eq!(
             1,
             query_handler
+                .internal
                 .metrics
                 .query_initial_call
                 .instructions
@@ -198,6 +234,7 @@ fn query_metrics_are_reported() {
         assert_eq!(
             1,
             query_handler
+                .internal
                 .metrics
                 .query_initial_call
                 .messages
@@ -206,6 +243,7 @@ fn query_metrics_are_reported() {
         assert_eq!(
             1,
             query_handler
+                .internal
                 .metrics
                 .query_initial_call
                 .messages
@@ -214,6 +252,7 @@ fn query_metrics_are_reported() {
         assert_eq!(
             1,
             query_handler
+                .internal
                 .metrics
                 .query_spawned_calls
                 .duration
@@ -222,6 +261,7 @@ fn query_metrics_are_reported() {
         assert_eq!(
             1,
             query_handler
+                .internal
                 .metrics
                 .query_spawned_calls
                 .instructions
@@ -229,6 +269,7 @@ fn query_metrics_are_reported() {
         );
         assert!(
             0 < query_handler
+                .internal
                 .metrics
                 .query_spawned_calls
                 .instructions
@@ -237,6 +278,7 @@ fn query_metrics_are_reported() {
         assert_eq!(
             1,
             query_handler
+                .internal
                 .metrics
                 .query_spawned_calls
                 .messages
@@ -245,19 +287,27 @@ fn query_metrics_are_reported() {
         assert_eq!(
             2,
             query_handler
+                .internal
                 .metrics
                 .query_spawned_calls
                 .messages
                 .get_sample_sum() as u64
         );
         assert_eq!(
-            query_handler.metrics.query.instructions.get_sample_sum() as u64,
             query_handler
+                .internal
+                .metrics
+                .query
+                .instructions
+                .get_sample_sum() as u64,
+            query_handler
+                .internal
                 .metrics
                 .query_initial_call
                 .instructions
                 .get_sample_sum() as u64
                 + query_handler
+                    .internal
                     .metrics
                     .query_spawned_calls
                     .instructions

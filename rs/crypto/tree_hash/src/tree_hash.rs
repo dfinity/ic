@@ -454,14 +454,29 @@ fn find_missing_label(
 /// structure and allows us to use the same algorithm to construct both
 /// witnesses that don't contain the data (e.g., for XNet) and the ones that do
 /// contain it (e.g., for certified reads).
-trait WitnessBuilder {
+pub trait WitnessBuilder {
+    /// Type of the trees that this builder produces.
     type Tree;
 
+    /// Creates a witness for an empty tree.
     fn make_empty() -> Self::Tree;
+
+    /// Constructs a witness for a labeled tree node pointing to the specified
+    /// subtree.
     fn make_node(label: Label, subtree: Self::Tree) -> Self::Tree;
+
+    /// Constructs a witness for a fork given the witnesses for left and right
+    /// subtrees.
     fn make_fork(lhs: Self::Tree, rhs: Self::Tree) -> Self::Tree;
+
+    /// Constructs a witness for a leaf containing the specified data.
     fn make_leaf(data: &[u8]) -> Self::Tree;
+
+    /// Constructs a witness that only reveals a subtree hash.
     fn make_pruned(digest: Digest) -> Self::Tree;
+
+    /// Merges two witnesses for the same tree.
+    fn merge_trees(lhs: Self::Tree, lhs: Self::Tree) -> Self::Tree;
 }
 
 impl WitnessBuilder for Witness {
@@ -492,6 +507,10 @@ impl WitnessBuilder for Witness {
     fn make_pruned(digest: Digest) -> Self {
         Self::Pruned { digest }
     }
+
+    fn merge_trees(lhs: Self, rhs: Self) -> Self {
+        Self::merge(lhs, rhs)
+    }
 }
 
 impl WitnessBuilder for MixedHashTree {
@@ -515,6 +534,10 @@ impl WitnessBuilder for MixedHashTree {
 
     fn make_pruned(digest: Digest) -> Self {
         Self::Pruned(digest)
+    }
+
+    fn merge_trees(lhs: Self, rhs: Self) -> Self {
+        Self::merge(lhs, rhs)
     }
 }
 

@@ -21,19 +21,26 @@ use ic_types::{
 use query_allocations::QueryAllocationsUsed;
 use std::sync::{Arc, RwLock};
 
-/// Struct that is responsible for handling queries sent by user.
-pub struct HttpQueryHandlerImpl {
+const QUERY_EXECUTION_THREADS: usize = 4;
+
+pub(crate) struct InternalHttpQueryHandlerImpl {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
     subnet_memory_capacity: NumBytes,
-    metrics: QueryHandlerMetrics,
+    pub(crate) metrics: QueryHandlerMetrics,
 }
 
-impl HttpQueryHandlerImpl {
-    pub fn new(
+/// Struct that is responsible for handling queries sent by user.
+pub struct HttpQueryHandlerImpl {
+    internal: Arc<InternalHttpQueryHandlerImpl>,
+    threadpool: rayon::ThreadPool,
+}
+
+impl InternalHttpQueryHandlerImpl {
+    fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
         own_subnet_id: SubnetId,
@@ -51,15 +58,11 @@ impl HttpQueryHandlerImpl {
             metrics: QueryHandlerMetrics::new(metrics_registry),
         }
     }
-}
-
-impl QueryHandler for HttpQueryHandlerImpl {
-    type State = ReplicatedState;
 
     fn query(
         &self,
         query: UserQuery,
-        state: Arc<Self::State>,
+        state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
@@ -88,5 +91,62 @@ impl QueryHandler for HttpQueryHandlerImpl {
             subnet_available_memory,
         );
         context.run(query, &self.metrics, &measurement_scope)
+    }
+}
+
+impl HttpQueryHandlerImpl {
+    pub fn new(
+        log: ReplicaLogger,
+        hypervisor: Arc<Hypervisor>,
+        own_subnet_id: SubnetId,
+        own_subnet_type: SubnetType,
+        subnet_memory_capacity: NumBytes,
+        metrics_registry: &MetricsRegistry,
+    ) -> Self {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(QUERY_EXECUTION_THREADS)
+            .thread_name(|idx| format!("query_execution thread index {}", idx))
+            .stack_size(8_192_000)
+            .build()
+            .unwrap();
+
+        Self {
+            internal: Arc::new(InternalHttpQueryHandlerImpl::new(
+                log,
+                hypervisor,
+                own_subnet_id,
+                own_subnet_type,
+                subnet_memory_capacity,
+                metrics_registry,
+            )),
+            threadpool: pool,
+        }
+    }
+}
+
+impl QueryHandler for HttpQueryHandlerImpl {
+    type State = ReplicatedState;
+
+    fn query(
+        &self,
+        query: UserQuery,
+        state: Arc<Self::State>,
+        data_certificate: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
+        self.internal.query(query, state, data_certificate)
+    }
+
+    fn non_blocking_query(
+        &self,
+        query: UserQuery,
+        state: Arc<Self::State>,
+        data_certificate: Vec<u8>,
+        callback: Box<dyn FnOnce(Result<WasmResult, UserError>) + Send + 'static>,
+    ) {
+        let internal = Arc::clone(&self.internal);
+        self.threadpool.spawn(move || {
+            let v = internal.query(query, state, data_certificate);
+            callback(v);
+        });
     }
 }

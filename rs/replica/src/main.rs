@@ -336,7 +336,7 @@ async fn run() -> io::Result<()> {
         root_subnet_id,
         logger.clone(),
         consensus_pool_cache,
-        ingress_message_filter,
+        Arc::from(ingress_message_filter),
         subnet_type,
         malicious_behaviour.malicious_flags.clone(),
     ));

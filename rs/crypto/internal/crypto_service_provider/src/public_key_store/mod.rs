@@ -4,7 +4,6 @@ use std::fs;
 use std::path::Path;
 
 use ic_protobuf::crypto::v1::NodePublicKeys;
-use std::io::Write;
 
 const PK_DATA_FILENAME: &str = "public_keys.pb";
 
@@ -22,12 +21,9 @@ pub fn store_node_public_keys(
     node_pks: &NodePublicKeys,
 ) -> Result<(), PublicKeyStoreError> {
     let pk_file = crypto_root.join(PK_DATA_FILENAME);
-    let mut buf = Vec::new();
-    match node_pks.encode(&mut buf) {
-        Ok(_) => ic_utils::fs::write_atomically(&pk_file, |f| f.write_all(&buf))
-            .map_err(|err| PublicKeyStoreError::IOError(err.to_string())),
-        Err(err) => Err(PublicKeyStoreError::SerialisationError(err.to_string())),
-    }
+
+    ic_utils::fs::write_protobuf_using_tmp_file(pk_file, node_pks)
+        .map_err(|err| PublicKeyStoreError::IOError(err.to_string()))
 }
 
 /// Read the node public keys from local storage

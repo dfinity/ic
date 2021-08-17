@@ -26,6 +26,7 @@ use ic_types::{
 };
 use ic_validator::{get_authorized_canisters, CanisterIdSet};
 use std::convert::TryFrom;
+use std::sync::RwLock;
 
 const MAX_READ_STATE_REQUEST_IDS: u8 = 100;
 
@@ -57,12 +58,12 @@ impl VerifyPathsError {
 
 /// Handles a call to /api/v2/canister/.../{query,read_state}
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn handle(
+pub(crate) async fn handle(
     log: &ReplicaLogger,
-    delegation_from_nns: Option<CertificateDelegation>,
+    delegation_from_nns: &RwLock<Option<CertificateDelegation>>,
     query_handler: &dyn QueryHandler<State = ReplicatedState>,
     state_reader: &dyn StateReader<State = ReplicatedState>,
-    validator: &dyn IngressSigVerifier,
+    validator: &(dyn IngressSigVerifier + Send + Sync),
     registry_version: RegistryVersion,
     body: Vec<u8>,
     metrics: &HttpHandlerMetrics,
@@ -116,6 +117,7 @@ pub(crate) fn handle(
         }
     };
 
+    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
     match request.content() {
         ReadContent::Query(query) => (
             handle_query(
@@ -126,7 +128,8 @@ pub(crate) fn handle(
                 query.clone(),
                 targets,
                 metrics,
-            ),
+            )
+            .await,
             Query,
         ),
         ReadContent::ReadState(read_state) => (
@@ -144,7 +147,7 @@ pub(crate) fn handle(
 
 // TODO(INF-328): The errors codes below are mostly 500. They should be more
 // descriptive.
-fn handle_query(
+async fn handle_query(
     log: &ReplicaLogger,
     delegation_from_nns: Option<CertificateDelegation>,
     query_handler: &dyn QueryHandler<State = ReplicatedState>,
@@ -167,7 +170,26 @@ fn handle_query(
         &delegation_from_nns,
         query.receiver,
     ) {
-        Some((state, cert)) => query_handler.query(query, state, cert),
+        Some((state, cert)) => {
+            let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+            let log = log.clone();
+            let callback = move |res| {
+                if let Err(err) = tx.blocking_send(res) {
+                    info!(log, "Broken channel (query execution). Most likely the user dropped the request: {}", err);
+                }
+            };
+            query_handler.non_blocking_query(query, state, cert, Box::new(callback));
+            // TODO: add a timeout for the await as a safety guard.
+            match rx.recv().await {
+                None => {
+                    return common::make_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Broken channel. Query execution didn't return a value.",
+                    )
+                }
+                Some(res) => res,
+            }
+        }
         None => Err(UserError::new(
             ErrorCode::CertifiedStateUnavailable,
             "Certified state is not available yet. Please try again...",

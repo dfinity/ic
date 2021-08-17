@@ -35,7 +35,7 @@ use ic_types::{
                 create_transcript_error::DkgCreateTranscriptError,
                 verify_dealing_error::DkgVerifyDealingError,
             },
-            NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
+            NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
         },
         CryptoError, Signed,
     },
@@ -56,12 +56,20 @@ use std::{
 // The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
 
+// The maximum number of intervals during which an initial DKG request is
+// attempted.
+const MAX_REMOTE_DKG_ATTEMPTS: u32 = 5;
+
+// Generic error string for failed remote DKG requests.
+const REMOTE_DKG_REPEATED_FAILURE_ERROR: &str = "Attemtps to run this DKG repeatedly failed";
+
 // Currently we assume that we run DKGs for all of these tags.
 const TAGS: [NiDkgTag; 2] = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
 
 /// Transient Dkg message validation errors.
 #[allow(missing_docs)]
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum PermanentError {
     CryptoError(CryptoError),
     DkgCreateTranscriptError(DkgCreateTranscriptError),
@@ -604,7 +612,7 @@ fn create_summary_payload(
 
     let height = parent.height.increment();
 
-    let (mut configs, transcripts_for_new_subnets) = compute_remote_dkg_data(
+    let (mut configs, transcripts_for_new_subnets, initial_dkg_attempts) = compute_remote_dkg_data(
         subnet_id,
         height,
         registry_client,
@@ -612,6 +620,7 @@ fn create_summary_payload(
         validation_context,
         transcripts_for_new_subnets,
         last_summary.transcripts_for_new_subnets(),
+        &last_summary.initial_dkg_attempts,
         &logger,
     )?;
 
@@ -651,6 +660,7 @@ fn create_summary_payload(
         interval_length,
         next_interval_length,
         height,
+        initial_dkg_attempts,
     ))
 }
 
@@ -838,15 +848,17 @@ fn compute_remote_dkg_data(
     validation_context: &ValidationContext,
     mut new_transcripts: BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
     previous_transcripts: &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
+    previous_attempts: &BTreeMap<NiDkgTargetId, u32>,
     logger: &ReplicaLogger,
 ) -> Result<
     (
         Vec<NiDkgConfig>,
         BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
+        BTreeMap<NiDkgTargetId, u32>,
     ),
     TransientError,
 > {
-    let (context_configs, errors) = process_subnet_call_context(
+    let (context_configs, errors, valid_target_ids) = process_subnet_call_context(
         subnet_id,
         height,
         registry_client,
@@ -891,20 +903,68 @@ fn compute_remote_dkg_data(
         }
     }
 
+    // Remove the data regarding old targets.
+    let mut attempts = previous_attempts
+        .clone()
+        .into_iter()
+        .filter(|(target_id, _)| valid_target_ids.contains(target_id))
+        .collect::<BTreeMap<_, _>>();
+
+    // Get the target ids that are attempted at least MAX_REMOTE_DKG_ATTEMPTS times.
+    let failed_target_ids = attempts
+        .iter()
+        .filter_map(
+            |(target_id, attempt_no)| match *attempt_no >= MAX_REMOTE_DKG_ATTEMPTS {
+                true => Some(*target_id),
+                false => None,
+            },
+        )
+        .collect::<Vec<_>>();
+
+    // Add errors into 'new_transcripts' for repeatedly failed configs and do not
+    // attempt to create transcripts for them any more.
+    //
+    // TODO: use drain_filter once it's stable.
+    config_groups.retain(|config_group| {
+        let target = config_group
+            .first()
+            .map(|config| config.dkg_id().target_subnet);
+        if let Some(NiDkgTargetSubnet::Remote(id)) = target {
+            if failed_target_ids.contains(&id) {
+                for config in config_group.iter() {
+                    new_transcripts.insert(
+                        config.dkg_id(),
+                        Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()),
+                    );
+                }
+                return false;
+            }
+        }
+        true
+    });
+
     // Retain not more than `MAX_REMOTE_DKGS_PER_INTERVAL` config groups, each
     // containing at most two configs: for high and low thresholds.
-    let configs: Vec<_> = config_groups[0..MAX_REMOTE_DKGS_PER_INTERVAL.min(config_groups.len())]
-        .to_vec()
-        .into_iter()
-        .flatten()
-        .collect();
+    let selected_config_groups: Vec<_> =
+        config_groups[0..MAX_REMOTE_DKGS_PER_INTERVAL.min(config_groups.len())].to_vec();
+
+    for config_group in selected_config_groups.iter() {
+        let target = config_group
+            .first()
+            .map(|config| config.dkg_id().target_subnet);
+        if let Some(NiDkgTargetSubnet::Remote(id)) = target {
+            *attempts.entry(id).or_insert(0) += 1;
+        }
+    }
+
+    let configs = selected_config_groups.into_iter().flatten().collect();
 
     // Add the errors returned during the config generation.
     for (dkg_id, err_str) in errors.into_iter() {
         new_transcripts.insert(dkg_id, Err(err_str));
     }
 
-    Ok((configs, new_transcripts))
+    Ok((configs, new_transcripts, attempts))
 }
 
 // Reads the SubnetCallContext and attempts to create DKG configs for new
@@ -919,9 +979,17 @@ fn process_subnet_call_context(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: &ReplicaLogger,
-) -> Result<(Vec<Vec<NiDkgConfig>>, Vec<(NiDkgId, String)>), TransientError> {
+) -> Result<
+    (
+        Vec<Vec<NiDkgConfig>>,
+        Vec<(NiDkgId, String)>,
+        Vec<NiDkgTargetId>,
+    ),
+    TransientError,
+> {
     let mut new_configs = Vec::new();
     let mut errors = Vec::new();
+    let mut valid_target_ids = Vec::new();
     let state = state_manager
         .get_state_at(validation_context.certified_height)
         .map_err(TransientError::StateManagerError)?;
@@ -957,11 +1025,14 @@ fn process_subnet_call_context(
             registry_version,
             logger,
         ) {
-            Ok((config0, config1)) => new_configs.push(vec![config0, config1]),
+            Ok((config0, config1)) => {
+                new_configs.push(vec![config0, config1]);
+                valid_target_ids.push(*target_id);
+            }
             Err(mut err_vec) => errors.append(&mut err_vec),
         };
     }
-    Ok((new_configs, errors))
+    Ok((new_configs, errors, valid_target_ids))
 }
 
 // This function is called for each entry on the SubnetCallContext. It returns
@@ -1200,6 +1271,7 @@ pub fn make_genesis_summary(
                     interval_length,
                     next_interval_length,
                     cup_height,
+                    BTreeMap::new(), // initial_dkg_attempts
                 );
             }
             _ => {
@@ -2780,6 +2852,155 @@ mod tests {
             "DKG validator counter",
             &["type"],
         )
+    }
+
+    #[test]
+    fn test_return_errors_for_repeatedly_failing_remote_dkg_requests() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            use ic_types::crypto::threshold_sig::ni_dkg::*;
+            with_test_replica_logger(|logger| {
+                let node_ids = vec![node_test_id(0), node_test_id(1)];
+                let dkg_interval_length = 99;
+                let subnet_id = subnet_test_id(0);
+                let Dependencies {
+                    registry,
+                    state_manager,
+                    ..
+                } = dependencies_with_subnet_records_with_raw_state_manager(
+                    pool_config,
+                    subnet_id,
+                    vec![(
+                        10,
+                        SubnetRecordBuilder::from(&node_ids)
+                            .with_dkg_interval_length(dkg_interval_length)
+                            .build(),
+                    )],
+                );
+
+                let target_id = NiDkgTargetId::new([0u8; 32]);
+                // The first two times, the context will have a request for the given target and
+                // not afterwards.
+                complement_state_manager_with_remote_dkg_requests(
+                    state_manager.clone(),
+                    registry.get_latest_version(),
+                    vec![10, 11, 12],
+                    Some(2),
+                    Some(target_id),
+                );
+                complement_state_manager_with_remote_dkg_requests(
+                    state_manager.clone(),
+                    registry.get_latest_version(),
+                    vec![],
+                    None,
+                    None,
+                );
+
+                // Any validation_context
+                let validation_context = ValidationContext {
+                    registry_version: registry.get_latest_version(),
+                    certified_height: Height::from(0),
+                    time: ic_test_utilities::mock_time(),
+                };
+
+                // STEP 1;
+                // Call compute_remote_dkg_data for the first time with this target.
+                let (configs, _, mut initial_dkg_attempts) = compute_remote_dkg_data(
+                    subnet_id,
+                    Height::from(0),
+                    registry.as_ref(),
+                    state_manager.as_ref(),
+                    &validation_context,
+                    BTreeMap::new(),
+                    &BTreeMap::new(),
+                    &BTreeMap::new(),
+                    &logger,
+                )
+                .unwrap();
+
+                // Two configs are created for this remote target.
+                assert_eq!(
+                    configs
+                        .iter()
+                        .filter(|config| config.dkg_id().target_subnet
+                            == NiDkgTargetSubnet::Remote(target_id))
+                        .count(),
+                    2,
+                    "{:?}",
+                    configs
+                );
+
+                // This is the first attempt to run DKG for this remote target.
+                assert_eq!(initial_dkg_attempts.get(&target_id), Some(&1u32));
+
+                // STEP 2:
+                // Call compute_remote_dkg_data again, but this time with an indicator that we
+                // have already attempted to run remote DKG for this target
+                // MAX_REMOTE_DKG_ATTEMPTS times.
+                initial_dkg_attempts.insert(target_id, MAX_REMOTE_DKG_ATTEMPTS);
+                let (configs, transcripts_for_new_subnets, initial_dkg_attempts) =
+                    compute_remote_dkg_data(
+                        subnet_id,
+                        Height::from(0),
+                        registry.as_ref(),
+                        state_manager.as_ref(),
+                        &validation_context,
+                        BTreeMap::new(),
+                        &BTreeMap::new(),
+                        &initial_dkg_attempts,
+                        &logger,
+                    )
+                    .unwrap();
+
+                // No configs are created for this remote target any more.
+                assert_eq!(
+                    configs
+                        .iter()
+                        .filter(|config| config.dkg_id().target_subnet
+                            == NiDkgTargetSubnet::Remote(target_id))
+                        .count(),
+                    0
+                );
+                // We rather respond with errors for this target.
+                assert_eq!(
+                    transcripts_for_new_subnets
+                        .iter()
+                        .filter(|(dkg_id, result)| dkg_id.target_subnet
+                            == NiDkgTargetSubnet::Remote(target_id)
+                            && **result == Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()))
+                        .count(),
+                    2
+                );
+                // The attempt counter is still kept and unchanged.
+                assert_eq!(
+                    initial_dkg_attempts.get(&target_id),
+                    Some(&MAX_REMOTE_DKG_ATTEMPTS)
+                );
+
+                // STEP 3:
+                // Call compute_remote_dkg_data the last time, with an empty call context.
+                // (As arranged in the initialization of the state manager...)
+                let (configs, transcripts_for_new_subnets, initial_dkg_attempts) =
+                    compute_remote_dkg_data(
+                        subnet_id,
+                        Height::from(0),
+                        registry.as_ref(),
+                        state_manager.as_ref(),
+                        &validation_context,
+                        BTreeMap::new(),
+                        &BTreeMap::new(),
+                        &initial_dkg_attempts,
+                        &logger,
+                    )
+                    .unwrap();
+
+                // No configs are created for this remote target any more.
+                assert_eq!(configs.len(), 0);
+                // No transcripts or errors are returned for this target.
+                assert_eq!(transcripts_for_new_subnets.len(), 0);
+                // The corresponding entry is removed from the counter.
+                assert_eq!(initial_dkg_attempts.len(), 0);
+            });
+        });
     }
 
     /// This tests the `validate_payload` function.

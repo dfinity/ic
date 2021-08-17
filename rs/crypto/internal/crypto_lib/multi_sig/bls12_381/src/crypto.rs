@@ -5,11 +5,11 @@ use crate::types::{
     CombinedPublicKey, CombinedSignature, IndividualSignature, Pop, PublicKey, PublicKeyBytes,
     SecretKey,
 };
-use ff::Field;
 use group::CurveProjective;
 use ic_crypto_internal_bls12381_common as bls;
+use ic_crypto_internal_bls12381_common::random_bls12_381_scalar;
 use ic_crypto_internal_types::context::{Context, DomainSeparationContext};
-use pairing::bls12_381::{Bls12, Fr, FrRepr, G1, G2};
+use pairing::bls12_381::{Bls12, FrRepr, G1, G2};
 use pairing::Engine;
 use rand::{CryptoRng, Rng};
 
@@ -58,8 +58,9 @@ pub fn keypair_from_seed(seed: [u64; 4]) -> (SecretKey, PublicKey) {
 }
 
 pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKey, PublicKey) {
-    // Fr::random() uses rejection sampling to ensure a uniform distribution.
-    let secret_key: FrRepr = FrRepr::from(Fr::random(rng));
+    // random_bls12_381_scalar uses rejection sampling to ensure a uniform
+    // distribution.
+    let secret_key: FrRepr = FrRepr::from(random_bls12_381_scalar(rng));
     let public_key: G2 = bls::scalar_multiply(G2::one(), secret_key);
     (secret_key, public_key)
 }

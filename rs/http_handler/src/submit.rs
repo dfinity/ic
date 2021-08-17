@@ -1,10 +1,6 @@
 //! Module that deals with requests to /api/v2/canister/.../call
 
-use crate::{
-    common,
-    metrics::HttpHandlerMetrics,
-    types::{ApiReqType, RequestType},
-};
+use crate::{common, metrics::HttpHandlerMetrics, types::*};
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces::crypto::IngressSigVerifier;
 use ic_interfaces::execution_environment::IngressMessageFilter;
@@ -26,6 +22,7 @@ use ic_types::{
 };
 use ic_validator::validate_request;
 use std::convert::TryInto;
+use std::sync::Arc;
 
 fn into_http_status_code(
     acceptance_error: MessageAcceptanceError,
@@ -76,17 +73,17 @@ fn into_http_status_code(
 
 /// Handles a call to /api/v2/canister/../call
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn handle(
-    log: &ReplicaLogger,
+pub(crate) async fn handle(
+    metrics: Arc<HttpHandlerMetrics>,
+    log: ReplicaLogger,
     subnet_id: SubnetId,
-    registry_client: &dyn RegistryClient,
-    ingress_sender: &dyn IngressEventHandler,
-    state_reader: &dyn StateReader<State = ReplicatedState>,
-    validator: &dyn IngressSigVerifier,
-    ingress_message_filter: &dyn IngressMessageFilter<State = ReplicatedState>,
+    registry_client: Arc<dyn RegistryClient>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+    ingress_sender: Arc<dyn IngressEventHandler>,
+    malicious_flags: MaliciousFlags,
+    ingress_message_filter: Arc<dyn IngressMessageFilter<State = ReplicatedState>>,
     body: Vec<u8>,
-    metrics: &HttpHandlerMetrics,
-    malicious_flags: &MaliciousFlags,
 ) -> (Response<Body>, ApiReqType) {
     use ApiReqType::*;
     // Actual parsing.
@@ -113,11 +110,21 @@ pub(crate) fn handle(
     );
 
     let message_id = msg.id();
+    let registry_version = registry_client.get_latest_version();
 
-    let max_ingress_bytes_per_message = match registry_client
-        .get_ingress_message_settings(subnet_id, registry_client.get_latest_version())
-    {
-        Ok(Some(settings)) => settings.max_ingress_bytes_per_message,
+    match registry_client.get_ingress_message_settings(subnet_id, registry_version) {
+        Ok(Some(settings)) => {
+            // Check size, respond with 413 if too large
+            if msg.count_bytes() > settings.max_ingress_bytes_per_message {
+                return (
+                    common::make_response(
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        format!("Request {} is too large. ", message_id).as_str(),
+                    ),
+                    Call,
+                );
+            }
+        }
         Ok(None) => {
             let err_msg = format!(
                 "No subnet record found for the latest registry version and subnet_id={:?}",
@@ -142,26 +149,14 @@ pub(crate) fn handle(
         }
     };
 
-    // Check size, respond with 413 if too large
-    if msg.count_bytes() > max_ingress_bytes_per_message {
-        return (
-            common::make_response(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                format!("Request {} is too large. ", message_id).as_str(),
-            ),
-            Call,
-        );
-    };
-    let registry_version = registry_client.get_latest_version();
-    let validity = validate_request(
+    if let Err(err) = validate_request(
         msg.as_ref(),
-        validator,
+        validator.as_ref(),
         current_time(),
         registry_version,
-        malicious_flags,
-    );
-    if let Err(err) = validity {
-        let response = common::make_response_on_validation_error(message_id, err, log);
+        &malicious_flags,
+    ) {
+        let response = common::make_response_on_validation_error(message_id, err, &log);
         metrics.observe_forbidden_request(&RequestType::Submit, "SubmitReqAuthFailed");
         return (response, Call);
     }
@@ -188,20 +183,30 @@ pub(crate) fn handle(
             &provisional_whitelist,
             msg.content(),
         ) {
-            let (status_code, error_msg) = into_http_status_code(err, metrics);
+            let (status_code, error_msg) = into_http_status_code(err, metrics.as_ref());
             return (common::make_response(status_code, &error_msg), Call);
         }
     }
 
-    // We're pretty much done, just need to send the message to ingress and
-    // make_response to the client
     let ingress_log_entry = msg.log_entry();
-    match ingress_sender.on_ingress_message(msg) {
-        Err(_e) => (
+    // TODO: remove the spawn blocking once the ingress sender API allows
+    // non-blocking op.
+    match tokio::task::spawn_blocking(move || ingress_sender.on_ingress_message(msg)).await {
+        Err(err) => {
+            metrics.observe_internal_error(
+                &RequestType::Submit,
+                InternalError::ConcurrentTaskExecution,
+            );
+            error!(log, "route_to_handlers failed with: {}", err);
+            (common::empty_response(), ApiReqType::Unknown)
+        }
+        Ok(Err(_e)) => (
             common::make_response(StatusCode::SERVICE_UNAVAILABLE, "Service Unavailable!"),
             Call,
         ),
-        Ok(_) => {
+        Ok(Ok(_)) => {
+            // We're pretty much done, just need to send the message to ingress and
+            // make_response to the client
             info_sample!(
                 "message_id" => &message_id,
                 log,

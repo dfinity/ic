@@ -32,6 +32,7 @@ message Summary {
 	repeated TaggedNiDkgTranscript next_transcripts = 6;
 	repeated NiDkgConfig configs = 7;
 	repeated IdedNiDkgTranscript transcripts_for_new_subnets = 8;
+	repeated InitialDkgAttemptCount initial_dkg_attempts = 9;
 }
 
 message TaggedNiDkgTranscript {
@@ -70,4 +71,9 @@ message NiDkgConfig {
 	uint32 threshold = 6;
 	uint64 registry_version = 7;
 	NiDkgTranscript resharing_transcript = 8;
+}
+
+message InitialDkgAttemptCount {
+	bytes target_id = 1;
+	uint32 attempt_no = 2;
 }

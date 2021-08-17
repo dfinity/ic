@@ -16,7 +16,9 @@ pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{execute, Hypervisor, HypervisorMetrics};
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::{IngressHistoryWriter, IngressMessageFilter, Scheduler};
+use ic_interfaces::execution_environment::{
+    IngressHistoryWriter, IngressMessageFilter, QueryHandler, Scheduler,
+};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::RoutingTable;
@@ -24,7 +26,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{messages::CallContextId, SubnetId};
 use ingress_message_filter::IngressMessageFilterImpl;
-pub use query_handler::HttpQueryHandlerImpl;
+use query_handler::HttpQueryHandlerImpl;
 use scheduler::SchedulerImpl;
 use std::sync::Arc;
 
@@ -63,7 +65,7 @@ pub fn setup_execution(
 ) -> (
     Box<dyn IngressMessageFilter<State = ReplicatedState>>,
     Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
-    Arc<HttpQueryHandlerImpl>,
+    Arc<dyn QueryHandler<State = ReplicatedState>>,
     Box<dyn Scheduler<State = ReplicatedState>>,
 ) {
     let hypervisor = Arc::new(Hypervisor::new(

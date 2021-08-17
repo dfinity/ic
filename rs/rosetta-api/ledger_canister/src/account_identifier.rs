@@ -1,8 +1,6 @@
 use candid::CandidType;
 use dfn_core::CanisterId;
-use ic_base_types::{
-    CanisterIdError, PrincipalId, PrincipalIdBlobParseError, PrincipalIdParseError,
-};
+use ic_base_types::{CanisterIdError, PrincipalId, PrincipalIdError};
 use ic_crypto_sha256::Sha224;
 use serde::{de, de::Error, Deserialize, Serialize};
 use std::{
@@ -210,7 +208,7 @@ impl From<&PrincipalId> for Subaccount {
 }
 
 impl TryFrom<&Subaccount> for PrincipalId {
-    type Error = PrincipalIdBlobParseError;
+    type Error = PrincipalIdError;
 
     fn try_from(subaccount: &Subaccount) -> Result<Self, Self::Error> {
         let len = subaccount.0[0] as usize;
@@ -229,11 +227,7 @@ impl TryFrom<&Subaccount> for CanisterId {
     type Error = CanisterIdError;
 
     fn try_from(subaccount: &Subaccount) -> Result<Self, Self::Error> {
-        CanisterId::new(subaccount.try_into().map_err(|err| match err {
-            PrincipalIdBlobParseError::TooLong(_) => {
-                CanisterIdError::PrincipalIdParseError(PrincipalIdParseError::TooLong)
-            }
-        })?)
+        CanisterId::new(subaccount.try_into()?)
     }
 }
 

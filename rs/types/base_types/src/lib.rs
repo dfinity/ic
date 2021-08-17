@@ -1,18 +1,24 @@
 //! A crate containing various basic types that are especially useful when
 //! writing Rust canisters.
+
+use candid::CandidType;
+use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::types::v1 as pb;
+use phantom_newtype::{AmountOf, DisplayerOf, Id};
+use serde::{Deserialize, Serialize};
+use std::{convert::TryFrom, fmt, slice::Iter};
+use strum_macros::EnumString;
+
 mod canister_id;
 mod pb_internal;
 mod principal_id;
 
-use candid::CandidType;
-pub use canister_id::{CanisterId, CanisterIdBlobParseError, CanisterIdError};
-use ic_protobuf::proxy::ProxyDecodeError;
-use ic_protobuf::types::v1 as pb;
-use phantom_newtype::{AmountOf, DisplayerOf, Id};
-pub use principal_id::{PrincipalId, PrincipalIdBlobParseError, PrincipalIdParseError};
-use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, fmt, slice::Iter};
-use strum_macros::EnumString;
+pub use candid::types::ic_types;
+pub use canister_id::{CanisterId, CanisterIdError, CanisterIdError as CanisterIdBlobParseError};
+pub use principal_id::{
+    PrincipalId, PrincipalIdError, PrincipalIdError as PrincipalIdBlobParseError,
+    PrincipalIdError as PrincipalIdParseError,
+};
 
 pub struct RegistryVersionTag {}
 /// A type representing the registry's version.
@@ -165,8 +171,8 @@ pub fn subnet_id_try_from_protobuf(value: pb::SubnetId) -> Result<SubnetId, Prox
     Ok(SubnetId::from(principal_id))
 }
 
-impl From<PrincipalIdBlobParseError> for ProxyDecodeError {
-    fn from(err: PrincipalIdBlobParseError) -> Self {
+impl From<PrincipalIdError> for ProxyDecodeError {
+    fn from(err: PrincipalIdError) -> Self {
         Self::InvalidPrincipalId(Box::new(err))
     }
 }

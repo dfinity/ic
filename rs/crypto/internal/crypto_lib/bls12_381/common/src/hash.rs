@@ -1,13 +1,12 @@
 //! Hashing to BLS12-381 primitives
 
 use crate::serde::pairing::g1_from_bytes;
-use ff::Field;
 use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_to_bytes;
 use ic_crypto_sha256::Sha256;
 use miracl_core::bls12381::ecp::ECP;
 use pairing::bls12_381::{Fr, G1};
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
+use rand_core::{RngCore, SeedableRng};
 
 #[cfg(test)]
 mod tests;
@@ -98,6 +97,59 @@ pub fn hash_to_miracl_g1(dst: &[u8], msg: &[u8]) -> MiraclG1 {
     p
 }
 
+pub fn random_bls12_381_scalar<R: RngCore>(rng: &mut R) -> Fr {
+    use ff::{Field, PrimeField};
+
+    loop {
+        let mut repr = [0u64; 4];
+        for r in repr.iter_mut() {
+            *r = rng.next_u64();
+        }
+
+        /*
+        Since the modulus is 255 bits, we clear out the most significant bit to
+        reduce number of repetitions for the rejection sampling.
+
+        (This also matches the logic used in the old version of zcrypto/pairing,
+        which we are attempting to maintain bit-for-bit compatability with)
+        */
+        repr[3] &= 0xffffffffffffffff >> 1;
+
+        let fr = Fr::from_repr(pairing::bls12_381::FrRepr(repr));
+
+        if fr.is_err() {
+            continue; // out of range
+        }
+        let mut fr = fr.expect("Generated Fr out of range");
+
+        /*
+        The purpose of this function is to maintain bit-compatability with old
+        versions of zkcrypto/pairing's Fr::random. That function generates random
+        values by generating a random integer, then treating it as if it was already
+        in Montgomery format; that is, x is stored as xR where R == 2**256, and so
+        the value that Fr::random produces is really z*R^-1 where z is the RNG
+        output.
+
+        To produce this value using the public API we have to first generate the
+        value, then multiply by R^-1 mod p, which is the constant below using
+        little-endian convention, ie the value is really 0x1bbe869...5c040.
+        Here R == 2**256 and p is the order of the BLS12-381 subgroup.
+        */
+        let montgomery_fixup = [
+            0x13f75b69fe75c040,
+            0xab6fca8f09dc705f,
+            0x7204078a4f77266a,
+            0x1bbe869330009d57,
+        ];
+
+        let montgomery_fixup = Fr::from_repr(pairing::bls12_381::FrRepr(montgomery_fixup))
+            .expect("Montgomery fixup value out of range");
+        fr.mul_assign(&montgomery_fixup);
+
+        return fr;
+    }
+}
+
 /// Deterministically create a BLS12-381 field element from a hash
 ///
 /// # Arguments
@@ -106,5 +158,6 @@ pub fn hash_to_miracl_g1(dst: &[u8], msg: &[u8]) -> MiraclG1 {
 /// A field element
 pub fn hash_to_fr(hash: Sha256) -> Fr {
     let hash = hash.finish();
-    Fr::random(&mut ChaChaRng::from_seed(hash))
+    let mut rng = ChaChaRng::from_seed(hash);
+    random_bls12_381_scalar(&mut rng)
 }

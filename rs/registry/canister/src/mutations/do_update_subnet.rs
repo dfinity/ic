@@ -176,7 +176,10 @@ fn merge_subnet_record(
 
     maybe_set!(subnet_record, start_as_nns);
 
-    maybe_set!(subnet_record, subnet_type);
+    // See EXC-408: changing of the subnet type is disabled.
+    if let Some(value) = subnet_type {
+        assert_eq!(subnet_record.subnet_type, i32::from(value));
+    }
 
     maybe_set!(subnet_record, is_halted);
 
@@ -249,7 +252,7 @@ mod tests {
             retransmission_request_ms: Some(7000),
             set_gossip_config_to_default: false,
             start_as_nns: Some(true),
-            subnet_type: Some(SubnetType::System),
+            subnet_type: None,
             is_halted: Some(true),
             max_instructions_per_message: Some(6_000_000_000),
             max_instructions_per_round: Some(8_000_000_000),
@@ -280,7 +283,7 @@ mod tests {
                     retransmission_request_ms: 7000,
                 }),
                 start_as_nns: true,
-                subnet_type: SubnetType::System.into(),
+                subnet_type: SubnetType::Application.into(),
                 is_halted: true,
                 max_instructions_per_message: 6_000_000_000,
                 max_instructions_per_round: 8_000_000_000,
@@ -344,7 +347,7 @@ mod tests {
             retransmission_request_ms: None,
             set_gossip_config_to_default: false,
             start_as_nns: None,
-            subnet_type: Some(SubnetType::System),
+            subnet_type: None,
             is_halted: None,
             max_instructions_per_message: None,
             max_instructions_per_round: Some(8_000_000_000),
@@ -375,7 +378,7 @@ mod tests {
                     retransmission_request_ms: 100,
                 }),
                 start_as_nns: false,
-                subnet_type: SubnetType::System.into(),
+                subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 max_instructions_per_message: 5_000_000_000,
                 max_instructions_per_round: 8_000_000_000,
@@ -434,7 +437,7 @@ mod tests {
             retransmission_request_ms: None,
             set_gossip_config_to_default: false,
             start_as_nns: None,
-            subnet_type: Some(SubnetType::System),
+            subnet_type: Some(SubnetType::Application),
             is_halted: None,
             max_instructions_per_message: None,
             max_instructions_per_round: None,

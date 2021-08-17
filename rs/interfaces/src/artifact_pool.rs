@@ -15,7 +15,7 @@ pub enum ArtifactPoolError {
     /// Error when artifact version is not accepted.
     ArtifactReplicaVersionError(ReplicaVersionMismatch),
     /// Error when artifact acceptance goes wrong.
-    ArtifactRejected(Box<dyn std::error::Error>),
+    ArtifactRejected(Box<dyn std::error::Error + Send>),
 }
 
 /// Describe expected version and artifact version when there is a mismatch.

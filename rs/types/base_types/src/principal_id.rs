@@ -1,9 +1,15 @@
+use crate::ic_types::{Principal, PrincipalError};
 use crate::pb_internal::v1::PrincipalId as PrincipalIdProto;
 use candid::types::{Type, TypeId};
 use ic_crypto_sha256::Sha224;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, fmt};
+use std::{
+    convert::TryFrom,
+    error::Error,
+    fmt,
+    hash::{Hash, Hasher},
+};
 
 /// The type representing principals as described in the [interface
 /// spec](https://sdk.dfinity.org/docs/interface-spec/index.html#_principals).
@@ -14,21 +20,74 @@ use std::{convert::TryFrom, fmt};
 /// Principals have variable length, bounded by 29 bytes. Since we
 /// want [`PrincipalId`] to implement the Copy trait, we encode them as
 /// a fixed-size array and a length.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct PrincipalId {
-    len: usize,
-    data: [u8; Self::MAX_LENGTH_IN_BYTES],
+#[derive(Clone, Copy, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[repr(transparent)]
+#[serde(transparent)]
+pub struct PrincipalId(pub Principal);
+
+impl PartialEq for PrincipalId {
+    fn eq(&self, other: &PrincipalId) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Hash for PrincipalId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let slice = self.0.as_slice();
+        slice.len().hash(state);
+        let mut array = [0; Self::MAX_LENGTH_IN_BYTES];
+        array[..slice.len()].copy_from_slice(slice);
+        array.hash(state);
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[repr(transparent)]
+#[serde(transparent)]
+pub struct PrincipalIdError(pub PrincipalError);
+
+impl PrincipalIdError {
+    #[allow(non_snake_case)]
+    pub fn TooLong(_: usize) -> Self {
+        PrincipalIdError(PrincipalError::BufferTooLong())
+    }
+}
+
+impl Error for PrincipalIdError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.0.source()
+    }
+}
+
+impl fmt::Display for PrincipalIdError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Default for PrincipalId {
+    fn default() -> Self {
+        PrincipalId(Principal::management_canister())
+    }
+}
+
+impl From<Principal> for PrincipalId {
+    fn from(p: Principal) -> PrincipalId {
+        PrincipalId(p)
+    }
+}
+impl From<PrincipalId> for Principal {
+    fn from(p: PrincipalId) -> Principal {
+        p.0
+    }
 }
 
 impl PrincipalId {
     pub const MAX_LENGTH_IN_BYTES: usize = 29;
     const HASH_LEN_IN_BYTES: usize = 28;
-    const CRC_LENGTH_IN_BYTES: usize = 4;
 
     pub fn as_slice(&self) -> &[u8] {
-        // The principal is stored as part of the array, starting from position 0
-        // and taking up "len" bytes. We thus need to truncate the array.
-        &self.data[..self.len]
+        self.0.as_slice()
     }
 
     pub fn to_vec(&self) -> Vec<u8> {
@@ -41,59 +100,16 @@ impl PrincipalId {
 }
 
 impl fmt::Display for PrincipalId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
-        let blob = self.as_slice();
-        // Calculate checksum...
-        let mut hasher = crc32fast::Hasher::new();
-        hasher.update(&blob);
-        let checksum = hasher.finalize();
-
-        // ...combine blobs...
-        let mut bytes = vec![];
-        bytes.extend_from_slice(&(checksum.to_be_bytes()));
-        bytes.extend_from_slice(&blob);
-
-        // ...encode in base32...
-        let mut s = base32::encode(base32::Alphabet::RFC4648 { padding: false }, &bytes);
-        s.make_ascii_lowercase();
-
-        // ...write out the string with dashes.
-        while s.len() > 5 {
-            let rest = s.split_off(5);
-            write!(f, "{}-", s)?;
-            s = rest;
-        }
-        write!(f, "{}", s)
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
 impl fmt::Debug for PrincipalId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
-/// Represents an error that can occur when parsing a blob into a
-/// [`PrincipalId`].
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum PrincipalIdBlobParseError {
-    TooLong(usize),
-}
-
-impl fmt::Display for PrincipalIdBlobParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::TooLong(n) => write!(
-                f,
-                "Principal id must contain at most {} bytes, got {}",
-                PrincipalId::MAX_LENGTH_IN_BYTES,
-                n
-            ),
-        }
+        write!(f, "{}", self.0)
     }
 }
-
-impl std::error::Error for PrincipalIdBlobParseError {}
 
 impl From<PrincipalId> for Vec<u8> {
     fn from(val: PrincipalId) -> Self {
@@ -104,32 +120,31 @@ impl From<PrincipalId> for Vec<u8> {
 /// The [`TryFrom`] trait should only be used when parsing data; fresh ids
 /// should always be created with the functions below (PrincipalId::new_*)
 impl TryFrom<&[u8]> for PrincipalId {
-    type Error = PrincipalIdBlobParseError;
+    type Error = PrincipalIdError;
 
     fn try_from(blob: &[u8]) -> Result<Self, Self::Error> {
-        if blob.len() > Self::MAX_LENGTH_IN_BYTES {
-            return Err(PrincipalIdBlobParseError::TooLong(blob.len()));
-        }
-
-        let mut id = PrincipalId {
-            len: blob.len(),
-            data: [0; Self::MAX_LENGTH_IN_BYTES],
-        };
-        id.data[..blob.len()].copy_from_slice(blob);
-        Ok(id)
+        Principal::try_from(blob)
+            .map(Self)
+            .map_err(PrincipalIdError)
     }
 }
 
 impl TryFrom<Vec<u8>> for PrincipalId {
-    type Error = PrincipalIdBlobParseError;
+    type Error = PrincipalIdError;
+
     fn try_from(blob: Vec<u8>) -> Result<Self, Self::Error> {
-        Self::try_from(blob.as_slice())
+        Principal::try_from(blob)
+            .map(Self)
+            .map_err(PrincipalIdError)
     }
 }
 impl TryFrom<&Vec<u8>> for PrincipalId {
-    type Error = PrincipalIdBlobParseError;
+    type Error = PrincipalIdError;
+
     fn try_from(blob: &Vec<u8>) -> Result<Self, Self::Error> {
-        Self::try_from(blob.as_slice())
+        Principal::try_from(blob)
+            .map(Self)
+            .map_err(PrincipalIdError)
     }
 }
 
@@ -139,64 +154,13 @@ impl AsRef<[u8]> for PrincipalId {
     }
 }
 
-/// Represents an error that can occur when parsing a string into a
-/// [`PrincipalId`].
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum PrincipalIdParseError {
-    TooLong,
-    TooShort,
-    NotBase32,
-    Wrong { expected: String },
-}
-
-impl std::error::Error for PrincipalIdParseError {}
-
-impl fmt::Display for PrincipalIdParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::TooLong => write!(f, "principal textual representation is too long"),
-            Self::TooShort => write!(f, "principal textual representation is too short"),
-            Self::NotBase32 => write!(
-                f,
-                "cannot decode principal textual representation as base32"
-            ),
-            Self::Wrong { expected } => write!(
-                f,
-                "principal textual not in normal form, expected {}",
-                expected
-            ),
-        }
-    }
-}
-
 impl std::str::FromStr for PrincipalId {
-    type Err = PrincipalIdParseError;
+    type Err = PrincipalIdError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        // Strategy: Parse very liberally, then pretty-print and compare output.
-        // This is both simpler and yields better error messages.
-
-        let mut s = input.to_string();
-        s.make_ascii_lowercase();
-        s.retain(|c| c.is_ascii_alphanumeric());
-        match base32::decode(base32::Alphabet::RFC4648 { padding: false }, &s) {
-            Some(mut bytes) => {
-                if bytes.len() < Self::CRC_LENGTH_IN_BYTES {
-                    return Err(PrincipalIdParseError::TooShort);
-                }
-                if bytes.len() > Self::MAX_LENGTH_IN_BYTES + Self::CRC_LENGTH_IN_BYTES {
-                    return Err(PrincipalIdParseError::TooLong);
-                }
-                let result =
-                    PrincipalId::try_from(&bytes.split_off(Self::CRC_LENGTH_IN_BYTES)[..]).unwrap();
-                let expected = format!("{}", result);
-                if input != expected {
-                    return Err(PrincipalIdParseError::Wrong { expected });
-                }
-                Ok(result)
-            }
-            None => Err(PrincipalIdParseError::NotBase32),
-        }
+        Principal::from_str(input)
+            .map(Self)
+            .map_err(PrincipalIdError)
     }
 }
 
@@ -217,7 +181,7 @@ impl PrincipalId {
     pub(crate) fn new_opaque(blob: &[u8]) -> Self {
         let mut bytes = blob.to_vec();
         bytes.push(Self::TYPE_OPAQUE);
-        PrincipalId::try_from(&bytes[..]).unwrap()
+        PrincipalId(Principal::from_slice(&bytes[..]))
     }
 
     /// Creates an opaque id from the first `len` bytes of `blob`.
@@ -249,17 +213,58 @@ impl PrincipalId {
     }
 
     pub const fn new(len: usize, data: [u8; Self::MAX_LENGTH_IN_BYTES]) -> Self {
-        PrincipalId { len, data }
+        // Calls in constant functions are limited to constant functions,
+        // tuple structs and tuple variants (E0015)
+        use std::ops::Range;
+        const fn get(mut data: &[u8], r: Range<usize>) -> Option<&[u8]> {
+            if r.start > r.end || data.len() < r.end {
+                return None;
+            }
+
+            while data.len() > r.end {
+                match data {
+                    [x @ .., _] => data = x,
+                    [] => {} //unreachable!(),
+                }
+            }
+
+            while data.len() > r.end - r.start {
+                match data {
+                    [_, x @ ..] => data = x,
+                    [] => {} //unreachable!(),
+                }
+            }
+
+            Some(data)
+        }
+        pub const fn range(data: &[u8], r: Range<usize>) -> &[u8] {
+            let (start, end) = (r.start, r.end);
+            match get(data, r) {
+                Some(v) => v,
+                None => {
+                    // TODO: remove (blocked by rust-lang/rust#85194)
+                    // Give good panic messages
+                    let _ = &data[start];
+                    let _ = &data[end];
+                    let _ = &data[end - start];
+                    const ASSERT: [(); 1] = [()];
+                    #[allow(unconditional_panic)]
+                    let _ = ASSERT[1];
+
+                    data
+                }
+            }
+        }
+
+        //PrincipalId(Principal::from_slice(&data[0..len]))
+        PrincipalId(Principal::from_slice(range(&data, 0..len)))
     }
 
     pub fn new_self_authenticating(pubkey: &[u8]) -> Self {
         let mut id: [u8; 29] = [0; 29];
         id[..28].copy_from_slice(&Sha224::hash(pubkey));
         id[28] = Self::TYPE_SELF_AUTH;
-        PrincipalId {
-            len: id.len(),
-            data: id,
-        }
+        PrincipalId(Principal::from_slice(&id))
     }
 
     pub fn new_derived(registerer: &PrincipalId, seed: &[u8]) -> Self {
@@ -272,9 +277,7 @@ impl PrincipalId {
     }
 
     pub fn new_anonymous() -> Self {
-        let mut data = [0; Self::MAX_LENGTH_IN_BYTES];
-        data[0] = Self::TYPE_ANONYMOUS;
-        PrincipalId { len: 1, data }
+        PrincipalId(Principal::anonymous())
     }
 
     pub fn authenticates_for_pubkey(&self, pubkey: &[u8]) -> bool {
@@ -307,7 +310,7 @@ impl PrincipalId {
     }
 
     pub fn is_anonymous(&self) -> bool {
-        self.len == 1 && self.data[0] == Self::TYPE_ANONYMOUS
+        self.as_slice() == [Self::TYPE_ANONYMOUS]
     }
 }
 
@@ -398,77 +401,6 @@ impl prost::Message for PrincipalId {
     }
 }
 
-impl Serialize for PrincipalId {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        serializer.serialize_bytes(self.as_slice())
-    }
-}
-
-impl<'de> Deserialize<'de> for PrincipalId {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        struct PrincipalIdVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for PrincipalIdVisitor {
-            type Value = PrincipalId;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(
-                    formatter,
-                    "a principal id: a blob with at most {} bytes",
-                    PrincipalId::MAX_LENGTH_IN_BYTES
-                )
-            }
-
-            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                PrincipalId::try_from(v).map_err(|err| E::custom(err.to_string()))
-            }
-            /// This visitor should only be used by the Candid crate.
-            fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                if v.is_empty() || v[0] != 2u8 {
-                    Err(E::custom("Not called by Candid"))
-                } else {
-                    PrincipalId::try_from(&v[1..]).map_err(E::custom)
-                }
-            }
-            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                use std::str::FromStr;
-                PrincipalId::from_str(s).map_err(|err| E::custom(err.to_string()))
-            }
-
-            fn visit_seq<V>(self, mut visitor: V) -> Result<Self::Value, V::Error>
-            where
-                V: serde::de::SeqAccess<'de>,
-            {
-                use serde::de::Error;
-                let mut bytes = Vec::with_capacity(PrincipalId::MAX_LENGTH_IN_BYTES);
-
-                while let Some(b) = visitor.next_element()? {
-                    bytes.push(b);
-                }
-
-                PrincipalId::try_from(&bytes[..]).map_err(|err| V::Error::custom(err.to_string()))
-            }
-        }
-
-        deserializer.deserialize_bytes(PrincipalIdVisitor)
-    }
-}
-
 impl From<PrincipalId> for pb::PrincipalId {
     fn from(id: PrincipalId) -> Self {
         Self { raw: id.into_vec() }
@@ -476,7 +408,7 @@ impl From<PrincipalId> for pb::PrincipalId {
 }
 
 impl TryFrom<pb::PrincipalId> for PrincipalId {
-    type Error = PrincipalIdBlobParseError;
+    type Error = PrincipalIdError;
 
     fn try_from(value: pb::PrincipalId) -> Result<Self, Self::Error> {
         Self::try_from(&value.raw[..])
@@ -491,9 +423,21 @@ mod tests {
     use std::str::FromStr;
 
     fn arb_principal_id() -> BoxedStrategy<PrincipalId> {
-        pvec(any::<u8>(), 0..PrincipalId::MAX_LENGTH_IN_BYTES)
-            .prop_map(|b| PrincipalId::try_from(&b[..]).unwrap())
-            .boxed()
+        prop_oneof![
+            Just(PrincipalId(Principal::management_canister())), // `[]`
+            Just(PrincipalId::new_anonymous()),                  // `[ANONYMOUS]`
+            pvec(0..u8::MAX - 1, 1..PrincipalId::MAX_LENGTH_IN_BYTES).prop_map(|mut b| {
+                // it's illegal for non-anonymous principals to end in `ANONYMOUS`
+                // so remap trailing `ANONYMOUS` bytes
+                const ANONYMOUS: u8 = 4;
+                let last = b.last_mut().unwrap();
+                if *last == ANONYMOUS {
+                    *last = u8::MAX
+                }
+                PrincipalId::try_from(&b[..]).unwrap()
+            }),
+        ]
+        .boxed()
     }
 
     proptest! {
@@ -517,11 +461,13 @@ mod tests {
 
     #[test]
     fn parse_bad_checksum() {
+        let good = PrincipalId::from_str(&"bfozs-kwa73-7nadi".to_string())
+            .expect("PrincipalId::from_str failed");
         assert_eq!(
             PrincipalId::from_str(&"5h74t-uga73-7nadi".to_string()),
-            Err(PrincipalIdParseError::Wrong {
-                expected: "bfozs-kwa73-7nadi".to_string()
-            })
+            Err(PrincipalIdError(PrincipalError::AbnormalTextualFormat(
+                good.into()
+            )))
         );
     }
 
@@ -529,11 +475,11 @@ mod tests {
     fn parse_too_short() {
         assert_eq!(
             PrincipalId::from_str(&"".to_string()),
-            Err(PrincipalIdParseError::TooShort)
+            Err(PrincipalIdError(PrincipalError::TextTooSmall()))
         );
         assert_eq!(
             PrincipalId::from_str(&"vpgq".to_string()),
-            Err(PrincipalIdParseError::TooShort)
+            Err(PrincipalIdError(PrincipalError::TextTooSmall()))
         );
     }
 
@@ -543,29 +489,31 @@ mod tests {
             PrincipalId::from_str(
                 "fmakz-kp753-o4zo5-ktgeh-ozsvi-qzsee-ia77x-n3tf3-vkmyq-53gkv-cdgiq"
             ),
-            Err(PrincipalIdParseError::TooLong)
+            Err(PrincipalIdError(PrincipalError::BufferTooLong()))
         )
     }
 
     #[test]
     fn parse_not_normalized() {
+        let good = PrincipalId::from_str(&"bfozs-kwa73-7nadi".to_string())
+            .expect("PrincipalId::from_str failed");
         assert_eq!(
             PrincipalId::from_str(&"BFOZS-KWA73-7NADI".to_string()),
-            Err(PrincipalIdParseError::Wrong {
-                expected: "bfozs-kwa73-7nadi".to_string()
-            })
+            Err(PrincipalIdError(PrincipalError::AbnormalTextualFormat(
+                good.into()
+            )))
         );
         assert_eq!(
             PrincipalId::from_str(&"bfozskwa737nadi".to_string()),
-            Err(PrincipalIdParseError::Wrong {
-                expected: "bfozs-kwa73-7nadi".to_string()
-            })
+            Err(PrincipalIdError(PrincipalError::AbnormalTextualFormat(
+                good.into()
+            )))
         );
         assert_eq!(
             PrincipalId::from_str(&"bf-oz-sk-wa737-nadi".to_string()),
-            Err(PrincipalIdParseError::Wrong {
-                expected: "bfozs-kwa73-7nadi".to_string()
-            })
+            Err(PrincipalIdError(PrincipalError::AbnormalTextualFormat(
+                good.into()
+            )))
         );
     }
 
@@ -632,10 +580,92 @@ mod tests {
     #[test]
     fn can_be_deserialized_from_blob() {
         let principal = PrincipalId::new_opaque(&[1, 2, 3, 4][..]);
-        let cbor_bytes =
-            serde_cbor::to_vec(&principal.to_vec()).expect("failed to serialize principal id");
+        let cbor_bytes = serde_cbor::to_vec(&principal).expect("failed to serialize principal id");
         let parsed: PrincipalId =
             serde_cbor::from_slice(&cbor_bytes[..]).expect("failed to deserialize principal id");
         assert_eq!(principal, parsed);
+    }
+
+    #[test]
+    fn sorts_correctly() {
+        let mut v = vec![
+            PrincipalId::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
+            PrincipalId::from_str(
+                "c2u3y-w273i-ols77-om7wu-jzrdm-gxxz3-b75cc-3ajdg-mauzk-hm5vh-jag",
+            )
+            .unwrap(),
+            PrincipalId::try_from(&[3, 0, 0, 0, 0, 0, 0, 0, 253, 1][..]).unwrap(),
+            PrincipalId::from_str("bfozs-kwa73-7nadi").unwrap(),
+            PrincipalId::from_str("aaaaa-aa").unwrap(),
+            PrincipalId::from_str("2vxsx-fae").unwrap(),
+            PrincipalId::try_from(&[4, 0, 0, 0, 0, 0, 0, 0, 253, 1][..]).unwrap(),
+            PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 0, 0, 253, 1][..]).unwrap(),
+            PrincipalId::try_from(&[1, 0, 0, 0, 0, 0, 0, 0, 253, 1][..]).unwrap(),
+        ];
+        v.sort_unstable();
+        assert_eq!(
+            v,
+            vec![
+                PrincipalId::from_str("aaaaa-aa").unwrap(),
+                PrincipalId::from_str("2vxsx-fae").unwrap(),
+                PrincipalId::from_str("bfozs-kwa73-7nadi").unwrap(),
+                PrincipalId::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
+                PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 0, 0, 253, 1][..]).unwrap(),
+                PrincipalId::try_from(&[1, 0, 0, 0, 0, 0, 0, 0, 253, 1][..]).unwrap(),
+                PrincipalId::try_from(&[3, 0, 0, 0, 0, 0, 0, 0, 253, 1][..]).unwrap(),
+                PrincipalId::try_from(&[4, 0, 0, 0, 0, 0, 0, 0, 253, 1][..]).unwrap(),
+                PrincipalId::from_str(
+                    "c2u3y-w273i-ols77-om7wu-jzrdm-gxxz3-b75cc-3ajdg-mauzk-hm5vh-jag"
+                )
+                .unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn hashes_correctly() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        fn calculate_hash<T: Hash>(t: &T) -> u64 {
+            let mut s = DefaultHasher::new();
+            t.hash(&mut s);
+            s.finish()
+        }
+        fn hash_id_string(s: &str) -> u64 {
+            calculate_hash(&PrincipalId::from_str(s).unwrap())
+        }
+        fn hash_id_slice(v: &[u8]) -> u64 {
+            calculate_hash(&PrincipalId::try_from(v).unwrap())
+        }
+
+        assert_eq!(hash_id_string("aaaaa-aa"), 7819764810086413800);
+        assert_eq!(hash_id_string("2vxsx-fae"), 265120109611795366);
+        assert_eq!(hash_id_string("bfozs-kwa73-7nadi"), 5239847422961869918);
+        assert_eq!(
+            hash_id_string("2chl6-4hpzw-vqaaa-aaaaa-c"),
+            4991410779248500671
+        );
+        assert_eq!(
+            hash_id_string("c2u3y-w273i-ols77-om7wu-jzrdm-gxxz3-b75cc-3ajdg-mauzk-hm5vh-jag"),
+            15210277524485168571
+        );
+
+        assert_eq!(
+            hash_id_slice(&[0, 0, 0, 0, 0, 0, 0, 0, 253, 1]),
+            727338461816966860
+        );
+        assert_eq!(
+            hash_id_slice(&[1, 0, 0, 0, 0, 0, 0, 0, 253, 1]),
+            297900807593556648
+        );
+        assert_eq!(
+            hash_id_slice(&[3, 0, 0, 0, 0, 0, 0, 0, 253, 1]),
+            11403466979739875017
+        );
+        assert_eq!(
+            hash_id_slice(&[4, 0, 0, 0, 0, 0, 0, 0, 253, 1]),
+            7553483959829495483
+        );
     }
 }

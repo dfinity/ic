@@ -1,5 +1,5 @@
-use ic_crypto_internal_csp::hash::Sha256Hasher;
 use ic_crypto_internal_types::context::Context;
+use ic_crypto_sha256::Sha256;
 use std::cmp::min;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
@@ -73,9 +73,10 @@ fn core(message_size: &str) -> Result<(), (String, i32)> {
     for iteration in 0..iterations {
         let context = format!("Run {}", iteration);
         let time_start = Instant::now();
-        let mut state = Sha256Hasher::new(&ByteWrapper::new(&context.as_bytes()));
-        state.update(&data);
-        let digest = state.finalize();
+        let mut state = Sha256::new();
+        state.write(ByteWrapper::new(&context.as_bytes()).as_bytes());
+        state.write(&data);
+        let digest = state.finish();
         let time_stop = Instant::now();
         results.insert(digest);
         total_time += time_stop.duration_since(time_start);

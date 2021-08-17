@@ -107,10 +107,22 @@ pub trait QueryHandler: Send + Sync {
     /// Handle a query of type `UserQuery` which was sent by an end user.
     fn query(
         &self,
-        q: UserQuery,
-        processing_state: Arc<Self::State>,
+        query: UserQuery,
+        state: Arc<Self::State>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError>;
+
+    // Non-blocking version of the function call above. The callee must call the
+    // callback with the appropriate result when the computation has finished.
+    // The callback can be called inlined (immediately) before the function returns.
+    // The callback should not block the thread.
+    fn non_blocking_query(
+        &self,
+        query: UserQuery,
+        state: Arc<Self::State>,
+        data_certificate: Vec<u8>,
+        callback: Box<dyn FnOnce(Result<WasmResult, UserError>) + Send + 'static>,
+    );
 }
 
 /// Interface for the component to filter out ingress messages that

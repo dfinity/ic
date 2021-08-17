@@ -5,7 +5,6 @@
 //! Interface for the cryptographic service provider
 
 pub mod api;
-pub mod crypto_lib;
 pub mod imported_test_utils;
 pub mod imported_utilities;
 pub mod public_key_store;
@@ -14,8 +13,6 @@ pub mod secret_key_store;
 pub mod threshold;
 pub mod tls_stub;
 pub mod types;
-
-pub use crypto_lib::hash;
 
 use crate::api::{
     CspKeyGenerator, CspSecretKeyInjector, CspSecretKeyStoreChecker, CspSigner,

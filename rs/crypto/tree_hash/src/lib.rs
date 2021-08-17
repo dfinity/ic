@@ -9,17 +9,19 @@ use std::iter::FromIterator;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-#[cfg(test)]
-pub(crate) mod arbitrary;
-#[cfg(test)]
-mod conversion_tests;
 pub mod flat_map;
-pub(crate) mod hasher;
+pub mod hasher;
 pub mod proto;
 pub(crate) mod tree_hash;
 
 #[cfg(test)]
+pub(crate) mod arbitrary;
+#[cfg(test)]
+mod conversion_tests;
+#[cfg(test)]
 mod encoding_tests;
+#[cfg(test)]
+mod merge_tests;
 
 pub use flat_map::FlatMap;
 pub use tree_hash::*;
@@ -216,10 +218,12 @@ pub struct Digest(pub [u8; 32]);
 ic_crypto_internal_types::derive_serde!(Digest, 32);
 
 impl Digest {
+    #[inline]
     pub fn as_bytes(&self) -> &[u8] {
         &self.0[..]
     }
 
+    #[inline]
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.to_vec()
     }
@@ -383,6 +387,40 @@ impl MixedHashTree {
             }
             Self::Leaf(buf) => tree_hash::compute_leaf_digest(&buf[..]),
             Self::Pruned(digest) => digest.clone(),
+        }
+    }
+
+    /// Merges two trees into a tree that combines the data parts of both inputs
+    /// and has the same root hash.
+    ///
+    /// Precondition: lhs.digest() == rhs.digest()
+    ///
+    /// Postconditions:
+    ///
+    /// ```text
+    ///     merge(lhs, rhs).digest() == lhs.digest() == rhs.digest()
+    ///
+    ///     ∀ p  Ok(v) = lookup(lhs, p) ⇒ lookup(merge(lhs, rhs), p) == Ok(v)
+    ///        ∧ Ok(v) = lookup(rhs, p) ⇒ lookup(merge(lhs, rhs), p) == Ok(v)
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the precondition is not met.
+    pub fn merge(lhs: Self, rhs: Self) -> Self {
+        use MixedHashTree::*;
+
+        match (lhs, rhs) {
+            (Pruned(l), Pruned(r)) if l == r => Pruned(l),
+            (Pruned(_), r) => r,
+            (l, Pruned(_)) => l,
+            (Empty, Empty) => Empty,
+            (Fork(l), Fork(r)) => Fork(Box::new((Self::merge(l.0, r.0), Self::merge(l.1, r.1)))),
+            (Labeled(label, l), Labeled(rlabel, r)) if label == rlabel => {
+                Labeled(label, Box::new(Self::merge(*l, *r)))
+            }
+            (Leaf(l), Leaf(r)) if l == r => Leaf(l),
+            (l, r) => panic!("inconsistent trees: {:#?}, {:#?}", l, r),
         }
     }
 }
@@ -630,6 +668,64 @@ pub enum Witness {
     // A marker for data (leaf or a subtree) to be explicitly provided
     // by the caller for verification or for re-computation of a digest.
     Known(),
+}
+
+impl Witness {
+    /// Merges two witnesses produced from the same tree.
+    ///
+    /// Precondition:
+    ///
+    /// ```text
+    ///     ∃ t : Ok(h) = recompute_digest(lhs, t)
+    ///         ∧ Ok(h) = recompute_digest(rhs, t)
+    /// ```
+    ///
+    /// Postcondition:
+    ///
+    /// ```text
+    ///     ∀ t : Ok(h) = recompute_digest(lhs, t)
+    ///         ∧ Ok(h) = recompute_digest(rhs, t)
+    ///         ⇒ recompute_digest(merge(lhs, rhs)) == Ok(h)
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the precondition is not met.
+    pub fn merge(lhs: Self, rhs: Self) -> Self {
+        use Witness::*;
+
+        match (lhs, rhs) {
+            (Pruned { .. }, r) => r,
+            (l, Pruned { .. }) => l,
+            (Known(), Known()) => Known(),
+            (
+                Fork {
+                    left_tree: ll,
+                    right_tree: lr,
+                },
+                Fork {
+                    left_tree: rl,
+                    right_tree: rr,
+                },
+            ) => Fork {
+                left_tree: Box::new(Self::merge(*ll, *rl)),
+                right_tree: Box::new(Self::merge(*lr, *rr)),
+            },
+            (
+                Node {
+                    label,
+                    sub_witness: lw,
+                },
+                Node {
+                    sub_witness: rw, ..
+                },
+            ) => Node {
+                label,
+                sub_witness: Box::new(Self::merge(*lw, *rw)),
+            },
+            (l, r) => panic!("inconsistent witnesses: {:#?}, {:#?}", l, r),
+        }
+    }
 }
 
 fn write_witness(witness: &Witness, level: u8, f: &mut fmt::Formatter<'_>) -> fmt::Result {

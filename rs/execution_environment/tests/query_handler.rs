@@ -1,6 +1,6 @@
 use ic_config::execution_environment::Config;
-use ic_execution_environment::{HttpQueryHandlerImpl, Hypervisor};
-use ic_interfaces::execution_environment::QueryHandler;
+use ic_config::subnet_config::SubnetConfigs;
+use ic_execution_environment::setup_execution;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -10,7 +10,7 @@ use ic_test_utilities::{
     types::ids::{subnet_test_id, user_test_id},
     with_test_replica_logger,
 };
-use ic_types::{messages::UserQuery, user_error::ErrorCode, CanisterId, NumBytes, SubnetId};
+use ic_types::{messages::UserQuery, user_error::ErrorCode, CanisterId, SubnetId};
 use maplit::btreemap;
 use std::{path::Path, sync::Arc};
 
@@ -29,28 +29,22 @@ fn query_non_existent() {
     with_test_replica_logger(|log| {
         let subnet_id = subnet_test_id(1);
         let subnet_type = SubnetType::Application;
+        let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         let state = initial_state(tmpdir.path(), subnet_id);
         let metrics_registry = MetricsRegistry::new();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let hypervisor = Hypervisor::new(
-            Config::default(),
-            1,
+        let (_, _, query_handler, _) = setup_execution(
+            log,
             &metrics_registry,
             subnet_id,
             subnet_type,
-            log.clone(),
+            subnet_config.scheduler_config,
+            Config::default(),
             cycles_account_manager,
         );
+
         let receiver = CanisterId::from(1234);
-        let query_handler = HttpQueryHandlerImpl::new(
-            log,
-            Arc::new(hypervisor),
-            subnet_id,
-            subnet_type,
-            NumBytes::from(std::u64::MAX),
-            &metrics_registry,
-        );
         match query_handler.query(
             UserQuery {
                 source: user_test_id(2),
