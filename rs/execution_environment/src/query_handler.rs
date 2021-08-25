@@ -21,7 +21,7 @@ use ic_types::{
 use query_allocations::QueryAllocationsUsed;
 use std::sync::{Arc, RwLock};
 
-const QUERY_EXECUTION_THREADS: usize = 4;
+const QUERY_EXECUTION_THREADS: usize = 1;
 
 pub(crate) struct InternalHttpQueryHandlerImpl {
     log: ReplicaLogger,

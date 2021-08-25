@@ -114,12 +114,12 @@ pub(crate) async fn handle(
 
     match registry_client.get_ingress_message_settings(subnet_id, registry_version) {
         Ok(Some(settings)) => {
-            // Check size, respond with 413 if too large
             if msg.count_bytes() > settings.max_ingress_bytes_per_message {
                 return (
                     common::make_response(
                         StatusCode::PAYLOAD_TOO_LARGE,
-                        format!("Request {} is too large. ", message_id).as_str(),
+                        format!("Request {} is too large. Message bytes {} is bigger than the max allowed {}.",
+                            message_id, msg.count_bytes(), settings.max_ingress_bytes_per_message).as_str(),
                     ),
                     Call,
                 );

@@ -362,6 +362,7 @@ struct ClientAdvertMap {
     ingress: ClientAdvertMapInt,
     certification: ClientAdvertMapInt,
     dkg: ClientAdvertMapInt,
+    ecdsa: ClientAdvertMapInt,
     file_tree_sync: ClientAdvertMapInt,
     state: ClientAdvertMapInt,
 }
@@ -391,6 +392,7 @@ impl Index<&ArtifactId> for ClientAdvertMap {
             ArtifactId::IngressMessage(_) => &self.ingress,
             ArtifactId::CertificationMessage(_) => &self.certification,
             ArtifactId::DkgMessage(_) => &self.dkg,
+            ArtifactId::EcdsaMessage(_) => &self.ecdsa,
             ArtifactId::FileTreeSync(_) => &self.file_tree_sync,
             ArtifactId::StateSync(_) => &self.state,
         }
@@ -404,6 +406,7 @@ impl IndexMut<&ArtifactId> for ClientAdvertMap {
             ArtifactId::IngressMessage(_) => &mut self.ingress,
             ArtifactId::CertificationMessage(_) => &mut self.certification,
             ArtifactId::DkgMessage(_) => &mut self.dkg,
+            ArtifactId::EcdsaMessage(_) => &mut self.ecdsa,
             ArtifactId::FileTreeSync(_) => &mut self.file_tree_sync,
             ArtifactId::StateSync(_) => &mut self.state,
         }
@@ -418,6 +421,7 @@ impl Index<ArtifactTag> for ClientAdvertMap {
             ArtifactTag::IngressArtifact => &self.ingress,
             ArtifactTag::CertificationArtifact => &self.certification,
             ArtifactTag::DkgArtifact => &self.dkg,
+            ArtifactTag::EcdsaArtifact => &self.ecdsa,
             ArtifactTag::FileTreeSyncArtifact => &self.file_tree_sync,
             ArtifactTag::StateSyncArtifact => &self.state,
         }
@@ -431,6 +435,7 @@ impl IndexMut<ArtifactTag> for ClientAdvertMap {
             ArtifactTag::IngressArtifact => &mut self.ingress,
             ArtifactTag::CertificationArtifact => &mut self.certification,
             ArtifactTag::DkgArtifact => &mut self.dkg,
+            ArtifactTag::EcdsaArtifact => &mut self.ecdsa,
             ArtifactTag::FileTreeSyncArtifact => &mut self.file_tree_sync,
             ArtifactTag::StateSyncArtifact => &mut self.state,
         }

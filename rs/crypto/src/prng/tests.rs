@@ -149,8 +149,7 @@ fn should_incorporate_crypto_hash_domain_when_generating_randomness_for_random_b
 
     let rb = random_beacon();
     for purpose in RandomnessPurpose::iter() {
-        let mut hasher = Sha256::new();
-        hasher.write(DomainSeparationContext::new(rb.domain()).as_bytes());
+        let mut hasher = Sha256::new_with_context(&DomainSeparationContext::new(rb.domain()));
         rb.hash(&mut hasher);
         let seed = Randomness::from(hasher.finish());
 

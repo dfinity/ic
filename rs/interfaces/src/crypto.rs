@@ -2,7 +2,6 @@
 mod keygen;
 
 pub use keygen::KeyManager;
-pub use keygen::Keygen;
 
 mod hash;
 

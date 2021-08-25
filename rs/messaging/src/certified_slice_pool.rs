@@ -1,8 +1,11 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::xnet_payload_builder::ExpectedIndices;
-use ic_canonical_state::{encoding, LabelLike};
+use crate::xnet_payload_builder::{
+    witness_count_bytes, ExpectedIndices, NO_MESSAGES_WITNESS_BYTES,
+};
+use header::Header;
+use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{
     first_sub_witness, flat_map::FlatMap, prune_witness, sub_witness, Label, LabeledTree,
     TreeHashError, Witness,
@@ -18,6 +21,7 @@ use ic_types::{
     xnet::{CertifiedStreamSlice, StreamIndex},
     CountBytes, SubnetId,
 };
+use messages::Messages;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom, TryInto};
@@ -112,36 +116,257 @@ impl CertifiedSlicePoolMetrics {
 use InvalidAppend::*;
 use InvalidSlice::*;
 
-/// Unpacked `CertifiedStreamSlice::payload` plus cached metadata.
+mod header {
+    use super::{CertifiedSliceError, InvalidSlice};
+    use ic_canonical_state::encoding;
+    use ic_types::xnet::{StreamHeader, StreamIndex};
+    use std::convert::TryFrom;
+
+    /// Wrapper around serialized header plus transient metadata.
+    #[derive(Clone, Debug, PartialEq)]
+    pub(super) struct Header {
+        /// Serialized stream header.
+        bytes: Vec<u8>,
+
+        /// Transient: deserialized header.
+        decoded: StreamHeader,
+    }
+
+    impl Header {
+        pub(super) fn begin(&self) -> StreamIndex {
+            self.decoded.begin
+        }
+
+        pub(super) fn end(&self) -> StreamIndex {
+            self.decoded.end
+        }
+
+        pub(super) fn signals_end(&self) -> StreamIndex {
+            self.decoded.signals_end
+        }
+    }
+
+    impl TryFrom<Vec<u8>> for Header {
+        type Error = CertifiedSliceError;
+
+        fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+            let decoded = encoding::decode_stream_header(&bytes)?;
+            if decoded.begin > decoded.end {
+                return Err(CertifiedSliceError::InvalidPayload(
+                    InvalidSlice::InvalidBounds,
+                ));
+            }
+            Ok(Header { bytes, decoded })
+        }
+    }
+
+    impl From<Header> for Vec<u8> {
+        fn from(header: Header) -> Self {
+            header.bytes
+        }
+    }
+}
+
+mod messages {
+    use super::*;
+
+    /// Wrapper around slice messages plus transient metadata.
+    #[derive(Debug, PartialEq)]
+    pub(super) struct Messages {
+        /// Slice messages.
+        ///
+        /// Must be non-empty. All children are leaves, keyed by stream index.
+        messages: PayloadTreeMap,
+
+        /// Transient: precomputed deterministic estimate of the overall byte
+        /// size of `messages`, used for efficiently implementing
+        /// `CountBytes`.
+        count_bytes: usize,
+
+        /// Transient: slice begin index.
+        begin: StreamIndex,
+    }
+
+    impl Messages {
+        pub(super) fn new(messages: PayloadTreeMap) -> CertifiedSliceResult<Self> {
+            if messages.is_empty() {
+                return Err(CertifiedSliceError::InvalidPayload(EmptyMessages));
+            }
+
+            let count_bytes = byte_size(&messages)?;
+            let begin = to_stream_index(&messages.keys()[0])
+                .map_err(CertifiedSliceError::InvalidPayload)?;
+
+            Ok(Messages {
+                messages,
+                count_bytes,
+                begin,
+            })
+        }
+
+        /// Returns the number of contained messages.
+        pub(super) fn len(&self) -> usize {
+            self.messages.len()
+        }
+
+        /// Returns the messages' begin index.
+        pub(super) fn begin(&self) -> StreamIndex {
+            self.begin
+        }
+
+        /// Returns the messages' end index.
+        pub(super) fn end(&self) -> StreamIndex {
+            self.begin + (self.messages.len() as u64).into()
+        }
+
+        /// Appends the given messages to `self`.
+        ///
+        /// Returns `Err(InvalidPayload)` if `suffix.messages` is malformed.
+        /// Returns `Err(InvalidAppend)` and leaves `self` unmodified if
+        /// `suffix` does not extend `self` gap-free.
+        pub(super) fn append(&mut self, suffix: Messages) -> CertifiedSliceResult<()> {
+            // Do all validation / fallible operations first, so `self` remains unmodified
+            // on error.
+            if suffix.begin.get() != self.begin.get() + self.len() as u64 {
+                return Err(CertifiedSliceError::InvalidAppend(IndexMismatch));
+            }
+            let suffix_byte_size = byte_size(&suffix.messages)?;
+
+            // `self.begin` stays unchanged.
+            self.messages = FlatMap::from_key_values(
+                std::mem::take(&mut self.messages)
+                    .into_iter()
+                    .chain(suffix.messages.into_iter())
+                    .collect(),
+            );
+            self.count_bytes += suffix_byte_size;
+            debug_assert_eq!(byte_size(&self.messages).unwrap(), self.count_bytes);
+            Ok(())
+        }
+
+        /// Takes a slice prefix up to the given label (exclusive).
+        ///
+        /// Returns the prefix (if non-empty) and the remaining payload (if
+        /// any). At least one of the two is `Some(_)`.
+        ///
+        /// Returns `Err(InvalidPayload)` if `self.messages` is malformed.
+        pub(super) fn take_prefix(
+            mut self,
+            to: &Label,
+        ) -> CertifiedSliceResult<(Option<PayloadTreeMap>, Option<Self>)> {
+            let postfix = self.messages.split_off(to);
+            let prefix = self.messages;
+
+            // Update the estimated size and put back the postfix if not empty.
+            self.count_bytes = byte_size(&postfix)?;
+
+            if prefix.is_empty() {
+                self.messages = postfix;
+                Ok((None, Some(self)))
+            } else if postfix.is_empty() {
+                Ok((Some(prefix), None))
+            } else {
+                // Both prefix and postfix are non-empty.
+                Ok((Some(prefix), Some(Self::new(postfix)?)))
+            }
+        }
+
+        /// Produces a witness from the provided one with `self.messages` pruned
+        /// (but the header untouched).
+        ///
+        /// Returns `Err(InvalidPayload)` if `self.messages` is malformed;
+        /// `Err(WitnessPruningFailed)` if `witness` is malformed or does not
+        /// entirely cover `self.messages`.
+        pub fn pruned_witness(
+            &mut self,
+            witness: &Witness,
+            subnet_id: Label,
+        ) -> CertifiedSliceResult<Witness> {
+            // Temporarily swap out `self.messages` so we don't have to copy it.
+            let mut messages = PayloadTreeMap::new();
+            std::mem::swap(&mut messages, &mut self.messages);
+
+            let partial_tree = Payload::pack(subnet_id, None, Some(messages));
+            let pruned_witness = prune_witness(witness, &partial_tree)?;
+
+            // Put back `self.messages`.
+            self.messages = Payload::unpack(partial_tree).map(|(_, _, m)| m)?.unwrap();
+
+            Ok(pruned_witness)
+        }
+
+        /// Returns an iterator over the contained messages.
+        pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = (&Label, &PayloadTree)> {
+            self.messages.iter()
+        }
+    }
+
+    impl From<Messages> for PayloadTreeMap {
+        fn from(messages: Messages) -> Self {
+            messages.messages
+        }
+    }
+
+    impl CountBytes for Messages {
+        fn count_bytes(&self) -> usize {
+            self.count_bytes
+        }
+    }
+
+    /// Returns a byte size estimate of a set of messages, including their
+    /// labels.
+    ///
+    /// Returns `Err(InvalidPayload)` if `messages` is malformed.
+    fn byte_size(messages: &PayloadTreeMap) -> CertifiedSliceResult<usize> {
+        let mut byte_size = 0;
+        for message in messages.values() {
+            byte_size += message_byte_size(message)?;
+        }
+        Ok(byte_size)
+    }
+
+    /// Returns a byte size estimate of a message plus its label.
+    ///
+    /// Returns `Err(InvalidPayload)` if `message` is not a leaf.
+    pub(super) fn message_byte_size(message: &PayloadTree) -> CertifiedSliceResult<usize> {
+        // 8 bytes overhead for `LabelTree` encoding, 8 bytes for label (u64).
+        Ok(8 + Payload::value_of_ref(message)?.len() + 8)
+    }
+}
+
+/// Unpacked `CertifiedStreamSlice::payload`, plus transient metadata.
 #[derive(Debug, PartialEq)]
 struct Payload {
     /// The intended destination subnet of this stream slice.
     subnet_id: Label,
 
-    /// Serialized stream header.
-    header: Vec<u8>,
+    /// Stream header.
+    header: Header,
 
-    /// Slice messages, may be missing from the `CertifiedStreamSlice`. Never
-    /// empty when present.
-    messages: Option<PayloadTreeMap>,
-
-    /// Metadata: signals end index, extracted from stream header.
-    signals_end: StreamIndex,
-
-    /// Metadata: upper-bound byte size estimate of encoded payload, used in
-    /// limiting sub-slice sizes.
-    byte_size: usize,
+    /// Slice messages.
+    messages: Option<Messages>,
 }
 
+/// Mean empty payload byte size: `LabelTree` with `"streams"` and `"header"`
+/// labels; subnet ID; and serialized header (3 variable length encoded
+/// integers).
+const EMPTY_PAYLOAD_BYTES: usize = 62;
+
+/// Mean non-empty payload byte size excluding messages: `LabelTree` with
+/// `"streams"` and `"header"` labels; subnet ID; serialized header (3 variable
+/// length encoded integers); plus "messages" node.
+const NON_EMPTY_PAYLOAD_FIXED_BYTES: usize = 84;
+
 impl Payload {
-    /// Takes a prefix of the slice that is guaranteed to meet the given limits
-    /// (particularly, the serialized byte size is guaranteed to be at most
-    /// `byte_limit`).
+    /// Takes a slice prefix whose estimated size meets the given limits.
+    /// `byte_limit` applies to the total estimated size of both the payload and
+    /// the resulting witness.
     ///
     /// Returns the prefix (if one can be created) and the remaining payload (if
     /// any). At least one of the two is `Some(_)`.
     ///
     /// Returns `Err(InvalidPayload)` if `self.messages` is malformed.
+    #[allow(clippy::assertions_on_constants)]
     pub fn take_prefix(
         mut self,
         message_limit: Option<usize>,
@@ -150,59 +375,79 @@ impl Payload {
         let message_limit = message_limit.unwrap_or(std::usize::MAX);
         let byte_limit = byte_limit.unwrap_or(std::usize::MAX);
 
-        // Find the cutoff point that respects the provided limits.
-        let (cutoff, byte_size) = if let Some(messages) = self.messages.as_ref() {
-            // Iterate right to left through messages until limits are met.
-            let mut message_count = messages.len();
-            let mut byte_size = self.byte_size;
-            let mut messages = messages.iter();
-            let mut cutoff = None;
-            while byte_size > byte_limit || message_count > message_limit {
-                let (label, leaf) = match messages.next_back() {
-                    Some(res) => res,
-                    None => break,
-                };
-                cutoff = Some(label);
-                message_count -= 1;
-                byte_size -= Self::min_message_byte_size(leaf)?;
-            }
-            (cutoff.map(Clone::clone), byte_size)
-        } else {
-            // Empty slice: return if under `byte_limit`, else keep it.
-            if self.byte_size <= byte_limit {
-                return Ok((Some(self), None));
-            } else {
-                return Ok((None, Some(self)));
-            }
-        };
-
-        if byte_size > byte_limit {
-            // Header-only prefix would be over `byte_limit`: bail out early.
+        debug_assert!(EMPTY_PAYLOAD_BYTES <= NON_EMPTY_PAYLOAD_FIXED_BYTES);
+        if byte_limit < EMPTY_PAYLOAD_BYTES + NO_MESSAGES_WITNESS_BYTES {
+            // `byte_limit` smaller than minimum payload size, bail out.
             return Ok((None, Some(self)));
         }
 
-        let cutoff = match cutoff {
-            Some(cutoff) => cutoff,
-
-            // No trimming necessary, return the whole slice.
-            None => return Ok((Some(self), None)),
-        };
-
-        let prefix = self.take_messages_prefix(&cutoff)?;
-        match prefix {
-            // Empty prefix, under `byte_limit`: return it.
-            None => Ok((Some(self.new_partial(None, byte_size)), Some(self))),
-
-            // Prefix is non-empty and below limits, return it; keep the leftover iff
-            // non-empty.
-            Some(_) => {
-                if self.messages.is_none() {
-                    Ok((Some(self.new_partial(prefix, byte_size)), None))
-                } else {
-                    Ok((Some(self.new_partial(prefix, byte_size)), Some(self)))
-                }
-            }
+        let stream_begin = self.header.begin();
+        let stream_end = self.header.end();
+        let witness_bytes = witness_count_bytes(
+            stream_begin,
+            stream_end,
+            self.messages.as_ref().map(|m| m.begin()),
+            self.messages.as_ref().map(|m| m.end()),
+        );
+        if self.len() <= message_limit && self.count_bytes() + witness_bytes <= byte_limit {
+            // Payload under both limits, return it.
+            return Ok((Some(self), None));
         }
+
+        // If we got here, we have at least one message.
+        let messages = self
+            .messages
+            .as_ref()
+            .expect("Non-zero byte size for empty `messages`.");
+
+        // Find the rightmost cutoff point that respects the provided limits.
+        let mut byte_size = NON_EMPTY_PAYLOAD_FIXED_BYTES;
+        let mut cutoff = None;
+        let slice_begin = messages.begin();
+        for (i, (label, message)) in messages.iter().enumerate() {
+            // Incremental message byte size.
+            let message_byte_size = messages::message_byte_size(message)?;
+            // Total witness byte size.
+            let witness_byte_size = witness_count_bytes(
+                stream_begin,
+                stream_end,
+                Some(slice_begin),
+                Some(slice_begin + (1 + i as u64).into()),
+            );
+            if byte_size + message_byte_size + witness_byte_size > byte_limit || i >= message_limit
+            {
+                cutoff = Some(label.clone());
+                break;
+            }
+            byte_size += message_byte_size;
+        }
+        let cutoff = cutoff.unwrap_or_else(|| {
+            // `count_bytes()` returned a value above `byte_limit`, but
+            // `byte_size` (computed the same way) is below `byte_limit`.
+            panic!(
+                "Invalid `messages_count_bytes`: was {}, expecting {}",
+                messages.count_bytes(),
+                byte_size
+            )
+        });
+
+        // Take the messages prefix, expect non-empty leftover postfix.
+        let prefix = self.take_messages_prefix(&cutoff)?;
+        assert!(
+            self.messages.is_some(),
+            "`take_messages_prefix()` produced an empty postfix for existing key {}",
+            cutoff
+        );
+
+        // Return (possibly empty) prefix, retain non-empty postfix.
+        let prefix = self.new_partial(prefix)?;
+        if prefix.len() == 0 {
+            debug_assert_eq!(prefix.count_bytes(), EMPTY_PAYLOAD_BYTES);
+        } else {
+            debug_assert_eq!(prefix.count_bytes(), byte_size);
+        }
+
+        Ok((Some(prefix), Some(self)))
     }
 
     /// Garbage collects the payload by dropping all messages before `cutoff`.
@@ -232,7 +477,7 @@ impl Payload {
         if other.subnet_id != self.subnet_id {
             return Err(CertifiedSliceError::InvalidAppend(DifferentSubnet));
         }
-        if other.signals_end < self.signals_end {
+        if other.header.signals_end() < self.header.signals_end() {
             // Not an actual error, just a race condition. We could choose to go ahead with
             // the merge and trade a larger slice for the possibility that the slice may be
             // invalid if the higher `signals_end` was already included into a block.
@@ -240,42 +485,35 @@ impl Payload {
         }
 
         match (self.messages.as_ref(), other.messages) {
-            (Some(prefix), Some(suffix)) => {
+            (Some(messages), Some(suffix)) => {
                 // Do all validation / fallible operations first, so `self` remains unmodified
                 // on error.
-                if Self::messages_begin_impl(&suffix)?.get()
-                    != Self::messages_begin_impl(prefix)?.get() + self.len() as u64
-                {
+                if other.header.begin() > messages.begin() || other.header.end() < suffix.end() {
                     return Err(CertifiedSliceError::InvalidAppend(IndexMismatch));
                 }
-                let suffix_byte_size = Self::min_byte_size(&suffix)?;
-
+                self.messages
+                    .as_mut()
+                    .map(|m| m.append(suffix))
+                    .transpose()?;
                 self.header = other.header;
-                self.messages = Some(FlatMap::from_key_values(
-                    self.messages
-                        .take()
-                        .unwrap()
-                        .into_iter()
-                        .chain(suffix.into_iter())
-                        .collect(),
-                ));
-                // `self.messages_begin` stays unchanged.
-                self.signals_end = other.signals_end;
-                self.byte_size += suffix_byte_size;
             }
 
-            (_, None) => {
-                // `other` has no messages: take its `header` and `signals_end`, keep the rest.
+            (messages, None) => {
+                if let Some(messages) = messages {
+                    if other.header.begin() > messages.begin()
+                        || other.header.end() < messages.end()
+                    {
+                        return Err(CertifiedSliceError::InvalidAppend(IndexMismatch));
+                    }
+                }
+                // `other` has no messages: take its `header`, keep the rest.
                 self.header = other.header;
-                self.signals_end = other.signals_end;
             }
 
             (None, messages) => {
                 // `self` has no messages: wholesale replace with `other`.
                 self.header = other.header;
                 self.messages = messages;
-                self.signals_end = other.signals_end;
-                self.byte_size = other.byte_size;
             }
         };
         Ok(())
@@ -288,19 +526,11 @@ impl Payload {
     /// `Err(WitnessPruningFailed)` if `witness` is malformed or does not
     /// entirely cover `self.messages`.
     pub fn pruned_witness(&mut self, witness: &Witness) -> CertifiedSliceResult<Witness> {
-        if let Some(m) = self.messages.as_ref() {
-            if m.is_empty() {
-                return Err(CertifiedSliceError::InvalidPayload(EmptyMessages));
-            }
-        } else {
-            // Nothing to prune.
-            return Ok(witness.clone());
-        }
+        match self.messages.as_mut() {
+            Some(messages) => messages.pruned_witness(witness, self.subnet_id.clone()),
 
-        let partial_tree = Payload::pack(self.subnet_id.clone(), None, self.messages.take());
-        let pruned_witness = prune_witness(witness, &partial_tree)?;
-        self.messages = Payload::unpack(partial_tree).map(|(_, _, m)| m)?;
-        Ok(pruned_witness)
+            None => Ok(witness.clone()),
+        }
     }
 
     /// Returns the number of messages in this payload.
@@ -315,48 +545,13 @@ impl Payload {
     /// Returns `Err(InvalidPayload)` if `self.messages` is malformed.
     fn take_messages_prefix(&mut self, to: &Label) -> CertifiedSliceResult<Option<PayloadTreeMap>> {
         match self.messages.take() {
-            Some(mut messages) => {
-                if messages.is_empty() {
-                    return Err(CertifiedSliceError::InvalidPayload(EmptyMessages));
-                }
-
-                let postfix = messages.split_off(to);
-                let prefix = messages;
-
-                // Adjust the estimated size and put back the postfix if not empty.
-                self.byte_size -= Self::min_byte_size(&prefix)?;
-                if !postfix.is_empty() {
-                    self.messages = Some(postfix);
-                }
-
-                if !prefix.is_empty() {
-                    Ok(Some(prefix))
-                } else {
-                    Ok(None)
-                }
+            Some(messages) => {
+                let (prefix, messages) = messages.take_prefix(to)?;
+                self.messages = messages;
+                Ok(prefix)
             }
             None => Ok(None),
         }
-    }
-
-    /// Returns a lower-bound byte size estimate of a set of messages,
-    /// including their labels.
-    ///
-    /// Returns `Err(InvalidPayload)` if `messages` is malformed.
-    fn min_byte_size(messages: &PayloadTreeMap) -> CertifiedSliceResult<usize> {
-        let mut byte_size = 0;
-        for message in messages.values() {
-            byte_size += Self::min_message_byte_size(message)?;
-        }
-        Ok(byte_size)
-    }
-
-    /// Returns a lower-bound byte size estimate of a message plus its label.
-    ///
-    /// Returns `Err(InvalidPayload)` if `message` is not a leaf.
-    fn min_message_byte_size(message: &PayloadTree) -> CertifiedSliceResult<usize> {
-        // 1 byte for length of label and message each, 8 bytes for label (u64).
-        Ok(1 + Self::value_of_ref(message)?.len() + 1 + 8)
     }
 
     /// Unpacks a `LabeledTree`-representation of a slice into subnet ID label,
@@ -435,36 +630,18 @@ impl Payload {
     }
 
     /// Creates a `Payload` that contains a subset of this `Payload`'s messages.
-    fn new_partial(&self, messages: Option<PayloadTreeMap>, byte_size: usize) -> Self {
-        Self {
+    fn new_partial(&self, messages: Option<PayloadTreeMap>) -> CertifiedSliceResult<Self> {
+        Ok(Self {
             subnet_id: self.subnet_id.clone(),
             header: self.header.clone(),
-            messages,
-            signals_end: self.signals_end,
-            byte_size,
-        }
+            messages: messages.map(Messages::new).transpose()?,
+        })
     }
 
     /// Returns the `StreamIndex` of the first message, if any;
     /// `Err(InvalidPayload)` if `self.messages` is malformed.
-    fn messages_begin(&self) -> CertifiedSliceResult<Option<StreamIndex>> {
-        self.messages
-            .as_ref()
-            .map(|m| Self::messages_begin_impl(m))
-            .transpose()
-    }
-
-    /// Returns the `StreamIndex` of the first message, if any;
-    /// `Err(InvalidPayload)` if `messages` is malformed
-    fn messages_begin_impl(messages: &PayloadTreeMap) -> CertifiedSliceResult<StreamIndex> {
-        if messages.is_empty() {
-            Err(CertifiedSliceError::InvalidPayload(EmptyMessages))
-        } else {
-            Ok(
-                to_stream_index(&messages.keys()[0])
-                    .map_err(CertifiedSliceError::InvalidPayload)?,
-            )
-        }
+    fn messages_begin(&self) -> Option<StreamIndex> {
+        self.messages.as_ref().map(|m| m.begin())
     }
 
     /// Returns the `FlatMap` contained in a `SubTree`; `Err(InvalidPayload)` if
@@ -495,6 +672,15 @@ impl Payload {
     }
 }
 
+impl CountBytes for Payload {
+    fn count_bytes(&self) -> usize {
+        match self.messages.as_ref() {
+            Some(messages) => NON_EMPTY_PAYLOAD_FIXED_BYTES + messages.count_bytes(),
+            None => EMPTY_PAYLOAD_BYTES,
+        }
+    }
+}
+
 impl TryFrom<&[u8]> for Payload {
     type Error = CertifiedSliceError;
 
@@ -503,14 +689,19 @@ impl TryFrom<&[u8]> for Payload {
         let (subnet_id, header, messages) = Self::unpack(tree)?;
 
         let header = header.ok_or(CertifiedSliceError::InvalidPayload(MissingHeader))?;
-        let decoded_header = encoding::decode_stream_header(&header)?;
+        let header = Header::try_from(header)?;
+
+        let messages = messages.map(Messages::new).transpose()?;
+        if let Some(messages) = messages.as_ref() {
+            if header.begin() > messages.begin() || messages.end() > header.end() {
+                return Err(CertifiedSliceError::InvalidPayload(InvalidBounds));
+            }
+        }
 
         Ok(Self {
             subnet_id,
             header,
             messages,
-            signals_end: decoded_header.signals_end,
-            byte_size: payload_bytes.len(),
         })
     }
 }
@@ -519,8 +710,8 @@ impl From<Payload> for Vec<u8> {
     fn from(payload: Payload) -> Self {
         v1::LabeledTree::proxy_encode(Payload::pack(
             payload.subnet_id,
-            Some(payload.header),
-            payload.messages,
+            Some(payload.header.into()),
+            payload.messages.map(|m| m.into()),
         ))
         .expect("failed to serialize a labeled tree")
     }
@@ -537,9 +728,6 @@ pub struct UnpackedStreamSlice {
     /// Witness that can be used to recompute the root hash from the payload.
     merkle_proof: Witness,
 
-    /// Original encoded witness size, used in estimating sub-slice sizes.
-    merkle_proof_byte_size: usize,
-
     /// The certification of the root hash.
     certification: Certification,
 }
@@ -554,13 +742,14 @@ impl UnpackedStreamSlice {
         mut self,
         msg_limit: Option<usize>,
         mut byte_limit: Option<usize>,
-    ) -> CertifiedSliceResult<(Option<CertifiedStreamSlice>, Option<Self>)> {
+    ) -> CertifiedSliceResult<(Option<Self>, Option<Self>)> {
+        // Adjust the byte limit by subtracting the certification size.
         if let Some(byte_limit_) = byte_limit {
-            let overhead_bytes = self.estimated_size() - self.payload.byte_size;
-            if overhead_bytes > byte_limit_ {
+            let certification_count_bytes = self.certification.count_bytes();
+            if certification_count_bytes > byte_limit_ {
                 return Ok((None, Some(self)));
             }
-            byte_limit = Some(byte_limit_ - overhead_bytes);
+            byte_limit = Some(byte_limit_ - certification_count_bytes);
         }
 
         match self.payload.take_prefix(msg_limit, byte_limit)? {
@@ -573,10 +762,10 @@ impl UnpackedStreamSlice {
             }
 
             // All messages taken.
-            (Some(payload), None) => Ok((
-                Some(Self::pack(payload, self.merkle_proof, self.certification)),
-                None,
-            )),
+            (Some(payload), None) => {
+                self.payload = payload;
+                Ok((Some(self), None))
+            }
 
             // Messages actually split or empty (header-only) prefix.
             (Some(mut prefix_payload), Some(mut postfix_payload)) => {
@@ -589,7 +778,11 @@ impl UnpackedStreamSlice {
                     self.merkle_proof = prefix_payload.pruned_witness(&self.merkle_proof)?;
                 }
 
-                let prefix = Self::pack(prefix_payload, prefix_witness, certification);
+                let prefix = UnpackedStreamSlice {
+                    payload: prefix_payload,
+                    merkle_proof: prefix_witness,
+                    certification,
+                };
 
                 Ok((Some(prefix), Some(self)))
             }
@@ -608,14 +801,15 @@ impl UnpackedStreamSlice {
         cutoff: &ExpectedIndices,
     ) -> CertifiedSliceResult<Option<Self>> {
         let pruned_tree = self.payload.garbage_collect(cutoff.message_index)?;
-        if cutoff.signal_index >= self.payload.signals_end && self.payload.messages.is_none() {
+        if cutoff.signal_index >= self.payload.header.signals_end()
+            && self.payload.messages.is_none()
+        {
             // All signals and messages were garbage collected.
             return Ok(None);
         }
 
         if let Some(pruned_tree) = pruned_tree {
             self.merkle_proof = prune_witness(&self.merkle_proof, &pruned_tree)?;
-            // Assuming witness size stays about constant.
         }
         Ok(Some(self))
     }
@@ -632,7 +826,7 @@ impl UnpackedStreamSlice {
     /// different `subnet_id`; its messages do not extend `self`'s gap-free; or
     /// its `signals_end` regresses.
     pub fn append(&mut self, partial: UnpackedStreamSlice) -> CertifiedSliceResult<()> {
-        let messages_begin = self.payload.messages_begin()?;
+        let messages_begin = self.payload.messages_begin();
         if messages_begin.is_some() {
             if messages_begin != partial.witness_messages_begin()? {
                 return Err(CertifiedSliceError::InvalidAppend(IndexMismatch));
@@ -643,7 +837,6 @@ impl UnpackedStreamSlice {
 
         self.payload.append(partial.payload)?;
         self.merkle_proof = partial.merkle_proof;
-        self.merkle_proof_byte_size = partial.merkle_proof_byte_size;
         self.certification = partial.certification;
 
         Ok(())
@@ -651,10 +844,9 @@ impl UnpackedStreamSlice {
 
     /// Tests whether this is a complete (`true`) or partial (`false`) slice.
     ///
-    /// Returns `Err(InvalidPayload)` if `self.payload` is malformed. Returns
-    /// `Err(InvalidWitness)` if `self.merkle_proof` is malformed.
+    /// Returns `Err(InvalidWitness)` if `self.merkle_proof` is malformed.
     fn is_complete(&self) -> CertifiedSliceResult<bool> {
-        Ok(self.payload.messages_begin()? == self.witness_messages_begin()?)
+        Ok(self.payload.messages_begin() == self.witness_messages_begin()?)
     }
 
     /// Returns the index of the first `Known` message in `self.merkle_proof`.
@@ -674,26 +866,33 @@ impl UnpackedStreamSlice {
             .transpose()
     }
 
-    /// Produces an upper bound estimate of the serialized byte size (with an
-    /// error delta of up to `2 * log(N) * 32` bytes, due to the witness
-    /// possibly growing after pruning).
-    pub fn estimated_size(&self) -> usize {
-        self.payload.byte_size + self.merkle_proof_byte_size + self.certification.count_bytes()
-    }
-
     /// Packs a `Payload`, `Witness` and `Certification` into a
     /// `CertifiedStreamSlice`.
-    fn pack(
-        payload: Payload,
-        witness: Witness,
-        certification: Certification,
-    ) -> CertifiedStreamSlice {
+    fn pack(self) -> CertifiedStreamSlice {
         CertifiedStreamSlice {
-            payload: payload.into(),
-            merkle_proof: v1::Witness::proxy_encode(witness)
+            payload: self.payload.into(),
+            merkle_proof: v1::Witness::proxy_encode(self.merkle_proof)
                 .expect("failed to serialize a witness"),
-            certification,
+            certification: self.certification,
         }
+    }
+}
+
+impl CountBytes for UnpackedStreamSlice {
+    fn count_bytes(&self) -> usize {
+        let stream_begin = self.payload.header.begin();
+        let stream_end = self.payload.header.end();
+        let slice_begin = self.payload.messages_begin();
+        let slice_end =
+            slice_begin.map(|begin| begin + StreamIndex::new(self.payload.len() as u64));
+        self.payload.count_bytes()
+            + crate::xnet_payload_builder::witness_count_bytes(
+                stream_begin,
+                stream_end,
+                slice_begin,
+                slice_end,
+            )
+            + self.certification.count_bytes()
     }
 }
 
@@ -704,7 +903,6 @@ impl TryFrom<CertifiedStreamSlice> for UnpackedStreamSlice {
         Ok(Self {
             payload: Payload::try_from(packed.payload.as_slice())?,
             merkle_proof: v1::Witness::proxy_decode(&packed.merkle_proof)?,
-            merkle_proof_byte_size: packed.merkle_proof.len(),
             certification: packed.certification,
         })
     }
@@ -712,11 +910,7 @@ impl TryFrom<CertifiedStreamSlice> for UnpackedStreamSlice {
 
 impl From<UnpackedStreamSlice> for CertifiedStreamSlice {
     fn from(unpacked: UnpackedStreamSlice) -> Self {
-        UnpackedStreamSlice::pack(
-            unpacked.payload,
-            unpacked.merkle_proof,
-            unpacked.certification,
-        )
+        unpacked.pack()
     }
 }
 
@@ -758,6 +952,7 @@ pub enum InvalidSlice {
     NotAStreamIndex,
     NotASubTree,
     NotALeaf,
+    InvalidBounds,
 }
 
 /// Root cause of `append()` failure.
@@ -858,13 +1053,14 @@ impl CertifiedSlicePool {
         begin: Option<&ExpectedIndices>,
         msg_limit: Option<usize>,
         byte_limit: Option<usize>,
-    ) -> CertifiedSliceResult<Option<CertifiedStreamSlice>> {
+    ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>> {
         match self.take_slice_impl(subnet_id, begin, msg_limit, byte_limit) {
-            Ok(Some((slice, message_count))) => {
+            Ok(Some(slice)) => {
+                let slice_count_bytes = slice.count_bytes();
                 self.metrics.observe_take(STATUS_SUCCESS);
-                self.metrics.observe_take_message_count(message_count);
-                self.metrics.observe_take_size_bytes(slice.count_bytes());
-                Ok(Some(slice))
+                self.metrics.observe_take_message_count(slice.payload.len());
+                self.metrics.observe_take_size_bytes(slice_count_bytes);
+                Ok(Some((slice.pack(), slice_count_bytes)))
             }
             Ok(None) => {
                 self.metrics.observe_take(STATUS_NONE);
@@ -880,7 +1076,7 @@ impl CertifiedSlicePool {
 
     /// Helper function to allow easy instrumentation of `take_slice` results.
     ///
-    /// On success, returns the certified slice and its message count.
+    /// On success, returns a prefix respecting the given limits.
     ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
     /// `self.payload` is malformed. Returns `Err(TakeBeforeSliceBegin)` if
@@ -892,7 +1088,7 @@ impl CertifiedSlicePool {
         begin: Option<&ExpectedIndices>,
         msg_limit: Option<usize>,
         byte_limit: Option<usize>,
-    ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>> {
+    ) -> CertifiedSliceResult<Option<UnpackedStreamSlice>> {
         // Update the stream position in case we bail out early with no slice returned.
         begin.map(|begin| self.stream_positions.insert(subnet_id, begin.clone()));
 
@@ -913,7 +1109,7 @@ impl CertifiedSlicePool {
                 }
             };
 
-            if let Some(actual_begin) = slice.payload.messages_begin()? {
+            if let Some(actual_begin) = slice.payload.messages_begin() {
                 if actual_begin != begin.message_index {
                     // Slice's `messages.begin` is past the requested stream index, bail out.
                     return Err(CertifiedSliceError::TakeBeforeSliceBegin);
@@ -924,7 +1120,7 @@ impl CertifiedSlicePool {
         let mut prefix_message_count = slice.payload.len();
         self.metrics
             .observe_take_messages_gced(original_message_count - prefix_message_count);
-        let signals_end = slice.payload.signals_end;
+        let signals_end = slice.payload.header.signals_end();
 
         let (prefix, slice) = slice.take_prefix(msg_limit, byte_limit)?;
 
@@ -940,7 +1136,7 @@ impl CertifiedSlicePool {
                 stream_indices.message_index += StreamIndex::from(prefix_message_count as u64);
                 stream_indices.signal_index = stream_indices.signal_index.max(signals_end);
             }
-            Ok(Some((prefix, prefix_message_count)))
+            Ok(Some(prefix))
         } else {
             Ok(None)
         }
@@ -1014,12 +1210,11 @@ impl CertifiedSlicePool {
     ) -> (Option<ExpectedIndices>, Option<StreamIndex>, usize, usize) {
         let (messages_begin, message_count, byte_size) =
             if let Some(slice) = self.slices.get(&subnet_id) {
-                if let Ok(messages_begin) = slice.payload.messages_begin() {
-                    (messages_begin, slice.payload.len(), slice.estimated_size())
-                } else {
-                    // Malformed payload, slice will be dropped on next mutation.
-                    Default::default()
-                }
+                (
+                    slice.payload.messages_begin(),
+                    slice.payload.len(),
+                    slice.count_bytes(),
+                )
             } else {
                 Default::default()
             };
@@ -1033,10 +1228,7 @@ impl CertifiedSlicePool {
 
     /// Returns the total estimated size of the slices in the pool.
     pub fn byte_size(&self) -> usize {
-        self.slices
-            .values()
-            .map(|slice| slice.estimated_size())
-            .sum()
+        self.slices.values().map(|slice| slice.count_bytes()).sum()
     }
 
     /// Places the provided slice into the pool, after trimming off any prefix
@@ -1119,5 +1311,36 @@ impl CertifiedSlicePool {
     /// Observes the total size of all pooled slices.
     pub fn observe_pool_size_bytes(&self) {
         self.metrics.pool_size_bytes.set(self.byte_size() as i64);
+    }
+}
+
+/// Internal functionality, exposed for use by integration tests.
+pub mod testing {
+    use super::*;
+
+    /// Calls `slice.payload.count_bytes()`.
+    pub fn payload_count_bytes(slice: &UnpackedStreamSlice) -> usize {
+        slice.payload.count_bytes()
+    }
+
+    /// Returns the result of calling
+    /// `xnet_payload_builder::witness_count_bytes()` on the given unpacked
+    /// slice, i.e. the estimated witness size in bytes.
+    pub fn witness_count_bytes(slice: &UnpackedStreamSlice) -> usize {
+        let stream_begin = slice.payload.header.begin();
+        let stream_end = slice.payload.header.end();
+        let slice_begin = slice.payload.messages_begin();
+        let slice_end =
+            slice_begin.map(|begin| begin + StreamIndex::new(slice.payload.len() as u64));
+        crate::xnet_payload_builder::witness_count_bytes(
+            stream_begin,
+            stream_end,
+            slice_begin,
+            slice_end,
+        )
+    }
+
+    pub fn slice_len(slice: &UnpackedStreamSlice) -> usize {
+        slice.payload.len()
     }
 }

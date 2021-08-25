@@ -660,6 +660,22 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             .get_num_instructions_from_bytes(num_bytes)
     }
 
+    fn ic0_msg_caller_size(&self) -> HypervisorResult<u32> {
+        match &self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Heartbeat { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => Err(self.error_for("ic0_msg_caller_size")),
+            ApiType::Init { caller, .. }
+            | ApiType::Update { caller, .. }
+            | ApiType::ReplicatedQuery { caller, .. }
+            | ApiType::NonReplicatedQuery { caller, .. }
+            | ApiType::PreUpgrade { caller, .. }
+            | ApiType::InspectMessage { caller, .. } => Ok(caller.as_slice().len() as u32),
+        }
+    }
+
     fn ic0_msg_caller_copy(
         &self,
         dst: u32,
@@ -686,22 +702,6 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 heap[dst..dst + size].copy_from_slice(slice);
                 Ok(())
             }
-        }
-    }
-
-    fn ic0_msg_caller_size(&self) -> HypervisorResult<u32> {
-        match &self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Heartbeat { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. } => Err(self.error_for("ic0_msg_caller_size")),
-            ApiType::Init { caller, .. }
-            | ApiType::Update { caller, .. }
-            | ApiType::ReplicatedQuery { caller, .. }
-            | ApiType::NonReplicatedQuery { caller, .. }
-            | ApiType::PreUpgrade { caller, .. }
-            | ApiType::InspectMessage { caller, .. } => Ok(caller.as_slice().len() as u32),
         }
     }
 
@@ -854,6 +854,23 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         }
     }
 
+    fn ic0_msg_reply(&mut self) -> HypervisorResult<()> {
+        match self.get_response_info() {
+            None => Err(self.error_for("ic0_msg_reply")),
+            Some((data, _, status)) => match status {
+                ResponseStatus::NotRepliedYet => {
+                    *status = ResponseStatus::JustRepliedWith(Some(WasmResult::Reply(
+                        std::mem::replace(data, Vec::new()),
+                    )));
+                    Ok(())
+                }
+                ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => Err(
+                    ContractViolation("ic0.msg_reply: the call is already replied".to_string()),
+                ),
+            },
+        }
+    }
+
     fn ic0_msg_reply_data_append(
         &mut self,
         src: u32,
@@ -881,23 +898,6 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                         "ic0.msg_reply_data_append: the call is already replied".to_string(),
                     ))
                 }
-            },
-        }
-    }
-
-    fn ic0_msg_reply(&mut self) -> HypervisorResult<()> {
-        match self.get_response_info() {
-            None => Err(self.error_for("ic0_msg_reply")),
-            Some((data, _, status)) => match status {
-                ResponseStatus::NotRepliedYet => {
-                    *status = ResponseStatus::JustRepliedWith(Some(WasmResult::Reply(
-                        std::mem::replace(data, Vec::new()),
-                    )));
-                    Ok(())
-                }
-                ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => Err(
-                    ContractViolation("ic0.msg_reply: the call is already replied".to_string()),
-                ),
             },
         }
     }
@@ -1060,30 +1060,6 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 Ok(())
             }
         }
-    }
-
-    fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) {
-        let msg = match valid_subslice("ic0.debug_print", src, size, heap) {
-            Ok(bytes) => String::from_utf8_lossy(bytes).to_string(),
-            Err(_) => {
-                // Do not trap here!
-                // debug.print should never fail, so if the specified memory range
-                // is invalid, we ignore it and print the error message
-                "(debug message out of memory bounds)".to_string()
-            }
-        };
-        eprintln!(
-            "[Canister {}] {}",
-            self.system_state_accessor.canister_id(),
-            msg
-        );
-    }
-
-    fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorError {
-        let msg = valid_subslice("trap", src, size, heap)
-            .map(|bytes| String::from_utf8_lossy(bytes).to_string())
-            .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
-        CalledTrap(msg)
     }
 
     fn ic0_call_simple(
@@ -2001,6 +1977,30 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             }
         }
     }
+
+    fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) {
+        let msg = match valid_subslice("ic0.debug_print", src, size, heap) {
+            Ok(bytes) => String::from_utf8_lossy(bytes).to_string(),
+            Err(_) => {
+                // Do not trap here!
+                // debug.print should never fail, so if the specified memory range
+                // is invalid, we ignore it and print the error message
+                "(debug message out of memory bounds)".to_string()
+            }
+        };
+        eprintln!(
+            "[Canister {}] {}",
+            self.system_state_accessor.canister_id(),
+            msg
+        );
+    }
+
+    fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorError {
+        let msg = valid_subslice("trap", src, size, heap)
+            .map(|bytes| String::from_utf8_lossy(bytes).to_string())
+            .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
+        CalledTrap(msg)
+    }
 }
 
 pub(crate) fn valid_subslice<'a>(
@@ -2196,42 +2196,48 @@ mod test {
             cycles_account_manager,
         );
 
-        assert_api_supported(api.ic0_msg_arg_data_size());
-        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_msg_caller_size());
         assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_msg_arg_data_size());
+        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_not_supported(api.ic0_msg_reply());
+        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_not_supported(api.ic0_msg_reject_code());
         assert_api_not_supported(api.ic0_msg_reject_msg_size());
         assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_not_supported(api.ic0_msg_reply());
-        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_not_supported(api.ic0_call_cycles_add(0));
+        assert_api_not_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
-        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_size64());
         assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_not_supported(api.ic0_msg_cycles_available());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         assert_api_not_supported(api.ic0_mint_cycles(0));
-        assert_api_not_supported(api.ic0_msg_method_name_size());
-        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_accept_message());
     }
 
     #[test]
@@ -2250,42 +2256,48 @@ mod test {
 
         let mut api = get_system_api(get_update_api_type(), system_state, cycles_account_manager);
 
-        assert_api_supported(api.ic0_msg_arg_data_size());
-        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_msg_caller_size());
         assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_msg_arg_data_size());
+        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_supported(api.ic0_msg_reply());
+        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_not_supported(api.ic0_msg_reject_code());
         assert_api_not_supported(api.ic0_msg_reject_msg_size());
         assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_supported(api.ic0_msg_reply());
-        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_supported(api.ic0_call_cycles_add(0));
+        assert_api_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
-        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_size64());
         assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_msg_cycles_available());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
         assert_api_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         assert_api_supported(api.ic0_mint_cycles(0));
-        assert_api_not_supported(api.ic0_msg_method_name_size());
-        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_accept_message());
     }
 
     #[test]
@@ -2302,38 +2314,44 @@ mod test {
         assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_msg_caller_size());
         assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_supported(api.ic0_msg_reply());
+        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_not_supported(api.ic0_msg_reject_code());
         assert_api_not_supported(api.ic0_msg_reject_msg_size());
         assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_supported(api.ic0_msg_reply());
-        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_not_supported(api.ic0_call_cycles_add(0));
+        assert_api_not_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
-        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_size64());
         assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_not_supported(api.ic0_msg_cycles_available());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         assert_api_not_supported(api.ic0_mint_cycles(0));
-        assert_api_not_supported(api.ic0_msg_method_name_size());
-        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_accept_message());
     }
 
     #[test]
@@ -2355,42 +2373,48 @@ mod test {
             cycles_account_manager,
         );
 
-        assert_api_supported(api.ic0_msg_arg_data_size());
-        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_msg_caller_size());
         assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_msg_arg_data_size());
+        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_supported(api.ic0_msg_reply());
+        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_not_supported(api.ic0_msg_reject_code());
         assert_api_not_supported(api.ic0_msg_reject_msg_size());
         assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_supported(api.ic0_msg_reply());
-        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_not_supported(api.ic0_call_cycles_add(0));
+        assert_api_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
-        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_size64());
         assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_not_supported(api.ic0_msg_cycles_available());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_supported(api.ic0_data_certificate_size());
         assert_api_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         assert_api_not_supported(api.ic0_mint_cycles(0));
-        assert_api_not_supported(api.ic0_msg_method_name_size());
-        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_accept_message());
     }
 
     fn get_test_api_for_reply(
@@ -2429,63 +2453,77 @@ mod test {
     fn test_reply_api_support_on_nns() {
         let mut api = get_test_api_for_reply(SubnetType::System);
 
-        assert_api_supported(api.ic0_msg_arg_data_size());
-        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_msg_caller_size());
         assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_msg_arg_data_size());
+        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_supported(api.ic0_msg_reply());
+        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_msg_reject_code());
         assert_api_not_supported(api.ic0_msg_reject_msg_size());
         assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_supported(api.ic0_msg_reply());
-        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_supported(api.ic0_call_cycles_add(0));
+        assert_api_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
-        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_size64());
         assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_msg_cycles_available());
         assert_api_supported(api.ic0_msg_cycles_refunded());
         assert_api_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         assert_api_supported(api.ic0_mint_cycles(0));
-        assert_api_not_supported(api.ic0_msg_method_name_size());
-        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_accept_message());
     }
 
     #[test]
     fn test_reply_api_support_non_nns() {
         let mut api = get_test_api_for_reply(SubnetType::Application);
 
-        assert_api_supported(api.ic0_msg_arg_data_size());
-        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_msg_caller_size());
         assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_msg_arg_data_size());
+        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_supported(api.ic0_msg_reply());
+        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_msg_reject_code());
         assert_api_not_supported(api.ic0_msg_reject_msg_size());
         assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_supported(api.ic0_msg_reply());
-        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_supported(api.ic0_call_cycles_add(0));
+        assert_api_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
@@ -2494,14 +2532,15 @@ mod test {
         assert_api_supported(api.ic0_stable_grow64(1));
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_msg_cycles_available());
         assert_api_supported(api.ic0_msg_cycles_refunded());
         assert_api_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         assert_api_not_supported(api.ic0_mint_cycles(0));
     }
@@ -2522,42 +2561,48 @@ mod test {
             system_state_accessor,
         );
 
-        assert_api_not_supported(api.ic0_msg_arg_data_size());
-        assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_msg_caller_size());
         assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_arg_data_size());
+        assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_supported(api.ic0_msg_reply());
+        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_msg_reject_code());
         assert_api_supported(api.ic0_msg_reject_msg_size());
         assert_api_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_supported(api.ic0_msg_reply());
-        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_supported(api.ic0_call_cycles_add(0));
+        assert_api_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
-        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_size64());
         assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_msg_cycles_available());
         assert_api_supported(api.ic0_msg_cycles_refunded());
         assert_api_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         assert_api_supported(api.ic0_mint_cycles(0));
-        assert_api_not_supported(api.ic0_msg_method_name_size());
-        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_accept_message());
     }
 
     #[test]
@@ -2574,37 +2619,46 @@ mod test {
             system_state_accessor,
         );
 
-        assert_api_not_supported(api.ic0_msg_arg_data_size());
-        assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_msg_caller_size());
         assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_arg_data_size());
+        assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_supported(api.ic0_msg_reply());
+        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_msg_reject_code());
         assert_api_supported(api.ic0_msg_reject_msg_size());
         assert_api_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_supported(api.ic0_msg_reply());
-        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_supported(api.ic0_call_cycles_add(0));
+        assert_api_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
-        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_size64());
         assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_msg_cycles_available());
         assert_api_supported(api.ic0_msg_cycles_refunded());
         assert_api_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         assert_api_not_supported(api.ic0_mint_cycles(0));
     }
@@ -2623,38 +2677,44 @@ mod test {
         assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_msg_caller_size());
         assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_not_supported(api.ic0_msg_reply());
+        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_not_supported(api.ic0_msg_reject_code());
         assert_api_not_supported(api.ic0_msg_reject_msg_size());
         assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_not_supported(api.ic0_msg_reply());
-        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_not_supported(api.ic0_call_cycles_add(0));
+        assert_api_not_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
-        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_size64());
         assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_not_supported(api.ic0_msg_cycles_available());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         assert_api_not_supported(api.ic0_mint_cycles(0));
-        assert_api_not_supported(api.ic0_msg_method_name_size());
-        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_accept_message());
     }
 
     #[test]
@@ -2667,38 +2727,44 @@ mod test {
         assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_msg_caller_size());
         assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_not_supported(api.ic0_msg_reply());
+        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_not_supported(api.ic0_msg_reject_code());
         assert_api_not_supported(api.ic0_msg_reject_msg_size());
         assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_not_supported(api.ic0_msg_reply());
-        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_not_supported(api.ic0_canister_self_size());
         assert_api_not_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_controller_size());
         assert_api_not_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_not_supported(api.ic0_call_cycles_add(0));
+        assert_api_not_supported(api.ic0_call_perform());
         assert_api_not_supported(api.ic0_stable_size());
         assert_api_not_supported(api.ic0_stable_grow(1));
-        assert_api_not_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_not_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_not_supported(api.ic0_stable_size64());
         assert_api_not_supported(api.ic0_stable_grow64(1));
-        assert_api_not_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_not_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_time());
         assert_api_not_supported(api.ic0_canister_cycle_balance());
         assert_api_not_supported(api.ic0_msg_cycles_available());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_not_supported(api.ic0_canister_status());
         assert_api_not_supported(api.ic0_mint_cycles(0));
-        assert_api_not_supported(api.ic0_msg_method_name_size());
-        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_accept_message());
     }
 
     #[test]
@@ -2711,42 +2777,48 @@ mod test {
             cycles_account_manager,
         );
 
-        assert_api_not_supported(api.ic0_msg_arg_data_size());
-        assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_msg_caller_size());
         assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_arg_data_size());
+        assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_reply());
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_not_supported(api.ic0_msg_reject_code());
         assert_api_not_supported(api.ic0_msg_reject_msg_size());
         assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_not_supported(api.ic0_msg_reply());
-        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_not_supported(api.ic0_call_cycles_add(0));
+        assert_api_not_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
-        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_size64());
         assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_not_supported(api.ic0_msg_cycles_available());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         assert_api_not_supported(api.ic0_mint_cycles(0));
-        assert_api_not_supported(api.ic0_msg_method_name_size());
-        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_accept_message());
     }
 
     #[test]
@@ -2764,42 +2836,48 @@ mod test {
             cycles_account_manager,
         );
 
-        assert_api_supported(api.ic0_msg_arg_data_size());
-        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_msg_caller_size());
         assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_msg_arg_data_size());
+        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_msg_method_name_size());
+        assert_api_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_accept_message());
+        assert_api_not_supported(api.ic0_msg_reply());
+        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_not_supported(api.ic0_msg_reject_code());
         assert_api_not_supported(api.ic0_msg_reject_msg_size());
         assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_not_supported(api.ic0_msg_reply());
-        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_not_supported(api.ic0_call_cycles_add(0));
+        assert_api_not_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
-        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_size64());
         assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_not_supported(api.ic0_msg_cycles_available());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         assert_api_not_supported(api.ic0_mint_cycles(0));
-        assert_api_supported(api.ic0_msg_method_name_size());
-        assert_api_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_accept_message());
     }
 
     #[test]
@@ -2820,42 +2898,48 @@ mod test {
             cycles_account_manager,
         );
 
-        assert_api_not_supported(api.ic0_msg_arg_data_size());
-        assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_msg_caller_size());
         assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_arg_data_size());
+        assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_not_supported(api.ic0_msg_reply());
+        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_not_supported(api.ic0_msg_reject_code());
         assert_api_not_supported(api.ic0_msg_reject_msg_size());
         assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_not_supported(api.ic0_msg_reply());
-        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_supported(api.ic0_call_cycles_add(0));
+        assert_api_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
-        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_size64());
+        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_grow64(1));
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_not_supported(api.ic0_msg_cycles_available());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         assert_api_not_supported(api.ic0_mint_cycles(0));
-        assert_api_not_supported(api.ic0_msg_method_name_size());
-        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_accept_message());
     }
 
     #[test]
@@ -2879,37 +2963,46 @@ mod test {
             cycles_account_manager,
         );
 
-        assert_api_not_supported(api.ic0_msg_arg_data_size());
-        assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_msg_caller_size());
         assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_arg_data_size());
+        assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_not_supported(api.ic0_msg_reply());
+        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_not_supported(api.ic0_msg_reject_code());
         assert_api_not_supported(api.ic0_msg_reject_msg_size());
         assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
-        assert_api_not_supported(api.ic0_msg_reply());
-        assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
         assert_api_supported(api.ic0_canister_self_size());
         assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_controller_size());
         assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_supported(api.ic0_call_cycles_add(0));
+        assert_api_supported(api.ic0_call_perform());
         assert_api_supported(api.ic0_stable_size());
         assert_api_supported(api.ic0_stable_grow(1));
-        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_size64());
         assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_not_supported(api.ic0_msg_cycles_available());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
-        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
         assert_api_supported(api.ic0_canister_status());
         // Only supported on NNS.
         assert_api_supported(api.ic0_mint_cycles(0));

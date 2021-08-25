@@ -4,6 +4,6 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-tokio = { version = "1.2.0", features = ["macros", "signal"] }
+tokio = { version = "1.9.0", features = ["macros", "signal"] }
 slog = "2.5.2"
 

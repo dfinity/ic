@@ -133,9 +133,9 @@ impl ReleasePackage {
             self.cup_provider
                 .persist_cup(&CUPWithOriginalProtobuf::from_cup(cup), latest_subnet_id)?;
 
-            info!(
+            warn!(
                 self.logger,
-                "Downloading registry data from {} with hash {}",
+                "Downloading registry data from {} with hash {} for disaster recovery",
                 registry_store_uri.uri,
                 registry_store_uri.hash,
             );
@@ -152,7 +152,12 @@ impl ReleasePackage {
                 )
                 .await
                 .expect("Download of registry cache should succeed");
-            self.stop_replica()?;
+
+            if let Err(e) = self.stop_replica() {
+                // Even though we fail to stop the replica, we should still
+                // replace the registry local store, so we simply issue a warning.
+                warn!(self.logger, "Failed to stop replica with error {:?}", e);
+            }
 
             let new_local_store = LocalStoreImpl::new(local_store_location);
             self.nns_registry_replicator

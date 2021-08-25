@@ -23,7 +23,7 @@ pub const RESERVED_SYMBOLS: [&str; 4] = [
 // Computer provides or any special exported user functions.
 struct FunctionSignature {
     pub param_types: Vec<ValueType>,
-    pub return_type: Option<ValueType>,
+    pub return_type: Vec<ValueType>,
 }
 
 /// Controls how many globals and functions are allowed in a Wasm module on the
@@ -69,7 +69,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -79,7 +79,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -89,7 +89,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -99,7 +99,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -109,7 +109,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -119,7 +119,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -129,7 +129,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -139,7 +139,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -149,7 +149,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -159,7 +159,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -169,7 +169,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -179,7 +179,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -189,7 +189,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -199,7 +199,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -209,7 +209,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -219,7 +219,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -229,7 +229,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -240,7 +240,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 METHOD_MODULE,
                 FunctionSignature {
                     param_types: vec![ValueType::I64, ValueType::I32, ValueType::I32],
-                    return_type: Some(ValueType::I64),
+                    return_type: vec![ValueType::I64],
                 },
             )],
         ),
@@ -261,7 +261,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                         ValueType::I32,
                         ValueType::I32,
                     ],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -280,7 +280,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                         ValueType::I32,
                         ValueType::I32,
                     ],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -290,7 +290,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -300,7 +300,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -310,7 +310,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I64],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -320,7 +320,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -331,7 +331,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -341,7 +341,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -351,7 +351,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -361,7 +361,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -371,7 +371,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -381,7 +381,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I64),
+                    return_type: vec![ValueType::I64],
                 },
             )],
         ),
@@ -391,7 +391,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -401,7 +401,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I64),
+                    return_type: vec![ValueType::I64],
                 },
             )],
         ),
@@ -411,7 +411,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I64),
+                    return_type: vec![ValueType::I64],
                 },
             )],
         ),
@@ -421,7 +421,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I64),
+                    return_type: vec![ValueType::I64],
                 },
             )],
         ),
@@ -431,7 +431,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I64],
-                    return_type: Some(ValueType::I64),
+                    return_type: vec![ValueType::I64],
                 },
             )],
         ),
@@ -441,7 +441,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -451,7 +451,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -461,7 +461,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -471,7 +471,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I32, ValueType::I32, ValueType::I32],
-                    return_type: None,
+                    return_type: vec![],
                 },
             )],
         ),
@@ -481,7 +481,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: Some(ValueType::I32),
+                    return_type: vec![ValueType::I32],
                 },
             )],
         ),
@@ -491,7 +491,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValueType::I64],
-                    return_type: Some(ValueType::I64),
+                    return_type: vec![ValueType::I64],
                 },
             )],
         ),
@@ -519,49 +519,49 @@ fn get_valid_exported_functions() -> HashMap<String, FunctionSignature> {
             "canister_init",
             FunctionSignature {
                 param_types: vec![],
-                return_type: None,
+                return_type: vec![],
             },
         ),
         (
             "canister_update",
             FunctionSignature {
                 param_types: vec![],
-                return_type: None,
+                return_type: vec![],
             },
         ),
         (
             "canister_query",
             FunctionSignature {
                 param_types: vec![],
-                return_type: None,
+                return_type: vec![],
             },
         ),
         (
             "canister_pre_upgrade",
             FunctionSignature {
                 param_types: vec![],
-                return_type: None,
+                return_type: vec![],
             },
         ),
         (
             "canister_post_upgrade",
             FunctionSignature {
                 param_types: vec![],
-                return_type: None,
+                return_type: vec![],
             },
         ),
         (
             "canister_inspect_message",
             FunctionSignature {
                 param_types: vec![],
-                return_type: None,
+                return_type: vec![],
             },
         ),
         (
             "canister_heartbeat",
             FunctionSignature {
                 param_types: vec![],
-                return_type: None,
+                return_type: vec![],
             },
         ),
     ];
@@ -589,12 +589,12 @@ fn validate_function_signature(
         )));
     }
 
-    if function_type.return_type() != expected_signature.return_type {
+    if function_type.results() != expected_signature.return_type {
         return Err(WasmValidationError::InvalidFunctionSignature(format!(
             "Expected return type {:?} for '{}', got {:?}.",
             expected_signature.return_type,
             field,
-            function_type.return_type()
+            function_type.results()
         )));
     }
     Ok(())

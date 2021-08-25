@@ -2,11 +2,13 @@
 use crate::{
     artifact_pool::ArtifactPoolError, certification::ChangeSet as CertificationChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet, dkg::ChangeSet as DkgChangeSet,
-    ingress_pool::ChangeSet as IngressChangeSet,
+    ecdsa::EcdsaChangeSet, ingress_pool::ChangeSet as IngressChangeSet,
 };
 use ic_types::{
-    artifact::{CertificationMessageId, ConsensusMessageId, DkgMessageId, IngressMessageId},
-    consensus::{certification::CertificationMessage, dkg, ConsensusMessage},
+    artifact::{
+        CertificationMessageId, ConsensusMessageId, DkgMessageId, EcdsaMessageId, IngressMessageId,
+    },
+    consensus::{certification::CertificationMessage, dkg, ecdsa::EcdsaMessage, ConsensusMessage},
     messages::SignedIngress,
     Height, NodeId, Time,
 };
@@ -80,5 +82,11 @@ pub trait CertificationGossipPool:
 /// GossipPool trait for DkgPool
 pub trait DkgGossipPool:
     GossipPool<dkg::Message, DkgChangeSet, MessageId = DkgMessageId, Filter = ()>
+{
+}
+
+/// GossipPool trait for EcdsaPool
+pub trait EcdsaGossipPool:
+    GossipPool<EcdsaMessage, EcdsaChangeSet, MessageId = EcdsaMessageId, Filter = ()>
 {
 }

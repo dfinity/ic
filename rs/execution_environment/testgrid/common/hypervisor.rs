@@ -806,7 +806,7 @@ fn sys_api_call_stable_read_traps_when_out_of_bounds() {
 fn sys_api_call_stable_read_can_handle_overflows() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
-            execute_update(
+            execute_update_with_cycles_memory_time(
                 &hypervisor,
                 r#"
                 (module
@@ -825,6 +825,9 @@ fn sys_api_call_stable_read_can_handle_overflows() {
                 "test",
                 EMPTY_PAYLOAD,
                 None,
+                MAX_NUM_INSTRUCTIONS * 10,
+                NumBytes::from(0),
+                mock_time(),
                 tmp_path,
             )
             .2,
@@ -873,7 +876,7 @@ fn sys_api_call_stable_write_traps_when_out_of_bounds() {
 fn sys_api_call_stable_write_can_handle_overflows() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
-            execute_update(
+            execute_update_with_cycles_memory_time(
                 &hypervisor,
                 r#"
                 (module
@@ -892,6 +895,9 @@ fn sys_api_call_stable_write_can_handle_overflows() {
                 "test",
                 EMPTY_PAYLOAD,
                 None,
+                MAX_NUM_INSTRUCTIONS * 10,
+                NumBytes::from(0),
+                mock_time(),
                 tmp_path,
             )
             .2,
@@ -3240,7 +3246,7 @@ fn changes_to_stable_memory_in_canister_init_are_rolled_back_on_failure() {
                 canister,
                 test_caller(),
                 EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS,
+                MAX_NUM_INSTRUCTIONS * 10,
                 mock_time(),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             )
@@ -3255,7 +3261,7 @@ fn changes_to_stable_memory_in_canister_pre_upgrade_are_rolled_back_on_failure()
             hypervisor.execute_canister_pre_upgrade(
                 canister,
                 test_caller(),
-                MAX_NUM_INSTRUCTIONS,
+                MAX_NUM_INSTRUCTIONS * 10,
                 mock_time(),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             )
@@ -3271,7 +3277,7 @@ fn changes_to_stable_memory_in_canister_post_upgrade_are_rolled_back_on_failure(
                 canister,
                 test_caller(),
                 EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS,
+                MAX_NUM_INSTRUCTIONS * 10,
                 mock_time(),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             )
@@ -3446,7 +3452,7 @@ fn sys_api_call_ic_trap_preserves_some_cycles() {
         // Check that ic0.trap call wasn't expensive
         assert_eq!(
             num_instructions_left,
-            MAX_NUM_INSTRUCTIONS - NumInstructions::new(4)
+            MAX_NUM_INSTRUCTIONS - NumInstructions::new(15)
         );
 
         // Check a query method.
@@ -3467,7 +3473,7 @@ fn sys_api_call_ic_trap_preserves_some_cycles() {
         // Check that ic0.trap call wasn't expensive
         assert_eq!(
             num_instructions_left,
-            MAX_NUM_INSTRUCTIONS - NumInstructions::new(4)
+            MAX_NUM_INSTRUCTIONS - NumInstructions::new(15)
         );
     });
 }

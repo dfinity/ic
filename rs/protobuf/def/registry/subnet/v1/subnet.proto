@@ -100,7 +100,7 @@ message RegistryStoreUri {
 	/// The uri at which the registry store data should be retrieved. The data
 	/// must be provided as gzipped tar archive
 	string uri = 1;
-	/// A SHA-265, hex encoded hash of the contents of the data stored at the
+	/// A SHA-256, hex encoded hash of the contents of the data stored at the
 	/// provided URI
 	string hash = 2;
 	/// The registry version that should be used for the catch up package contents

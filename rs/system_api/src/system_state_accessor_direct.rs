@@ -20,8 +20,10 @@ use ic_base_types::NumBytes;
 
 const WASM_PAGE_SIZE_IN_BYTES: u32 = 64 * 1024;
 const MAX_STABLE_MEMORY_IN_PAGES: u32 = 64 * 1024; // 4GiB
-const BYTES_PER_INSTRUCTION: NumBytes = NumBytes::new(10); // Number of bytes that can be copied from/to canister's heap with one
-                                                           // instruction.
+
+// Number of bytes that can be copied from/to canister's heap with one
+// instruction.
+const BYTES_PER_INSTRUCTION: NumBytes = NumBytes::new(1);
 
 #[doc(hidden)]
 pub struct SystemStateAccessorDirect {

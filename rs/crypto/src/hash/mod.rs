@@ -1,5 +1,4 @@
-use ic_crypto_internal_types::context::{Context, DomainSeparationContext};
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha256::{DomainSeparationContext, Sha256};
 use ic_interfaces::crypto::CryptoHashable;
 use ic_types::crypto::{CryptoHash, CryptoHashOf};
 
@@ -23,8 +22,7 @@ mod tests;
 /// versions. Use `Sha256` instead if the algorithm used for producing
 /// the hash must not change across registry/protocol versions.
 pub fn crypto_hash<T: CryptoHashable>(data: &T) -> CryptoHashOf<T> {
-    let mut hash = Sha256::new();
-    hash.write(DomainSeparationContext::new(data.domain()).as_bytes());
+    let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(data.domain()));
     data.hash(&mut hash);
     CryptoHashOf::new(CryptoHash(hash.finish().to_vec()))
 }

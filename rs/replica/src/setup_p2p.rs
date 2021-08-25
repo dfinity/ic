@@ -8,20 +8,20 @@ use ic_interfaces::registry::LocalStoreCertifiedTimeReader;
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore, consensus_pool::ConsensusPoolCache,
     execution_environment::QueryHandler, p2p::IngressEventHandler, p2p::P2PRunner,
-    registry::RegistryClient, transport::Transport,
+    registry::RegistryClient,
 };
 use ic_logger::ReplicaLogger;
 use ic_messaging::{MessageRoutingImpl, XNetPayloadBuilderImpl};
 use ic_messaging::{XNetEndpoint, XNetEndpointConfig};
-use ic_p2p::p2p::{create_p2p, P2PStateSyncClient};
+use ic_p2p::p2p::{create_networking_stack, P2PStateSyncClient};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
-use ic_types::{consensus::catchup::CUPWithOriginalProtobuf, transport::FlowTag, NodeId, SubnetId};
+use ic_types::{consensus::catchup::CUPWithOriginalProtobuf, NodeId, SubnetId};
 use std::sync::Arc;
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-pub fn construct_p2p_stack(
+pub fn construct_ic_stack(
     replica_logger: ReplicaLogger,
     config: Config,
     subnet_config: SubnetConfig,
@@ -31,7 +31,6 @@ pub fn construct_p2p_stack(
     registry: Arc<dyn RegistryClient + Send + Sync>,
     crypto: Arc<CryptoComponent>,
     metrics_registry: ic_metrics::MetricsRegistry,
-    transport: Arc<dyn Transport>,
     catch_up_package: Option<CUPWithOriginalProtobuf>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
 ) -> std::io::Result<(
@@ -133,28 +132,24 @@ pub fn construct_p2p_stack(
     );
     let xnet_payload_builder = Arc::new(xnet_payload_builder);
 
-    let artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool);
-
-    let p2p_flow_tags = config
-        .transport
-        .p2p_flows
-        .iter()
-        .map(|flow_config| FlowTag::from(flow_config.flow_tag))
-        .collect();
-
     let catch_up_package = catch_up_package.unwrap_or_else(|| {
         CUPWithOriginalProtobuf::from_cup(ic_consensus_message::make_genesis(
             ic_consensus::dkg::make_genesis_summary(&*registry, subnet_id, None),
         ))
     });
 
-    let (p2p_event_handler, p2p_runner, consensus_pool_cache) = create_p2p(
+    let (p2p_event_handler, p2p_runner, consensus_pool_cache) = create_networking_stack(
+        metrics_registry,
+        replica_logger,
         tokio::runtime::Handle::current(),
+        config.transport,
+        ArtifactPoolConfig::from(config.artifact_pool),
+        config.consensus,
         config.malicious_behaviour.malicious_flags,
         node_id,
         subnet_id,
-        transport,
-        p2p_flow_tags,
+        None,
+        Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         P2PStateSyncClient::Client(Arc::clone(&state_manager) as Arc<_>),
         xnet_payload_builder as Arc<_>,
@@ -168,10 +163,6 @@ pub fn construct_p2p_stack(
         Box::new(IngressHistoryReaderImpl::new(
             Arc::clone(&state_manager) as Arc<_>
         )),
-        artifact_pool_config,
-        config.consensus,
-        metrics_registry,
-        replica_logger,
         catch_up_package,
         cycles_account_manager,
         local_store_time_reader,

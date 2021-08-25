@@ -1,18 +1,16 @@
 use criterion::measurement::Measurement;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
 
-use ic_crypto::utils::TempCryptoComponent;
+use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, Keygen, SignableMock,
-    DOMAIN_IC_REQUEST,
+    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, SignableMock, DOMAIN_IC_REQUEST,
 };
-use ic_interfaces::registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_registry_keys::make_crypto_node_key;
-use ic_test_utilities::types::ids::{node_test_id, NODE_1};
+use ic_test_utilities::types::ids::{NODE_1, NODE_2};
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, UserPublicKey};
 use ic_types::messages::MessageId;
 use ic_types::{NodeId, RegistryVersion};
@@ -29,7 +27,6 @@ use rand_core::OsRng;
 use std::sync::Arc;
 
 const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(3);
-const NODE_ID: NodeId = NODE_1;
 
 fn crypto_basicsig_ed25519(criterion: &mut Criterion) {
     let algorithm_id = AlgorithmId::Ed25519;
@@ -70,12 +67,14 @@ fn crypto_basicsig_rsasha256(criterion: &mut Criterion) {
 fn crypto_ed25519_basicsig_verify<M: Measurement>(group: &mut BenchmarkGroup<'_, M>) {
     // NOTE: Only Ed25519 can use verify
     // (other basic-sig key types aren't held in the registry).
-
     let mut rng = thread_rng();
+    let (temp_crypto, registry_data, registry) = temp_crypto(NODE_1);
+
     let request_id = MessageId::from(rng.gen::<[u8; 32]>());
     let (signature, public_key) =
         request_id_signature_from_random_keypair(&request_id, AlgorithmId::Ed25519);
-    let temp_crypto = crypto_component_with_public_key_in_registry(&public_key.key);
+
+    add_node_signing_pubkey_to_registry(NODE_2, &public_key.key, &registry, &registry_data);
 
     struct BenchData {
         signature: BasicSigOf<MessageId>,
@@ -92,7 +91,7 @@ fn crypto_ed25519_basicsig_verify<M: Measurement>(group: &mut BenchmarkGroup<'_,
         bench.iter(|| {
             assert!(data
                 .temp_crypto
-                .verify_basic_sig(&data.signature, &data.request_id, NODE_ID, REGISTRY_VERSION,)
+                .verify_basic_sig(&data.signature, &data.request_id, NODE_2, REGISTRY_VERSION,)
                 .is_ok());
         })
     });
@@ -103,7 +102,7 @@ fn crypto_ed25519_basicsig_sign<M: Measurement>(group: &mut BenchmarkGroup<'_, M
     // (other basic-sig key types aren't held in the secret key store).
 
     let mut rng = thread_rng();
-    let temp_crypto = crypto_component_with_generated_keypair_in_sks();
+    let (temp_crypto, _registry_data, _registry) = temp_crypto(NODE_1);
 
     let message = SignableMock::new(rng.gen::<[u8; 32]>().to_vec());
 
@@ -120,7 +119,7 @@ fn crypto_ed25519_basicsig_sign<M: Measurement>(group: &mut BenchmarkGroup<'_, M
         bench.iter(|| {
             assert!(data
                 .temp_crypto
-                .sign_basic(&data.message, NODE_ID, REGISTRY_VERSION)
+                .sign_basic(&data.message, NODE_1, REGISTRY_VERSION)
                 .is_ok());
         })
     });
@@ -131,11 +130,12 @@ fn crypto_basicsig_verifybypubkey<M: Measurement>(
     algorithm_id: AlgorithmId,
 ) {
     let mut rng = thread_rng();
-    let temp_crypto = crypto_component_with_state_in_temp_dir().2;
+    let (temp_crypto, _registry_data, _registry) = temp_crypto(NODE_1);
 
     let request_id = MessageId::from(rng.gen::<[u8; 32]>());
     let (signature, public_key) =
         request_id_signature_from_random_keypair(&request_id, algorithm_id);
+
     struct BenchData {
         signature: BasicSigOf<MessageId>,
         request_id: MessageId,
@@ -176,54 +176,37 @@ criterion_group! {
 
 criterion_main!(benches);
 
-fn crypto_component_with_state_in_temp_dir() -> (
+fn temp_crypto(
+    node_id: NodeId,
+) -> (
+    TempCryptoComponent,
     Arc<ProtoRegistryDataProvider>,
     Arc<FakeRegistryClient>,
-    TempCryptoComponent,
 ) {
-    let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
 
-    let registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
-
-    // The node id is currently irrelevant for these tests,
-    // so we set it to a constant for now.
-    let fake_node_id = node_test_id(314);
-
-    let crypto_component = TempCryptoComponent::new(
-        Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
-        fake_node_id,
+    let (crypto_component, node_pubkeys) = TempCryptoComponent::new_with_node_keys_generation(
+        Arc::clone(&registry) as Arc<_>,
+        node_id,
+        NodeKeysToGenerate::only_node_signing_key(),
     );
 
-    (data_provider, registry_client, crypto_component)
+    add_node_signing_pubkey_to_registry(
+        node_id,
+        &node_pubkeys.node_signing_pk.unwrap().key_value,
+        &registry,
+        &registry_data,
+    );
+    (crypto_component, registry_data, registry)
 }
 
-fn crypto_component_with_public_key_in_registry(public_key_bytes: &[u8]) -> TempCryptoComponent {
-    let (data_provider, registry_client, crypto_component) =
-        crypto_component_with_state_in_temp_dir();
-
-    add_public_key_to_registry(public_key_bytes, registry_client, data_provider);
-
-    crypto_component
-}
-
-fn crypto_component_with_generated_keypair_in_sks() -> TempCryptoComponent {
-    let (data_provider, registry_client, crypto_component) =
-        crypto_component_with_state_in_temp_dir();
-
-    let public_key_bytes = crypto_component.generate_user_keys_ed25519().unwrap().1.key;
-
-    add_public_key_to_registry(&public_key_bytes, registry_client, data_provider);
-
-    crypto_component
-}
-
-fn add_public_key_to_registry(
+fn add_node_signing_pubkey_to_registry(
+    node_id: NodeId,
     public_key_bytes: &[u8],
-    registry_client: Arc<FakeRegistryClient>,
-    data_provider: Arc<ProtoRegistryDataProvider>,
+    registry: &Arc<FakeRegistryClient>,
+    registry_data: &Arc<ProtoRegistryDataProvider>,
 ) {
-    let key = make_crypto_node_key(NODE_ID, KeyPurpose::NodeSigning);
-
     let pk = PublicKeyProto {
         algorithm: AlgorithmIdProto::Ed25519 as i32, // Nb. Only Ed25519 in registry
         key_value: public_key_bytes.to_vec(),
@@ -231,12 +214,16 @@ fn add_public_key_to_registry(
         proof_data: None,
     };
 
-    data_provider
-        .add(&key, REGISTRY_VERSION, Some(pk))
+    registry_data
+        .add(
+            &make_crypto_node_key(node_id, KeyPurpose::NodeSigning),
+            REGISTRY_VERSION,
+            Some(pk),
+        )
         .expect("Could not extend registry");
 
     // Need to poll the data provider at least once to update the cache.
-    registry_client.update_to_latest_version();
+    registry.reload();
 }
 
 fn request_id_signature_from_random_keypair(

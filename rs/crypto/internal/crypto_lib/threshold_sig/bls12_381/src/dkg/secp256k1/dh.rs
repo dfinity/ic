@@ -5,8 +5,8 @@ use crate::dkg::secp256k1::types::{EncryptedShare, EphemeralPublicKeyBytes};
 use crate::types::SecretKey as ThresholdSecretKey;
 use ff::Field;
 use ic_crypto_internal_bls12381_common::hash_to_fr;
-use ic_crypto_internal_types::context::{Context, DomainSeparationContext};
 use ic_crypto_sha256::Sha256;
+use ic_crypto_sha256::{Context, DomainSeparationContext};
 use ic_types::IDkgId;
 
 #[cfg(test)]

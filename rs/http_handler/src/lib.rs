@@ -502,6 +502,7 @@ async fn route(
     let request_start_time = Instant::now();
 
     let (parts, body) = request.into_parts();
+    let mut body_size: usize = 0;
     let (request_type, (response, api_req_type)) = match validate_parts(&parts) {
         Ok(request_type) => {
             // Don't process requests for which preconditions are not met.
@@ -526,16 +527,19 @@ async fn route(
                 )
                 .await
                 {
-                    Ok(parsed_body) => (
-                        request_type.as_str().to_string(),
-                        route_to_handlers(
-                            Arc::clone(&metrics),
-                            http_handler,
-                            parsed_body,
-                            request_type,
+                    Ok(parsed_body) => {
+                        body_size = parsed_body.len();
+                        (
+                            request_type.as_str().to_string(),
+                            route_to_handlers(
+                                Arc::clone(&metrics),
+                                http_handler,
+                                parsed_body,
+                                request_type,
+                            )
+                            .await,
                         )
-                        .await,
-                    ),
+                    }
                     Err(err) => (
                         request_type.as_str().to_string(),
                         (err, ApiReqType::Unknown),
@@ -547,6 +551,7 @@ async fn route(
     };
     metrics.observe_request(
         &request_start_time,
+        body_size,
         &request_type,
         &api_req_type,
         &response.status(),
@@ -668,11 +673,18 @@ fn load_root_delegation(
             content: HttpReadContent::ReadState {
                 read_state: HttpReadState {
                     sender: Blob(vec![4]),
-                    paths: vec![Path::new(vec![
-                        b"subnet".into(),
-                        subnet_id.get().into(),
-                        b"public_key".into(),
-                    ])],
+                    paths: vec![
+                        Path::new(vec![
+                            b"subnet".into(),
+                            subnet_id.get().into(),
+                            b"public_key".into(),
+                        ]),
+                        Path::new(vec![
+                            b"subnet".into(),
+                            subnet_id.get().into(),
+                            b"canister_ranges".into(),
+                        ]),
+                    ],
                     ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
                     nonce: None,
                 },

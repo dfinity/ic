@@ -962,10 +962,8 @@ impl Ledger {
     }
 
     pub fn can_send(&self, principal_id: &PrincipalId) -> bool {
-        principal_id.is_self_authenticating()
-            || LEDGER
-                .read()
-                .unwrap()
+        !principal_id.is_anonymous()
+            || self
                 .send_whitelist
                 .contains(&CanisterId::new(*principal_id).unwrap())
     }

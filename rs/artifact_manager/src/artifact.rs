@@ -135,3 +135,23 @@ impl ArtifactKind for DkgArtifact {
         }
     }
 }
+
+/// The `ArtifactKind` of ECDSA messages.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct EcdsaArtifact;
+
+/// `EcdsaArtifact` implements the `ArtifactKind` trait.
+impl ArtifactKind for EcdsaArtifact {
+    const TAG: ArtifactTag = ArtifactTag::EcdsaArtifact;
+    type Id = EcdsaMessageId;
+    type Message = EcdsaMessage;
+    type SerializeAs = EcdsaMessage;
+    type Attribute = EcdsaMessageAttribute;
+    type Filter = ();
+
+    /// The function converts a `EcdsaMessage` into an advert for a
+    /// `EcdsaArtifact`.
+    fn message_to_advert(_msg: &EcdsaMessage) -> Advert<EcdsaArtifact> {
+        unimplemented!()
+    }
+}

@@ -6,8 +6,8 @@ use crate::dkg::secp256k1::types::{
     EphemeralPop, EphemeralPopBytes, EphemeralPublicKey, EphemeralPublicKeyBytes,
     EphemeralSecretKey, EphemeralSecretKeyBytes, SECP256K1_PUBLIC_KEY_ONE,
 };
-use ic_crypto_internal_types::context::{Context, DomainSeparationContext};
 use ic_crypto_sha256::Sha256;
+use ic_crypto_sha256::{Context, DomainSeparationContext};
 use ic_types::{crypto::AlgorithmId, IDkgId, Randomness};
 use rand::{CryptoRng, Rng};
 use std::convert::TryInto;

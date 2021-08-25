@@ -17,6 +17,7 @@ const STATUS_ERROR: &str = "error";
 // the data members are thread-safe.
 pub(crate) struct HttpHandlerMetrics {
     requests: Arc<HistogramVec>,
+    requests_body_size_bytes: Arc<HistogramVec>,
     requests_total: Arc<IntCounterVec>,
     pub(crate) connections: Arc<IntGauge>,
     pub(crate) connections_total: Arc<IntCounter>,
@@ -53,6 +54,13 @@ impl HttpHandlerMetrics {
                 // +Inf.
                 add_bucket(15.0, decimal_buckets(-3, 1)),
                 // 1ms, 2ms, 5ms, 10ms, 20ms, ..., 10s, 15s, 20s, 50s
+                &["type", "status", "request_type"],
+            )),
+            requests_body_size_bytes: Arc::new(metrics_registry.histogram_vec(
+                "replica_http_request_body_size_bytes",
+                "HTTP/HTTPS request body sizes in bytes.",
+                // 10 B - 5 MB
+                decimal_buckets(1, 6),
                 &["type", "status", "request_type"],
             )),
             requests_total: Arc::new(metrics_registry.int_counter_vec(
@@ -100,9 +108,11 @@ impl HttpHandlerMetrics {
             .inc();
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn observe_request(
         &self,
         request_start_time: &Instant,
+        request_body_size: usize,
         request_type: &str,
         api_req_type: &ApiReqType,
         status: &StatusCode,
@@ -112,6 +122,9 @@ impl HttpHandlerMetrics {
         self.requests
             .with_label_values(&[request_type, &status.to_string(), api_req_type.as_str()])
             .observe(request_start_time.elapsed().as_secs_f64());
+        self.requests_body_size_bytes
+            .with_label_values(&[request_type, &status.to_string(), api_req_type.as_str()])
+            .observe(request_body_size as f64);
         self.requests_total
             .with_label_values(&[request_type, app_layer.as_str(), &format!("{:?}", version)])
             .inc();

@@ -3,8 +3,8 @@ use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{flat_map::FlatMap, Label, LabeledTree};
 use ic_messaging::{
     certified_slice_pool::{
-        CertifiedSliceError, CertifiedSlicePool, InvalidAppend, InvalidSlice, UnpackedStreamSlice,
-        LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
+        testing, CertifiedSliceError, CertifiedSlicePool, InvalidAppend, InvalidSlice,
+        UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
     },
     ExpectedIndices,
 };
@@ -116,7 +116,7 @@ proptest! {
     }
 
     #[test]
-    fn slice_take_prefix((stream, from, msg_count) in arb_stream_slice(0, 10)) {
+    fn slice_take_prefix((stream, from, msg_count) in arb_stream_slice(0, 100)) {
         /// Convenience wrapper for `UnpackedStreamSlice::take_prefix()` that takes a
         /// `&CertifiedStreamSlice` argument.
         fn take_prefix(
@@ -128,7 +128,33 @@ proptest! {
                 .expect("failed to unpack certified stream");
 
             let (prefix, postfix) = unpacked.take_prefix(msg_limit, byte_limit).unwrap();
-            (prefix, postfix.map(|postfix| postfix.into()))
+
+            // Ensure that any limits were respected.
+            if let (Some(msg_limit), Some(prefix)) = (msg_limit, prefix.as_ref()) {
+                assert!(testing::slice_len(prefix) <= msg_limit);
+            }
+            if let (Some(byte_limit), Some(prefix)) = (byte_limit, prefix.as_ref()) {
+                assert!(prefix.count_bytes() <= byte_limit);
+            }
+
+            // And that a longer prefix would have gone over one the limits.
+            let unpacked = UnpackedStreamSlice::try_from(certified_slice.clone()).unwrap();
+            match prefix.as_ref() {
+                Some(prefix) if postfix.is_some() => {
+                    let prefix_len = testing::slice_len(prefix);
+                    let longer_prefix = unpacked.take_prefix(Some(prefix_len + 1), None).unwrap().0.unwrap();
+                    let over_msg_limit = msg_limit.map(|limit| testing::slice_len(&longer_prefix) > limit).unwrap_or_default();
+                    let over_byte_limit = byte_limit.map(|limit| longer_prefix.count_bytes() > limit).unwrap_or_default();
+                    assert!(over_msg_limit || over_byte_limit)
+                },
+                None => {
+                    let empty_prefix = unpacked.take_prefix(Some(0), None).unwrap().0.unwrap();
+                    assert!(empty_prefix.count_bytes() > byte_limit.unwrap())
+                }
+                _ => {}
+            }
+
+            (prefix.map(|prefix| prefix.into()), postfix.map(|postfix| postfix.into()))
         }
 
         /// Helper producing two adjacent `CertifiedStreamSlices` starting at `from` and
@@ -179,7 +205,7 @@ proptest! {
                 // Taking an unlimited number of messages with a byte limit just under the byte size
                 // should result in `msg_count - 1` messages and 1 message left over.
                 let byte_size = UnpackedStreamSlice::try_from(certified_slice.clone())
-                    .expect("failed to unpack certified stream").estimated_size();
+                    .expect("failed to unpack certified stream").count_bytes();
                 assert_opt_slice_pairs_eq(
                     split(&fixture, DST_SUBNET, from, msg_count - 1, 1),
                     take_prefix(&certified_slice, None, Some(byte_size - 1)),
@@ -189,6 +215,12 @@ proptest! {
                 assert_opt_slice_pairs_eq(
                     split(&fixture, DST_SUBNET, from, msg_count - 1, 1),
                     take_prefix(&certified_slice, Some(msg_count - 1), None),
+                );
+
+                // But setting both limits exactly should result in the full slice and no leftover.
+                assert_opt_slice_pairs_eq(
+                (Some(certified_slice.clone()), None),
+                    take_prefix(&certified_slice, Some(msg_count), Some(byte_size)),
                 );
             } else {
                 // Taking zero messages from an empty slice should result in the full slice and no leftover.
@@ -238,6 +270,7 @@ proptest! {
         }
 
         with_test_replica_logger(|log| {
+            let stream_begin = stream.messages_begin();
             let fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream);
 
             let certified_slice = fixture.get_slice(DST_SUBNET, from, msg_count);
@@ -300,31 +333,104 @@ proptest! {
                     }
                 );
 
-                // Unpacking will succeed, as we're not validating against the witness.
-                let unpacked = UnpackedStreamSlice::try_from(slice_with_extra_message.clone()).unwrap();
+                if from > stream_begin {
+                    // Valid slice, but mismatching withess.
 
-                // But GC should fail.
-                match unpacked.garbage_collect(&ExpectedIndices {
-                    message_index: from.increment(),
-                    signal_index: StreamIndex::from(std::u64::MAX),
-                }) {
-                    Err(CertifiedSliceError::WitnessPruningFailed(_)) => {}
-                    actual => panic!(
-                        "Expected Err(CertifiedSliceError::WitnessPruningFailed(_), got {:?}",
-                        actual
-                    ),
-                }
+                    // Unpacking will succeed, as we're not validating against the witness.
+                    let unpacked = UnpackedStreamSlice::try_from(slice_with_extra_message.clone()).unwrap();
 
-                // As should taking a prefix.
-                let unpacked = UnpackedStreamSlice::try_from(slice_with_extra_message).unwrap();
-                match unpacked.take_prefix(Some(1), None) {
-                    Err(CertifiedSliceError::WitnessPruningFailed(_)) => {}
-                    actual => panic!(
-                        "Expected Err(CertifiedSliceError::WitnessPruningFailed(_), got {:?}",
-                        actual
-                    ),
+                    // But GC should fail.
+                    match unpacked.garbage_collect(&ExpectedIndices {
+                        message_index: from.increment(),
+                        signal_index: StreamIndex::from(std::u64::MAX),
+                    }) {
+                        Err(CertifiedSliceError::WitnessPruningFailed(_)) => {}
+                        actual => panic!(
+                            "Expected Err(CertifiedSliceError::WitnessPruningFailed(_), got {:?}",
+                            actual
+                        ),
+                    }
+
+                    // As should taking a prefix.
+                    let unpacked = UnpackedStreamSlice::try_from(slice_with_extra_message).unwrap();
+                    match unpacked.take_prefix(Some(1), None) {
+                        Err(CertifiedSliceError::WitnessPruningFailed(_)) => {}
+                        actual => panic!(
+                            "Expected Err(CertifiedSliceError::WitnessPruningFailed(_), got {:?}",
+                            actual
+                        ),
+                    }
+                } else {
+                    // Invalid slice, begin index before stream begin index. Unpacking should fail.
+                    match UnpackedStreamSlice::try_from(slice_with_extra_message) {
+                        Err(CertifiedSliceError::InvalidPayload(InvalidSlice::InvalidBounds)) => {}
+                        actual => panic!(
+                            "Expected Err(CertifiedSliceError::InvalidPayload(InvalidBounds), got {:?}",
+                            actual
+                        ),
+                    }
                 }
             }
+        });
+    }
+
+    /// Verifies that the size estimate returned by `count_bytes()` is within
+    /// 5% of the actual size of the encoded struct.
+    ///
+    /// If this test fails, you need to check where the error lies (payload vs.
+    /// witness) and adjust the estimate accordingly. Or bump the error margin.
+    #[test]
+    fn slice_accurate_count_bytes((stream, from, msg_count) in arb_stream_slice(2, 100)) {
+        /// Asserts that the `actual` value is within `+/-(error_percent% +
+        /// absolute_error)` of the `expected` value.
+        fn assert_almost_equal(
+            expected: usize,
+            actual: usize,
+            error_percent: usize,
+            absolute_error: usize,
+        ) {
+            let expected_min = expected * (100 - error_percent) / 100 - absolute_error;
+            let expected_max = expected * (100 + error_percent) / 100 + absolute_error;
+            assert!(
+                expected_min <= actual && actual <= expected_max,
+                "Expecting estimated size to be within {}% of {}, was {}",
+                error_percent,
+                expected,
+                actual
+            );
+        }
+
+        /// Verifies that the result of calling `count_bytes()` on the
+        /// `UnpackedStreamSlice` unpacked from `slice` is within 5% of the
+        /// byte size of `slice`.
+        fn assert_good_estimate(slice: CertifiedStreamSlice) {
+            let unpacked = UnpackedStreamSlice::try_from(slice.clone())
+                .expect("failed to unpack certified stream");
+
+            let packed_payload_bytes = slice.payload.len();
+            let unpacked_payload_bytes = testing::payload_count_bytes(&unpacked);
+            assert_almost_equal(packed_payload_bytes, unpacked_payload_bytes, 1, 10);
+
+            let packed_witness_bytes = slice.merkle_proof.len();
+            let unpacked_witness_bytes = testing::witness_count_bytes(&unpacked);
+            assert_almost_equal(packed_witness_bytes, unpacked_witness_bytes, 5, 10);
+
+            let packed_bytes =
+                slice.payload.len() + slice.merkle_proof.len() + slice.certification.count_bytes();
+            let unpacked_bytes = unpacked.count_bytes();
+            assert_almost_equal(packed_bytes, unpacked_bytes, 5, 0);
+        }
+
+        with_test_replica_logger(|log| {
+            let fixture =
+                StateManagerFixture::new(log).with_stream(DST_SUBNET, stream);
+
+            // Verify that we have good estimates for empty, single-message
+            // and many-message slices, to ensure that both fixed and
+            // per-message overheads are accurate.
+            assert_good_estimate(fixture.get_slice(DST_SUBNET, from, 0));
+            assert_good_estimate(fixture.get_slice(DST_SUBNET, from, 1));
+            assert_good_estimate(fixture.get_slice(DST_SUBNET, from, msg_count));
         });
     }
 
@@ -342,7 +448,7 @@ proptest! {
         }
         /// Takes the full pooled slice from the given subnet. Panics if no such slice exists.
         fn take_slice(subnet_id: SubnetId, pool: &mut CertifiedSlicePool) -> Option<CertifiedStreamSlice> {
-            pool.take_slice(subnet_id, None, None, None).unwrap()
+            pool.take_slice(subnet_id, None, None, None).unwrap().map(|(slice, _)| slice)
         }
         /// Asserts that the pool contains a slice with the expected stats and non-zero byte size.
         fn assert_has_slice(
@@ -413,7 +519,7 @@ proptest! {
 
                 pool.observe_pool_size_bytes();
                 assert_eq!(
-                    slice.count_bytes(),
+                    UnpackedStreamSlice::try_from(slice.clone()).unwrap().count_bytes(),
                     fixture.fetch_pool_size_bytes()
                 );
             }
@@ -434,7 +540,9 @@ proptest! {
             // Taking a slice with message limit zero should return the header only...
             assert_opt_slices_eq(
                 Some(fixture.get_slice(DST_SUBNET, from, 0)),
-                pool.take_slice(SRC_SUBNET, Some(&indices_before), Some(0), None).unwrap(),
+                pool.take_slice(SRC_SUBNET, Some(&indices_before), Some(0), None)
+                    .unwrap()
+                    .map(|(slice, _)| slice),
             );
             // ...but advance `signals_end`.
             let mut stream_position = ExpectedIndices {
@@ -470,7 +578,10 @@ proptest! {
             }
 
             // A slice containing the second message should have been returned.
-            assert_opt_slices_eq(Some(fixture.get_slice(DST_SUBNET, from.increment(), 1)), prefix);
+            assert_opt_slices_eq(
+                Some(fixture.get_slice(DST_SUBNET, from.increment(), 1)),
+                prefix.map(|(slice, _)| slice),
+            );
 
             stream_position.message_index.inc_assign();
             if msg_count == 2 {
@@ -547,7 +658,7 @@ proptest! {
 
             let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
             let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
-            let slice_bytes = slice.count_bytes();
+            let slice_bytes = UnpackedStreamSlice::try_from(slice.clone()).unwrap().count_bytes();
 
             // Stream position guaranteed to yield a slice, even if empty.
             let stream_position = ExpectedIndices{
@@ -562,7 +673,9 @@ proptest! {
             // Note: this takes the slice and updates the cached stream position to its end indices.
             assert_opt_slices_eq(
                 Some(slice.clone()),
-                pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None).unwrap(),
+                pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None)
+                    .unwrap()
+                    .map(|(slice, _)| slice),
             );
 
             // Appending the same slice after taking it should be a no-op.
@@ -585,10 +698,12 @@ proptest! {
             pool.append(SRC_SUBNET, new_slice).unwrap();
 
             let empty_slice = new_fixture.get_slice(DST_SUBNET, to, 0);
-            let empty_slice_bytes = empty_slice.count_bytes();
+            let empty_slice_bytes = UnpackedStreamSlice::try_from(empty_slice.clone()).unwrap().count_bytes();
             assert_opt_slices_eq(
                 Some(empty_slice),
-                pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None).unwrap(),
+                pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None)
+                    .unwrap()
+                    .map(|(slice, _)| slice),
             );
             stream_position.signal_index = stream.signals_end();
             assert_eq!(
@@ -671,7 +786,9 @@ proptest! {
             );
             assert_opt_slices_eq(
                 Some(slice),
-                pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None).unwrap(),
+                pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None)
+                    .unwrap()
+                    .map(|(slice, _)| slice),
             );
         });
     }
@@ -759,7 +876,9 @@ proptest! {
             );
             assert_opt_slices_eq(
                 Some(slice),
-                pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None).unwrap(),
+                pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None)
+                    .unwrap()
+                    .map(|(slice, _)| slice),
             );
         });
     }

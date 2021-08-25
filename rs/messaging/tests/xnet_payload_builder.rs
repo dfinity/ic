@@ -6,8 +6,9 @@ use ic_interfaces::{
 };
 use ic_logger::ReplicaLogger;
 use ic_messaging::{
-    certified_slice_pool::CertifiedSlicePool, xnet_payload_builder_testing::*, ExpectedIndices,
-    XNetPayloadBuilderImpl,
+    certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice},
+    xnet_payload_builder_testing::*,
+    ExpectedIndices, XNetPayloadBuilderImpl,
 };
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::{
@@ -45,6 +46,7 @@ use maplit::btreemap;
 use proptest::prelude::*;
 use std::{
     collections::BTreeMap,
+    convert::TryFrom,
     sync::{Arc, Mutex},
 };
 use tempfile::TempDir;
@@ -133,7 +135,7 @@ impl XNetPayloadBuilderFixture {
     }
 
     /// Pools the provided slice coming from a given subnet and returns its byte
-    /// size, as calculated by `XNetPayloadBuilder`.
+    /// size, as evaluated by `UnpackedStreamSlice::count_bytes()`.
     fn pool_slice(
         &self,
         subnet_id: SubnetId,
@@ -143,7 +145,9 @@ impl XNetPayloadBuilderFixture {
         log: &ReplicaLogger,
     ) -> usize {
         let certified_slice = in_slice(stream, from, from, msg_count, log);
-        let slice_size_bytes = certified_slice.count_bytes();
+        let slice_size_bytes = UnpackedStreamSlice::try_from(certified_slice.clone())
+            .unwrap()
+            .count_bytes();
         pool_slice(&self.xnet_payload_builder, subnet_id, certified_slice);
         slice_size_bytes
     }
@@ -666,7 +670,8 @@ proptest! {
                 pool.lock()
                     .unwrap()
                     .take_slice(REMOTE_SUBNET, Some(&stream_position), None, None)
-                    .unwrap(),
+                    .unwrap()
+                    .map(|(slice, _)| slice),
             );
         });
     }
@@ -705,7 +710,7 @@ proptest! {
             let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
             let prefix_msg_count = (from - stream_begin).get() as usize;
             let prefix = in_slice(stream_begin, stream_begin, prefix_msg_count);
-            let prefix_size_bytes = prefix.count_bytes();
+            let prefix_size_bytes = UnpackedStreamSlice::try_from(prefix.clone()).unwrap().count_bytes();
             {
                 let mut pool = pool.lock().unwrap();
                 pool.put(REMOTE_SUBNET, prefix).unwrap();
@@ -763,7 +768,8 @@ proptest! {
                 pool.lock()
                     .unwrap()
                     .take_slice(REMOTE_SUBNET, Some(&stream_position), None, None)
-                    .unwrap(),
+                    .unwrap()
+                    .map(|(slice, _)| slice),
             );
         });
     }

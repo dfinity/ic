@@ -23,7 +23,7 @@ pub mod dkg_id_to_key_id;
 use crate::types::CspEncryptedSecretKey;
 use ic_crypto_internal_multi_sig_bls12381::types::conversions::protobuf::PopBytesFromProtoError;
 use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1::types::CLibDealingBytes;
-use ic_crypto_internal_types::context::{Context, DomainSeparationContext};
+use ic_crypto_sha256::{Context, DomainSeparationContext};
 use openssl::sha::Sha256;
 
 #[cfg(test)]

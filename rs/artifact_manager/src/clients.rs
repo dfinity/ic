@@ -9,7 +9,11 @@ use ic_interfaces::{
     consensus::ConsensusGossip,
     consensus_pool::{ConsensusPool, ConsensusPoolCache},
     dkg::{DkgGossip, DkgPool},
-    gossip_pool::{CertificationGossipPool, ConsensusGossipPool, DkgGossipPool, IngressGossipPool},
+    ecdsa::{EcdsaGossip, EcdsaPool},
+    gossip_pool::{
+        CertificationGossipPool, ConsensusGossipPool, DkgGossipPool, EcdsaGossipPool,
+        IngressGossipPool,
+    },
     ingress_pool::IngressPool,
     time_source::TimeSource,
 };
@@ -614,5 +618,52 @@ impl<Pool: DkgPool + DkgGossipPool + Send + Sync> ArtifactClient<DkgArtifact> fo
     /// The method returns a new (single-chunked) DKG message tracker.
     fn get_chunk_tracker(&self, _id: &DkgMessageId) -> Box<dyn Chunkable + Send + Sync> {
         Box::new(SingleChunked::Dkg)
+    }
+}
+
+/// The ECDSA client.
+pub struct EcdsaClient<Pool> {
+    ecdsa_pool: Arc<RwLock<Pool>>,
+    ecdsa_gossip: Arc<dyn EcdsaGossip>,
+}
+
+impl<Pool> EcdsaClient<Pool> {
+    pub fn new<T: EcdsaGossip + 'static>(ecdsa_pool: Arc<RwLock<Pool>>, gossip: T) -> Self {
+        Self {
+            ecdsa_pool,
+            ecdsa_gossip: Arc::new(gossip),
+        }
+    }
+}
+
+impl<Pool: EcdsaPool + EcdsaGossipPool + Send + Sync> ArtifactClient<EcdsaArtifact>
+    for EcdsaClient<Pool>
+{
+    fn check_artifact_acceptance(
+        &self,
+        msg: EcdsaMessage,
+        _peer_id: &NodeId,
+    ) -> Result<ArtifactAcceptance<EcdsaMessage>, ArtifactPoolError> {
+        Ok(ArtifactAcceptance::AcceptedForProcessing(msg))
+    }
+
+    fn has_artifact(&self, msg_id: &EcdsaMessageId) -> bool {
+        self.ecdsa_pool.read().unwrap().contains(msg_id)
+    }
+
+    fn get_validated_by_identifier(&self, msg_id: &EcdsaMessageId) -> Option<EcdsaMessage> {
+        self.ecdsa_pool
+            .read()
+            .unwrap()
+            .get_validated_by_identifier(msg_id)
+    }
+
+    fn get_priority_function(&self) -> Option<PriorityFn<EcdsaMessageId, EcdsaMessageAttribute>> {
+        let ecdsa_pool = &*self.ecdsa_pool.read().unwrap();
+        Some(self.ecdsa_gossip.get_priority_function(ecdsa_pool))
+    }
+
+    fn get_chunk_tracker(&self, _id: &EcdsaMessageId) -> Box<dyn Chunkable + Send + Sync> {
+        Box::new(SingleChunked::Ecdsa)
     }
 }

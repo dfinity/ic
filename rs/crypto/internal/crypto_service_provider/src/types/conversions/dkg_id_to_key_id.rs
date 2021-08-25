@@ -1,6 +1,6 @@
 //! Compute a key identifier for a DKG id
 
-use ic_crypto_internal_types::context::{Context, DomainSeparationContext};
+use ic_crypto_sha256::{Context, DomainSeparationContext};
 use ic_types::crypto::KeyId;
 use ic_types::IDkgId;
 

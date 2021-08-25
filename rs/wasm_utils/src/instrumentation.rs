@@ -194,7 +194,7 @@ fn inject_helper_functions(module: Module) -> Module {
         builder::signature()
             .with_param(ValueType::I32)
             .with_param(ValueType::I32)
-            .with_return_type(Some(ValueType::I32))
+            .with_result(ValueType::I32)
             .build_sig(),
     );
     builder.push_import(
@@ -421,11 +421,7 @@ pub fn instrument(
     // push canister counter_get
     mbuilder.push_function(
         builder::function()
-            .with_signature(
-                builder::signature()
-                    .with_return_type(Some(ValueType::I64))
-                    .build_sig(),
-            )
+            .with_signature(builder::signature().with_result(ValueType::I64).build_sig())
             .body()
             .with_instructions(Instructions::new(vec![
                 Instruction::GetGlobal(instructions_counter_ix),

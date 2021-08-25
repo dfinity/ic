@@ -4,8 +4,7 @@ use ic_crypto_internal_bls12381_common::{hash_to_miracl_g1, MiraclG1};
 use ic_crypto_internal_bls12381_serde_miracl::{
     miracl_fr_to_bytes, miracl_g1_to_bytes, miracl_g2_to_bytes,
 };
-use ic_crypto_internal_types::context::{Context, DomainSeparationContext};
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha256::{Context, DomainSeparationContext, Sha256};
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;
@@ -25,9 +24,7 @@ const DOMAIN_RO_VECTOR: &str = "ic-random-oracle-vector";
 
 /// Initializes an hasher with a DomainSeparationContext string.
 fn new_hasher_with_domain(domain: &str) -> Sha256 {
-    let mut hasher = Sha256::new();
-    hasher.write(&DomainSeparationContext::new(domain).as_bytes());
-    hasher
+    Sha256::new_with_context(&DomainSeparationContext::new(domain))
 }
 
 /// Hashes the unique encoding of some structured data. Each data type uses a

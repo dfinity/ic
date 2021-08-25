@@ -242,6 +242,13 @@ impl NodeKeysToGenerate {
             ..Self::all()
         }
     }
+
+    pub fn only_node_signing_key() -> Self {
+        NodeKeysToGenerate {
+            generate_node_signing_keys: true,
+            ..Self::none()
+        }
+    }
 }
 
 impl TempCryptoComponentGeneric<Csp<ChaChaRng, ProtoSecretKeyStore>> {

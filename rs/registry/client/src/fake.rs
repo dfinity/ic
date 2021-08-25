@@ -72,8 +72,7 @@ impl FakeRegistryClient {
     ///
     /// Useful to pick up data that were added at an existing version in the
     /// test data provider.
-    #[allow(dead_code)]
-    fn reload(&self) {
+    pub fn reload(&self) {
         let mut cache = self.cache.write().unwrap();
         cache.0 = ZERO_REGISTRY_VERSION;
         cache.1.clear();

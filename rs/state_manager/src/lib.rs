@@ -185,7 +185,14 @@ impl StateManagerMetrics {
     }
 }
 
+#[derive(Debug, Default)]
+struct PersistedStatesMetadata {
+    by_height: StatesMetadata,
+    oldest_required_state: Height,
+}
+
 type StatesMetadata = BTreeMap<Height, StateMetadata>;
+
 type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
 
 #[derive(Debug, Default)]
@@ -581,8 +588,61 @@ impl StateManagerImpl {
         );
         let state_layout = StateLayout::new(log.clone(), config.state_root());
 
-        let mut states_metadata =
-            Self::load_metadata(&log, state_layout.states_metadata().as_path());
+        let PersistedStatesMetadata {
+            by_height: mut states_metadata,
+            oldest_required_state,
+        } = Self::load_metadata(&log, state_layout.states_metadata().as_path());
+
+        let mut checkpoint_heights = state_layout
+            .checkpoint_heights()
+            .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
+
+        if oldest_required_state > Self::INITIAL_STATE_HEIGHT {
+            // We look at the oldest state height consensus asked us to keep and
+            // compare it to the checkpoints we have.  We then "archive" all the
+            // checkpoints that are too fresh and can prevent us from recomputing
+            // states that consensus might still need.
+            //
+            // For example, let's say we have checkpoints @100 and @200, and
+            // consensus asked us to remove states below 150.  We did that and
+            // then got restarted. If we now recover from checkpoint @200, we'll
+            // never recompute states 150 and above, which might still be needed.
+            // So we archive checkpoint @200, to make sure it doesn't interfere
+            // with normal operation and continue from @100 instead.
+            //
+            // NB. We do not apply this heuristic if we only have one
+            // checkpoint. Rationale:
+            //
+            //   1. It's unlikely that we'll be able to recompute old states
+            //      this way as we'll have to start from the genesis state.
+            //
+            //   2. It's a common case if we completed a state sync and
+            //      restarted, in which case we'll have to sync again.
+            //
+            //   3. It looks dangerous to remove the only last state.
+            //      What if this somehow happens on all the nodes simultaneously?
+            while checkpoint_heights.len() > 1
+                && checkpoint_heights.last().cloned().unwrap() > oldest_required_state
+            {
+                let h = checkpoint_heights.pop().unwrap();
+                info!(
+                    log,
+                    "Archiving checkpoint {} (oldest required state = {})",
+                    h,
+                    oldest_required_state
+                );
+                state_layout
+                    .archive_checkpoint(h)
+                    .unwrap_or_else(|err| fatal!(&log, "{:?}", err));
+                states_metadata.remove(&h);
+            }
+        }
+
+        state_layout
+            .cleanup_tip()
+            .unwrap_or_else(|err| fatal!(&log, "Failed to cleanup old tip {:?}", err));
+
+        cleanup_diverged_states(&log, &state_layout);
 
         let (certifications_metadata, compute_manifest_requests) = Self::populate_missing_metadata(
             &log,
@@ -592,19 +652,10 @@ impl StateManagerImpl {
             own_subnet_type,
         );
 
-        let checkpoint_heights = state_layout
-            .checkpoint_heights()
-            .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
-
-        state_layout
-            .cleanup_tip()
-            .unwrap_or_else(|err| fatal!(&log, "Failed to cleanup old tip {:?}", err));
-
-        cleanup_diverged_states(&log, &state_layout);
-
         let latest_state_height = AtomicU64::new(0);
         let latest_certified_height = AtomicU64::new(0);
         let last_checkpoint = checkpoint_heights.last();
+
         let height_and_state = match last_checkpoint {
             Some(height) => {
                 // Set latest state height in metadata to be last checkpoint height
@@ -726,7 +777,7 @@ impl StateManagerImpl {
             deallocation_sender,
             latest_state_height,
             latest_certified_height,
-            requested_to_remove_states_below: AtomicU64::new(0),
+            requested_to_remove_states_below: AtomicU64::new(oldest_required_state.get()),
             _state_hasher_handle,
             _deallocation_handle,
         }
@@ -771,7 +822,7 @@ impl StateManagerImpl {
     ///
     /// It's OK to miss some (or all) metadata entries as it will be re-computed
     /// as part of the recovery procedure.
-    fn load_metadata(log: &ReplicaLogger, path: &Path) -> StatesMetadata {
+    fn load_metadata(log: &ReplicaLogger, path: &Path) -> PersistedStatesMetadata {
         use std::io::Read;
 
         let mut file = match OpenOptions::new().read(true).open(path) {
@@ -814,7 +865,10 @@ impl StateManagerImpl {
                         }
                     }
                 }
-                map
+                PersistedStatesMetadata {
+                    by_height: map,
+                    oldest_required_state: Height::new(pb_meta.oldest_required_state),
+                }
             }
             Err(err) => {
                 warn!(
@@ -846,6 +900,10 @@ impl StateManagerImpl {
                 for (h, m) in metadata.iter() {
                     pb_meta.by_height.insert(h.get(), m.into());
                 }
+                pb_meta.oldest_required_state = self
+                    .requested_to_remove_states_below
+                    .load(Ordering::Relaxed);
+
                 let mut buf = vec![];
                 pb_meta.encode(&mut buf).unwrap_or_else(|e| {
                     fatal!(
@@ -1643,6 +1701,16 @@ impl StateManager for StateManagerImpl {
             end: last_height_to_keep,
         };
 
+        // The latest checkpoint below or at the requested height will also be kept
+        // because the state manager needs to load from it when restarting.
+        // Therefore, it is excluded from the `heights_to_remove` above.
+        // Note: the `oldest_checkpoint_to_keep`, if set, is <= `last_checkpoint`.
+        let oldest_checkpoint_to_keep = checkpoint_heights
+            .iter()
+            .filter(|x| **x <= requested_height)
+            .max()
+            .cloned();
+
         let mut states = self.states.write();
 
         // Send object to deallocation thread if it has capacity.
@@ -1656,10 +1724,10 @@ impl StateManager for StateManagerImpl {
             }
         };
 
-        let (removed, retained) = states
-            .snapshots
-            .drain(0..)
-            .partition(|snapshot| heights_to_remove.contains(&snapshot.height));
+        let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
+            heights_to_remove.contains(&snapshot.height)
+                && Some(snapshot.height) != oldest_checkpoint_to_keep
+        });
         states.snapshots = retained;
 
         self.metrics
@@ -1675,9 +1743,13 @@ impl StateManager for StateManagerImpl {
         self.latest_state_height
             .store(latest_height.get(), Ordering::Relaxed);
 
+        let min_resident_height = oldest_checkpoint_to_keep
+            .unwrap_or(last_height_to_keep)
+            .min(last_height_to_keep);
+
         self.metrics
             .min_resident_height
-            .set(last_height_to_keep.get() as i64);
+            .set(min_resident_height.get() as i64);
         self.metrics
             .max_resident_height
             .set(latest_height.get() as i64);
@@ -1685,7 +1757,10 @@ impl StateManager for StateManagerImpl {
         // Send removed snapshot to deallocator thread
         deallocate(Box::new(removed));
 
-        for (_, ref metadata) in states.states_metadata.range(heights_to_remove) {
+        for (height, ref metadata) in states.states_metadata.range(heights_to_remove) {
+            if Some(*height) == oldest_checkpoint_to_keep {
+                continue;
+            }
             if let Some(ref checkpoint_ref) = metadata.checkpoint_ref {
                 checkpoint_ref.mark_deleted();
             }
@@ -1694,6 +1769,12 @@ impl StateManager for StateManagerImpl {
         let mut certifications_metadata = states
             .certifications_metadata
             .split_off(&last_height_to_keep);
+
+        if let Some(h) = oldest_checkpoint_to_keep {
+            if let Some(cert_metadata) = states.certifications_metadata.remove(&h) {
+                certifications_metadata.insert(h, cert_metadata);
+            }
+        }
 
         std::mem::swap(
             &mut certifications_metadata,
@@ -1720,7 +1801,14 @@ impl StateManager for StateManagerImpl {
         // TODO: send states_metadata through deallocation channel too. But then
         // checkpoint removal becomes asynchronous, which requires more careful
         // handling.
-        states.states_metadata = states.states_metadata.split_off(&last_height_to_keep);
+        let mut metadata_to_keep = states.states_metadata.split_off(&last_height_to_keep);
+
+        if let Some(h) = oldest_checkpoint_to_keep {
+            if let Some(metadata) = states.states_metadata.remove(&h) {
+                metadata_to_keep.insert(h, metadata);
+            }
+        }
+        states.states_metadata = metadata_to_keep;
 
         self.persist_metadata_or_die(&states.states_metadata);
     }

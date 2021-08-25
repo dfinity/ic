@@ -1,22 +1,3 @@
-//! The ic-crypto-sha256 package works both on Wasm and non-Wasm
-//! architectures by using different SHA224 hasher implementations depending on
-//! the architecture:
-//!
-//! * When compiling to Wasm, we use pure Rust implementation (provided by sha2
-//!   package).
-//!
-//! * When compiling to native, we use openssl, which relies on OpenSSL.
-//!
-//! At the moment, the complexity introduced by architecture-dependent
-//! code is worth it:
-//!
-//! * OpenSSL is big, complicated and is hard to port to Wasm. So it's not
-//!   really a viable option to use it in canisters.
-//!
-//! * sha2 is pure Rust, but it's ~20% slower than OpenSSL on StateManager
-//!   benchmarks. Thus it makes sense to use a faster implementation in the
-//!   replica code.
-
 #[cfg(not(target_arch = "wasm32"))]
 mod openssl_sha224;
 #[cfg(target_arch = "wasm32")]
@@ -33,36 +14,7 @@ pub(crate) use rust_sha224::{hash, InternalSha224};
 ///
 /// This hasher can be used, e.g., for creating fingerprints of files that are
 /// persisted on disk.
-//
-/// # Example (using state explicitly to hash data piece by piece)
-///
-/// ```
-/// use ic_crypto_sha256::Sha224;
-///
-/// let mut state = Sha224::new();
-/// state.write(b"some ");
-/// state.write(b"data!");
-/// let digest: [u8; 28] = state.finish();
-/// ```
-///
-/// # Example (using state implicitly with the convenience function)
-///
-/// ```
-/// use ic_crypto_sha256::Sha224;
-///
-/// let digest: [u8; 28] = Sha224::hash(b"some data!");
-/// ```
-///
-/// # Example (using as an `std::io::Writer`)
-///
-/// ```
-/// use ic_crypto_sha256::Sha224;
-///
-/// let mut reader: &[u8] = b"some data";
-/// let mut hasher = Sha224::new();
-///
-/// std::io::copy(&mut reader, &mut hasher).unwrap();
-/// ```
+
 #[derive(Default)]
 pub struct Sha224 {
     sha224: InternalSha224,

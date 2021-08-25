@@ -1019,7 +1019,10 @@ impl Validator {
         // need to look beyond finalized height.
         let finalized_height = pool_reader.get_finalized_height();
         let expected_height = self.message_routing.expected_batch_height();
-        let range = HeightRange::new(expected_height, max_height.min(finalized_height));
+        let range = HeightRange::new(
+            expected_height,
+            max_height.min(finalized_height.increment()),
+        );
         self.validate_tape_artifacts(
             pool_reader,
             pool_reader
@@ -1046,7 +1049,10 @@ impl Validator {
         // need to look beyond finalized height.
         let finalized_height = pool_reader.get_finalized_height();
         let expected_height = self.message_routing.expected_batch_height();
-        let range = HeightRange::new(expected_height, max_height.min(finalized_height));
+        let range = HeightRange::new(
+            expected_height,
+            max_height.min(finalized_height.increment()),
+        );
         self.validate_tape_artifacts(
             pool_reader,
             pool_reader
@@ -1692,7 +1698,6 @@ pub mod test {
             ) = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
             let mut round = pool.prepare_round().dont_finalize().dont_add_random_tape();
-            round.advance();
             round.advance();
             pool.prepare_round()
                 .dont_add_catch_up_package()

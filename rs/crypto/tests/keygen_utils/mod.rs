@@ -5,7 +5,7 @@ use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key};
 use ic_test_utilities::types::ids::node_test_id;
-use ic_types::crypto::{KeyId, KeyPurpose, UserPublicKey};
+use ic_types::crypto::KeyPurpose;
 use ic_types::{NodeId, RegistryVersion};
 use std::sync::Arc;
 
@@ -273,45 +273,6 @@ fn add_tls_cert_to_registry(
             Some(cert),
         )
         .expect("Could not add TLS cert key to registry");
-}
-
-pub fn add_keys_to_registry(
-    registry: Arc<ProtoRegistryDataProvider>,
-    keys: Vec<(KeyId, UserPublicKey)>,
-) -> Vec<NodeId> {
-    let mut node_ids = Vec::new();
-    for (node_id_index, (_key_id, pk)) in keys.iter().enumerate() {
-        let node_id = node_test_id(node_id_index as u64);
-        add_user_pk_to_registry(
-            node_id,
-            pk.to_owned(),
-            Arc::clone(&registry),
-            RegistryVersion::from(1),
-        );
-        node_ids.push(node_id);
-    }
-    node_ids
-}
-
-fn add_user_pk_to_registry(
-    node_id: NodeId,
-    pk: UserPublicKey,
-    registry: Arc<ProtoRegistryDataProvider>,
-    version: RegistryVersion,
-) {
-    let pk = PublicKey {
-        algorithm: pk.algorithm_id as i32,
-        key_value: pk.key,
-        version: 0,
-        proof_data: None,
-    };
-    registry
-        .add(
-            &make_crypto_node_key(node_id, KeyPurpose::NodeSigning),
-            version,
-            Some(pk),
-        )
-        .expect("Could not add keys to registry");
 }
 
 fn add_public_key_to_registry(

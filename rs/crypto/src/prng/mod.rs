@@ -1,6 +1,5 @@
 //! Offers cryptographically secure pseudorandom number generation (CSPRNG).
-use ic_crypto_internal_types::context::{Context, DomainSeparationContext};
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha256::{DomainSeparationContext, Sha256};
 use ic_interfaces::crypto::CryptoHashable;
 use ic_types::consensus::{RandomBeacon, RandomTape};
 use ic_types::Randomness;
@@ -65,8 +64,8 @@ impl Csprng {
 
     /// Creates a CSPRNG seed from the given crypto hashable.
     fn seed_from_crypto_hashable<T: CryptoHashable>(crypto_hashable: &T) -> Randomness {
-        let mut hasher = Sha256::new();
-        hasher.write(DomainSeparationContext::new(crypto_hashable.domain()).as_bytes());
+        let mut hasher =
+            Sha256::new_with_context(&DomainSeparationContext::new(crypto_hashable.domain()));
         crypto_hashable.hash(&mut hasher);
         Randomness::from(hasher.finish())
     }

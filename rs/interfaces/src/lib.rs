@@ -10,6 +10,7 @@ pub mod consensus;
 pub mod consensus_pool;
 pub mod crypto;
 pub mod dkg;
+pub mod ecdsa;
 pub mod execution_environment;
 pub mod gossip_pool;
 pub mod ingress_manager;

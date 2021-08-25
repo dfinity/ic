@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 package state.v1;
+
 import "state/sync/v1/manifest.proto";
 
 message StateMetadata {
@@ -8,5 +9,9 @@ message StateMetadata {
 }
 
 message StatesMetadata {
+    // Checkpoint metadata indexed by height.
     map<uint64, StateMetadata> by_height = 1;
+
+    // The largest height passed to `StateManager::remove_states_below()`.
+    uint64 oldest_required_state = 2;
 }

@@ -1,4 +1,3 @@
-use crate::keygen::keygen_internal::KeyGenInternal;
 use crate::{key_from_registry, CryptoComponentFatClient};
 use ic_crypto_internal_csp::keygen::{forward_secure_key_id, public_key_hash_as_key_id};
 use ic_crypto_internal_csp::types::conversions::CspPopFromPublicKeyProtoError;
@@ -8,32 +7,14 @@ use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_interfaces::crypto::{KeyManager, Keygen};
+use ic_interfaces::crypto::KeyManager;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client::helper::crypto::CryptoRegistry;
-use ic_types::crypto::{
-    AlgorithmId, CommitteeMemberPublicKey, CryptoError, CryptoResult, KeyId, KeyPurpose,
-    UserPublicKey,
-};
+use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, KeyPurpose};
 use ic_types::RegistryVersion;
 use std::convert::TryFrom;
 use std::sync::Arc;
-
-mod keygen_internal;
-
-#[cfg(test)]
-mod tests;
-
-impl<C: CryptoServiceProvider> Keygen for CryptoComponentFatClient<C> {
-    fn generate_user_keys_ed25519(&self) -> CryptoResult<(KeyId, UserPublicKey)> {
-        KeyGenInternal::generate_user_keys_ed25519(&self.csp)
-    }
-
-    fn generate_committee_member_keys(&self) -> CryptoResult<(KeyId, CommitteeMemberPublicKey)> {
-        KeyGenInternal::generate_committee_member_keys(&self.csp)
-    }
-}
 
 impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
     fn node_public_keys(&self) -> NodePublicKeys {

@@ -72,27 +72,32 @@ impl HttpClient {
             .await
             .map_err(|e| format!("HttpClient: Request timed out for {:?}: {:?}", uri, e))?;
         let response = result.map_err(|e| format!("Request failed for {:?}: {:?}", uri, e))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "HTTP Client: Request for {:?} failed: {:?}",
-                uri, response
-            ));
-        }
-        tokio::time::timeout_at(deadline, hyper::body::to_bytes(response))
+        let status = response.status();
+        let parsed_body = tokio::time::timeout_at(deadline, hyper::body::to_bytes(response))
             .await
             .map_err(|e| {
                 format!(
-                    "HttpClient: hyper::body::to_bytes() timed out for {:?}: {:?}",
-                    uri, e
+                    "HttpClient: Request to {:?} timed out while waiting for body: {:?}. Returned status {:?}.",
+                    uri, e, status.canonical_reason().unwrap_or("empty status"),
                 )
             })?
             .map(|bytes| bytes.to_vec())
             .map_err(|e| {
                 format!(
-                    "HttpClient: Request failed to get bytes for {:?}: {:?}",
-                    uri, e
+                    "HttpClient: Request to {:?} failed to get bytes: {:?}. Returned status: {:?}.",
+                    uri, e, status.canonical_reason().unwrap_or("empty status"),
                 )
-            })
+            })?;
+        if !status.is_success() {
+            let readable_response = std::str::from_utf8(&parsed_body);
+            return Err(format!(
+                "HTTP Client: Request to {:?} failed with {:?}, {:?}",
+                uri,
+                status.canonical_reason().unwrap_or("empty status"),
+                readable_response,
+            ));
+        }
+        Ok(parsed_body)
     }
 
     pub(crate) async fn get_with_response(

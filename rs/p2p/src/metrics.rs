@@ -1,57 +1,6 @@
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
 
-/// The P2P metrics.
-#[derive(Debug, Clone)]
-pub struct P2PMetrics {
-    /// The run duration.
-    pub run_duration: Histogram,
-    /// The advert queue size.
-    pub advert_queue_size: IntGauge,
-    /// The chunk queue size.
-    pub chunk_queue_size: IntGauge,
-    /// The chunk request queue size.
-    pub request_queue_size: IntGauge,
-    /// The ingress message queue size.
-    pub user_ingress_queue_size: IntGauge,
-    /// The number of reported sender errors.
-    pub sender_errors_reported: IntGauge,
-}
-
-impl P2PMetrics {
-    /// The constructor returns a `P2PMetrics` instance.
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
-        Self {
-            run_duration: metrics_registry.histogram(
-                "p2p_run_duration",
-                "The time it takes to call P2PImpl.run, in seconds",
-                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms
-                decimal_buckets(-4, -1),
-            ),
-            advert_queue_size: metrics_registry.int_gauge(
-                "gossip_advert_queue_size_deprecated",
-                "Adverts received by transport and not yet delivered to Gossip",
-            ),
-            chunk_queue_size: metrics_registry.int_gauge(
-                "gossip_chunk_queue_size_deprecated",
-                "Chunks received by transport and not yet delivered to Gossip",
-            ),
-            request_queue_size: metrics_registry.int_gauge(
-                "gossip_request_queue_size_deprecated",
-                "Requests received by transport but not yet delivered to Gossip",
-            ),
-            user_ingress_queue_size: metrics_registry.int_gauge(
-                "gossip_user_ingress_queue_size_deprecated",
-                "User ingress messages received by P2P but not yet delivered to Gossip",
-            ),
-            sender_errors_reported: metrics_registry.int_gauge(
-                "gossip_sender_errors_reported",
-                "Errors reported by the sender which possibly caused a retransmission request",
-            ),
-        }
-    }
-}
-
 /// The *Gossip* metrics.
 #[derive(Debug, Clone)]
 pub struct GossipMetrics {

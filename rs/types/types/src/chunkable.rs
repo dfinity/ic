@@ -90,6 +90,7 @@ pub enum SingleChunked {
     Ingress,
     Certification,
     Dkg,
+    Ecdsa,
 }
 
 /// Interface providing access to artifact chunks.

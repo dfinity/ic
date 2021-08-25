@@ -3,6 +3,7 @@ use ic_types::consensus::certification::CertificationMessage;
 use ic_types::consensus::dkg as consensus_dkg;
 use ic_types::consensus::{
     certification::{Certification, CertificationContent, CertificationShare},
+    ecdsa::EcdsaMessage,
     BasicSignature, Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
     CatchUpShareContent, ConsensusMessage, FinalizationContent, HashedBlock, MultiSignature,
     MultiSignatureShare, NotarizationContent, RandomBeaconContent, RandomTapeContent,
@@ -61,6 +62,7 @@ const DOMAIN_CATCH_UP_PACKAGE_SHARE: &str = "catch_up_package_share_domain";
 const DOMAIN_STATE_SYNC_MESSAGE: &str = "state_sync_message_domain";
 const DOMAIN_CONSENSUS_MESSAGE: &str = "consensus_message_domain";
 const DOMAIN_CERTIFICATION_MESSAGE: &str = "certification_message_domain";
+const DOMAIN_ECDSA_MESSAGE: &str = "ecdsa_message_domain";
 
 /// A cryptographically hashable type.
 pub trait CryptoHashable: CryptoHashDomain + Hash {}
@@ -138,6 +140,7 @@ mod private {
     impl CryptoHashDomainSeal for StateSyncMessage {}
     impl CryptoHashDomainSeal for ConsensusMessage {}
     impl CryptoHashDomainSeal for CertificationMessage {}
+    impl CryptoHashDomainSeal for EcdsaMessage {}
 
     impl CryptoHashDomainSeal for CryptoHashableTestDummy {}
 }
@@ -327,6 +330,12 @@ impl CryptoHashDomain for ConsensusMessage {
 impl CryptoHashDomain for CertificationMessage {
     fn domain(&self) -> String {
         DOMAIN_CERTIFICATION_MESSAGE.to_string()
+    }
+}
+
+impl CryptoHashDomain for EcdsaMessage {
+    fn domain(&self) -> String {
+        DOMAIN_ECDSA_MESSAGE.to_string()
     }
 }
 

@@ -25,11 +25,11 @@ use dkg::{
 use ic_crypto_internal_threshold_sig_bls12381 as clib;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1 as dkg;
-use ic_crypto_internal_types::context::{Context, DomainSeparationContext};
 use ic_crypto_internal_types::sign::threshold_sig::dkg::encryption_public_key::{
     CspEncryptionPublicKey, InternalCspEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
+use ic_crypto_sha256::{Context, DomainSeparationContext};
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{IDkgId, NodeIndex, NumberOfNodes, Randomness};
 use openssl::sha::Sha256;

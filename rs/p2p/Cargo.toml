@@ -6,12 +6,12 @@ edition = "2018"
 [dependencies]
 futures = "0.3.10"
 async-trait = "0.1.36"
-tokio = { version = "1.2.0", features = ["full"] }
 enum-map = "0.6.2"
 lru = { version = "0.6.0", default-features = false }
 ic-base-thread = { path = "../base/thread" }
 ic-config = { path = "../config" }
 ic-crypto = { path = "../crypto" }
+ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces = { path = "../interfaces" }
@@ -26,6 +26,7 @@ ic-registry-client = { path = "../registry/client" }
 ic-state-manager = { path = "../state_manager" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-transport = { path = "../transport" }
 bincode = "1.2.1"
 crossbeam-channel = "0.5.0"
 linked-hash-map = "0.5.3"
@@ -34,6 +35,7 @@ serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 strum = "0.18.0"
 strum_macros = "0.18.0"
+tokio = { version = "1.9.0", features = ["full"] }
 
 [dev-dependencies]
 ic-consensus-message = { path = "../consensus/message" }

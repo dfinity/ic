@@ -1,4 +1,4 @@
-use ic_crypto_internal_types::context::Context;
+use ic_crypto_sha256::Context;
 use ic_crypto_sha256::Sha256;
 
 pub fn main(args: &[String]) -> Result<(), (String, i32)> {
@@ -15,8 +15,7 @@ fn usage() -> Result<(), (String, i32)> {
 fn core(domain_separator: &str, message: &str) -> Result<(), (String, i32)> {
     let context = domain_separator.as_bytes();
     let data = message.as_bytes();
-    let mut state = Sha256::new();
-    state.write(ByteWrapper::new(&context).as_bytes());
+    let mut state = Sha256::new_with_context(&ByteWrapper::new(&context));
     state.write(&data);
     let digest = state.finish();
     // TODO(DFN-1350): Digest doesn't provide a default stringification. Use base64.

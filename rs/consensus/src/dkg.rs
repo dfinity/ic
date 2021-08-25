@@ -1394,9 +1394,13 @@ mod tests {
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_interfaces::{
         artifact_pool::UnvalidatedArtifact, consensus_pool::ConsensusPool, dkg::MutableDkgPool,
+        registry::RegistryVersionedRecord,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetRecord,
+    };
     use ic_replicated_state::metadata_state::SubnetCallContext;
     use ic_test_utilities::{
         consensus::fake::FakeContentSigner,
@@ -1410,13 +1414,14 @@ mod tests {
     };
     use ic_types::{
         batch::BatchPayload,
+        consensus::HasVersion,
         crypto::threshold_sig::ni_dkg::{
             NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
         time::UNIX_EPOCH,
-        RegistryVersion,
+        PrincipalId, RegistryVersion, ReplicaVersion,
     };
-    use std::{collections::BTreeSet, ops::Deref};
+    use std::{collections::BTreeSet, convert::TryFrom, ops::Deref};
 
     #[test]
     // In this test we test the creation of dealing payloads.
@@ -3473,5 +3478,149 @@ mod tests {
                 assert_eq!(next_transcript.dkg_id.start_block_height, Height::from(15));
             }
         });
+    }
+
+    /// `RegistryClient` implementation that allows to provide a custom function
+    /// to provide a `get_versioned_value`.
+    struct MockRegistryClient<F>
+    where
+        F: Fn(&str, RegistryVersion) -> Option<Vec<u8>>,
+    {
+        latest_registry_version: RegistryVersion,
+        get_versioned_value_fun: F,
+    }
+
+    impl<F> MockRegistryClient<F>
+    where
+        F: Fn(&str, RegistryVersion) -> Option<Vec<u8>>,
+    {
+        fn new(latest_registry_version: RegistryVersion, get_versioned_value_fun: F) -> Self {
+            Self {
+                latest_registry_version,
+                get_versioned_value_fun,
+            }
+        }
+    }
+
+    impl<F> RegistryClient for MockRegistryClient<F>
+    where
+        F: Fn(&str, RegistryVersion) -> Option<Vec<u8>> + Send + Sync,
+    {
+        fn get_versioned_value(
+            &self,
+            key: &str,
+            version: RegistryVersion,
+        ) -> ic_interfaces::registry::RegistryClientVersionedResult<Vec<u8>> {
+            let value = (self.get_versioned_value_fun)(key, version);
+            Ok(RegistryVersionedRecord {
+                key: key.to_string(),
+                version,
+                value,
+            })
+        }
+
+        // Not needed for this test
+        fn get_key_family(
+            &self,
+            _: &str,
+            _: RegistryVersion,
+        ) -> Result<Vec<String>, RegistryClientError> {
+            Ok(vec![])
+        }
+
+        fn get_latest_version(&self) -> RegistryVersion {
+            self.latest_registry_version
+        }
+
+        // Not needed for this test
+        fn get_version_timestamp(&self, _: RegistryVersion) -> Option<Time> {
+            None
+        }
+    }
+
+    /// Creates a Protobuf `InitialNiDkgTranscriptRecord`. Used in the test
+    /// below.
+    fn dummy_initial_dkg_transcript(
+        committee: Vec<NodeId>,
+        tag: NiDkgTag,
+    ) -> InitialNiDkgTranscriptRecord {
+        let threshold = committee.len() as u32 / 3 + 1;
+        let transcript =
+            NiDkgTranscript::dummy_transcript_for_tests_with_params(committee, tag, threshold, 0);
+        InitialNiDkgTranscriptRecord {
+            id: Some(transcript.dkg_id.into()),
+            threshold: transcript.threshold.get().get(),
+            committee: transcript
+                .committee
+                .iter()
+                .map(|(_, c)| c.get().to_vec())
+                .collect(),
+            registry_version: 1,
+            internal_csp_transcript: serde_cbor::to_vec(&transcript.internal_csp_transcript)
+                .unwrap(),
+        }
+    }
+
+    #[test]
+    fn test_make_registry_cup() {
+        let registry_client = MockRegistryClient::new(RegistryVersion::from(12345), |key, _| {
+            use prost::Message;
+            if key.starts_with("catch_up_package_contents_") {
+                // Build a dummy cup
+                let committee = vec![NodeId::from(PrincipalId::new_node_test_id(0))];
+                let cup =
+                    CatchUpPackageContents {
+                        initial_ni_dkg_transcript_low_threshold: Some(
+                            dummy_initial_dkg_transcript(committee.clone(), NiDkgTag::LowThreshold),
+                        ),
+                        initial_ni_dkg_transcript_high_threshold: Some(
+                            dummy_initial_dkg_transcript(committee, NiDkgTag::HighThreshold),
+                        ),
+                        height: 54321,
+                        time: 1,
+                        state_hash: vec![1, 2, 3, 4, 5],
+                        registry_store_uri: None,
+                    };
+
+                // Encode the cup to protobuf
+                let mut value = Vec::with_capacity(cup.encoded_len());
+                cup.encode(&mut value).unwrap();
+                Some(value)
+            } else if key.starts_with("subnet_record_") {
+                // Build a dummy subnet record. The only value used from this are the
+                // `membership` and `dkg_interval_length` fields.
+                let subnet_record = SubnetRecord {
+                    membership: vec![PrincipalId::new_subnet_test_id(1).to_vec()],
+                    dkg_interval_length: 99,
+                    replica_version_id: "TestID".to_string(),
+                    ..SubnetRecord::default()
+                };
+
+                // Encode the `SubnetRecord` to protobuf
+                let mut value = Vec::with_capacity(subnet_record.encoded_len());
+                subnet_record.encode(&mut value).unwrap();
+                Some(value)
+            } else {
+                None
+            }
+        });
+        let result = make_registry_cup(&registry_client, subnet_test_id(0), None).unwrap();
+        assert_eq!(
+            result.content.state_hash.get_ref(),
+            &CryptoHash(vec![1, 2, 3, 4, 5])
+        );
+        assert_eq!(
+            result.content.block.get_value().context.registry_version,
+            RegistryVersion::from(12345)
+        );
+        assert_eq!(
+            result.content.block.get_value().context.certified_height,
+            Height::from(54321)
+        );
+        assert_eq!(
+            result.content.version(),
+            &ReplicaVersion::try_from("TestID").unwrap()
+        );
+        assert_eq!(result.signature.signer.dealer_subnet, subnet_test_id(0));
     }
 }

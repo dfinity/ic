@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use ic_crypto_internal_types::context::Context;
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha256::{Context, Sha256};
 use std::hash::Hash;
 
 const EXPECTED_DIGEST: [u8; 32] = [
@@ -93,11 +92,10 @@ fn should_panic_on_calling_finish_of_std_hash_hasher() {
 
 #[test]
 fn test_sha256_with_nonempty_context_and_nonempty_input() {
-    let context = [0x11, 0x22, 0x33, 0x44];
+    let context = TestContext::new(&[0x11, 0x22, 0x33, 0x44]);
     let data = b"data";
 
-    let mut state = Sha256::new();
-    state.write(TestContext::new(&context).as_bytes());
+    let mut state = Sha256::new_with_context(&context);
     state.write(data);
     let digest = state.finish();
 
@@ -114,11 +112,10 @@ fn test_sha256_with_nonempty_context_and_nonempty_input() {
 
 #[test]
 fn test_sha256_with_empty_context_and_emtpy_data() {
-    let context = [];
+    let context = TestContext::new(&[]);
     let data = b"";
 
-    let mut state = Sha256::new();
-    state.write(TestContext::new(&context).as_bytes());
+    let mut state = Sha256::new_with_context(&context);
     state.write(data);
     let digest = state.finish();
 
@@ -135,11 +132,10 @@ fn test_sha256_with_empty_context_and_emtpy_data() {
 
 #[test]
 fn test_sha256_with_nonempty_context_and_emtpy_input() {
-    let context = [0x11, 0x22, 0x33, 0x44];
+    let context = TestContext::new(&[0x11, 0x22, 0x33, 0x44]);
     let data = b"";
 
-    let mut state = Sha256::new();
-    state.write(TestContext::new(&context).as_bytes());
+    let mut state = Sha256::new_with_context(&context);
     state.write(data);
     let digest = state.finish();
 
@@ -156,11 +152,10 @@ fn test_sha256_with_nonempty_context_and_emtpy_input() {
 
 #[test]
 fn test_sha256_with_empty_context_and_nonempty_input() {
-    let context = [];
+    let context = TestContext::new(&[]);
     let data = b"data";
 
-    let mut state = Sha256::new();
-    state.write(TestContext::new(&context).as_bytes());
+    let mut state = Sha256::new_with_context(&context);
     state.write(data);
     let digest = state.finish();
 
@@ -179,8 +174,7 @@ fn test_sha256_with_empty_context_and_nonempty_input() {
 fn should_produce_same_sha256_digest_as_if_openssl_sha256_was_used_directly() {
     let context = TestContext::new(b"context");
 
-    let mut lib_state = Sha256::new();
-    lib_state.write(context.as_bytes());
+    let mut lib_state = Sha256::new_with_context(&context);
     lib_state.write(b"some data!");
     let lib_digest = lib_state.finish();
 

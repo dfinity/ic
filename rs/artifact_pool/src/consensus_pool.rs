@@ -842,11 +842,9 @@ mod tests {
             .collect();
 
             pool.apply_changes(time_source.as_ref(), changeset);
-            // We let the pool apply empty change set, so that it triggers the backup,
-            // which will block on the previous backup execution, which is running
-            // asynchronously. This way, we make sure the backup is written and the test
-            // can continue.
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            // We sync the backup before checking the asserts to make sure all backups have
+            // been written.
+            pool.backup.as_ref().unwrap().sync_backup();
 
             // Check backup for height 0
             assert!(
@@ -1000,20 +998,12 @@ mod tests {
             );
 
             // Now we fast-forward the time for purging being definitely overdue.
-            // Before we purge, we sleep for one purging interval, making sure artifacts are
-            // old enough. Then we sleep again so that the group folder is
-            // removed as well. Note that we measure the age of artifacts using
-            // the FS timestamp and cannot fast-forward it.
-            for _ in 0..2 {
-                let sleep_time = purging_interval;
-                std::thread::sleep(sleep_time);
-                time_source
-                    .set_time(time_source.get_relative_time() + sleep_time)
-                    .unwrap();
-                // This should cause purging.
-                pool.apply_changes(time_source.as_ref(), Vec::new());
-                pool.apply_changes(time_source.as_ref(), Vec::new());
-            }
+            std::thread::sleep(purging_interval);
+            time_source
+                .set_time(time_source.get_relative_time() + purging_interval)
+                .unwrap();
+            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.backup.as_ref().unwrap().sync_purging();
 
             // Make sure the subnet directory is empty, as we purged everything.
             assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
@@ -1026,7 +1016,7 @@ mod tests {
                 .set_time(time_source.get_relative_time() + sleep_time)
                 .unwrap();
             pool.apply_changes(time_source.as_ref(), Vec::new());
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.backup.as_ref().unwrap().sync_purging();
             assert!(!path.exists());
         })
     }
@@ -1090,15 +1080,10 @@ mod tests {
                 .map(ChangeAction::AddToValidated)
                 .collect();
 
-            // Trigger purging timestamp to update.
-            pool.apply_changes(time_source.as_ref(), Vec::new());
-            // sync
-            pool.apply_changes(time_source.as_ref(), Vec::new());
-
             // Apply changes
             pool.apply_changes(time_source.as_ref(), changeset);
             // sync
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.backup.as_ref().unwrap().sync_backup();
 
             let group_path = &path.join("0");
             // We expect 3 folders for heights 0 to 2.
@@ -1119,7 +1104,7 @@ mod tests {
 
             pool.apply_changes(time_source.as_ref(), changeset);
             // sync
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.backup.as_ref().unwrap().sync_backup();
 
             // We expect 5 folders for heights 0 to 4.
             assert_eq!(fs::read_dir(&group_path).unwrap().count(), 5);
@@ -1135,7 +1120,7 @@ mod tests {
             // Trigger the purging.
             pool.apply_changes(time_source.as_ref(), Vec::new());
             // sync
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.backup.as_ref().unwrap().sync_purging();
 
             // We expect only 2 folders to survive the purging: 3, 4
             assert_eq!(fs::read_dir(&group_path).unwrap().count(), 2);
@@ -1151,7 +1136,7 @@ mod tests {
             // Trigger the purging.
             pool.apply_changes(time_source.as_ref(), Vec::new());
             // sync
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.backup.as_ref().unwrap().sync_purging();
 
             // We deleted all artifacts, but the group folder was updated by this and needs
             // to age now.
@@ -1167,7 +1152,7 @@ mod tests {
             // Trigger the purging.
             pool.apply_changes(time_source.as_ref(), Vec::new());
             // sync
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.backup.as_ref().unwrap().sync_purging();
 
             // The group folder expired and was deleted.
             assert!(!group_path.exists());
@@ -1183,7 +1168,7 @@ mod tests {
             // Trigger the purging.
             pool.apply_changes(time_source.as_ref(), Vec::new());
             // sync
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.backup.as_ref().unwrap().sync_purging();
 
             // The subnet_id folder expired and was deleted.
             assert!(!path.exists());

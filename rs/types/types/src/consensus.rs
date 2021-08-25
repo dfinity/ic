@@ -16,6 +16,7 @@ use std::hash::Hash;
 pub mod catchup;
 pub mod certification;
 pub mod dkg;
+pub mod ecdsa;
 pub mod hashed;
 mod payload;
 pub mod thunk;

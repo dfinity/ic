@@ -1,13 +1,12 @@
 #![allow(clippy::unwrap_used)]
-use crate::keygen_utils::{add_keys_to_registry, TestKeygenCrypto};
+use crate::keygen_utils::TestKeygenCrypto;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::utils::{
     get_node_keys_or_generate_if_missing, NodeKeysToGenerate, TempCryptoComponent,
 };
 use ic_crypto::CryptoComponent;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
-use ic_interfaces::crypto::{BasicSigner, KeyManager, Keygen, SignableMock};
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces::crypto::KeyManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -15,17 +14,12 @@ use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::types::ids::node_test_id;
-use ic_types::crypto::{AlgorithmId, CryptoError, KeyId, KeyPurpose, UserPublicKey};
-use ic_types::{NodeId, RegistryVersion};
-use std::sync::mpsc::Receiver;
-use std::sync::{mpsc, Arc};
-use std::thread;
-use std::time::Duration;
+use ic_types::crypto::{AlgorithmId, CryptoError, KeyPurpose};
+use ic_types::RegistryVersion;
+use std::sync::Arc;
 
 mod keygen_utils;
 
-const NUM_THREADS: i32 = 20;
-const NUM_KEY_GEN_CALLS: i32 = 25;
 const REG_V1: RegistryVersion = RegistryVersion::new(1);
 const NODE_ID: u64 = 42;
 
@@ -88,35 +82,6 @@ fn should_provide_public_keys_via_crypto_for_non_replica_process() {
         let retrieved_node_pks = crypto.node_public_keys();
         assert!(all_node_keys_are_present(&retrieved_node_pks));
         assert_eq!(created_node_pks, retrieved_node_pks);
-    })
-}
-
-#[test]
-fn should_sign_with_keys_generated_in_multiple_threads() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        let registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
-        let crypto_component = crypto_component(
-            &config,
-            Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
-        );
-        let (initial_sender, receiver) = mpsc::channel();
-
-        for _ in 0..NUM_THREADS {
-            let crypto_component = Arc::clone(&crypto_component);
-            let sender = mpsc::Sender::clone(&initial_sender);
-            thread::spawn(move || {
-                for _ in 0..NUM_KEY_GEN_CALLS {
-                    let result = crypto_component.generate_user_keys_ed25519();
-                    sender.send(result).unwrap();
-                }
-            });
-        }
-        let keys = receive_keys_from_threads(receiver, NUM_THREADS * NUM_KEY_GEN_CALLS);
-        let node_ids = add_keys_to_registry(Arc::clone(&data_provider), keys);
-
-        registry_client.update_to_latest_version();
-        assert_sign_is_successful_for_node_ids(crypto_component, node_ids);
     })
 }
 
@@ -593,49 +558,6 @@ fn should_succeed_check_keys_with_registry_if_all_keys_are_present() {
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
     assert!(result.is_ok());
-}
-
-fn crypto_component(
-    config: &CryptoConfig,
-    registry_client: Arc<dyn RegistryClient>,
-) -> Arc<CryptoComponent> {
-    Arc::new(CryptoComponent::new_with_fake_node_id(
-        config,
-        registry_client,
-        node_test_id(NODE_ID), /* we set the node id to a constant since it is currently
-                                * irrelevant for these tests. */
-        no_op_logger(),
-    ))
-}
-
-fn receive_keys_from_threads(
-    receiver: Receiver<Result<(KeyId, UserPublicKey), CryptoError>>,
-    num_calls: i32,
-) -> Vec<(KeyId, UserPublicKey)> {
-    let mut keys: Vec<(KeyId, UserPublicKey)> = Vec::new();
-    for _ in 0..num_calls {
-        let result = receiver.recv_timeout(Duration::from_secs(3));
-        let (key_id, pk) = result
-            .expect("The channel did not contain a result as expected. ")
-            .expect("Generating the user key was not successful");
-        keys.push((key_id, pk));
-    }
-    keys
-}
-
-fn assert_sign_is_successful_for_node_ids(
-    crypto_component: Arc<CryptoComponent>,
-    node_ids: Vec<NodeId>,
-) {
-    for node_id in node_ids {
-        assert!(crypto_component
-            .sign_basic(&dummy_message(), node_id, REG_V1)
-            .is_ok());
-    }
-}
-
-fn dummy_message() -> SignableMock {
-    SignableMock::new(b"message".to_vec())
 }
 
 fn well_formed_dkg_dealing_encryption_pk() -> PublicKey {

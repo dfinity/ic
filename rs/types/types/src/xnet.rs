@@ -1,7 +1,5 @@
 //! Types used by the Xnet component.
-use crate::{
-    consensus::certification::Certification, messages::RequestOrResponse, CanisterId, CountBytes,
-};
+use crate::{consensus::certification::Certification, messages::RequestOrResponse, CanisterId};
 use phantom_newtype::{AmountOf, Id};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -237,12 +235,6 @@ pub struct CertifiedStreamSlice {
 
     /// The certification of the root hash.
     pub certification: Certification,
-}
-
-impl CountBytes for CertifiedStreamSlice {
-    fn count_bytes(&self) -> usize {
-        self.payload.len() + self.merkle_proof.len() + self.certification.count_bytes()
-    }
 }
 
 pub struct SessionTag {}

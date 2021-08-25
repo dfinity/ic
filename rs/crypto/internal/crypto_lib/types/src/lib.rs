@@ -24,7 +24,6 @@
 //! * Note that the same pattern as for external types could be used for CSP
 //!   types at a later point, so that accessing the internal CSP type would
 //!   require an import in Cargo.toml.
-pub mod context;
 pub mod curves;
 pub mod encrypt;
 pub mod scope;

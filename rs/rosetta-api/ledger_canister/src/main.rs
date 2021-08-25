@@ -128,10 +128,7 @@ async fn send(
     let caller_principal_id = caller();
 
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
-        panic!(
-            "Sending from non-self-authenticating principal or non-whitelisted canister is not allowed: {}",
-            caller_principal_id
-        );
+        panic!("Sending from {} is not allowed", caller_principal_id);
     }
 
     let from = AccountIdentifier::new(caller_principal_id, from_subaccount);
@@ -196,10 +193,7 @@ pub async fn notify(
     let caller_principal_id = caller();
 
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
-        panic!(
-            "Notifying from non-self-authenticating principal or non-whitelisted canister is not allowed: {}",
-            caller_principal_id
-        );
+        panic!("Notifying from {} is not allowed", caller_principal_id);
     }
 
     let expected_from = AccountIdentifier::new(caller_principal_id, from_subaccount);

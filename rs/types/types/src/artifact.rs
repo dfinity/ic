@@ -30,8 +30,8 @@ use strum_macros::EnumIter;
 
 pub use crate::{
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, ConsensusMessage,
-        ConsensusMessageAttribute,
+        certification::CertificationMessage, dkg::Message as DkgMessage, ecdsa::EcdsaMessage,
+        ConsensusMessage, ConsensusMessageAttribute,
     },
     messages::SignedIngress,
 };
@@ -45,6 +45,7 @@ pub enum Artifact {
     IngressMessage(SignedRequestBytes),
     CertificationMessage(CertificationMessage),
     DkgMessage(DkgMessage),
+    EcdsaMessage(EcdsaMessage),
     FileTreeSync(FileTreeSyncArtifact),
     StateSync(StateSyncMessage),
 }
@@ -57,6 +58,7 @@ pub enum ArtifactAttribute {
     IngressMessage(IngressMessageAttribute),
     DkgMessage(DkgMessageAttribute),
     CertificationMessage(CertificationMessageAttribute),
+    EcdsaMessage(EcdsaMessageAttribute),
     FileTreeSync(FileTreeSyncAttribute),
     StateSync(StateSyncAttribute),
 }
@@ -69,6 +71,7 @@ pub enum ArtifactId {
     IngressMessage(IngressMessageId),
     CertificationMessage(CertificationMessageId),
     DkgMessage(DkgMessageId),
+    EcdsaMessage(EcdsaMessageId),
     FileTreeSync(FileTreeSyncId),
     StateSync(StateSyncArtifactId),
 }
@@ -82,6 +85,7 @@ pub enum ArtifactTag {
     IngressArtifact,
     CertificationArtifact,
     DkgArtifact,
+    EcdsaArtifact,
     FileTreeSyncArtifact,
     StateSyncArtifact,
 }
@@ -96,6 +100,7 @@ impl std::fmt::Display for ArtifactTag {
                 ArtifactTag::IngressArtifact => "Ingress",
                 ArtifactTag::CertificationArtifact => "Certification",
                 ArtifactTag::DkgArtifact => "DKG",
+                ArtifactTag::EcdsaArtifact => "ECDSA",
                 ArtifactTag::FileTreeSyncArtifact => "FileTreeSync",
                 ArtifactTag::StateSyncArtifact => "StateSync",
             }
@@ -110,6 +115,7 @@ impl From<&ArtifactId> for ArtifactTag {
             ArtifactId::IngressMessage(_) => ArtifactTag::IngressArtifact,
             ArtifactId::CertificationMessage(_) => ArtifactTag::CertificationArtifact,
             ArtifactId::DkgMessage(_) => ArtifactTag::DkgArtifact,
+            ArtifactId::EcdsaMessage(_) => ArtifactTag::EcdsaArtifact,
             ArtifactId::FileTreeSync(_) => ArtifactTag::FileTreeSyncArtifact,
             ArtifactId::StateSync(_) => ArtifactTag::StateSyncArtifact,
         }
@@ -125,6 +131,7 @@ impl From<&Artifact> for ArtifactTag {
             Artifact::IngressMessage(_) => ArtifactTag::IngressArtifact,
             Artifact::CertificationMessage(_) => ArtifactTag::CertificationArtifact,
             Artifact::DkgMessage(_) => ArtifactTag::DkgArtifact,
+            Artifact::EcdsaMessage(_) => ArtifactTag::EcdsaArtifact,
             Artifact::FileTreeSync(_) => ArtifactTag::FileTreeSyncArtifact,
             Artifact::StateSync(_) => ArtifactTag::StateSyncArtifact,
         }
@@ -394,6 +401,18 @@ pub type DkgMessageId = CryptoHashOf<DkgMessage>;
 pub struct DkgMessageAttribute {
     pub interval_start_height: Height,
 }
+
+// -----------------------------------------------------------------------------
+// ECDSA artifacts
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EcdsaMessageId;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EcdsaMessageAttribute;
+
+#[derive(Default, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EcdsaMessageFilter;
 
 // ------------------------------------------------------------------------------
 // StateSync artifacts.

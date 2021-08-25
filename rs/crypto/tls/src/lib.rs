@@ -55,7 +55,7 @@ impl TlsPrivateKey {
     }
 
     /// Returns the private key as an OpenSSL struct
-    pub fn as_pkey(&self) -> &PKey<Private> {
+    fn as_pkey(&self) -> &PKey<Private> {
         &self.private_key
     }
 }

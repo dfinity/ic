@@ -188,26 +188,6 @@ impl From<KeyPurpose> for AlgorithmId {
     }
 }
 
-/// A public key.
-#[derive(Debug)]
-pub enum PublicKey {
-    UserPublicKey(UserPublicKey),
-    NodePublicKey(NodePublicKey),
-    IcpPublicKey(IcpPublicKey),
-    CommitteeMemberPublicKey(CommitteeMemberPublicKey),
-}
-
-impl CountBytes for PublicKey {
-    fn count_bytes(&self) -> usize {
-        match self {
-            PublicKey::UserPublicKey(key) => key.count_bytes(),
-            PublicKey::NodePublicKey(key) => key.count_bytes(),
-            PublicKey::IcpPublicKey(key) => key.count_bytes(),
-            PublicKey::CommitteeMemberPublicKey(key) => key.count_bytes(),
-        }
-    }
-}
-
 /// A public key of a user interacting with the IC.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserPublicKey {
@@ -230,46 +210,6 @@ impl fmt::Display for UserPublicKey {
 impl CountBytes for UserPublicKey {
     fn count_bytes(&self) -> usize {
         self.key.len()
-    }
-}
-
-/// A public key of an IC node.
-#[derive(Debug)]
-pub struct NodePublicKey {
-    pub key: Vec<u8>,
-    pub proof_of_possession: Vec<u8>,
-}
-
-impl CountBytes for NodePublicKey {
-    fn count_bytes(&self) -> usize {
-        self.key.len() + self.proof_of_possession.len()
-    }
-}
-
-/// An ICP public key.
-#[derive(Debug)]
-pub struct IcpPublicKey {
-    pub key: Vec<u8>,
-}
-
-impl CountBytes for IcpPublicKey {
-    fn count_bytes(&self) -> usize {
-        self.key.len()
-    }
-}
-
-/// A public key of a committee member.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CommitteeMemberPublicKey {
-    #[serde(with = "serde_bytes")]
-    pub key: Vec<u8>,
-    #[serde(with = "serde_bytes")]
-    pub proof_of_possession: Vec<u8>,
-}
-
-impl CountBytes for CommitteeMemberPublicKey {
-    fn count_bytes(&self) -> usize {
-        self.key.len() + self.proof_of_possession.len()
     }
 }
 

@@ -13,5 +13,5 @@ phantom_newtype = { path = "../../phantom_newtype" }
 rand = "0.7.3"
 serde = { version = "1.0.99", features = [ "derive" ] }
 strum_macros = "0.18.0"
-tokio = { version = "1.2.0", features = ["net"] }
+tokio = { version = "1.9.0", features = ["net"] }
 tokio-openssl = "0.6.0"

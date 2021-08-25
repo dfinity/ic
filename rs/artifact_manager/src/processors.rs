@@ -11,6 +11,7 @@ use ic_interfaces::{
     consensus::{Consensus, ConsensusGossip},
     consensus_pool::{ChangeAction as ConsensusAction, ConsensusPoolCache, MutableConsensusPool},
     dkg::{ChangeAction as DkgChangeAction, Dkg, DkgGossip, MutableDkgPool},
+    ecdsa::{Ecdsa, EcdsaGossip, MutableEcdsaPool},
     ingress_manager::IngressHandler,
     ingress_pool::{
         ChangeAction as IngressAction, IngressPoolObject, IngressPoolSelect, MutableIngressPool,
@@ -700,5 +701,75 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> ArtifactProcessor<DkgArtif
 
         self.dkg_pool.write().unwrap().apply_changes(change_set);
         (adverts, changed)
+    }
+}
+
+/// ECDSA `OnStateChange` client.
+pub struct EcdsaProcessor<PoolEcdsa> {
+    ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
+    client: Box<dyn Ecdsa>,
+}
+
+impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcdsa> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn build<
+        C: Ecdsa + 'static,
+        G: EcdsaGossip + 'static,
+        S: Fn(Advert<EcdsaArtifact>) + Send + 'static,
+        F: FnOnce() -> (C, G),
+    >(
+        send_advert: S,
+        setup: F,
+        time_source: Arc<SysTimeSource>,
+        ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
+        metrics_registry: MetricsRegistry,
+        rt_handle: tokio::runtime::Handle,
+    ) -> (
+        clients::EcdsaClient<PoolEcdsa>,
+        ArtifactProcessorManager<EcdsaArtifact>,
+    ) {
+        let (ecdsa, ecdsa_gossip) = setup();
+        let client = Self {
+            ecdsa_pool: ecdsa_pool.clone(),
+            client: Box::new(ecdsa),
+        };
+        let manager = ArtifactProcessorManager::new(
+            time_source,
+            metrics_registry,
+            BoxOrArcClient::BoxClient(Box::new(client)),
+            send_advert,
+            rt_handle,
+        );
+        (clients::EcdsaClient::new(ecdsa_pool, ecdsa_gossip), manager)
+    }
+}
+
+impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<EcdsaArtifact>
+    for EcdsaProcessor<PoolEcdsa>
+{
+    fn process_changes(
+        &self,
+        _time_source: &dyn TimeSource,
+        artifacts: Vec<UnvalidatedArtifact<EcdsaMessage>>,
+    ) -> (Vec<Advert<EcdsaArtifact>>, ProcessingResult) {
+        {
+            let mut ecdsa_pool = self.ecdsa_pool.write().unwrap();
+            for artifact in artifacts {
+                ecdsa_pool.insert(artifact)
+            }
+        }
+
+        let change_set = {
+            let ecdsa_pool = self.ecdsa_pool.read().unwrap();
+            self.client.on_state_change(&*ecdsa_pool)
+        };
+        let changed = if !change_set.is_empty() {
+            ProcessingResult::StateChanged
+        } else {
+            ProcessingResult::StateUnchanged
+        };
+
+        self.ecdsa_pool.write().unwrap().apply_changes(change_set);
+        (vec![], changed)
     }
 }

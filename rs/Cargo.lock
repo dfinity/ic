@@ -1227,7 +1227,7 @@ dependencies = [
 [[package]]
 name = "derive_more"
 version = "0.99.8-alpha.0"
-source = "git+https://github.com/dfinity-lab/derive_more?branch=master#9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da"
+source = "git+https://github.com/dfinity-lab/derive_more#9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da"
 dependencies = [
  "proc-macro2 1.0.27",
  "quote 1.0.7",
@@ -2416,9 +2416,11 @@ dependencies = [
  "phantom_newtype",
  "prometheus",
  "proptest 0.9.6",
+ "prost 0.7.0",
  "rand 0.7.3",
  "rand_chacha 0.2.2",
  "rayon",
+ "serde_cbor",
  "slog",
  "slog-async",
  "slog-envlogger",
@@ -2821,6 +2823,7 @@ dependencies = [
  "ic-crypto-internal-bls12381-common",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
+ "ic-crypto-sha256",
  "ic-protobuf",
  "ic-types 0.8.0",
  "pairing",
@@ -2831,6 +2834,14 @@ dependencies = [
  "rand_core 0.5.1",
  "serde",
  "zeroize",
+]
+
+[[package]]
+name = "ic-crypto-internal-sha2"
+version = "0.8.0"
+dependencies = [
+ "openssl",
+ "sha2 0.9.3",
 ]
 
 [[package]]
@@ -2945,9 +2956,8 @@ dependencies = [
 name = "ic-crypto-sha256"
 version = "0.8.0"
 dependencies = [
- "ic-crypto-internal-types",
+ "ic-crypto-internal-sha2",
  "openssl",
- "sha2 0.9.3",
 ]
 
 [[package]]
@@ -3129,7 +3139,7 @@ dependencies = [
  "maplit",
  "memory_tracker",
  "nix 0.20.0",
- "parity-wasm 0.42.1",
+ "parity-wasm",
  "prometheus",
  "proptest 0.9.6",
  "rand 0.7.3",
@@ -3577,6 +3587,7 @@ dependencies = [
  "ic-consensus",
  "ic-consensus-message",
  "ic-crypto",
+ "ic-crypto-tls-interfaces",
  "ic-cycles-account-manager",
  "ic-execution-environment",
  "ic-ingress-manager",
@@ -4192,7 +4203,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "ic-wasm-types",
- "parity-wasm 0.40.3",
+ "parity-wasm",
  "pretty_assertions 0.6.1",
  "wabt",
  "wasmtime",
@@ -5344,7 +5355,7 @@ version = "0.8.0"
 [[package]]
 name = "once_cell"
 version = "1.4.0-alpha.0"
-source = "git+https://github.com/dfinity-lab/once_cell?branch=master#854095347d356e006ea29b7750637a14a20a6dae"
+source = "git+https://github.com/dfinity-lab/once_cell#854095347d356e006ea29b7750637a14a20a6dae"
 
 [[package]]
 name = "once_cell"
@@ -5432,15 +5443,9 @@ dependencies = [
 
 [[package]]
 name = "parity-wasm"
-version = "0.40.3"
+version = "0.42.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e39faaa292a687ea15120b1ac31899b13586446521df6c149e46f1584671e0f"
-
-[[package]]
-name = "parity-wasm"
-version = "0.42.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d17797de36b94bc5f73edad736fd0a77ce5ab64dd622f809c1eead8c91fa6564"
+checksum = "be5e13c266502aadf83426d87d81a0f5d1ef45b8027f5a471c360abfe4bfae92"
 
 [[package]]
 name = "parking_lot"
@@ -7531,9 +7536,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.6.2"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aea337f72e96efe29acc234d803a5981cd9a2b6ed21655cd7fc21cfe021e8ec7"
+checksum = "01cf844b23c6131f624accf65ce0e4e9956a8bb329400ea5bcc26ae3a5c20b0b"
 dependencies = [
  "autocfg 1.0.0",
  "bytes 1.0.1",
@@ -7637,9 +7642,9 @@ checksum = "e987b6bf443f4b5b3b6f38704195592cca41c5bb7aedd3c3693c7081f8289860"
 
 [[package]]
 name = "tracing"
-version = "0.1.25"
+version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01ebdc2bb4498ab1ab5f5b73c5803825e60199229ccba0698170e3be0e7f959f"
+checksum = "09adeb8c97449311ccd28a427f96fb563e7fd31aabf994189879d9da2394b89d"
 dependencies = [
  "cfg-if 1.0.0",
  "pin-project-lite",
@@ -7660,9 +7665,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-core"
-version = "0.1.17"
+version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f50de3927f93d202783f4513cda820ab47ef17f624b03c096e86ef00c67e6b5f"
+checksum = "a9ff14f98b1a4b289c6248a023c1c2fa1491062964e9fed67ab29c4e4da4a052"
 dependencies = [
  "lazy_static",
 ]

@@ -4,7 +4,6 @@
 //! time source.
 
 use crate::gossip_protocol::{Gossip, GossipImpl};
-use crate::metrics::P2PMetrics;
 use crate::{
     event_handler::IngressEventHandlerImpl,
     event_handler::{
@@ -24,6 +23,7 @@ use ic_consensus::{
     consensus::{ConsensusCrypto, Membership},
     dkg,
 };
+use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
@@ -44,6 +44,7 @@ use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
+use ic_transport::transport::create_transport;
 use ic_types::{
     artifact::{Advert, ArtifactKind, ArtifactTag, FileTreeSyncAttribute},
     consensus::catchup::CUPWithOriginalProtobuf,
@@ -51,7 +52,7 @@ use ic_types::{
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     p2p,
     replica_config::ReplicaConfig,
-    transport::{FlowTag, TransportClientType},
+    transport::{FlowTag, TransportClientType, TransportConfig},
     NodeId, SubnetId,
 };
 use std::sync::{
@@ -83,8 +84,6 @@ struct P2P {
     task_handles: Vec<JoinHandle<()>>,
     /// Flag indicating if P2P has been terminated.
     killed: Arc<AtomicBool>,
-    /// The P2P metrics.
-    metrics: P2PMetrics,
     /// The P2P event handler control with automatic reference counting.
     event_handler: Arc<dyn P2PEventHandlerControl>,
 }
@@ -125,13 +124,20 @@ pub(crate) fn fetch_gossip_config(
     clippy::type_complexity,
     clippy::new_ret_no_self
 )]
-pub fn create_p2p(
+pub fn create_networking_stack(
+    metrics_registry: MetricsRegistry,
+    log: ReplicaLogger,
     rt_handle: tokio::runtime::Handle,
+    transport_config: TransportConfig,
+    artifact_pool_config: ArtifactPoolConfig,
+    consensus_config: ConsensusConfig,
     malicious_flags: MaliciousFlags,
     node_id: NodeId,
     subnet_id: SubnetId,
-    transport: Arc<dyn Transport>,
-    flow_tags: Vec<FlowTag>,
+    // For testing purposes the caller can pass a transport object instead. Otherwise, the callee
+    // constructs it from the 'transport_config'.
+    transport: Option<Arc<dyn Transport>>,
+    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_sync_client: P2PStateSyncClient,
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
@@ -142,10 +148,6 @@ pub fn create_p2p(
     ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
-    artifact_pool_config: ArtifactPoolConfig,
-    consensus_config: ConsensusConfig,
-    metrics_registry: MetricsRegistry,
-    log: ReplicaLogger,
     catch_up_package: CUPWithOriginalProtobuf,
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
@@ -158,6 +160,23 @@ pub fn create_p2p(
     ),
     String,
 > {
+    let transport = transport.unwrap_or_else(|| {
+        create_transport(
+            node_id,
+            transport_config.clone(),
+            registry_client.get_latest_version(),
+            metrics_registry.clone(),
+            tls_handshake,
+            tokio::runtime::Handle::current(),
+            log.clone(),
+        )
+    });
+    let p2p_flow_tags = transport_config
+        .p2p_flows
+        .iter()
+        .map(|flow_config| FlowTag::from(flow_config.flow_tag))
+        .collect();
+
     let event_handler = Arc::new(P2PEventHandlerImpl::new(
         rt_handle.clone(),
         node_id,
@@ -204,7 +223,7 @@ pub fn create_p2p(
         artifact_manager.clone(),
         transport.clone(),
         event_handler.clone(),
-        flow_tags,
+        p2p_flow_tags,
         log.clone(),
         &metrics_registry,
         malicious_flags,
@@ -215,7 +234,6 @@ pub fn create_p2p(
         log,
         rt_handle,
         gossip: gossip.clone(),
-        metrics: P2PMetrics::new(&metrics_registry),
         task_handles: Vec::new(),
         killed: Arc::new(AtomicBool::new(false)),
         event_handler,

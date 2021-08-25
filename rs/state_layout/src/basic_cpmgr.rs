@@ -259,6 +259,32 @@ impl CheckpointManager for BasicCheckpointManager {
         self.atomically_remove_via_path(backup_path.as_path(), tmp_path.as_path())
     }
 
+    fn archive_checkpoint(&self, name: &str) -> std::io::Result<()> {
+        let cp_path = self.get_checkpoint_path(name);
+        if !cp_path.exists() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Cannot archive non-existent checkpoint {}", name),
+            ));
+        }
+
+        let backups_dir = self.backups();
+        self.ensure_dir_exists(&backups_dir)?;
+        let dst = backups_dir.join(name);
+
+        if dst.exists() {
+            // This might happen if we archived a checkpoint, then
+            // recomputed it again, and then restarted again.  We don't need
+            // another copy.
+            return self.remove_checkpoint(name);
+        }
+
+        std::fs::rename(cp_path, &dst)?;
+
+        sync_path(&backups_dir)?;
+        sync_path(&self.checkpoints())
+    }
+
     fn list_checkpoints(&self) -> std::io::Result<Vec<String>> {
         dir_file_names(&self.checkpoints())
     }

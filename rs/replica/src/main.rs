@@ -12,7 +12,6 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_replica::{args::ReplicaArgs, setup};
-use ic_transport::transport::create_transport;
 use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion, SubnetId};
 use ic_utils::ic_features::*;
 use nix::unistd::{setpgid, Pid};
@@ -24,7 +23,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal::unix::{signal, SignalKind};
-use tokio::{runtime, task};
+use tokio::task;
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
@@ -285,16 +284,6 @@ async fn run() -> io::Result<()> {
             None
         };
 
-    // Transport already implement its own actor-like light interface.
-    let transport = create_transport(
-        node_id,
-        config.transport.clone(),
-        registry.get_latest_version(),
-        metrics_registry.clone(),
-        Arc::clone(&crypto) as Arc<dyn TlsHandshake + Send + Sync>,
-        runtime::Handle::current(),
-        logger.clone(),
-    );
     let (
         crypto,
         state_manager,
@@ -304,7 +293,7 @@ async fn run() -> io::Result<()> {
         consensus_pool_cache,
         ingress_message_filter,
         _xnet_endpoint,
-    ) = ic_replica::setup_p2p::construct_p2p_stack(
+    ) = ic_replica::setup_p2p::construct_ic_stack(
         logger.clone(),
         config.clone(),
         subnet_config,
@@ -314,7 +303,6 @@ async fn run() -> io::Result<()> {
         registry.clone(),
         crypto,
         metrics_registry.clone(),
-        transport,
         cup_with_proto,
         registry_certified_time_reader,
     )?;

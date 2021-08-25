@@ -420,6 +420,7 @@ impl DownloadManager for DownloadManagerImpl {
                     ArtifactId::IngressMessage(_) => "ingress",
                     ArtifactId::CertificationMessage(_) => "certification",
                     ArtifactId::DkgMessage(_) => "dkg",
+                    ArtifactId::EcdsaMessage(_) => "ecdsa",
                     ArtifactId::FileTreeSync(_) => "file_tree_sync",
                     ArtifactId::StateSync(_) => "state_sync",
                 };
@@ -559,6 +560,7 @@ impl DownloadManager for DownloadManagerImpl {
             Artifact::IngressMessage(msg) => ic_crypto::crypto_hash(msg).get(),
             Artifact::CertificationMessage(msg) => ic_crypto::crypto_hash(msg).get(),
             Artifact::DkgMessage(msg) => ic_crypto::crypto_hash(msg).get(),
+            Artifact::EcdsaMessage(msg) => ic_crypto::crypto_hash(msg).get(),
             // FileTreeSync is not of ArtifactKind kind, and it's used only for testing.
             // Thus, we make up the integrity_hash.
             Artifact::FileTreeSync(_msg) => CryptoHash(vec![]),

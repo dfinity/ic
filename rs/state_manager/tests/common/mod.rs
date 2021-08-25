@@ -386,39 +386,37 @@ pub fn state_manager_test<F: FnOnce(StateManagerImpl)>(f: F) {
     state_manager_test_with_verifier_result(true, f)
 }
 
-pub fn state_manager_restart_test<Fixture, Test, R>(fixture: Fixture, test: Test)
+pub fn state_manager_restart_test<Test>(test: Test)
 where
-    Fixture: FnOnce(StateManagerImpl) -> R,
-    Test: FnOnce(StateManagerImpl, R),
+    Test: FnOnce(StateManagerImpl, Box<dyn Fn(StateManagerImpl) -> StateManagerImpl>),
 {
     let tmp = Builder::new().prefix("test").tempdir().unwrap();
     let config = Config::new(tmp.path().into());
     let own_subnet = subnet_test_id(42);
     let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
-    with_test_replica_logger(|log| {
-        let metrics_registry = MetricsRegistry::new();
 
-        let result = fixture(StateManagerImpl::new(
-            Arc::clone(&verifier),
-            own_subnet,
-            SubnetType::Application,
-            log.clone(),
-            &metrics_registry,
-            &config,
-            ic_types::malicious_flags::MaliciousFlags::default(),
-        ));
-        let metrics_registry = MetricsRegistry::new();
-        test(
+    with_test_replica_logger(|log| {
+        let make_state_manager = move || {
+            let metrics_registry = MetricsRegistry::new();
+
             StateManagerImpl::new(
-                verifier,
+                Arc::clone(&verifier),
                 own_subnet,
                 SubnetType::Application,
-                log,
+                log.clone(),
                 &metrics_registry,
                 &config,
                 ic_types::malicious_flags::MaliciousFlags::default(),
-            ),
-            result,
-        );
+            )
+        };
+
+        let state_manager = make_state_manager();
+
+        let restart_fn = Box::new(move |state_manager| {
+            drop(state_manager);
+            make_state_manager()
+        });
+
+        test(state_manager, restart_fn);
     });
 }

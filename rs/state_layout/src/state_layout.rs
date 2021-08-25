@@ -76,6 +76,10 @@ pub trait CheckpointManager: Send + Sync {
     /// List names of all the existing checkpoints.
     fn list_checkpoints(&self) -> std::io::Result<Vec<String>>;
 
+    /// Moves a checkpoint with the specified name into the backup checkpoints
+    /// directory.
+    fn archive_checkpoint(&self, name: &str) -> std::io::Result<()>;
+
     /// Atomically resets containts of "tip" directory to that of checkpoint
     fn reset_tip_to(&self, tip: &Path, name: &str) -> std::io::Result<()>;
 }
@@ -519,6 +523,22 @@ impl StateLayout {
             .map_err(|err| LayoutError::IoError {
                 path: self.cp_manager.get_backup_path(backup_name.as_str()),
                 message: format!("failed to remove backup {}", height),
+                io_err: err,
+            })
+    }
+
+    /// Moves the checkpoint with the specified height to backup location so
+    /// that state manager ignores it on restart.
+    ///
+    /// If checkpoint at `height` was already backed-up/archived before, it's
+    /// removed.
+    pub fn archive_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
+        let cp_name = self.checkpoint_name(height);
+        self.cp_manager
+            .archive_checkpoint(&cp_name)
+            .map_err(|err| LayoutError::IoError {
+                path: self.cp_manager.get_checkpoint_path(&cp_name),
+                message: format!("failed to archive checkpoint {}", height),
                 io_err: err,
             })
     }

@@ -6,11 +6,12 @@ use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::{registry::RegistryClient, transport::Transport};
 use ic_logger::{debug, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_p2p::p2p::create_p2p;
+use ic_p2p::p2p::create_networking_stack;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::{
     consensus::make_catch_up_package_with_empty_transcript,
+    crypto::fake_tls_handshake::FakeTlsHandshake,
     crypto::CryptoReturningOk,
     message_routing::FakeMessageRouting,
     metrics::fetch_int_gauge,
@@ -21,9 +22,7 @@ use ic_test_utilities::{
     types::ids::{node_test_id, subnet_test_id},
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
-use ic_types::{
-    consensus::catchup::CUPWithOriginalProtobuf, replica_config::ReplicaConfig, transport::FlowTag,
-};
+use ic_types::{consensus::catchup::CUPWithOriginalProtobuf, replica_config::ReplicaConfig};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tempfile::Builder;
@@ -81,13 +80,18 @@ fn execute_test(
             subnet_config.cycles_account_manager_config,
         ));
 
-        let (_, p2p_runner, _) = create_p2p(
+        let (_, p2p_runner, _) = create_networking_stack(
+            metrics_registry.clone(),
+            log.clone(),
             tokio::runtime::Handle::current(),
+            transport_config,
+            artifact_pool_config,
+            Default::default(),
             Default::default(),
             node_id,
             subnet_id,
-            transport,
-            vec![FlowTag::from(0)],
+            Some(transport),
+            Arc::new(FakeTlsHandshake::new()),
             Arc::clone(&state_manager) as Arc<_>,
             no_state_sync_client,
             xnet_payload_builder as Arc<_>,
@@ -98,10 +102,6 @@ fn execute_test(
             Arc::clone(&fake_crypto) as Arc<_>,
             registry.clone(),
             ingress_hist_reader,
-            artifact_pool_config,
-            Default::default(),
-            metrics_registry.clone(),
-            log.clone(),
             CUPWithOriginalProtobuf::from_cup(make_catch_up_package_with_empty_transcript(
                 registry, subnet_id,
             )),
@@ -232,13 +232,18 @@ fn execute_test_chunking_pool(
             subnet_config.cycles_account_manager_config,
         ));
 
-        let (_a, p2p_runner, _) = create_p2p(
+        let (_a, p2p_runner, _) = create_networking_stack(
+            metrics_registry.clone(),
+            log.clone(),
             tokio::runtime::Handle::current(),
+            transport_config,
+            artifact_pool_config,
+            Default::default(),
             Default::default(),
             node_id,
             subnet_id,
-            transport,
-            vec![FlowTag::from(0)],
+            Some(transport),
+            Arc::new(FakeTlsHandshake::new()),
             Arc::clone(&state_manager) as Arc<_>,
             state_sync_client,
             xnet_payload_builder,
@@ -249,10 +254,6 @@ fn execute_test_chunking_pool(
             Arc::clone(&fake_crypto) as Arc<_>,
             registry.clone(),
             ingress_hist_reader,
-            artifact_pool_config,
-            Default::default(),
-            metrics_registry.clone(),
-            log.clone(),
             CUPWithOriginalProtobuf::from_cup(make_catch_up_package_with_empty_transcript(
                 registry, subnet_id,
             )),

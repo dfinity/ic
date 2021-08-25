@@ -55,7 +55,7 @@ slog-term = "2.6.0"
 socket2 = { version = "0.3.19", features = ["reuseport"] }
 strum = "0.18.0"
 tempfile = "3.1.0"
-tokio = { version = "1.2.0" }
+tokio = { version = "1.9.0" }
 wabt = "0.10.0"
 
 [dev-dependencies]

@@ -1,4 +1,4 @@
-use ic_crypto_internal_types::context::Context;
+use ic_crypto_sha256::Context;
 use ic_crypto_sha256::Sha256;
 use std::cmp::min;
 use std::collections::HashSet;
@@ -73,8 +73,7 @@ fn core(message_size: &str) -> Result<(), (String, i32)> {
     for iteration in 0..iterations {
         let context = format!("Run {}", iteration);
         let time_start = Instant::now();
-        let mut state = Sha256::new();
-        state.write(ByteWrapper::new(&context.as_bytes()).as_bytes());
+        let mut state = Sha256::new_with_context(&ByteWrapper::new(&context.as_bytes()));
         state.write(&data);
         let digest = state.finish();
         let time_stop = Instant::now();

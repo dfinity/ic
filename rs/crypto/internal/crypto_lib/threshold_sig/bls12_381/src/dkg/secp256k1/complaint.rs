@@ -15,8 +15,8 @@ use crate::{
     },
     types::{PublicCoefficients, SecretKey as ThresholdSecretKey},
 };
-use ic_crypto_internal_types::context::{Context, DomainSeparationContext};
 use ic_crypto_sha256::Sha256;
+use ic_crypto_sha256::{Context, DomainSeparationContext};
 use ic_types::crypto::CryptoError;
 use ic_types::{crypto::AlgorithmId, IDkgId, NodeIndex, Randomness};
 use rand::{CryptoRng, Rng};
