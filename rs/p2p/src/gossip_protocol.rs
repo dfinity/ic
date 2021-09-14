@@ -53,7 +53,7 @@
 
 use crate::{
     download_management::{DownloadManager, DownloadManagerImpl},
-    event_handler::P2PEventHandlerControl,
+    event_handler::P2PEventHandlerImpl,
     metrics::GossipMetrics,
     use_gossip_malicious_behavior_on_chunk_request,
     utils::FlowMapper,
@@ -72,6 +72,7 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeErr
 use ic_types::{
     artifact::{Artifact, ArtifactFilter, ArtifactId, ArtifactKind},
     chunkable::{ArtifactChunk, ArtifactChunkData, ChunkId},
+    crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     p2p::GossipAdvert,
@@ -84,7 +85,7 @@ use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 
 /// The main *Gossip* trait, specifying the P2P gossip functionality.
-pub(crate) trait Gossip {
+pub trait Gossip {
     /// The *Gossip* advert type.
     type GossipAdvert;
     /// The *Gossip* chunk request type.
@@ -143,50 +144,39 @@ pub(crate) trait Gossip {
 
     /// The method reacts to a transport error message.
     fn on_transport_error(&self, transport_error: TransportError);
-
-    /// The method is called on a periodic timer event.
-    ///
-    /// The periodic invocation of this method guarantees IC liveness.
-    /// Specifically, the following actions occur on each call:
-    ///
-    /// - It polls all artifact clients, enabling the IC to make
-    /// progress without the need for any external triggers.
-    ///
-    /// - It checks each peer for request timeouts and advert download
-    /// eligibility.
-    ///
-    /// In short, the method is a catch-all for a periodic and
-    /// holistic refresh of IC state.
-    fn on_timer(&self, event_handler: &Arc<dyn P2PEventHandlerControl>);
 }
 
 /// A request for an artifact sent to the peer.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct GossipChunkRequest {
+pub struct GossipChunkRequest {
     /// The artifact ID.
-    pub artifact_id: ArtifactId,
+    pub(crate) artifact_id: ArtifactId,
+    /// The integrity hash
+    pub integrity_hash: CryptoHash,
     /// The chunk ID.
-    pub chunk_id: ChunkId,
+    pub(crate) chunk_id: ChunkId,
 }
 
 /// A re-transmission request. A filter is used to restrict the set of
 /// adverts that are to be returned as a response to this request.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct GossipRetransmissionRequest {
+pub struct GossipRetransmissionRequest {
     /// The artifact filter used to restrict the set of returned adverts.
-    pub filter: ArtifactFilter,
+    pub(crate) filter: ArtifactFilter,
 }
 
 /// A *Gossip* chunk, identified by its artifact ID and chunk ID.
 /// It contains the actual chunk data in an artifact chunk.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct GossipChunk {
+pub struct GossipChunk {
     /// The artifact ID.
-    pub artifact_id: ArtifactId,
+    pub(crate) artifact_id: ArtifactId,
+    /// The integrity hash.
+    pub integrity_hash: CryptoHash,
     /// The chunk ID.
-    pub chunk_id: ChunkId,
+    pub(crate) chunk_id: ChunkId,
     /// The artifact chunk, encapsulated in a `P2PResult`.
-    pub artifact_chunk: P2PResult<ArtifactChunk>,
+    pub(crate) artifact_chunk: P2PResult<ArtifactChunk>,
 }
 
 /// This is the message exchanged on the wire with other peers.  This
@@ -217,7 +207,7 @@ impl From<&GossipMessage> for FlowTag {
 }
 
 /// The canonical implementation of the `GossipMessage` trait.
-pub(crate) struct GossipImpl {
+pub struct GossipImpl {
     /// The download manager used to initiate and track downloads.
     download_manager: DownloadManagerImpl,
     /// The artifact manager used to handle received artifacts.
@@ -243,7 +233,7 @@ impl GossipImpl {
         registry_client: Arc<dyn RegistryClient>,
         artifact_manager: Arc<dyn ArtifactManager>,
         transport: Arc<dyn Transport>,
-        event_handler: Arc<dyn P2PEventHandlerControl>,
+        event_handler: Arc<P2PEventHandlerImpl>,
         flow_tags: Vec<FlowTag>,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
@@ -303,6 +293,7 @@ impl GossipImpl {
             warn!(self.log, "Malicious behavior: artifact not found");
             let chunk_not_found = GossipChunk {
                 artifact_id: gossip_chunk.artifact_id,
+                integrity_hash: gossip_chunk.integrity_hash,
                 chunk_id: gossip_chunk.chunk_id,
                 artifact_chunk: Err(P2PError {
                     p2p_error_code: P2PErrorCode::NotFound,
@@ -322,6 +313,7 @@ impl GossipImpl {
         {
             warn!(self.log, "Malicious behavior: sending invalid artifacts");
             let artifact_id = gossip_chunk.artifact_id;
+            let integrity_hash = gossip_chunk.integrity_hash;
             let chunk_id = gossip_chunk.chunk_id;
             let artifact_chunk_data = ArtifactChunkData::SemiStructuredChunkData([].to_vec());
             let artifact_chunk = Ok(ArtifactChunk {
@@ -331,6 +323,7 @@ impl GossipImpl {
             });
             let invalid_chunk = GossipChunk {
                 artifact_id,
+                integrity_hash,
                 chunk_id,
                 artifact_chunk,
             };
@@ -339,6 +332,23 @@ impl GossipImpl {
         } else {
             warn!(self.log, "Malicious behavior: This should never happen!");
         }
+    }
+
+    /// The method is called on a periodic timer event.
+    ///
+    /// The periodic invocation of this method guarantees IC liveness.
+    /// Specifically, the following actions occur on each call:
+    ///
+    /// - It polls all artifact clients, enabling the IC to make
+    /// progress without the need for any external triggers.
+    ///
+    /// - It checks each peer for request timeouts and advert download
+    /// eligibility.
+    ///
+    /// In short, the method is a catch-all for a periodic and
+    /// holistic refresh of IC state.
+    pub fn on_timer(&self, event_handler: Arc<P2PEventHandlerImpl>) {
+        self.download_manager.on_timer(event_handler);
     }
 }
 
@@ -382,6 +392,7 @@ impl Gossip for GossipImpl {
             .observe(start.elapsed().as_millis() as f64);
         let gossip_chunk = GossipChunk {
             artifact_id: gossip_request.artifact_id.clone(),
+            integrity_hash: gossip_request.integrity_hash.clone(),
             chunk_id: gossip_request.chunk_id,
             artifact_chunk,
         };
@@ -485,11 +496,6 @@ impl Gossip for GossipImpl {
         // multiple flows support), but then we'll end up with
         // periodic retransmission and not event-based.
     }
-
-    /// The method is called on a periodic timer event.
-    fn on_timer(&self, event_handler: &Arc<dyn P2PEventHandlerControl>) {
-        self.download_manager.on_timer(event_handler);
-    }
 }
 
 /// A *Gossip* message can be converted into a
@@ -539,8 +545,10 @@ impl From<GossipChunkRequest> for pb::GossipChunkRequest {
     fn from(gossip_chunk_request: GossipChunkRequest) -> Self {
         Self {
             artifact_id: serialize(&gossip_chunk_request.artifact_id)
-                .expect("Local value serailization should succeed"),
+                .expect("Local value serialization should succeed"),
             chunk_id: gossip_chunk_request.chunk_id.get(),
+            integrity_hash: serialize(&gossip_chunk_request.integrity_hash)
+                .expect("Local value serialization should succeed"),
         }
     }
 }
@@ -554,6 +562,7 @@ impl TryFrom<pb::GossipChunkRequest> for GossipChunkRequest {
         Ok(Self {
             artifact_id: deserialize(&gossip_chunk_request.artifact_id)?,
             chunk_id: ChunkId::from(gossip_chunk_request.chunk_id),
+            integrity_hash: deserialize(&gossip_chunk_request.integrity_hash)?,
         })
     }
 }
@@ -569,9 +578,11 @@ impl From<GossipChunk> for pb::GossipChunk {
         };
         Self {
             artifact_id: serialize(&gossip_chunk.artifact_id)
-                .expect("Local value serailization should succeed"),
+                .expect("Local value serialization should succeed"),
             chunk_id: gossip_chunk.chunk_id.get(),
             response,
+            integrity_hash: serialize(&gossip_chunk.integrity_hash)
+                .expect("Local value serialization should succeed"),
         }
     }
 }
@@ -592,6 +603,7 @@ impl TryFrom<pb::GossipChunk> for GossipChunk {
                     p2p_error_code: P2PErrorCode::NotFound,
                 }),
             },
+            integrity_hash: deserialize(&gossip_chunk.integrity_hash)?,
         })
     }
 }

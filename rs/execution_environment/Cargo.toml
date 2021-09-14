@@ -9,7 +9,8 @@ ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-cow-state = { path = "../cow_state" }
 ic-crypto = { path = "../crypto" }
-ic-crypto-sha256 = { path = "../crypto/sha256" }
+ic-crypto-sha = { path = "../crypto/sha" }
+ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-embedders = { path = "../embedders" }
 ic-ic00-types = { path = "../types/ic00_types" }
@@ -27,7 +28,9 @@ ic-sys = { path = "../sys" }
 ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
+ic-wasm-types = { path = "../types/wasm_types" }
 ic-wasm-utils = { path = "../wasm_utils" }
+memory_tracker = { path = "../memory_tracker" }
 nix = "0.20.0"
 num-traits = "0.2.12"
 num-rational = "0.2.2"

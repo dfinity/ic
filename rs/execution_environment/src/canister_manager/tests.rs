@@ -12,7 +12,9 @@ use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::Config;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionParameters, HypervisorError, SubnetAvailableMemory,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -20,7 +22,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::testing::CanisterStateTesting;
 use ic_replicated_state::{
-    page_map, CallContextManager, CallOrigin, CanisterStatus, NumWasmPages, PageMap,
+    page_map, CallContextManager, CallOrigin, CanisterStatus, NumWasmPages64, PageMap,
     ReplicatedState,
 };
 use ic_test_utilities::{
@@ -68,6 +70,12 @@ lazy_static! {
         SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX));
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
+    static ref EXECUTION_PARAMETERS: ExecutionParameters = ExecutionParameters {
+        instruction_limit: MAX_NUM_INSTRUCTIONS,
+        canister_memory_limit: NumBytes::new(std::u64::MAX),
+        subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        compute_allocation: ComputeAllocation::default(),
+    };
 }
 
 struct CanisterManagerBuilder {
@@ -208,8 +216,7 @@ fn install_canister_makes_subnet_oversubscribed() {
                     .compute_allocation(ComputeAllocation::try_from(50).unwrap())
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .is_ok());
@@ -222,8 +229,7 @@ fn install_canister_makes_subnet_oversubscribed() {
                     .compute_allocation(ComputeAllocation::try_from(25).unwrap())
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .is_ok());
@@ -238,8 +244,7 @@ fn install_canister_makes_subnet_oversubscribed() {
                     .compute_allocation(ComputeAllocation::try_from(30).unwrap())
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             ),
             (
                 MAX_NUM_INSTRUCTIONS,
@@ -268,8 +273,7 @@ fn upgrade_non_existing_canister_fails() {
                     )
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             ),
             (
                 MAX_NUM_INSTRUCTIONS,
@@ -305,8 +309,7 @@ fn upgrade_canister_with_no_wasm_fails() {
                     )
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             ),
             (
                 MAX_NUM_INSTRUCTIONS,
@@ -344,8 +347,7 @@ fn can_update_compute_allocation_during_upgrade() {
                 .compute_allocation(ComputeAllocation::try_from(60).unwrap())
                 .build(),
             &mut state,
-            MAX_NUM_INSTRUCTIONS,
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            EXECUTION_PARAMETERS.clone(),
         );
         assert!(res.1.is_ok());
 
@@ -368,8 +370,7 @@ fn can_update_compute_allocation_during_upgrade() {
                     .mode(CanisterInstallMode::Upgrade)
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .is_ok());
@@ -429,8 +430,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                     .compute_allocation(ComputeAllocation::try_from(50).unwrap())
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .is_ok());
@@ -443,8 +443,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                     .compute_allocation(ComputeAllocation::try_from(25).unwrap())
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .is_ok());
@@ -457,8 +456,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                     .compute_allocation(ComputeAllocation::try_from(20).unwrap())
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .is_ok());
@@ -475,8 +473,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                     .mode(CanisterInstallMode::Upgrade)
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             ),
             (
                 MAX_NUM_INSTRUCTIONS,
@@ -566,8 +563,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
                     )
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -583,8 +579,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
                     )
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -600,8 +595,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
                     .memory_allocation(MemoryAllocation::try_from(NumBytes::from(1)).unwrap())
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             ),
             (
                 MAX_NUM_INSTRUCTIONS,
@@ -644,8 +638,7 @@ fn can_update_memory_allocation_during_upgrade() {
                     .memory_allocation(initial_memory_allocation)
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -669,8 +662,7 @@ fn can_update_memory_allocation_during_upgrade() {
                     .mode(CanisterInstallMode::Upgrade)
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -720,8 +712,7 @@ fn install_code_preserves_messages() {
                     )
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -847,8 +838,7 @@ fn cannot_install_non_empty_canister() {
                     .canister_id(canister_id)
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -864,8 +854,7 @@ fn cannot_install_non_empty_canister() {
                     )
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             ),
             (
                 MAX_NUM_INSTRUCTIONS,
@@ -906,8 +895,7 @@ fn install_code_with_wrong_controller_fails() {
                         .mode(*mode)
                         .build(),
                     &mut state,
-                    MAX_NUM_INSTRUCTIONS,
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                    EXECUTION_PARAMETERS.clone(),
                 ),
                 (
                     MAX_NUM_INSTRUCTIONS,
@@ -1030,8 +1018,7 @@ fn reinstall_on_empty_canister_succeeds() {
                     .mode(CanisterInstallMode::Reinstall)
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .is_ok());
@@ -1120,8 +1107,7 @@ fn reinstall_calls_canister_start_and_canister_init() {
                     .canister_id(canister_id)
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -1136,8 +1122,7 @@ fn reinstall_calls_canister_start_and_canister_init() {
                     .mode(CanisterInstallMode::Reinstall)
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -1153,10 +1138,10 @@ fn reinstall_calls_canister_start_and_canister_init() {
                     &"read",
                     &[],
                     user_id.get(),
-                    MAX_NUM_INSTRUCTIONS,
                     canister,
                     None,
                     mock_time(),
+                    EXECUTION_PARAMETERS.clone(),
                 )
                 .2
                 .unwrap(),
@@ -1218,8 +1203,7 @@ fn install_calls_canister_start_and_canister_init() {
                     .wasm_module(wabt::wat2wasm(COUNTER_WAT).unwrap())
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -1235,10 +1219,10 @@ fn install_calls_canister_start_and_canister_init() {
                     &"read",
                     &[],
                     user_id.get(),
-                    MAX_NUM_INSTRUCTIONS,
                     canister,
                     None,
                     mock_time(),
+                    EXECUTION_PARAMETERS.clone(),
                 )
                 .2
                 .unwrap(),
@@ -1276,8 +1260,7 @@ fn install_puts_canister_back_after_invalid_wasm() {
                     .wasm_module(wasm)
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             ),
             (
                 MAX_NUM_INSTRUCTIONS,
@@ -1318,8 +1301,7 @@ fn reinstall_clears_stable_memory() {
                     .canister_id(canister_id)
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -1328,9 +1310,9 @@ fn reinstall_clears_stable_memory() {
         let mut canister = state.take_canister_state(&canister_id).unwrap();
         assert_eq!(
             canister.system_state.stable_memory_size,
-            NumWasmPages::new(0)
+            NumWasmPages64::new(0)
         );
-        canister.system_state.stable_memory_size = NumWasmPages::new(1);
+        canister.system_state.stable_memory_size = NumWasmPages64::new(1);
         let mut buf = page_map::Buffer::new(PageMap::default());
         buf.write(&[1; 10], 0);
         canister.system_state.stable_memory = buf.into_page_map();
@@ -1346,8 +1328,7 @@ fn reinstall_clears_stable_memory() {
                     .mode(CanisterInstallMode::Reinstall)
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -1356,7 +1337,7 @@ fn reinstall_clears_stable_memory() {
         let canister = state.take_canister_state(&canister_id).unwrap();
         assert_eq!(
             canister.system_state.stable_memory_size,
-            NumWasmPages::new(0)
+            NumWasmPages64::new(0)
         );
     });
 }
@@ -1973,8 +1954,7 @@ fn install_canister_with_query_allocation() {
                     .query_allocation(query_allocation)
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .is_ok());
@@ -2169,8 +2149,7 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
                 .memory_allocation(memory_allocation)
                 .build(),
             &mut state,
-            MAX_NUM_INSTRUCTIONS,
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            EXECUTION_PARAMETERS.clone(),
         );
         assert_eq!(res.0, MAX_NUM_INSTRUCTIONS);
         assert_matches!(
@@ -2189,8 +2168,7 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
                     )
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -2208,8 +2186,7 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
                 .memory_allocation(memory_allocation)
                 .build(),
             &mut state,
-            MAX_NUM_INSTRUCTIONS,
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            EXECUTION_PARAMETERS.clone(),
         );
         assert_eq!(res.0, MAX_NUM_INSTRUCTIONS);
         assert_matches!(
@@ -2245,8 +2222,7 @@ fn upgrading_a_canister_with_not_enough_memory_allocation_fails() {
                     )
                     .build(),
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -2266,8 +2242,7 @@ fn upgrading_a_canister_with_not_enough_memory_allocation_fails() {
                         .mode(CanisterInstallMode::Upgrade)
                         .build(),
                     &mut state,
-                    MAX_NUM_INSTRUCTIONS,
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                    EXECUTION_PARAMETERS.clone(),
                 )
                 .1,
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
@@ -2302,8 +2277,7 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
                 )
                 .build(),
             &mut state,
-            MAX_NUM_INSTRUCTIONS,
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            EXECUTION_PARAMETERS.clone(),
         );
         assert_eq!(res.0, MAX_NUM_INSTRUCTIONS);
         assert_matches!(res.1, Err(CanisterManagerError::CanisterOutOfCycles { .. }));
@@ -2401,8 +2375,7 @@ fn failed_upgrade_hooks_consume_instructions() {
                     query_allocation: QueryAllocation::default(),
                 },
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -2419,8 +2392,7 @@ fn failed_upgrade_hooks_consume_instructions() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
-            MAX_NUM_INSTRUCTIONS,
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            EXECUTION_PARAMETERS.clone(),
         );
         assert_eq!(
             MAX_NUM_INSTRUCTIONS - instructions_left,
@@ -2521,8 +2493,7 @@ fn failed_install_hooks_consume_instructions() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
-            MAX_NUM_INSTRUCTIONS,
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            EXECUTION_PARAMETERS.clone(),
         );
         assert_matches!(result, Err(CanisterManagerError::Hypervisor(_, _)));
         assert!(
@@ -2554,6 +2525,76 @@ fn failed_install_hooks_consume_instructions() {
     )"#;
     let wasm = wabt::wat2wasm(wasm).unwrap();
     run(wasm);
+}
+
+#[test]
+fn install_code_respects_instruction_limit() {
+    let subnet_id = subnet_test_id(1);
+    let subnet_type = SubnetType::Application;
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(subnet_type)
+        .build();
+
+    let canister_manager = CanisterManagerBuilder::default()
+        .with_subnet_id(subnet_id)
+        .with_cycles_account_manager(cycles_account_manager)
+        .build();
+
+    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+    let mut state = initial_state(tmpdir.path(), subnet_id);
+    let sender = canister_test_id(100).get();
+    let canister_id = canister_manager
+        .create_canister(
+            sender,
+            subnet_id,
+            *INITIAL_CYCLES,
+            CanisterSettings::default(),
+            &mut state,
+        )
+        .0
+        .unwrap();
+
+    let wasm = r#"
+    (module
+        (func $start
+          (i32.const 0)
+          drop
+        )
+        (func $canister_init
+          (i32.const 0)
+          drop
+        )
+        (memory $memory 1)
+        (start $start)
+        (export "canister_init" (func $canister_init))
+    )"#;
+    let wasm = wabt::wat2wasm(wasm).unwrap();
+
+    let (instructions_left, result) = canister_manager.install_code(
+        InstallCodeContext {
+            sender,
+            canister_id,
+            wasm_module: wasm,
+            arg: vec![],
+            compute_allocation: None,
+            memory_allocation: None,
+            mode: CanisterInstallMode::Install,
+            query_allocation: QueryAllocation::default(),
+        },
+        &mut state,
+        ExecutionParameters {
+            instruction_limit: NumInstructions::from(3),
+            ..EXECUTION_PARAMETERS.clone()
+        },
+    );
+    assert_matches!(
+        result,
+        Err(CanisterManagerError::Hypervisor(
+            _,
+            HypervisorError::OutOfInstructions
+        ))
+    );
+    assert_eq!(instructions_left, NumInstructions::from(0));
 }
 
 #[test]
@@ -2596,15 +2637,14 @@ fn install_code_preserves_system_state_and_scheduler_state() {
             .canister_id(canister_id)
             .build(),
         &mut state,
-        MAX_NUM_INSTRUCTIONS,
-        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        EXECUTION_PARAMETERS.clone(),
     );
 
     // Installation is free, since there is no `(start)` or `canister_init` to run.
     assert_eq!(instructions_left, MAX_NUM_INSTRUCTIONS);
 
     // No heap delta.
-    assert_eq!(res.unwrap(), NumBytes::from(0));
+    assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
 
     // Verify the system state is preserved.
     assert_eq!(
@@ -2627,15 +2667,14 @@ fn install_code_preserves_system_state_and_scheduler_state() {
             .canister_id(canister_id)
             .build(),
         &mut state,
-        MAX_NUM_INSTRUCTIONS,
-        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        EXECUTION_PARAMETERS.clone(),
     );
 
     // Installation is free, since there is no `(start)` or `canister_init` to run.
     assert!(instructions_left == MAX_NUM_INSTRUCTIONS);
 
     // No heap delta.
-    assert_eq!(res.unwrap(), NumBytes::from(0));
+    assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
 
     // Verify the system state is preserved.
     assert_eq!(
@@ -2658,15 +2697,14 @@ fn install_code_preserves_system_state_and_scheduler_state() {
             .canister_id(canister_id)
             .build(),
         &mut state,
-        MAX_NUM_INSTRUCTIONS,
-        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        EXECUTION_PARAMETERS.clone(),
     );
 
     // Installation is free, since there is no `canister_pre/post_upgrade`
     assert!(instructions_left == MAX_NUM_INSTRUCTIONS);
 
     // No heap delta.
-    assert_eq!(res.unwrap(), NumBytes::from(0));
+    assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
 
     // Verify the system state is preserved.
     assert_eq!(
@@ -2715,8 +2753,7 @@ fn lower_memory_allocation_than_usage_fails() {
                     query_allocation: QueryAllocation::default(),
                 },
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -2779,8 +2816,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                         query_allocation: QueryAllocation::default(),
                     },
                     &mut state,
-                    MAX_NUM_INSTRUCTIONS,
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                    EXECUTION_PARAMETERS.clone(),
                 )
                 .1,
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
@@ -2823,8 +2859,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                     query_allocation: QueryAllocation::default(),
                 },
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -2867,8 +2902,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                     query_allocation: QueryAllocation::default(),
                 },
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -2895,8 +2929,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                         query_allocation: QueryAllocation::default(),
                     },
                     &mut state,
-                    MAX_NUM_INSTRUCTIONS,
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                    EXECUTION_PARAMETERS.clone(),
                 )
                 .1,
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
@@ -2942,8 +2975,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                     query_allocation: QueryAllocation::default(),
                 },
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -3038,8 +3070,7 @@ fn test_install_when_setting_memory_allocation_to_zero() {
                     query_allocation: QueryAllocation::default(),
                 },
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -3077,8 +3108,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                     query_allocation: QueryAllocation::default(),
                 },
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();
@@ -3119,8 +3149,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                     query_allocation: QueryAllocation::default(),
                 },
                 &mut state,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                EXECUTION_PARAMETERS.clone(),
             )
             .1
             .unwrap();

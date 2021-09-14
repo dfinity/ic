@@ -70,22 +70,14 @@ impl CatchUpPackageProvider {
         for url in peer_urls.into_iter().flatten() {
             let param = latest_cup.as_ref().map(CatchUpPackageParam::from);
             let cup = self
-                .fetch_verify_and_deserialize_catch_up_package(url.clone(), param, subnet_id)
+                .fetch_verify_and_deserialize_catch_up_package(url, param, subnet_id)
                 .await;
-            let received_param = cup.as_ref().map(CatchUpPackageParam::from);
-            info!(
-                self.logger,
-                "Received a CUP with params {:?} from peer at url {}", received_param, url,
-            );
             // Note: None is < Some(_)
-            if received_param > param {
+            if cup.as_ref().map(CatchUpPackageParam::from) > param {
                 latest_cup = cup;
-                info!(
-                    self.logger,
-                    "Marking this CUP as the latest {:?} from peer at url {}", received_param, url,
-                );
             }
         }
+
         latest_cup
     }
 
@@ -246,17 +238,10 @@ impl CatchUpPackageProvider {
         let registry_version = self.registry.get_latest_version();
         let local_cup = self.get_local_cup(subnet_id);
 
-        info!(self.logger, "Current local CUP is {:?}", local_cup,);
-
         // Returns local_cup in case no more recent CUP is found.
         let subnet_cup = self
             .get_latest_subnet_cup(subnet_id, registry_version, local_cup)
             .await;
-
-        info!(
-            self.logger,
-            "Moving on to receive the registry CUP. The CUP received from peers (or the local one) is {:?}", subnet_cup,
-        );
 
         let registry_cup = self
             .registry
@@ -264,8 +249,6 @@ impl CatchUpPackageProvider {
             .map(CUPWithOriginalProtobuf::from_cup)
             .map_err(|err| warn!(self.logger, "Failed to retrieve registry CUP {:?}", err))
             .ok();
-
-        info!(self.logger, "Received registry CUP {:?}", registry_cup,);
 
         vec![registry_cup, subnet_cup]
             .into_iter()

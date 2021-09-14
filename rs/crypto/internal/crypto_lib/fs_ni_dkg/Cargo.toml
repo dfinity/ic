@@ -12,7 +12,7 @@ zeroize = "1.1.1"
 ic-crypto-internal-bls12381-common ={path ="../bls12_381/common"}
 ic-crypto-internal-bls12381-serde-miracl = { path = "../bls12_381/serde/miracl" }
 ic-crypto-internal-types = { path = "../types" }
-ic-crypto-sha256 = { path = "../../../sha256" }
+ic-crypto-sha = { path = "../../../sha" }
 
 [dev-dependencies]
 proptest = "0.9.4"

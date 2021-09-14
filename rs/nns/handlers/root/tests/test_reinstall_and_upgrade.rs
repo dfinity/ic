@@ -156,7 +156,7 @@ fn test_reinstall_loses_stable_memory_stop() {
 fn test_init_payload_is_passed_through_upgrades() {
     let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
     let test_wasm = proj.cargo_bin("upgrade-test-canister").bytes();
-    let test_wasm_sha256 = ic_crypto_sha256::Sha256::hash(&test_wasm);
+    let test_wasm_sha256 = ic_crypto_sha::Sha256::hash(&test_wasm);
     let test_byte_array = b"just_testing";
 
     local_test_on_nns_subnet(move |runtime| async move {

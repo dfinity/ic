@@ -7,34 +7,35 @@ use std::string::ToString;
 
 use crate::pb::v1::{
     add_or_remove_node_provider::Change,
-    claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
     governance::neuron_in_flight_command::Command as InFlightCommand,
     governance::NeuronInFlightCommand,
     governance_error::ErrorType,
     manage_neuron,
-    manage_neuron::{claim_or_refresh::By, Command, NeuronIdOrSubaccount},
+    manage_neuron::{
+        claim_or_refresh::{By, MemoAndController},
+        ClaimOrRefresh, Command, NeuronIdOrSubaccount,
+    },
     manage_neuron_response,
     neuron::DissolveState,
     neuron::Followees,
     proposal,
     reward_node_provider::RewardMode,
-    Ballot, BallotInfo, ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse,
-    ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ListNeurons,
-    ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-    ManageNeuronResponse, NetworkEconomics, Neuron, NeuronInfo, NeuronStakeTransfer, NeuronState,
-    NnsFunction, NodeProvider, Proposal, ProposalData, ProposalInfo, ProposalRewardStatus,
-    ProposalStatus, RewardEvent, RewardNodeProvider, Tally, Topic, Vote,
+    Ballot, BallotInfo, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
+    ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
+    ManageNeuronResponse, NetworkEconomics, Neuron, NeuronInfo, NeuronState, NnsFunction,
+    NodeProvider, Proposal, ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus,
+    RewardEvent, RewardNodeProvider, Tally, Topic, Vote,
 };
 use candid::Decode;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ledger_canister::{AccountIdentifier, Memo, Subaccount, TRANSACTION_FEE};
+use ledger_canister::{AccountIdentifier, Subaccount, TRANSACTION_FEE};
 use registry_canister::mutations::{
     do_add_node_operator::AddNodeOperatorPayload,
     do_update_icp_xdr_conversion_rate::UpdateIcpXdrConversionRatePayload,
@@ -56,8 +57,8 @@ pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
 pub const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
 // Proposal validation
-// 280 B
-const PROPOSAL_SUMMARY_BYTES_MAX: usize = 280;
+// 15000 B
+const PROPOSAL_SUMMARY_BYTES_MAX: usize = 15000;
 // 2048 characters
 const PROPOSAL_URL_CHAR_MAX: usize = 2048;
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -147,7 +148,7 @@ impl NetworkEconomics {
 // If the subaccount vector is empty, returns None.
 // If the subaccount vector has exactly 32 bytes return the corresponding array.
 // In any other case returns an error.
-fn subaccount_from_slice(subaccount: &[u8]) -> Result<Option<Subaccount>, GovernanceError> {
+pub fn subaccount_from_slice(subaccount: &[u8]) -> Result<Option<Subaccount>, GovernanceError> {
     match subaccount.len() {
         0 => Ok(None),
         _ => {
@@ -1897,389 +1898,6 @@ impl Governance {
         })
     }
 
-    /// Convenience function to return the funds if anything went wrong.
-    ///
-    /// Returns a message explaining whether the transfer back worked.
-    async fn return_funds(
-        &mut self,
-        gov_subaccount: Subaccount,
-        user: PrincipalId,
-        user_subaccount: Option<Subaccount>,
-        stake_e8s: u64,
-        nonce: u64,
-    ) -> String {
-        let account = AccountIdentifier::new(user, user_subaccount);
-        let result = self
-            .ledger
-            .transfer_funds(
-                stake_e8s - self.transaction_fee(),
-                self.transaction_fee(),
-                Some(gov_subaccount),
-                account,
-                nonce,
-            )
-            .await;
-        if result.is_err() {
-            println!(
-                "Error making return funds ledger transfer. \
-                          User: {:?} User subaccount: {:?} Gov subaccount: {:?}, \
-                          Amount: {:?}, Nonce: {:?}, Error: {:?}",
-                user, user_subaccount, gov_subaccount, stake_e8s, nonce, result
-            );
-        }
-        match result {
-            Ok(_) => "The funds have been returned to the source account.".to_string(),
-            Err(e) => format!(
-                "We tried to return the funds to the source account, \
-                     but the transfer back appeared to have failed due to {}",
-                e
-            ),
-        }
-    }
-
-    /// Creates a new neuron or refreshes the stake of an existing one from
-    /// a ledger transfer notification.
-    ///
-    /// Since this is meant to be called by the ledger, we're limited in what
-    /// we can do/return. We expect to be provided all the information about
-    /// the transfer (can't do anything without that), but after we do have
-    /// all the information the only failure mode is to return the transfer
-    /// back.
-    ///
-    /// Pre-conditions:
-    /// In all cases:
-    /// 1 - The sender of the transfer matches the principal encoded in the hash
-    ///     of the subaccount. That is, the sender of the transfer is the
-    ///     controller of the neuron.
-    /// 2 - The nonce of the subaccount's hash is the memo of the transfer.
-    ///
-    /// For new neurons, i.e. if the subaccount of the transfer is a new one:
-    /// - The new neuron won't take us above the `MAX_NUMBER_OF_NEURONS`.
-    /// - The amount transfered was greater than or equal to
-    ///   `self.enconomics.neuron_minimum_stake_e8s`.
-    /// - The transfer's subaccount is provided and is not being used by an
-    ///   existing neuron.
-    ///
-    /// For neuron refresh, i.e. if the subaccount of the transfer already
-    /// exists.
-    ///
-    ///
-    /// Post-conditions:
-    /// - If all the pre-conditions apply, either a new neuron is created or the
-    ///   stake of an existing neuron is updated.
-    /// - If one of more of the pre-conditions do not apply, the stake is
-    ///   transferred back to the source account.
-    pub async fn claim_or_top_up_neuron_from_notification(
-        &mut self,
-        transfer: NeuronStakeTransfer,
-    ) -> Result<NeuronId, GovernanceError> {
-        let nonce = transfer.memo;
-        let controller = transfer.from.unwrap();
-        let gov_subaccount = Subaccount::try_from(&transfer.to_subaccount[..])
-            .expect("Couldn't decode governance subaccount");
-        let source_subaccount = Subaccount::try_from(&transfer.from_subaccount[..]).ok();
-        let stake_e8s = transfer.neuron_stake_e8s;
-
-        // First things first, let's rebuild the account hash from the sender
-        // and the nonce and make sure they match the subaccount the funds were
-        // transferred to.
-        let gov_subaccount_computed = compute_neuron_staking_subaccount(controller, nonce);
-
-        // Preconditons 1 and 2. The subaccount can't be computed from the
-        // controller and the nonce, meaning the hash has been miscomputed.
-        // We'll return the funds.
-        if gov_subaccount != gov_subaccount_computed {
-            let return_msg = self
-                .return_funds(
-                    gov_subaccount,
-                    controller,
-                    source_subaccount,
-                    stake_e8s,
-                    nonce,
-                )
-                .await;
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!("The governance subaccount the funds were transferred to wasn't built properly: \
-                 either there was a mistake building the SHA256 hash, \
-                 the wrong principal was used to build the hash (must match the sender), \
-                 or the wrong nonce was used to build the hash (must match the nonce in the memo). \
-                 {}", return_msg)
-            ));
-        }
-
-        let now = self.env.now();
-
-        // Lets figure out if the neuron already exists so that we can choose whether
-        // to refresh the stake or create a new neuron.
-        if let Some(neuron) = self.get_neuron_by_subaccount_mut(&gov_subaccount) {
-            let new_stake = neuron
-                .cached_neuron_stake_e8s
-                .saturating_add(transfer.neuron_stake_e8s);
-            neuron.update_stake(new_stake, now);
-            let nid = neuron.id.as_ref().expect("Neuron must have an id");
-            Ok(nid.clone())
-        // ... else we're creating a new neuron.
-        } else {
-            // Check that we haven't reached the max number of neurons
-            // allowed.
-            let heap_growth_res = self.check_heap_can_grow();
-            if heap_growth_res.is_err() || self.proto.neurons.len() >= MAX_NUMBER_OF_NEURONS {
-                let return_msg = self
-                    .return_funds(
-                        gov_subaccount,
-                        controller,
-                        source_subaccount,
-                        stake_e8s,
-                        nonce,
-                    )
-                    .await;
-                let mut err = heap_growth_res.err().unwrap_or_else(|| {
-                    GovernanceError::new_with_message(
-                        ErrorType::PreconditionFailed,
-                        "Maximum number of neurons reached.".to_string(),
-                    )
-                });
-                err.error_message.push_str(return_msg.as_str());
-                return Err(err);
-            }
-
-            // TODO(NNS1-491): handle the case where `stake_e8s` is less than
-            // the transaction fee.
-
-            // Check that there's enough stake.
-            if stake_e8s < self.economics().neuron_minimum_stake_e8s {
-                self.return_funds(
-                    gov_subaccount,
-                    controller,
-                    source_subaccount,
-                    stake_e8s,
-                    nonce,
-                )
-                .await;
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "Not enough stake. \
-                     The funds were returned to the source account.",
-                ));
-            }
-
-            let nid = self.new_neuron_id();
-
-            // Step 5 - create the neuron and store it in the map.
-            let neuron = Neuron {
-                id: Some(nid.clone()),
-                account: gov_subaccount.to_vec(),
-                controller: Some(controller),
-                cached_neuron_stake_e8s: transfer.neuron_stake_e8s,
-                created_timestamp_seconds: self.env.now(),
-                aging_since_timestamp_seconds: self.env.now(),
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
-                transfer: Some(transfer),
-                // Claimed neurons are always KYC verified.
-                kyc_verified: true,
-                followees: self.proto.default_followees.clone(),
-                hot_keys: vec![],
-                maturity_e8s_equivalent: 0,
-                neuron_fees_e8s: 0,
-                not_for_profit: false,
-                recent_ballots: vec![],
-            };
-
-            self.add_neuron(nid.id, neuron)
-                .expect("Expected the neuron to be added.");
-            Ok(nid)
-        }
-    }
-
-    /// Creates a new neuron or refreshes the stake of an existing
-    /// neuron from a ledger account.
-    ///
-    /// Pre-conditions:
-    /// - The memo must match the nonce of the subaccount.
-    ///
-    /// For new neurons, i.e. if the subaccount of the transfer is a new one:
-    /// - The new neuron won't take us above the `MAX_NUMBER_OF_NEURONS`.
-    /// - The amount transfered was greater than or equal to
-    ///   `self.enconomics.neuron_minimum_stake_e8s`.
-    ///
-    /// Post-conditions:
-    /// - If all the pre-conditions apply, either a new neuron is created or the
-    ///   stake of an existing neuron is updated.
-    pub async fn claim_or_refresh_neuron_from_account(
-        &mut self,
-        caller: &PrincipalId,
-        claim_or_refresh: &ClaimOrRefreshNeuronFromAccount,
-    ) -> ClaimOrRefreshNeuronFromAccountResponse {
-        let controller = claim_or_refresh.controller.unwrap_or(*caller);
-        let result = self
-            .claim_or_refresh_neuron_from_account_internal(Memo(claim_or_refresh.memo), controller)
-            .await;
-        match result {
-            Ok(neuron_id) => ClaimOrRefreshNeuronFromAccountResponse {
-                result: Some(ClaimOrRefreshResult::NeuronId(neuron_id)),
-            },
-            Err(err) => ClaimOrRefreshNeuronFromAccountResponse {
-                result: Some(ClaimOrRefreshResult::Error(err)),
-            },
-        }
-    }
-
-    async fn claim_or_refresh_neuron_from_account_internal(
-        &mut self,
-        memo: Memo,
-        controller: PrincipalId,
-    ) -> Result<NeuronId, GovernanceError> {
-        // Compute the subaccount we expect the transfer to have been made to.
-        let gov_subaccount = compute_neuron_staking_subaccount(controller, memo.0);
-        let account = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(gov_subaccount));
-        let now = self.env.now();
-
-        // See if there is already a neuron with this subaccount, if there is
-        // one refresh the stake of that neuron, if the stake is different from
-        // the balance.
-        if let Some(neuron) = self.get_neuron_by_subaccount(&gov_subaccount) {
-            let nid = neuron.id.as_ref().expect("Neuron must have an id").clone();
-            // We need to lock the neuron to make sure it doesn't undergo
-            // concurrent changes while we're checking the balance and
-            // refreshing the stake.
-            let _neuron_lock = self.lock_neuron_for_command(
-                nid.id,
-                NeuronInFlightCommand {
-                    timestamp: self.env.now(),
-                    command: Some(InFlightCommand::ClaimOrRefresh(
-                        ClaimOrRefreshNeuronFromAccount {
-                            controller: Some(controller),
-                            memo: memo.0,
-                        },
-                    )),
-                },
-            )?;
-
-            // Get the balance of the neuron ledger canister.
-            let balance = self.ledger.account_balance(account).await?;
-            let neuron = self.get_neuron_mut(&nid)?;
-            match neuron.cached_neuron_stake_e8s.cmp(&balance.get_e8s()) {
-                Ordering::Greater => {
-                    println!(
-                        "{}ERROR. Neuron cached stake was inconsistent.\
-                          Neuron account: {} has less e8s: {} than the cached neuron stake: {}.\
-                          Stake adjusted.",
-                        LOG_PREFIX,
-                        account,
-                        balance.get_e8s(),
-                        neuron.cached_neuron_stake_e8s
-                    );
-                    neuron.cached_neuron_stake_e8s = balance.get_e8s();
-                }
-                Ordering::Less => {
-                    neuron.update_stake(balance.get_e8s(), now);
-                }
-                // If the stake is the same as the account balance,
-                // just return the neuron id (this way this method
-                // also serves the purpose of allowing to discover the
-                // neuron id based on the memo and the controller).
-                Ordering::Equal => (),
-            };
-
-            Ok(nid)
-        }
-        // If there isn't a neuron already we create one, unless the account
-        // doesn't have enough to stake a neuron or we've reached the maximum number
-        // of neurons, in which case we return an error.
-        // We can't return the funds without more information about the
-        // source account, so as a workaround for insufficient stake we can ask the
-        // user to transfer however much is missing to stake a neuron and they can
-        // then disburse if they so choose. We need to do something more involved
-        // if we've reached the max, TODO.
-        //
-        // Note that we need to create the neuron before checking the balance
-        // so that we record the neuron and avoid a race where a user calls
-        // this method a second time before the first time responds. If we store
-        // the neuron and lock it before we make the call, we know that any
-        // competing call will need to wait for this one to finish before
-        // proceeding.
-        else {
-            let nid = self.new_neuron_id();
-            let neuron = Neuron {
-                id: Some(nid.clone()),
-                account: gov_subaccount.to_vec(),
-                controller: Some(controller),
-                cached_neuron_stake_e8s: 0,
-                created_timestamp_seconds: self.env.now(),
-                aging_since_timestamp_seconds: self.env.now(),
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
-                transfer: None,
-                kyc_verified: true,
-                followees: self.proto.default_followees.clone(),
-                hot_keys: vec![],
-                maturity_e8s_equivalent: 0,
-                neuron_fees_e8s: 0,
-                not_for_profit: false,
-                recent_ballots: vec![],
-            };
-
-            // This also verifies that there are not too many neurons already.
-            self.add_neuron(nid.id, neuron.clone())?;
-
-            let _neuron_lock = self.lock_neuron_for_command(
-                nid.id,
-                NeuronInFlightCommand {
-                    timestamp: self.env.now(),
-                    command: Some(InFlightCommand::ClaimOrRefresh(
-                        ClaimOrRefreshNeuronFromAccount {
-                            controller: Some(controller),
-                            memo: memo.0,
-                        },
-                    )),
-                },
-            )?;
-
-            // Get the balance of the neuron ledger canister.
-            let balance = self.ledger.account_balance(account).await?;
-            let min_stake = self.economics().neuron_minimum_stake_e8s;
-            if balance.get_e8s() < min_stake {
-                // To prevent this method from creating non-staked
-                // neurons, we must also remove the neuron that was
-                // previously created.
-                self.remove_neuron(nid.id, neuron)?;
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InsufficientFunds,
-                    format!(
-                        "Account does not have enough funds to stake a neuron. \
-                         Please make sure that account has at least {:?} e8s (was {:?} e8s)",
-                        min_stake,
-                        balance.get_e8s()
-                    ),
-                ));
-            }
-
-            // Ok, we were able to stake the neuron.
-            match self.get_neuron_mut(&nid) {
-                Ok(mut neuron) => {
-                    // Adjust the stake.
-                    neuron.cached_neuron_stake_e8s = balance.get_e8s();
-                    Ok(nid)
-                }
-                Err(err) => {
-                    // This should not be possible, but let's be
-                    // defensive and provide a reasonable error message.
-                    Err(GovernanceError::new_with_message(
-                        ErrorType::NotFound,
-                        format!(
-                            "When attempting to stake a neuron with ID {:?} and stake {:?},\
-			     the neuron disappeared while the operation was in flight.\
-			     Please try again: {:?}",
-                            nid,
-                            balance.get_e8s(),
-                            err
-                        ),
-                    ))
-                }
-            }
-        }
-    }
-
     /// Claim the neurons supplied by the GTC on behalf of `new_controller`
     ///
     /// For each neuron ID in `neuron_ids`, check that the corresponding neuron
@@ -2752,21 +2370,18 @@ impl Governance {
             )
             .await;
 
-        let block_height = match result {
-            Ok(block_height_) => block_height_,
-            Err(error) => {
-                // If we've got an error, we assume the transfer didn't happen for
-                // some reason. The only state to cleanup is to delete the child
-                // neuron, since we haven't mutated the parent yet.
-                self.remove_neuron(child_nid.id, child_neuron)?;
-                println!(
-                    "Neuron stake transfer of to neuron: {:?} \
+        if let Err(error) = result {
+            // If we've got an error, we assume the transfer didn't happen for
+            // some reason. The only state to cleanup is to delete the child
+            // neuron, since we haven't mutated the parent yet.
+            self.remove_neuron(child_nid.id, child_neuron)?;
+            println!(
+                "Neuron stake transfer of split_neuron: {:?} \
                      failed with error: {:?}. Neuron can't be staked.",
-                    child_nid, error
-                );
-                return Err(error);
-            }
-        };
+                child_nid, error
+            );
+            return Err(error);
+        }
 
         // Get the neuron again, but this time a mutable reference.
         // Expect it to exist, since we acquired a lock above.
@@ -2780,16 +2395,6 @@ impl Governance {
             .expect("Expected the child neuron to exist");
 
         child_neuron.cached_neuron_stake_e8s = staked_amount;
-        child_neuron.transfer = Some(NeuronStakeTransfer {
-            transfer_timestamp: creation_timestamp_seconds,
-            from: Some(ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID)),
-            from_subaccount: from_subaccount.to_vec(),
-            to_subaccount: to_subaccount.to_vec(),
-            neuron_stake_e8s: staked_amount,
-            block_height,
-            memo,
-        });
-
         Ok(child_nid)
     }
 
@@ -2928,21 +2533,17 @@ impl Governance {
             )
             .await;
 
-        let block_height;
-        match result {
-            Ok(block_height_) => block_height = block_height_,
-            Err(error) => {
-                // If we've got an error, we assume the transfer didn't happen for
-                // some reason. The only state to cleanup is to delete the child
-                // neuron, since we haven't mutated the parent yet.
-                self.remove_neuron(child_nid.id, child_neuron)?;
-                println!(
-                    "Neuron minting transfer of to neuron: {:?}\
+        if let Err(error) = result {
+            // If we've got an error, we assume the transfer didn't happen for
+            // some reason. The only state to cleanup is to delete the child
+            // neuron, since we haven't mutated the parent yet.
+            self.remove_neuron(child_nid.id, child_neuron)?;
+            println!(
+                "Neuron minting transfer of to neuron: {:?}\
                                   failed with error: {:?}. Neuron can't be staked.",
-                    child_nid, error
-                );
-                return Err(error);
-            }
+                child_nid, error
+            );
+            return Err(error);
         }
 
         // Get the neurons again, but this time mutable references.
@@ -2956,16 +2557,6 @@ impl Governance {
             .expect("Expected the child neuron to exist");
 
         child_neuron.cached_neuron_stake_e8s = child_stake_e8s;
-        child_neuron.transfer = Some(NeuronStakeTransfer {
-            transfer_timestamp: creation_timestamp_seconds,
-            from: Some(ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID)),
-            from_subaccount: Vec::new(),
-            to_subaccount: to_subaccount.to_vec(),
-            neuron_stake_e8s: child_stake_e8s,
-            block_height,
-            memo,
-        });
-
         Ok(child_nid)
     }
 
@@ -3300,21 +2891,17 @@ impl Governance {
             )
             .await;
 
-        let block_height;
-        match result {
-            Ok(block_height_) => block_height = block_height_,
-            Err(error) => {
-                // If we've got an error, we assume the transfer didn't happen for
-                // some reason. The only state to cleanup is to delete the child
-                // neuron, since we haven't mutated the parent yet.
-                self.remove_neuron(child_nid.id, child_neuron)?;
-                println!(
-                    "Neuron minting transfer of to neuron: {:?}\
+        if let Err(error) = result {
+            // If we've got an error, we assume the transfer didn't happen for
+            // some reason. The only state to cleanup is to delete the child
+            // neuron, since we haven't mutated the parent yet.
+            self.remove_neuron(child_nid.id, child_neuron)?;
+            println!(
+                "Neuron minting transfer of to neuron: {:?}\
                                   failed with error: {:?}. Neuron can't be staked.",
-                    child_nid, error
-                );
-                return Err(error);
-            }
+                child_nid, error
+            );
+            return Err(error);
         }
 
         // Get the neurons again, but this time mutable references.
@@ -3328,16 +2915,6 @@ impl Governance {
             .expect("Expected the child neuron to exist");
 
         child_neuron.cached_neuron_stake_e8s = staked_amount;
-        child_neuron.transfer = Some(NeuronStakeTransfer {
-            transfer_timestamp: creation_timestamp_seconds,
-            from: Some(ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID)),
-            from_subaccount: from_subaccount.to_vec(),
-            to_subaccount: to_subaccount.to_vec(),
-            neuron_stake_e8s: staked_amount,
-            block_height,
-            memo,
-        });
-
         Ok(child_nid)
     }
 
@@ -3849,7 +3426,7 @@ impl Governance {
             )),
             Some(RewardMode::RewardToNeuron(reward_to_neuron)) => {
                 let to_subaccount = Subaccount(self.env.random_byte_array());
-                let block_height = self
+                let _block_height = self
                     .ledger
                     .transfer_funds(
                         reward.amount_e8s,
@@ -3883,17 +3460,9 @@ impl Governance {
                     followees: self.proto.default_followees.clone(),
                     recent_ballots: vec![],
                     kyc_verified: true,
-                    transfer: Some(NeuronStakeTransfer {
-                        transfer_timestamp: now,
-                        from: Some(ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID)),
-                        from_subaccount: vec![],
-                        to_subaccount: to_subaccount.to_vec(),
-                        neuron_stake_e8s: reward.amount_e8s,
-                        block_height,
-                        memo: now,
-                    }),
                     maturity_e8s_equivalent: 0,
                     not_for_profit: false,
+                    transfer: None,
                 };
                 self.add_neuron(nid.id, neuron)
             }
@@ -5062,112 +4631,341 @@ impl Governance {
         }
     }
 
+    /// Creates a new neuron or refreshes the stake of an existing
+    /// neuron from a ledger account.
+    ///
+    /// Pre-conditions:
+    /// - The memo must match the nonce of the subaccount.
+    ///
+    /// Post-conditions:
+    /// - If all the pre-conditions apply, either a new neuron is created or the
+    ///   stake of an existing neuron is updated.
+    async fn claim_or_refresh_neuron_by_memo_and_controller(
+        &mut self,
+        caller: &PrincipalId,
+        memo_and_controller: MemoAndController,
+        claim_or_refresh: &ClaimOrRefresh,
+    ) -> Result<NeuronId, GovernanceError> {
+        let controller = memo_and_controller.controller.unwrap_or(*caller);
+        let memo = memo_and_controller.memo;
+        let subaccount = compute_neuron_staking_subaccount(controller, memo);
+        match self.get_neuron_by_subaccount(&subaccount) {
+            Some(neuron) => {
+                let nid = neuron.id.as_ref().expect("Neuron must have an id").clone();
+                self.refresh_neuron(nid, subaccount, claim_or_refresh).await
+            }
+            None => {
+                self.claim_neuron(subaccount, controller, claim_or_refresh)
+                    .await
+            }
+        }
+    }
+
+    /// Refreshes the neuron, getting both it's id and subaccount, if only one
+    /// of them was provided as argument.
+    async fn refresh_neuron_by_id_or_subaccount(
+        &mut self,
+        id: NeuronIdOrSubaccount,
+        claim_or_refresh: &ClaimOrRefresh,
+    ) -> Result<NeuronId, GovernanceError> {
+        let (nid, subaccount) = match id {
+            NeuronIdOrSubaccount::NeuronId(nid) => {
+                let neuron = self.get_neuron(&nid)?;
+                let subaccount = Self::bytes_to_subaccount(&neuron.account)?;
+                (nid, subaccount)
+            }
+            NeuronIdOrSubaccount::Subaccount(sid) => {
+                let subaccount = Self::bytes_to_subaccount(&sid)?;
+                let neuron = self
+                    .get_neuron_by_subaccount(&subaccount)
+                    .ok_or_else(|| Self::no_neuron_for_subaccount_error(&sid))?;
+                (
+                    neuron.id.as_ref().expect("Neurons must have an id").clone(),
+                    subaccount,
+                )
+            }
+        };
+        self.refresh_neuron(nid, subaccount, claim_or_refresh).await
+    }
+
+    /// Refreshes the stake of a given neuron by checking it's account.
+    async fn refresh_neuron(
+        &mut self,
+        nid: NeuronId,
+        subaccount: Subaccount,
+        claim_or_refresh: &ClaimOrRefresh,
+    ) -> Result<NeuronId, GovernanceError> {
+        let now = self.env.now();
+        let account = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
+        // We need to lock the neuron to make sure it doesn't undergo
+        // concurrent changes while we're checking the balance and
+        // refreshing the stake.
+        let _neuron_lock = self.lock_neuron_for_command(
+            nid.id,
+            NeuronInFlightCommand {
+                timestamp: self.env.now(),
+                command: Some(InFlightCommand::ClaimOrRefreshNeuron(
+                    claim_or_refresh.clone(),
+                )),
+            },
+        )?;
+
+        // Get the balance of the neuron from the ledger canister.
+        let balance = self.ledger.account_balance(account).await?;
+        let min_stake = self.economics().neuron_minimum_stake_e8s;
+        if balance.get_e8s() < min_stake {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InsufficientFunds,
+                format!(
+                    "Account does not have enough funds to refresh a neuron. \
+                     Please make sure that account has at least {:?} e8s (was {:?} e8s)",
+                    min_stake,
+                    balance.get_e8s()
+                ),
+            ));
+        }
+        let neuron = self.get_neuron_mut(&nid)?;
+        match neuron.cached_neuron_stake_e8s.cmp(&balance.get_e8s()) {
+            Ordering::Greater => {
+                println!(
+                    "{}ERROR. Neuron cached stake was inconsistent.\
+                     Neuron account: {} has less e8s: {} than the cached neuron stake: {}.\
+                     Stake adjusted.",
+                    LOG_PREFIX,
+                    account,
+                    balance.get_e8s(),
+                    neuron.cached_neuron_stake_e8s
+                );
+                neuron.update_stake(balance.get_e8s(), now);
+            }
+            Ordering::Less => {
+                neuron.update_stake(balance.get_e8s(), now);
+            }
+            // If the stake is the same as the account balance,
+            // just return the neuron id (this way this method
+            // also serves the purpose of allowing to discover the
+            // neuron id based on the memo and the controller).
+            Ordering::Equal => (),
+        };
+
+        Ok(nid)
+    }
+
+    /// Claim a new neuron, unless the account doesn't have enough to stake a
+    /// neuron or we've reached the maximum number of neurons, in which case
+    /// we return an error.
+    ///
+    /// We can't return the funds without more information about the
+    /// source account, so as a workaround for insufficient stake we can ask the
+    /// user to transfer however much is missing to stake a neuron and they can
+    /// then disburse if they so choose. We need to do something more involved
+    /// if we've reached the max, TODO.
+    ///
+    /// Preconditions:
+    /// - The new neuron won't take us above the `MAX_NUMBER_OF_NEURONS`.
+    /// - The amount transfered was greater than or equal to
+    ///   `self.enconomics.neuron_minimum_stake_e8s`.
+    ///
+    /// Note that we need to create the neuron before checking the balance
+    /// so that we record the neuron and avoid a race where a user calls
+    /// this method a second time before the first time responds. If we store
+    /// the neuron and lock it before we make the call, we know that any
+    /// concurrent call to mutate the same neuron will need to wait for this
+    /// one to finish before proceeding.
+    async fn claim_neuron(
+        &mut self,
+        subaccount: Subaccount,
+        controller: PrincipalId,
+        claim_or_refresh: &ClaimOrRefresh,
+    ) -> Result<NeuronId, GovernanceError> {
+        let nid = self.new_neuron_id();
+        let now = self.env.now();
+        let neuron = Neuron {
+            id: Some(nid.clone()),
+            account: subaccount.to_vec(),
+            controller: Some(controller),
+            cached_neuron_stake_e8s: 0,
+            created_timestamp_seconds: now,
+            aging_since_timestamp_seconds: now,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
+            transfer: None,
+            kyc_verified: true,
+            followees: self.proto.default_followees.clone(),
+            hot_keys: vec![],
+            maturity_e8s_equivalent: 0,
+            neuron_fees_e8s: 0,
+            not_for_profit: false,
+            recent_ballots: vec![],
+        };
+
+        // This also verifies that there are not too many neurons already.
+        self.add_neuron(nid.id, neuron.clone())?;
+
+        let _neuron_lock = self.lock_neuron_for_command(
+            nid.id,
+            NeuronInFlightCommand {
+                timestamp: now,
+                command: Some(InFlightCommand::ClaimOrRefreshNeuron(
+                    claim_or_refresh.clone(),
+                )),
+            },
+        )?;
+
+        // Get the balance of the neuron's subaccount from ledger canister.
+        let account = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
+        let balance = self.ledger.account_balance(account).await?;
+        let min_stake = self.economics().neuron_minimum_stake_e8s;
+        if balance.get_e8s() < min_stake {
+            // To prevent this method from creating non-staked
+            // neurons, we must also remove the neuron that was
+            // previously created.
+            self.remove_neuron(nid.id, neuron)?;
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InsufficientFunds,
+                format!(
+                    "Account does not have enough funds to stake a neuron. \
+                     Please make sure that account has at least {:?} e8s (was {:?} e8s)",
+                    min_stake,
+                    balance.get_e8s()
+                ),
+            ));
+        }
+
+        // Ok, we are able to stake the neuron.
+        match self.get_neuron_mut(&nid) {
+            Ok(neuron) => {
+                // Adjust the stake.
+                neuron.update_stake(balance.get_e8s(), now);
+                Ok(nid)
+            }
+            Err(err) => {
+                // This should not be possible, but let's be defensive and provide a
+                // reasonable error message, but still panic so that the lock remains
+                // acquired and we can investigate.
+                panic!(
+                    "When attempting to stake a neuron with ID {:?} and stake {:?},\
+	             the neuron disappeared while the operation was in flight.\
+	             Please try again: {:?}",
+                    nid,
+                    balance.get_e8s(),
+                    err
+                )
+            }
+        }
+    }
+
     pub async fn manage_neuron(
         &mut self,
         caller: &PrincipalId,
         mgmt: &ManageNeuron,
     ) -> ManageNeuronResponse {
+        self.manage_neuron_internal(caller, mgmt)
+            .await
+            .unwrap_or_else(ManageNeuronResponse::error)
+    }
+
+    pub async fn manage_neuron_internal(
+        &mut self,
+        caller: &PrincipalId,
+        mgmt: &ManageNeuron,
+    ) -> Result<ManageNeuronResponse, GovernanceError> {
         // We run claim or refresh before we check whether a neuron exists because it
         // may not in the case of the neuron being claimed
         if let Some(manage_neuron::Command::ClaimOrRefresh(claim_or_refresh)) = &mgmt.command {
-            match claim_or_refresh.by {
+            // Note that we return here, so none of the rest of this method is executed
+            // in this case.
+            return match &claim_or_refresh.by {
                 Some(By::Memo(memo)) => {
-                    return self
-                        .claim_or_refresh_neuron_from_account_internal(Memo(memo), *caller)
-                        .await
-                        .map_or_else(
-                            ManageNeuronResponse::error,
-                            ManageNeuronResponse::claim_or_refresh_neuron_response,
-                        );
+                    let memo_and_controller = MemoAndController {
+                        memo: *memo,
+                        controller: None,
+                    };
+                    self.claim_or_refresh_neuron_by_memo_and_controller(
+                        caller,
+                        memo_and_controller,
+                        claim_or_refresh,
+                    )
+                    .await
+                    .map(ManageNeuronResponse::claim_or_refresh_neuron_response)
                 }
-                None => {
-                    return ManageNeuronResponse::error(GovernanceError::new_with_message(
-                        ErrorType::InvalidCommand,
-                        "Can only claim or refresh a neuron by memo",
-                    ));
-                }
-            }
-        }
+                Some(By::MemoAndController(memo_and_controller)) => self
+                    .claim_or_refresh_neuron_by_memo_and_controller(
+                        caller,
+                        memo_and_controller.clone(),
+                        claim_or_refresh,
+                    )
+                    .await
+                    .map(ManageNeuronResponse::claim_or_refresh_neuron_response),
 
-        let id = match mgmt.get_neuron_id_or_subaccount() {
-            Err(e) => return ManageNeuronResponse::error(e),
-            Ok(None) => {
-                return ManageNeuronResponse::error(GovernanceError::new_with_message(
-                    ErrorType::NotFound,
-                    "No neuron ID specified in the management request.",
-                ))
-            }
-            Ok(Some(NeuronIdOrSubaccount::NeuronId(id))) => id,
-            Ok(Some(NeuronIdOrSubaccount::Subaccount(sid))) => {
-                let subaccount = match Self::bytes_to_subaccount(&sid) {
-                    Ok(subaccount) => subaccount,
-                    Err(e) => return ManageNeuronResponse::error(e),
-                };
-                match self.get_neuron_by_subaccount(&subaccount) {
-                    Some(neuron) => neuron.id.clone().expect("neuron doesn't have an ID"),
-                    None => {
-                        return ManageNeuronResponse::error(GovernanceError::new_with_message(
+                Some(By::NeuronIdOrSubaccount(_)) => {
+                    let id = mgmt.get_neuron_id_or_subaccount()?.ok_or_else(|| {
+                        GovernanceError::new_with_message(
                             ErrorType::NotFound,
                             "No neuron ID specified in the management request.",
-                        ))
-                    }
+                        )
+                    })?;
+                    self.refresh_neuron_by_id_or_subaccount(id, claim_or_refresh)
+                        .await
+                        .map(ManageNeuronResponse::claim_or_refresh_neuron_response)
+                }
+                None => Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    "Need to provide a way by which to claim or refresh the neuron.",
+                )),
+            };
+        }
+
+        let id = match mgmt.get_neuron_id_or_subaccount()? {
+            Some(NeuronIdOrSubaccount::NeuronId(id)) => Ok(id),
+            Some(NeuronIdOrSubaccount::Subaccount(sid)) => {
+                let subaccount = Self::bytes_to_subaccount(&sid)?;
+                match self.get_neuron_by_subaccount(&subaccount) {
+                    Some(neuron) => Ok(neuron.id.clone().expect("neuron doesn't have an ID")),
+                    None => Err(GovernanceError::new_with_message(
+                        ErrorType::NotFound,
+                        "No neuron ID specified in the management request.",
+                    )),
                 }
             }
-        };
+            None => Err(GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                "No neuron ID specified in the management request.",
+            )),
+        }?;
 
         match &mgmt.command {
             Some(manage_neuron::Command::Configure(c)) => self
                 .configure_neuron(&id, &caller, c)
-                .map_or_else(ManageNeuronResponse::error, |_| {
-                    ManageNeuronResponse::configure_response()
-                }),
-            Some(manage_neuron::Command::Disburse(d)) => {
-                self.disburse_neuron(&id, caller, d).await.map_or_else(
-                    ManageNeuronResponse::error,
-                    ManageNeuronResponse::disburse_response,
-                )
-            }
-            Some(manage_neuron::Command::Spawn(s)) => {
-                self.spawn_neuron(&id, caller, s).await.map_or_else(
-                    ManageNeuronResponse::error,
-                    ManageNeuronResponse::spawn_response,
-                )
-            }
+                .map(|_| ManageNeuronResponse::configure_response()),
+            Some(manage_neuron::Command::Disburse(d)) => self
+                .disburse_neuron(&id, caller, d)
+                .await
+                .map(ManageNeuronResponse::disburse_response),
+            Some(manage_neuron::Command::Spawn(s)) => self
+                .spawn_neuron(&id, caller, s)
+                .await
+                .map(ManageNeuronResponse::spawn_response),
             Some(manage_neuron::Command::MergeMaturity(m)) => self
                 .merge_maturity_of_neuron(&id, caller, m)
                 .await
-                .map_or_else(
-                    ManageNeuronResponse::error,
-                    ManageNeuronResponse::merge_maturity_response,
-                ),
-            Some(manage_neuron::Command::Split(s)) => {
-                self.split_neuron(&id, caller, s).await.map_or_else(
-                    ManageNeuronResponse::error,
-                    ManageNeuronResponse::split_response,
-                )
-            }
-            Some(manage_neuron::Command::DisburseToNeuron(d)) => {
-                self.disburse_to_neuron(&id, caller, d).await.map_or_else(
-                    ManageNeuronResponse::error,
-                    ManageNeuronResponse::disburse_to_neuron_response,
-                )
-            }
+                .map(ManageNeuronResponse::merge_maturity_response),
+            Some(manage_neuron::Command::Split(s)) => self
+                .split_neuron(&id, caller, s)
+                .await
+                .map(ManageNeuronResponse::split_response),
+            Some(manage_neuron::Command::DisburseToNeuron(d)) => self
+                .disburse_to_neuron(&id, caller, d)
+                .await
+                .map(ManageNeuronResponse::disburse_to_neuron_response),
             Some(manage_neuron::Command::Follow(f)) => self
                 .follow(&id, caller, f)
-                .map_or_else(ManageNeuronResponse::error, |_| {
-                    ManageNeuronResponse::follow_response()
-                }),
-            Some(manage_neuron::Command::MakeProposal(p)) => {
-                self.make_proposal(&id, caller, p).map_or_else(
-                    ManageNeuronResponse::error,
-                    ManageNeuronResponse::make_proposal_response,
-                )
-            }
+                .map(|_| ManageNeuronResponse::follow_response()),
+            Some(manage_neuron::Command::MakeProposal(p)) => self
+                .make_proposal(&id, caller, p)
+                .map(ManageNeuronResponse::make_proposal_response),
             Some(manage_neuron::Command::RegisterVote(v)) => self
                 .register_vote(&id, caller, v)
-                .map_or_else(ManageNeuronResponse::error, |_| {
-                    ManageNeuronResponse::register_vote_response()
-                }),
+                .map(|_| ManageNeuronResponse::register_vote_response()),
             Some(manage_neuron::Command::ClaimOrRefresh(_)) => {
                 panic!("This should have already returned")
             }
@@ -5251,13 +5049,22 @@ impl Governance {
                 + (self.latest_reward_event().day_after_genesis + 1)
                     * REWARD_DISTRIBUTION_PERIOD_SECONDS
         {
-            let supply = self.ledger.total_supply().await;
-            println!(
-                "{}consider_distributing_rewards. Supply: {:?}",
-                LOG_PREFIX, supply
-            );
+            match self.ledger.total_supply().await {
+                Ok(supply) => {
+                    println!(
+                        "{}consider_distributing_rewards. Supply: {:?}",
+                        LOG_PREFIX, supply
+                    );
 
-            self.distribute_rewards(supply.expect("Could not get the total ICPT supply."));
+                    self.distribute_rewards(supply);
+                }
+                Err(e) => {
+                    println!(
+                        "{}consider_distributing_rewards. Error when getting total ICP supply: {}",
+                        LOG_PREFIX, e
+                    );
+                }
+            }
         }
     }
 

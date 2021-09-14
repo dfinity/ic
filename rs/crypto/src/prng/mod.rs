@@ -1,5 +1,5 @@
 //! Offers cryptographically secure pseudorandom number generation (CSPRNG).
-use ic_crypto_sha256::{DomainSeparationContext, Sha256};
+use ic_crypto_sha::{DomainSeparationContext, Sha256};
 use ic_interfaces::crypto::CryptoHashable;
 use ic_types::consensus::{RandomBeacon, RandomTape};
 use ic_types::Randomness;

@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-serde = { version = "1.0.99" }
+serde = { version = "1.0.99", features = ["derive"] }
 zeroize = { version = "1.1.1", features = ["zeroize_derive"] }
 
 [dev-dependencies]

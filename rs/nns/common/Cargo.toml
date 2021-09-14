@@ -11,7 +11,7 @@ path = "src/lib.rs"
 candid = "0.7.4"
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha256 = {path = "../../crypto/sha256/"}
+ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-nns-constants = { path = "../constants" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-keys = { path = "../../registry/keys" }

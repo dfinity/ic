@@ -59,6 +59,8 @@ pub(crate) enum RequestType {
     Dashboard,
     /// A request for the latest Catch-Up Package (CUP)
     CatchUpPackage,
+    /// A request for backup artifacts of the given height
+    Artifacts(u64),
 }
 
 impl RequestType {
@@ -72,6 +74,7 @@ impl RequestType {
             RedirectToDashboard => "redirect_to_dashboard",
             Dashboard => "dashboard",
             CatchUpPackage => "catch-up-package",
+            Artifacts(_) => "artifacts",
         }
     }
 }

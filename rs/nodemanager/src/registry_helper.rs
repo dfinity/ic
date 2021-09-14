@@ -172,15 +172,8 @@ impl RegistryHelper {
         version: RegistryVersion,
     ) -> NodeManagerResult<CatchUpPackage> {
         let subnet_id = self.get_subnet_id(version)?;
-        let maybe_registry_cup =
-            make_registry_cup(&*self.registry_client, subnet_id, Some(&self.logger));
-        match maybe_registry_cup {
-            Some(registry_cup) => Ok(registry_cup),
-            None => {
-                warn!(self.logger, "make_registry_cup returned None",);
-                Err(NodeManagerError::MakeRegistryCupError(subnet_id, version))
-            }
-        }
+        make_registry_cup(&*self.registry_client, subnet_id, Some(&self.logger))
+            .ok_or(NodeManagerError::MakeRegistryCupError(subnet_id, version))
     }
 
     pub(crate) fn get_firewall_config(

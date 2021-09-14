@@ -35,19 +35,22 @@
 //! - For a lack of a better strategy, always prioritise responses over
 //! requests.
 
-use super::query_allocations::QueryAllocationsUsed;
+use super::{compilation_cache::CompilationCache, query_allocations::QueryAllocationsUsed};
 use crate::{
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
     QueryExecutionType,
 };
+use ic_base_types::NumBytes;
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, SubnetAvailableMemory,
+    ExecutionParameters, HypervisorError, HypervisorResult, SubnetAvailableMemory,
 };
 use ic_logger::{debug, fatal, ReplicaLogger};
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallContextAction, CallOrigin, CanisterState, ReplicatedState};
+use ic_replicated_state::{
+    CallContextAction, CallOrigin, CanisterState, EmbedderCache, ExecutionState, ReplicatedState,
+};
 use ic_types::{
     ingress::WasmResult,
     messages::{
@@ -55,7 +58,7 @@ use ic_types::{
         UserQuery,
     },
     user_error::{ErrorCode, RejectCode, UserError},
-    CanisterId, Cycles, NumMessages, PrincipalId, QueryAllocation, SubnetId,
+    CanisterId, Cycles, NumInstructions, NumMessages, PrincipalId, QueryAllocation, SubnetId,
 };
 use std::{
     collections::BTreeMap,
@@ -106,7 +109,9 @@ pub(super) struct QueryContext<'a> {
     // one outstanding response.
     outstanding_response: Option<Response>,
     query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
+    compilation_cache: Arc<RwLock<CompilationCache>>,
     subnet_available_memory: SubnetAvailableMemory,
+    max_canister_memory_size: NumBytes,
 }
 
 impl<'a> QueryContext<'a> {
@@ -119,7 +124,9 @@ impl<'a> QueryContext<'a> {
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
         query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
+        compilation_cache: Arc<RwLock<CompilationCache>>,
         subnet_available_memory: SubnetAvailableMemory,
+        max_canister_memory_size: NumBytes,
     ) -> Self {
         let routing_table = Arc::new(state.metadata.network_topology.routing_table.clone());
         Self {
@@ -133,8 +140,10 @@ impl<'a> QueryContext<'a> {
             state,
             data_certificate,
             query_allocations_used,
+            compilation_cache,
             routing_table,
             subnet_available_memory,
+            max_canister_memory_size,
         }
     }
 
@@ -346,6 +355,57 @@ impl<'a> QueryContext<'a> {
         }
     }
 
+    // Returns the compiled code for the given canister and state.
+    // More specifically, it returns:
+    // - Some(cache_code) if the code is already in the compilation cache.
+    // - Some(compiled_code) if compilation succeeds.
+    // - None if compilation failes.
+    // In the second case the compiled code is inserted into the compilation cache
+    // to speed up future queries.
+    fn lookup_embedder_cache_or_compile(
+        &mut self,
+        canister_id: CanisterId,
+        execution_state: &ExecutionState,
+    ) -> Option<EmbedderCache> {
+        let maybe_embedder_cache = self
+            .compilation_cache
+            .read()
+            .unwrap()
+            .get(canister_id, execution_state);
+        match maybe_embedder_cache {
+            Some(embedder_cache) => {
+                // Cache hit: return the result from the compilation cache.
+                Some(embedder_cache)
+            }
+            None => {
+                // Cache miss: try to compile the canister and save the result in the
+                // compilation cache.
+                match self.hypervisor.compile(
+                    &execution_state.wasm_binary,
+                    execution_state.persistence_type(),
+                ) {
+                    Ok(embedder_cache) => {
+                        // Another thread may have already compiled the code and updated the
+                        // compilation cache. In that case we change
+                        // `embedder_cache` to to the value that is
+                        // already in the cache.
+                        let embedder_cache = self.compilation_cache.write().unwrap().insert(
+                            canister_id,
+                            execution_state,
+                            embedder_cache,
+                        );
+                        Some(embedder_cache)
+                    }
+                    Err(_) => {
+                        // Compilation failed. This case may happen after replica upgrade if the new
+                        // version of the replica has more strict validation rules.
+                        None
+                    }
+                }
+            }
+        }
+    }
+
     fn execute_query(
         &mut self,
         mut canister: CanisterState,
@@ -355,6 +415,25 @@ impl<'a> QueryContext<'a> {
         source: PrincipalId,
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, HypervisorResult<Option<WasmResult>>) {
+        // If the canister state was loaded from a checkpoint then its embedder cache is
+        // empty, which means that the embedder will compile Wasm code before executing
+        // it. Since all state changes are thrown away after the query execution, the
+        // next query will also observe an empty embedder cache and will recompiled
+        // Wasm code. To avoid such redundant recompilations we cache the compilation
+        // results and prefill the embedder cache before executing the query.
+        if let Some(execution_state) = &mut canister.execution_state {
+            if execution_state.embedder_cache.is_none() {
+                if let Some(embedder_cache) = self.lookup_embedder_cache_or_compile(
+                    canister.system_state.canister_id,
+                    &execution_state,
+                ) {
+                    // It is okay to modify the `embedder_cache` field of the execution state
+                    // because all state changes will be anyway thrown away after execution.
+                    execution_state.embedder_cache = Some(embedder_cache);
+                }
+            }
+        }
+
         let call_context_id = self.new_call_context(&mut canister, call_origin);
         let instruction_limit = self
             .query_allocations_used
@@ -362,6 +441,7 @@ impl<'a> QueryContext<'a> {
             .unwrap()
             .allocation_before_execution(&canister)
             .into();
+        let execution_parameters = self.execution_parameters(&canister, instruction_limit);
         let (canister, instructions_left, result) = self.hypervisor.execute_query(
             QueryExecutionType::NonReplicated {
                 call_context_id,
@@ -370,10 +450,10 @@ impl<'a> QueryContext<'a> {
             method_name,
             method_payload,
             source,
-            instruction_limit,
             canister,
             Some(self.data_certificate.clone()),
             self.state.time(),
+            execution_parameters,
         );
         let instructions_executed = instruction_limit - instructions_left;
         measurement_scope.add(instructions_executed, NumMessages::from(1));
@@ -435,6 +515,7 @@ impl<'a> QueryContext<'a> {
             .unwrap()
             .allocation_before_execution(&canister)
             .into();
+        let execution_parameters = self.execution_parameters(&canister, instruction_limit);
         let (canister, instructions_left, _heap_delta, execution_result) =
             self.hypervisor.execute_callback(
                 canister,
@@ -443,11 +524,10 @@ impl<'a> QueryContext<'a> {
                 response.response_payload,
                 // No cycles are refunded in a response to a query call.
                 Cycles::from(0),
-                instruction_limit,
                 self.state.time(),
                 self.routing_table.clone(),
                 subnet_records,
-                self.subnet_available_memory.clone(),
+                execution_parameters,
             );
         let instructions_executed = instruction_limit - instructions_left;
         measurement_scope.add(instructions_executed, NumMessages::from(1));
@@ -805,6 +885,19 @@ impl<'a> QueryContext<'a> {
                     call_context_id,
                     execution_result,
                 ),
+        }
+    }
+
+    fn execution_parameters(
+        &self,
+        canister: &CanisterState,
+        instruction_limit: NumInstructions,
+    ) -> ExecutionParameters {
+        ExecutionParameters {
+            instruction_limit,
+            canister_memory_limit: canister.memory_limit(self.max_canister_memory_size),
+            subnet_available_memory: self.subnet_available_memory.clone(),
+            compute_allocation: canister.scheduler_state.compute_allocation,
         }
     }
 }

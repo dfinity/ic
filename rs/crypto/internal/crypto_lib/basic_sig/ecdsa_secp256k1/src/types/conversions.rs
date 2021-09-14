@@ -3,13 +3,6 @@ use ic_types::crypto::{AlgorithmId, CryptoError};
 use std::convert::{From, TryFrom};
 
 // From vector of bytes.
-impl From<Vec<u8>> for SecretKeyBytes {
-    fn from(key: Vec<u8>) -> Self {
-        SecretKeyBytes(key)
-    }
-}
-
-// From vector of bytes.
 impl From<Vec<u8>> for PublicKeyBytes {
     fn from(key: Vec<u8>) -> Self {
         PublicKeyBytes(key)

@@ -3,8 +3,12 @@ use crate::{
     subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE,
 };
 use ic_base_types::NumSeconds;
-use ic_types::{Cycles, NumBytes, NumInstructions};
+use ic_types::{
+    Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
+};
 use serde::{Deserialize, Serialize};
+
+const GB: u64 = 1024 * 1024 * 1024;
 
 /// This is the upper limit on how much logical storage canisters can request to
 /// be store on a given subnet.
@@ -16,7 +20,7 @@ use serde::{Deserialize, Serialize};
 /// The gen 1 machines in production will have 3TiB disks. We offer 300GiB to
 /// canisters. The rest will be used to for storing additional copies of the
 /// canister's data and the deltas.
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(300 * 1024 * 1024 * 1024);
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(300 * GB);
 
 /// This is the upper limit on how big heap deltas all the canisters together
 /// can produce on a subnet in between checkpoints. Once, the total delta size
@@ -28,7 +32,7 @@ const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(300 * 1024 * 1024 * 1024)
 /// The gen 1 machines in production will have 3TiB disks. As this is a soft
 /// limit, we do not want to set it too high. The remainder of the storage can
 /// be used for storing other copies of the canister states.
-pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(1024 * 1024 * 1024 * 1024);
+pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(1024 * GB);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
@@ -77,8 +81,9 @@ impl Default for Config {
             create_funds_whitelist: String::default(),
             max_instructions_for_message_acceptance_calls: MAX_INSTRUCTIONS_PER_MESSAGE,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
-            // A canister's memory size can be at most 8GiB (4GiB heap + 4GiB stable memory).
-            max_canister_memory_size: NumBytes::new(8 * 1024 * 1024 * 1024),
+            max_canister_memory_size: NumBytes::new(
+                MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,
+            ),
             // Canisters on the system subnet are not capped.
             // They can hold an amount of cycles that goes above this limit.
             // If this limit is set to None, canisters can hold any amount of cycles.

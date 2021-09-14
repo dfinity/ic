@@ -6,6 +6,7 @@ edition = "2018"
 [dependencies]
 debug_stub_derive = "0.3.0"
 ic-base-types = { path = "../types/base_types" }
+ic-config = { path = "../config" }
 ic-cow-state = { path = "../cow_state" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }

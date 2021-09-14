@@ -1,5 +1,6 @@
 use super::SessionNonce;
 use crate::{num_bytes_from, NumWasmPages, PageDelta, PageIndex, PageMap};
+use ic_config::embedders::PersistenceType;
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState, MappedStateImpl};
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_protobuf::{
@@ -299,6 +300,15 @@ impl ExecutionState {
     /// Returns the number of global variables in the Wasm module.
     pub fn num_wasm_globals(&self) -> usize {
         self.exported_globals.len()
+    }
+
+    /// Returns the persistence type associated with this state.
+    pub fn persistence_type(&self) -> PersistenceType {
+        if self.cow_mem_mgr.is_valid() {
+            PersistenceType::Pagemap
+        } else {
+            PersistenceType::Sigsegv
+        }
     }
 }
 

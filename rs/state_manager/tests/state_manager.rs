@@ -7,7 +7,7 @@ use ic_interfaces::{
     state_manager::*,
 };
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::{NumWasmPages, PageMap, ReplicatedState, Stream};
+use ic_replicated_state::{NumWasmPages64, PageMap, ReplicatedState, Stream};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
@@ -162,14 +162,14 @@ fn stable_memory_is_persisted() {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        canister_state.system_state.stable_memory_size = NumWasmPages::new(2);
+        canister_state.system_state.stable_memory_size = NumWasmPages64::new(2);
         canister_state.system_state.stable_memory = PageMap::from(&[1; 100][..]);
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
         let (_height, state) = state_manager.take_tip();
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
         assert_eq!(
-            NumWasmPages::new(2),
+            NumWasmPages64::new(2),
             canister_state.system_state.stable_memory_size
         );
         assert_eq!(
@@ -184,7 +184,7 @@ fn stable_memory_is_persisted() {
         let state = recovered.take();
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
         assert_eq!(
-            NumWasmPages::new(2),
+            NumWasmPages64::new(2),
             canister_state.system_state.stable_memory_size
         );
         assert_eq!(
@@ -700,6 +700,39 @@ fn should_keep_the_last_checkpoint_on_restart() {
             .unwrap()
             .is_empty());
     });
+}
+
+#[test]
+fn can_keep_the_latest_snapshot_after_removal() {
+    state_manager_test(|state_manager| {
+        let mut heights = vec![height(0)];
+        for i in 1..10 {
+            let (_height, state) = state_manager.take_tip();
+            heights.push(height(i));
+
+            let scope = if i % 2 == 0 {
+                CertificationScope::Full
+            } else {
+                CertificationScope::Metadata
+            };
+
+            state_manager.commit_and_certify(state, height(i), scope.clone());
+
+            if scope == CertificationScope::Full {
+                // We need to wait for hashing to complete, otherwise the
+                // checkpoint can be retained until the hashing is complete.
+                wait_for_checkpoint(&state_manager, height(i));
+            }
+        }
+        assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
+
+        for i in 1..20 {
+            state_manager.remove_states_below(height(i));
+            assert_eq!(height(9), state_manager.latest_state_height());
+            let latest_state = state_manager.get_latest_state();
+            assert_eq!(height(9), latest_state.height());
+        }
+    })
 }
 
 #[test]

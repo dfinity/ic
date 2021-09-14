@@ -146,6 +146,7 @@ fn state_machine_populates_network_topology() {
             fixture.network_topology.clone(),
             provided_batch,
             ProvisionalWhitelist::Set(BTreeSet::new()),
+            Default::default(),
         );
 
         assert_eq!(state.metadata.network_topology, fixture.network_topology);
@@ -171,6 +172,7 @@ fn test_delivered_batch(provided_batch: Batch) {
             NetworkTopology::default(),
             provided_batch,
             ProvisionalWhitelist::Set(BTreeSet::new()),
+            Default::default(),
         );
     });
 }

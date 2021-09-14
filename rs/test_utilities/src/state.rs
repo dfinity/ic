@@ -8,8 +8,8 @@ use ic_cow_state::CowMemoryManagerImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE, metadata_state::Stream, page_map, CallContext, CallOrigin,
-    CanisterState, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageMap,
-    ReplicatedState, SchedulerState, SystemState,
+    CanisterState, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, NumWasmPages64,
+    PageMap, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_types::{
     messages::{Ingress, RequestOrResponse},
@@ -182,7 +182,7 @@ impl CanisterStateBuilder {
 
         if let Some(data) = self.stable_memory {
             system_state.stable_memory_size =
-                NumWasmPages::new((data.len() / WASM_PAGE_SIZE_BYTES) as u32 + 1);
+                NumWasmPages64::new((data.len() / WASM_PAGE_SIZE_BYTES) as u64 + 1);
             let mut buf = page_map::Buffer::new(system_state.stable_memory);
             buf.write(&data[..], 0);
             system_state.stable_memory = buf.into_page_map();

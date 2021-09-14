@@ -56,14 +56,13 @@ impl ReleasePackage {
         force_replica_binary: Option<String>,
         replica_config_file: PathBuf,
         ic_binary_dir: PathBuf,
+        version_file: PathBuf,
         current_node_manager_hash: String,
         nns_registry_replicator: Arc<NnsRegistryReplicator>,
         logger: ReplicaLogger,
     ) -> Arc<std::sync::atomic::AtomicBool> {
         // For base OS upgrades, we determine the current version from a file packed
         // into the image.
-        let mut version_file = ic_binary_dir.clone();
-        version_file.push("version.txt");
         let contents = fs::read_to_string(version_file);
         let (fixed_version_mode, replica_version) = if let Ok(version) = contents {
             info!(logger, "Setting replica version ID to: {}", &version);
@@ -229,6 +228,7 @@ impl ReleasePackage {
                     .payload
                     .as_ref()
                     .as_summary()
+                    .dkg
                     .current_transcript(&NiDkgTag::HighThreshold)
                     .public_key();
 
@@ -309,6 +309,7 @@ impl ReleasePackage {
             .payload
             .as_ref()
             .as_summary()
+            .dkg
             .current_transcript(&NiDkgTag::HighThreshold)
             .public_key();
 
@@ -584,6 +585,7 @@ async fn get_public_key(
             .payload
             .as_ref()
             .as_summary()
+            .dkg
             .current_transcript(&NiDkgTag::HighThreshold)
             .public_key()
     })

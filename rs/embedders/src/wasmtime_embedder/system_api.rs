@@ -1,6 +1,6 @@
 use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
-use ic_types::NumBytes;
-use std::borrow::Borrow;
+use ic_logger::{error, info, ReplicaLogger};
+use ic_types::{CanisterId, Cycles, NumBytes};
 use std::cell::{RefCell, RefMut};
 use std::convert::TryFrom;
 use std::ops::DerefMut;
@@ -41,39 +41,108 @@ fn process_err(api: &mut dyn SystemApi, e: HypervisorError) -> wasmtime::Trap {
     t
 }
 
-fn update_num_instructions_global<T: Into<u64>>(
-    num_instructions_global_rc: &std::rc::Weak<RefCell<Option<wasmtime::Global>>>,
-    api: &mut dyn SystemApi,
-    num_bytes: T,
-) -> Result<(), Trap> {
-    let num_instructions_global = num_instructions_global_rc.upgrade().unwrap();
-    let num_instructions_global_ref = num_instructions_global.borrow_mut();
-    let num_instructions_global = num_instructions_global_ref.as_ref().unwrap();
+/// A simple struct to wrap various fields needed to charge canisters for
+/// different types of memory accesses.
+#[derive(Clone)]
+struct MemoryCharger {
+    log: ReplicaLogger,
+    canister_id: CanisterId,
+    num_instructions_global: std::rc::Weak<RefCell<Option<wasmtime::Global>>>,
+}
 
-    match num_instructions_global.get() {
-        Val::I64(current_instructions) => {
-            let num_instructions = api
-                .get_num_instructions_from_bytes(NumBytes::from(num_bytes.into()))
-                .get() as i64;
-            if current_instructions < num_instructions {
+impl MemoryCharger {
+    fn new(
+        log: ReplicaLogger,
+        canister_id: CanisterId,
+        num_instructions_global: std::rc::Weak<RefCell<Option<wasmtime::Global>>>,
+    ) -> Self {
+        Self {
+            log,
+            canister_id,
+            num_instructions_global,
+        }
+    }
+
+    /// Charges a canister (in instructions) for using `num_bytes` bytes of
+    /// memory. If the canister has run out instructions or there are
+    /// unexpected bugs, return an error.
+    ///
+    /// There are a number of scenarios that this function must handle where due
+    /// to potential bugs, the expected information is not available. In more
+    /// classical systems, we could just panic in such cases. However, for us
+    /// that has the danger of putting the subnet in a crash loop. So instead,
+    /// we emit a error log message and continue execution. We intentionally do
+    /// not introduce new error types in these paths as these error paths should
+    /// be extremely rare and we do not want to increase the complexity of the
+    /// code to handle hypothetical bugs.
+    fn charge_for_memory_used(&self, api: &mut dyn SystemApi, num_bytes: u64) -> Result<(), Trap> {
+        let counter = match self.num_instructions_global.upgrade() {
+            None => {
+                error!(
+                    self.log,
+                    "[EXC-BUG] Canister {}: Upgrading weak pointer failed.", self.canister_id,
+                );
                 return Err(process_err(api, HypervisorError::OutOfInstructions));
             }
+            Some(counter) => counter,
+        };
+        let counter = counter.borrow_mut();
+        let counter = match counter.as_ref() {
+            None => {
+                error!(
+                    self.log,
+                    "[EXC-BUG] Canister {}: instructions counter is set to None.", self.canister_id,
+                );
+                return Err(process_err(api, HypervisorError::OutOfInstructions));
+            }
+            Some(counter) => counter,
+        };
 
-            num_instructions_global
-                .set(Val::I64(current_instructions - num_instructions))
-                .unwrap_or_else(|_| {
-                    panic!(
-                        "Setting counter_instructions to {}  failed",
-                        num_instructions
-                    )
-                });
-            Ok(())
+        match counter.get() {
+            Val::I64(current_instructions) => {
+                let fee = api
+                    .get_num_instructions_from_bytes(NumBytes::from(num_bytes))
+                    .get() as i64;
+                if current_instructions < fee {
+                    info!(
+                        self.log,
+                        "Canister {}: ran out of instructions.  Current {}, fee {}",
+                        self.canister_id,
+                        current_instructions,
+                        fee
+                    );
+                    return Err(process_err(api, HypervisorError::OutOfInstructions));
+                }
+                let updated_instructions = current_instructions - fee;
+                if let Err(err) = counter.set(Val::I64(updated_instructions)) {
+                    error!(
+                        self.log,
+                        "[EXC-BUG] Canister {}: Setting instructions from {} to {} failed with {}",
+                        self.canister_id,
+                        current_instructions,
+                        updated_instructions,
+                        err
+                    );
+                    return Err(process_err(api, HypervisorError::OutOfInstructions));
+                }
+                Ok(())
+            }
+            others => {
+                error!(
+                    self.log,
+                    "[EXC-BUG] Canister {}: expected value of type I64 instead got {:?}",
+                    self.canister_id,
+                    others,
+                );
+                Err(process_err(api, HypervisorError::OutOfInstructions))
+            }
         }
-        _ => unreachable!("invalid instructions counter type"),
     }
 }
 
 pub(crate) fn syscalls(
+    log: ReplicaLogger,
+    canister_id: CanisterId,
     store: &Store,
     api: SystemApiHandle,
     num_instructions_global: std::rc::Weak<RefCell<Option<wasmtime::Global>>>,
@@ -99,6 +168,7 @@ pub(crate) fn syscalls(
             .map_err(|e| process_err(&mut *api, e))
     }
 
+    let memory_charger = MemoryCharger::new(log, canister_id, num_instructions_global);
     let mut linker = Linker::new(&store);
 
     linker
@@ -149,16 +219,12 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "msg_arg_data_copy", {
             let api = api.clone();
-            let num_instructions_global = num_instructions_global.clone();
+            let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>, dst: i32, offset: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    size as u32,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), size as u64)?;
                 api.ic0_msg_arg_data_copy(dst as u32, offset as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -184,16 +250,12 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "msg_method_name_copy", {
             let api = api.clone();
-            let num_instructions_global = num_instructions_global.clone();
+            let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>, dst: i32, offset: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    size as u32,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), size as u64)?;
                 api.ic0_msg_method_name_copy(dst as u32, offset as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -214,16 +276,12 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "msg_reply_data_append", {
             let api = api.clone();
-            let num_instructions_global = num_instructions_global.clone();
+            let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>, src: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    size as u32,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), size as u64)?;
                 api.ic0_msg_reply_data_append(src as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -254,16 +312,12 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "msg_reject", {
             let api = api.clone();
-            let num_instructions_global = num_instructions_global.clone();
+            let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>, src: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    size as u32,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), size as u64)?;
                 api.ic0_msg_reject(src as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -289,16 +343,12 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "msg_reject_msg_copy", {
             let api = api.clone();
-            let num_instructions_global = num_instructions_global.clone();
+            let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>, dst: i32, offset: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    size as u32,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), size as u64)?;
                 api.ic0_msg_reject_msg_copy(dst as u32, offset as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -366,16 +416,12 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "debug_print", {
             let api = api.clone();
-            let num_instructions_global = num_instructions_global.clone();
+            let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>, offset: i32, length: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    length as u32,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), length as u64)?;
                 api.ic0_debug_print(offset as u32, length as u32, memory);
                 Ok(())
             }
@@ -385,16 +431,12 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "trap", {
             let api = api.clone();
-            let num_instructions_global = num_instructions_global.clone();
+            let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>, offset: i32, length: i32| -> Result<(), _> {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    length as u32,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), length as u64)?;
                 let trap = api.ic0_trap(offset as u32, length as u32, memory);
                 Err(process_err(&mut *api, trap))
             }
@@ -404,7 +446,7 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "call_simple", {
             let api = api.clone();
-            let num_instructions_global = num_instructions_global.clone();
+            let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>,
                   callee_src: i32,
                   callee_size: i32,
@@ -419,11 +461,7 @@ pub(crate) fn syscalls(
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    len as u32,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), len as u64)?;
                 api.ic0_call_simple(
                     callee_src as u32,
                     callee_size as u32,
@@ -476,16 +514,12 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "call_data_append", {
             let api = api.clone();
-            let num_instructions_global = num_instructions_global.clone();
+            let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>, src: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    size as u32,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), size as u64)?;
                 api.ic0_call_data_append(src as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -510,6 +544,20 @@ pub(crate) fn syscalls(
                 let mut api = api.get_system_api();
                 api.ic0_call_cycles_add(amount as u64)
                     .map_err(|e| process_err(&mut *api, e))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func("ic0", "call_cycles_add128", {
+            let api = api.clone();
+            move |amount_high: i64, amount_low: i64| {
+                let mut api = api.get_system_api();
+                api.ic0_call_cycles_add128(Cycles::from_parts(
+                    amount_high as u64,
+                    amount_low as u64,
+                ))
+                .map_err(|e| process_err(&mut *api, e))
             }
         })
         .unwrap();
@@ -555,16 +603,12 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "stable_read", {
             let api = api.clone();
-            let num_instructions_global = num_instructions_global.clone();
+            let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>, dst: i32, offset: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    size as u32,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), size as u64)?;
                 api.ic0_stable_read(dst as u32, offset as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -574,16 +618,12 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "stable_write", {
             let api = api.clone();
-            let num_instructions_global = num_instructions_global.clone();
+            let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>, offset: i32, src: i32, size: i32| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    size as u32,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), size as u64)?;
                 api.ic0_stable_write(offset as u32, src as u32, size as u32, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -620,16 +660,12 @@ pub(crate) fn syscalls(
     linker
         .func("ic0", "stable_read64", {
             let api = api.clone();
-            let num_instructions_global = num_instructions_global.clone();
+            let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>, dst: i64, offset: i64, size: i64| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    size as u64,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), size as u64)?;
                 api.ic0_stable_read64(dst as u64, offset as u64, size as u64, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -643,11 +679,7 @@ pub(crate) fn syscalls(
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
-                update_num_instructions_global(
-                    num_instructions_global.borrow(),
-                    api.deref_mut(),
-                    size as u64,
-                )?;
+                memory_charger.charge_for_memory_used(api.deref_mut(), size as u64)?;
                 api.ic0_stable_write64(offset as u64, src as u64, size as u64, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
@@ -683,6 +715,19 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
+        .func("ic0", "canister_cycles_balance128", {
+            let api = api.clone();
+            move || {
+                let mut api = api.get_system_api();
+                match api.ic0_canister_cycles_balance128() {
+                    Ok((high, low)) => Ok((high as i64, low as i64)),
+                    Err(err) => Err(process_err(&mut *api, err)),
+                }
+            }
+        })
+        .unwrap();
+
+    linker
         .func("ic0", "msg_cycles_available", {
             let api = api.clone();
             move || {
@@ -694,6 +739,19 @@ pub(crate) fn syscalls(
                             wasmtime::Trap::new(format!("ic0_msg_cycles_available failed: {}", e))
                         })
                     })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func("ic0", "msg_cycles_available128", {
+            let api = api.clone();
+            move || {
+                let mut api = api.get_system_api();
+                match api.ic0_msg_cycles_available128() {
+                    Ok((high, low)) => Ok((high as i64, low as i64)),
+                    Err(err) => Err(process_err(&mut *api, err)),
+                }
             }
         })
         .unwrap();
@@ -715,12 +773,41 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
+        .func("ic0", "msg_cycles_refunded128", {
+            let api = api.clone();
+            move || {
+                let mut api = api.get_system_api();
+                match api.ic0_msg_cycles_refunded128() {
+                    Ok((high, low)) => Ok((high as i64, low as i64)),
+                    Err(err) => Err(process_err(&mut *api, err)),
+                }
+            }
+        })
+        .unwrap();
+
+    linker
         .func("ic0", "msg_cycles_accept", {
             let api = api.clone();
             move |amount: i64| {
                 let mut api = api.get_system_api();
                 api.ic0_msg_cycles_accept(amount as u64)
                     .map_err(|e| process_err(&mut *api, e))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func("ic0", "msg_cycles_accept128", {
+            let api = api.clone();
+            move |amount_high: i64, amount_low: i64| {
+                let mut api = api.get_system_api();
+                match api.ic0_msg_cycles_accept128(Cycles::from_parts(
+                    amount_high as u64,
+                    amount_low as u64,
+                )) {
+                    Ok((high, low)) => Ok((high as i64, low as i64)),
+                    Err(err) => Err(process_err(&mut *api, err)),
+                }
             }
         })
         .unwrap();

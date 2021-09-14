@@ -3,8 +3,9 @@ use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{flat_map::FlatMap, Label, LabeledTree};
 use ic_messaging::{
     certified_slice_pool::{
-        testing, CertifiedSliceError, CertifiedSlicePool, InvalidAppend, InvalidSlice,
-        UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
+        certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool,
+        InvalidAppend, InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE,
+        STATUS_SUCCESS,
     },
     ExpectedIndices,
 };
@@ -431,6 +432,34 @@ proptest! {
             assert_good_estimate(fixture.get_slice(DST_SUBNET, from, 0));
             assert_good_estimate(fixture.get_slice(DST_SUBNET, from, 1));
             assert_good_estimate(fixture.get_slice(DST_SUBNET, from, msg_count));
+        });
+    }
+
+    /// Verifies that `certified_slice_count_bytes(&slice)` (used in payload
+    /// validation) produces the exact same estimate as
+    /// `UnpackedStreamSlice::try_from(slice).unwrap().count_bytes()` (used in
+    /// payload building).
+    #[test]
+    fn matching_count_bytes((stream, from, msg_count) in arb_stream_slice(2, 100)) {
+        /// Verifies that the two ways of computing a byte size estimate produce
+        /// the exact same result.
+        fn assert_matching_count_bytes(slice: CertifiedStreamSlice) {
+            let fn_estimate = certified_slice_count_bytes(&slice)
+                .expect("failed to unpack certified stream");
+            let unpacked = UnpackedStreamSlice::try_from(slice)
+                .expect("failed to unpack certified stream");
+
+            assert_eq!(unpacked.count_bytes(), fn_estimate);
+        }
+
+        with_test_replica_logger(|log| {
+            let fixture =
+                StateManagerFixture::new(log).with_stream(DST_SUBNET, stream);
+
+            // Verify equality for empty, single-message and many-message slices.
+            assert_matching_count_bytes(fixture.get_slice(DST_SUBNET, from, 0));
+            assert_matching_count_bytes(fixture.get_slice(DST_SUBNET, from, 1));
+            assert_matching_count_bytes(fixture.get_slice(DST_SUBNET, from, msg_count));
         });
     }
 

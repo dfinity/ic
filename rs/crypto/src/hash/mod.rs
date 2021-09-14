@@ -1,4 +1,4 @@
-use ic_crypto_sha256::{DomainSeparationContext, Sha256};
+use ic_crypto_sha::{DomainSeparationContext, Sha256};
 use ic_interfaces::crypto::CryptoHashable;
 use ic_types::crypto::{CryptoHash, CryptoHashOf};
 

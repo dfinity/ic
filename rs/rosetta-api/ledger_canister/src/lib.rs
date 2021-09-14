@@ -1,6 +1,6 @@
 use candid::CandidType;
 use dfn_protobuf::ProtoBuf;
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_types::{CanisterId, PrincipalId};
 use intmap::IntMap;
 use lazy_static::lazy_static;
@@ -962,8 +962,10 @@ impl Ledger {
     }
 
     pub fn can_send(&self, principal_id: &PrincipalId) -> bool {
-        !principal_id.is_anonymous()
-            || self
+        principal_id.is_self_authenticating()
+            || LEDGER
+                .read()
+                .unwrap()
                 .send_whitelist
                 .contains(&CanisterId::new(*principal_id).unwrap())
     }

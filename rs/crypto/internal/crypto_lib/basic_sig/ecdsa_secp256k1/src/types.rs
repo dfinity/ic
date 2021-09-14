@@ -1,6 +1,7 @@
 //! Types for ECDSA secp256k1 signatures
 #![allow(clippy::unit_arg)] // Arbitrary is a unit arg in: derive(proptest_derive::Arbitrary)
 
+use ic_crypto_secrets_containers::SecretVec;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
@@ -10,7 +11,7 @@ mod generic_traits;
 /// The size of the secp256k1 field (256 bits, 32 bytes)
 pub const FIELD_SIZE: usize = 32;
 
-// NOTE: PublicKeyBytes, SecretKeyDerBytes, use Vec<u8>
+// NOTE: PublicKeyBytes uses Vec<u8> (and SecretKeyBytes SecretVec),
 // (rather than [u8; <KEY_SIZE>]) for convenience and to avoid copying,
 // as Rust OpenSSL works mostly Vec<u8>.
 
@@ -18,7 +19,7 @@ pub const FIELD_SIZE: usize = 32;
 ///
 /// An unsigned big integer in DER-encoding.
 #[derive(Zeroize, Serialize, Deserialize)]
-pub struct SecretKeyBytes(#[serde(with = "serde_bytes")] pub Vec<u8>);
+pub struct SecretKeyBytes(pub SecretVec);
 
 /// ECDSA secp256k1 public key bytes, in uncompressed format
 ///

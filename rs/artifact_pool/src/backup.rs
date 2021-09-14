@@ -14,6 +14,7 @@
 //! no possibility to inject purging (or any other deletion) of artifacts
 //! between the pool update and the backup.
 
+use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
 use ic_interfaces::{
     consensus_pool::{ConsensusPool, HeightRange},
     time_source::TimeSource,
@@ -506,8 +507,8 @@ impl BackupArtifact {
         let full_path = file_directory.join(file_name);
         // If the file exists, it will be overwritten (this is required on
         // intializations).
-        let mut file = fs::File::create(&full_path)?;
-        file.write_all(&self.serialize()?)
+        let serialized = self.serialize()?;
+        ic_utils::fs::write_using_tmp_file(full_path, |writer| writer.write_all(&serialized))
     }
 
     // Serializes the artifact to protobuf.
@@ -572,9 +573,8 @@ impl BackupArtifact {
         };
         // We group heights by directories to avoid running into any kind of unexpected
         // FS inode limitations. Each group directory will contain at most
-        // `group_size` heights.
-        let group_size = 10000;
-        let group_key = (height.get() / group_size) * group_size;
+        // `BACKUP_GROUP_SIZE` heights.
+        let group_key = (height.get() / BACKUP_GROUP_SIZE) * BACKUP_GROUP_SIZE;
         let path_with_height = path.join(group_key.to_string()).join(height.to_string());
         (path_with_height, file_name)
     }

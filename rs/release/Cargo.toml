@@ -4,9 +4,9 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-flate2 = "1.0.18"
+flate2 = "1.0.20"
 hex = "0.4.2"
-ic-crypto-sha256 = { path = "../crypto/sha256" }
+ic-crypto-sha = { path = "../crypto/sha" }
 ic-types = { path = "../types/types" }
 phantom_newtype = { path = "../phantom_newtype" }
 structopt = "0.3.20"

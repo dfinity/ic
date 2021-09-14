@@ -8,7 +8,6 @@ use ic_interfaces::messaging::{
     XNetPayloadValidationError,
 };
 use ic_interfaces::state_manager::{CertificationScope, StateManager};
-use ic_interfaces::validation::ValidationResult;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{Batch, ValidationContext, XNetPayload},
@@ -108,8 +107,7 @@ mock! {
             &self,
             payload: &XNetPayload,
             validation_context: &ValidationContext,
-            past_payloads: &[&'a XNetPayload],
-            byte_limit : NumBytes
-        ) -> ValidationResult<XNetPayloadValidationError>;
+            past_payloads: &[&'a XNetPayload]
+        ) -> Result<NumBytes, XNetPayloadValidationError>;
     }
 }

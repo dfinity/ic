@@ -68,7 +68,7 @@ fn main() {
         "integrity check: {:?}",
         verify_ciphertext_integrity(&crsz, &epoch10, &associated_data, sys)
     );
-    let out = dec_chunks(&dk, 1, &crsz, &epoch10, &associated_data, sys);
+    let out = dec_chunks(&dk, 1, &crsz, &epoch10, &associated_data);
     println!("dec_chunks initially: {:?}", out);
 
     for _i in 0..3 {
@@ -76,7 +76,7 @@ fn main() {
         dk.update(sys, rng);
     }
 
-    let out = dec_chunks(&dk, 1, &crsz, &epoch10, &associated_data, sys);
+    let out = dec_chunks(&dk, 1, &crsz, &epoch10, &associated_data);
     println!("dec_chunks after 3 upgrades: {:?}", out);
 
     for _i in 0..8 {
@@ -84,6 +84,6 @@ fn main() {
         dk.update(sys, rng);
     }
     // Should be impossible to decrypt now.
-    let out = dec_chunks(&dk, 1, &crsz, &epoch10, &associated_data, sys);
+    let out = dec_chunks(&dk, 1, &crsz, &epoch10, &associated_data);
     println!("dec_chunks after 8 additional upgrades: {:?}", out);
 }

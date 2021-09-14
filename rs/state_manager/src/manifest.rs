@@ -8,7 +8,7 @@ use hash::{
     chunk_hasher, cow_chunk_hasher, cow_file_hasher, file_hasher, manifest_hasher, ManifestHash,
 };
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{
     state_sync::{ChunkInfo, FileInfo, Manifest},

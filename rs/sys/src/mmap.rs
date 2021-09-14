@@ -30,7 +30,7 @@ fn nix_to_io_err(err: nix::Error) -> io::Error {
 
 impl ScopedMmap {
     /// Creates a new mapping from a file descriptor and length.
-    pub fn from_readonly_file<FD: AsRawFd>(fd: FD, len: usize) -> io::Result<Self> {
+    pub fn from_readonly_file<FD: AsRawFd>(fd: &FD, len: usize) -> io::Result<Self> {
         // mmap fails on 0-size requests, which is extremely annoying in
         // practice, so we construct a bogus 0-sized mapping instead.
         if len == 0 {
@@ -60,7 +60,7 @@ impl ScopedMmap {
     pub fn from_path<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let f = std::fs::File::open(path)?;
         let len = f.metadata()?.len() as usize;
-        Self::from_readonly_file(f, len)
+        Self::from_readonly_file(&f, len)
     }
 
     /// Returns start address of the memory mapping.

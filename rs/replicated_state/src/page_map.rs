@@ -11,6 +11,8 @@ use phantom_newtype::Id;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs::{File, OpenOptions};
+use std::ops::Range;
+use std::os::unix::io::RawFd;
 use std::path::Path;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -104,6 +106,12 @@ impl PageDelta {
     /// Gets content of the page at the specified index.
     pub fn get_page(&self, page_index: PageIndex) -> Option<&[u8]> {
         self.0.get(page_index.get()).map(|p| p.contents())
+    }
+
+    /// Gets an inclusive range of pages that contains the given page.
+    pub fn bounds(&self, page_index: PageIndex) -> (Option<PageIndex>, Option<PageIndex>) {
+        let (lower, upper) = self.0.bounds(page_index.get());
+        (lower.map(PageIndex::new), upper.map(PageIndex::new))
     }
 
     /// Modifies this delta in-place by applying all the entries in `rhs` to it.
@@ -282,6 +290,25 @@ impl std::fmt::Display for PersistenceError {
     }
 }
 
+/// A wrapper around the raw file descriptor to be used for memory mapping the
+/// file into the Wasm heap while executing a canister.
+pub struct FileDescriptor {
+    pub fd: RawFd,
+}
+
+/// The result of the `get_memory_region(page_index)` function. It specifies the
+/// largest contiguous page range that contains the given page such that all
+/// pages share the same backing store. There are three possible cases:
+/// - The page is not in the current `PageMap` and it is zero initialized.
+/// - The page maps to the checkpoint file.
+/// - The page is in the page delta of the current `PageMap`. In this case the
+///   range is a singleton and its contents need to be copied out.
+pub enum MemoryRegion<'a> {
+    Zeros(Range<PageIndex>),
+    BackedByFile(Range<PageIndex>, FileDescriptor),
+    BackedByPage(&'a [u8]),
+}
+
 /// PageMap is a data structure that represents an image of a canister virtual
 /// memory.  The memory is viewed as a collection of _pages_. `PageMap` uses
 /// 4KiB host OS pages to track the heap contents, not 64KiB Wasm pages.
@@ -376,6 +403,36 @@ impl PageMap {
         match self.page_delta.get_page(page_index) {
             Some(page) => page,
             None => self.checkpoint.get_page(page_index),
+        }
+    }
+
+    /// Returns the largest contiguous range of pages that contains the given
+    /// page such that all pages share the same backing store.
+    pub fn get_memory_region(&self, page_index: PageIndex) -> MemoryRegion {
+        match self.page_delta.get_page(page_index) {
+            Some(page) => MemoryRegion::BackedByPage(page),
+            None => {
+                let (start, end) = self.page_delta.bounds(page_index);
+                let start = match start {
+                    None => PageIndex::new(0),
+                    Some(start) => {
+                        // Here `start` is a page in `page_delta`. We need to skip that page to
+                        // get to the start of the checkpoint region that contains `page_index`.
+                        PageIndex::new(start.get() + 1)
+                    }
+                };
+                let end = match end {
+                    None => PageIndex::new(u64::MAX),
+                    Some(end) => {
+                        // Here `end` is a page in `page_delta`. Since we will use it as the end of
+                        // half-open `Range`, so we can take it as is without decrementing.
+                        end
+                    }
+                };
+                let range = Range { start, end };
+                assert!(range.contains(&page_index));
+                self.checkpoint.get_memory_region(page_index, range)
+            }
         }
     }
 

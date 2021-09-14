@@ -6,9 +6,9 @@ use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::{registry::RegistryClient, transport::Transport};
 use ic_logger::{debug, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_p2p::p2p::create_networking_stack;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_subnet_type::SubnetType;
+use ic_replica_setup_ic_network::{create_networking_stack, P2PStateSyncClient};
 use ic_test_utilities::{
     consensus::make_catch_up_package_with_empty_transcript,
     crypto::fake_tls_handshake::FakeTlsHandshake,
@@ -67,7 +67,7 @@ fn execute_test(
         let fake_crypto = Arc::new(fake_crypto);
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
         let xnet_payload_builder = Arc::new(xnet_payload_builder);
-        let no_state_sync_client = ic_p2p::p2p::P2PStateSyncClient::TestClient();
+        let no_state_sync_client = P2PStateSyncClient::TestClient();
         let ingress_hist_reader = Box::new(IngressHistoryReaderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
         ));
@@ -219,10 +219,8 @@ fn execute_test_chunking_pool(
         let fake_crypto = Arc::new(fake_crypto);
         let node_pool_dir = test_synchronizer.get_test_group_directory();
         let state_sync_client = Arc::new(ArtifactChunkingTestImpl::new(node_pool_dir, node_id));
-        let state_sync_client = ic_p2p::p2p::P2PStateSyncClient::TestChunkingPool(
-            state_sync_client.clone(),
-            state_sync_client,
-        );
+        let state_sync_client =
+            P2PStateSyncClient::TestChunkingPool(state_sync_client.clone(), state_sync_client);
         let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::System);
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,

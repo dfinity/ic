@@ -518,7 +518,7 @@ mod test {
     fn check_hardcoded_sha256_is_up_to_date() {
         assert_eq!(
             UNIVERSAL_CANISTER_WASM_SHA256,
-            ic_crypto_sha256::Sha256::hash(UNIVERSAL_CANISTER_WASM)
+            ic_crypto_sha::Sha256::hash(UNIVERSAL_CANISTER_WASM)
         );
     }
 }

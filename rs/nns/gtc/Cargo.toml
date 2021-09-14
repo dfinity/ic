@@ -17,7 +17,7 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 hex = "0.4.2"
 hex-literal = "0.3.1"
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha256 = {path = "../../crypto/sha256/"}
+ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-nns-governance = { path = "../governance" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }

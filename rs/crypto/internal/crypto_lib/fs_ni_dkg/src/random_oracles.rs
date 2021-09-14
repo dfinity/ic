@@ -4,7 +4,7 @@ use ic_crypto_internal_bls12381_common::{hash_to_miracl_g1, MiraclG1};
 use ic_crypto_internal_bls12381_serde_miracl::{
     miracl_fr_to_bytes, miracl_g1_to_bytes, miracl_g2_to_bytes,
 };
-use ic_crypto_sha256::{Context, DomainSeparationContext, Sha256};
+use ic_crypto_sha::{Context, DomainSeparationContext, Sha256};
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;

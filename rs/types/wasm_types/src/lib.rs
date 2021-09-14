@@ -27,13 +27,13 @@ pub struct BinaryEncodedWasm {
 impl BinaryEncodedWasm {
     pub fn new(bytes: Vec<u8>) -> Self {
         let wasm = WasmStorage::Memory(Arc::new(bytes));
-        let wasm_hash = ic_crypto_sha256::Sha256::hash(wasm.as_slice());
+        let wasm_hash = ic_crypto_sha::Sha256::hash(wasm.as_slice());
         Self { wasm, wasm_hash }
     }
 
     pub fn new_from_file(path: PathBuf) -> std::io::Result<Self> {
         let wasm = WasmStorage::mmap_file(path)?;
-        let wasm_hash = ic_crypto_sha256::Sha256::hash(wasm.as_slice());
+        let wasm_hash = ic_crypto_sha::Sha256::hash(wasm.as_slice());
         Ok(Self { wasm, wasm_hash })
     }
 
@@ -106,7 +106,7 @@ impl WasmStorage {
                 format!("{}: Wasm file must not be empty", path.display()),
             ));
         }
-        match ic_sys::mmap::ScopedMmap::from_readonly_file(f, len as usize) {
+        match ic_sys::mmap::ScopedMmap::from_readonly_file(&f, len as usize) {
             Ok(mmap) => Ok(Self::File(path, Arc::new(mmap))),
             Err(_) => Err(io::Error::last_os_error()),
         }

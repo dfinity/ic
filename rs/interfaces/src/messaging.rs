@@ -1,5 +1,5 @@
 //! Message Routing public interfaces.
-use crate::validation::{ValidationError, ValidationResult};
+use crate::validation::ValidationError;
 use ic_types::{
     batch::{Batch, ValidationContext, XNetPayload},
     Height, NumBytes,
@@ -55,17 +55,6 @@ pub trait XNetPayloadBuilder: Send + Sync {
     /// valid given a `ValidationContext` (certified height plus registry
     /// version) and `past_payloads` (the `XNetPayloads` from all blocks
     /// above the certified height, in descending block height order).
-    ///
-    /// With the current implementation, if no valid XNetPayload of size
-    /// 'byte_limit' exists, then the function returns the smallest
-    /// XNetPayload which is valid. For practical parameters,
-    /// for the current implementation XNetPayload will no be more than
-    /// byte_limit+2kB. More details here:
-    /// https://docs.google.com/document/d/1cC1-U000cts3GHiEf9OUNhp4clKt2XCG08Zxo35xoWw/edit#
-    ///
-    /// Because payload takes time to make, and this function should not block
-    /// its caller, An implementation can return `Pending` so that the
-    /// caller knows to poll again in the future.
     fn get_xnet_payload(
         &self,
         height: Height,
@@ -77,15 +66,18 @@ pub trait XNetPayloadBuilder: Send + Sync {
     /// Checks whether the provided `XNetPayload` is valid given a
     /// `ValidationContext` (certified height and registry version) and
     /// `past_payloads` (the `XNetPayloads` from all blocks above the certified
-    /// height, in descending block height order); and whether its size in bytes
-    /// does not exceed `byte_limit`.
+    /// height, in descending block height order).
+    ///
+    /// If valid, returns the payload's `CountBytes`-like byte size (estimated,
+    /// deterministic, using the exact same logic that`get_xnet_payload()` uses
+    /// for enforcing `byte_limit`); else returns a permanent or transient
+    /// `ValidationError`.
     fn validate_xnet_payload(
         &self,
         payload: &XNetPayload,
         validation_context: &ValidationContext,
         past_payloads: &[&XNetPayload],
-        byte_limit: NumBytes,
-    ) -> ValidationResult<XNetPayloadValidationError>;
+    ) -> Result<NumBytes, XNetPayloadValidationError>;
 }
 
 /// Possible errors in making XNetPayload.

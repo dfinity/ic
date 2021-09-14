@@ -262,7 +262,7 @@ fn diff_rose_trees(lhs: &RoseHashTree, rhs: &RoseHashTree) -> Changes {
 mod tests {
     use super::RoseHashTree::Leaf;
     use super::*;
-    use ic_crypto_sha256::Sha256;
+    use ic_crypto_sha::Sha256;
     use proptest::collection::btree_map;
     use proptest::prelude::*;
 

@@ -8,6 +8,7 @@ askama = "0.10.5"
 futures-util = "0.3.13"
 hex = "0.4.2"
 http = "0.2.3"
+flate2 = "1.0.20"
 futures = "0.3.13"
 hyper = { version = "0.14.5", features = ["full"] }
 ic-base-thread = { path = "../base/thread" }
@@ -25,6 +26,7 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-validator = { path = "../validator" }
+leaky-bucket = "0.11.0"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 prost = "0.7.0"
 rand = "0.8.3"
@@ -32,6 +34,7 @@ reqwest = { version = "0.11.1", features = [ "native-tls", "blocking" ] }
 serde = "1.0.99"
 serde_cbor = "0.11.1"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+tar = "0.4.30"
 tempfile = "3.1.0"
 tokio = { version = "1.9.0", features = [ "full" ] }
 

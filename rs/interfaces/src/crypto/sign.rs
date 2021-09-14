@@ -47,6 +47,8 @@ pub mod threshold_sig;
 
 pub use threshold_sig::{ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner};
 
+pub mod canister_threshold_sign;
+
 const SIG_DOMAIN_IC_REQUEST_AUTH_DELEGATION: &str = "ic-request-auth-delegation";
 const SIG_DOMAIN_IC_REQUEST: &str = "ic-request";
 

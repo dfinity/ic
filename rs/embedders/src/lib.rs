@@ -4,25 +4,20 @@ pub mod wasm_executor;
 pub mod wasmtime_embedder;
 
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::{HypervisorError, InstanceStats, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{ExecutionParameters, HypervisorError, InstanceStats};
 use ic_replicated_state::{
     canister_state::system_state::SystemState, ExecutionState, Global, PageIndex,
 };
 use ic_system_api::ApiType;
-use ic_types::{
-    ingress::WasmResult, methods::FuncRef, ComputeAllocation, NumBytes, NumInstructions,
-};
+use ic_types::{ingress::WasmResult, methods::FuncRef, NumBytes, NumInstructions};
 use std::sync::Arc;
 pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
 
 pub struct WasmExecutionInput {
     pub api_type: ApiType,
     pub system_state: SystemState,
-    pub instructions_limit: NumInstructions,
-    pub canister_memory_limit: NumBytes,
     pub canister_current_memory_usage: NumBytes,
-    pub subnet_available_memory: SubnetAvailableMemory,
-    pub compute_allocation: ComputeAllocation,
+    pub execution_parameters: ExecutionParameters,
     pub func_ref: FuncRef,
     pub execution_state: ExecutionState,
     pub cycles_account_manager: Arc<CyclesAccountManager>,

@@ -9,7 +9,7 @@ ic-certified-vars = { path = "../../../../../certified_vars" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-tree-hash = { path = "../../../../tree_hash" }
-ic-crypto-sha256 = { path = "../../../../sha256" }
+ic-crypto-sha = { path = "../../../../sha" }
 ic-types = { path = "../../../../../types/types" }
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"

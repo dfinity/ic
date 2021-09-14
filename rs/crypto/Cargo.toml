@@ -21,7 +21,7 @@ ic-crypto-internal-threshold-sig-bls12381 = { path = "internal/crypto_lib/thresh
 ic-crypto-internal-basic-sig-iccsa = { path = "internal/crypto_lib/basic_sig/iccsa" }
 ic-crypto-internal-test-vectors = { path = "internal/test_vectors" }
 ic-crypto-internal-types = { path = "internal/crypto_lib/types" }
-ic-crypto-sha256 = { path = "sha256" }
+ic-crypto-sha = { path = "sha" }
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }

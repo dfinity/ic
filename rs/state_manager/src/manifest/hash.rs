@@ -1,4 +1,4 @@
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 
 /// Trait specifying how a type should be hashed when it's included into a
 /// manifest.

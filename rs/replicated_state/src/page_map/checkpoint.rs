@@ -1,7 +1,10 @@
-use crate::page_map::{PageIndex, PersistenceError};
+use crate::page_map::{FileDescriptor, MemoryRegion, PageIndex, PersistenceError};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use lazy_static::lazy_static;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
+use std::ops::Range;
+use std::os::unix::io::AsRawFd;
+use std::os::unix::io::RawFd;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -21,6 +24,8 @@ pub(crate) struct Checkpoint {
 
 struct Mapping {
     mmap: ScopedMmap,
+    _file: File, // It is not used but it keeps the `file_descriptor` alive.
+    file_descriptor: RawFd,
 }
 
 impl Mapping {
@@ -54,14 +59,19 @@ impl Mapping {
             // will act as an empty mapping if the file size is zero.
             Ok(None)
         } else {
-            let mmap = ScopedMmap::from_readonly_file(file, len).map_err(|err| {
+            let mmap = ScopedMmap::from_readonly_file(&file, len).map_err(|err| {
                 PersistenceError::MmapError {
                     path: path.display().to_string(),
                     len,
                     internal_error: err.to_string(),
                 }
             })?;
-            Ok(Some(Mapping { mmap }))
+            let fd = file.as_raw_fd();
+            Ok(Some(Mapping {
+                _file: file,
+                file_descriptor: fd,
+                mmap,
+            }))
         }
     }
 
@@ -72,6 +82,31 @@ impl Mapping {
             unsafe { std::slice::from_raw_parts(self.mmap.addr().offset(offset), *PAGE_SIZE) }
         } else {
             &ZEROED_PAGE[..]
+        }
+    }
+
+    /// See the comments of `PageMap::get_memory_region()`.
+    pub fn get_memory_region(
+        &self,
+        page_index: PageIndex,
+        page_range: Range<PageIndex>,
+    ) -> MemoryRegion {
+        let num_pages = (self.mmap.len() / *PAGE_SIZE) as u64;
+        if page_index.get() >= num_pages {
+            MemoryRegion::Zeros(Range {
+                start: PageIndex::new(num_pages),
+                end: page_range.end,
+            })
+        } else {
+            MemoryRegion::BackedByFile(
+                Range {
+                    start: page_range.start,
+                    end: PageIndex::new(std::cmp::min(num_pages, page_range.end.get())),
+                },
+                FileDescriptor {
+                    fd: self.file_descriptor,
+                },
+            )
         }
     }
 
@@ -99,6 +134,19 @@ impl Checkpoint {
         match self.mapping {
             Some(ref mapping) => mapping.get_page(page_index),
             None => &ZEROED_PAGE,
+        }
+    }
+
+    /// See the comments of `PageMap::get_memory_region()`.
+    pub fn get_memory_region(
+        &self,
+        page_index: PageIndex,
+        page_range: Range<PageIndex>,
+    ) -> MemoryRegion {
+        assert!(page_range.contains(&page_index));
+        match self.mapping {
+            Some(ref mapping) => mapping.get_memory_region(page_index, page_range),
+            None => MemoryRegion::Zeros(page_range),
         }
     }
 

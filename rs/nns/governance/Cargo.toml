@@ -26,7 +26,7 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 futures = "0.3.13"
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha256 = {path = "../../crypto/sha256/"}
+ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }

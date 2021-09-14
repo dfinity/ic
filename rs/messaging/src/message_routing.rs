@@ -14,6 +14,7 @@ use ic_interfaces::{
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets};
 use ic_metrics::{MetricsRegistry, Timer};
+use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client::helper::{
     crypto::CryptoRegistry,
     node::NodeRegistry,
@@ -22,6 +23,7 @@ use ic_registry_client::helper::{
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, NetworkTopology, NodeTopology, ReplicatedState, SubnetTopology,
@@ -473,17 +475,16 @@ impl BatchProcessorImpl {
         unreachable!("Could not find the NNS subnet id.");
     }
 
-    fn get_subnet_type(
+    fn get_subnet_record(
         &self,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
-    ) -> SubnetType {
+    ) -> SubnetRecord {
         loop {
             match self.registry.get_subnet_record(subnet_id, registry_version) {
                 Ok(subnet_record) => {
                     break match subnet_record {
-                        Some(record) => SubnetType::try_from(record.subnet_type)
-                            .expect("Could not parse SubnetType"),
+                        Some(record) => record,
                         // This can only happen if the registry is corrupted, so better to crash.
                         None => fatal!(
                             self.log,
@@ -502,6 +503,24 @@ impl BatchProcessorImpl {
             }
             sleep(std::time::Duration::from_millis(100));
         }
+    }
+
+    fn get_subnet_type(
+        &self,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+    ) -> SubnetType {
+        let record = self.get_subnet_record(subnet_id, registry_version);
+        SubnetType::try_from(record.subnet_type).expect("Could not parse SubnetType")
+    }
+
+    fn get_subnet_features(
+        &self,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+    ) -> SubnetFeatures {
+        let record = self.get_subnet_record(subnet_id, registry_version);
+        record.features.unwrap_or_default().into()
     }
 }
 
@@ -561,15 +580,21 @@ impl BatchProcessor for BatchProcessorImpl {
             CertificationScope::Metadata
         };
 
-        // TODO (MR-29) Cache network topology and only populate if version
-        // referenced in batch changes.
+        // TODO (MR-29) Cache network topology and subnet_features; and populate only
+        // if version referenced in batch changes.
         let network_topology = self.populate_network_topology(batch.registry_version);
         let provisional_whitelist = self.get_provisional_whitelist(batch.registry_version);
+        let subnet_features =
+            self.get_subnet_features(state.metadata.own_subnet_id, batch.registry_version);
 
         let batch_requires_full_state_hash = batch.requires_full_state_hash;
-        let mut state_after_round =
-            self.state_machine
-                .execute_round(state, network_topology, batch, provisional_whitelist);
+        let mut state_after_round = self.state_machine.execute_round(
+            state,
+            network_topology,
+            batch,
+            provisional_whitelist,
+            subnet_features,
+        );
         self.observe_canisters_memory_usage(&state_after_round);
 
         // See documentation around the definition of `heap_delta_estimate` for

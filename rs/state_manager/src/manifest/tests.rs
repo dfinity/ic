@@ -4,7 +4,7 @@ use super::{
     STATE_SYNC_V1,
 };
 
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_types::{
     crypto::CryptoHash,
     state_sync::{decode_manifest, encode_manifest, ChunkInfo, FileInfo, Manifest},

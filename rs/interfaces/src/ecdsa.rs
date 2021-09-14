@@ -22,7 +22,7 @@ pub trait MutableEcdsaPool: EcdsaPool {
 
 /// Checks and processes the changes (if any)
 pub trait Ecdsa: Send {
-    fn on_state_change(&self, ecds_pool: &dyn EcdsaPool) -> EcdsaChangeSet;
+    fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet;
 }
 
 pub trait EcdsaGossip: Send + Sync {

@@ -2,23 +2,18 @@
 
 use hyper::{Body, HeaderMap, Response, StatusCode};
 use ic_crypto_tree_hash::Path;
-use ic_crypto_tree_hash::{
-    flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, LabeledTree::SubTree,
-};
+use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label};
 use ic_interfaces::state_manager::StateReader;
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{
-    messages::{Blob, Certificate, CertificateDelegation, MessageId},
-    CanisterId,
-};
+use ic_types::messages::MessageId;
 use ic_validator::RequestValidationError;
 use prost::Message;
 use serde::Serialize;
 use std::sync::Arc;
 
 /// Helper function to generate a response.
-pub(crate) fn make_response(status_code: StatusCode, body: &str) -> Response<Body> {
+pub fn make_response(status_code: StatusCode, body: &str) -> Response<Body> {
     let mut resp = Response::new(Body::from(body.to_string()));
     *resp.status_mut() = status_code;
     *resp.headers_mut() = get_cors_headers();
@@ -28,7 +23,7 @@ pub(crate) fn make_response(status_code: StatusCode, body: &str) -> Response<Bod
 /// Add CORS headers to provided Response. In particular we allow
 /// wildcard origin, POST and GET and allow Accept, Authorization and
 /// Content Type headers.
-fn get_cors_headers() -> HeaderMap {
+pub(crate) fn get_cors_headers() -> HeaderMap {
     use hyper::header;
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -125,43 +120,6 @@ pub(crate) fn get_latest_certified_state(
     state_reader
         .read_certified_state(&labeled_tree)
         .map(|r| r.0)
-}
-
-pub(crate) fn get_latest_certified_state_and_data_certificate(
-    state_reader: &dyn StateReader<State = ReplicatedState>,
-    delegation_from_nns: &Option<CertificateDelegation>,
-    canister_id: CanisterId,
-) -> Option<(Arc<ReplicatedState>, Vec<u8>)> {
-    // The path to fetch the data certificate for the canister.
-    let path = SubTree(flatmap! {
-        label("canister") => SubTree(
-            flatmap! {
-                label(canister_id.get_ref()) => SubTree(
-                    flatmap!(label("certified_data") => LabeledTree::Leaf(()))
-                )
-            }),
-        // NOTE: "time" is added here to ensure that `read_certified_state`
-        // returns the certified state. This won't be necessary once non-existence
-        // proofs are implemented.
-        label("time") => LabeledTree::Leaf(())
-    });
-
-    state_reader
-        .read_certified_state(&path)
-        .map(|(state, tree, cert)| {
-            (
-                state,
-                into_cbor(&Certificate {
-                    tree,
-                    signature: Blob(cert.signed.signature.signature.get().0),
-                    delegation: delegation_from_nns.clone(),
-                }),
-            )
-        })
-}
-
-fn label<T: Into<Label>>(t: T) -> Label {
-    t.into()
 }
 
 // A few test helpers, improving readability in the tests

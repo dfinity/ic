@@ -1,7 +1,7 @@
 mod crypto_hash_tests {
     use super::super::*;
     use crate::common::test_utils::hex_to_32_bytes;
-    use ic_crypto_sha256::{DomainSeparationContext, Sha256};
+    use ic_crypto_sha::{DomainSeparationContext, Sha256};
     use ic_interfaces::crypto::{CryptoHashDomain, CryptoHashableTestDummy};
     use std::hash::Hash;
 

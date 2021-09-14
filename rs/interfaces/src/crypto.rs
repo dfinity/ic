@@ -31,6 +31,8 @@ pub use sign::ThresholdSigVerifierByPublicKey;
 pub use sign::ThresholdSigner;
 pub use sign::{Signable, SignableMock};
 
+pub use sign::canister_threshold_sign::*;
+
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::consensus::dkg as consensus_dkg;
 use ic_types::consensus::{

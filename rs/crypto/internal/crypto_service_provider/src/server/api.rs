@@ -1,4 +1,6 @@
 use crate::api::CspThresholdSignError;
+#[cfg(test)]
+use crate::types::CspPublicCoefficients;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::FsEncryptionPublicKey;
@@ -52,6 +54,12 @@ pub enum CspMultiSignatureError {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspMultiSignatureKegenError {
     UnsupportedAlgorithm { algorithm: AlgorithmId },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CspThresholdSignatureKeygenError {
+    UnsupportedAlgorithm { algorithm: AlgorithmId },
+    InvalidArgument { message: String },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -144,19 +152,56 @@ pub trait MultiSignatureCspServer {
 /// Operations of `CspServer` related to threshold signatures
 /// (cf. `ThresholdSignatureCspClient`).
 pub trait ThresholdSignatureCspServer {
+    /// Generates threshold keys.
+    ///
+    /// This interface is primarily of interest for testing and demos.
+    ///
+    /// # Arguments
+    /// * `algorithm_id` indicates the algorithms to be used in the key
+    ///   generation.
+    /// * `threshold` is the minimum number of signatures that can be combined
+    ///   to make a valid threshold signature.
+    /// * `signatory_eligibility` is a boolean indicating, for each signatory,
+    ///   whether they should receive a key.  The `i`th signatory should receive
+    ///   a key if and only if `signatory_eligibility[i]==true`.
+    /// # Returns
+    /// * `CspPublicCoefficients` can be used by the caller to verify
+    ///   signatures.
+    /// * `Vec<Option<KeyId>>` contains key identifiers.  The vector has the
+    ///   same length as the input `signatory_eligibility` and the i'th entry
+    ///   contains a secret key if and only if `signatory_eligibility[i]` is
+    ///   `true`.
+    /// # Panics
+    /// * An implementation MAY panic if it is unable to access the secret key
+    ///   store to save keys or if it cannot access a suitable random number
+    ///   generator.
+    /// # Errors
+    /// * If `threshold > signatory_eligibility.len()` then it is impossible for
+    ///   the signatories to create a valid combined signature, so
+    ///   implementations MUST return an error.
+    /// * An implementation MAY return an error if it is temporarily unable to
+    ///   generate and store keys.
+    #[cfg(test)]
+    fn threshold_keygen_for_test(
+        &mut self,
+        algorithm_id: AlgorithmId,
+        threshold: NumberOfNodes,
+        signatory_eligibility: &[bool],
+    ) -> Result<(CspPublicCoefficients, Vec<Option<KeyId>>), CspThresholdSignatureKeygenError>;
+
     /// Signs the given message digest using the specified algorithm and key
     /// IDs.
     ///
     /// # Arguments
     /// * `algorithm_id` specifies the signature algorithm
-    /// * `msg_digest` is the digest of the message to be signed
+    /// * `message` is the message to be signed
     /// * `key_id` determines the private key to sign with
     /// # Returns
     /// The computed threshold signature.
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
-        msg_digest: &[u8],
+        message: &[u8],
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError>;
 }

@@ -167,7 +167,7 @@ pub(crate) trait DownloadManager {
     /// changes.</br>
     /// b) Check for chunk download timeouts.</br>
     /// c) Poll the registry for subnet membership changes.
-    fn on_timer(&self, event_handler: &Arc<dyn P2PEventHandlerControl>);
+    fn on_timer(&self, event_handler: Arc<dyn P2PEventHandlerControl>);
 }
 
 /// The peer manager manages the list of current peers.
@@ -198,6 +198,8 @@ pub(crate) trait PeerManager {
 struct GossipRequestTrackerKey {
     /// The artifact ID of the requested chunk.
     artifact_id: ArtifactId,
+    /// The Integrity Hash of the requested artifact.
+    integrity_hash: CryptoHash,
     /// The chunk ID of the requested chunk.
     chunk_id: ChunkId,
 }
@@ -413,6 +415,7 @@ impl DownloadManager for DownloadManagerImpl {
         if let Some(peer_context) = current_peers.get_mut(&peer_id) {
             if let Some(tracker) = peer_context.requested.remove(&GossipRequestTrackerKey {
                 artifact_id: gossip_chunk.artifact_id.clone(),
+                integrity_hash: gossip_chunk.integrity_hash.clone(),
                 chunk_id: gossip_chunk.chunk_id,
             }) {
                 let artifact_type = match &gossip_chunk.artifact_id {
@@ -469,6 +472,7 @@ impl DownloadManager for DownloadManagerImpl {
                 self.delete_advert_from_peer(
                     peer_id,
                     &gossip_chunk.artifact_id,
+                    &gossip_chunk.integrity_hash,
                     self.artifacts_under_construction
                         .write()
                         .unwrap()
@@ -485,7 +489,8 @@ impl DownloadManager for DownloadManagerImpl {
         let mut artifacts_under_construction = self.artifacts_under_construction.write().unwrap();
 
         // Find the tracker to feed the chunk.
-        let artifact_tracker = artifacts_under_construction.get_tracker(&gossip_chunk.artifact_id);
+        let artifact_tracker =
+            artifacts_under_construction.get_tracker(&gossip_chunk.integrity_hash);
         if artifact_tracker.is_none() {
             trace!(
                 self.log,
@@ -496,6 +501,7 @@ impl DownloadManager for DownloadManagerImpl {
             );
             let _ = self.prioritizer.delete_advert_from_peer(
                 &gossip_chunk.artifact_id,
+                &gossip_chunk.integrity_hash,
                 peer_id,
                 AdvertTrackerFinalAction::Abort,
             );
@@ -536,10 +542,11 @@ impl DownloadManager for DownloadManagerImpl {
         let completed_artifact = completed_artifact.unwrap();
 
         // Check whether the artifact matches the advertised integrity hash.
-        let advert = match self
-            .prioritizer
-            .get_advert_from_peer(&gossip_chunk.artifact_id, &peer_id)
-        {
+        let advert = match self.prioritizer.get_advert_from_peer(
+            &gossip_chunk.artifact_id,
+            &gossip_chunk.integrity_hash,
+            &peer_id,
+        ) {
             Ok(Some(advert)) => advert,
             Err(_) | Ok(None) => {
                 trace!(
@@ -582,6 +589,7 @@ impl DownloadManager for DownloadManagerImpl {
             // artifact again from another peer.
             let _ = self.prioritizer.delete_advert_from_peer(
                 &gossip_chunk.artifact_id,
+                &gossip_chunk.integrity_hash,
                 peer_id,
                 AdvertTrackerFinalAction::Abort,
             );
@@ -599,10 +607,12 @@ impl DownloadManager for DownloadManagerImpl {
 
         // The artifact is complete and the integrity hash is okay.
         // Clean up the adverts for all peers:
-        let _ = self
-            .prioritizer
-            .delete_advert(&gossip_chunk.artifact_id, AdvertTrackerFinalAction::Success);
-        artifacts_under_construction.remove_tracker(&gossip_chunk.artifact_id);
+        let _ = self.prioritizer.delete_advert(
+            &gossip_chunk.artifact_id,
+            &gossip_chunk.integrity_hash,
+            AdvertTrackerFinalAction::Success,
+        );
+        artifacts_under_construction.remove_tracker(&gossip_chunk.integrity_hash);
 
         // Drop the locks before calling client callbacks.
         std::mem::drop(artifacts_under_construction);
@@ -770,7 +780,7 @@ impl DownloadManager for DownloadManagerImpl {
 
     /// The method is invoked periodically by the *Gossip* component to perform
     /// P2P book keeping tasks.
-    fn on_timer(&self, event_handler: &Arc<dyn P2PEventHandlerControl>) {
+    fn on_timer(&self, event_handler: Arc<dyn P2PEventHandlerControl>) {
         let (update_priority_fns, retransmission_request, refresh_registry) =
             self.get_timer_tasks();
         if update_priority_fns {
@@ -836,7 +846,8 @@ impl DownloadManagerImpl {
         metrics_registry: &MetricsRegistry,
     ) -> Self {
         let transport_client_type = TransportClientType::P2P;
-        let gossip_config = crate::p2p::fetch_gossip_config(registry_client.clone(), subnet_id);
+        let gossip_config =
+            crate::event_handler::fetch_gossip_config(registry_client.clone(), subnet_id);
 
         let current_peers = Arc::new(Mutex::new(PeerContextDictionary::default()));
         let peer_manager = Arc::new(PeerManagerImpl {
@@ -1107,11 +1118,13 @@ impl DownloadManagerImpl {
         peer_id: &NodeId,
         peers: &'a PeerContextDictionary,
         artifact_id: &ArtifactId,
+        integrity_hash: &CryptoHash,
         chunk_id: ChunkId,
     ) -> Option<&'a GossipRequestTracker> {
         let peer_context = peers.get(peer_id)?;
         peer_context.requested.get(&GossipRequestTrackerKey {
             artifact_id: artifact_id.clone(),
+            integrity_hash: integrity_hash.clone(),
             chunk_id,
         })
     }
@@ -1145,6 +1158,7 @@ impl DownloadManagerImpl {
                     advertiser,
                     peers,
                     &advert_tracker.advert.artifact_id,
+                    &advert_tracker.advert.integrity_hash,
                     chunk_id,
                 )
             })
@@ -1158,6 +1172,7 @@ impl DownloadManagerImpl {
         // violate duplicity constraints, a gossip chunk request is returned.
         Some(GossipChunkRequest {
             artifact_id: advert_tracker.advert.artifact_id.clone(),
+            integrity_hash: advert_tracker.advert.integrity_hash.clone(),
             chunk_id,
         })
     }
@@ -1237,6 +1252,7 @@ impl DownloadManagerImpl {
             (
                 GossipRequestTrackerKey {
                     artifact_id: req.artifact_id.clone(),
+                    integrity_hash: req.integrity_hash.clone(),
                     chunk_id: req.chunk_id,
                 },
                 GossipRequestTracker { requested_instant },
@@ -1255,10 +1271,12 @@ impl DownloadManagerImpl {
         &self,
         peer_id: NodeId,
         artifact_id: &ArtifactId,
+        integrity_hash: &CryptoHash,
         artifacts_under_construction: &mut dyn ArtifactDownloadList,
     ) {
         let ret = self.prioritizer.delete_advert_from_peer(
             artifact_id,
+            integrity_hash,
             peer_id,
             AdvertTrackerFinalAction::Abort,
         );
@@ -1266,7 +1284,7 @@ impl DownloadManagerImpl {
         // last peer with an advert tracker for this artifact, indicated by the
         // previous call's return value.
         if ret.is_ok() {
-            artifacts_under_construction.remove_tracker(&artifact_id);
+            artifacts_under_construction.remove_tracker(&integrity_hash);
         }
     }
 
@@ -1290,9 +1308,13 @@ impl DownloadManagerImpl {
 
         // Add the timed-out adverts to the end of their respective
         // priority queue in the prioritizer.
-        expired_downloads.into_iter().for_each(|artifact_id| {
-            let _ = self.prioritizer.reinsert_advert_at_tail(&artifact_id);
-        });
+        expired_downloads
+            .into_iter()
+            .for_each(|(artifact_id, integrity_hash)| {
+                let _ = self
+                    .prioritizer
+                    .reinsert_advert_at_tail(&artifact_id, &integrity_hash);
+            });
     }
 
     /// The method processes timed-out requests
@@ -1309,7 +1331,12 @@ impl DownloadManagerImpl {
                 >= self.gossip_config.max_chunk_wait_ms as u128;
             if timed_out {
                 self.metrics.chunks_timed_out.inc();
-                timed_out_chunks.push((*node_id, key.chunk_id, key.artifact_id.clone()));
+                timed_out_chunks.push((
+                    *node_id,
+                    key.chunk_id,
+                    key.artifact_id.clone(),
+                    key.integrity_hash.clone(),
+                ));
                 peer_timed_out = true;
                 trace!(
                     self.log,
@@ -1325,8 +1352,8 @@ impl DownloadManagerImpl {
             !timed_out
         });
 
-        for (node_id, chunk_id, artifact_id) in timed_out_chunks.into_iter() {
-            self.process_timed_out_chunk(&node_id, artifact_id, chunk_id)
+        for (node_id, chunk_id, artifact_id, integrity_hash) in timed_out_chunks.into_iter() {
+            self.process_timed_out_chunk(&node_id, artifact_id, integrity_hash, chunk_id)
         }
 
         peer_timed_out
@@ -1337,13 +1364,14 @@ impl DownloadManagerImpl {
         &self,
         node_id: &NodeId,
         artifact_id: ArtifactId,
+        integrity_hash: CryptoHash,
         chunk_id: ChunkId,
     ) {
         // Drop it and switch the preferred primary so that the next node that
         // advertised the chunk picks it up.
         let _ = self
             .prioritizer
-            .get_advert_tracker_by_id(&artifact_id)
+            .get_advert_tracker(&artifact_id, &integrity_hash)
             .map(|advert_tracker| {
                 // unset the in-progress flag.
                 let mut advert_tracker = advert_tracker.write().unwrap();
@@ -1475,6 +1503,7 @@ pub mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_registry_client::client::RegistryClientImpl;
     use ic_registry_client::fake::FakeRegistryClient;
+    use ic_test_utilities::consensus::fake::FakeSigner;
     use ic_test_utilities::port_allocation::allocate_ports;
     use ic_test_utilities::registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities::{
@@ -1482,19 +1511,22 @@ pub mod tests {
         thread_transport::*,
         types::ids::{node_id_to_u64, node_test_id, subnet_test_id},
     };
-    use ic_types::artifact::StateSyncMessage;
-    use ic_types::crypto::CryptoHash;
-    use ic_types::NodeId;
+    use ic_types::artifact::{DkgMessage, DkgMessageAttribute};
+    use ic_types::consensus::dkg::DealingContent;
+    use ic_types::consensus::BasicSignature;
+    use ic_types::crypto::threshold_sig::ni_dkg::{
+        NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet,
+    };
+    use ic_types::crypto::{CryptoHash, CryptoHashOf};
     use ic_types::{
         artifact,
         artifact::{Artifact, ArtifactAttribute, ArtifactPriorityFn, Priority},
         chunkable::{ArtifactChunk, ArtifactChunkData, Chunkable, ChunkableArtifact},
-        state_sync::{ChunkInfo, FileInfo, Manifest},
-        CryptoHashOfState, Height,
+        Height, NodeId, PrincipalId,
     };
     use proptest::prelude::*;
+    use std::convert::TryFrom;
     use std::ops::Range;
-    use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
 
     /// This priority function always returns Priority::FetchNow.
@@ -1548,9 +1580,12 @@ pub mod tests {
             &mut self,
             artifact_chunk: ArtifactChunk,
         ) -> Result<Artifact, ArtifactErrorCode> {
-            self.chunks.push(artifact_chunk);
+            self.chunks.push(artifact_chunk.clone());
             if self.chunks.len() == self.num_chunks as usize {
-                Ok(Artifact::StateSync(receive_check_test_create_message()))
+                match artifact_chunk.artifact_chunk_data {
+                    ArtifactChunkData::UnitChunkData(artifact) => Ok(artifact),
+                    _ => Err(ArtifactErrorCode::ChunkVerificationFailed),
+                }
             } else {
                 Err(ArtifactErrorCode::ChunksMoreNeeded)
             }
@@ -1718,7 +1753,7 @@ pub mod tests {
                 artifact_id: ArtifactId::FileTreeSync(advert_id.to_string()),
                 attribute: ArtifactAttribute::FileTreeSync(advert_id.to_string()),
                 size: 0,
-                integrity_hash: CryptoHash(vec![]),
+                integrity_hash: CryptoHash(Vec::from(advert_id.to_be_bytes())),
             };
             download_manager.on_advert(gossip_advert, node_id)
         }
@@ -1825,6 +1860,7 @@ pub mod tests {
         for advert_id in 0..5 {
             let advert = download_manager.prioritizer.get_advert_from_peer(
                 &ArtifactId::FileTreeSync(advert_id.to_string()),
+                &CryptoHash(vec![u8::try_from(advert_id).unwrap()]),
                 &removed_peer,
             );
             assert_eq!(advert, Err(DownloadPrioritizerError::NotFound));
@@ -1835,6 +1871,7 @@ pub mod tests {
         for advert_id in 0..5 {
             let advert = download_manager.prioritizer.get_advert_from_peer(
                 &ArtifactId::FileTreeSync(advert_id.to_string()),
+                &CryptoHash(vec![u8::try_from(advert_id).unwrap()]),
                 &removed_peer,
             );
             assert_eq!(advert, Err(DownloadPrioritizerError::NotFound));
@@ -1946,7 +1983,10 @@ pub mod tests {
             let artifact_id = ArtifactId::FileTreeSync(advert_id.to_string());
             let advert_tracker = download_manager
                 .prioritizer
-                .get_advert_tracker_by_id(&artifact_id)
+                .get_advert_tracker(
+                    &artifact_id,
+                    &CryptoHash(Vec::from(advert_id.to_be_bytes())),
+                )
                 .unwrap();
             let mut advert_tracker = advert_tracker.write().unwrap();
             assert_eq!(
@@ -2035,12 +2075,14 @@ pub mod tests {
                 .artifacts_under_construction
                 .read()
                 .unwrap();
-            for (idx, (id, _)) in artifacts_under_construction.iter().enumerate() {
-                assert_eq!(
-                    *id,
-                    ArtifactId::FileTreeSync((idx + num_replicas as usize).to_string())
-                )
+            // Advert 1 and 2 timed out, so we start from advert 3.
+            let mut counter: u32 = 3;
+            for (_, (id, _)) in artifacts_under_construction.iter().enumerate() {
+                assert_eq!(*id, CryptoHash(Vec::from(counter.to_be_bytes())));
+                counter += 1;
             }
+            // Assert counter matches total number of adverts
+            assert_eq!(counter, 5)
         }
     }
 
@@ -2106,33 +2148,44 @@ pub mod tests {
             .boxed()
     }
 
-    /// The function returns a simple state sync message.
-    fn receive_check_test_create_message() -> StateSyncMessage {
-        StateSyncMessage {
-            height: Height::from(1),
-            checkpoint_root: PathBuf::new(),
-            manifest: Manifest {
-                version: 0,
-                file_table: Vec::<FileInfo>::new(),
-                chunk_table: Vec::<ChunkInfo>::new(),
-            },
-            root_hash: CryptoHashOfState::from(CryptoHash(vec![])),
-            get_state_sync_chunk: None,
+    /// The function returns a simple DKG message which changes according to the
+    /// number passed in.
+    fn receive_check_test_create_message(number: u32) -> DkgMessage {
+        let dkg_id = NiDkgId {
+            start_block_height: Height::from(number as u64),
+            dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(number as u64)),
+            dkg_tag: NiDkgTag::LowThreshold,
+            target_subnet: NiDkgTargetSubnet::Local,
+        };
+        DkgMessage {
+            content: DealingContent::new(
+                NiDkgDealing::dummy_dealing_for_tests(number as u8),
+                dkg_id,
+            ),
+            signature: BasicSignature::fake(NodeId::from(PrincipalId::new_node_test_id(
+                number as u64,
+            ))),
         }
     }
-
     /// The function returns a new chunk with the given chunk ID and artifact
-    /// ID.
-    fn receive_check_test_create_chunk(chunk_id: ChunkId, artifact_id: ArtifactId) -> GossipChunk {
-        let payload = vec![0; 8];
+    /// ID. The chunk created differs based on the number provided (same as the
+    /// advert).
+    fn receive_check_test_create_chunk(
+        chunk_id: ChunkId,
+        artifact_id: ArtifactId,
+        number: u32,
+        integrity_hash: CryptoHash,
+    ) -> GossipChunk {
+        let payload = Artifact::DkgMessage(receive_check_test_create_message(number));
         let artifact_chunk = ArtifactChunk {
             chunk_id,
             witness: Vec::with_capacity(0),
-            artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(payload),
+            artifact_chunk_data: ArtifactChunkData::UnitChunkData(payload),
         };
 
         GossipChunk {
             artifact_id,
+            integrity_hash,
             chunk_id,
             artifact_chunk: Ok(artifact_chunk),
         }
@@ -2141,11 +2194,15 @@ pub mod tests {
     /// The function returns the given number of adverts.
     fn receive_check_test_create_adverts(range: Range<u32>) -> Vec<GossipAdvert> {
         let mut result = vec![];
-        let msg = receive_check_test_create_message();
-        for advert_id in range {
+        for advert_number in range {
+            let msg = receive_check_test_create_message(advert_number);
+            let artifact_id = CryptoHashOf::from(ic_crypto::crypto_hash(&msg).get());
+            let attribute = DkgMessageAttribute {
+                interval_start_height: Default::default(),
+            };
             let gossip_advert = GossipAdvert {
-                artifact_id: ArtifactId::FileTreeSync(advert_id.to_string()),
-                attribute: ArtifactAttribute::FileTreeSync(advert_id.to_string()),
+                artifact_id: ArtifactId::DkgMessage(artifact_id),
+                attribute: ArtifactAttribute::DkgMessage(attribute),
                 size: 0,
                 integrity_hash: ic_crypto::crypto_hash(&msg).get(),
             };
@@ -2160,15 +2217,24 @@ pub mod tests {
     /// afterwards and that the download manager does not consider
     /// downloading the same artifact(s) again when receiving the corresponding
     /// adverts again.
+    ///
+    /// This test also validates that adverts with the same artifact ID but
+    /// different integrity hashes can be processed from advert -> artifact.
     #[tokio::test]
     async fn receive_check_test() {
         // Initialize the logger and download manager for the test.
         let logger = p2p_test_setup_logger();
         let download_manager = new_test_download_manager(2, &logger);
-        //test_add_adverts(&download_manager, 0..1000, node_test_id(0));
         let node_id = node_test_id(1);
         let max_adverts = download_manager.gossip_config.max_artifact_streams_per_peer;
-        let adverts = receive_check_test_create_adverts(0..max_adverts);
+        let mut adverts = receive_check_test_create_adverts(0..max_adverts);
+        let msg = receive_check_test_create_message(0);
+        let artifact_id =
+            ArtifactId::DkgMessage(CryptoHashOf::from(ic_crypto::crypto_hash(&msg).get()));
+        for mut advert in &mut adverts {
+            advert.artifact_id = artifact_id.clone();
+        }
+
         for gossip_advert in &adverts {
             download_manager.on_advert(gossip_advert.clone(), node_id);
         }
@@ -2177,16 +2243,20 @@ pub mod tests {
             .unwrap();
 
         // Add the chunk(s).
-        for (i, chunk_req) in chunks_to_be_downloaded.iter().enumerate() {
+        for (index, chunk_req) in chunks_to_be_downloaded.iter().enumerate() {
+            // Verify all the chunk requests processed have the same artifact id.
+            assert_eq!(chunk_req.artifact_id, artifact_id);
             assert_eq!(
-                chunk_req.artifact_id,
-                ArtifactId::FileTreeSync(i.to_string())
+                chunk_req.integrity_hash,
+                ic_crypto::crypto_hash(&receive_check_test_create_message(index as u32)).get(),
             );
             assert_eq!(chunk_req.chunk_id, ChunkId::from(0));
 
             let gossip_chunk = receive_check_test_create_chunk(
-                chunks_to_be_downloaded[i].chunk_id,
-                chunks_to_be_downloaded[i].artifact_id.clone(),
+                chunks_to_be_downloaded[index].chunk_id,
+                chunks_to_be_downloaded[index].artifact_id.clone(),
+                index as u32,
+                chunk_req.integrity_hash.clone(),
             );
 
             download_manager.on_chunk(gossip_chunk, node_id);
@@ -2209,6 +2279,52 @@ pub mod tests {
             .unwrap();
 
         assert!(new_chunks_to_be_downloaded.is_empty());
+    }
+
+    /// This test will verify that artifacts with incorrect integrity hashes
+    /// will not be processed.
+    #[tokio::test]
+    async fn integrity_hash_test() {
+        // Initialize the logger and download manager for the test.
+        let logger = p2p_test_setup_logger();
+        let download_manager = new_test_download_manager(2, &logger);
+        let node_id = node_test_id(1);
+        let max_adverts = 20;
+        let adverts = receive_check_test_create_adverts(0..max_adverts);
+        for gossip_advert in &adverts {
+            download_manager.on_advert(gossip_advert.clone(), node_id);
+        }
+        let chunks_to_be_downloaded = download_manager
+            .download_next_compute_work(node_id)
+            .unwrap();
+
+        // Add the chunks with incorrect integrity hash
+        for (i, chunk_req) in adverts.iter().enumerate() {
+            // Create chunks with different integrity hashes
+            let gossip_chunk = receive_check_test_create_chunk(
+                chunks_to_be_downloaded[i].chunk_id,
+                chunks_to_be_downloaded[i].artifact_id.clone(),
+                max_adverts,
+                chunk_req.integrity_hash.clone(),
+            );
+
+            download_manager.on_chunk(gossip_chunk, node_id);
+        }
+
+        // Validate that the cache does not contain the artifacts since we put chunks
+        // with incorrect integrity hashes
+        let receive_check_caches = download_manager.receive_check_caches.read().unwrap();
+        let cache = &receive_check_caches.get(&node_id).unwrap();
+        for gossip_advert in &adverts {
+            assert!(!cache.contains(&gossip_advert.integrity_hash));
+        }
+
+        // Validate that the number of integrity check failures is equivalent to the
+        // length of the adverts in the incorrect integrity hash bucket
+        assert_eq!(
+            adverts.len(),
+            download_manager.metrics.integrity_hash_check_failed.get() as usize
+        );
     }
 
     proptest! {

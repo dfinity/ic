@@ -5,12 +5,28 @@ use ic_types::{
 };
 use std::convert::TryFrom;
 
+use std::fmt::{self, Debug, Display, Formatter};
+
 /// A wrapper around ingress messages and canister requests/responses.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CanisterInputMessage {
     Response(Response),
     Request(Request),
     Ingress(Ingress),
+}
+
+impl Display for CanisterInputMessage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            CanisterInputMessage::Ingress(Ingress { method_name, .. }) => {
+                write!(f, "Ingress, method name {},", method_name)
+            }
+            CanisterInputMessage::Request(Request { method_name, .. }) => {
+                write!(f, "Request, method name {},", method_name)
+            }
+            CanisterInputMessage::Response(_) => write!(f, "Response"),
+        }
+    }
 }
 
 /// A wrapper around a canister request and an ingress message.

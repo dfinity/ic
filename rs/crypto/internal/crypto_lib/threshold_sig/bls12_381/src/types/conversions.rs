@@ -9,7 +9,8 @@ use super::*;
 use crate::api::threshold_sign_error::ClibThresholdSignError;
 use ff::PrimeField;
 use ic_crypto_internal_bls12381_common::{
-    fr_from_bytes, fr_to_bytes, g1_from_bytes, g1_to_bytes, g2_from_bytes, g2_to_bytes,
+    fr_from_bytes, fr_to_bytes, g1_from_bytes, g1_to_bytes, g2_from_bytes, g2_from_bytes_unchecked,
+    g2_to_bytes,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::{
     PublicKeyBytes, ThresholdSigPublicKeyBytesConversionError,
@@ -30,6 +31,25 @@ impl From<&PublicKey> for PublicKeyBytes {
 impl From<PublicKey> for PublicKeyBytes {
     fn from(public_key: PublicKey) -> PublicKeyBytes {
         PublicKeyBytes::from(&public_key)
+    }
+}
+
+impl PublicKey {
+    /// Deserializes a `PublicKey` from a *trusted* source.
+    ///
+    /// # Security Notice
+    /// This uses the "unchecked" G2 deserialization (no subgroup check),
+    /// so should only be used on `PublicKeyBytes` obtained
+    /// from a known, trusted source.
+    pub fn from_trusted_bytes(
+        bytes: &PublicKeyBytes,
+    ) -> Result<Self, ThresholdSigPublicKeyBytesConversionError> {
+        g2_from_bytes_unchecked(&bytes.0)
+            .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
+                key_bytes: Some(bytes.0.to_vec()),
+                internal_error: "Invalid public key".to_string(),
+            })
+            .map(PublicKey)
     }
 }
 

@@ -57,7 +57,11 @@ pub struct MsgCyclesAvailableReply {
 pub struct StableSizeRequest {}
 #[derive(Serialize, Deserialize, Clone)]
 pub struct StableSizeReply {
-    pub size: u32,
+    pub result: HypervisorResult<u32>,
+}
+#[derive(Serialize, Deserialize, Clone)]
+pub struct StableSize64Reply {
+    pub result: HypervisorResult<u64>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -75,13 +79,26 @@ pub struct StableGrowRequest {
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct StableGrowReply {
-    pub result: i32,
+    pub result: HypervisorResult<i32>,
+}
+#[derive(Serialize, Deserialize, Clone)]
+pub struct StableGrow64Request {
+    pub additional_pages: u64,
+}
+#[derive(Serialize, Deserialize, Clone)]
+pub struct StableGrow64Reply {
+    pub result: HypervisorResult<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct StableReadRequest {
     pub offset: u32,
     pub size: u32,
+}
+#[derive(Serialize, Deserialize, Clone)]
+pub struct StableRead64Request {
+    pub offset: u64,
+    pub size: u64,
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct StableReadReply {
@@ -91,6 +108,11 @@ pub struct StableReadReply {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct StableWriteRequest {
     pub offset: u32,
+    pub data: Vec<u8>,
+}
+#[derive(Serialize, Deserialize, Clone)]
+pub struct StableWrite64Request {
+    pub offset: u64,
     pub data: Vec<u8>,
 }
 #[derive(Serialize, Deserialize, Clone)]
@@ -182,8 +204,11 @@ pub enum Request {
     GetNumInstructionsFromBytes(GetNumInstructionsFromBytesRequest),
     StableSize(StableSizeRequest),
     StableGrow(StableGrowRequest),
+    StableGrow64(StableGrow64Request),
     StableRead(StableReadRequest),
+    StableRead64(StableRead64Request),
     StableWrite(StableWriteRequest),
+    StableWrite64(StableWrite64Request),
     CanisterCyclesBalance(CanisterCyclesBalanceRequest),
     CanisterCyclesWithdraw(CanisterCyclesWithdrawRequest),
     CanisterCyclesRefund(CanisterCyclesRefundRequest),
@@ -202,7 +227,9 @@ pub enum Reply {
     MsgCyclesAvailable(MsgCyclesAvailableReply),
     GetNumInstructionsFromBytes(GetNumInstructionsFromBytesReply),
     StableSize(StableSizeReply),
+    StableSize64(StableSize64Reply),
     StableGrow(StableGrowReply),
+    StableGrow64(StableGrow64Reply),
     StableRead(StableReadReply),
     StableWrite(StableWriteReply),
     CanisterCyclesBalance(CanisterCyclesBalanceReply),

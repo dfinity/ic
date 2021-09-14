@@ -5,6 +5,7 @@
 /// As much as possible the naming of structs in this module should match the
 /// naming used in the [Interface
 /// Specification](https://sdk.dfinity.org/docs/interface-spec/index.html)
+mod artifacts;
 mod catch_up_package;
 mod common;
 mod dashboard;
@@ -16,16 +17,17 @@ mod types;
 
 use crate::types::*;
 use futures_util::stream::StreamExt;
-use hyper::{server::conn::Http, service::service_fn};
-use hyper::{Body, Request, Response, StatusCode};
+use hyper::{server::conn::Http, service::service_fn, Body, Request, Response, StatusCode};
 use ic_base_thread::ObservableCountingSemaphore;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::{AllowedClients, SomeOrAllNodes, TlsHandshake};
 use ic_crypto_tree_hash::Path;
-use ic_interfaces::execution_environment::IngressMessageFilter;
 use ic_interfaces::{
-    consensus_pool::ConsensusPoolCache, crypto::IngressSigVerifier,
-    execution_environment::QueryHandler, p2p::IngressEventHandler, registry::RegistryClient,
+    consensus_pool::ConsensusPoolCache,
+    crypto::IngressSigVerifier,
+    execution_environment::{IngressMessageFilter, QueryHandler},
+    p2p::IngressEventHandler,
+    registry::RegistryClient,
     state_manager::StateReader,
 };
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
@@ -34,14 +36,14 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{NodeTopology, ReplicatedState};
 use ic_types::{
     malicious_flags::MaliciousFlags,
-    messages::CertificateDelegation,
     messages::{
-        Blob, HttpReadContent, HttpReadState, HttpReadStateResponse, HttpRequestEnvelope,
-        ReplicaHealthStatus,
+        Blob, CertificateDelegation, HttpReadContent, HttpReadState, HttpReadStateResponse,
+        HttpRequestEnvelope, ReplicaHealthStatus,
     },
     time::current_time_and_expiry_time,
     SubnetId,
 };
+use leaky_bucket::RateLimiter;
 use metrics::HttpHandlerMetrics;
 use rand::Rng;
 use std::collections::HashSet;
@@ -49,8 +51,7 @@ use std::convert::Infallible;
 use std::io::{Error, ErrorKind, Write};
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tempfile::NamedTempFile;
 
@@ -58,10 +59,32 @@ use tokio::{net::TcpListener, net::TcpStream, time::timeout, time::timeout_at, t
 
 // Constants defining the limits of the HttpHandler.
 
+// The http handler should apply backpresure when we lack a particular resources
+// which is purely HttpHandler related (e.g. connections, file descritors).
+//
+// Current mechanisms for constrained resources include:
+//
+// 1. File descriptors. The limit can be checked by 'process_max_fds'
+// Prometheus metric. The number of file descriptors used by the crate is
+// controlled by 'MAX_OUTSTANDING_CONNECTIONS'.
+//
+// 2. Lock contention. Currently we don't use lock-free data structures
+// (e.g. StateManager, RegistryClient), hence we can observe lock contention.
+// 'MAX_REQUESTS_PER_SECOND' is used to control the risk of running into
+// contention. A resonable value can be derived by looking what are the
+// latencies for operations that hold locks (e.g. methods on the RegistryClient
+// and StateManager).
+
 // In the HttpHandler we can have at most 'MAX_OUTSTANDING_CONNECTIONS'
 // live TCP connections. If we are at the limit, we won't
 // accept new TCP connections.
 const MAX_OUTSTANDING_CONNECTIONS: usize = 30000;
+
+// Maximum number of requests per second that we route to the corresponding
+// handlers. To get an estimate what is reasonable number check the operation
+// latencies of the data structures that hold locks (the RegistryClient and the
+// StateManager).
+const MAX_REQUESTS_PER_SECOND: usize = 500;
 
 // The maximum time we should wait for a peeking the first bytes on a TCP
 // connection. Effectively, if we can't read the first bytes within the
@@ -88,23 +111,25 @@ const UNKNOWN_LABEL: &str = "unknown";
 /// The struct that handles incoming HTTP requests for the IC replica.
 /// This is collection of thread-safe data members.
 struct HttpHandler {
+    log: ReplicaLogger,
     config: Config,
-    registry_client: Arc<dyn RegistryClient>,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
-    log: ReplicaLogger,
-    ingress_sender: Arc<dyn IngressEventHandler>,
-    query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
+    subnet_type: SubnetType,
+    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    registry_client: Arc<dyn RegistryClient>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+
+    query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     ingress_message_filter: Arc<dyn IngressMessageFilter<State = ReplicatedState>>,
-    subnet_type: SubnetType,
+    backup_spool_path: Option<PathBuf>,
+    ingress_sender: Arc<dyn IngressEventHandler>,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    malicious_flags: MaliciousFlags,
 
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
-    malicious_flags: MaliciousFlags,
 }
 
 // Crates a detached tokio blocking task that initializes the server (reading
@@ -209,6 +234,7 @@ pub async fn start_server(
     nns_subnet_id: SubnetId,
     log: ReplicaLogger,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    backup_spool_path: Option<PathBuf>,
     ingress_message_filter: Arc<dyn IngressMessageFilter<State = ReplicatedState>>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
@@ -228,6 +254,7 @@ pub async fn start_server(
         state_reader,
         ingress_verifier,
         consensus_pool_cache,
+        backup_spool_path,
         ingress_message_filter,
         malicious_flags,
     ));
@@ -266,6 +293,15 @@ pub async fn start_server(
         MAX_OUTSTANDING_CONNECTIONS,
         Arc::clone(&metrics.connections),
     );
+
+    let requests_rate_limiter = Arc::new(
+        RateLimiter::builder()
+            .initial(MAX_REQUESTS_PER_SECOND)
+            .interval(Duration::from_secs(1))
+            .refill(MAX_REQUESTS_PER_SECOND)
+            .build(),
+    );
+
     loop {
         let http = http.clone();
         let log = log.clone();
@@ -277,7 +313,7 @@ pub async fn start_server(
                 metrics.connections_total.inc();
                 // Start recording connection setup duration.
                 let connection_start_time = Instant::now();
-
+                let requests_rate_limiter = Arc::clone(&requests_rate_limiter);
                 tokio::task::spawn(async move {
                     // Do a move of the permit so it gets dropped at the end of the scope.
                     let _request_permit_deleter = request_permit;
@@ -298,6 +334,7 @@ pub async fn start_server(
                                         tcp_stream,
                                         connection_start_time,
                                         log,
+                                        requests_rate_limiter,
                                     )
                                     .await;
                                 } else {
@@ -310,6 +347,7 @@ pub async fn start_server(
                                         tcp_stream,
                                         connection_start_time,
                                         log,
+                                        requests_rate_limiter,
                                     )
                                     .await;
                                 }
@@ -362,6 +400,7 @@ impl HttpHandler {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         validator: Arc<dyn IngressSigVerifier + Send + Sync>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+        backup_spool_path: Option<PathBuf>,
         ingress_message_filter: Arc<dyn IngressMessageFilter<State = ReplicatedState>>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
@@ -378,6 +417,7 @@ impl HttpHandler {
             state_reader,
             validator,
             consensus_pool_cache,
+            backup_spool_path,
             ingress_message_filter,
             delegation_from_nns: Arc::new(RwLock::new(None)),
             health_status: Arc::new(RwLock::new(ReplicaHealthStatus::Starting)),
@@ -393,12 +433,15 @@ async fn serve_unsecure_connection(
     tcp_stream: TcpStream,
     connection_start_time: Instant,
     log: ReplicaLogger,
+    requests_rate_limiter: Arc<RateLimiter>,
 ) {
     let metrics_svc = Arc::clone(&metrics);
     let aservice_fn = service_fn(move |request| {
         let http_handler = Arc::clone(&http_handler);
         let metrics_svc = Arc::clone(&metrics_svc);
+        let requests_rate_limiter_svc = Arc::clone(&requests_rate_limiter);
         async move {
+            requests_rate_limiter_svc.acquire_one().await;
             Ok::<_, Infallible>(route(metrics_svc, http_handler, AppLayer::Http, request).await)
         }
     });
@@ -423,13 +466,16 @@ async fn serve_secure_connection(
     tcp_stream: TcpStream,
     connection_start_time: Instant,
     log: ReplicaLogger,
+    requests_rate_limiter: Arc<RateLimiter>,
 ) {
     let http_handler_svc = Arc::clone(&http_handler);
     let metrics_svc = Arc::clone(&metrics);
     let aservice_fn = service_fn(move |request| {
         let http_handler_svc = Arc::clone(&http_handler_svc);
         let metrics_svc = Arc::clone(&metrics_svc);
+        let requests_rate_limiter_svc = Arc::clone(&requests_rate_limiter);
         async move {
+            requests_rate_limiter_svc.acquire_one().await;
             Ok::<_, Infallible>(
                 route(metrics_svc, http_handler_svc, AppLayer::Https, request).await,
             )
@@ -489,6 +535,7 @@ fn needs_all_preconditions(request_type: &RequestType) -> bool {
             | RequestType::RedirectToDashboard
             | RequestType::Dashboard
             | RequestType::Status
+            | RequestType::Artifacts(_)
     )
 }
 
@@ -569,16 +616,17 @@ async fn route_to_handlers(
 ) -> (Response<Body>, ApiReqType) {
     match request_type {
         RequestType::Read => {
+            let root_delegation = http_handler.delegation_from_nns.read().unwrap().clone();
             read::handle(
                 &http_handler.log,
-                &http_handler.delegation_from_nns,
-                http_handler.query_handler.as_ref(),
-                http_handler.state_reader.as_ref(),
-                http_handler.validator.as_ref(),
+                root_delegation,
+                Arc::clone(&http_handler.query_handler),
+                Arc::clone(&http_handler.state_reader),
+                Arc::clone(&http_handler.validator),
                 http_handler.registry_client.get_latest_version(),
                 parsed_body,
-                metrics.as_ref(),
-                &http_handler.malicious_flags,
+                Arc::clone(&metrics),
+                http_handler.malicious_flags.clone(),
             )
             .await
         }
@@ -622,6 +670,19 @@ async fn route_to_handlers(
         RequestType::RedirectToDashboard => (redirect_to_dashboard(), ApiReqType::Unknown),
         RequestType::Options => (
             common::make_response(StatusCode::NO_CONTENT, ""),
+            ApiReqType::Unknown,
+        ),
+        RequestType::Artifacts(height) => (
+            match &http_handler.backup_spool_path {
+                Some(path) => artifacts::handle(
+                    path,
+                    http_handler.subnet_id,
+                    http_handler.consensus_pool_cache.as_ref(),
+                    height,
+                    http_handler.log.clone(),
+                ),
+                None => common::make_response(StatusCode::NOT_FOUND, ""),
+            },
             ApiReqType::Unknown,
         ),
     }
@@ -874,7 +935,16 @@ fn validate_parts(parts: &http::request::Parts) -> Result<RequestType, Response<
             "/api/v2/status" => Ok(RequestType::Status),
             "/" | "/_/" => Ok(RequestType::RedirectToDashboard),
             HTTP_DASHBOARD_URL_PATH => Ok(RequestType::Dashboard),
-            _ => Err(common::make_response(StatusCode::NOT_FOUND, "")),
+            other => match other.split('/').collect::<Vec<&str>>().as_slice() {
+                ["", "_", "artifacts", height] => match height.parse::<u64>() {
+                    Ok(val) => Ok(RequestType::Artifacts(val)),
+                    Err(_) => Err(common::make_response(
+                        StatusCode::BAD_REQUEST,
+                        "Couldn't parse height as integer.",
+                    )),
+                },
+                _ => Err(common::make_response(StatusCode::NOT_FOUND, "")),
+            },
         },
         Method::OPTIONS => Ok(RequestType::Options),
         _ => Err(common::make_response(

@@ -7,6 +7,7 @@ edition = "2018"
 base64 = "0.11.0"
 hex = "0.4.2"
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
+ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-types = { path = "../../../../../types/types" }
 openssl = "0.10.29"

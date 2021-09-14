@@ -2,7 +2,7 @@
 
 use crate::serde::pairing::g1_from_bytes;
 use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_to_bytes;
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use miracl_core::bls12381::ecp::ECP;
 use pairing::bls12_381::{Fr, G1};
 use rand_chacha::ChaChaRng;

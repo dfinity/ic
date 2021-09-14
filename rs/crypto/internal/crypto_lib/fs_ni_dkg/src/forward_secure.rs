@@ -910,7 +910,7 @@ pub fn enc_chunks(
         })
         .collect();
 
-    let extended_tau = extend_tau_with_associated_data(&cc, &rr, &ss, &tau, associated_data);
+    let extended_tau = extend_tau(&cc, &rr, &ss, &tau, associated_data);
     let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
     let mut zz = Vec::new();
     for j in 0..chunks {
@@ -1013,6 +1013,7 @@ pub fn baby_giant(tgt: &FP12, base: &FP12, lo: isize, range: isize) -> Option<is
 #[derive(Debug)]
 pub enum DecErr {
     ExpiredKey,
+    InvalidChunk,
 }
 
 /// Decrypt the i-th group of chunks.
@@ -1032,14 +1033,8 @@ pub fn dec_chunks(
     crsz: &Crsz,
     tau: &[Bit],
     associated_data: &[u8],
-    sys: &SysParam,
 ) -> Result<Vec<isize>, DecErr> {
-    let extended_tau = if verify_ciphertext_integrity(crsz, tau, associated_data, sys).is_ok() {
-        extend_tau_with_associated_data(&crsz.cc, &crsz.rr, &crsz.ss, &tau, associated_data)
-    } else {
-        extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, &tau)
-    };
-
+    let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, &tau, associated_data);
     let dk = match find_prefix(dks, &tau) {
         None => return Err(DecErr::ExpiredKey),
         Some(node) => node,
@@ -1148,8 +1143,7 @@ pub fn verify_ciphertext_integrity(
     use miracl_core::bls12381::pair;
     let mut g1_neg = ECP::generator();
     g1_neg.neg();
-    let extended_tau =
-        extend_tau_with_associated_data(&crsz.cc, &crsz.rr, &crsz.ss, &tau, associated_data);
+    let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, &tau, associated_data);
     let mut id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
 
     // Pre-compute the line calculations (for pairing) on `id`
@@ -1199,30 +1193,10 @@ pub fn verify_ciphertext_integrity(
     checks
 }
 
-// CRP-897: Remove support for old `extend_tau` once all ciphertexts use
-// `extend_tau_with_associated_data`.
-/// Returns tau ++ bitsOf (sha256 (cc, rr, ss, tau)).
-fn extend_tau(cc: &[Vec<ECP>], rr: &[ECP], ss: &[ECP], tau: &[Bit]) -> Vec<Bit> {
-    let mut h = miracl_core::hash256::HASH256::new();
-    cc.iter()
-        .for_each(|cc_i| cc_i.iter().for_each(|cc_ij| process_ecp(&mut h, cc_ij)));
-    rr.iter().for_each(|point| process_ecp(&mut h, point));
-    ss.iter().for_each(|point| process_ecp(&mut h, point));
-    tau.iter().for_each(|t| h.process_num(t.into()));
-
-    let mut extended_tau: Vec<Bit> = tau.to_vec();
-    h.hash().iter().for_each(|byte| {
-        for b in 0..8 {
-            extended_tau.push(Bit::from((byte >> b) & 1));
-        }
-    });
-    extended_tau
-}
-
 /// Returns (tau || RO(cc, rr, ss, tau, associated_data)).
 ///
 /// See the description of Deal in Section 7.1.
-fn extend_tau_with_associated_data(
+fn extend_tau(
     cc: &[Vec<ECP>],
     rr: &[ECP],
     ss: &[ECP],

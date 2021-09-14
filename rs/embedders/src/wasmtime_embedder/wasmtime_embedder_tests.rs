@@ -1,5 +1,6 @@
 use super::system_api;
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
+use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
+use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::SystemState;
 use ic_system_api::{ApiType, SystemApiImpl};
 use ic_test_utilities::{
@@ -29,17 +30,22 @@ fn test_wasmtime_system_api() {
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
 
-    let system_state = SystemState::new_for_start(canister_test_id(53));
+    let canister_id = canister_test_id(53);
+    let system_state = SystemState::new_for_start(canister_id);
     let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
     let system_state_accessor =
         ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
     let mut system_api = SystemApiImpl::new(
         ApiType::start(),
         system_state_accessor,
-        canister_memory_limit,
         canister_current_memory_usage,
-        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-        ComputeAllocation::default(),
+        ExecutionParameters {
+            instruction_limit: MAX_NUM_INSTRUCTIONS,
+            canister_memory_limit,
+            subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            compute_allocation: ComputeAllocation::default(),
+        },
+        no_op_logger(),
     );
     system_api_handle.replace(&mut system_api);
     let wat = r#"
@@ -63,6 +69,8 @@ fn test_wasmtime_system_api() {
 
     let counter_instructions_global = Rc::new(RefCell::new(None));
     let linker = system_api::syscalls(
+        no_op_logger(),
+        canister_id,
         &store,
         system_api_handle,
         Rc::downgrade(&counter_instructions_global),

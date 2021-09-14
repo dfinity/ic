@@ -9,4 +9,4 @@ hex-literal = "0.2.1"
 serde = "1.0.115"
 
 [dev-dependencies]
-ic-crypto-sha256 = { path = "../../crypto/sha256" }
+ic-crypto-sha = { path = "../../crypto/sha" }

@@ -1,6 +1,6 @@
 use super::RawHttpRequestVal;
 use crate::{crypto::SignedBytesWithoutDomainSeparator, CountBytes};
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
 use std::{

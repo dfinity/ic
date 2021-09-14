@@ -2,7 +2,7 @@
 use crate::types::{PublicKey, PublicKeyBytes, Signature, SignatureBytes};
 use ic_certified_vars::CertificateValidationError;
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_crypto_tree_hash::{Digest, LabeledTree};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{

@@ -582,6 +582,10 @@ message Proposal {
   }
 }
 
+// Empty message to use in oneof fields that represent empty
+// enums.
+message Empty {}
+
 // All operations that modify the state of an existing neuron are
 // represented by instances of `ManageNeuron`.
 //
@@ -732,9 +736,28 @@ message ManageNeuron {
     Vote vote = 2;
   }
 
+  // Claim a new neuron or refresh the stake of an existing neuron.
   message ClaimOrRefresh {
-    oneof by {
+    message MemoAndController {
       uint64 memo = 1;
+      ic_base_types.pb.v1.PrincipalId controller = 2;
+    }
+
+    oneof by {
+      // DEPRECATED: Use MemoAndController and omit the controller.
+      uint64 memo = 1;
+
+      // Claim or refresh a neuron, by providing the memo used in the
+      // staking stransfer and 'controller' as the principal id used to
+      // calculate the subaccount to which the transfer was made. If
+      // 'controller' is omitted, the principal id of the caller is
+      // used.
+      MemoAndController memo_and_controller = 2;
+
+      // This just serves as a tag to indicate that the neuron should be
+      // refreshed by it's id or subaccount. This does not work to claim
+      // new neurons.
+      Empty neuron_id_or_subaccount = 3;
     }
   }
 
@@ -1163,13 +1186,16 @@ message Governance {
     // The timestamp at which the command was issued, for debugging
     // purposes.
     uint64 timestamp = 1;
+    reserved 6;
+    reserved "claim_or_refresh";
+
     oneof command {
       ManageNeuron.Disburse disburse = 2;
       ManageNeuron.Split split = 3;
       ManageNeuron.Spawn spawn = 4;
       ManageNeuron.DisburseToNeuron disburse_to_neuron = 5;
-      ClaimOrRefreshNeuronFromAccount claim_or_refresh = 6;
       ManageNeuron.MergeMaturity merge_maturity = 7;
+      ManageNeuron.ClaimOrRefresh claim_or_refresh_neuron = 8;
     }
   }
 
@@ -1290,6 +1316,8 @@ message ListNeuronsResponse {
 }
 
 // The arguments to the method `claim_or_refresh_neuron_from_account`.
+//
+// DEPRECATED: Use ManageNeuron::ClaimOrRefresh.
 message ClaimOrRefreshNeuronFromAccount {
   // The principal for which to refresh the account. If not specified,
   // defaults to the caller.
@@ -1299,6 +1327,8 @@ message ClaimOrRefreshNeuronFromAccount {
 }
 
 // Response to claim_or_refresh_neuron_from_account.
+//
+// DEPRECATED: Use ManageNeuron::ClaimOrRefresh.
 message ClaimOrRefreshNeuronFromAccountResponse {
   oneof result {
     // Specified in case of error.

@@ -43,11 +43,17 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
             // Setup input data for measurement
             || BenchData {
                 ptr,
-                tracker: SigsegvMemoryTracker::new(ptr, *PAGE_SIZE, no_op_logger()).unwrap(),
+                tracker: SigsegvMemoryTracker::new(
+                    ptr,
+                    *PAGE_SIZE,
+                    no_op_logger(),
+                    DirtyPageTracking::Track,
+                )
+                .unwrap(),
             },
             // Do the actual measurement
             |data| {
-                sigsegv_fault_handler(
+                sigsegv_fault_handler_mprotect(
                     black_box(&data.tracker),
                     &(|_| Some(&ZEROED_PAGE)),
                     black_box(data.ptr),
@@ -81,16 +87,22 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
             || {
                 let data = BenchData {
                     ptr,
-                    tracker: SigsegvMemoryTracker::new(ptr, *PAGE_SIZE, no_op_logger()).unwrap(),
+                    tracker: SigsegvMemoryTracker::new(
+                        ptr,
+                        *PAGE_SIZE,
+                        no_op_logger(),
+                        DirtyPageTracking::Track,
+                    )
+                    .unwrap(),
                 };
 
-                sigsegv_fault_handler(&data.tracker, &(|_| Some(&ZEROED_PAGE)), data.ptr);
+                sigsegv_fault_handler_mprotect(&data.tracker, &(|_| Some(&ZEROED_PAGE)), data.ptr);
 
                 data
             },
             // Do the actual measurement
             |data| {
-                sigsegv_fault_handler(
+                sigsegv_fault_handler_mprotect(
                     black_box(&data.tracker),
                     &(|_| Some(&ZEROED_PAGE)),
                     black_box(data.ptr),

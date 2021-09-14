@@ -55,3 +55,21 @@ fn test_iter() {
 
     assert!(int_map.iter().eq(btree_map.iter().map(|(k, v)| (*k, v))));
 }
+
+#[test]
+fn test_int_map_bounds() {
+    let m: IntMap<u64> = (10..=100u64).map(|x| (7 * x, 0)).collect();
+    for i in 0..800 {
+        let (start, end) = m.bounds(i);
+        if (70..=700).contains(&i) {
+            assert_eq!(start, Some((i / 7) * 7));
+            assert_eq!(end, Some(((i + 6) / 7) * 7));
+        } else if i < 70 {
+            assert_eq!(start, None);
+            assert_eq!(end, Some(70));
+        } else {
+            assert_eq!(start, Some(700));
+            assert_eq!(end, None)
+        }
+    }
+}

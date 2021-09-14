@@ -8,7 +8,7 @@ use crate::types::{
 use group::CurveProjective;
 use ic_crypto_internal_bls12381_common as bls;
 use ic_crypto_internal_bls12381_common::random_bls12_381_scalar;
-use ic_crypto_sha256::{Context, DomainSeparationContext};
+use ic_crypto_sha::{Context, DomainSeparationContext};
 use pairing::bls12_381::{Bls12, FrRepr, G1, G2};
 use pairing::Engine;
 use rand::{CryptoRng, Rng};

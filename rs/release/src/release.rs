@@ -1,7 +1,7 @@
 use crate::error::{ReleaseError, ReleaseResult};
 use flate2::Compression;
 use flate2::{read::GzDecoder, write::GzEncoder};
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::fs::{self, File};

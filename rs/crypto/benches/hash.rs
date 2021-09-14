@@ -1,7 +1,7 @@
 use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, Throughput};
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use rand::prelude::*;
 use std::convert::TryFrom;
 use std::time::Duration;

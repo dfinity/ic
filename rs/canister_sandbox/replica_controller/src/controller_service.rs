@@ -67,14 +67,12 @@ pub(crate) struct ControllerServer {
 
 fn to_rpc_exec_input(input: &WasmExecutionInput) -> ExecInput {
     ExecInput {
+        canister_id: input.system_state.canister_id,
         func_ref: input.func_ref.clone(),
         api_type: input.api_type.clone(),
-        instructions_limit: input.instructions_limit,
         globals: input.execution_state.exported_globals.clone(),
-        canister_memory_limit: input.canister_memory_limit,
         canister_current_memory_usage: input.canister_current_memory_usage,
-        subnet_available_memory: input.subnet_available_memory.clone(),
-        compute_allocation: input.compute_allocation,
+        execution_parameters: input.execution_parameters.clone(),
     }
 }
 
@@ -558,12 +556,16 @@ impl ControllerService for ControllerServer {
                         Reply::MsgCyclesAvailable(MsgCyclesAvailableReply { result })
                     }
                     Request::StableSize(_req) => {
-                        let size = system_state_accessor.stable_size();
-                        Reply::StableSize(StableSizeReply { size })
+                        let result = system_state_accessor.stable_size();
+                        Reply::StableSize(StableSizeReply { result })
                     }
                     Request::StableGrow(req) => {
                         let result = system_state_accessor.stable_grow(req.additional_pages);
                         Reply::StableGrow(StableGrowReply { result })
+                    }
+                    Request::StableGrow64(req) => {
+                        let result = system_state_accessor.stable_grow64(req.additional_pages);
+                        Reply::StableGrow64(StableGrow64Reply { result })
                     }
                     Request::GetNumInstructionsFromBytes(req) => {
                         let result =
@@ -580,12 +582,33 @@ impl ControllerService for ControllerServer {
                         let result = result.map_or_else(Err, |_| Ok(buf));
                         Reply::StableRead(StableReadReply { result })
                     }
+                    Request::StableRead64(req) => {
+                        let mut buf = Vec::<u8>::new();
+                        buf.resize(req.size as usize, 0);
+                        let result =
+                            system_state_accessor.stable_read64(0, req.offset, req.size, &mut buf);
+                        let result = result.map_or_else(Err, |_| Ok(buf));
+                        Reply::StableRead(StableReadReply { result })
+                    }
                     Request::StableWrite(req) => {
                         let result = if req.data.len() <= (u32::MAX as usize) {
                             system_state_accessor.stable_write(
                                 req.offset,
                                 0,
                                 req.data.len() as u32,
+                                &req.data,
+                            )
+                        } else {
+                            Err(HypervisorError::Trapped(StableMemoryOutOfBounds))
+                        };
+                        Reply::StableWrite(StableWriteReply { result })
+                    }
+                    Request::StableWrite64(req) => {
+                        let result = if req.data.len() <= (u64::MAX as usize) {
+                            system_state_accessor.stable_write64(
+                                req.offset,
+                                0,
+                                req.data.len() as u64,
                                 &req.data,
                             )
                         } else {

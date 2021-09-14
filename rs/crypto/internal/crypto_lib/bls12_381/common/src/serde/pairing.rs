@@ -59,6 +59,27 @@ pub fn g2_from_bytes(bytes: &[u8; G2_SIZE]) -> Result<G2, GroupDecodingError> {
         .map(|affine| affine.into_projective())
 }
 
+/// Decode BLS12-381 G2 point from bytes, without guaranteeing that the encoding
+/// represents an element in the large prime order subgroup.
+///
+/// # Security Notice
+///
+/// This should only be used if the `bytes` are from a trusted source.
+///
+/// # Arguments
+/// * `bytes`: a compressed instance of G2 point
+/// # Errors
+/// * `GroupDecodingError` if the input is invalid
+/// # Returns
+/// The decoded point
+pub fn g2_from_bytes_unchecked(bytes: &[u8; G2_SIZE]) -> Result<G2, GroupDecodingError> {
+    let mut compressed: <G2Affine as CurveAffine>::Compressed = EncodedPoint::empty();
+    compressed.as_mut().copy_from_slice(bytes);
+    compressed
+        .into_affine_unchecked()
+        .map(|affine| affine.into_projective())
+}
+
 /// Encode BLS12-381 G2 point to bytes
 ///
 /// # Arguments

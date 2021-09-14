@@ -3,13 +3,6 @@
 //! Specifically, it constructs all the artifact pools and the Consensus/P2P
 //! time source.
 
-use crate::gossip_protocol::{Gossip, GossipImpl};
-use crate::{
-    event_handler::IngressEventHandlerImpl,
-    event_handler::{
-        AdvertSubscriber, IngressThrottler, P2PEventHandlerControl, P2PEventHandlerImpl,
-    },
-};
 use ic_artifact_manager::{manager, processors};
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl,
@@ -26,6 +19,7 @@ use ic_consensus::{
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ingress_manager::IngressManager;
+use ic_interfaces::registry::LocalStoreCertifiedTimeReader;
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactManager, ArtifactProcessor},
     consensus_pool::ConsensusPoolCache,
@@ -40,8 +34,13 @@ use ic_interfaces::{
 };
 use ic_logger::{debug, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::subnet::v1::GossipConfig;
-use ic_registry_client::helper::subnet::SubnetRegistry;
+use ic_p2p::{
+    event_handler::{
+        fetch_gossip_config, AdvertSubscriber, IngressEventHandlerImpl, IngressThrottler,
+        P2PEventHandlerImpl,
+    },
+    gossip_protocol::GossipImpl,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
 use ic_transport::transport::create_transport;
@@ -50,7 +49,7 @@ use ic_types::{
     consensus::catchup::CUPWithOriginalProtobuf,
     crypto::CryptoHash,
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
-    p2p,
+    malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
     transport::{FlowTag, TransportClientType, TransportConfig},
     NodeId, SubnetId,
@@ -61,10 +60,6 @@ use std::sync::{
 };
 use std::time::Duration;
 use tokio::task::JoinHandle;
-
-// import of malicious flags definition for p2p
-use ic_interfaces::registry::LocalStoreCertifiedTimeReader;
-use ic_types::malicious_flags::MaliciousFlags;
 
 /// Periodic timer duration in milliseconds between polling calls to the P2P
 /// component.
@@ -85,7 +80,7 @@ struct P2P {
     /// Flag indicating if P2P has been terminated.
     killed: Arc<AtomicBool>,
     /// The P2P event handler control with automatic reference counting.
-    event_handler: Arc<dyn P2PEventHandlerControl>,
+    event_handler: Arc<P2PEventHandlerImpl>,
 }
 
 /// The P2P state sync client.
@@ -100,20 +95,6 @@ pub enum P2PStateSyncClient {
         Arc<dyn ArtifactClient<TestArtifact>>,
         Arc<dyn ArtifactProcessor<TestArtifact> + Sync + 'static>,
     ),
-}
-
-/// Fetch the Gossip configuration from the registry.
-pub(crate) fn fetch_gossip_config(
-    registry_client: Arc<dyn RegistryClient>,
-    subnet_id: SubnetId,
-) -> GossipConfig {
-    if let Ok(Some(Some(gossip_config))) =
-        registry_client.get_gossip_config(subnet_id, registry_client.get_latest_version())
-    {
-        gossip_config
-    } else {
-        p2p::build_default_gossip_config()
-    }
 }
 
 /// The function constructs a P2P instance. Currently, it constructs all the
@@ -260,7 +241,7 @@ impl P2PRunner for P2P {
             let timer_duration = Duration::from_millis(P2P_TIMER_DURATION_MS);
             while !killed.load(SeqCst) {
                 std::thread::sleep(timer_duration);
-                gossip.on_timer(&event_handler);
+                gossip.on_timer(Arc::clone(&event_handler));
             }
         });
         self.task_handles.push(handle);

@@ -26,7 +26,7 @@ various tests of the Crypto Component.
 | `node_key_validation/..` | `ic-crypto-node-key-validation`^**[Wasm]**^ |
 validation utils for public keys of a node
 
-| `sha256/..` | `ic-crypto-sha256`^**[Wasm]**^ |
+| `sha/..` | `ic-crypto-sha`^**[Wasm]**^ |
 hashing algorithms, incl. SHA256 and SHA224
 
 | `tls/..` | `ic-crypto-tls` |

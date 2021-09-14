@@ -16,7 +16,11 @@ type Amount = record { e8s : nat64 };
 type ApproveGenesisKyc = record { principals : vec principal };
 type Ballot = record { vote : int32; voting_power : nat64 };
 type BallotInfo = record { vote : int32; proposal_id : opt NeuronId };
-type By = variant { Memo : nat64 };
+type By = variant {
+  NeuronIdOrSubaccount : record {};
+  MemoAndController : ClaimOrRefreshNeuronFromAccount;
+  Memo : nat64;
+};
 type Change = variant { ToRemove : NodeProvider; ToAdd : NodeProvider };
 type ClaimOrRefresh = record { by : opt By };
 type ClaimOrRefreshNeuronFromAccount = record {
@@ -53,8 +57,8 @@ type Command_1 = variant {
 type Command_2 = variant {
   Spawn : Spawn;
   Split : Split;
-  ClaimOrRefresh : ClaimOrRefreshNeuronFromAccount;
   DisburseToNeuron : DisburseToNeuron;
+  ClaimOrRefreshNeuron : ClaimOrRefresh;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
 };

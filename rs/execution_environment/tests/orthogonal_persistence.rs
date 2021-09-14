@@ -1,6 +1,9 @@
 use ic_config::execution_environment::Config;
 use ic_execution_environment::{Hypervisor, QueryExecutionType};
-use ic_interfaces::{execution_environment::SubnetAvailableMemory, messages::RequestOrIngress};
+use ic_interfaces::{
+    execution_environment::{ExecutionParameters, SubnetAvailableMemory},
+    messages::RequestOrIngress,
+};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -11,18 +14,21 @@ use ic_test_utilities::{
     types::ids::subnet_test_id, types::ids::user_test_id, types::messages::IngressBuilder,
     with_test_replica_logger,
 };
-use ic_types::{ingress::WasmResult, CanisterId, Cycles, NumBytes, NumInstructions, SubnetId};
+use ic_types::{
+    ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId,
+};
 use ic_wasm_utils::validation::WasmValidationLimits;
-use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::{collections::BTreeMap, sync::Arc};
 
-const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
-
-lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX));
+fn execution_parameters() -> ExecutionParameters {
+    ExecutionParameters {
+        instruction_limit: NumInstructions::new(1_000_000_000),
+        canister_memory_limit: NumBytes::new(std::u64::MAX),
+        subnet_available_memory: SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX)),
+        compute_allocation: ComputeAllocation::default(),
+    }
 }
 
 struct HypervisorTest {
@@ -88,11 +94,10 @@ impl HypervisorTest {
         let (canister, _, action, _) = self.hypervisor.execute_update(
             self.canister.clone(),
             RequestOrIngress::Ingress(ingress),
-            MAX_NUM_INSTRUCTIONS,
             mock_time(),
             self.routing_table.clone(),
             self.subnet_records.clone(),
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            execution_parameters(),
         );
         self.canister = canister;
         action
@@ -104,10 +109,10 @@ impl HypervisorTest {
             method_name,
             method_payload.as_slice(),
             user_test_id(24).get(),
-            MAX_NUM_INSTRUCTIONS,
             self.canister.clone(),
             None,
             mock_time(),
+            execution_parameters(),
         );
 
         self.canister = canister;

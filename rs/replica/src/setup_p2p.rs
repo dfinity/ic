@@ -2,7 +2,7 @@ use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, 
 use ic_consensus::certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_execution_environment::{setup_execution, IngressHistoryReaderImpl};
+use ic_execution_environment::setup_execution;
 use ic_interfaces::execution_environment::IngressMessageFilter;
 use ic_interfaces::registry::LocalStoreCertifiedTimeReader;
 use ic_interfaces::{
@@ -13,8 +13,8 @@ use ic_interfaces::{
 use ic_logger::ReplicaLogger;
 use ic_messaging::{MessageRoutingImpl, XNetPayloadBuilderImpl};
 use ic_messaging::{XNetEndpoint, XNetEndpointConfig};
-use ic_p2p::p2p::{create_networking_stack, P2PStateSyncClient};
 use ic_registry_subnet_type::SubnetType;
+use ic_replica_setup_ic_network::{create_networking_stack, P2PStateSyncClient};
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
 use ic_types::{consensus::catchup::CUPWithOriginalProtobuf, NodeId, SubnetId};
@@ -52,19 +52,8 @@ pub fn construct_ic_stack(
         subnet_id,
         subnet_config.cycles_account_manager_config,
     ));
-    let (ingress_message_filter, ingress_history_writer, http_query_handler, scheduler) =
-        setup_execution(
-            replica_logger.clone(),
-            &metrics_registry,
-            subnet_id,
-            subnet_type,
-            subnet_config.scheduler_config,
-            config.hypervisor.clone(),
-            Arc::clone(&cycles_account_manager),
-        );
-
     let verifier = VerifierImpl::new(crypto.clone());
-    let state_manager = StateManagerImpl::new(
+    let state_manager = Arc::new(StateManagerImpl::new(
         Arc::new(verifier),
         subnet_id,
         subnet_type,
@@ -72,8 +61,23 @@ pub fn construct_ic_stack(
         &metrics_registry,
         &config.state_manager,
         config.malicious_behaviour.malicious_flags.clone(),
+    ));
+    let (
+        ingress_message_filter,
+        ingress_history_writer,
+        http_query_handler,
+        scheduler,
+        ingress_history_reader,
+    ) = setup_execution(
+        replica_logger.clone(),
+        &metrics_registry,
+        subnet_id,
+        subnet_type,
+        subnet_config.scheduler_config,
+        config.hypervisor.clone(),
+        Arc::clone(&cycles_account_manager),
+        Arc::clone(&state_manager) as Arc<_>,
     );
-    let state_manager = Arc::new(state_manager);
 
     let certified_stream_store: Arc<dyn CertifiedStreamStore> =
         Arc::clone(&state_manager) as Arc<_>;
@@ -132,6 +136,15 @@ pub fn construct_ic_stack(
     );
     let xnet_payload_builder = Arc::new(xnet_payload_builder);
 
+    let mut artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool);
+    match subnet_type {
+        SubnetType::System => {}
+        // Disable the backup for non-NNS subnets.
+        SubnetType::Application | SubnetType::VerifiedApplication => {
+            artifact_pool_config.backup_config = None
+        }
+    };
+
     let catch_up_package = catch_up_package.unwrap_or_else(|| {
         CUPWithOriginalProtobuf::from_cup(ic_consensus_message::make_genesis(
             ic_consensus::dkg::make_genesis_summary(&*registry, subnet_id, None),
@@ -143,7 +156,7 @@ pub fn construct_ic_stack(
         replica_logger,
         tokio::runtime::Handle::current(),
         config.transport,
-        ArtifactPoolConfig::from(config.artifact_pool),
+        artifact_pool_config,
         config.consensus,
         config.malicious_behaviour.malicious_flags,
         node_id,
@@ -160,9 +173,7 @@ pub fn construct_ic_stack(
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
         registry,
-        Box::new(IngressHistoryReaderImpl::new(
-            Arc::clone(&state_manager) as Arc<_>
-        )),
+        ingress_history_reader,
         catch_up_package,
         cycles_account_manager,
         local_store_time_reader,

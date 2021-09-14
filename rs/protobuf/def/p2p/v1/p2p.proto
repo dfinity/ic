@@ -21,6 +21,7 @@ message GossipAdvert {
 message GossipChunkRequest {
   bytes artifact_id = 1;
   uint32 chunk_id = 2;
+  bytes integrity_hash = 3;
 }
 
 message ArtifactFilter {
@@ -57,6 +58,7 @@ message GossipChunk {
     ArtifactChunk chunk = 3;
     P2PError error = 4;
   }
+  bytes integrity_hash = 5;
 }
 
 message ArtifactChunk {

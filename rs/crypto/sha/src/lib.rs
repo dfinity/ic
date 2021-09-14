@@ -19,10 +19,10 @@
 //! Hashers with fixed algorithms that are guaranteed not to change in the
 //! future or across registry versions.
 //!
-//! The algorithm used by `ic_crypto_sha256::Sha256` is SHA256 and
+//! The algorithm used by `ic_crypto_sha::Sha256` is SHA256 and
 //! has constant output size of 32 bytes.
 //!
-//! The algorithm used by `ic_crypto_sha256::Sha224` is SHA224 and
+//! The algorithm used by `ic_crypto_sha::Sha224` is SHA224 and
 //! has constant output size of 28 bytes.
 //!
 //! These hashers can be used, e.g., for creating fingerprints of files that are
@@ -31,7 +31,7 @@
 //! # Example for `Sha256` (using state explicitly to hash data piece by piece)
 //!
 //! ```
-//! use ic_crypto_sha256::Sha256;
+//! use ic_crypto_sha::Sha256;
 //!
 //! let mut state = Sha256::new();
 //! state.write(b"some ");
@@ -43,7 +43,7 @@
 //! function)
 //!
 //! ```
-//! use ic_crypto_sha256::Sha256;
+//! use ic_crypto_sha::Sha256;
 //!
 //! let digest: [u8; 32] = Sha256::hash(b"some data!");
 //! ```
@@ -51,7 +51,7 @@
 //! # Example for `Sha256` (using as an `std::io::Writer`)
 //!
 //! ```
-//! use ic_crypto_sha256::Sha256;
+//! use ic_crypto_sha::Sha256;
 //!
 //! let mut reader: &[u8] = b"some data";
 //! let mut hasher = Sha256::new();
@@ -62,7 +62,7 @@
 //! # Example for `Sha224` (using state explicitly to hash data piece by piece)
 //!
 //! ```
-//! use ic_crypto_sha256::Sha224;
+//! use ic_crypto_sha::Sha224;
 //!
 //! let mut state = Sha224::new();
 //! state.write(b"some ");
@@ -74,7 +74,7 @@
 //! function)
 //!
 //! ```
-//! use ic_crypto_sha256::Sha224;
+//! use ic_crypto_sha::Sha224;
 //!
 //! let digest: [u8; 28] = Sha224::hash(b"some data!");
 //! ```
@@ -82,7 +82,7 @@
 //! # Example for `Sha224` (using as an `std::io::Writer`)
 //!
 //! ```
-//! use ic_crypto_sha256::Sha224;
+//! use ic_crypto_sha::Sha224;
 //!
 //! let mut reader: &[u8] = b"some data";
 //! let mut hasher = Sha224::new();

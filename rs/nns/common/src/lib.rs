@@ -4,7 +4,7 @@ pub mod pb;
 pub mod registry;
 pub mod types;
 
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use std::convert::TryInto;
 
 impl pb::v1::NeuronId {

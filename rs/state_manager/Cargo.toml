@@ -11,7 +11,7 @@ ic-canonical-state = { path = "../canonical_state" }
 ic-config = { path = "../config" }
 ic-cow-state = { path = "../cow_state" }
 ic-crypto = { path = "../crypto" }
-ic-crypto-sha256 = { path = "../crypto/sha256" }
+ic-crypto-sha = { path = "../crypto/sha" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }

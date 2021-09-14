@@ -4,7 +4,7 @@ use crate::message::{msg_stream_from_file, Message};
 use hex::encode;
 use ic_config::{subnet_config::SubnetConfigs, Config};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_execution_environment::{setup_execution, IngressHistoryReaderImpl};
+use ic_execution_environment::setup_execution;
 use ic_interfaces::{
     execution_environment::IngressHistoryReader, messaging::MessageRouting,
     state_manager::StateReader,
@@ -172,16 +172,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         subnet_config.cycles_account_manager_config,
     ));
 
-    let (_, ingress_history_writer, http_query_handler, scheduler) = setup_execution(
-        log.clone().into(),
-        &metrics_registry,
-        replica_config.subnet_id,
-        subnet_type,
-        subnet_config.scheduler_config,
-        cfg.hypervisor.clone(),
-        Arc::clone(&cycles_account_manager),
-    );
-    let state_manager = StateManagerImpl::new(
+    let state_manager = Arc::new(StateManagerImpl::new(
         Arc::new(FakeVerifier::new()),
         replica_config.subnet_id,
         subnet_type,
@@ -189,8 +180,18 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         &metrics_registry,
         &cfg.state_manager,
         ic_types::malicious_flags::MaliciousFlags::default(),
-    );
-    let state_manager = Arc::new(state_manager);
+    ));
+    let (_, ingress_history_writer, http_query_handler, scheduler, ingress_hist_reader) =
+        setup_execution(
+            log.clone().into(),
+            &metrics_registry,
+            replica_config.subnet_id,
+            subnet_type,
+            subnet_config.scheduler_config,
+            cfg.hypervisor.clone(),
+            Arc::clone(&cycles_account_manager),
+            Arc::clone(&state_manager) as Arc<_>,
+        );
     let _metrics_runtime = MetricsRuntimeImpl::new_insecure(
         tokio::runtime::Handle::current(),
         cfg.metrics,
@@ -210,11 +211,15 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         Arc::clone(&registry) as _,
     );
 
-    let ingress_hist_reader = IngressHistoryReaderImpl::new(Arc::clone(&state_manager) as _);
     msg_stream.try_for_each(|parse_result| {
         parse_result.map(|msg| match msg {
             Message::Install(msg) => {
-                deliver_message(msg, &message_routing, &ingress_hist_reader, extra_batches);
+                deliver_message(
+                    msg,
+                    &message_routing,
+                    ingress_hist_reader.as_ref(),
+                    extra_batches,
+                );
             }
 
             Message::Query(q) => {
@@ -229,10 +234,20 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
             }
 
             Message::Ingress(msg) => {
-                deliver_message(msg, &message_routing, &ingress_hist_reader, extra_batches);
+                deliver_message(
+                    msg,
+                    &message_routing,
+                    ingress_hist_reader.as_ref(),
+                    extra_batches,
+                );
             }
             Message::Create(msg) => {
-                deliver_message(msg, &message_routing, &ingress_hist_reader, extra_batches);
+                deliver_message(
+                    msg,
+                    &message_routing,
+                    ingress_hist_reader.as_ref(),
+                    extra_batches,
+                );
             }
         })
     })

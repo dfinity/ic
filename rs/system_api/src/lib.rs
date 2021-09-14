@@ -4,20 +4,23 @@ mod system_state_accessor_direct;
 
 use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
+    ExecutionParameters,
     HypervisorError::{self, *},
     HypervisorResult, SubnetAvailableMemory, SystemApi,
+    TrapCode::CyclesAmountTooBigFor64Bit,
 };
+use ic_logger::{error, ReplicaLogger};
 use ic_registry_routing_table::{resolve_destination, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::CanisterStatus, page_map::PAGE_SIZE, NumWasmPages, StateError,
+    canister_state::system_state::CanisterStatus, page_map::PAGE_SIZE, NumWasmPages64, StateError,
 };
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{Callback, WasmClosure},
     user_error::RejectCode,
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
+    CanisterId, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
 };
 use request_in_prep::{into_request, RequestInPrep};
 use serde::{Deserialize, Serialize};
@@ -430,22 +433,27 @@ impl MemoryUsage {
         }
     }
 
-    fn increase_usage(&mut self, pages: u32) -> HypervisorResult<()> {
-        let bytes = ic_replicated_state::num_bytes_from(NumWasmPages::from(pages));
-        if self.current_usage + bytes > self.limit {
+    fn increase_usage(&mut self, pages: u64) -> HypervisorResult<()> {
+        let bytes = ic_replicated_state::num_bytes_try_from64(NumWasmPages64::from(pages))
+            .map_err(|_| HypervisorError::OutOfMemory)?;
+        let (new_usage, overflow) = self.current_usage.get().overflowing_add(bytes.get());
+        if overflow || new_usage > self.limit.get() {
             return Err(HypervisorError::OutOfMemory);
         }
         match self.subnet_available_memory.try_decrement(bytes) {
             Ok(()) => {
-                self.current_usage += bytes;
+                self.current_usage = NumBytes::from(new_usage);
                 Ok(())
             }
             Err(_err) => Err(HypervisorError::OutOfMemory),
         }
     }
 
-    fn decrease_usage(&mut self, pages: u32) {
-        let bytes = ic_replicated_state::num_bytes_from(NumWasmPages::from(pages));
+    fn decrease_usage(&mut self, pages: u64) {
+        // Expected to work as we have converted `pages` to bytes when `increase_usage`
+        // was called and if it would have failed, we wouldn't call `decrease_usage`.
+        let bytes = ic_replicated_state::num_bytes_try_from64(NumWasmPages64::from(pages))
+            .expect("could not convert wasm pages to bytes");
         self.subnet_available_memory.increment(bytes);
         self.current_usage -= bytes;
     }
@@ -457,6 +465,8 @@ pub struct SystemApiImpl<A: SystemStateAccessor> {
     // An execution error of the current message.
     execution_error: Option<HypervisorError>,
 
+    log: ReplicaLogger,
+
     // The variant of ApiType being executed.
     api_type: ApiType,
 
@@ -465,7 +475,7 @@ pub struct SystemApiImpl<A: SystemStateAccessor> {
 
     memory_usage: MemoryUsage,
 
-    compute_allocation: ComputeAllocation,
+    execution_parameters: ExecutionParameters,
 }
 
 impl<A: SystemStateAccessor> SystemApiImpl<A> {
@@ -473,15 +483,14 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
     pub fn new(
         api_type: ApiType,
         system_state_accessor: A,
-        canister_memory_limit: NumBytes,
         canister_current_memory_usage: NumBytes,
-        subnet_available_memory: SubnetAvailableMemory,
-        compute_allocation: ComputeAllocation,
+        execution_parameters: ExecutionParameters,
+        log: ReplicaLogger,
     ) -> Self {
         let memory_usage = MemoryUsage::new(
-            canister_memory_limit,
+            execution_parameters.canister_memory_limit,
             canister_current_memory_usage,
-            subnet_available_memory,
+            execution_parameters.subnet_available_memory.clone(),
         );
 
         Self {
@@ -489,7 +498,8 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
             api_type,
             system_state_accessor,
             memory_usage,
-            compute_allocation,
+            execution_parameters,
+            log,
         }
     }
 
@@ -610,6 +620,147 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => None,
             ApiType::RejectCallback { reject_context, .. } => Some(reject_context),
+        }
+    }
+
+    fn ic0_call_cycles_add_helper(
+        &mut self,
+        method_name: &str,
+        amount: Cycles,
+    ) -> HypervisorResult<()> {
+        match &mut self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
+            ApiType::Update {
+                outgoing_request, ..
+            }
+            | ApiType::Heartbeat {
+                outgoing_request, ..
+            }
+            | ApiType::ReplyCallback {
+                outgoing_request, ..
+            }
+            | ApiType::RejectCallback {
+                outgoing_request, ..
+            } => match outgoing_request {
+                None => Err(HypervisorError::ContractViolation(format!(
+                    "{} called when no call is under construction.",
+                    method_name
+                ))),
+                Some(request) => {
+                    self.system_state_accessor.canister_cycles_withdraw(
+                        self.memory_usage.current_usage,
+                        self.execution_parameters.compute_allocation,
+                        amount,
+                    )?;
+                    request.add_cycles(amount);
+                    Ok(())
+                }
+            },
+        }
+    }
+
+    fn ic0_canister_cycles_balance_helper(
+        &self,
+        method_name: &str,
+    ) -> HypervisorResult<(u64, u64)> {
+        match &self.api_type {
+            ApiType::Start {} => Err(self.error_for(method_name)),
+            ApiType::Init { .. }
+            | ApiType::Heartbeat { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                let res = self
+                    .system_state_accessor
+                    .canister_cycles_balance()
+                    .into_parts();
+                Ok(res)
+            }
+        }
+    }
+
+    fn ic0_msg_cycles_available_helper(&self, method_name: &str) -> HypervisorResult<(u64, u64)> {
+        match &self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::Heartbeat { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
+            ApiType::Update {
+                call_context_id, ..
+            }
+            | ApiType::ReplyCallback {
+                call_context_id, ..
+            }
+            | ApiType::RejectCallback {
+                call_context_id, ..
+            } => self
+                .system_state_accessor
+                .msg_cycles_available(call_context_id)
+                .map(|cycles| cycles.into_parts()),
+        }
+    }
+
+    fn ic0_msg_cycles_refunded_helper(&self, method_name: &str) -> HypervisorResult<(u64, u64)> {
+        match &self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::Heartbeat { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Update { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
+            ApiType::ReplyCallback {
+                incoming_cycles, ..
+            }
+            | ApiType::RejectCallback {
+                incoming_cycles, ..
+            } => Ok((*incoming_cycles).into_parts()),
+        }
+    }
+
+    fn ic0_msg_cycles_accept_helper(
+        &mut self,
+        method_name: &str,
+        max_amount: Cycles,
+    ) -> HypervisorResult<(u64, u64)> {
+        match &mut self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::Heartbeat { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
+            ApiType::Update {
+                call_context_id, ..
+            }
+            | ApiType::ReplyCallback {
+                call_context_id, ..
+            }
+            | ApiType::RejectCallback {
+                call_context_id, ..
+            } => Ok(self
+                .system_state_accessor
+                .msg_cycles_accept(call_context_id, max_amount)
+                .into_parts()),
         }
     }
 
@@ -1174,7 +1325,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 };
                 match self.system_state_accessor.push_output_request(
                     self.memory_usage.current_usage,
-                    self.compute_allocation,
+                    self.execution_parameters.compute_allocation,
                     msg,
                 ) {
                     Ok(()) => Ok(0),
@@ -1314,47 +1465,17 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
     }
 
     fn ic0_call_cycles_add(&mut self, amount: u64) -> HypervisorResult<()> {
-        match &mut self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_cycles_add")),
-            ApiType::Update {
-                outgoing_request, ..
-            }
-            | ApiType::Heartbeat {
-                outgoing_request, ..
-            }
-            | ApiType::ReplyCallback {
-                outgoing_request, ..
-            }
-            | ApiType::RejectCallback {
-                outgoing_request, ..
-            } => match outgoing_request {
-                None => Err(HypervisorError::ContractViolation(
-                    "ic0.call_cycles_add called when no call is under construction.".to_string(),
-                )),
-                Some(request) => {
-                    let amount_cycles = Cycles::from(amount);
-                    self.system_state_accessor.canister_cycles_withdraw(
-                        self.memory_usage.current_usage,
-                        self.compute_allocation,
-                        amount_cycles,
-                    )?;
-                    request.add_cycles(amount_cycles);
-                    Ok(())
-                }
-            },
-        }
+        self.ic0_call_cycles_add_helper("ic0_call_cycles_add", Cycles::from(amount))
+    }
+
+    fn ic0_call_cycles_add128(&mut self, amount: Cycles) -> HypervisorResult<()> {
+        self.ic0_call_cycles_add_helper("ic0_call_cycles_add128", amount)
     }
 
     // Note that if this function returns an error, then the canister will be
     // trapped and the state will be rolled back. Hence, we do not have to worry
     // about rolling back any modifications that previous calls like
-    // ic0_call_cycles_add() made.
+    // ic0_call_cycles_add128() made.
     //
     // However, this call can still "fail" without returning an error. Examples
     // are if the canister does not have sufficient cycles to send the request
@@ -1421,7 +1542,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 )?;
                 match self.system_state_accessor.push_output_request(
                     self.memory_usage.current_usage,
-                    self.compute_allocation,
+                    self.execution_parameters.compute_allocation,
                     req,
                 ) {
                     Ok(()) => Ok(0),
@@ -1469,7 +1590,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 )?;
                 match self.system_state_accessor.push_output_request(
                     self.memory_usage.current_usage,
-                    self.compute_allocation,
+                    self.execution_parameters.compute_allocation,
                     req,
                 ) {
                     Ok(()) => Ok(0),
@@ -1499,7 +1620,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => Ok(self.system_state_accessor.stable_size()),
+            | ApiType::InspectMessage { .. } => self.system_state_accessor.stable_size(),
         }
     }
 
@@ -1516,12 +1637,12 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                match self.memory_usage.increase_usage(additional_pages) {
+                match self.memory_usage.increase_usage(additional_pages as u64) {
                     Ok(()) => {
                         let native_memory_grow_res =
-                            self.system_state_accessor.stable_grow(additional_pages);
+                            self.system_state_accessor.stable_grow(additional_pages)?;
                         if native_memory_grow_res == -1 {
-                            self.memory_usage.decrease_usage(additional_pages);
+                            self.memory_usage.decrease_usage(additional_pages as u64);
                             return Ok(-1);
                         }
                         Ok(native_memory_grow_res)
@@ -1596,7 +1717,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => Ok(self.system_state_accessor.stable_size64()),
+            | ApiType::InspectMessage { .. } => self.system_state_accessor.stable_size64(),
         }
     }
 
@@ -1613,7 +1734,18 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                Ok(self.system_state_accessor.stable_grow64(additional_pages))
+                match self.memory_usage.increase_usage(additional_pages) {
+                    Ok(()) => {
+                        let native_memory_grow_res =
+                            self.system_state_accessor.stable_grow64(additional_pages)?;
+                        if native_memory_grow_res == -1 {
+                            self.memory_usage.decrease_usage(additional_pages);
+                            return Ok(-1);
+                        }
+                        Ok(native_memory_grow_res)
+                    }
+                    Err(_err) => Ok(-1),
+                }
             }
         }
     }
@@ -1662,7 +1794,11 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => self
                 .system_state_accessor
-                .stable_write64(offset, src, size, heap),
+                .stable_write64(offset, src, size, heap)
+                .map(|_| {
+                    self.memory_usage.stable_memory_delta +=
+                        (size as usize / *PAGE_SIZE) + std::cmp::min(1, size as usize % *PAGE_SIZE);
+                }),
         }
     }
 
@@ -1694,99 +1830,68 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         if native_memory_grow_res == -1 {
             return Ok(-1);
         }
-        match self.memory_usage.increase_usage(additional_pages) {
+        match self.memory_usage.increase_usage(additional_pages as u64) {
             Ok(()) => Ok(native_memory_grow_res),
             Err(_err) => Err(HypervisorError::OutOfMemory),
         }
     }
 
     fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64> {
-        match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_canister_cycle_balance")),
-            ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
-            | ApiType::Update { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => {
-                let res = self.system_state_accessor.canister_cycles_balance().into();
-                Ok(res)
-            }
+        let (high_amount, low_amount) =
+            self.ic0_canister_cycles_balance_helper("ic0_canister_cycles_balance")?;
+        if high_amount != 0 {
+            return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
         }
+        Ok(low_amount)
+    }
+
+    fn ic0_canister_cycles_balance128(&self) -> HypervisorResult<(u64, u64)> {
+        self.ic0_canister_cycles_balance_helper("ic0_canister_cycles_balance128")
     }
 
     fn ic0_msg_cycles_available(&self) -> HypervisorResult<u64> {
-        match &self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_msg_cycles_available")),
-            ApiType::Update {
-                call_context_id, ..
-            }
-            | ApiType::ReplyCallback {
-                call_context_id, ..
-            }
-            | ApiType::RejectCallback {
-                call_context_id, ..
-            } => self
-                .system_state_accessor
-                .msg_cycles_available(call_context_id)
-                .map(|cycles| cycles.into()),
+        let (high_amount, low_amount) =
+            self.ic0_msg_cycles_available_helper("ic0_msg_cycles_available")?;
+        if high_amount != 0 {
+            return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
         }
+        Ok(low_amount)
+    }
+
+    fn ic0_msg_cycles_available128(&self) -> HypervisorResult<(u64, u64)> {
+        self.ic0_msg_cycles_available_helper("ic0_msg_cycles_available128")
     }
 
     fn ic0_msg_cycles_refunded(&self) -> HypervisorResult<u64> {
-        match &self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::Update { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_msg_cycles_refunded")),
-            ApiType::ReplyCallback {
-                incoming_cycles, ..
-            }
-            | ApiType::RejectCallback {
-                incoming_cycles, ..
-            } => Ok((*incoming_cycles).into()),
+        let (high_amount, low_amount) =
+            self.ic0_msg_cycles_refunded_helper("ic0_msg_cycles_refunded")?;
+        if high_amount != 0 {
+            return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
         }
+        Ok(low_amount)
+    }
+
+    fn ic0_msg_cycles_refunded128(&self) -> HypervisorResult<(u64, u64)> {
+        self.ic0_msg_cycles_refunded_helper("ic0_msg_cycles_refunded128")
     }
 
     fn ic0_msg_cycles_accept(&mut self, max_amount: u64) -> HypervisorResult<u64> {
-        match &mut self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_msg_cycles_accept")),
-            ApiType::Update {
-                call_context_id, ..
-            }
-            | ApiType::ReplyCallback {
-                call_context_id, ..
-            }
-            | ApiType::RejectCallback {
-                call_context_id, ..
-            } => Ok(self
-                .system_state_accessor
-                .msg_cycles_accept(call_context_id, Cycles::from(max_amount))
-                .into()),
+        // Cannot accept more than max_amount.
+        let (high_amount, low_amount) =
+            self.ic0_msg_cycles_accept_helper("ic0_msg_cycles_accept", Cycles::from(max_amount))?;
+        if high_amount != 0 {
+            error!(
+                self.log,
+                "ic0_msg_cycles_accept cannot accept more than max_amount {}; accepted amount {}",
+                max_amount,
+                Cycles::from_parts(high_amount, low_amount).get()
+            )
         }
+        Ok(low_amount)
+    }
+
+    fn ic0_msg_cycles_accept128(&mut self, max_amount: Cycles) -> HypervisorResult<(u64, u64)> {
+        self.ic0_msg_cycles_accept_helper("ic0_msg_cycles_accept128", max_amount)
     }
 
     fn ic0_data_certificate_present(&self) -> HypervisorResult<i32> {
@@ -2028,6 +2133,7 @@ mod test {
     use super::*;
     use ic_base_types::NumSeconds;
     use ic_cycles_account_manager::CyclesAccountManager;
+    use ic_logger::replica_logger::no_op_logger;
     use ic_registry_routing_table::CanisterIdRange;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{CallOrigin, SystemState};
@@ -2037,18 +2143,21 @@ mod test {
         state::SystemStateBuilder,
         types::ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
     };
-    use ic_types::{messages::CallbackId, NumInstructions};
-    use lazy_static::lazy_static;
+    use ic_types::{messages::CallbackId, ComputeAllocation, NumInstructions};
     use maplit::btreemap;
     use std::convert::TryInto;
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 40);
     const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
-    const CANISTER_MEMORY_LIMIT: NumBytes = NumBytes::new(4 << 30);
     const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
-    lazy_static! {
-        static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-            SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX));
+
+    fn execution_parameters() -> ExecutionParameters {
+        ExecutionParameters {
+            instruction_limit: NumInstructions::new(5_000_000_000),
+            canister_memory_limit: NumBytes::new(4 << 30),
+            subnet_available_memory: SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX)),
+            compute_allocation: ComputeAllocation::default(),
+        }
     }
 
     fn setup() -> (
@@ -2100,10 +2209,9 @@ mod test {
                 subnet_records,
             ),
             system_state_accessor,
-            CANISTER_MEMORY_LIMIT,
             CANISTER_CURRENT_MEMORY_USAGE,
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            ComputeAllocation::default(),
+            execution_parameters(),
+            no_op_logger(),
         )
     }
 
@@ -2149,6 +2257,21 @@ mod test {
         )
     }
 
+    fn get_reply_api_type(incoming_cycles: Cycles) -> ApiType {
+        let (subnet_id, subnet_type, routing_table, subnet_records) = setup();
+        ApiType::reply_callback(
+            mock_time(),
+            vec![],
+            incoming_cycles,
+            CallContextId::new(1),
+            false,
+            subnet_id,
+            subnet_type,
+            routing_table,
+            subnet_records,
+        )
+    }
+
     fn get_heartbeat_api_type() -> ApiType {
         let (subnet_id, subnet_type, routing_table, subnet_records) = setup();
         ApiType::heartbeat(
@@ -2171,10 +2294,9 @@ mod test {
         SystemApiImpl::new(
             api_type,
             system_state_accessor,
-            CANISTER_MEMORY_LIMIT,
             CANISTER_CURRENT_MEMORY_USAGE,
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            ComputeAllocation::default(),
+            execution_parameters(),
+            no_op_logger(),
         )
     }
 
@@ -2229,9 +2351,13 @@ mod test {
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_not_supported(api.ic0_msg_cycles_available());
+        assert_api_not_supported(api.ic0_msg_cycles_available128());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
+        assert_api_not_supported(api.ic0_msg_cycles_refunded128());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_not_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2289,9 +2415,13 @@ mod test {
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_supported(api.ic0_msg_cycles_available());
+        assert_api_supported(api.ic0_msg_cycles_available128());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
+        assert_api_not_supported(api.ic0_msg_cycles_refunded128());
         assert_api_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2343,9 +2473,13 @@ mod test {
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_not_supported(api.ic0_msg_cycles_available());
+        assert_api_not_supported(api.ic0_msg_cycles_available128());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
+        assert_api_not_supported(api.ic0_msg_cycles_refunded128());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_not_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2406,9 +2540,13 @@ mod test {
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_not_supported(api.ic0_msg_cycles_available());
+        assert_api_not_supported(api.ic0_msg_cycles_available128());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
+        assert_api_not_supported(api.ic0_msg_cycles_refunded128());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_not_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_supported(api.ic0_data_certificate_size());
         assert_api_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2431,19 +2569,8 @@ mod test {
                 CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
                 Cycles::from(50),
             );
-        let (subnet_id, subnet_type, routing_table, subnet_records) = setup();
         get_system_api(
-            ApiType::reply_callback(
-                mock_time(),
-                vec![],
-                Cycles::from(0),
-                CallContextId::new(1),
-                false,
-                subnet_id,
-                subnet_type,
-                routing_table,
-                subnet_records,
-            ),
+            get_reply_api_type(Cycles::from(0)),
             system_state,
             cycles_account_manager,
         )
@@ -2486,9 +2613,13 @@ mod test {
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_supported(api.ic0_msg_cycles_available());
+        assert_api_supported(api.ic0_msg_cycles_available128());
         assert_api_supported(api.ic0_msg_cycles_refunded());
+        assert_api_supported(api.ic0_msg_cycles_refunded128());
         assert_api_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2534,9 +2665,13 @@ mod test {
         assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_supported(api.ic0_msg_cycles_available());
+        assert_api_supported(api.ic0_msg_cycles_available128());
         assert_api_supported(api.ic0_msg_cycles_refunded());
+        assert_api_supported(api.ic0_msg_cycles_refunded128());
         assert_api_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2594,9 +2729,13 @@ mod test {
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_supported(api.ic0_msg_cycles_available());
+        assert_api_supported(api.ic0_msg_cycles_available128());
         assert_api_supported(api.ic0_msg_cycles_refunded());
+        assert_api_supported(api.ic0_msg_cycles_refunded128());
         assert_api_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2652,9 +2791,13 @@ mod test {
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_supported(api.ic0_msg_cycles_available());
+        assert_api_supported(api.ic0_msg_cycles_available128());
         assert_api_supported(api.ic0_msg_cycles_refunded());
+        assert_api_supported(api.ic0_msg_cycles_refunded128());
         assert_api_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2706,9 +2849,13 @@ mod test {
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_not_supported(api.ic0_msg_cycles_available());
+        assert_api_not_supported(api.ic0_msg_cycles_available128());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
+        assert_api_not_supported(api.ic0_msg_cycles_refunded128());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_not_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2756,9 +2903,13 @@ mod test {
         assert_api_not_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_not_supported(api.ic0_time());
         assert_api_not_supported(api.ic0_canister_cycle_balance());
+        assert_api_not_supported(api.ic0_canister_cycles_balance128());
         assert_api_not_supported(api.ic0_msg_cycles_available());
+        assert_api_not_supported(api.ic0_msg_cycles_available128());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
+        assert_api_not_supported(api.ic0_msg_cycles_refunded128());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_not_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2810,9 +2961,13 @@ mod test {
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_not_supported(api.ic0_msg_cycles_available());
+        assert_api_not_supported(api.ic0_msg_cycles_available128());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
+        assert_api_not_supported(api.ic0_msg_cycles_refunded128());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_not_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2869,9 +3024,13 @@ mod test {
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_not_supported(api.ic0_msg_cycles_available());
+        assert_api_not_supported(api.ic0_msg_cycles_available128());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
+        assert_api_not_supported(api.ic0_msg_cycles_refunded128());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_not_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2931,9 +3090,13 @@ mod test {
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_not_supported(api.ic0_msg_cycles_available());
+        assert_api_not_supported(api.ic0_msg_cycles_available128());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
+        assert_api_not_supported(api.ic0_msg_cycles_refunded128());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_not_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -2996,9 +3159,13 @@ mod test {
         assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
         assert_api_not_supported(api.ic0_msg_cycles_available());
+        assert_api_not_supported(api.ic0_msg_cycles_available128());
         assert_api_not_supported(api.ic0_msg_cycles_refunded());
+        assert_api_not_supported(api.ic0_msg_cycles_refunded128());
         assert_api_not_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_not_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
         assert_api_supported(api.ic0_data_certificate_present());
         assert_api_not_supported(api.ic0_data_certificate_size());
         assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
@@ -3030,29 +3197,28 @@ mod test {
 
     #[test]
     fn test_discard_cycles_charge_by_new_call() {
-        let cycles_amount = 1_000_000_000_000;
+        let cycles_amount = Cycles::from(1_000_000_000_000u128);
         let max_num_instructions = NumInstructions::from(1 << 30);
         let cycles_account_manager = CyclesAccountManagerBuilder::new()
             .with_max_num_instructions(max_num_instructions)
             .build();
-        let system_state =
-            get_new_running_system_state(Cycles::from(cycles_amount), SubnetType::Application);
+        let system_state = get_new_running_system_state(cycles_amount, SubnetType::Application);
         let mut api = get_system_api(get_update_api_type(), system_state, cycles_account_manager);
 
         // Check ic0_canister_cycle_balance after first ic0_call_new.
         assert_eq!(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]), Ok(()));
         // Check cycles balance.
         assert_eq!(
-            api.ic0_canister_cycle_balance().unwrap() as u128,
+            Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
             cycles_amount
         );
 
         // Add cycles to call.
-        let amount: u128 = 49;
-        assert_eq!(api.ic0_call_cycles_add(amount as u64), Ok(()));
+        let amount = Cycles::from(49);
+        assert_eq!(api.ic0_call_cycles_add128(amount), Ok(()));
         // Check cycles balance after call_add_cycles.
         assert_eq!(
-            api.ic0_canister_cycle_balance().unwrap() as u128,
+            Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
             cycles_amount - amount
         );
 
@@ -3061,43 +3227,41 @@ mod test {
         // Check cycles balance -> should be the same as the original as the call was
         // discarded.
         assert_eq!(
-            api.ic0_canister_cycle_balance().unwrap() as u128,
+            Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
             cycles_amount
         );
     }
 
     #[test]
     fn test_fail_add_cycles_when_not_enough_balance() {
-        let cycles_amount = 1_000_000_000_000;
+        let cycles_amount = Cycles::from(1_000_000_000_000u128);
         let max_num_instructions = NumInstructions::from(1 << 30);
         let cycles_account_manager = CyclesAccountManagerBuilder::new()
             .with_max_num_instructions(max_num_instructions)
             .build();
-        let system_state =
-            get_new_running_system_state(Cycles::from(cycles_amount), SubnetType::Application);
+        let system_state = get_new_running_system_state(cycles_amount, SubnetType::Application);
         let mut api = get_system_api(get_update_api_type(), system_state, cycles_account_manager);
 
         // Check ic0_canister_cycle_balance after first ic0_call_new.
         assert_eq!(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]), Ok(()));
         // Check cycles balance.
         assert_eq!(
-            api.ic0_canister_cycle_balance().unwrap() as u128,
+            Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
             cycles_amount
         );
 
         // Add cycles to call.
-        let amount = cycles_amount + 1;
+        let amount = cycles_amount + Cycles::from(1);
         assert_eq!(
-            api.ic0_call_cycles_add(amount.try_into().unwrap())
-                .unwrap_err(),
+            api.ic0_call_cycles_add128(amount).unwrap_err(),
             HypervisorError::InsufficientCyclesBalance {
-                available: Cycles::from(cycles_amount),
-                requested: Cycles::from(amount),
+                available: cycles_amount,
+                requested: amount,
             }
         );
         //Check cycles balance after call_add_cycles.
         assert_eq!(
-            api.ic0_canister_cycle_balance().unwrap() as u128,
+            Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
             cycles_amount
         );
     }
@@ -3123,7 +3287,10 @@ mod test {
 
         // Add cycles to call.
         let amount = cycles_amount / 2 + 1;
-        assert_eq!(api.ic0_call_cycles_add(amount.try_into().unwrap()), Ok(()));
+        assert_eq!(
+            api.ic0_call_cycles_add128(amount.try_into().unwrap()),
+            Ok(())
+        );
         // Check cycles balance after call_add_cycles.
         assert_eq!(
             api.ic0_canister_cycle_balance().unwrap() as u128,
@@ -3132,7 +3299,7 @@ mod test {
 
         // Adding more cycles fails because not enough balance left.
         assert_eq!(
-            api.ic0_call_cycles_add(amount.try_into().unwrap())
+            api.ic0_call_cycles_add128(amount.try_into().unwrap())
                 .unwrap_err(),
             HypervisorError::InsufficientCyclesBalance {
                 available: Cycles::from(cycles_amount - amount),
@@ -3172,13 +3339,12 @@ mod test {
 
     #[test]
     fn test_canister_cycle_balance() {
-        let cycles_amount = 100;
+        let cycles_amount = Cycles::from(123456789012345678901234567890u128);
         let max_num_instructions = NumInstructions::from(1 << 30);
         let cycles_account_manager = CyclesAccountManagerBuilder::new()
             .with_max_num_instructions(max_num_instructions)
             .build();
-        let mut system_state =
-            get_new_running_system_state(Cycles::from(cycles_amount), SubnetType::Application);
+        let mut system_state = get_new_running_system_state(cycles_amount, SubnetType::Application);
 
         system_state
             .call_context_manager_mut()
@@ -3191,7 +3357,56 @@ mod test {
         let api = get_system_api(get_update_api_type(), system_state, cycles_account_manager);
 
         // Check ic0_canister_cycle_balance.
-        assert_eq!(api.ic0_canister_cycle_balance().unwrap(), cycles_amount);
+        assert_eq!(
+            api.ic0_canister_cycle_balance(),
+            Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit))
+        );
+        let (high, low) = api.ic0_canister_cycles_balance128().unwrap();
+        assert_eq!(Cycles::from_parts(high, low), cycles_amount);
+    }
+
+    #[test]
+    fn test_msg_cycles_available_traps() {
+        let cycles_amount = Cycles::from(123456789012345678901234567890u128);
+        let available_cycles = Cycles::from(789012345678901234567890u128);
+        let mut system_state = get_new_running_system_state(cycles_amount, SubnetType::Application);
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .new_call_context(
+                CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
+                available_cycles,
+            );
+
+        let api = get_system_api(get_update_api_type(), system_state, cycles_account_manager);
+
+        assert_eq!(
+            api.ic0_msg_cycles_available(),
+            Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit))
+        );
+        let (high, low) = api.ic0_msg_cycles_available128().unwrap();
+        assert_eq!(Cycles::from_parts(high, low), available_cycles);
+    }
+
+    #[test]
+    fn test_msg_cycles_refunded_traps() {
+        let incoming_cycles = Cycles::from(789012345678901234567890u128);
+        let cycles_amount = Cycles::from(123456789012345678901234567890u128);
+        let system_state = get_new_running_system_state(cycles_amount, SubnetType::Application);
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        let api = get_system_api(
+            get_reply_api_type(incoming_cycles),
+            system_state,
+            cycles_account_manager,
+        );
+
+        assert_eq!(
+            api.ic0_msg_cycles_refunded(),
+            Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit))
+        );
+        let (high, low) = api.ic0_msg_cycles_refunded128().unwrap();
+        assert_eq!(Cycles::from_parts(high, low), incoming_cycles);
     }
 
     #[test]
@@ -3442,7 +3657,7 @@ mod test {
         let mut api = get_system_api(get_update_api_type(), system_state, cycles_account_manager);
         api.ic0_call_new(0, 10, 0, 10, 0, 0, 0, 0, &[0; 1024])
             .unwrap();
-        api.ic0_call_cycles_add(100).unwrap();
+        api.ic0_call_cycles_add128(Cycles::from(100)).unwrap();
         assert_eq!(api.ic0_call_perform().unwrap(), 2);
         let system_state = api.release_system_state_accessor().release_system_state();
         let call_context_manager = system_state.call_context_manager().unwrap();
@@ -3526,10 +3741,12 @@ mod test {
         let mut api = SystemApiImpl::new(
             get_update_api_type(),
             system_state_accessor,
-            CANISTER_MEMORY_LIMIT,
             CANISTER_CURRENT_MEMORY_USAGE,
-            subnet_available_memory.clone(),
-            ComputeAllocation::default(),
+            ExecutionParameters {
+                subnet_available_memory: subnet_available_memory.clone(),
+                ..execution_parameters()
+            },
+            no_op_logger(),
         );
 
         assert_eq!(api.ic0_stable_grow(1).unwrap(), 0);
@@ -3552,10 +3769,12 @@ mod test {
         let mut api = SystemApiImpl::new(
             get_update_api_type(),
             system_state_accessor,
-            CANISTER_MEMORY_LIMIT,
             CANISTER_CURRENT_MEMORY_USAGE,
-            subnet_available_memory.clone(),
-            ComputeAllocation::default(),
+            ExecutionParameters {
+                subnet_available_memory: subnet_available_memory.clone(),
+                ..execution_parameters()
+            },
+            no_op_logger(),
         );
 
         api.update_available_memory(0, 1).unwrap();

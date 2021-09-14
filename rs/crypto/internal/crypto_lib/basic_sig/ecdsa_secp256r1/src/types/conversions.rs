@@ -2,32 +2,6 @@ use super::*;
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use std::convert::{From, TryFrom};
 
-impl From<SecretKeyBytes> for String {
-    fn from(val: SecretKeyBytes) -> Self {
-        base64::encode(&val.0[..])
-    }
-}
-
-// From vector of bytes.
-impl From<Vec<u8>> for SecretKeyBytes {
-    fn from(key: Vec<u8>) -> Self {
-        SecretKeyBytes(key)
-    }
-}
-
-// From base64-encoded string.
-impl TryFrom<&str> for SecretKeyBytes {
-    type Error = CryptoError;
-
-    fn try_from(key: &str) -> Result<Self, CryptoError> {
-        let key = base64::decode(key).map_err(|e| CryptoError::MalformedSecretKey {
-            algorithm: AlgorithmId::EcdsaP256,
-            internal_error: format!("Key is not a valid base64 encoded string: {}", e),
-        })?;
-        Ok(SecretKeyBytes(key))
-    }
-}
-
 // From vector of bytes.
 impl From<Vec<u8>> for PublicKeyBytes {
     fn from(key: Vec<u8>) -> Self {

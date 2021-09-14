@@ -136,13 +136,13 @@ impl Finalizer {
                         info!(
                             self.log,
                             "New DKG summary with config ids created: {:?}",
-                            summary.configs.keys().collect::<Vec<_>>()
+                            summary.dkg.configs.keys().collect::<Vec<_>>()
                         );
                         // Compute consensus' responses to subnet calls.
                         consensus_responses = generate_responses_to_subnet_calls(
                             &*self.state_manager,
                             block.context.certified_height,
-                            summary.transcripts_for_new_subnets(),
+                            summary.dkg.transcripts_for_new_subnets(),
                             &self.log,
                         );
                     }
@@ -435,7 +435,6 @@ pub fn generate_responses_to_subnet_calls(
     log: &ReplicaLogger,
 ) -> Vec<Response> {
     use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
-    use ic_replicated_state::metadata_state::SubnetCallContext;
     use ic_types::{crypto::threshold_sig::ni_dkg::NiDkgTag, ic00::SetupInitialDKGResponse};
 
     let mut consensus_responses = Vec::<Response>::new();
@@ -444,15 +443,15 @@ pub fn generate_responses_to_subnet_calls(
             .get_ref()
             .metadata
             .subnet_call_context_manager
-            .contexts;
+            .setup_initial_dkg_contexts;
         for (callback_id, context) in contexts.iter() {
-            let SubnetCallContext::SetupInitialDKGContext { target_id, .. } = context;
+            let target_id = context.target_id;
 
             let transcript = |dkg_tag| {
                 transcripts_for_new_subnets
                     .iter()
                     .filter_map(|(id, transcript)| {
-                        if id.dkg_tag == dkg_tag && id.target_subnet == Remote(*target_id) {
+                        if id.dkg_tag == dkg_tag && id.target_subnet == Remote(target_id) {
                             Some(transcript)
                         } else {
                             None
@@ -542,7 +541,9 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{metadata_state::SubnetCallContext, SystemMetadata};
+    use ic_replicated_state::{
+        metadata_state::subnet_call_context_manager::SetupInitialDkgContext, SystemMetadata,
+    };
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector,
         message_routing::FakeMessageRouting,
@@ -695,7 +696,7 @@ mod tests {
             let block = block_proposal.content.as_mut();
             assert!(block.payload.is_summary());
             assert_eq!(
-                block.payload.as_ref().as_summary().registry_version,
+                block.payload.as_ref().as_summary().dkg.registry_version,
                 RegistryVersion::from(1)
             );
             assert_eq!(block.context.registry_version, RegistryVersion::from(10));
@@ -720,7 +721,7 @@ mod tests {
             assert!(block.payload.is_summary());
             assert_eq!(block.context.registry_version, RegistryVersion::from(10));
             assert_eq!(
-                block.payload.as_ref().as_summary().registry_version,
+                block.payload.as_ref().as_summary().dkg.registry_version,
                 RegistryVersion::from(10)
             );
 
@@ -771,11 +772,13 @@ mod tests {
 
         // Manually create `SystemMetadata` with custom context
         let mut metadata = SystemMetadata::new(subnet_test_id(0), SubnetType::System);
-        metadata.subnet_call_context_manager.contexts = vec![(
+        metadata
+            .subnet_call_context_manager
+            .setup_initial_dkg_contexts = vec![(
             CallbackId::from(0),
             // NOTE: From this struct we only need the target id, therefore we will initialize the
             // rest with dummy data
-            SubnetCallContext::SetupInitialDKGContext {
+            SetupInitialDkgContext {
                 request: Request {
                     receiver: CanisterId::from(0),
                     sender: CanisterId::from(0),

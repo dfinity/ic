@@ -13,7 +13,7 @@ use ic_ic00_types::{
     SetControllerArgs, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, IngressHistoryWriter, MessageAcceptanceError, SubnetAvailableMemory,
+    ExecutionParameters, HypervisorError, IngressHistoryWriter, MessageAcceptanceError,
 };
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -37,6 +37,13 @@ use ic_wasm_utils::validation::WasmValidationLimits;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::{collections::BTreeSet, convert::TryFrom, mem, str::FromStr, sync::Arc};
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct InstallCodeResult {
+    pub heap_delta: NumBytes,
+    pub old_wasm_hash: Option<[u8; 32]>,
+    pub new_wasm_hash: Option<[u8; 32]>,
+}
 
 /// The different return types from `stop_canister()` function below.
 #[derive(Debug, PartialEq, Eq)]
@@ -159,9 +166,10 @@ impl CanisterManager {
             // are not allowed to send.
             Err(_)
             | Ok(Ic00Method::CreateCanister)
-                | Ok(Ic00Method::SetupInitialDKG)
-                // This can be called by anyone however as ingress message
-                // cannot carry cycles, it does not make sense to allow them from users.
+            | Ok(Ic00Method::SetupInitialDKG)
+            | Ok(Ic00Method::SignWithECDSA)
+            // "DepositCycles" can be called by anyone however as ingress message
+            // cannot carry cycles, it does not make sense to allow them from users.
             | Ok(Ic00Method::DepositCycles) => Err(MessageAcceptanceError::CanisterRejected),
 
             // These methods are only valid if they are sent by the controller
@@ -192,13 +200,13 @@ impl CanisterManager {
             Ok(Ic00Method::RawRand) => Err(MessageAcceptanceError::CanisterRejected),
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
-                | Ok(Ic00Method::ProvisionalTopUpCanister) => {
-                    if provisional_whitelist.contains(sender.get_ref()) {
-                        Ok(())
-                    } else {
-                        Err(MessageAcceptanceError::CanisterRejected)
-                    }
+            | Ok(Ic00Method::ProvisionalTopUpCanister) => {
+                if provisional_whitelist.contains(sender.get_ref()) {
+                    Ok(())
+                } else {
+                    Err(MessageAcceptanceError::CanisterRejected)
                 }
+            }
         }
     }
 
@@ -393,9 +401,11 @@ impl CanisterManager {
         &self,
         context: InstallCodeContext,
         state: &mut ReplicatedState,
-        instructions_limit: NumInstructions,
-        subnet_available_memory: SubnetAvailableMemory,
-    ) -> (NumInstructions, Result<NumBytes, CanisterManagerError>) {
+        mut execution_parameters: ExecutionParameters,
+    ) -> (
+        NumInstructions,
+        Result<InstallCodeResult, CanisterManagerError>,
+    ) {
         // Copy necessary bits out of the `ReplicatedState`. This is because further
         // below, we take a mutable reference to the old canister state while it
         // is held inside state. Then Rust's borrow checker prevents us from
@@ -409,7 +419,7 @@ impl CanisterManager {
         let old_canister = match state.canister_state_mut(&context.canister_id) {
             None => {
                 return (
-                    instructions_limit,
+                    execution_parameters.instruction_limit,
                     Err(CanisterManagerError::CanisterNotFound(context.canister_id)),
                 );
             }
@@ -420,21 +430,21 @@ impl CanisterManager {
             &old_canister,
             context.compute_allocation,
         ) {
-            return (instructions_limit, Err(err));
+            return (execution_parameters.instruction_limit, Err(err));
         }
         if let Err(err) =
             self.validate_memory_allocation(memory_taken, &old_canister, context.memory_allocation)
         {
-            return (instructions_limit, Err(err));
+            return (execution_parameters.instruction_limit, Err(err));
         }
         if let Err(err) = self.validate_controller(&old_canister, &context.sender) {
-            return (instructions_limit, Err(err));
+            return (execution_parameters.instruction_limit, Err(err));
         }
         match context.mode {
             CanisterInstallMode::Install => {
                 if !canister_is_empty(old_canister) {
                     return (
-                        instructions_limit,
+                        execution_parameters.instruction_limit,
                         Err(CanisterManagerError::CanisterNonEmpty(context.canister_id)),
                     );
                 }
@@ -447,14 +457,19 @@ impl CanisterManager {
         // `post_upgrade`.
         let memory_usage = old_canister.memory_usage();
         let compute_allocation = old_canister.scheduler_state.compute_allocation;
+        if let MemoryAllocation::Reserved(bytes) = old_canister.memory_allocation() {
+            execution_parameters.canister_memory_limit = bytes;
+        }
+        execution_parameters.compute_allocation = compute_allocation;
+
         if let Err(err) = self.cycles_account_manager.withdraw_execution_cycles(
             &mut old_canister.system_state,
             memory_usage,
             compute_allocation,
-            instructions_limit,
+            execution_parameters.instruction_limit,
         ) {
             return (
-                instructions_limit,
+                execution_parameters.instruction_limit,
                 Err(CanisterManagerError::CanisterOutOfCycles {
                     canister_id: err.canister_id,
                     available: err.available,
@@ -472,18 +487,16 @@ impl CanisterManager {
             CanisterInstallMode::Install | CanisterInstallMode::Reinstall => self.install(
                 context,
                 old_canister,
-                instructions_limit,
-                subnet_available_memory,
                 time,
                 canister_layout_path,
+                execution_parameters,
             ),
             CanisterInstallMode::Upgrade => self.upgrade(
                 context,
                 old_canister,
-                instructions_limit,
-                subnet_available_memory,
                 time,
                 canister_layout_path,
+                execution_parameters,
             ),
         };
 
@@ -492,6 +505,8 @@ impl CanisterManager {
                 // Refund the left over execution cycles to the new canister and
                 // replace the old canister with the new one.
 
+                let old_wasm_hash = self.get_wasm_hash(old_canister);
+                let new_wasm_hash = self.get_wasm_hash(&new_canister);
                 self.cycles_account_manager
                     .refund_execution_cycles(&mut new_canister.system_state, instructions_left);
                 state.put_canister_state(new_canister);
@@ -503,7 +518,12 @@ impl CanisterManager {
                 if mode != CanisterInstallMode::Upgrade {
                     truncate_canister_stable_memory(&self.log, state.path(), canister_id);
                 }
-                Ok(heap_delta)
+
+                Ok(InstallCodeResult {
+                    heap_delta,
+                    old_wasm_hash,
+                    new_wasm_hash,
+                })
             }
             Err(err) => {
                 // the install / upgrade failed. Refund the left over cycles to
@@ -805,10 +825,9 @@ impl CanisterManager {
         &self,
         context: InstallCodeContext,
         old_canister: &CanisterState,
-        instructions_limit: NumInstructions,
-        subnet_available_memory: SubnetAvailableMemory,
         time: Time,
         canister_layout_path: PathBuf,
+        mut execution_parameters: ExecutionParameters,
     ) -> (
         NumInstructions,
         Result<(NumBytes, CanisterState), CanisterManagerError>,
@@ -825,7 +844,10 @@ impl CanisterManager {
         ) {
             Ok(execution_state) => Some(execution_state),
             Err(err) => {
-                return (instructions_limit, Err((canister_id, err).into()));
+                return (
+                    execution_parameters.instruction_limit,
+                    Err((canister_id, err).into()),
+                );
             }
         };
 
@@ -838,7 +860,12 @@ impl CanisterManager {
         let (mut new_canister, result) = self.hypervisor.execute_empty(new_canister);
         match result {
             Ok(()) => (),
-            Err(err) => return (instructions_limit, Err((canister_id, err).into())),
+            Err(err) => {
+                return (
+                    execution_parameters.instruction_limit,
+                    Err((canister_id, err).into()),
+                )
+            }
         }
 
         // Update allocations.  This must happen after we have created the new
@@ -846,6 +873,7 @@ impl CanisterManager {
         // of the new wasm module.
         if let Some(compute_allocation) = context.compute_allocation {
             new_canister.scheduler_state.compute_allocation = compute_allocation;
+            execution_parameters.compute_allocation = compute_allocation;
         }
 
         // While the memory allocation can still be included in the context, we need to
@@ -858,7 +886,7 @@ impl CanisterManager {
         if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
             if bytes < new_canister.memory_usage() {
                 return (
-                    instructions_limit,
+                    execution_parameters.instruction_limit,
                     Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                         canister_id,
                         memory_allocation_given: desired_memory_allocation,
@@ -866,39 +894,39 @@ impl CanisterManager {
                     }),
                 );
             }
+            execution_parameters.canister_memory_limit = bytes;
         }
         new_canister.system_state.memory_allocation = desired_memory_allocation;
 
         let mut total_heap_delta = NumBytes::from(0);
 
         // Run (start)
-        let (new_canister, instructions_limit, result) = self.hypervisor.execute_canister_start(
-            new_canister,
-            instructions_limit,
-            subnet_available_memory.clone(),
-        );
+        let (new_canister, instruction_limit, result) = self
+            .hypervisor
+            .execute_canister_start(new_canister, execution_parameters.clone());
         match result {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
             }
-            Err(err) => return (instructions_limit, Err((canister_id, err).into())),
+            Err(err) => return (instruction_limit, Err((canister_id, err).into())),
         }
 
+        execution_parameters.instruction_limit = instruction_limit;
+
         // Run canister_init
-        let (new_canister, instructions_limit, result) = self.hypervisor.execute_canister_init(
+        let (new_canister, instruction_limit, result) = self.hypervisor.execute_canister_init(
             new_canister,
             context.sender,
             context.arg.as_slice(),
-            instructions_limit,
             time,
-            subnet_available_memory,
+            execution_parameters,
         );
         match result {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
-                (instructions_limit, Ok((total_heap_delta, new_canister)))
+                (instruction_limit, Ok((total_heap_delta, new_canister)))
             }
-            Err(err) => (instructions_limit, Err((canister_id, err).into())),
+            Err(err) => (instruction_limit, Err((canister_id, err).into())),
         }
     }
 
@@ -906,10 +934,9 @@ impl CanisterManager {
         &self,
         context: InstallCodeContext,
         old_canister: &CanisterState,
-        instructions_limit: NumInstructions,
-        subnet_available_memory: SubnetAvailableMemory,
         time: Time,
         canister_layout_path: PathBuf,
+        mut execution_parameters: ExecutionParameters,
     ) -> (
         NumInstructions,
         Result<(NumBytes, CanisterState), CanisterManagerError>,
@@ -922,9 +949,8 @@ impl CanisterManager {
             self.hypervisor.execute_canister_pre_upgrade(
                 new_canister,
                 context.sender,
-                instructions_limit,
                 time,
-                subnet_available_memory.clone(),
+                execution_parameters.clone(),
             );
         match res {
             Ok(heap_delta) => {
@@ -968,6 +994,7 @@ impl CanisterManager {
         // of the new wasm module.
         if let Some(compute_allocation) = context.compute_allocation {
             new_canister.scheduler_state.compute_allocation = compute_allocation;
+            execution_parameters.compute_allocation = compute_allocation;
         }
 
         // While the memory allocation can still be included in the context, we need to
@@ -988,15 +1015,14 @@ impl CanisterManager {
                     }),
                 );
             }
+            execution_parameters.canister_memory_limit = bytes;
         }
         new_canister.system_state.memory_allocation = desired_memory_allocation;
 
         // Run (start)
-        let (new_canister, instructions_limit, result) = self.hypervisor.execute_canister_start(
-            new_canister,
-            instructions_limit,
-            subnet_available_memory.clone(),
-        );
+        let (new_canister, instructions_limit, result) = self
+            .hypervisor
+            .execute_canister_start(new_canister, execution_parameters.clone());
         match result {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
@@ -1010,9 +1036,8 @@ impl CanisterManager {
                 new_canister,
                 context.sender,
                 context.arg.as_slice(),
-                instructions_limit,
                 time,
-                subnet_available_memory,
+                execution_parameters,
             );
         match result {
             Ok(heap_delta) => {
@@ -1275,8 +1300,14 @@ impl CanisterManager {
             .canister_state(&canister_id)
             .ok_or(CanisterManagerError::CanisterNotFound(canister_id))
     }
-}
 
+    pub(crate) fn get_wasm_hash(&self, canister: &CanisterState) -> Option<[u8; 32]> {
+        canister
+            .execution_state
+            .as_ref()
+            .map(|execution_state| execution_state.wasm_binary.hash_sha256())
+    }
+}
 #[doc(hidden)] // pub for usage in tests
 pub(crate) fn canister_layout(
     state_path: &Path,

@@ -1,4 +1,4 @@
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 
 /// A wrapper around architecture-dependent SHA256 hasher providing a uniform
 /// API.

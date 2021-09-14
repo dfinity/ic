@@ -1,7 +1,7 @@
 use http::{Method, Response, Uri};
 use hyper::{body::HttpBody as _, client::Client, client::HttpConnector, Body};
 use hyper_tls::HttpsConnector;
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_logger::{info, warn, ReplicaLogger};
 use std::error::Error;
 use std::fmt;
@@ -10,6 +10,7 @@ use std::io;
 use std::io::prelude::*;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use flate2::read::GzDecoder;
 use tar::Archive;
@@ -18,16 +19,24 @@ use tar::Archive;
 pub struct FileDownloader {
     http_client: Client<HttpsConnector<HttpConnector>, Body>,
     logger: Option<ReplicaLogger>,
+    /// This is a timeout that is applied to the downloading each chunk that is
+    /// yielded, not to the entire downloading of the file.
+    timeout: Duration,
 }
 
 impl FileDownloader {
     pub fn new(logger: Option<ReplicaLogger>) -> Self {
+        Self::new_with_timeout(logger, Duration::from_secs(15))
+    }
+
+    pub fn new_with_timeout(logger: Option<ReplicaLogger>, timeout: Duration) -> Self {
         let https = HttpsConnector::new();
         let http_client = Client::builder().build::<_, hyper::Body>(https);
 
         Self {
             http_client,
             logger,
+            timeout,
         }
     }
 
@@ -141,7 +150,10 @@ impl FileDownloader {
         let mut output_file = File::create(file_path)
             .map_err(|e| FileDownloadError::file_create_error(file_path, e))?;
 
-        while let Some(next) = response.data().await {
+        while let Some(next) = tokio::time::timeout(self.timeout, response.data())
+            .await
+            .map_err(|_| FileDownloadError::TimeoutError)?
+        {
             let chunk = next.map_err(FileDownloadError::from)?;
             output_file
                 .write_all(&chunk)
@@ -209,6 +221,7 @@ pub enum FileDownloadError {
         expected_hash: String,
         file_path: PathBuf,
     },
+    TimeoutError,
 }
 
 impl FileDownloadError {
@@ -304,6 +317,11 @@ impl fmt::Display for FileDownloadError {
                     "File failed hash validation: computed_hash: {}, expected_hash: {}, file: {:?}",
                     computed_hash, expected_hash, file_path
                 ),
+            FileDownloadError::TimeoutError =>
+                write!(
+                    f,
+                    "File downloader timed out."
+                )
         }
     }
 }

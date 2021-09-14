@@ -8,7 +8,9 @@ use ic_interfaces::artifact_manager::{
 };
 use ic_interfaces::artifact_pool::{ArtifactPoolError, UnvalidatedArtifact};
 use ic_interfaces::time_source::TimeSource;
-pub use ic_p2p::p2p::{TestArtifact, TestArtifactAttribute, TestArtifactId, TestArtifactMessage};
+use ic_replica_setup_ic_network::{
+    TestArtifact, TestArtifactAttribute, TestArtifactId, TestArtifactMessage,
+};
 use ic_types::artifact::{Advert, ArtifactId, Priority};
 use ic_types::chunkable::Chunkable;
 use ic_types::crypto::CryptoHash;

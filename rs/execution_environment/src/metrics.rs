@@ -1,8 +1,8 @@
 use ic_config::subnet_config::SchedulerConfig;
 use ic_metrics::{buckets::decimal_buckets_with_zero, MetricsRegistry};
 use ic_types::{NumInstructions, NumMessages};
-use prometheus::{Histogram, HistogramTimer};
-use std::{cell::RefCell, rc::Rc};
+use prometheus::Histogram;
+use std::{cell::RefCell, rc::Rc, time::Instant};
 
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
@@ -120,7 +120,8 @@ impl<'a> MeasurementScope<'a> {
                 instructions: NumInstructions::from(0),
                 messages: NumMessages::from(0),
                 outer: None,
-                _timer: metrics.duration.start_timer(),
+                start_time: Instant::now(),
+                record_zeros: true,
             })),
         }
     }
@@ -138,9 +139,16 @@ impl<'a> MeasurementScope<'a> {
                 instructions: NumInstructions::from(0),
                 messages: NumMessages::from(0),
                 outer: Some(outer.clone()),
-                _timer: metrics.duration.start_timer(),
+                start_time: Instant::now(),
+                record_zeros: true,
             })),
         }
+    }
+
+    /// Disable recording of scopes with zero messages, zero instructions.
+    pub fn dont_record_zeros(self) -> Self {
+        self.core.borrow_mut().record_zeros = false;
+        self
     }
 
     /// Increments the instruction and message counters.
@@ -222,9 +230,8 @@ struct MeasurementScopeCore<'a> {
     instructions: NumInstructions,
     messages: NumMessages,
     outer: Option<MeasurementScope<'a>>,
-    // The timer field is not read, but it automatically observes
-    // duration when dropped.
-    _timer: HistogramTimer,
+    start_time: Instant,
+    record_zeros: bool,
 }
 
 impl<'a> Drop for MeasurementScopeCore<'a> {
@@ -232,10 +239,15 @@ impl<'a> Drop for MeasurementScopeCore<'a> {
         if let Some(outer) = &self.outer {
             outer.add(self.instructions, self.messages);
         }
-        self.metrics
-            .instructions
-            .observe(self.instructions.get() as f64);
-        self.metrics.messages.observe(self.messages.get() as f64);
+        if self.record_zeros || self.messages.get() != 0 {
+            self.metrics
+                .instructions
+                .observe(self.instructions.get() as f64);
+            self.metrics.messages.observe(self.messages.get() as f64);
+            self.metrics
+                .duration
+                .observe(self.start_time.elapsed().as_secs_f64())
+        }
     }
 }
 
@@ -366,5 +378,53 @@ mod tests {
         assert_eq!(60, l2.instructions.get_sample_sum() as u64);
         assert_eq!(1, l2.messages.get_sample_count());
         assert_eq!(3, l2.messages.get_sample_sum() as u64);
+    }
+
+    #[test]
+    fn dont_record_zeros() {
+        let mr = MetricsRegistry::new();
+        let outer = ScopedMetrics {
+            duration: duration_histogram("l1_duration_seconds", "...", &mr),
+            instructions: instructions_histogram("l1_instructions", "...", &mr),
+            messages: messages_histogram("l1_messages", "...", &mr),
+        };
+        let middle = ScopedMetrics {
+            duration: duration_histogram("l2_duration_seconds", "...", &mr),
+            instructions: instructions_histogram("l2_instructions", "...", &mr),
+            messages: messages_histogram("l2_messages", "...", &mr),
+        };
+        let inner = ScopedMetrics {
+            duration: duration_histogram("l3_duration_seconds", "...", &mr),
+            instructions: instructions_histogram("l3_instructions", "...", &mr),
+            messages: messages_histogram("l3_messages", "...", &mr),
+        };
+
+        {
+            let outer_scope = MeasurementScope::root(&outer);
+            let milddle_scope = MeasurementScope::nested(&middle, &outer_scope).dont_record_zeros();
+            let _inner_scope = MeasurementScope::nested(&inner, &milddle_scope);
+        }
+
+        // Outer scope should have recorded one zero sample for each metric.
+        assert_eq!(1, outer.duration.get_sample_count());
+        assert_eq!(1, outer.instructions.get_sample_count());
+        assert_eq!(0, outer.instructions.get_sample_sum() as u64);
+        assert_eq!(1, outer.messages.get_sample_count());
+        assert_eq!(0, outer.messages.get_sample_sum() as u64);
+
+        // Middle scope (with `dont_record_zeros()`) should not have recorded any
+        // samples.
+        assert_eq!(0, middle.duration.get_sample_count());
+        assert_eq!(0, middle.instructions.get_sample_count());
+        assert_eq!(0, middle.instructions.get_sample_sum() as u64);
+        assert_eq!(0, middle.messages.get_sample_count());
+        assert_eq!(0, middle.messages.get_sample_sum() as u64);
+
+        // Inner scope should have alsp recorded one zero sample for each metric.
+        assert_eq!(1, inner.duration.get_sample_count());
+        assert_eq!(1, inner.instructions.get_sample_count());
+        assert_eq!(0, inner.instructions.get_sample_sum() as u64);
+        assert_eq!(1, inner.messages.get_sample_count());
+        assert_eq!(0, inner.messages.get_sample_sum() as u64);
     }
 }

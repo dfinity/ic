@@ -425,10 +425,12 @@ pub fn validate_payload(
         // We expect the parent to be valid, so there will be _always_ a DKG start block on the
         // chain.
         .expect("No DKG start block found for the parent block.");
-    let last_summary = BlockPayload::from(last_summary_block.payload).into_summary();
+    let last_dkg_summary = BlockPayload::from(last_summary_block.payload)
+        .into_summary()
+        .dkg;
 
     let current_height = parent.height.increment();
-    let is_dkg_start_height = last_summary.get_next_start_height() == current_height;
+    let is_dkg_start_height = last_dkg_summary.get_next_start_height() == current_height;
 
     if payload.is_summary() {
         if !is_dkg_start_height {
@@ -442,7 +444,7 @@ pub fn validate_payload(
             registry_client,
             crypto,
             pool_reader,
-            last_summary,
+            last_dkg_summary,
             &parent,
             registry_version,
             state_manager,
@@ -452,8 +454,8 @@ pub fn validate_payload(
         let expected_payload = expected_summary.into();
         if payload != &expected_payload {
             return Err(PermanentError::MismatchedDkgSummary(
-                expected_payload.as_summary().clone(),
-                payload.as_summary().clone(),
+                expected_payload.as_summary().dkg.clone(),
+                payload.as_summary().dkg.clone(),
             )
             .into());
         }
@@ -466,7 +468,7 @@ pub fn validate_payload(
             crypto,
             pool_reader,
             dkg_pool,
-            &last_summary,
+            &last_dkg_summary,
             payload.dkg_interval_start_height(),
             &payload.as_dealings().messages,
             &parent,
@@ -498,9 +500,11 @@ pub fn create_payload(
     let last_summary_block = pool_reader
         .dkg_summary_block(parent)
         .ok_or(TransientError::MissingDkgStartBlock)?;
-    let last_summary = BlockPayload::from(last_summary_block.payload).into_summary();
+    let last_dkg_summary = BlockPayload::from(last_summary_block.payload)
+        .into_summary()
+        .dkg;
 
-    if last_summary.get_next_start_height() == height {
+    if last_dkg_summary.get_next_start_height() == height {
         // Since `height` corresponds to the start of a new DKG interval, we create a
         // new summary.
         return create_summary_payload(
@@ -508,7 +512,7 @@ pub fn create_payload(
             registry_client,
             &*crypto,
             pool_reader,
-            last_summary,
+            last_dkg_summary,
             parent,
             last_summary_block.context.registry_version,
             state_manager,
@@ -531,7 +535,7 @@ pub fn create_payload(
         .get_validated_older_than(age_threshold)
         .filter(|msg| {
             // Make sure the message relates to one of the ongoing DKGs.
-            last_summary.configs.contains_key(&msg.content.dkg_id) &&
+            last_dkg_summary.configs.contains_key(&msg.content.dkg_id) &&
                     // The message is from a unique dealer.
                     match dealers_from_chain.get(&msg.content.dkg_id) {
                         // If no list of dealers for the given DKG id was found, this must be the
@@ -997,11 +1001,11 @@ fn process_subnet_call_context(
         .get_ref()
         .metadata
         .subnet_call_context_manager
-        .contexts;
+        .setup_initial_dkg_contexts;
     for (_callback_id, context) in contexts.iter() {
-        use ic_replicated_state::metadata_state::SubnetCallContext;
+        use ic_replicated_state::metadata_state::subnet_call_context_manager::SetupInitialDkgContext;
 
-        let SubnetCallContext::SetupInitialDKGContext {
+        let SetupInitialDkgContext {
             request: _,
             nodes_in_target_subnet,
             target_id,
@@ -1147,7 +1151,7 @@ impl Dkg for DkgImpl {
         // it's dropped.
         let _timer = self.metrics.on_state_change_duration.start_timer();
         let dkg_summary_block = self.consensus_cache.summary_block();
-        let dkg_summary = dkg_summary_block.payload.as_ref().as_summary();
+        let dkg_summary = &dkg_summary_block.payload.as_ref().as_summary().dkg;
         let start_height = dkg_summary_block.height;
 
         if start_height > dkg_pool.get_current_start_height() {
@@ -1325,7 +1329,13 @@ pub fn make_registry_cup(
     } else {
         versioned_record.version
     };
-    let replica_version = match registry.get_replica_version(subnet_id, registry_version) {
+    // We do not use `registry_version` here because doing so would cause issues
+    // for full NNS (4b) disaster recovery. When we are calling
+    // make_registry_cup, our notion of the the NNS registry is still that of
+    // the temporary NNS that is used to spawn the recovered NNS. However the
+    // registry version store in `registry_store_uri` is a registry version from
+    // the original/restored NNS, and so we can not use that version here.
+    let replica_version = match registry.get_replica_version(subnet_id, versioned_record.version) {
         Ok(Some(replica_version)) => replica_version,
         err => {
             if let Some(logger) = logger {
@@ -1401,7 +1411,7 @@ mod tests {
     use ic_protobuf::registry::subnet::v1::{
         CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetRecord,
     };
-    use ic_replicated_state::metadata_state::SubnetCallContext;
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::SetupInitialDkgContext;
     use ic_test_utilities::{
         consensus::fake::FakeContentSigner,
         crypto::CryptoReturningOk,
@@ -1414,7 +1424,7 @@ mod tests {
     };
     use ic_types::{
         batch::BatchPayload,
-        consensus::HasVersion,
+        consensus::{DataPayload, HasVersion},
         crypto::threshold_sig::ni_dkg::{
             NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
@@ -1597,7 +1607,7 @@ mod tests {
             // This first block is expected to contain the genesis summary.
             match BlockPayload::from(block.payload) {
                 BlockPayload::Summary(summary) => {
-                    assert_eq!(summary, genesis_summary, "Unexpected genesis summary.");
+                    assert_eq!(summary.dkg, genesis_summary, "Unexpected genesis summary.");
                 }
                 _ => panic!("Unexpected DKG payload."),
             };
@@ -1613,20 +1623,24 @@ mod tests {
 
                 // Advance one more time and get the summary block.
                 pool.advance_round_normal_operation();
-                let summary =
-                    BlockPayload::from(pool.get_cache().finalized_block().payload).into_summary();
+                let dkg_summary = BlockPayload::from(pool.get_cache().finalized_block().payload)
+                    .into_summary()
+                    .dkg;
 
                 assert_eq!(
-                    summary.registry_version,
+                    dkg_summary.registry_version,
                     RegistryVersion::from(initial_registry_version)
                 );
                 let expected_height = interval * (dkg_interval_len + 1) + dkg_interval_len + 1;
-                assert_eq!(summary.height, Height::from(expected_height));
-                assert_eq!(summary.interval_length, Height::from(dkg_interval_len));
-                assert_eq!(summary.next_interval_length, Height::from(dkg_interval_len));
+                assert_eq!(dkg_summary.height, Height::from(expected_height));
+                assert_eq!(dkg_summary.interval_length, Height::from(dkg_interval_len));
+                assert_eq!(
+                    dkg_summary.next_interval_length,
+                    Height::from(dkg_interval_len)
+                );
 
                 for tag in TAGS.iter() {
-                    let (id, conf) = summary
+                    let (id, conf) = dkg_summary
                         .configs
                         .iter()
                         .find(|(id, _)| id.dkg_tag == *tag)
@@ -1670,7 +1684,7 @@ mod tests {
                     if interval > 0 {
                         if tag == &NiDkgTag::HighThreshold {
                             assert_eq!(
-                                summary
+                                dkg_summary
                                     .clone()
                                     .next_transcript(&NiDkgTag::HighThreshold)
                                     .unwrap(),
@@ -2018,14 +2032,15 @@ mod tests {
         let nodes_in_target_subnet = node_ids.into_iter().map(node_test_id).collect();
 
         if let Some(target_id) = target {
-            state.metadata.subnet_call_context_manager.push(
-                SubnetCallContext::SetupInitialDKGContext {
+            state
+                .metadata
+                .subnet_call_context_manager
+                .push_setup_initial_dkg_request(SetupInitialDkgContext {
                     request: RequestBuilder::new().build(),
                     nodes_in_target_subnet,
                     target_id,
                     registry_version,
-                },
-            );
+                });
         }
 
         let mut mock = state_manager.get_mut();
@@ -2181,12 +2196,17 @@ mod tests {
             // two errors for the remote DKG request.
             let block: Block = PoolReader::new(&pool).get_highest_summary_block();
             if let BlockPayload::Summary(summary) = block.payload.as_ref() {
-                assert_eq!(summary.configs.len(), 2, "Configs: {:?}", summary.configs);
-                for (dkg_id, _) in summary.configs.iter() {
+                assert_eq!(
+                    summary.dkg.configs.len(),
+                    2,
+                    "Configs: {:?}",
+                    summary.dkg.configs
+                );
+                for (dkg_id, _) in summary.dkg.configs.iter() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                 }
-                assert_eq!(summary.transcripts_for_new_subnets().len(), 2);
-                for (dkg_id, result) in summary.transcripts_for_new_subnets().iter() {
+                assert_eq!(summary.dkg.transcripts_for_new_subnets().len(), 2);
+                for (dkg_id, result) in summary.dkg.transcripts_for_new_subnets().iter() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
                     assert!(result.is_err());
                 }
@@ -2619,8 +2639,8 @@ mod tests {
                     pool_2.advance_round_normal_operation_n(dkg_interval_length + 1);
                     let block: Block = PoolReader::new(&pool_1).get_highest_summary_block();
                     if let BlockPayload::Summary(summary) = block.payload.as_ref() {
-                        assert_eq!(summary.configs.len(), 2);
-                        for (dkg_id, _) in summary.configs.iter() {
+                        assert_eq!(summary.dkg.configs.len(), 2);
+                        for (dkg_id, _) in summary.dkg.configs.iter() {
                             assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                         }
                     } else {
@@ -2637,7 +2657,7 @@ mod tests {
                     pool_2.advance_round_normal_operation_n(dkg_interval_length + 1);
                     let block: Block = PoolReader::new(&pool_1).get_highest_summary_block();
                     if let BlockPayload::Summary(summary) = block.payload.as_ref() {
-                        assert_eq!(summary.configs.len(), 4);
+                        assert_eq!(summary.dkg.configs.len(), 4);
                     } else {
                         panic!(
                             "block at height {} is not a summary block",
@@ -2795,17 +2815,17 @@ mod tests {
                 .content
                 .into_inner();
             if block.payload.as_ref().is_summary() {
-                let summary = block.payload.as_ref().as_summary();
-                assert_eq!(summary.configs.len(), 4);
+                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
+                assert_eq!(dkg_summary.configs.len(), 4);
                 assert_eq!(
-                    summary
+                    dkg_summary
                         .configs
                         .keys()
                         .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
                         .count(),
                     2
                 );
-                assert!(summary.transcripts_for_new_subnets().is_empty());
+                assert!(dkg_summary.transcripts_for_new_subnets().is_empty());
             } else {
                 panic!(
                     "block at height {} is not a summary block",
@@ -2824,10 +2844,10 @@ mod tests {
                 .content
                 .into_inner();
             if block.payload.as_ref().is_summary() {
-                let summary = block.payload.as_ref().as_summary();
-                assert_eq!(summary.configs.len(), 2);
+                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
+                assert_eq!(dkg_summary.configs.len(), 2);
                 assert_eq!(
-                    summary
+                    dkg_summary
                         .configs
                         .keys()
                         .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
@@ -2835,7 +2855,7 @@ mod tests {
                     0
                 );
                 assert_eq!(
-                    summary
+                    dkg_summary
                         .transcripts_for_new_subnets()
                         .keys()
                         .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
@@ -3104,7 +3124,7 @@ mod tests {
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
                     dkg_pool.read().unwrap().deref(),
-                    &last_summary,
+                    &last_summary.dkg,
                     Height::from(0),
                     messages,
                     parent,
@@ -3163,10 +3183,10 @@ mod tests {
             let messages = vec![Message::fake(valid_dealing_content, node_test_id(0))];
             let payload = Payload::new(
                 ic_crypto::crypto_hash,
-                BlockPayload::BatchAndDealings(
-                    BatchPayload::default(),
-                    dkg::Dealings::new(Height::from(0), messages.clone()),
-                ),
+                BlockPayload::Data(DataPayload {
+                    batch: BatchPayload::default(),
+                    dealings: dkg::Dealings::new(Height::from(0), messages.clone()),
+                }),
             );
             let mut parent = Block::from(pool.make_next_block());
             parent.payload = payload;
@@ -3280,15 +3300,15 @@ mod tests {
                 RegistryVersion::from(5),
                 "The latest available version was used for the summary block."
             );
-            let summary = BlockPayload::from(dkg_block.payload).into_summary();
-            assert_eq!(summary.registry_version, RegistryVersion::from(5));
-            assert_eq!(summary.height, Height::from(0));
+            let dkg_summary = BlockPayload::from(dkg_block.payload).into_summary().dkg;
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
+            assert_eq!(dkg_summary.height, Height::from(0));
             assert_eq!(
-                summary.get_subnet_membership_version(),
+                dkg_summary.get_subnet_membership_version(),
                 RegistryVersion::from(5)
             );
             for tag in TAGS.iter() {
-                let current_transcript = summary.current_transcript(tag);
+                let current_transcript = dkg_summary.current_transcript(tag);
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(0)
@@ -3299,7 +3319,7 @@ mod tests {
                 );
                 // The genesis summary cannot have next transcripts, instead we'll reuse in
                 // round 1 the active transcripts from round 0.
-                assert!(summary.next_transcript(tag).is_none());
+                assert!(dkg_summary.next_transcript(tag).is_none());
             }
 
             // Advance for one round and update the registry to version 6 with new
@@ -3325,23 +3345,23 @@ mod tests {
                 RegistryVersion::from(6),
                 "The newest registry version is used."
             );
-            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let dkg_summary = BlockPayload::from(dkg_block.payload).into_summary().dkg;
             // This registry version corresponds to the registry version from the block
             // context of the previous summary.
-            assert_eq!(summary.registry_version, RegistryVersion::from(5));
-            assert_eq!(summary.height, Height::from(5));
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
+            assert_eq!(dkg_summary.height, Height::from(5));
             assert_eq!(
-                summary.get_subnet_membership_version(),
+                dkg_summary.get_subnet_membership_version(),
                 RegistryVersion::from(5)
             );
             for tag in TAGS.iter() {
                 // We reused the transcript.
-                let current_transcript = summary.current_transcript(tag);
+                let current_transcript = dkg_summary.current_transcript(tag);
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(0)
                 );
-                let (_, conf) = summary
+                let (_, conf) = dkg_summary
                     .configs
                     .iter()
                     .find(|(id, _)| id.dkg_tag == *tag)
@@ -3375,17 +3395,17 @@ mod tests {
                 RegistryVersion::from(10),
                 "The newest registry version is used."
             );
-            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let dkg_summary = BlockPayload::from(dkg_block.payload).into_summary().dkg;
             // This registry version corresponds to the registry version from the block
             // context of the previous summary.
-            assert_eq!(summary.registry_version, RegistryVersion::from(6));
-            assert_eq!(summary.height, Height::from(10));
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(6));
+            assert_eq!(dkg_summary.height, Height::from(10));
             assert_eq!(
-                summary.get_subnet_membership_version(),
+                dkg_summary.get_subnet_membership_version(),
                 RegistryVersion::from(5)
             );
             for tag in TAGS.iter() {
-                let (_, conf) = summary
+                let (_, conf) = dkg_summary
                     .configs
                     .iter()
                     .find(|(id, _)| id.dkg_tag == *tag)
@@ -3394,12 +3414,12 @@ mod tests {
                     conf.receivers().get(),
                     &committee2.clone().into_iter().collect::<BTreeSet<_>>()
                 );
-                let current_transcript = summary.current_transcript(tag);
+                let current_transcript = dkg_summary.current_transcript(tag);
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(0)
                 );
-                let next_transcript = summary.next_transcript(tag).unwrap();
+                let next_transcript = dkg_summary.next_transcript(tag).unwrap();
                 // The DKG id start height refers to height 0, where we started computing this
                 // DKG.
                 assert_eq!(next_transcript.dkg_id.start_block_height, Height::from(5));
@@ -3413,17 +3433,17 @@ mod tests {
                 RegistryVersion::from(10),
                 "The latest registry version is used."
             );
-            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let dkg_summary = BlockPayload::from(dkg_block.payload).into_summary().dkg;
             // This registry version corresponds to the registry version from the block
             // context of the previous summary.
-            assert_eq!(summary.registry_version, RegistryVersion::from(10));
-            assert_eq!(summary.height, Height::from(15));
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(10));
+            assert_eq!(dkg_summary.height, Height::from(15));
             assert_eq!(
-                summary.get_subnet_membership_version(),
+                dkg_summary.get_subnet_membership_version(),
                 RegistryVersion::from(5)
             );
             for tag in TAGS.iter() {
-                let (_, conf) = summary
+                let (_, conf) = dkg_summary
                     .configs
                     .iter()
                     .find(|(id, _)| id.dkg_tag == *tag)
@@ -3432,12 +3452,12 @@ mod tests {
                     conf.receivers().get(),
                     &committee3.clone().into_iter().collect::<BTreeSet<_>>()
                 );
-                let current_transcript = summary.current_transcript(tag);
+                let current_transcript = dkg_summary.current_transcript(tag);
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(5)
                 );
-                let next_transcript = summary.next_transcript(tag).unwrap();
+                let next_transcript = dkg_summary.next_transcript(tag).unwrap();
                 assert_eq!(next_transcript.dkg_id.start_block_height, Height::from(10));
             }
 
@@ -3449,18 +3469,18 @@ mod tests {
                 RegistryVersion::from(10),
                 "The latest registry version is used."
             );
-            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let dkg_summary = BlockPayload::from(dkg_block.payload).into_summary().dkg;
             // This registry version corresponds to the registry version from the block
             // context of the previous summary.
-            assert_eq!(summary.registry_version, RegistryVersion::from(10));
-            assert_eq!(summary.height, Height::from(20));
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(10));
+            assert_eq!(dkg_summary.height, Height::from(20));
             assert_eq!(
-                summary.get_subnet_membership_version(),
+                dkg_summary.get_subnet_membership_version(),
                 // The current DKGs finally use `RegistryVersion` 6
                 RegistryVersion::from(6)
             );
             for tag in TAGS.iter() {
-                let (_, conf) = summary
+                let (_, conf) = dkg_summary
                     .configs
                     .iter()
                     .find(|(id, _)| id.dkg_tag == *tag)
@@ -3469,12 +3489,12 @@ mod tests {
                     conf.receivers().get(),
                     &committee3.clone().into_iter().collect::<BTreeSet<_>>()
                 );
-                let current_transcript = summary.current_transcript(tag);
+                let current_transcript = dkg_summary.current_transcript(tag);
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(10)
                 );
-                let next_transcript = summary.next_transcript(tag).unwrap();
+                let next_transcript = dkg_summary.next_transcript(tag).unwrap();
                 assert_eq!(next_transcript.dkg_id.start_block_height, Height::from(15));
             }
         });

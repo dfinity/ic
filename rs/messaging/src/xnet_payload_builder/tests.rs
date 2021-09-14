@@ -7,7 +7,6 @@ use ic_interfaces::{
 };
 use ic_test_utilities::{
     certified_stream_store::MockCertifiedStreamStore,
-    consensus::assert_result_invalid,
     crypto::fake_tls_handshake::FakeTlsHandshake,
     metrics::{
         fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter_vec, metric_vec,
@@ -118,25 +117,23 @@ async fn validate_empty_payload() {
         };
 
         // Empty payload is valid after `state` + `past_payloads`.
-        assert_matches!(
-            xnet_payload_builder.validate_xnet_payload(
-                &payload,
-                &fixture.validation_context,
-                &fixture.past_payloads(),
-                PAYLOAD_BYTES_LIMIT
-            ),
-            Ok(_)
+        assert_eq!(
+            NumBytes::from(0),
+            xnet_payload_builder
+                .validate_xnet_payload(
+                    &payload,
+                    &fixture.validation_context,
+                    &fixture.past_payloads()
+                )
+                .unwrap()
         );
 
         // Empty payload is valid after `state` with no `past_payloads`.
-        assert_matches!(
-            xnet_payload_builder.validate_xnet_payload(
-                &payload,
-                &fixture.validation_context,
-                &[],
-                PAYLOAD_BYTES_LIMIT
-            ),
-            Ok(_)
+        assert_eq!(
+            NumBytes::from(0),
+            xnet_payload_builder
+                .validate_xnet_payload(&payload, &fixture.validation_context, &[])
+                .unwrap()
         );
     });
 }
@@ -152,14 +149,11 @@ async fn validate_valid_payload() {
         let payloads = fixture.past_payloads();
         let (payload, past_payloads) = payloads.split_first().unwrap();
 
-        assert_matches!(
-            xnet_payload_builder.validate_xnet_payload(
-                payload,
-                &fixture.validation_context,
-                &past_payloads,
-                PAYLOAD_BYTES_LIMIT
-            ),
-            Ok(_)
+        assert_eq!(
+            NumBytes::from(payload.stream_slices.len() as u64),
+            xnet_payload_builder
+                .validate_xnet_payload(payload, &fixture.validation_context, &past_payloads)
+                .unwrap()
         );
     });
 }
@@ -169,16 +163,14 @@ async fn validate_valid_payload_against_state_only() {
     with_test_replica_logger(|log| {
         let fixture = PayloadBuilderTestFixture::with_xnet_state(0);
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
+        let payload = fixture.payloads.last().unwrap();
 
         // Validate oldest payload against state and no intermediate payloads.
-        assert_matches!(
-            xnet_payload_builder.validate_xnet_payload(
-                &fixture.payloads.last().unwrap(),
-                &fixture.validation_context,
-                &[],
-                PAYLOAD_BYTES_LIMIT
-            ),
-            Ok(_)
+        assert_eq!(
+            NumBytes::from(payload.stream_slices.len() as u64),
+            xnet_payload_builder
+                .validate_xnet_payload(&payload, &fixture.validation_context, &[])
+                .unwrap()
         );
     });
 }
@@ -191,12 +183,16 @@ async fn validate_duplicate_messages() {
 
         // Simulate duplicate messages by validating the last `XNetPayload` on top of
         // itself.
-        assert_result_invalid(xnet_payload_builder.validate_xnet_payload(
-            fixture.payloads.last().unwrap(),
-            &fixture.validation_context,
-            &fixture.past_payloads(),
-            PAYLOAD_BYTES_LIMIT,
-        ));
+        assert_matches!(
+            xnet_payload_builder.validate_xnet_payload(
+                fixture.payloads.last().unwrap(),
+                &fixture.validation_context,
+                &fixture.past_payloads(),
+            ),
+            Err(ValidationError::Permanent(
+                InvalidXNetPayload::InvalidSlice(_)
+            ))
+        );
     });
 }
 
@@ -250,12 +246,12 @@ async fn validate_duplicate_messages_against_state_only() {
 
         let validation_context = get_validation_context_for_test();
 
-        assert_result_invalid(xnet_payload_builder.validate_xnet_payload(
-            &payload,
-            &validation_context,
-            &[],
-            PAYLOAD_BYTES_LIMIT,
-        ));
+        assert_matches!(
+            xnet_payload_builder.validate_xnet_payload(&payload, &validation_context, &[],),
+            Err(ValidationError::Permanent(
+                InvalidXNetPayload::InvalidSlice(_)
+            ))
+        );
     });
 }
 
@@ -271,12 +267,16 @@ async fn validate_missing_messages() {
 
         // Simulate missing messages by removing the last `XNetPayload` in `payloads`.
         past_payloads.pop().unwrap();
-        assert_result_invalid(xnet_payload_builder.validate_xnet_payload(
-            payload,
-            &fixture.validation_context,
-            &past_payloads,
-            PAYLOAD_BYTES_LIMIT,
-        ));
+        assert_matches!(
+            xnet_payload_builder.validate_xnet_payload(
+                payload,
+                &fixture.validation_context,
+                &past_payloads,
+            ),
+            Err(ValidationError::Permanent(
+                InvalidXNetPayload::InvalidSlice(_)
+            ))
+        );
     });
 }
 
@@ -287,12 +287,16 @@ async fn validate_missing_messages_against_state_only() {
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
         // Validate the second `XNetPayload` against `state` only.
-        assert_result_invalid(xnet_payload_builder.validate_xnet_payload(
-            &fixture.payloads.get(1).unwrap(),
-            &fixture.validation_context,
-            &[],
-            PAYLOAD_BYTES_LIMIT,
-        ));
+        assert_matches!(
+            xnet_payload_builder.validate_xnet_payload(
+                &fixture.payloads.get(1).unwrap(),
+                &fixture.validation_context,
+                &[],
+            ),
+            Err(ValidationError::Permanent(
+                InvalidXNetPayload::InvalidSlice(_)
+            ))
+        );
     });
 }
 
@@ -330,8 +334,7 @@ async fn validate_state_removed() {
             xnet_payload_builder.validate_xnet_payload(
                 &payload,
                 &validation_context,
-                &[],
-                PAYLOAD_BYTES_LIMIT,
+                &[]
             ),
             Err(ValidationError::Permanent(InvalidXNetPayload::StateRemoved(h)))
             if h == CERTIFIED_HEIGHT
@@ -368,8 +371,7 @@ async fn validate_state_not_yet_committed() {
             xnet_payload_builder.validate_xnet_payload(
                 &payload,
                 &validation_context,
-                &[],
-                PAYLOAD_BYTES_LIMIT,
+                &[]
             ),
             Err(ValidationError::Transient(XNetTransientValidationError::StateNotCommittedYet(h)))
             if h == CERTIFIED_HEIGHT
@@ -429,6 +431,8 @@ impl PayloadBuilderTestFixture {
             &self.metrics,
             log,
         )
+        // Any slice, empty or not, has byte size 1.
+        .with_count_bytes_fn(|_| Ok(1))
     }
 
     /// Helper to create a vector of references from `self.payloads`.

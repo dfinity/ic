@@ -71,6 +71,9 @@ message SubnetRecord {
   // The maximum number of instructions an `install_code` message can execute.
   // See the comments in `subnet_config.rs` for more details.
   uint64 max_instructions_per_install_code = 22;
+
+  // Information on whether a feature is supported by this subnet.
+  SubnetFeatures features = 23;
 }
 
 // Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
@@ -159,4 +162,8 @@ enum SubnetType {
     // A subnet type that is like application subnets but can have some
     // additional features.
     SUBNET_TYPE_VERIFIED_APPLICATION = 4;
+}
+
+message SubnetFeatures {
+    bool ecdsa_signatures = 1;
 }

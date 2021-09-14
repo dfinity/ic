@@ -39,7 +39,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         iproute2 \
         dosfstools mtools fakeroot faketime android-sdk-ext4-utils policycoreutils \
         python3 python3-requests python3-pip python3-gflags python3-cbor \
-        shellcheck sudo docker-ce-cli \
+        shellcheck sudo docker-ce-cli ripgrep \
         asciidoctor plantuml graphviz cpio nodejs npm && gem install asciidoctor-diagram rouge
 
 # Add the `ubuntu` user, and the required folders

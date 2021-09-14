@@ -371,6 +371,9 @@ impl SchedulerMetrics {
     }
 }
 
+// Log all messages that took more than `MIN_MESSAGE_DURATION_LOG` to execute.
+pub const MIN_MESSAGE_DURATION_LOG: f64 = 5.0;
+
 pub(crate) struct SchedulerImpl {
     config: SchedulerConfig,
     own_subnet_id: SubnetId,
@@ -584,6 +587,7 @@ impl SchedulerImpl {
         // consume any additional instructions or the maximum allowed instructions
         // per round have been consumed.
         let mut total_instructions_consumed = NumInstructions::from(0);
+        let mut total_heap_delta = NumBytes::from(0);
         let mut state = loop {
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_inner_iteration, &measurement_scope);
@@ -643,7 +647,7 @@ impl SchedulerImpl {
                 heartbeat_handling,
                 &measurement_scope,
             );
-
+            total_heap_delta += heap_delta;
             state.metadata.heap_delta_estimate += heap_delta;
             state.put_canister_states(
                 executed_canisters
@@ -700,6 +704,9 @@ impl SchedulerImpl {
                     .inc();
                 break state;
             }
+            if total_heap_delta >= self.config.max_heap_delta_per_iteration {
+                break state;
+            }
             state.induct_messages_on_same_subnet(&self.log);
             is_first_iteration = false;
         };
@@ -745,6 +752,7 @@ impl SchedulerImpl {
         let thread_pool = &mut self.thread_pool.borrow_mut();
         let exec_env = self.exec_env.as_ref();
         let max_instructions_per_round = current_config.max_instructions_per_round;
+        let max_heap_delta_per_iteration = current_config.max_heap_delta_per_iteration;
         let max_instructions_per_message = current_config.max_instructions_per_message;
 
         // If we don't have enough instructions to execute a single message,
@@ -778,11 +786,13 @@ impl SchedulerImpl {
                 let routing_table = Arc::clone(&routing_table);
                 let subnet_records = Arc::clone(&subnet_records);
                 let metrics = Arc::clone(&self.metrics);
+                let logger = new_logger!(self.log; messaging.round => round_id.get());
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
                         canisters,
                         exec_env,
                         max_instructions_per_round,
+                        max_heap_delta_per_iteration,
                         max_instructions_per_message,
                         metrics,
                         round_id,
@@ -791,6 +801,7 @@ impl SchedulerImpl {
                         routing_table,
                         subnet_records,
                         heartbeat_handling,
+                        logger,
                     );
                 });
             }
@@ -1079,6 +1090,7 @@ impl Scheduler for SchedulerImpl {
             while let Some(msg) = state.subnet_queues.pop_input() {
                 let instructions_limit_per_message =
                     get_instructions_limit_for_subnet_message(&self.config, &msg);
+
                 let (new_state, instructions_left) = self.exec_env.execute_subnet_message(
                     msg,
                     state,
@@ -1087,6 +1099,7 @@ impl Scheduler for SchedulerImpl {
                     &provisional_whitelist,
                     subnet_available_memory.clone(),
                 );
+
                 state = new_state;
                 let instructions_consumed = instructions_limit_per_message - instructions_left;
                 total_instructions_consumed += instructions_consumed;
@@ -1184,6 +1197,7 @@ fn execute_canisters_on_thread(
     canisters_to_execute: Vec<CanisterState>,
     exec_env: &dyn ExecutionEnvironment,
     total_instruction_limit: NumInstructions,
+    max_heap_delta_per_iteration: NumBytes,
     instruction_limit_per_message: NumInstructions,
     metrics: Arc<SchedulerMetrics>,
     round_id: ExecutionRound,
@@ -1192,11 +1206,13 @@ fn execute_canisters_on_thread(
     routing_table: Arc<RoutingTable>,
     subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
     heartbeat_handling: HeartbeatHandling,
+    logger: ReplicaLogger,
 ) -> ExecutionThreadResult {
     // Since this function runs on a helper thread, we cannot use a nested scope
     // here. Instead, we propagate metrics to the outer scope manually via
     // `ExecutionThreadResult`.
-    let measurement_scope = MeasurementScope::root(&metrics.round_inner_iteration_thread);
+    let measurement_scope =
+        MeasurementScope::root(&metrics.round_inner_iteration_thread).dont_record_zeros();
     // These variables accumulate the results and will be returned at the end.
     let mut canisters = vec![];
     let mut ingress_results = vec![];
@@ -1205,15 +1221,18 @@ fn execute_canisters_on_thread(
     let mut total_heap_delta = NumBytes::from(0);
 
     for (rank, mut canister) in canisters_to_execute.into_iter().enumerate() {
-        // If there are not enough instructions to execute a message,
-        // then skip the execution of the canister and keep its old state.
-        if total_instructions_executed + instruction_limit_per_message > total_instruction_limit {
+        // If there are not enough instructions to execute a message or if we already
+        // have large heap delta, then skip the execution of the canister and
+        // keep its old state.
+        if total_instructions_executed + instruction_limit_per_message > total_instruction_limit
+            || total_heap_delta >= max_heap_delta_per_iteration
+        {
             canisters.push(canister);
             continue;
         }
 
         // Run heartbeat before processing the messages. Otherwise, if there are many
-        // messages, we may reach the instruciton limit before running heartbeat.
+        // messages, we may reach the instruction limit before running heartbeat.
         if heartbeat_handling == HeartbeatHandling::Execute && canister.exports_heartbeat_method() {
             let measurement_scope = MeasurementScope::nested(
                 &metrics.round_inner_iteration_thread_heartbeat,
@@ -1264,6 +1283,7 @@ fn execute_canisters_on_thread(
                 &measurement_scope,
             );
             let message = canister.pop_input().unwrap();
+            let msg_info = message.to_string();
             let timer = metrics.msg_execution_duration.start_timer();
             let result = exec_env.execute_canister_message(
                 canister,
@@ -1287,7 +1307,20 @@ fn execute_canisters_on_thread(
             total_instructions_executed += instructions_consumed;
             total_messages_executed.inc_assign();
             total_heap_delta += result.heap_delta;
-            drop(timer);
+            let msg_execution_duration = timer.stop_and_record();
+            if msg_execution_duration > MIN_MESSAGE_DURATION_LOG {
+                warn!(
+                    logger,
+                    "Finished executing message type {:?} on canister {:?} after {:?} seconds",
+                    msg_info,
+                    canister.canister_id(),
+                    msg_execution_duration;
+                    messaging.canister_id => canister.canister_id().to_string(),
+                );
+            }
+            if total_heap_delta >= max_heap_delta_per_iteration {
+                break;
+            }
         }
         if let Some(es) = &mut canister.execution_state {
             es.last_executed_round = round_id;
@@ -1399,6 +1432,7 @@ fn get_instructions_limit_for_subnet_message(
             | RawRand
             | SetController
             | SetupInitialDKG
+            | SignWithECDSA
             | StartCanister
             | StopCanister
             | UninstallCode

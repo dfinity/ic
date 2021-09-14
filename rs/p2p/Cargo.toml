@@ -4,32 +4,25 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-futures = "0.3.10"
 async-trait = "0.1.36"
+bincode = "1.2.1"
+crossbeam-channel = "0.5.0"
 enum-map = "0.6.2"
-lru = { version = "0.6.0", default-features = false }
+futures = "0.3.10"
+ic-artifact-manager = { path = "../artifact_manager" }
 ic-base-thread = { path = "../base/thread" }
 ic-config = { path = "../config" }
 ic-crypto = { path = "../crypto" }
-ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
-ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-types = { path = "../types/types" }
 ic-protobuf = { path = "../protobuf" }
-ic-artifact-pool = { path = "../artifact_pool" }
-ic-artifact-manager = { path = "../artifact_manager" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-consensus = { path = "../consensus" }
 ic-registry-client = { path = "../registry/client" }
-ic-state-manager = { path = "../state_manager" }
-ic-replicated-state = { path = "../replicated_state" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-transport = { path = "../transport" }
-bincode = "1.2.1"
-crossbeam-channel = "0.5.0"
 linked-hash-map = "0.5.3"
+lru = { version = "0.6.0", default-features = false }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
@@ -45,6 +38,7 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-logger = { path = "../monitoring/logger" }
 ic-transport = { path = "../transport" }
+ic-replica-setup-ic-network = { path = "../replica/setup_ic_network" }
 mockall = "0.7.2"
 tempfile = "3.1.0"
 proptest = "0.9.4"

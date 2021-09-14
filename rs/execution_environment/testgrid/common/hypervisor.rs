@@ -4,8 +4,8 @@ use ic_execution_environment::{
     execute as hypervisor_execute, Hypervisor, HypervisorMetrics, QueryExecutionType,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorError::ContractViolation, HypervisorResult, SubnetAvailableMemory,
-    TrapCode,
+    ExecutionParameters, HypervisorError, HypervisorError::ContractViolation, HypervisorResult,
+    SubnetAvailableMemory, TrapCode,
 };
 use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::replica_logger::no_op_logger;
@@ -14,7 +14,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::testing::CanisterQueuesTesting, CallContextAction, CallOrigin, CanisterState,
-    ExecutionState, Global, NumWasmPages, SystemState,
+    ExecutionState, Global, NumWasmPages, NumWasmPages64, SystemState,
 };
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ApiType;
@@ -53,6 +53,18 @@ const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
         SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX));
+}
+
+fn execution_parameters(
+    canister: &CanisterState,
+    instruction_limit: NumInstructions,
+) -> ExecutionParameters {
+    ExecutionParameters {
+        instruction_limit,
+        canister_memory_limit: canister.memory_limit(NumBytes::new(std::u64::MAX)),
+        subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        compute_allocation: canister.scheduler_state.compute_allocation,
+    }
 }
 
 fn test_func_ref() -> FuncRef {
@@ -183,14 +195,14 @@ fn execute_update_with_cycles_memory_time(
         .build();
 
     let (_, _, routing_table, subnet_records) = setup();
+    let execution_parameters = execution_parameters(&canister, instructions_limit);
     let (canister, num_instructions_left, action, heap_delta) = hypervisor.execute_update(
         canister,
         RequestOrIngress::Ingress(req),
-        instructions_limit,
         time,
         routing_table,
         subnet_records,
-        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        execution_parameters,
     );
 
     (canister, num_instructions_left, action, heap_delta)
@@ -227,14 +239,14 @@ fn execute_update_for_request(
         .build();
 
     let (_, _, routing_table, subnet_records) = setup();
+    let execution_parameters = execution_parameters(&canister, instructions_limit);
     let (canister, num_instructions_left, action, _) = hypervisor.execute_update(
         canister,
         RequestOrIngress::Request(req),
-        instructions_limit,
         time,
         routing_table,
         subnet_records,
-        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        execution_parameters,
     );
 
     (canister, num_instructions_left, action)
@@ -271,16 +283,21 @@ fn execute(
         embedder_config.max_globals,
         embedder_config.max_functions,
         &metrics_registry,
+        no_op_logger(),
     );
+
+    let execution_parameters = ExecutionParameters {
+        instruction_limit: MAX_NUM_INSTRUCTIONS,
+        canister_memory_limit: NumBytes::from(4 << 30),
+        subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        compute_allocation: ComputeAllocation::default(),
+    };
 
     hypervisor_execute(
         api_type,
         system_state,
-        MAX_NUM_INSTRUCTIONS,
-        NumBytes::from(4 << 30),
         NumBytes::from(0),
-        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-        ComputeAllocation::default(),
+        execution_parameters,
         func_ref,
         execution_state,
         Arc::new(CyclesAccountManagerBuilder::new().build()),
@@ -378,12 +395,9 @@ fn start_noop() {
                 .expect("initialize succeeds");
 
         let canister = canister_from_exec_state(execution_state);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         hypervisor
-            .execute_canister_start(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
+            .execute_canister_start(canister, execution_parameters)
             .2
             .expect("(start) succeeds");
     });
@@ -672,6 +686,157 @@ fn exercise_stable_memory_delta_2() {
 }
 
 #[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn exercise_stable_memory_delta64() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        let wasm_module = r#"
+                (module
+                    (import "ic0" "stable_size64" (func $stable_size64 (result i64)))
+                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
+                    (import "ic0" "stable_write64"
+                        (func $stable_write64 (param $offset i64) (param $src i64) (param $size i64)))
+                    (import "ic0" "msg_reply" (func $msg_reply))
+
+                    (func $grow
+                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 0))
+                            (then (unreachable))
+                        )
+                        (if (i64.ne (call $stable_size64) (i64.const 1))
+                            (then (unreachable))
+                        )
+                        (call $msg_reply)
+                    )
+
+                    (func $write
+                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 0))
+                            (then (unreachable))
+                        )
+                        (if (i64.ne (call $stable_size64) (i64.const 1))
+                            (then (unreachable))
+                        )
+                        (call $stable_write64 (i64.const 0) (i64.const 0) (i64.const 6144))
+                        (call $msg_reply)
+                    )
+
+                    (memory $memory 1)
+                    (export "memory" (memory $memory))
+                    (export "canister_update write" (func $write))
+                    (export "canister_update grow" (func $grow)))"#;
+
+        let (_, _, action, delta) = execute_update(
+            &hypervisor,
+            wasm_module,
+            "grow",
+            EMPTY_PAYLOAD,
+            None,
+            tmp_path.clone(),
+        );
+        assert_eq!(
+            action,
+            CallContextAction::Reply {
+                payload: vec![],
+                refund: Cycles::from(0),
+            },
+        );
+        assert_eq!(delta, NumBytes::from(0));
+
+        let (_, _, action, delta) = execute_update(
+            &hypervisor,
+            wasm_module,
+            "write",
+            EMPTY_PAYLOAD,
+            None,
+            tmp_path,
+        );
+        assert_eq!(
+            action,
+            CallContextAction::Reply {
+                payload: vec![],
+                refund: Cycles::from(0),
+            },
+        );
+        // We wrote more than 1 page but less than 2 pages so we should expect a
+        // 2 page delta.
+        assert_eq!(delta, NumBytes::from(8192));
+    });
+}
+
+#[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn exercise_stable_memory_delta64_exact_page() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        let wasm_module = r#"
+                (module
+                    (import "ic0" "stable_size64" (func $stable_size64 (result i64)))
+                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
+                    (import "ic0" "stable_write64"
+                        (func $stable_write64 (param $offset i64) (param $src i64) (param $size i64)))
+                    (import "ic0" "msg_reply" (func $msg_reply))
+
+                    (func $grow
+                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 0))
+                            (then (unreachable))
+                        )
+                        (if (i64.ne (call $stable_size64) (i64.const 1))
+                            (then (unreachable))
+                        )
+                        (call $msg_reply)
+                    )
+
+                    (func $write
+                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 0))
+                            (then (unreachable))
+                        )
+                        (if (i64.ne (call $stable_size64) (i64.const 1))
+                            (then (unreachable))
+                        )
+                        (call $stable_write64 (i64.const 0) (i64.const 0) (i64.const 8192))
+                        (call $msg_reply)
+                    )
+
+                    (memory $memory 1)
+                    (export "memory" (memory $memory))
+                    (export "canister_update write" (func $write))
+                    (export "canister_update grow" (func $grow)))"#;
+
+        let (_, _, action, delta) = execute_update(
+            &hypervisor,
+            wasm_module,
+            "grow",
+            EMPTY_PAYLOAD,
+            None,
+            tmp_path.clone(),
+        );
+        assert_eq!(
+            action,
+            CallContextAction::Reply {
+                payload: vec![],
+                refund: Cycles::from(0),
+            },
+        );
+        assert_eq!(delta, NumBytes::from(0));
+
+        let (_, _, action, delta) = execute_update(
+            &hypervisor,
+            wasm_module,
+            "write",
+            EMPTY_PAYLOAD,
+            None,
+            tmp_path,
+        );
+        assert_eq!(
+            action,
+            CallContextAction::Reply {
+                payload: vec![],
+                refund: Cycles::from(0),
+            },
+        );
+        // We wrote exactly 2 pages, so we should a 2 page delta.
+        assert_eq!(delta, NumBytes::from(8192));
+    });
+}
+
+#[test]
 fn sys_api_call_stable_grow_too_many_pages() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
@@ -684,10 +849,12 @@ fn sys_api_call_stable_grow_too_many_pages() {
                     (import "ic0" "msg_reply" (func $msg_reply))
 
                     (func $test
-                        ;; Grow the memory by 100,000 pages.
+                        ;; Grow the memory by 10 pages.
+                        (drop (call $stable_grow (i32.const 10)))
+                        ;; Grow the memory by 2^32-1 pages.
                         ;; This should fail since it's bigger than the maximum number of memory
                         ;; pages that can be allocated and return -1.
-                        (if (i32.ne (call $stable_grow (i32.const 100000)) (i32.const -1))
+                        (if (i32.ne (call $stable_grow (i32.const 4294967295)) (i32.const -1))
                             (then (unreachable))
                         )
                         (call $msg_reply)
@@ -704,6 +871,164 @@ fn sys_api_call_stable_grow_too_many_pages() {
                 payload: vec![],
                 refund: Cycles::from(0),
             },
+        );
+    });
+}
+
+#[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn sys_api_call_stable_grow64() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update_with_cycles_memory_time(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_size64" (func $stable_size64 (result i64)))
+                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
+                    (import "ic0" "msg_reply" (func $msg_reply))
+
+                    (func $test
+                        ;; Grow the memory by 1 page and verify that the return value
+                        ;; is the previous number of pages, which should be 0.
+                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 0))
+                            (then (unreachable))
+                        )
+
+                        ;; Grow the memory by 5 more pages and verify that the return value
+                        ;; is the previous number of pages, which should be 1.
+                        (if (i64.ne (call $stable_grow64 (i64.const 5)) (i64.const 1))
+                            (then (unreachable))
+                        )
+
+                        ;; Grow the memory by 2^64-1 more pages. This should fail.
+                        (if (i64.ne (call $stable_grow64 (i64.const 18446744073709551615)) (i64.const -1))
+                            (then (unreachable))
+                        )
+
+                        ;; Stable memory size now should be 6.
+                        (if (i64.ne (call $stable_size64) (i64.const 6))
+                            (then (unreachable))
+                        )
+                        (call $msg_reply)
+                    )
+
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                MAX_NUM_INSTRUCTIONS,
+                NumBytes::from(8 * 1024 * 1024 * 1024),
+                mock_time(),
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Reply {
+                payload: vec![],
+                refund: Cycles::from(0),
+            },
+        );
+    });
+}
+
+#[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn sys_api_call_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update_with_cycles_memory_time(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
+                    (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+                    (import "ic0" "msg_reply" (func $msg_reply))
+
+                    (func $test
+                        ;; Grow the memory to 4GiB.
+                        (if (i64.ne (call $stable_grow64 (i64.const 65536)) (i64.const 0))
+                            (then (unreachable))
+                        )
+                        ;; Grow the memory by 0 pages using 32-bit API. This should succeed.
+                        (if (i32.ne (call $stable_grow (i32.const 0)) (i32.const 65536))
+                            (then (unreachable))
+                        )
+                        ;; Grow the memory by 1 page. This should succeed.
+                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 65536))
+                            (then (unreachable))
+                        )
+
+                        ;; Grow the memory by 0 pages using 32-bit API. This should trap.
+                        (drop (call $stable_grow (i32.const 0)))
+
+                        (call $msg_reply)
+                    )
+
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                MAX_NUM_INSTRUCTIONS,
+                NumBytes::from(8 * 1024 * 1024 * 1024),
+                mock_time(),
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Fail {
+                error: HypervisorError::Trapped(TrapCode::StableMemoryTooBigFor32Bit),
+                refund: Cycles::from(0),
+            }
+        );
+    });
+}
+
+#[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn sys_api_call_stable_grow_by_traps_if_memory_exceeds_4gb() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update_with_cycles_memory_time(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
+                    (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+                    (import "ic0" "msg_reply" (func $msg_reply))
+
+                    (func $test
+                        ;; Grow the memory to 4GiB.
+                        (if (i64.ne (call $stable_grow64 (i64.const 65536)) (i64.const 0))
+                            (then (unreachable))
+                        )
+                        ;; Grow the memory by 0 pages using 32-bit API. This should succeed.
+                        (if (i32.ne (call $stable_grow (i32.const 0)) (i32.const 65536))
+                            (then (unreachable))
+                        )
+                        ;; Grow the memory by 1 page. This should succeed.
+                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 65536))
+                            (then (unreachable))
+                        )
+
+                        ;; Grow the memory by 100 pages using 32-bit API. This should trap.
+                        (drop (call $stable_grow (i32.const 100)))
+
+                        (call $msg_reply)
+                    )
+
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                MAX_NUM_INSTRUCTIONS,
+                NumBytes::from(8 * 1024 * 1024 * 1024),
+                mock_time(),
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Fail {
+                error: HypervisorError::Trapped(TrapCode::StableMemoryTooBigFor32Bit),
+                refund: Cycles::from(0),
+            }
         );
     });
 }
@@ -767,6 +1092,8 @@ fn sys_api_call_stable_read_write() {
         );
     });
 }
+
+// -------------------- Edge cases for stable_read/write --------------------
 
 #[test]
 fn sys_api_call_stable_read_traps_when_out_of_bounds() {
@@ -1141,6 +1468,316 @@ fn sys_api_call_stable_read_at_max_size_handled_gracefully() {
     });
 }
 
+// --------------------------------------------------------------------------
+
+// ----------------- Edge cases for stable_read64/write64 -------------------
+
+#[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn sys_api_call_stable_read64_traps_when_out_of_bounds() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_read64"
+                        (func $stable_read64 (param $dst i64) (param $offset i64) (param $size i64)))
+
+                    (func $test
+                        ;; Reading from stable memory should fail, since the memory size is
+                        ;; initially zero.
+                        (call $stable_read64 (i64.const 0) (i64.const 0) (i64.const 4))
+                    )
+
+                    (memory 1)
+                    (data (i32.const 0) "abcdefgh")  ;; Initial contents of the heap.
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Fail {
+                error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
+                refund: Cycles::from(0),
+            }
+        );
+    });
+}
+
+#[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn sys_api_call_stable_read64_can_handle_overflows() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_grow64"
+                        (func $stable_grow64 (param $additional_pages i64) (result i64)))
+                    (import "ic0" "stable_read64"
+                        (func $stable_read64 (param $dst i64) (param $offset i64) (param $size i64)))
+
+                    (func $test
+                        ;; Grow the memory by 1 page.
+                        (drop (call $stable_grow64 (i64.const 1)))
+                        ;; Ensure reading from stable memory with overflow doesn't panic.
+                        (call $stable_read64 (i64.const 0) (i64.const 18446744073709551615) (i64.const 10))
+                    )
+
+                    (memory 1)
+                    (data (i32.const 0) "abcdefgh")  ;; Initial contents of the heap.
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Fail {
+                error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
+                refund: Cycles::from(0),
+            }
+        );
+    });
+}
+
+#[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn sys_api_call_stable_write64_traps_when_out_of_bounds() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_write64"
+                        (func $stable_write64 (param $offset i64) (param $src i64) (param $size i64)))
+
+                    (func $test
+                        ;; Writing to stable memory should fail, since the memory size is zero.
+                        (call $stable_write64 (i64.const 0) (i64.const 0) (i64.const 4))
+                    )
+
+                    (memory 1)
+                    (data (i32.const 0) "abcdefgh")  ;; Initial contents of the heap.
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Fail {
+                error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
+                refund: Cycles::from(0),
+            }
+        );
+    });
+}
+
+#[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn sys_api_call_stable_write64_can_handle_overflows() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_grow64"
+                        (func $stable_grow64 (param $additional_pages i64) (result i64)))
+                    (import "ic0" "stable_write64"
+                        (func $stable_write64 (param $offset i64) (param $src i64) (param $size i64)))
+
+                    (func $test
+                        ;; Grow the memory by 1 page.
+                        (drop (call $stable_grow64 (i64.const 1)))
+                        ;; Writing to stable memory with the maximum possible size.
+                        ;; Ensure the function errors gracefully and doesn't panick due to overflow.
+                        (call $stable_write64 (i64.const 18446744073709551615) (i64.const 0) (i64.const 10))
+                    )
+
+                    (memory 1)
+                    (data (i32.const 0) "abcdefgh")  ;; Initial contents of the heap.
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Fail {
+                error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
+                refund: Cycles::from(0),
+            }
+        );
+    });
+}
+
+#[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn sys_api_call_stable_read64_traps_when_heap_out_of_bounds() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
+                    (import "ic0" "stable_read64"
+                        (func $stable_read64 (param $dst i64) (param $offset i64) (param $size i64)))
+
+                    (func $test
+                        ;; Grow stable memory by 2 page.
+                        (drop (call $stable_grow64 (i64.const 2)))
+
+                        ;; Attempting to read 2 pages into memory of size 1. This should fail.
+                        (call $stable_read64
+                            (i64.const 0)
+                            (i64.const 0)
+                            (i64.mul (i64.const 2) (i64.const 65536))
+                        )
+                    )
+
+                    (memory 1)
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Fail {
+                error: HypervisorError::Trapped(TrapCode::HeapOutOfBounds),
+                refund: Cycles::from(0),
+            }
+        );
+    });
+}
+
+#[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn sys_api_call_stable_write64_traps_when_heap_out_of_bounds() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
+                    (import "ic0" "stable_write64"
+                        (func $stable_write64 (param $offset i64) (param $src i64) (param $size i64)))
+
+                    (func $test
+                        (drop (call $stable_grow64 (i64.const 2)))
+
+                        ;; Attempting to copy 2 pages from memory of size 1. This should fail.
+                        (call $stable_write64
+                            (i64.const 0)
+                            (i64.const 0)
+                            (i64.mul (i64.const 2) (i64.const 65536)))
+                    )
+
+                    (memory 1)
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Fail {
+                error: HypervisorError::Trapped(TrapCode::HeapOutOfBounds),
+                refund: Cycles::from(0),
+            }
+        );
+    });
+}
+
+#[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn sys_api_call_stable_read64_does_not_trap_at_end_of_page() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
+                    (import "ic0" "stable_read64"
+                        (func $stable_read64 (param $dst i64) (param $offset i64) (param $size i64)))
+                    (import "ic0" "msg_reply" (func $msg_reply))
+
+                    (func $test
+                        ;; Grow stable memory by 1 page (64kb)
+                        (drop (call $stable_grow64 (i64.const 1)))
+
+                        ;; Reading from stable memory at end of page should not fail.
+                        (call $stable_read64 (i64.const 0) (i64.const 0) (i64.const 65536))
+                        (call $msg_reply)
+                    )
+
+                    (memory 1)
+                    (data (i32.const 0) "abcdefgh")  ;; Initial contents of the heap.
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Reply {
+                payload: vec![],
+                refund: Cycles::from(0),
+            }
+        );
+    });
+}
+
+#[test]
+#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
+fn sys_api_call_stable_read64_traps_beyond_end_of_page() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        assert_eq!(
+            execute_update(
+                &hypervisor,
+                r#"
+                (module
+                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
+                    (import "ic0" "stable_read64"
+                        (func $stable_read64 (param $dst i64) (param $offset i64) (param $size i64)))
+
+                    (func $test
+                        ;; Grow stable memory by 1 page (64kb)
+                        (drop (call $stable_grow64 (i64.const 1)))
+
+                        ;; Reading from stable memory just after the page should trap.
+                        (call $stable_read64 (i64.const 0) (i64.const 65536) (i64.const 1))
+                    )
+
+                    (memory 1)
+                    (data (i32.const 0) "abcdefgh")  ;; Initial contents of the heap.
+                    (export "canister_update test" (func $test)))"#,
+                "test",
+                EMPTY_PAYLOAD,
+                None,
+                tmp_path,
+            )
+            .2,
+            CallContextAction::Fail {
+                error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
+                refund: Cycles::from(0),
+            }
+        );
+    });
+}
+
+// ---------------------------------------------------------------------------
+
 #[test]
 fn sys_api_call_time_with_5_nanoseconds() {
     with_hypervisor(|hypervisor, tmp_path| {
@@ -1390,15 +2027,16 @@ fn test_execute_query_msg_caller() {
         let _system_state = SystemStateBuilder::default().build();
         let canister = canister_from_exec_state(execution_state);
         let id = user_test_id(12);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (canister, _, result) = hypervisor.execute_query(
             QueryExecutionType::Replicated,
             "query_test",
             &[],
             id.clone().get(),
-            MAX_NUM_INSTRUCTIONS,
             canister,
             None,
             mock_time(),
+            execution_parameters.clone(),
         );
         assert_eq!(result, Ok(Some(WasmResult::Reply(id.get().into_vec()))));
 
@@ -1408,10 +2046,10 @@ fn test_execute_query_msg_caller() {
             "query_test",
             &[],
             id.clone().get(),
-            MAX_NUM_INSTRUCTIONS,
             canister,
             None,
             mock_time(),
+            execution_parameters,
         );
         assert_eq!(result, Ok(Some(WasmResult::Reply(id.get().into_vec()))));
     });
@@ -2634,13 +3272,16 @@ fn canister_metrics_are_recorded() {
             Some(HistogramStats { sum: 1.0, count: 1 })
         );
 
+        // Cow memory does not support absolute accessed pages
+        // accounting.
         if !cow_state_feature::is_enabled(cow_state_feature::cow_state) {
-            // Cow memory does not support absolute accessed pages
-            // accounting.
-            assert_eq!(
-                fetch_histogram_stats(&registry, "hypervisor_accessed_pages"),
-                Some(HistogramStats { sum: 2.0, count: 1 })
-            );
+            match fetch_histogram_stats(&registry, "hypervisor_accessed_pages") {
+                Some(HistogramStats { sum, count }) => {
+                    assert_eq!(count, 1);
+                    assert!(sum >= 2.0);
+                }
+                None => unreachable!(),
+            }
         }
     });
 }
@@ -2699,16 +3340,18 @@ fn executing_non_existing_method_does_not_consume_cycles() {
         );
         assert_eq!(num_instructions_left, MAX_NUM_INSTRUCTIONS);
 
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
+
         // Check a query method.
         let (_, num_instructions_left, res) = hypervisor.execute_query(
             QueryExecutionType::Replicated,
             "foo",
             EMPTY_PAYLOAD.as_slice(),
             test_caller(),
-            MAX_NUM_INSTRUCTIONS,
             canister,
             None,
             mock_time(),
+            execution_parameters,
         );
         assert_eq!(
             res,
@@ -2739,14 +3382,15 @@ fn grow_memory() {
         .unwrap();
 
         let canister = canister_from_exec_state(execution_state);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
+
         hypervisor
             .execute_canister_init(
                 canister,
                 user_test_id(0).get(),
                 &[],
-                MAX_NUM_INSTRUCTIONS,
                 mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                execution_parameters,
             )
             .2
             .unwrap();
@@ -2775,13 +3419,10 @@ fn memory_access_between_min_and_max_canister_start() {
         .unwrap();
 
         let canister = canister_from_exec_state(execution_state);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         assert_eq!(
             hypervisor
-                .execute_canister_start(
-                    canister,
-                    MAX_NUM_INSTRUCTIONS,
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                )
+                .execute_canister_start(canister, execution_parameters,)
                 .2,
             Err(HypervisorError::Trapped(TrapCode::HeapOutOfBounds))
         );
@@ -2846,37 +3487,32 @@ fn test_system_method_is_callable(system_method: SystemMethod) {
             ExecutionState::new(binary, tmp_path, WasmValidationLimits::default()).unwrap();
 
         let canister = canister_from_exec_state(execution_state);
-
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         // Run the system method to increment the counter.
         let (canister, instructions, res) = match system_method {
             SystemMethod::CanisterPostUpgrade => hypervisor.execute_canister_post_upgrade(
                 canister,
                 test_caller(),
                 EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS,
                 mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                execution_parameters.clone(),
             ),
             SystemMethod::CanisterPreUpgrade => hypervisor.execute_canister_pre_upgrade(
                 canister,
                 test_caller(),
-                MAX_NUM_INSTRUCTIONS,
                 mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                execution_parameters.clone(),
             ),
             SystemMethod::CanisterInit => hypervisor.execute_canister_init(
                 canister,
                 test_caller(),
                 EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS,
                 mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                execution_parameters.clone(),
             ),
-            SystemMethod::CanisterStart => hypervisor.execute_canister_start(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            ),
+            SystemMethod::CanisterStart => {
+                hypervisor.execute_canister_start(canister, execution_parameters.clone())
+            }
             SystemMethod::CanisterInspectMessage => unimplemented!(),
             SystemMethod::Empty => unimplemented!(),
             SystemMethod::CanisterHeartbeat => unimplemented!("We don't need this test."),
@@ -2899,10 +3535,10 @@ fn test_system_method_is_callable(system_method: SystemMethod) {
             "read",
             EMPTY_PAYLOAD.as_slice(),
             test_caller(),
-            MAX_NUM_INSTRUCTIONS,
             canister,
             None,
             mock_time(),
+            execution_parameters,
         );
         assert_eq!(result, Ok(Some(WasmResult::Reply(vec![1, 0, 0, 0]))));
     });
@@ -2936,7 +3572,7 @@ fn test_non_existing_system_method(system_method: SystemMethod) {
             ExecutionState::new(binary, tmp_path, WasmValidationLimits::default()).unwrap();
 
         let canister = canister_from_exec_state(execution_state);
-
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (_, _, routing_table, subnet_records) = setup();
         // Run the non-existing system method.
         let (_, cycles, res) = match system_method {
@@ -2944,39 +3580,33 @@ fn test_non_existing_system_method(system_method: SystemMethod) {
                 canister,
                 test_caller(),
                 EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS,
                 mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                execution_parameters,
             ),
             SystemMethod::CanisterPreUpgrade => hypervisor.execute_canister_pre_upgrade(
                 canister,
                 test_caller(),
-                MAX_NUM_INSTRUCTIONS,
                 mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                execution_parameters,
             ),
             SystemMethod::CanisterInit => hypervisor.execute_canister_init(
                 canister,
                 test_caller(),
                 EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS,
                 mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                execution_parameters,
             ),
-            SystemMethod::CanisterStart => hypervisor.execute_canister_start(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            ),
+            SystemMethod::CanisterStart => {
+                hypervisor.execute_canister_start(canister, execution_parameters)
+            }
             SystemMethod::CanisterInspectMessage => unimplemented!(),
             SystemMethod::Empty => unimplemented!(),
             SystemMethod::CanisterHeartbeat => hypervisor.execute_canister_heartbeat(
                 canister,
-                MAX_NUM_INSTRUCTIONS,
                 routing_table,
                 subnet_records,
                 mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                execution_parameters,
             ),
         };
 
@@ -3038,14 +3668,13 @@ fn canister_init_can_set_mutable_globals() {
         let canister = canister_from_exec_state(
             ExecutionState::new(wasm, tmp_path, WasmValidationLimits::default()).unwrap(),
         );
-
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (canister, _, _) = hypervisor.execute_canister_init(
             canister,
             test_caller(),
             EMPTY_PAYLOAD.as_slice(),
-            MAX_NUM_INSTRUCTIONS,
             mock_time(),
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            execution_parameters,
         );
 
         assert_eq!(
@@ -3081,14 +3710,13 @@ fn grow_memory_beyond_max_size_1() {
         .unwrap();
 
         let canister = canister_from_exec_state(execution_state);
-
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (_, _, res) = hypervisor.execute_canister_init(
             canister,
             test_caller(),
             EMPTY_PAYLOAD.as_slice(),
-            MAX_NUM_INSTRUCTIONS,
             mock_time(),
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            execution_parameters,
         );
 
         assert_eq!(
@@ -3118,13 +3746,13 @@ fn memory_access_between_min_and_max_canister_init() {
         .unwrap();
 
         let canister = canister_from_exec_state(execution_state);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (_, _, res) = hypervisor.execute_canister_init(
             canister,
             test_caller(),
             EMPTY_PAYLOAD.as_slice(),
-            MAX_NUM_INSTRUCTIONS,
             mock_time(),
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            execution_parameters,
         );
 
         assert_eq!(
@@ -3159,13 +3787,13 @@ fn grow_memory_beyond_max_size_2() {
         .unwrap();
 
         let canister = canister_from_exec_state(execution_state);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (_, _, res) = hypervisor.execute_canister_init(
             canister,
             test_caller(),
             EMPTY_PAYLOAD.as_slice(),
-            MAX_NUM_INSTRUCTIONS,
             mock_time(),
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            execution_parameters,
         );
 
         assert_eq!(
@@ -3233,7 +3861,7 @@ where
         // Stable memory should remain empty since the call failed.
         assert_eq!(
             canister.system_state.stable_memory_size,
-            NumWasmPages::new(0)
+            NumWasmPages64::new(0)
         );
     });
 }
@@ -3242,13 +3870,13 @@ where
 fn changes_to_stable_memory_in_canister_init_are_rolled_back_on_failure() {
     test_stable_memory_is_rolled_back_on_failure(
         |hypervisor: &Hypervisor, canister: CanisterState| {
+            let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS * 10);
             hypervisor.execute_canister_init(
                 canister,
                 test_caller(),
                 EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS * 10,
                 mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                execution_parameters,
             )
         },
     );
@@ -3258,12 +3886,12 @@ fn changes_to_stable_memory_in_canister_init_are_rolled_back_on_failure() {
 fn changes_to_stable_memory_in_canister_pre_upgrade_are_rolled_back_on_failure() {
     test_stable_memory_is_rolled_back_on_failure(
         |hypervisor: &Hypervisor, canister: CanisterState| {
+            let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS * 10);
             hypervisor.execute_canister_pre_upgrade(
                 canister,
                 test_caller(),
-                MAX_NUM_INSTRUCTIONS * 10,
                 mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                execution_parameters,
             )
         },
     )
@@ -3273,13 +3901,13 @@ fn changes_to_stable_memory_in_canister_pre_upgrade_are_rolled_back_on_failure()
 fn changes_to_stable_memory_in_canister_post_upgrade_are_rolled_back_on_failure() {
     test_stable_memory_is_rolled_back_on_failure(
         |hypervisor: &Hypervisor, canister: CanisterState| {
+            let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS * 10);
             hypervisor.execute_canister_post_upgrade(
                 canister,
                 test_caller(),
                 EMPTY_PAYLOAD.as_slice(),
-                MAX_NUM_INSTRUCTIONS * 10,
                 mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                execution_parameters,
             )
         },
     )
@@ -3290,17 +3918,17 @@ fn cannot_execute_update_on_stopping_canister() {
     with_hypervisor(|hypervisor, _| {
         let canister = get_stopping_canister(canister_test_id(0));
         let (_, _, routing_table, subnet_records) = setup();
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
             hypervisor
                 .execute_update(
                     canister,
                     RequestOrIngress::Ingress(IngressBuilder::new().build()),
-                    MAX_NUM_INSTRUCTIONS,
                     mock_time(),
                     routing_table,
                     subnet_records,
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                    execution_parameters,
                 )
                 .2,
             CallContextAction::Fail {
@@ -3316,17 +3944,17 @@ fn cannot_execute_update_on_stopped_canister() {
     with_hypervisor(|hypervisor, _| {
         let canister = get_stopped_canister(canister_test_id(0));
         let (_, _, routing_table, subnet_records) = setup();
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
             hypervisor
                 .execute_update(
                     canister,
                     RequestOrIngress::Ingress(IngressBuilder::new().build()),
-                    MAX_NUM_INSTRUCTIONS,
                     mock_time(),
                     routing_table,
                     subnet_records,
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                    execution_parameters,
                 )
                 .2,
             CallContextAction::Fail {
@@ -3341,6 +3969,7 @@ fn cannot_execute_update_on_stopped_canister() {
 fn cannot_execute_query_on_stopping_canister() {
     with_hypervisor(|hypervisor, _| {
         let canister = get_stopping_canister(canister_test_id(0));
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
             hypervisor
@@ -3349,10 +3978,10 @@ fn cannot_execute_query_on_stopping_canister() {
                     "query_test",
                     &[],
                     user_test_id(0).get(),
-                    MAX_NUM_INSTRUCTIONS,
                     canister,
                     None,
                     mock_time(),
+                    execution_parameters,
                 )
                 .2,
             Err(HypervisorError::CanisterStopped)
@@ -3364,6 +3993,7 @@ fn cannot_execute_query_on_stopping_canister() {
 fn cannot_execute_query_on_stopped_canister() {
     with_hypervisor(|hypervisor, _| {
         let canister = get_stopped_canister(canister_test_id(0));
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
             hypervisor
@@ -3372,10 +4002,10 @@ fn cannot_execute_query_on_stopped_canister() {
                     "query_test",
                     &[],
                     user_test_id(0).get(),
-                    MAX_NUM_INSTRUCTIONS,
                     canister,
                     None,
                     mock_time(),
+                    execution_parameters,
                 )
                 .2,
             Err(HypervisorError::CanisterStopped)
@@ -3388,6 +4018,7 @@ fn cannot_execute_callback_on_stopped_canister() {
     with_hypervisor(|hypervisor, _| {
         let canister = get_stopped_canister(canister_test_id(0));
         let (_, _, routing_table, subnet_records) = setup();
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
             hypervisor
@@ -3403,11 +4034,10 @@ fn cannot_execute_callback_on_stopped_canister() {
                     ),
                     Payload::Data(EMPTY_PAYLOAD),
                     Cycles::from(0),
-                    MAX_NUM_INSTRUCTIONS,
                     mock_time(),
                     routing_table,
                     subnet_records,
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                    execution_parameters,
                 )
                 .3,
             Err(HypervisorError::CanisterStopped)
@@ -3455,16 +4085,18 @@ fn sys_api_call_ic_trap_preserves_some_cycles() {
             MAX_NUM_INSTRUCTIONS - NumInstructions::new(15)
         );
 
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
+
         // Check a query method.
         let (_, num_instructions_left, res) = hypervisor.execute_query(
             QueryExecutionType::Replicated,
             "query_trap",
             EMPTY_PAYLOAD.as_slice(),
             test_caller(),
-            MAX_NUM_INSTRUCTIONS,
             canister,
             None,
             mock_time(),
+            execution_parameters,
         );
         assert_eq!(
             res,
@@ -3495,16 +4127,16 @@ fn canister_heartbeat() {
             .expect("Failed to create execution state.");
         let canister = canister_from_exec_state(execution_state);
         let (_, _, routing_table, subnet_records) = setup();
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
             hypervisor
                 .execute_canister_heartbeat(
                     canister,
-                    MAX_NUM_INSTRUCTIONS,
                     routing_table,
                     subnet_records,
                     mock_time(),
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                    execution_parameters,
                 )
                 .2,
             Err(HypervisorError::Trapped(TrapCode::Unreachable))
@@ -3530,14 +4162,14 @@ fn execute_canister_heartbeat_produces_heap_delta() {
             .expect("Failed to create execution state.");
         let canister = canister_from_exec_state(execution_state);
         let (_, _, routing_table, subnet_records) = setup();
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let (_, _, result) = hypervisor.execute_canister_heartbeat(
             canister,
-            MAX_NUM_INSTRUCTIONS,
             routing_table,
             subnet_records,
             mock_time(),
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            execution_parameters,
         );
         let heap_delta = result.unwrap();
         // the wasm module touched one memory location so that should produce one page
@@ -3564,6 +4196,7 @@ fn execute_update_produces_heap_delta() {
             .expect("Failed to create execution state.");
         let canister = canister_from_exec_state(execution_state);
         let (_, _, routing_table, subnet_records) = setup();
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let message = RequestOrIngress::Ingress(
             IngressBuilder::new()
@@ -3574,11 +4207,10 @@ fn execute_update_produces_heap_delta() {
         let (_, _, _, heap_delta) = hypervisor.execute_update(
             canister,
             message,
-            MAX_NUM_INSTRUCTIONS,
             mock_time(),
             routing_table,
             subnet_records,
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            execution_parameters,
         );
         // the wasm module touched one memory location so that should produce one page
         // of delta.
@@ -3604,12 +4236,9 @@ fn execute_canister_start_produces_heap_delta() {
         let execution_state = ExecutionState::new(wasm, tmp_path, WasmValidationLimits::default())
             .expect("Failed to create execution state.");
         let canister = canister_from_exec_state(execution_state);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
-        let (_, _, result) = hypervisor.execute_canister_start(
-            canister,
-            MAX_NUM_INSTRUCTIONS,
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-        );
+        let (_, _, result) = hypervisor.execute_canister_start(canister, execution_parameters);
         let heap_delta = result.unwrap();
         // the wasm module touched one memory location so that should produce one page
         // of delta.
@@ -3634,14 +4263,14 @@ fn execute_system_produces_heap_delta() {
         let execution_state = ExecutionState::new(wasm, tmp_path, WasmValidationLimits::default())
             .expect("Failed to create execution state.");
         let canister = canister_from_exec_state(execution_state);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let (_, _, result) = hypervisor.execute_canister_init(
             canister,
             user_test_id(0).get(),
             &[],
-            MAX_NUM_INSTRUCTIONS,
             mock_time(),
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            execution_parameters,
         );
         let heap_delta = result.unwrap();
         // the wasm module touched one memory location so that should produce one page

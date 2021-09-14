@@ -290,14 +290,8 @@ pub fn decrypt(
     let ciphertext =
         ciphertext_into_miracl(ciphertext).map_err(DecryptError::MalformedCiphertext)?;
     let tau = Tau::from(epoch);
-    let decrypt_maybe = crypto::dec_chunks(
-        &secret_key,
-        index,
-        &ciphertext,
-        &tau.0[..],
-        associated_data,
-        &SYS_PARAMS,
-    );
+    let decrypt_maybe =
+        crypto::dec_chunks(&secret_key, index, &ciphertext, &tau.0[..], associated_data);
 
     decrypt_maybe
         .map(|decrypt| plaintext_to_bytes(&decrypt))

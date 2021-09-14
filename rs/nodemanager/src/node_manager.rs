@@ -151,6 +151,13 @@ impl NodeManager {
 
         let slog_logger = logger.inner_logger.root.clone();
         let replica_process = Arc::new(Mutex::new(ReplicaProcess::new(slog_logger.clone())));
+        let ic_binary_directory = args
+            .ic_binary_directory
+            .as_ref()
+            .unwrap_or(&PathBuf::from("/tmp"))
+            .clone();
+        let mut fallback_version_file = ic_binary_directory.clone();
+        fallback_version_file.push("version.txt");
         let release_package = ReleasePackage::start(
             Arc::clone(&registry),
             replica_process.clone(),
@@ -159,9 +166,10 @@ impl NodeManager {
             args.replica_binary_dir.clone(),
             args.force_replica_binary.clone(),
             args.replica_config_file.clone(),
-            args.ic_binary_directory
+            ic_binary_directory.clone(),
+            args.version_file
                 .as_ref()
-                .unwrap_or(&PathBuf::from("/tmp"))
+                .unwrap_or(&fallback_version_file)
                 .clone(),
             current_node_manager_hash,
             nns_registry_replicator,

@@ -7,7 +7,7 @@
 //! See RFC 8017 (https://www.rfc-editor.org/rfc/rfc8017.txt)
 //! for information about the signature format
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use num_traits::{FromPrimitive, Zero};
 use rsa::{PublicKey, PublicKeyParts};

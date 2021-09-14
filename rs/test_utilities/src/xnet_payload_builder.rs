@@ -1,7 +1,4 @@
-use ic_interfaces::{
-    messaging::{XNetPayloadBuilder, XNetPayloadError, XNetPayloadValidationError},
-    validation::ValidationResult,
-};
+use ic_interfaces::messaging::{XNetPayloadBuilder, XNetPayloadError, XNetPayloadValidationError};
 use ic_types::{
     batch::{ValidationContext, XNetPayload},
     xnet::CertifiedStreamSlice,
@@ -40,8 +37,7 @@ impl XNetPayloadBuilder for FakeXNetPayloadBuilder {
         _payload: &XNetPayload,
         _validation_context: &ValidationContext,
         _past_payloads: &[&XNetPayload],
-        _byte_limit: NumBytes,
-    ) -> ValidationResult<XNetPayloadValidationError> {
-        Ok(())
+    ) -> Result<NumBytes, XNetPayloadValidationError> {
+        Ok(0.into())
     }
 }

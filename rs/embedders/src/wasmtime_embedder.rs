@@ -20,10 +20,10 @@ use ic_logger::{debug, ReplicaLogger};
 use ic_replicated_state::{EmbedderCache, Global, NumWasmPages, PageIndex, PageMap};
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    NumInstructions,
+    CanisterId, NumInstructions,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::SigsegvMemoryTracker;
+use memory_tracker::{DirtyPageTracking, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 use std::cell::RefCell;
 use std::convert::TryFrom;
@@ -149,13 +149,16 @@ impl WasmtimeEmbedder {
         Ok(EmbedderCache::new((module, cached_mem_creator)))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new_instance(
         &self,
+        canister_id: CanisterId,
         cache: &EmbedderCache,
         exported_globals: &[Global],
         heap_size: NumWasmPages,
         memory_creator: Option<Arc<CowMemoryCreator>>,
         memory_initializer: Option<PageMap>,
+        dirty_page_tracking: DirtyPageTracking,
     ) -> WasmtimeInstance {
         let (module, memory_creator_proxy) = cache
             .downcast::<(wasmtime::Module, Option<CowMemoryCreatorProxy>)>()
@@ -177,6 +180,8 @@ impl WasmtimeEmbedder {
         // create a cyclic reference. Since Store holds both the global and our
         // syscalls, syscalls won't outlive the global
         let linker: wasmtime::Linker = system_api::syscalls(
+            self.log.clone(),
+            canister_id,
             &store,
             system_api_handle.clone(),
             Rc::downgrade(&canister_num_instructions_global),
@@ -280,12 +285,14 @@ impl WasmtimeEmbedder {
                         &store,
                         memory_initializer,
                         self.log.clone(),
+                        dirty_page_tracking,
                     ),
                     PersistenceType::Pagemap => sigsegv_memory_tracker(
                         Arc::downgrade(instance_memory),
                         &store,
                         None,
                         self.log.clone(),
+                        dirty_page_tracking,
                     ),
                 });
         let signal_stack = WasmtimeSignalStack::new();
@@ -313,6 +320,7 @@ fn sigsegv_memory_tracker(
     store: &wasmtime::Store,
     memory_initializer: Option<PageMap>,
     log: ReplicaLogger,
+    dirty_page_tracking: DirtyPageTracking,
 ) -> Rc<SigsegvMemoryTracker> {
     let (base, size) = {
         let memory = instance_memory.upgrade().unwrap();
@@ -330,7 +338,7 @@ fn sigsegv_memory_tracker(
             "heap size must be a multiple of page size"
         );
         std::rc::Rc::new(
-            SigsegvMemoryTracker::new(base, size, log)
+            SigsegvMemoryTracker::new(base, size, log, dirty_page_tracking)
                 .expect("failed to instantiate SIGSEGV memory tracker"),
         )
     };

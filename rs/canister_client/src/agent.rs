@@ -5,7 +5,7 @@ use crate::{
 };
 use backoff::backoff::Backoff;
 use ed25519_dalek::{Keypair, Signer, KEYPAIR_LENGTH};
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_crypto_tree_hash::Path;
 use ic_interfaces::crypto::DOMAIN_IC_REQUEST;
 use ic_protobuf::types::v1 as pb;

@@ -23,7 +23,7 @@ pub mod thunk;
 
 pub use catchup::*;
 use hashed::Hashed;
-pub use payload::{BlockPayload, Payload};
+pub use payload::{BlockPayload, DataPayload, Payload, SummaryPayload};
 
 /// BasicSignature captures basic signature on a value and the identity of the
 /// replica that signed it
@@ -1221,7 +1221,7 @@ impl From<&Block> for pb::Block {
     fn from(block: &Block) -> Self {
         let payload: &BlockPayload = block.payload.as_ref();
         let (dkg_payload, xnet_payload, ingress_payload) = if payload.is_summary() {
-            (pb::DkgPayload::from(payload.as_summary()), None, None)
+            (pb::DkgPayload::from(&payload.as_summary().dkg), None, None)
         } else {
             let batch = payload.as_batch_payload();
             (
@@ -1272,7 +1272,7 @@ impl TryFrom<pb::Block> for Block {
                     batch.is_empty(),
                     "Error: Summary block has non-empty batch payload."
                 );
-                BlockPayload::Summary(summary)
+                BlockPayload::Summary(SummaryPayload { dkg: summary })
             }
             dkg::Payload::Dealings(dealings) => (batch, dealings).into(),
         };

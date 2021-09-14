@@ -12,7 +12,7 @@ message CallContext {
     types.v1.CanisterId canister_id = 1;
     uint64 callback_id = 2;
   }
-  message Heartbeat { }
+  message Heartbeat {}
 
   oneof call_origin {
     Ingress ingress = 1;
@@ -158,11 +158,22 @@ message CanisterStateBits {
   uint64 executed = 18;
   reserved 19;
   reserved "executed_and_exhausted_its_messages";
-  bytes certified_data = 20; 
+  bytes certified_data = 20;
   uint64 interruped_during_execution = 21;
   types.v1.NominalCycles consumed_cycles_since_replica_started = 22;
   uint64 freeze_threshold = 23;
+  // This field is deprecated. Once all subnets in production contain the 64-bit
+  // version of this field, we can mark it reserved (EXC-402).
   uint32 stable_memory_size = 24;
   repeated types.v1.PrincipalId controllers = 25;
   state.queues.v1.Cycles cycles_balance = 26;
+  // This replaces `stable_memory_size` so that we can represent the size of
+  // both 32-bit (legacy) and 64-bit stable memories.
+  // On the first upgrade of the replica we have:
+  // - `stable_memory_size` stores the actual size,
+  // - `stable_memory_size64` is 0 (the default value)
+  // After that we have the following invariant:
+  // - `stable_memory_size == min(u32::MAX, stable_memory_size64)`
+  // The values of the two fields are in sync as long as the value fits `u32`.
+  uint64 stable_memory_size64 = 27;
 }

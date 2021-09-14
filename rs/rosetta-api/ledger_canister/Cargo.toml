@@ -13,7 +13,7 @@ dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
 candid = "0.7.4"
 lazy_static = "1.4.0"
 serde = "1.0"
-ic-crypto-sha256 = {path = "../../crypto/sha256/"}
+ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-types = { path = "../../types/types" }
 hex = {version = "0.4.2", features = ["serde"] }
 digest = "0.9.0"

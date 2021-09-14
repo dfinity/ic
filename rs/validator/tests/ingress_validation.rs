@@ -1,4 +1,4 @@
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_interfaces::crypto::Signable;
 use ic_test_utilities::types::ids::canister_test_id;
 use ic_types::{messages::Delegation, time::UNIX_EPOCH};

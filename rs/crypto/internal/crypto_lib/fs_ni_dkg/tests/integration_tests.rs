@@ -76,7 +76,7 @@ fn potpourri() {
     verify_ciphertext_integrity(&crsz, &tau10, &associated_data, sys)
         .expect("ciphertext integrity check failed");
 
-    let out = dec_chunks(&dk, 1, &crsz, &tau10, &associated_data, sys)
+    let out = dec_chunks(&dk, 1, &crsz, &tau10, &associated_data)
         .expect("It should be possible to decrypt");
     println!("decrypted: {:?}", out);
     let mut last3 = vec![0; 3];
@@ -90,7 +90,7 @@ fn potpourri() {
         dk.update(sys, rng);
     }
     // Should be impossible to decrypt now.
-    let out = dec_chunks(&dk, 1, &crsz, &tau10, &associated_data, sys);
+    let out = dec_chunks(&dk, 1, &crsz, &tau10, &associated_data);
     match out {
         Err(DecErr::ExpiredKey) => (),
         _ => panic!("old ciphertexts should be lost forever"),
@@ -202,7 +202,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
 
     // Check that decryption succeeds
     let dk = &receiver_fs_keys[1].1;
-    let out = dec_chunks(&dk, 1, &crsz, &tau, &associated_data, sys);
+    let out = dec_chunks(&dk, 1, &crsz, &tau, &associated_data);
     println!("decrypted: {:?}", out);
     assert!(
         out.unwrap() == plaintext_chunks[1],

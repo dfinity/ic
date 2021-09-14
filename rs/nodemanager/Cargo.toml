@@ -6,7 +6,6 @@ edition = "2018"
 [dependencies]
 base64 = "0.13.0"
 candid = "0.7.4"
-flate2 = "1.0.17"
 exec = "0.3.1"
 futures = "0.3.5"
 hex = "0.4.2"
@@ -22,7 +21,7 @@ ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
-ic-crypto-sha256 = { path = "../crypto/sha256" }
+ic-crypto-sha = { path = "../crypto/sha" }
 ic-http-utils = { path = "../http_utils" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }

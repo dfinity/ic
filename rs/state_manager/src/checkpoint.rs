@@ -311,7 +311,7 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         page_map, CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions,
-        NumWasmPages, PageDelta, PageIndex,
+        NumWasmPages, NumWasmPages64, PageDelta, PageIndex,
     };
     use ic_sys::PAGE_SIZE;
     use ic_test_utilities::{
@@ -494,7 +494,7 @@ mod tests {
                 mapped_state: None,
             };
             canister_state.execution_state = Some(execution_state);
-            canister_state.system_state.stable_memory_size = NumWasmPages::new(1);
+            canister_state.system_state.stable_memory_size = NumWasmPages64::new(1);
 
             let mut buf = page_map::Buffer::new(canister_state.system_state.stable_memory);
             buf.write(&[1, 2, 3, 4][..], 0);
@@ -527,7 +527,7 @@ mod tests {
             );
             assert_eq!(
                 canister.system_state.stable_memory_size,
-                NumWasmPages::new(1)
+                NumWasmPages64::new(1)
             );
 
             // Verify that the deserialized stable memory is correctly retrieved.

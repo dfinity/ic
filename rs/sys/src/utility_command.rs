@@ -136,7 +136,7 @@ impl UtilityCommand {
             .map(|s| s.to_string())
             .collect::<Vec<_>>(),
         )
-        .with_input(ic_crypto_sha256::Sha256::hash(msg.as_slice()).to_vec())
+        .with_input(ic_crypto_sha::Sha256::hash(msg.as_slice()).to_vec())
     }
 
     /// Try to attach the USB HSM, if the VSOCK_AGENT_PATH binary

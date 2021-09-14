@@ -46,6 +46,10 @@ pub struct NodeManagerArgs {
     /// the registration procedure.
     #[structopt(long)]
     pub(crate) enable_provisional_registration: bool,
+
+    /// The path to the version file.
+    #[structopt(long, parse(from_os_str))]
+    pub(crate) version_file: Option<PathBuf>,
 }
 
 impl NodeManagerArgs {

@@ -345,6 +345,7 @@ impl CyclesAccountManager {
                 | Ok(Method::SetupInitialDKG)
                 | Ok(Method::DepositCycles)
                 | Ok(Method::RawRand)
+                | Ok(Method::SignWithECDSA)
                 | Err(_) => {
                     return Err(IngressInductionCostError::UnknownSubnetMethod);
                 }

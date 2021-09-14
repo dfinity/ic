@@ -1,4 +1,5 @@
 use crate::QueryExecutionType;
+use ic_config::embedders::PersistenceType;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cow_state::{error::CowError, CowMemoryManager};
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -6,13 +7,15 @@ use ic_embedders::{
     wasm_executor::WasmExecutor, WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, MessageAcceptanceError, SubnetAvailableMemory,
+    ExecutionParameters, HypervisorError, HypervisorResult, MessageAcceptanceError,
+    SubnetAvailableMemory,
 };
 use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::{debug, fatal, ReplicaLogger};
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::EmbedderCache;
 use ic_replicated_state::{
     page_map::allocated_pages_count, CallContextAction, CallOrigin, CanisterState, ExecutionState,
     SchedulerState, SystemState,
@@ -23,9 +26,10 @@ use ic_types::{
     ingress::WasmResult,
     messages::Payload,
     methods::{Callback, FuncRef, SystemMethod, WasmMethod},
-    CanisterStatusType, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, SubnetId, Time,
+    CanisterStatusType, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
+    SubnetId, Time,
 };
+use ic_wasm_types::BinaryEncodedWasm;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -85,7 +89,6 @@ impl HypervisorMetrics {
 
 #[doc(hidden)]
 pub struct Hypervisor {
-    config: Config,
     wasm_executor: Arc<WasmExecutor>,
     metrics: Arc<HypervisorMetrics>,
     own_subnet_id: SubnetId,
@@ -110,16 +113,14 @@ impl Hypervisor {
     ///
     /// - The size of the heap delta change that the canister produced during
     /// execution. If execution failed, then the value is 0.
-    #[allow(clippy::too_many_arguments)]
     pub fn execute_update(
         &self,
         canister: CanisterState,
         mut request: RequestOrIngress,
-        instructions_limit: NumInstructions,
         time: Time,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
-        subnet_available_memory: SubnetAvailableMemory,
+        execution_parameters: ExecutionParameters,
     ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
         debug!(self.log, "execute_update: method {}", request.method_name());
 
@@ -129,7 +130,7 @@ impl Hypervisor {
         if CanisterStatusType::Running != canister.status() {
             return (
                 canister,
-                instructions_limit,
+                execution_parameters.instruction_limit,
                 CallContextAction::Fail {
                     error: HypervisorError::CanisterStopped,
                     refund: incoming_cycles,
@@ -139,7 +140,6 @@ impl Hypervisor {
         }
 
         let method = WasmMethod::Update(request.method_name().to_string());
-        let memory_limit = self.canister_memory_limit(&canister);
         let memory_usage = canister.memory_usage();
         let (execution_state, mut system_state, scheduler_state) = canister.into_parts();
 
@@ -148,7 +148,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
-                    instructions_limit,
+                    execution_parameters.instruction_limit,
                     CallContextAction::Fail {
                         error: HypervisorError::WasmModuleNotFound,
                         refund: incoming_cycles,
@@ -163,7 +163,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                instructions_limit,
+                execution_parameters.instruction_limit,
                 CallContextAction::Fail {
                     error: HypervisorError::MethodNotFound(method),
                     refund: incoming_cycles,
@@ -191,11 +191,8 @@ impl Hypervisor {
         let output = execute(
             api_type,
             system_state.clone(),
-            instructions_limit,
-            memory_limit,
             memory_usage,
-            subnet_available_memory,
-            scheduler_state.compute_allocation,
+            execution_parameters,
             FuncRef::Method(method),
             execution_state,
             Arc::clone(&self.cycles_account_manager),
@@ -237,10 +234,10 @@ impl Hypervisor {
         method: &str,
         payload: &[u8],
         caller: PrincipalId,
-        instructions_limit: NumInstructions,
         canister: CanisterState,
         data_certificate: Option<Vec<u8>>,
         time: Time,
+        execution_parameters: ExecutionParameters,
     ) -> (
         CanisterState,
         NumInstructions,
@@ -250,15 +247,13 @@ impl Hypervisor {
         if CanisterStatusType::Running != canister.status() {
             return (
                 canister,
-                instructions_limit,
+                execution_parameters.instruction_limit,
                 Err(HypervisorError::CanisterStopped),
             );
         }
 
         let method = WasmMethod::Query(method.to_string());
-        let memory_limit = self.canister_memory_limit(&canister);
         let memory_usage = canister.memory_usage();
-        let compute_allocation = canister.scheduler_state.compute_allocation;
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
         // Validate that the Wasm module is present.
@@ -266,7 +261,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
-                    instructions_limit,
+                    execution_parameters.instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -277,7 +272,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                instructions_limit,
+                execution_parameters.instruction_limit,
                 Err(HypervisorError::MethodNotFound(method)),
             );
         }
@@ -301,13 +296,8 @@ impl Hypervisor {
                 let output = execute(
                     api_type,
                     system_state.clone(),
-                    instructions_limit,
-                    memory_limit,
                     memory_usage,
-                    // Letting the canister grow arbitrarily when executing the
-                    // query is fine as we do not persist state modifications.
-                    SubnetAvailableMemory::new(self.config.subnet_memory_capacity),
-                    compute_allocation,
+                    execution_parameters,
                     FuncRef::Method(method),
                     execution_state.clone(),
                     Arc::clone(&self.cycles_account_manager),
@@ -355,13 +345,8 @@ impl Hypervisor {
                 let output = execute(
                     api_type,
                     system_state,
-                    instructions_limit,
-                    memory_limit,
                     memory_usage,
-                    // Letting the canister grow arbitrarily when executing the
-                    // query is fine as we do not persist state modifications.
-                    SubnetAvailableMemory::new(self.config.subnet_memory_capacity),
-                    compute_allocation,
+                    execution_parameters,
                     FuncRef::Method(method),
                     execution_state,
                     Arc::clone(&self.cycles_account_manager),
@@ -403,11 +388,10 @@ impl Hypervisor {
         callback: Callback,
         payload: Payload,
         incoming_cycles: Cycles,
-        instructions_limit: NumInstructions,
         time: Time,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
-        subnet_available_memory: SubnetAvailableMemory,
+        execution_parameters: ExecutionParameters,
     ) -> (
         CanisterState,
         NumInstructions,
@@ -418,7 +402,7 @@ impl Hypervisor {
         if canister.status() == CanisterStatusType::Stopped {
             return (
                 canister,
-                instructions_limit,
+                execution_parameters.instruction_limit,
                 NumBytes::from(0),
                 Err(HypervisorError::CanisterStopped),
             );
@@ -428,7 +412,7 @@ impl Hypervisor {
         if canister.execution_state.is_none() {
             return (
                 canister,
-                instructions_limit,
+                execution_parameters.instruction_limit,
                 NumBytes::from(0),
                 Err(HypervisorError::WasmModuleNotFound),
             );
@@ -485,11 +469,8 @@ impl Hypervisor {
         let output = execute(
             api_type,
             canister.system_state.clone(),
-            instructions_limit,
-            self.canister_memory_limit(&canister),
             canister.memory_usage(),
-            subnet_available_memory.clone(),
-            canister.scheduler_state.compute_allocation,
+            execution_parameters.clone(),
             func_ref,
             canister.execution_state.take().unwrap(),
             Arc::clone(&self.cycles_account_manager),
@@ -499,7 +480,6 @@ impl Hypervisor {
 
         let cycles_account_manager = Arc::clone(&self.cycles_account_manager);
         let metrics = Arc::clone(&self.metrics);
-        let canister_memory_limit = self.canister_memory_limit(&canister);
         let canister_current_memory_usage = canister.memory_usage();
         let call_origin = call_origin.clone();
 
@@ -537,11 +517,11 @@ impl Hypervisor {
                         let cleanup_output = execute(
                             ApiType::Cleanup { time },
                             canister.system_state.clone(),
-                            output.num_instructions_left,
-                            canister_memory_limit,
                             canister_current_memory_usage,
-                            subnet_available_memory,
-                            canister.scheduler_state.compute_allocation,
+                            ExecutionParameters {
+                                instruction_limit: output.num_instructions_left,
+                                ..execution_parameters
+                            },
                             func_ref,
                             canister.execution_state.take().unwrap(),
                             cycles_account_manager,
@@ -601,11 +581,9 @@ impl Hypervisor {
     pub fn execute_canister_start(
         &self,
         canister: CanisterState,
-        instructions_limit: NumInstructions,
-        subnet_available_memory: SubnetAvailableMemory,
+        execution_parameters: ExecutionParameters,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterStart);
-        let memory_limit = self.canister_memory_limit(&canister);
         let memory_usage = canister.memory_usage();
         let canister_id = canister.canister_id();
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
@@ -615,7 +593,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
-                    instructions_limit,
+                    execution_parameters.instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -627,7 +605,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                instructions_limit,
+                execution_parameters.instruction_limit,
                 Ok(NumBytes::from(0)),
             );
         }
@@ -635,11 +613,8 @@ impl Hypervisor {
         let output = execute(
             ApiType::start(),
             SystemState::new_for_start(canister_id),
-            instructions_limit,
-            memory_limit,
             memory_usage,
-            subnet_available_memory,
-            scheduler_state.compute_allocation,
+            execution_parameters,
             FuncRef::Method(method),
             execution_state,
             Arc::clone(&self.cycles_account_manager),
@@ -652,7 +627,6 @@ impl Hypervisor {
 
     pub fn execute_empty(&self, canister: CanisterState) -> (CanisterState, HypervisorResult<()>) {
         let method = WasmMethod::System(SystemMethod::Empty);
-        let memory_limit = self.canister_memory_limit(&canister);
         let memory_usage = canister.memory_usage();
         let canister_id = canister.canister_id();
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
@@ -671,11 +645,13 @@ impl Hypervisor {
         let output = execute(
             ApiType::start(),
             SystemState::new_for_start(canister_id),
-            NumInstructions::from(0),
-            memory_limit,
             memory_usage,
-            SubnetAvailableMemory::new(NumBytes::from(0)),
-            ComputeAllocation::zero(),
+            ExecutionParameters {
+                instruction_limit: NumInstructions::from(0),
+                canister_memory_limit: NumBytes::from(0),
+                subnet_available_memory: SubnetAvailableMemory::new(NumBytes::from(0)),
+                compute_allocation: ComputeAllocation::zero(),
+            },
             FuncRef::Method(method),
             execution_state,
             Arc::clone(&self.cycles_account_manager),
@@ -702,17 +678,15 @@ impl Hypervisor {
     ///
     /// - A HypervisorResult containing the size of the heap delta change if
     /// execution was successful or the relevant error if execution failed.
-    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    #[allow(clippy::type_complexity)]
     pub fn execute_canister_pre_upgrade(
         &self,
         canister: CanisterState,
         caller: PrincipalId,
-        instructions_limit: NumInstructions,
         time: Time,
-        subnet_available_memory: SubnetAvailableMemory,
+        execution_parameters: ExecutionParameters,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterPreUpgrade);
-        let memory_limit = self.canister_memory_limit(&canister);
         let memory_usage = canister.memory_usage();
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
@@ -721,7 +695,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
-                    instructions_limit,
+                    execution_parameters.instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -733,7 +707,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                instructions_limit,
+                execution_parameters.instruction_limit,
                 Ok(NumBytes::from(0)),
             );
         }
@@ -741,11 +715,8 @@ impl Hypervisor {
         let output = execute(
             ApiType::pre_upgrade(time, caller),
             system_state.clone(),
-            instructions_limit,
-            memory_limit,
             memory_usage,
-            subnet_available_memory,
-            scheduler_state.compute_allocation,
+            execution_parameters,
             FuncRef::Method(method),
             execution_state,
             Arc::clone(&self.cycles_account_manager),
@@ -766,18 +737,16 @@ impl Hypervisor {
     ///
     /// - A HypervisorResult containing the size of the heap delta change if
     /// execution was successful or the relevant error if execution failed.
-    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    #[allow(clippy::type_complexity)]
     pub fn execute_canister_init(
         &self,
         canister: CanisterState,
         caller: PrincipalId,
         payload: &[u8],
-        instructions_limit: NumInstructions,
         time: Time,
-        subnet_available_memory: SubnetAvailableMemory,
+        execution_parameters: ExecutionParameters,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterInit);
-        let memory_limit = self.canister_memory_limit(&canister);
         let memory_usage = canister.memory_usage();
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
@@ -786,7 +755,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
-                    instructions_limit,
+                    execution_parameters.instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -798,7 +767,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                instructions_limit,
+                execution_parameters.instruction_limit,
                 Ok(NumBytes::from(0)),
             );
         }
@@ -806,11 +775,8 @@ impl Hypervisor {
         let output = execute(
             ApiType::init(time, payload.to_vec(), caller),
             system_state.clone(),
-            instructions_limit,
-            memory_limit,
             memory_usage,
-            subnet_available_memory,
-            scheduler_state.compute_allocation,
+            execution_parameters,
             FuncRef::Method(method),
             execution_state,
             Arc::clone(&self.cycles_account_manager),
@@ -831,18 +797,16 @@ impl Hypervisor {
     ///
     /// - A HypervisorResult containing the size of the heap delta change if
     /// execution was successful or the relevant error if execution failed.
-    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    #[allow(clippy::type_complexity)]
     pub fn execute_canister_post_upgrade(
         &self,
         canister: CanisterState,
         caller: PrincipalId,
         payload: &[u8],
-        instructions_limit: NumInstructions,
         time: Time,
-        subnet_available_memory: SubnetAvailableMemory,
+        execution_parameters: ExecutionParameters,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterPostUpgrade);
-        let memory_limit = self.canister_memory_limit(&canister);
         let memory_usage = canister.memory_usage();
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
@@ -851,7 +815,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
-                    instructions_limit,
+                    execution_parameters.instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -863,7 +827,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                instructions_limit,
+                execution_parameters.instruction_limit,
                 Ok(NumBytes::from(0)),
             );
         }
@@ -871,11 +835,8 @@ impl Hypervisor {
         let output = execute(
             ApiType::init(time, payload.to_vec(), caller),
             system_state.clone(),
-            instructions_limit,
-            memory_limit,
             memory_usage,
-            subnet_available_memory,
-            scheduler_state.compute_allocation,
+            execution_parameters,
             FuncRef::Method(method),
             execution_state,
             Arc::clone(&self.cycles_account_manager),
@@ -895,13 +856,12 @@ impl Hypervisor {
         sender: PrincipalId,
         method_name: String,
         method_payload: Vec<u8>,
-        instructions_limit: NumInstructions,
         time: Time,
+        execution_parameters: ExecutionParameters,
     ) -> Result<(), MessageAcceptanceError> {
         let method = WasmMethod::System(SystemMethod::CanisterInspectMessage);
-        let memory_limit = self.canister_memory_limit(&canister);
         let memory_usage = canister.memory_usage();
-        let (execution_state, system_state, scheduler_state) = canister.into_parts();
+        let (execution_state, system_state, _) = canister.into_parts();
 
         // Validate that the Wasm module is present.
         let execution_state = match execution_state {
@@ -920,11 +880,8 @@ impl Hypervisor {
         let output = execute(
             system_api,
             system_state,
-            instructions_limit,
-            memory_limit,
             memory_usage,
-            SubnetAvailableMemory::new(self.config.subnet_memory_capacity),
-            scheduler_state.compute_allocation,
+            execution_parameters,
             FuncRef::Method(method),
             execution_state,
             Arc::clone(&self.cycles_account_manager),
@@ -961,14 +918,12 @@ impl Hypervisor {
     pub fn execute_canister_heartbeat(
         &self,
         canister: CanisterState,
-        instructions_limit: NumInstructions,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         time: Time,
-        subnet_available_memory: SubnetAvailableMemory,
+        execution_parameters: ExecutionParameters,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterHeartbeat);
-        let memory_limit = self.canister_memory_limit(&canister);
         let memory_usage = canister.memory_usage();
         let (execution_state, mut system_state, scheduler_state) = canister.into_parts();
 
@@ -977,7 +932,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
-                    instructions_limit,
+                    execution_parameters.instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -989,7 +944,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                instructions_limit,
+                execution_parameters.instruction_limit,
                 Ok(NumBytes::from(0)),
             );
         }
@@ -1011,11 +966,8 @@ impl Hypervisor {
         let output = execute(
             api_type,
             system_state.clone(),
-            instructions_limit,
-            memory_limit,
             memory_usage,
-            subnet_available_memory,
-            scheduler_state.compute_allocation,
+            execution_parameters,
             FuncRef::Method(method),
             execution_state,
             Arc::clone(&self.cycles_account_manager),
@@ -1036,6 +988,14 @@ impl Hypervisor {
         }
     }
 
+    pub fn compile(
+        &self,
+        wasm_binary: &BinaryEncodedWasm,
+        persistence_type: PersistenceType,
+    ) -> HypervisorResult<EmbedderCache> {
+        self.wasm_executor.compile(wasm_binary, persistence_type)
+    }
+
     pub fn new(
         config: Config,
         num_runtime_threads: usize,
@@ -1046,7 +1006,7 @@ impl Hypervisor {
         cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
         let mut embedder_config = EmbeddersConfig::new();
-        embedder_config.persistence_type = config.persistence_type.clone();
+        embedder_config.persistence_type = config.persistence_type;
         embedder_config.num_runtime_generic_threads = num_runtime_threads;
         embedder_config.num_runtime_query_threads = std::cmp::min(num_runtime_threads, 4);
 
@@ -1056,10 +1016,10 @@ impl Hypervisor {
             embedder_config.max_globals,
             embedder_config.max_functions,
             metrics_registry,
+            log.clone(),
         );
 
         Self {
-            config,
             wasm_executor: Arc::new(wasm_executor),
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
             own_subnet_id,
@@ -1069,12 +1029,9 @@ impl Hypervisor {
         }
     }
 
-    /// Returns the maximum amount of memory that the Canister can use.
-    fn canister_memory_limit(&self, canister: &CanisterState) -> NumBytes {
-        match canister.memory_allocation() {
-            MemoryAllocation::Reserved(bytes) => bytes,
-            MemoryAllocation::BestEffort => self.config.max_canister_memory_size,
-        }
+    #[cfg(test)]
+    pub fn compile_count(&self) -> u64 {
+        self.wasm_executor.compile_count_for_testing()
     }
 }
 
@@ -1092,11 +1049,8 @@ impl Hypervisor {
 pub fn execute(
     api_type: ApiType,
     system_state: SystemState,
-    instructions_limit: NumInstructions,
-    canister_memory_limit: NumBytes,
     canister_current_memory_usage: NumBytes,
-    subnet_available_memory: SubnetAvailableMemory,
-    compute_allocation: ComputeAllocation,
+    execution_parameters: ExecutionParameters,
     func_ref: FuncRef,
     execution_state: ExecutionState,
     cycles_account_manager: Arc<CyclesAccountManager>,
@@ -1108,11 +1062,8 @@ pub fn execute(
     let result = wasm_executor.process(WasmExecutionInput {
         api_type: api_type.clone(),
         system_state,
-        instructions_limit,
-        canister_memory_limit,
         canister_current_memory_usage,
-        subnet_available_memory,
-        compute_allocation,
+        execution_parameters,
         func_ref,
         execution_state,
         cycles_account_manager,

@@ -582,7 +582,7 @@ fn resharing_with_encryption_should_preserve_the_threshold_key() {
     ///
     /// Note: The original receiver is the new dealer.
     fn dh_stub(original_receiver_index: NodeIndex, new_receiver_index: NodeIndex) -> SecretKey {
-        let mut hash = ic_crypto_sha256::Sha256::new();
+        let mut hash = ic_crypto_sha::Sha256::new();
         hash.write(&(original_receiver_index as NodeIndex).to_be_bytes()[..]);
         hash.write(&(new_receiver_index as NodeIndex).to_be_bytes()[..]);
         hash_to_fr(hash)

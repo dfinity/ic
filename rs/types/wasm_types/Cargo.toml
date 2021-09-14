@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-ic-crypto-sha256 = { path = "../../crypto/sha256" }
+ic-crypto-sha = { path = "../../crypto/sha" }
 ic-sys = { path = "../../sys" }
 ic-utils = { path = "../../utils" }
 serde = { version = "1.0.99", features = ["derive"] }

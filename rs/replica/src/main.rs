@@ -3,7 +3,7 @@
 use ic_base_server::shutdown_signal;
 use ic_config::registry_client::DataProviderConfig;
 use ic_config::{subnet_config::SubnetConfigs, Config};
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::crypto::IngressSigVerifier;
 use ic_interfaces::registry::{LocalStoreCertifiedTimeReader, RegistryClient};
@@ -324,6 +324,7 @@ async fn run() -> io::Result<()> {
         root_subnet_id,
         logger.clone(),
         consensus_pool_cache,
+        config.artifact_pool.backup.map(|config| config.spool_path),
         Arc::from(ingress_message_filter),
         subnet_type,
         malicious_behaviour.malicious_flags.clone(),

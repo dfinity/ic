@@ -1,6 +1,6 @@
 use crate::error::{NodeManagerError, NodeManagerResult};
 
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_logger::{info, ReplicaLogger};
 use std::env;
 use std::fs;

@@ -1,0 +1,25 @@
+[package]
+name = "ic-replica-setup-ic-network"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-artifact-manager = { path = "../../artifact_manager" }
+ic-artifact-pool = { path = "../../artifact_pool" }
+ic-base-thread = { path = "../../base/thread" }
+ic-config = { path = "../../config" }
+ic-consensus = { path = "../../consensus" }
+ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
+ic-cycles-account-manager = { path = "../../cycles_account_manager" }
+ic-ingress-manager = { path = "../../ingress_manager" }
+ic-interfaces = { path = "../../interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-p2p = { path = "../../p2p" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-state-manager = { path = "../../state_manager" }
+ic-transport = { path = "../../transport" }
+ic-types = { path = "../../types/types" }
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+tokio = { version = "1.9.0", features = ["full"] }
+

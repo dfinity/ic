@@ -97,12 +97,7 @@ impl NnsRegistryReplicator {
     /// continuously polls for updates. Returns the result of the first poll.
     /// The background task is stopped when the object is dropped.
     pub fn fetch_and_start_polling(&self) -> Result<(), Error> {
-        // TODO(IDX-1862)
-        #[allow(deprecated)]
-        if self
-            .started
-            .compare_and_swap(false, true, Ordering::Relaxed)
-        {
+        if self.started.swap(true, Ordering::Relaxed) {
             return Err(Error::new(
                 ErrorKind::AlreadyExists,
                 "'start_polling' was already called",

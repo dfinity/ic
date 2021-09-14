@@ -1,6 +1,6 @@
 mod call_context_manager;
 
-use crate::{CanisterQueues, NumWasmPages, PageMap, StateError};
+use crate::{CanisterQueues, NumWasmPages64, PageMap, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
 use ic_interfaces::messages::CanisterInputMessage;
@@ -51,7 +51,7 @@ pub struct SystemState {
     pub canister_id: CanisterId,
     // EXE-92: This should be private
     pub queues: CanisterQueues,
-    pub stable_memory_size: NumWasmPages,
+    pub stable_memory_size: NumWasmPages64,
     pub stable_memory: PageMap,
     /// The canister's memory allocation.
     pub memory_allocation: MemoryAllocation,
@@ -227,7 +227,7 @@ impl SystemState {
             canister_id,
             controllers: btreeset! {controller},
             queues: CanisterQueues::default(),
-            stable_memory_size: NumWasmPages::new(0),
+            stable_memory_size: NumWasmPages64::new(0),
             stable_memory: PageMap::default(),
             cycles_balance: initial_cycles,
             memory_allocation: MemoryAllocation::BestEffort,
@@ -460,7 +460,8 @@ impl SystemState {
 
     /// Returns the memory that is currently used by the `SystemState`.
     pub fn memory_usage(&self) -> NumBytes {
-        crate::num_bytes_from(self.stable_memory_size)
+        crate::num_bytes_try_from64(self.stable_memory_size)
+            .expect("could not convert from wasm pages to bytes")
     }
 
     pub fn add_stop_context(&mut self, stop_context: StopCanisterContext) {
@@ -475,7 +476,7 @@ impl SystemState {
     /// Clears stable memory of this canister.
     pub fn clear_stable_memory(&mut self) {
         self.stable_memory = PageMap::default();
-        self.stable_memory_size = NumWasmPages::new(0);
+        self.stable_memory_size = NumWasmPages64::new(0);
     }
 
     /// Method used only by the dashboard.

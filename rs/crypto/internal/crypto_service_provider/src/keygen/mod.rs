@@ -7,7 +7,7 @@ use crate::Csp;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_multi_sig_bls12381 as multi_sig;
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
-use ic_crypto_sha256::{Context, DomainSeparationContext};
+use ic_crypto_sha::{Context, DomainSeparationContext};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::{AlgorithmId, CryptoError, KeyId};
 use ic_types::NodeId;
@@ -18,7 +18,7 @@ use std::convert::TryFrom;
 const KEY_ID_DOMAIN: &str = "ic-key-id";
 
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 pub use tls_keygen::tls_cert_hash_as_key_id;
 
 #[cfg(test)]

@@ -293,6 +293,7 @@ pub trait ConsensusPoolCache: Send + Sync {
             .payload
             .as_ref()
             .as_summary()
+            .dkg
             .get_subnet_membership_version()
     }
 }

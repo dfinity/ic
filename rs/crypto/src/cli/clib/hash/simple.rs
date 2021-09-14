@@ -1,5 +1,5 @@
-use ic_crypto_sha256::Context;
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Context;
+use ic_crypto_sha::Sha256;
 
 pub fn main(args: &[String]) -> Result<(), (String, i32)> {
     match args {

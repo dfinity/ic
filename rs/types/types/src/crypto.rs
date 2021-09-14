@@ -1,4 +1,5 @@
 //! Defines crypto component types.
+pub mod canister_threshold_sig;
 pub mod dkg;
 pub mod error;
 pub mod threshold_sig;

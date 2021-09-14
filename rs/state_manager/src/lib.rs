@@ -1360,20 +1360,8 @@ fn crypto_hash_of_tree(t: &HashTree) -> CryptoHash {
 }
 
 fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
-    // Replace  with 'fetch_max'  after 'atomic_min_max'  is stable.   See issue
-    // https://github.com/rust-lang/rust/issues/48655 for more information
-
-    let mut prev = cached.load(Ordering::Relaxed);
-    while prev < h.get() {
-        // TODO(IDX-1862)
-        #[allow(deprecated)]
-        let updated = cached.compare_and_swap(prev, h.get(), Ordering::Relaxed);
-        if updated == prev {
-            break;
-        }
-        prev = updated;
-    }
-    prev.max(h.get())
+    let h = h.get();
+    cached.fetch_max(h, Ordering::Relaxed).max(h)
 }
 
 fn purge_cow_rounds_below(state: &mut ReplicatedState, height: Height) {

@@ -119,7 +119,7 @@ impl DkgKeyManager {
         let cup_height = Some(cup.height());
         if last_seen_cup_height < cup_height {
             let summary = BlockPayload::from(cup.content.block.into_inner().payload).into_summary();
-            self.load_transcripts_from_summary(Arc::new(summary));
+            self.load_transcripts_from_summary(Arc::new(summary.dkg));
             self.last_cup_height.replace(cup_height);
         }
 
@@ -130,8 +130,8 @@ impl DkgKeyManager {
         let last_seen_dkg_summary_height = *self.last_dkg_summary_height.borrow();
         if last_seen_dkg_summary_height < Some(summary_block.height) {
             let summary = BlockPayload::from(summary_block.payload).into_summary();
-            self.update_dkg_metrics(&summary);
-            let summary = Arc::new(summary);
+            self.update_dkg_metrics(&summary.dkg);
+            let dkg_summary = Arc::new(summary.dkg);
             // Note that the order of these two calls is critical. We remove DKG keys that
             // are no longer relevant by telling the CSP which transcripts are still
             // relevant. However, over time, we may load new transcripts that are relevant.
@@ -144,7 +144,7 @@ impl DkgKeyManager {
             // the next transcript before the previous removal (which would consider the
             // next transcript key irrelevant and remove it).
             self.delete_inactive_keys(pool_reader);
-            self.load_transcripts_from_summary(Arc::clone(&summary));
+            self.load_transcripts_from_summary(Arc::clone(&dkg_summary));
             self.last_dkg_summary_height
                 .replace(Some(summary_block.height));
         }
@@ -291,8 +291,8 @@ impl DkgKeyManager {
         );
 
         while let Some(summary) = dkg_summary {
-            let next_summary_height = summary.get_next_start_height();
-            for transcript in summary.into_transcripts() {
+            let next_summary_height = summary.dkg.get_next_start_height();
+            for transcript in summary.dkg.into_transcripts() {
                 transcripts_to_retain.insert(transcript);
             }
 
@@ -402,15 +402,16 @@ mod tests {
 
                 // Emulate the first invocation of the dkg key manager and make sure all
                 // transcripts (exactly 2) were loaded from the genesis summary.
-                let summary =
-                    BlockPayload::from(pool.get_cache().finalized_block().payload).into_summary();
-                assert_eq!(summary.height, Height::from(0));
+                let dkg_summary = BlockPayload::from(pool.get_cache().finalized_block().payload)
+                    .into_summary()
+                    .dkg;
+                assert_eq!(dkg_summary.height, Height::from(0));
                 key_manager.on_state_change(&PoolReader::new(&pool));
                 key_manager.sync();
-                let summary_0_transcripts = summary
+                let summary_0_transcripts = dkg_summary
                     .current_transcripts()
                     .values()
-                    .chain(summary.next_transcripts().values())
+                    .chain(dkg_summary.next_transcripts().values())
                     .map(|t| t.dkg_id)
                     .collect::<HashSet<_>>();
                 // We expect the genesis summary to contain exactly 2 current transcripts.
@@ -437,13 +438,14 @@ mod tests {
                     Height::from(0)
                 );
 
-                let summary =
-                    BlockPayload::from(pool.get_cache().finalized_block().payload).into_summary();
-                assert_eq!(summary.height, Height::from(2 * (dkg_interval_len + 1)));
-                let summary_2_transcripts = summary
+                let dkg_summary = BlockPayload::from(pool.get_cache().finalized_block().payload)
+                    .into_summary()
+                    .dkg;
+                assert_eq!(dkg_summary.height, Height::from(2 * (dkg_interval_len + 1)));
+                let summary_2_transcripts = dkg_summary
                     .current_transcripts()
                     .values()
-                    .chain(summary.next_transcripts().values())
+                    .chain(dkg_summary.next_transcripts().values())
                     .map(|t| t.dkg_id)
                     .collect::<HashSet<_>>();
                 // For the 3rd summary we expect 2 current and 2 next transcripts.
@@ -467,13 +469,14 @@ mod tests {
                     pool.get_cache().catch_up_package().height(),
                     Height::from(3 * (dkg_interval_len + 1))
                 );
-                let summary =
-                    BlockPayload::from(pool.get_cache().finalized_block().payload).into_summary();
-                assert_eq!(summary.height, Height::from(3 * (dkg_interval_len + 1)));
-                let summary_3_transcripts = summary
+                let dkg_summary = BlockPayload::from(pool.get_cache().finalized_block().payload)
+                    .into_summary()
+                    .dkg;
+                assert_eq!(dkg_summary.height, Height::from(3 * (dkg_interval_len + 1)));
+                let summary_3_transcripts = dkg_summary
                     .current_transcripts()
                     .values()
-                    .chain(summary.next_transcripts().values())
+                    .chain(dkg_summary.next_transcripts().values())
                     .map(|t| t.dkg_id)
                     .collect::<HashSet<_>>();
                 // For the 3rd summary we expect 2 current and 2 next transcripts.

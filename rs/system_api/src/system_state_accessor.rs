@@ -29,10 +29,10 @@ pub trait SystemStateAccessor {
     fn msg_cycles_available(&self, call_context_id: &CallContextId) -> HypervisorResult<Cycles>;
 
     /// Determines size of stable memory in Web assembly pages.
-    fn stable_size(&self) -> u32;
+    fn stable_size(&self) -> HypervisorResult<u32>;
 
     /// Grows stable memory by specified amount.
-    fn stable_grow(&self, additional_pages: u32) -> i32;
+    fn stable_grow(&self, additional_pages: u32) -> HypervisorResult<i32>;
 
     /// Returns the number of instructions needed to copy `num_bytes`.
     fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions;
@@ -50,10 +50,10 @@ pub trait SystemStateAccessor {
     fn stable_write(&self, offset: u32, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
 
     /// Determines size of stable memory in Web assembly pages.
-    fn stable_size64(&self) -> u64;
+    fn stable_size64(&self) -> HypervisorResult<u64>;
 
     /// Grows stable memory by specified amount.
-    fn stable_grow64(&self, additional_pages: u64) -> i64;
+    fn stable_grow64(&self, additional_pages: u64) -> HypervisorResult<i64>;
 
     /// Reads from stable memory back to heap.
     ///

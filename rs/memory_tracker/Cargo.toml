@@ -9,6 +9,7 @@ edition = "2018"
 bit-vec = "0.5"
 byteorder = "1.3.4"
 ic-logger = { path = "../monitoring/logger" }
+ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
 ic-utils = { path = "../utils" }
 libc = "0.2.91"

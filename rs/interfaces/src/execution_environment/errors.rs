@@ -12,9 +12,11 @@ pub enum TrapCode {
     StackOverflow,
     HeapOutOfBounds,
     StableMemoryOutOfBounds,
+    StableMemoryTooBigFor32Bit,
     IntegerDivByZero,
     Unreachable,
     TableOutOfBounds,
+    CyclesAmountTooBigFor64Bit,
     Other,
 }
 
@@ -24,9 +26,16 @@ impl std::fmt::Display for TrapCode {
             Self::StackOverflow => write!(f, "stack overflow"),
             Self::HeapOutOfBounds => write!(f, "heap out of bounds"),
             Self::StableMemoryOutOfBounds => write!(f, "stable memory out of bounds"),
+            Self::StableMemoryTooBigFor32Bit => write!(
+                f,
+                "32 bit stable memory api used on a memory larger than 4GB"
+            ),
             Self::IntegerDivByZero => write!(f, "integer division by 0"),
             Self::Unreachable => write!(f, "unreachable"),
             Self::TableOutOfBounds => write!(f, "table out of bounds"),
+            Self::CyclesAmountTooBigFor64Bit => {
+                write!(f, "cycles amount exceeds 64-bit representation")
+            }
             Self::Other => write!(f, "unknown"),
         }
     }

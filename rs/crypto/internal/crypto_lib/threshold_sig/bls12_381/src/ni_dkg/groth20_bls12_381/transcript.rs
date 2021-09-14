@@ -168,8 +168,10 @@ fn compute_transcript(
     > = csp_dealings
         .iter()
         .map(|(dealer_index, dealing)| {
-            // Type conversion from crypto internal type:
-            threshold_types::PublicCoefficients::try_from(&dealing.public_coefficients)
+            // Type conversion from crypto internal type.
+            // The dealings have already been verified,
+            // so we can trust the serialized coefficients.
+            threshold_types::PublicCoefficients::from_trusted_bytes(&dealing.public_coefficients)
                 .map(|public_coefficients| (*dealer_index, public_coefficients))
                 .map_err(|crypto_error| {
                     let error = InvalidArgumentError {

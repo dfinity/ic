@@ -56,6 +56,7 @@ impl CatchUpContent {
             .payload
             .as_ref()
             .as_summary()
+            .dkg
             .registry_version
     }
 

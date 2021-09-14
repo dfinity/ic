@@ -135,6 +135,26 @@ impl From<PublicCoefficients> for InternalPublicCoefficients {
         InternalPublicCoefficients::from(&public_coefficients)
     }
 }
+impl PublicCoefficients {
+    /// Deserializes a `PublicCoefficients` from a *trusted* source.
+    ///
+    /// # Security Notice
+    /// This uses the "unchecked" G2 deserialization (no subgroup check),
+    /// so should only be used on `InternalPublicCoefficients` obtained
+    /// from a known, trusted source.
+    pub fn from_trusted_bytes(
+        bytes: &InternalPublicCoefficients,
+    ) -> Result<PublicCoefficients, CryptoError> {
+        let coefficients: Result<Vec<PublicKey>, ThresholdSigPublicKeyBytesConversionError> = bytes
+            .coefficients
+            .iter()
+            .map(PublicKey::from_trusted_bytes)
+            .collect();
+        let coefficients = coefficients?;
+        Ok(PublicCoefficients { coefficients })
+    }
+}
+
 impl TryFrom<&InternalPublicCoefficients> for PublicCoefficients {
     type Error = CryptoError;
     fn try_from(bytes: &InternalPublicCoefficients) -> Result<PublicCoefficients, CryptoError> {

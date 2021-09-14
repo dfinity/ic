@@ -7,6 +7,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
+    state_manager::FakeStateManager,
     types::ids::{subnet_test_id, user_test_id},
     with_test_replica_logger,
 };
@@ -34,7 +35,9 @@ fn query_non_existent() {
         let state = initial_state(tmpdir.path(), subnet_id);
         let metrics_registry = MetricsRegistry::new();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let (_, _, query_handler, _) = setup_execution(
+        let state_manager = Arc::new(FakeStateManager::new());
+
+        let (_, _, query_handler, _, _) = setup_execution(
             log,
             &metrics_registry,
             subnet_id,
@@ -42,6 +45,7 @@ fn query_non_existent() {
             subnet_config.scheduler_config,
             Config::default(),
             cycles_account_manager,
+            state_manager,
         );
 
         let receiver = CanisterId::from(1234);

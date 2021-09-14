@@ -37,6 +37,10 @@ fn main() {
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
     config.extern_path(".ic_ledger.pb.v1", "::ledger-canister::protobuf");
     config.type_attribute(
+        "ic_nns_governance.pb.v1.Empty",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.NodeProvider",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
@@ -142,6 +146,10 @@ fn main() {
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.ManageNeuron.ClaimOrRefresh",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuron.ClaimOrRefresh.MemoAndController",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(

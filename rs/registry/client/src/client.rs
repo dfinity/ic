@@ -22,7 +22,6 @@ pub use ic_types::{
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock, RwLockReadGuard};
-use url::Url;
 
 use crate::metrics::Metrics;
 
@@ -61,12 +60,7 @@ impl RegistryClientImpl {
     /// spawned that continuously polls for updates.
     /// The background task is stopped when the object is dropped.
     pub fn fetch_and_start_polling(&self) -> Result<(), RegistryClientError> {
-        // TODO(IDX-1862)
-        #[allow(deprecated)]
-        if self
-            .started
-            .compare_and_swap(false, true, Ordering::Relaxed)
-        {
+        if self.started.swap(true, Ordering::Relaxed) {
             return Err(RegistryClientError::PollLockFailed {
                 error: "'fetch_and_start_polling' already called".to_string(),
             });
@@ -174,23 +168,20 @@ pub fn create_data_provider(
     data_provider_config: &DataProviderConfig,
     optional_nns_public_key: Option<ThresholdSigPublicKey>,
 ) -> Arc<dyn RegistryDataProvider> {
-    let nns_data_provider = |urls: Vec<Url>| -> Arc<dyn RegistryDataProvider> {
-        let registry_canister = RegistryCanister::new(urls);
-        match optional_nns_public_key {
-            Some(nns_pk) => Arc::new(CertifiedNnsDataProvider::new(registry_canister, nns_pk)),
-            None => Arc::new(NnsDataProvider::new(registry_canister)),
-        }
-    };
-
     match data_provider_config {
-        DataProviderConfig::RegistryCanisterUrl(url) => nns_data_provider(url.clone()),
+        DataProviderConfig::RegistryCanisterUrl(url) => {
+            let registry_canister = RegistryCanister::new(url.clone());
+            match optional_nns_public_key {
+                Some(nns_pk) => Arc::new(CertifiedNnsDataProvider::new(registry_canister, nns_pk)),
+                None => Arc::new(NnsDataProvider::new(registry_canister)),
+            }
+        }
         DataProviderConfig::ProtobufFile(path) => {
             Arc::new(ProtoRegistryDataProvider::load_from_file(path))
         }
-        DataProviderConfig::Bootstrap {
-            initial_registry_file: _,
-            registry_canister_url: _,
-        } => panic!("The Bootstrap Registry Data Provider is deprecated!"),
+        DataProviderConfig::Bootstrap { .. } => {
+            panic!("The Bootstrap Registry Data Provider is deprecated!")
+        }
         DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
     }
 }

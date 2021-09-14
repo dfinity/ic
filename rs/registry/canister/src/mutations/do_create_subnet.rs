@@ -24,6 +24,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 
@@ -175,6 +176,8 @@ impl Registry {
             max_instructions_per_message: payload.max_instructions_per_message,
             max_instructions_per_round: payload.max_instructions_per_round,
             max_instructions_per_install_code: payload.max_instructions_per_install_code,
+
+            features: Some(payload.features.into()),
         };
 
         // 4. Update registry with the new subnet data
@@ -261,6 +264,8 @@ pub struct CreateSubnetPayload {
     pub max_instructions_per_message: u64,
     pub max_instructions_per_round: u64,
     pub max_instructions_per_install_code: u64,
+
+    pub features: SubnetFeatures,
 }
 
 impl From<CreateSubnetPayload> for SubnetRecord {
@@ -302,6 +307,7 @@ impl From<CreateSubnetPayload> for SubnetRecord {
             max_instructions_per_message: val.max_instructions_per_message,
             max_instructions_per_round: val.max_instructions_per_round,
             max_instructions_per_install_code: val.max_instructions_per_install_code,
+            features: Some(val.features.into()),
         }
     }
 }

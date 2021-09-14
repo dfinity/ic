@@ -402,6 +402,48 @@ proptest! {
         });
     }
 
+    /// Tests payload building with a byte limit too small even for an empty
+    /// slice.
+    #[test]
+    fn get_xnet_payload_byte_limit_too_small(
+        (stream, from, msg_count) in arb_stream_slice(10, 15),
+    ) {
+        with_test_replica_logger(|log| {
+            let mut state_manager =
+                StateManagerFixture::with_subnet_type(SubnetType::Application, log.clone());
+
+            // Create a matching outgoing stream within `state_manager` for each slice.
+            state_manager = state_manager.with_stream(REMOTE_SUBNET, out_stream(&stream, from));
+
+            // Create payload builder with the slice pooled.
+            let xnet_payload_builder = XNetPayloadBuilderFixture::new(state_manager);
+            xnet_payload_builder.pool_slice(REMOTE_SUBNET, &stream, from, msg_count, &log);
+
+            // Build a payload with a byte limit too small even for an empty slice.
+            let payload = xnet_payload_builder.get_xnet_payload(1).unwrap();
+
+            // Payload should contain no slices.
+            assert!(
+                payload.is_empty(),
+                "Expecting empty payload, got payload of length {}",
+                payload.len()
+            );
+
+            assert_eq!(
+                metric_vec(&[(&[(LABEL_STATUS, STATUS_SUCCESS)], 1)]),
+                xnet_payload_builder.build_payload_counts()
+            );
+            assert_eq!(
+                HistogramStats {
+                    count: 0,
+                    sum: 0.0
+                },
+                xnet_payload_builder.slice_messages_stats()
+            );
+            assert_eq!(0, xnet_payload_builder.slice_payload_size_stats().count);
+        });
+    }
+
     /// Tests payload building from a pool containing an empty slice only.
     #[test]
     fn get_xnet_payload_empty_slice(

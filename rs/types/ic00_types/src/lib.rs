@@ -27,6 +27,7 @@ pub enum Method {
     RawRand,
     SetController,
     SetupInitialDKG,
+    SignWithECDSA,
     StartCanister,
     StopCanister,
     UninstallCode,

@@ -1,7 +1,7 @@
 use crate::ic_types::{Principal, PrincipalError};
 use crate::pb_internal::v1::PrincipalId as PrincipalIdProto;
 use candid::types::{Type, TypeId};
-use ic_crypto_sha256::Sha224;
+use ic_crypto_sha::Sha224;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::{

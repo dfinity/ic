@@ -21,12 +21,12 @@ use ic_types::{
         ReadContent, ReadState, SignedRequestBytes, UserQuery, EXPECTED_MESSAGE_ID_LENGTH,
     },
     time::current_time,
-    user_error::{ErrorCode, RejectCode, UserError},
+    user_error::RejectCode,
     RegistryVersion, Time, UserId,
 };
 use ic_validator::{get_authorized_canisters, CanisterIdSet};
 use std::convert::TryFrom;
-use std::sync::RwLock;
+use std::sync::Arc;
 
 const MAX_READ_STATE_REQUEST_IDS: u8 = 100;
 
@@ -60,14 +60,14 @@ impl VerifyPathsError {
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle(
     log: &ReplicaLogger,
-    delegation_from_nns: &RwLock<Option<CertificateDelegation>>,
-    query_handler: &dyn QueryHandler<State = ReplicatedState>,
-    state_reader: &dyn StateReader<State = ReplicatedState>,
-    validator: &(dyn IngressSigVerifier + Send + Sync),
+    delegation_from_nns: Option<CertificateDelegation>,
+    query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_version: RegistryVersion,
     body: Vec<u8>,
-    metrics: &HttpHandlerMetrics,
-    malicious_flags: &MaliciousFlags,
+    metrics: Arc<HttpHandlerMetrics>,
+    malicious_flags: MaliciousFlags,
 ) -> (Response<Body>, ApiReqType) {
     trace!(log, "in handle read");
     use ApiReqType::*;
@@ -102,10 +102,10 @@ pub(crate) async fn handle(
 
     let targets = match get_authorized_canisters(
         &request,
-        validator,
+        validator.as_ref(),
         current_time(),
         registry_version,
-        malicious_flags,
+        &malicious_flags,
     ) {
         Ok(targets) => targets,
         Err(err) => {
@@ -117,14 +117,12 @@ pub(crate) async fn handle(
         }
     };
 
-    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
     match request.content() {
         ReadContent::Query(query) => (
             handle_query(
                 log,
                 delegation_from_nns,
                 query_handler,
-                state_reader,
                 query.clone(),
                 targets,
                 metrics,
@@ -150,11 +148,10 @@ pub(crate) async fn handle(
 async fn handle_query(
     log: &ReplicaLogger,
     delegation_from_nns: Option<CertificateDelegation>,
-    query_handler: &dyn QueryHandler<State = ReplicatedState>,
-    state_reader: &dyn StateReader<State = ReplicatedState>,
+    query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     query: UserQuery,
     targets: CanisterIdSet,
-    metrics: &HttpHandlerMetrics,
+    metrics: Arc<HttpHandlerMetrics>,
 ) -> Response<Body> {
     if !targets.contains(&query.receiver) {
         return common::make_response(StatusCode::UNAUTHORIZED, "Unauthorized.");
@@ -165,35 +162,27 @@ async fn handle_query(
         Time::from_nanos_since_unix_epoch(query.ingress_expiry),
     );
 
-    let res = match common::get_latest_certified_state_and_data_certificate(
-        state_reader,
-        &delegation_from_nns,
-        query.receiver,
-    ) {
-        Some((state, cert)) => {
-            let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-            let log = log.clone();
-            let callback = move |res| {
-                if let Err(err) = tx.blocking_send(res) {
-                    info!(log, "Broken channel (query execution). Most likely the user dropped the request: {}", err);
-                }
-            };
-            query_handler.non_blocking_query(query, state, cert, Box::new(callback));
-            // TODO: add a timeout for the await as a safety guard.
-            match rx.recv().await {
-                None => {
-                    return common::make_response(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Broken channel. Query execution didn't return a value.",
-                    )
-                }
-                Some(res) => res,
-            }
+    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+    let c_log = log.clone();
+    let callback = move |res| {
+        if let Err(err) = tx.blocking_send(res) {
+            info!(
+                c_log,
+                "Broken channel (query execution). Most likely the user dropped the request: {}",
+                err
+            );
         }
-        None => Err(UserError::new(
-            ErrorCode::CertifiedStateUnavailable,
-            "Certified state is not available yet. Please try again...",
-        )),
+    };
+    query_handler.query_latest_certified_state(query, delegation_from_nns, Box::new(callback));
+    // TODO: add a timeout for the await as a safety guard.
+    let res = match rx.recv().await {
+        None => {
+            return common::make_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Broken channel. Query execution didn't return a value.",
+            )
+        }
+        Some(res) => res,
     };
 
     match res {
@@ -224,14 +213,14 @@ async fn handle_query(
 
 fn handle_read_state(
     delegation_from_nns: Option<CertificateDelegation>,
-    state_reader: &dyn StateReader<State = ReplicatedState>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     read_state: ReadState,
     targets: CanisterIdSet,
-    metrics: &HttpHandlerMetrics,
+    metrics: Arc<HttpHandlerMetrics>,
 ) -> Response<Body> {
     // Verify that the sender has authorization to the paths requested.
     if let Err(err) = verify_paths(
-        state_reader,
+        state_reader.as_ref(),
         &read_state.source,
         &read_state.paths,
         &targets,

@@ -9,6 +9,11 @@ const MAX_CONSENSUS_POOL_VALIDATED_CAPACITY: usize = 2048;
 const MAX_CONSENSUS_POOL_UNVALIDATED_CAPACITY_PER_PEER: usize = 2048;
 const PERSISTENT_POOL_VALIDATED_PURGE_INTERVAL: u64 = 5000;
 
+/// The number of height folders we store grouped inside a single "shard" folder
+/// (to avoid running into inode limits on potentially misconfigured file
+/// systems).
+pub const BACKUP_GROUP_SIZE: u64 = 10000;
+
 /// External configuration for artifact pools meant to be used by replica's
 /// config file.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

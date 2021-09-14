@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use ic_crypto_sha256::{Context, Sha256};
+use ic_crypto_sha::{Context, Sha256};
 use std::hash::Hash;
 
 const EXPECTED_DIGEST: [u8; 32] = [

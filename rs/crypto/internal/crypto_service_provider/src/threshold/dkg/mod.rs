@@ -29,7 +29,7 @@ use ic_crypto_internal_types::sign::threshold_sig::dkg::encryption_public_key::{
     CspEncryptionPublicKey, InternalCspEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
-use ic_crypto_sha256::{Context, DomainSeparationContext};
+use ic_crypto_sha::{Context, DomainSeparationContext};
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{IDkgId, NodeIndex, NumberOfNodes, Randomness};
 use openssl::sha::Sha256;

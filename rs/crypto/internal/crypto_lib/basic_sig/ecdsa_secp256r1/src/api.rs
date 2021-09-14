@@ -1,6 +1,7 @@
 //! ECDSA signature methods
 use super::types;
 use ic_crypto_internal_basic_sig_der_utils::PkixAlgorithmIdentifier;
+use ic_crypto_secrets_containers::SecretVec;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use openssl::bn::{BigNum, BigNumContext};
 use openssl::ec::{EcGroup, EcKey, EcPoint};
@@ -47,13 +48,14 @@ pub fn new_keypair() -> CryptoResult<(types::SecretKeyBytes, types::PublicKeyByt
         EcKey::generate(&group).map_err(|e| wrap_openssl_err(e, "unable to generate EC key"))?;
     let mut ctx =
         BigNumContext::new().map_err(|e| wrap_openssl_err(e, "unable to create BigNumContext"))?;
-    let sk_der = ec_key
-        .private_key_to_der()
-        .map_err(|e| CryptoError::AlgorithmNotSupported {
-            algorithm: AlgorithmId::EcdsaP256,
-            reason: format!("OpenSSL failed with error {}", e.to_string()),
-        })?;
-    let sk = types::SecretKeyBytes::from(sk_der);
+    let mut sk_der =
+        ec_key
+            .private_key_to_der()
+            .map_err(|e| CryptoError::AlgorithmNotSupported {
+                algorithm: AlgorithmId::EcdsaP256,
+                reason: format!("OpenSSL failed with error {}", e.to_string()),
+            })?;
+    let sk = types::SecretKeyBytes(SecretVec::new_and_zeroize_argument(&mut sk_der));
     let pk_bytes = ec_key
         .public_key()
         .to_bytes(
@@ -244,11 +246,12 @@ fn ecdsa_sig_to_bytes(ecdsa_sig: EcdsaSig) -> CryptoResult<[u8; types::Signature
 /// # Returns
 /// The generated signature
 pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> CryptoResult<types::SignatureBytes> {
-    let signing_key =
-        EcKey::private_key_from_der(&sk.0).map_err(|_| CryptoError::MalformedSecretKey {
+    let signing_key = EcKey::private_key_from_der(sk.0.expose_secret()).map_err(|_| {
+        CryptoError::MalformedSecretKey {
             algorithm: AlgorithmId::EcdsaP256,
             internal_error: "OpenSSL error".to_string(), // don't leak sensitive information
-        })?;
+        }
+    })?;
     let ecdsa_sig =
         EcdsaSig::sign(msg, &signing_key).map_err(|e| CryptoError::InvalidArgument {
             message: format!("ECDSA signing failed with error {}", e),

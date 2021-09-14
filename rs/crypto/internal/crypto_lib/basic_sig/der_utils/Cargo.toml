@@ -6,6 +6,7 @@ edition = "2018"
 [dependencies]
 hex = "0.4.2"
 simple_asn1 = "0.5.4"
+ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-types = { path = "../../../../../types/types" }
 
 [dev-dependencies]

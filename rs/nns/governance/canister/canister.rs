@@ -37,12 +37,17 @@ use ic_nns_governance::stable_mem_utils::{BufferedStableMemReader, BufferedStabl
 use ic_nns_governance::{
     governance::{Environment, Governance, Ledger},
     pb::v1::{
-        governance_error::ErrorType, manage_neuron::Command, manage_neuron::RegisterVote,
-        ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse,
-        ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ListNeurons,
-        ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, Neuron, NeuronInfo, NeuronStakeTransfer, NnsFunction, Proposal,
-        ProposalInfo, Vote,
+        claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
+        governance_error::ErrorType,
+        manage_neuron::{
+            claim_or_refresh::{By, MemoAndController},
+            ClaimOrRefresh, Command, RegisterVote,
+        },
+        manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
+        ClaimOrRefreshNeuronFromAccountResponse, ExecuteNnsFunction, Governance as GovernanceProto,
+        GovernanceError, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, Neuron, NeuronInfo,
+        NnsFunction, Proposal, ProposalInfo, Vote,
     },
 };
 
@@ -51,7 +56,7 @@ use ic_nns_common::access_control::check_caller_is_gtc;
 use ic_nns_governance::governance::HeapGrowthPotential;
 use ledger_canister::{
     metrics_encoder, AccountBalanceArgs, AccountIdentifier, ICPTs, Memo, SendArgs, Subaccount,
-    TotalSupplyArgs, TransactionNotification,
+    TotalSupplyArgs,
 };
 
 /// Size of the buffer for stable memory reads and writes.
@@ -420,54 +425,55 @@ fn vote() {
 fn neuron_stake_transfer_notification() {
     println!("{}neuron_stake_transfer_notification", LOG_PREFIX);
     check_caller_is_ledger();
-    over_async(candid_one, claim_or_top_up_neuron_from_notification);
+    panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
 }
 
 #[export_name = "canister_update transaction_notification_pb"]
 fn neuron_stake_transfer_notification_pb() {
     println!("{}neuron_stake_transfer_notification_pb", LOG_PREFIX);
     check_caller_is_ledger();
-    over_async(protobuf, claim_or_top_up_neuron_from_notification);
+    panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
 }
 
-async fn claim_or_top_up_neuron_from_notification(
-    txn: TransactionNotification,
-) -> ic_nns_common::pb::v1::NeuronId {
-    let now = governance_mut().env.now();
-    let result = governance_mut()
-        .claim_or_top_up_neuron_from_notification(NeuronStakeTransfer {
-            transfer_timestamp: now,
-            from: Some(txn.from),
-            from_subaccount: txn.from_subaccount.map(|s| s.to_vec()).unwrap_or_default(),
-            to_subaccount: txn.to_subaccount.map(|s| s.to_vec()).unwrap_or_default(),
-            neuron_stake_e8s: txn.amount.get_e8s(),
-            block_height: txn.block_height,
-            memo: txn.memo.0,
-        })
-        .await;
-    // Panic if we couldn't create or refresh the stake. The ledger is expecting
-    // this.
-    result.unwrap_or_else(|err| {
-        panic!(
-            "Couldn\'t create or refresh the stake of the neuron. Error: {:?}",
-            err
-        )
-    })
-}
-
+// DEPRECATED: Please use ManageNeuron::ClaimOrRefresh.
 #[export_name = "canister_update claim_or_refresh_neuron_from_account"]
 fn claim_or_refresh_neuron_from_account() {
     println!("{}claim_or_refresh_neuron_from_account", LOG_PREFIX);
     over_async(candid_one, claim_or_refresh_neuron_from_account_)
 }
 
+// DEPRECATED: Please use ManageNeuron::ClaimOrRefresh.
+//
+// Just redirects to ManageNeuron.
 #[candid_method(update, rename = "claim_or_refresh_neuron_from_account")]
 async fn claim_or_refresh_neuron_from_account_(
     claim_or_refresh: ClaimOrRefreshNeuronFromAccount,
 ) -> ClaimOrRefreshNeuronFromAccountResponse {
-    governance_mut()
-        .claim_or_refresh_neuron_from_account(&caller(), &claim_or_refresh)
-        .await
+    let manage_neuron_response = manage_neuron_(ManageNeuron {
+        id: None,
+        command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+            by: Some(By::MemoAndController(MemoAndController {
+                memo: claim_or_refresh.memo,
+                controller: claim_or_refresh.controller,
+            })),
+        })),
+        neuron_id_or_subaccount: None,
+    })
+    .await;
+
+    match manage_neuron_response.command.unwrap() {
+        manage_neuron_response::Command::Error(error) => ClaimOrRefreshNeuronFromAccountResponse {
+            result: Some(ClaimOrRefreshNeuronFromAccountResponseResult::Error(error)),
+        },
+        manage_neuron_response::Command::ClaimOrRefresh(response) => {
+            ClaimOrRefreshNeuronFromAccountResponse {
+                result: Some(ClaimOrRefreshNeuronFromAccountResponseResult::NeuronId(
+                    response.refreshed_neuron_id.unwrap(),
+                )),
+            }
+        }
+        _ => panic!("Invalid command response"),
+    }
 }
 
 #[export_name = "canister_update claim_gtc_neurons"]

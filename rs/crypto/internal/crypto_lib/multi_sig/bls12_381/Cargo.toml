@@ -10,7 +10,7 @@ group = "0.2.0"
 hex = "0.4.2"
 ic-crypto-internal-bls12381-common = { path = "../../bls12_381/common"}
 ic-crypto-internal-types = { path = "../../types" }
-ic-crypto-sha256 = { path= "../../../../sha256"}
+ic-crypto-sha = { path= "../../../../sha"}
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
 pairing = "0.15.0"

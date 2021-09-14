@@ -5,7 +5,7 @@ use ic_interfaces::certification::Verifier;
 use ic_interfaces::state_manager::*;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{page_map, NumWasmPages, PageMap};
+use ic_replicated_state::{page_map, NumWasmPages64, PageMap};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_state_manager::StateManagerImpl;
 use ic_sys::PAGE_SIZE;
@@ -598,7 +598,7 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
         let mut buf = page_map::Buffer::new(PageMap::default());
         // let layout = canister_layout(state.path(), &canister_id);
         // system_state.stable_memory = StableMemory::open(layout.raw_path());
-        system_state.stable_memory_size = NumWasmPages::new(10);
+        system_state.stable_memory_size = NumWasmPages64::new(10);
 
         buf.write(&random_bytes[..], get_page_off(p0_o0));
 
@@ -654,7 +654,7 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
 
         assert_eq!(
             canister_state.system_state.stable_memory_size,
-            NumWasmPages::new(10)
+            NumWasmPages64::new(10)
         );
 
         let mut read_bytes = vec![0; *PAGE_SIZE];
@@ -749,7 +749,7 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
 
         assert_eq!(
             canister_state.system_state.stable_memory_size,
-            NumWasmPages::new(10)
+            NumWasmPages64::new(10)
         );
 
         buf.read(
@@ -813,7 +813,7 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
         let mut canister_state = state.take_canister_state(&canister_id).unwrap();
         let mut es = canister_state.execution_state.take().unwrap();
 
-        canister_state.system_state.stable_memory_size += NumWasmPages::new(50);
+        canister_state.system_state.stable_memory_size += NumWasmPages64::new(50);
         let mut buf = page_map::Buffer::new(canister_state.system_state.stable_memory);
         buf.write(
             &random_bytes1,
@@ -880,7 +880,7 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
 
         assert_eq!(
             canister_state.system_state.stable_memory_size,
-            NumWasmPages::new(60)
+            NumWasmPages64::new(60)
         );
         let buf = page_map::Buffer::new(canister_state.system_state.stable_memory);
 

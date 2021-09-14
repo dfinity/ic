@@ -1,6 +1,6 @@
 use crate::{crypto::SignedBytesWithoutDomainSeparator, messages::Blob, CountBytes};
 use base64::URL_SAFE_NO_PAD;
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 

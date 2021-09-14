@@ -69,17 +69,23 @@
 //! ```
 use crate::{
     gossip_protocol::{
-        Gossip, GossipChunk, GossipChunkRequest, GossipMessage, GossipRetransmissionRequest,
+        Gossip, GossipChunk, GossipChunkRequest, GossipImpl, GossipMessage,
+        GossipRetransmissionRequest,
     },
     metrics::EventHandlerMetrics,
     P2PErrorCode, P2PResult,
 };
 use async_trait::async_trait;
+use crossbeam_channel::Receiver as CrossBeamReceiver;
+use crossbeam_channel::Sender as CrossBeamSender;
+use futures::future::select_all;
+use futures::future::FutureExt;
 use ic_base_thread::async_safe_block_on_await;
 use ic_interfaces::{
     artifact_manager::OnArtifactError,
     ingress_pool::IngressPoolThrottler,
     p2p::IngressEventHandler,
+    registry::RegistryClient,
     transport::{AsyncTransportEventHandler, SendError},
 };
 use ic_logger::{info, replica_logger::ReplicaLogger, trace};
@@ -87,13 +93,18 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::p2p::v1 as pb;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
+use ic_registry_client::helper::subnet::SubnetRegistry;
+use ic_types::transport::{TransportError, TransportErrorCode, TransportFlowInfo};
 use ic_types::{
     artifact::Artifact,
     messages::SignedIngress,
     transport::{FlowId, TransportNotification, TransportPayload},
-    NodeId,
+    NodeId, SubnetId,
 };
 use ic_types::{p2p::GossipAdvert, transport};
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::{
     cmp::max,
     collections::BTreeMap,
@@ -101,15 +112,6 @@ use std::{
     sync::{Arc, Mutex, RwLock},
     vec::Vec,
 };
-
-use crossbeam_channel::Receiver as CrossBeamReceiver;
-use crossbeam_channel::Sender as CrossBeamSender;
-use futures::future::select_all;
-use futures::future::FutureExt;
-use ic_types::transport::{TransportError, TransportErrorCode, TransportFlowInfo};
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use tokio::{
@@ -123,10 +125,6 @@ use tokio::{
 /// control, as well as add nodes.
 #[async_trait]
 pub(crate) trait P2PEventHandlerControl: Send + Sync {
-    /// The method starts the event processing loop, dispatching events to the
-    /// *Gossip* component.
-    fn start(&self, gossip_arc: GossipArc);
-
     /// The method adds/registers a peer node with the event handler.
     ///
     /// The P2P event handler implementation maintains per-peer-per-flow queues
@@ -135,11 +133,20 @@ pub(crate) trait P2PEventHandlerControl: Send + Sync {
     /// are dropped. Thus, valid nodes must be added to the event handler
     /// before any network processing starts.
     fn add_node(&self, node_id: NodeId);
+}
 
-    /// The method stops the event handler.
-    ///
-    /// This is a no-op call if the event handler has not been started.
-    fn stop(&self);
+/// Fetch the Gossip configuration from the registry.
+pub fn fetch_gossip_config(
+    registry_client: Arc<dyn RegistryClient>,
+    subnet_id: SubnetId,
+) -> GossipConfig {
+    if let Ok(Some(Some(gossip_config))) =
+        registry_client.get_gossip_config(subnet_id, registry_client.get_latest_version())
+    {
+        gossip_config
+    } else {
+        ic_types::p2p::build_default_gossip_config()
+    }
 }
 
 /// The different flow types.
@@ -178,8 +185,8 @@ type ManagementCommandSender<T> = CrossBeamSender<ManagementCommands<T>>;
 /// The type of a receiver of management commands.
 type ManagementCommandReceiver<T> = CrossBeamReceiver<ManagementCommands<T>>;
 
-/// A *Gossip* type with automatic reference counting.
-type GossipArc = Arc<
+/// A *Gossip* type with atomic reference counting.
+pub type GossipArc = Arc<
     dyn Gossip<
             GossipAdvert = GossipAdvert,
             GossipChunkRequest = GossipChunkRequest,
@@ -472,10 +479,10 @@ impl PeerFlows {
 
 /// The ingress throttler is protected by a read-write lock for concurrent
 /// access.
-pub(crate) type IngressThrottler = Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>;
+pub type IngressThrottler = Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>;
 /// The struct implements the async event handler traits for consumption by
 /// transport, ingress, artifact manager, and node addition/removal.
-pub(crate) struct P2PEventHandlerImpl {
+pub struct P2PEventHandlerImpl {
     /// The replica node ID.
     node_id: NodeId,
     /// The logger.
@@ -534,7 +541,7 @@ impl From<GossipConfig> for ChannelConfig {
 impl P2PEventHandlerImpl {
     /// The function creates a `P2PEventHandlerImpl` instance.
     #[allow(dead_code, clippy::too_many_arguments)] // pending integration with P2P crate
-    pub(crate) fn new(
+    pub fn new(
         rt_handle: tokio::runtime::Handle,
         node_id: NodeId,
         log: ReplicaLogger,
@@ -553,24 +560,26 @@ impl P2PEventHandlerImpl {
             .add_node(node_id, &handler.channel_config);
         handler
     }
-}
 
-/// `P2PEventHandlerImpl` implements the `P2PEventHandlerControl` trait.
-impl P2PEventHandlerControl for P2PEventHandlerImpl {
-    /// The method starts the P2P event handler.
-    fn start(&self, gossip_arc: GossipArc) {
+    /// The method starts the event processing loop, dispatching events to the
+    /// *Gossip* component.
+    pub fn start(&self, gossip_arc: GossipArc) {
         self.peer_flows.start(gossip_arc);
     }
 
+    /// The method stops the event handler.
+    ///
+    /// This is a no-op call if the event handler has not been started.
+    pub fn stop(&self) {
+        self.peer_flows.stop();
+    }
+}
+
+impl P2PEventHandlerControl for P2PEventHandlerImpl {
     /// The method adds a node to the event handler. Messages from nodes that
     /// are not found in the peer flow maps are not processed.
     fn add_node(&self, node_id: NodeId) {
         self.peer_flows.add_node(node_id, &self.channel_config);
-    }
-
-    /// The method stops the P2P event handler.
-    fn stop(&self) {
-        self.peer_flows.stop();
     }
 }
 
@@ -743,7 +752,7 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
 }
 
 /// Interface between the ingress handler and P2P.
-pub(crate) struct IngressEventHandlerImpl {
+pub struct IngressEventHandlerImpl {
     /// The ingress throttler.
     ingress_throttler: IngressThrottler,
     /// The shared *Gossip* instance (using automatic reference counting).
@@ -754,7 +763,11 @@ pub(crate) struct IngressEventHandlerImpl {
 
 impl IngressEventHandlerImpl {
     /// The function creates an `IngressEventHandlerImpl` instance.
-    pub fn new(ingress_throttle: IngressThrottler, c_gossip: GossipArc, node_id: NodeId) -> Self {
+    pub fn new(
+        ingress_throttle: IngressThrottler,
+        c_gossip: Arc<GossipImpl>,
+        node_id: NodeId,
+    ) -> Self {
         Self {
             ingress_throttler: ingress_throttle,
             c_gossip,
@@ -778,7 +791,7 @@ impl IngressEventHandler for IngressEventHandlerImpl {
 }
 
 /// This trait is used as the interface between Artifact Manager and P2P.
-pub(crate) trait AdvertSubscriber {
+pub trait AdvertSubscriber {
     /// The method broadcasts the given advert.
     fn broadcast_advert(&self, advert: GossipAdvert);
 }
@@ -937,11 +950,6 @@ pub mod tests {
         /// The method is called on a transport error.
         fn on_transport_error(&self, _transport_error: TransportError) {
             // Do nothing
-        }
-
-        /// The method is called when the timer triggers.
-        fn on_timer(&self, _event_handler: &Arc<dyn P2PEventHandlerControl>) {
-            unimplemented!()
         }
     }
 

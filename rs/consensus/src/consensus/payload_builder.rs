@@ -186,7 +186,6 @@ impl PayloadBuilder for PayloadBuilderImpl {
             &batch_payload.xnet,
             context,
             &past_xnet,
-            MAX_XNET_PAYLOAD_IN_BYTES,
         )?;
 
         Ok(())

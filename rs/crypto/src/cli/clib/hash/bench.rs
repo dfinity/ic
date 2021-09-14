@@ -1,5 +1,5 @@
-use ic_crypto_sha256::Context;
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Context;
+use ic_crypto_sha::Sha256;
 use std::cmp::min;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};

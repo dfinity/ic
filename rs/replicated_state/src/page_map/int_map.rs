@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod test;
 
-use std::sync::Arc;
+use std::{cmp::Ordering, sync::Arc};
 
 /// Big-endian patricia trees.
 #[derive(Clone, Debug)]
@@ -113,6 +113,92 @@ impl<T: Clone> Tree<T> {
                     (*left).get(key)
                 } else {
                     (*right).get(key)
+                }
+            }
+        }
+    }
+
+    // See the comments of the public `bounds()` method.
+    fn bounds(&self, key: u64) -> (Option<u64>, Option<u64>) {
+        match self {
+            Tree::Empty => (None, None),
+            Tree::Leaf(k, _) => match key.cmp(k) {
+                Ordering::Less => (None, Some(*k)),
+                Ordering::Equal => (Some(key), Some(key)),
+                Ordering::Greater => (Some(*k), None),
+            },
+            Tree::Branch {
+                prefix,
+                branching_bit,
+                left,
+                right,
+            } => match mask(key, *branching_bit).cmp(prefix) {
+                Ordering::Less => (None, (*left).min_key()),
+                Ordering::Greater => ((*right).max_key(), None),
+                Ordering::Equal => {
+                    if key & (1 << branching_bit) == 0 {
+                        let (start, end) = (*left).bounds(key);
+                        if end.is_none() {
+                            (start, (*right).min_key())
+                        } else {
+                            (start, end)
+                        }
+                    } else {
+                        let (start, end) = (*right).bounds(key);
+                        if start.is_none() {
+                            ((*left).max_key(), end)
+                        } else {
+                            (start, end)
+                        }
+                    }
+                }
+            },
+        }
+    }
+
+    // Returns the smallest key in the given tree.
+    // If the tree is empty, then it returns `None`.
+    fn min_key(&self) -> Option<u64> {
+        let mut node = self;
+        loop {
+            match node {
+                Tree::Empty => {
+                    return None;
+                }
+                Tree::Leaf(k, _) => {
+                    return Some(*k);
+                }
+                Tree::Branch {
+                    prefix: _,
+                    branching_bit: _,
+                    left,
+                    right: _,
+                } => {
+                    node = left.as_ref();
+                }
+            }
+        }
+    }
+
+    // Returns the largest key in the given tree.
+    // If the tree is empty, then it returns `None`.
+    fn max_key(&self) -> Option<u64> {
+        let mut node = self;
+        loop {
+            match node {
+                Tree::Empty => {
+                    return None;
+                }
+                Tree::Leaf(k, _) => {
+                    return Some(*k);
+                }
+                Tree::Branch {
+                    prefix: _,
+                    branching_bit: _,
+                    left: _,
+                    right,
+                } => {
+                    node = right.as_ref();
                 }
             }
         }
@@ -314,6 +400,23 @@ impl<T: Clone> IntMap<T> {
     /// Complexity: O(min(N, 64))
     pub fn get(&self, key: u64) -> Option<&T> {
         self.0.get(key)
+    }
+
+    // Returns `(lower, upper)` inclusive bounds for the given key such that:
+    // - `lower` is the largest key in the tree that is smaller or equal to the
+    //   given key. If such a key doesn't exist then, `lower = None`.
+    // - `upper` is the smallest key in the tree that is larger or equal to the
+    //   given key. If such a key doesn't exist then, `upper = None`.
+    //
+    // In all cases the following post-conditions hold:
+    // - lower <= key <= upper,
+    // - for all i in [lower + 1..upper - 1]: self.get(i) == None,
+    // - lower != None implies self.get(lower) != None,
+    // - upper != None implies self.get(upper) != None,
+    //
+    // Complexity: O(min(N, 64))
+    pub fn bounds(&self, key: u64) -> (Option<u64>, Option<u64>) {
+        self.0.bounds(key)
     }
 
     /// Inserts a new entry into this map.

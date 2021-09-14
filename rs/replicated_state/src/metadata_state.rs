@@ -1,17 +1,19 @@
+pub mod subnet_call_context_manager;
+
+use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
+
 use ic_registry_routing_table::RoutingTable;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    crypto::{
-        threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
-        CryptoHash,
-    },
+    crypto::CryptoHash,
     ingress::{IngressStatus, MAX_INGRESS_TTL},
-    messages::{CallbackId, MessageId, Request, RequestOrResponse},
+    messages::{MessageId, RequestOrResponse},
     node_id_into_protobuf, node_id_try_from_protobuf, subnet_id_into_protobuf,
     subnet_id_try_from_protobuf,
     time::{Time, UNIX_EPOCH},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
-    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId,
+    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -60,6 +62,8 @@ pub struct SystemMetadata {
     pub own_subnet_id: SubnetId,
 
     pub own_subnet_type: SubnetType,
+
+    pub own_subnet_features: SubnetFeatures,
 
     /// Asynchronously handled subnet messages.
     pub subnet_call_context_manager: SubnetCallContextManager,
@@ -270,6 +274,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
             state_sync_version: item.state_sync_version,
             certification_version: item.certification_version,
             heap_delta_estimate: item.heap_delta_estimate.get(),
+            own_subnet_features: Some(item.own_subnet_features.into()),
         }
     }
 }
@@ -296,6 +301,7 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             // actual value when we serialize SystemMetadata. We rely on `load_checkpoint()` to
             // properly set this value.
             own_subnet_type: SubnetType::default(),
+            own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
             generated_id_counter: item.generated_id_counter,
             prev_state_hash: item.prev_state_hash.map(|b| CryptoHash(b).into()),
             batch_time: Time::from_nanos_since_unix_epoch(item.batch_time_nanos),
@@ -332,6 +338,7 @@ impl SystemMetadata {
             batch_time: UNIX_EPOCH,
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
+            own_subnet_features: SubnetFeatures::default(),
             // StateManager populates proper values of these fields before
             // committing each state.
             prev_state_hash: Default::default(),
@@ -357,120 +364,6 @@ impl SystemMetadata {
             Duration::from_secs(0)
         } else {
             self.batch_time - time_of_previous_batch
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SubnetCallContextManager {
-    next_callback_id: u64,
-    pub contexts: BTreeMap<CallbackId, SubnetCallContext>,
-}
-
-impl SubnetCallContextManager {
-    pub fn push(&mut self, context: SubnetCallContext) {
-        let callback_id = CallbackId::new(self.next_callback_id);
-        self.next_callback_id += 1;
-
-        self.contexts.insert(callback_id, context);
-    }
-}
-
-impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
-    fn from(item: &SubnetCallContextManager) -> Self {
-        Self {
-            next_callback_id: item.next_callback_id,
-            contexts: item
-                .contexts
-                .iter()
-                .map(
-                    |(callback_id, context)| pb_metadata::SubnetCallContextTree {
-                        callback_id: callback_id.get(),
-                        context: Some(context.into()),
-                    },
-                )
-                .collect(),
-        }
-    }
-}
-
-impl TryFrom<pb_metadata::SubnetCallContextManager> for SubnetCallContextManager {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_metadata::SubnetCallContextManager) -> Result<Self, Self::Error> {
-        let mut contexts = BTreeMap::<CallbackId, SubnetCallContext>::new();
-        for entry in item.contexts {
-            let context: SubnetCallContext = try_from_option_field(
-                entry.context,
-                "SystemMetadata::SubnetCallContextManager::SubnetCallContext",
-            )?;
-            contexts.insert(CallbackId::new(entry.callback_id), context);
-        }
-        Ok(Self {
-            next_callback_id: item.next_callback_id,
-            contexts,
-        })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SubnetCallContext {
-    SetupInitialDKGContext {
-        request: Request,
-        nodes_in_target_subnet: BTreeSet<NodeId>,
-        target_id: NiDkgTargetId,
-        registry_version: RegistryVersion,
-    },
-}
-
-impl From<&SubnetCallContext> for pb_metadata::SubnetCallContext {
-    fn from(context: &SubnetCallContext) -> Self {
-        match context {
-            SubnetCallContext::SetupInitialDKGContext {
-                request,
-                nodes_in_target_subnet,
-                target_id,
-                registry_version,
-            } => Self {
-                setup_initial_dkg_context: Some(pb_metadata::SetupInitialDkgContext {
-                    request: Some(request.into()),
-                    nodes_in_subnet: nodes_in_target_subnet
-                        .iter()
-                        .map(|node_id| node_id_into_protobuf(*node_id))
-                        .collect(),
-                    target_id: target_id.to_vec(),
-                    registry_version: registry_version.get(),
-                }),
-            },
-        }
-    }
-}
-
-impl TryFrom<pb_metadata::SubnetCallContext> for SubnetCallContext {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_metadata::SubnetCallContext) -> Result<Self, Self::Error> {
-        match item.setup_initial_dkg_context {
-            Some(context) => {
-                let mut nodes_in_target_subnet = BTreeSet::<NodeId>::new();
-                for node_id in context.nodes_in_subnet {
-                    nodes_in_target_subnet.insert(node_id_try_from_protobuf(node_id)?);
-                }
-                Ok(SubnetCallContext::SetupInitialDKGContext {
-                    request: try_from_option_field(context.request, "SubnetCallContext::request")?,
-                    nodes_in_target_subnet,
-                    target_id: match ni_dkg_target_id(context.target_id.as_slice()) {
-                        Ok(target_id) => target_id,
-                        Err(_) => {
-                            return Err(Self::Error::Other(
-                                "target_id is not 32 bytes.".to_string(),
-                            ))
-                        }
-                    },
-                    registry_version: RegistryVersion::from(context.registry_version),
-                })
-            }
-            None => Err(ProxyDecodeError::MissingField(
-                "SubnetCallContext::setup_initial_dkg_context",
-            )),
         }
     }
 }

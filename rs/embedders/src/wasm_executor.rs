@@ -4,20 +4,26 @@ use crate::{
 };
 use ic_config::embedders::PersistenceType;
 use ic_cow_state::{CowMemoryManager, MappedState};
-use ic_interfaces::execution_environment::{HypervisorError, InstanceStats, SystemApi};
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, InstanceStats, SystemApi,
+};
+use ic_logger::ReplicaLogger;
+use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::{PageDelta, PageIndex};
-use ic_system_api::{SystemApiImpl, SystemStateAccessorDirect};
+use ic_replicated_state::{EmbedderCache, PageDelta, PageIndex};
+use ic_system_api::{ApiType, SystemApiImpl, SystemStateAccessorDirect};
 use ic_types::{
     methods::{FuncRef, SystemMethod, WasmMethod},
     NumInstructions,
 };
+use ic_wasm_types::BinaryEncodedWasm;
 use ic_wasm_utils::validation::WasmImportsDetails;
 use ic_wasm_utils::{
     instrumentation::{instrument, InstructionCostTable},
     validation::{validate_wasm_binary, WasmValidationLimits},
 };
-use prometheus::IntCounter;
+use memory_tracker::DirtyPageTracking;
+use prometheus::{Histogram, IntCounter};
 use std::sync::Arc;
 
 struct WasmExecutorConfig {
@@ -48,6 +54,7 @@ struct WasmExecutorMetrics {
     imports_msg_cycles_refunded: IntCounter,
     imports_msg_cycles_accept: IntCounter,
     imports_mint_cycles: IntCounter,
+    compile: Histogram,
 }
 
 impl WasmExecutorMetrics {
@@ -86,6 +93,11 @@ impl WasmExecutorMetrics {
                 "execution_wasm_imports_mint_cycles",
                 "The number of Wasm modules that import ic0.mint_cycles",
             ),
+            compile: metrics_registry.histogram(
+                "execution_wasm_compile",
+                "The duration of Wasm module compilation including validation and instrumentation",
+                decimal_buckets_with_zero(-4, 1),
+            ),
         }
     }
 }
@@ -95,6 +107,7 @@ pub struct WasmExecutor {
     wasm_embedder: WasmtimeEmbedder,
     config: WasmExecutorConfig,
     metrics: WasmExecutorMetrics,
+    log: ReplicaLogger,
 }
 
 impl WasmExecutor {
@@ -103,11 +116,13 @@ impl WasmExecutor {
         max_globals: usize,
         max_functions: usize,
         metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
     ) -> Self {
         Self {
             wasm_embedder,
             config: WasmExecutorConfig::new(max_globals, max_functions),
             metrics: WasmExecutorMetrics::new(metrics_registry),
+            log,
         }
     }
 
@@ -135,53 +150,56 @@ impl WasmExecutor {
         }
     }
 
+    pub fn compile(
+        &self,
+        wasm_binary: &BinaryEncodedWasm,
+        persistence_type: PersistenceType,
+    ) -> HypervisorResult<EmbedderCache> {
+        let _timer = self.metrics.compile.start_timer();
+        validate_wasm_binary(
+            wasm_binary,
+            WasmValidationLimits {
+                max_globals: self.config.max_globals,
+                max_functions: self.config.max_functions,
+            },
+        )
+        .map_err(HypervisorError::from)
+        .and_then(|details| {
+            if details.reserved_exports > 0 {
+                self.metrics
+                    .reserved_exports
+                    .inc_by(details.reserved_exports as u64);
+            }
+            self.observe_metrics(&details.imports_details);
+            instrument(&wasm_binary, &InstructionCostTable::new()).map_err(HypervisorError::from)
+        })
+        .and_then(|output| self.wasm_embedder.compile(persistence_type, &output.binary))
+    }
+
     pub fn process(
         &self,
         WasmExecutionInput {
             api_type,
             system_state,
-            instructions_limit,
-            canister_memory_limit,
             canister_current_memory_usage,
-            subnet_available_memory,
-            compute_allocation,
+            execution_parameters,
             func_ref,
             mut execution_state,
             cycles_account_manager,
         }: WasmExecutionInput,
     ) -> WasmExecutionOutput {
+        let canister_id = system_state.canister_id;
         let system_state_accessor =
             SystemStateAccessorDirect::new(system_state, cycles_account_manager);
-        let persistence_type = if execution_state.cow_mem_mgr.is_valid() {
-            PersistenceType::Pagemap
-        } else {
-            PersistenceType::Sigsegv
-        };
         if execution_state.embedder_cache.is_none() {
             // The wasm_binary stored in the `ExecutionState` is not
             // instrumented so instrument it before compiling. Further, due to
             // IC upgrades, it is possible that the `validate_wasm_binary()`
             // function has changed, so also validate the binary.
-            match validate_wasm_binary(
+            match self.compile(
                 &execution_state.wasm_binary,
-                WasmValidationLimits {
-                    max_globals: self.config.max_globals,
-                    max_functions: self.config.max_functions,
-                },
-            )
-            .map_err(HypervisorError::from)
-            .and_then(|details| {
-                if details.reserved_exports > 0 {
-                    self.metrics
-                        .reserved_exports
-                        .inc_by(details.reserved_exports as u64);
-                }
-                self.observe_metrics(&details.imports_details);
-                instrument(&execution_state.wasm_binary, &InstructionCostTable::new())
-                    .map_err(HypervisorError::from)
-            })
-            .and_then(|output| self.wasm_embedder.compile(persistence_type, &output.binary))
-            {
+                execution_state.persistence_type(),
+            ) {
                 Ok(cache) => execution_state.embedder_cache = Some(cache),
                 Err(err) => {
                     return WasmExecutionOutput {
@@ -201,7 +219,7 @@ impl WasmExecutor {
         // TODO(EXC-176): we should combine this with the hypervisor so that
         // we make the decision of whether or not to commit modifications in
         // a single place instead.
-        let (memory_creator, commit_dirty_pages) = if execution_state.cow_mem_mgr.is_valid() {
+        let memory_creator = if execution_state.cow_mem_mgr.is_valid() {
             match &func_ref {
                 FuncRef::Method(WasmMethod::Update(_))
                 | FuncRef::Method(WasmMethod::System(_))
@@ -211,24 +229,29 @@ impl WasmExecutor {
                 }
                 _ => (),
             }
-
-            let commit_dirty_pages = func_ref.to_commit();
-
             let mapped_state = Arc::as_ref(execution_state.mapped_state.as_ref().unwrap());
-            (
-                Some(Arc::new(CowMemoryCreator::new(mapped_state))),
-                commit_dirty_pages,
-            )
+            Some(Arc::new(CowMemoryCreator::new(mapped_state)))
         } else {
-            (None, false)
+            None
+        };
+
+        let commit_dirty_pages = func_ref.to_commit();
+
+        let dirty_page_tracking = match &api_type {
+            ApiType::ReplicatedQuery { .. } | ApiType::InspectMessage { .. } => {
+                DirtyPageTracking::Ignore
+            }
+            _ => DirtyPageTracking::Track,
         };
 
         let mut instance = self.wasm_embedder.new_instance(
+            canister_id,
             &execution_state.embedder_cache.as_ref().unwrap(),
             &execution_state.exported_globals,
             execution_state.heap_size,
             memory_creator,
             Some(execution_state.page_map.clone()),
+            dirty_page_tracking,
         );
 
         if let FuncRef::Method(WasmMethod::System(SystemMethod::Empty)) = func_ref {
@@ -244,26 +267,27 @@ impl WasmExecutor {
         }
 
         let (execution_result, available_num_instructions, system_state_accessor, instance_stats) = {
+            instance.set_num_instructions(execution_parameters.instruction_limit);
             let mut system_api = SystemApiImpl::new(
                 api_type,
                 system_state_accessor,
-                canister_memory_limit,
                 canister_current_memory_usage,
-                subnet_available_memory,
-                compute_allocation,
+                execution_parameters,
+                self.log.clone(),
             );
-            instance.set_num_instructions(instructions_limit);
             let run_result = instance.run(&mut system_api, func_ref);
             match run_result {
                 Ok(run_result) => {
-                    if execution_state.cow_mem_mgr.is_valid() && commit_dirty_pages {
-                        let mapped_state = execution_state.mapped_state.take();
-                        let pages: Vec<u64> =
-                            run_result.dirty_pages.iter().map(|p| p.get()).collect();
-                        mapped_state.unwrap().soft_commit(&pages);
-                    } else {
-                        let page_delta = compute_page_delta(&instance, &run_result.dirty_pages);
-                        execution_state.page_map.update(page_delta);
+                    if dirty_page_tracking == DirtyPageTracking::Track {
+                        if execution_state.cow_mem_mgr.is_valid() && commit_dirty_pages {
+                            let mapped_state = execution_state.mapped_state.take();
+                            let pages: Vec<u64> =
+                                run_result.dirty_pages.iter().map(|p| p.get()).collect();
+                            mapped_state.unwrap().soft_commit(&pages);
+                        } else {
+                            let page_delta = compute_page_delta(&instance, &run_result.dirty_pages);
+                            execution_state.page_map.update(page_delta);
+                        }
                     }
                     execution_state.exported_globals = run_result.exported_globals;
                     execution_state.heap_size = instance.heap_size();
@@ -289,6 +313,10 @@ impl WasmExecutor {
             execution_state,
             instance_stats,
         }
+    }
+
+    pub fn compile_count_for_testing(&self) -> u64 {
+        self.metrics.compile.get_sample_count()
     }
 }
 

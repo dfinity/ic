@@ -251,7 +251,8 @@ async fn validate_slice() {
         assert_eq!(
             SliceValidationResult::Valid {
                 messages_end: EXPECTED.message_index.increment(),
-                signals_end: EXPECTED.signal_index
+                signals_end: EXPECTED.signal_index,
+                byte_size: 1
             },
             validate_slice_with_messages(expected_message, expected_message + 1)
         );
@@ -423,7 +424,8 @@ async fn validate_slice_above_msg_limit() {
         assert_eq!(
             SliceValidationResult::Valid {
                 messages_end: expected_message.into(),
-                signals_end: (signal_index + 1).into()
+                signals_end: (signal_index + 1).into(),
+                byte_size: 1
             },
             validate_slice(expected_message, expected_message, signal_index + 1, &state),
         );
@@ -441,7 +443,8 @@ async fn validate_slice_above_msg_limit() {
         assert_eq!(
             SliceValidationResult::Valid {
                 messages_end: (expected_message + 1).into(),
-                signals_end: signal_index.into()
+                signals_end: signal_index.into(),
+                byte_size: 1
             },
             validate_slice(expected_message, expected_message + 1, signal_index, &state),
         );
@@ -468,4 +471,6 @@ fn get_xnet_payload_builder_for_test(
         &MetricsRegistry::new(),
         log,
     )
+    // Any slice, empty or not, has byte size 1.
+    .with_count_bytes_fn(|_| Ok(1))
 }

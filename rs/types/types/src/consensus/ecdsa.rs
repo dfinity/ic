@@ -7,10 +7,26 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use self::ecdsa_crypto_mock::{
-    BeaverTriple, EcdsaSignature, MultiplicationTranscript, MultiplicationTranscriptParams,
-    OngoingSigningRequests, RandomTranscript, RandomTranscriptParams, RequestId,
-    ResharingTranscript, TranscriptId,
+    EcdsaQuadruple, EcdsaSignature, MultiplicationTranscript, MultiplicationTranscriptParams,
+    OngoingSigningRequests, RandomFatTranscript, RandomFatTranscriptParams, RandomSkinnyTranscript,
+    RandomSkinnyTranscriptParams, RequestId, ResharingTranscript, TranscriptId,
 };
+
+/// Refers to any EcdsaPayload type
+pub enum EcdsaPayload {
+    Batch(EcdsaBatchPayload),
+    Summary(EcdsaSummaryPayload),
+}
+
+struct RandomTranscriptPair {
+    skinny: RandomSkinnyTranscript,
+    fat: RandomFatTranscript,
+}
+
+struct RandomTranscriptParamsPair {
+    skinny: RandomSkinnyTranscriptParams,
+    fat: RandomFatTranscriptParams,
+}
 
 /// The payload information necessary for ECDSA threshold signatures, that is
 /// published on every consensus round.
@@ -19,7 +35,7 @@ pub struct EcdsaBatchPayload {
     signature_agreements: BTreeMap<RequestId, EcdsaSignature>,
 
     /// `RandomTranscripts` that we agreed upon in this round.
-    random_transcript_agreements: BTreeMap<TranscriptId, RandomTranscript>,
+    random_transcript_agreements: BTreeMap<TranscriptId, RandomTranscriptPair>,
 
     /// `MultiplicationTranscripts` that we agreed upon in this round.
     multiplication_transcript_agreements: BTreeMap<TranscriptId, MultiplicationTranscript>,
@@ -33,7 +49,7 @@ pub struct EcdsaBatchPayload {
 pub struct EcdsaSummaryPayload {
     /// Configs to generate random transcripts from. These are taken from
     /// random_transcripts.
-    random_configs: Vec<RandomTranscriptParams>,
+    random_configs: Vec<RandomTranscriptParamsPair>,
 
     /// Configs to generate multiplication transcripts from. These are taken
     /// from random_transcripts.
@@ -49,12 +65,12 @@ pub struct EcdsaSummaryPayload {
     /// next summary (if we have one).
     next_ecdsa_transcript: Option<ResharingTranscript>,
 
-    /// Beaver triples that we can use to create ECDSA signatures.
-    available_beaver_triples: Vec<BeaverTriple>,
+    /// ECDSA transcript quadruples that we can use to create ECDSA signatures.
+    available_ecdsa_quadruples: Vec<EcdsaQuadruple>,
 
-    /// Available transcripts of random numbers. We use these to build beaver
-    /// triples.
-    random_transcripts: Vec<RandomTranscript>,
+    /// Available transcripts of random numbers. We use these to build
+    /// quadruples
+    random_transcripts: Vec<RandomTranscriptPair>,
 }
 
 /// The ECDSA message that goes into the artifact pool and gossiped with peers
@@ -71,16 +87,23 @@ mod ecdsa_crypto_mock {
     pub struct RequestId;
     pub struct EcdsaSignature;
 
-    pub struct RandomTranscript;
+    pub struct RandomSkinnyTranscript;
+    pub struct RandomFatTranscript;
     pub struct ResharingTranscript;
     pub struct MultiplicationTranscript;
 
-    pub struct RandomTranscriptParams;
+    pub struct RandomSkinnyTranscriptParams;
+    pub struct RandomFatTranscriptParams;
     pub struct ResharingTranscriptParams;
     pub struct MultiplicationTranscriptParams;
 
     pub struct TranscriptId;
-    pub struct BeaverTripleId;
-    pub type BeaverTriple = (RandomTranscript, RandomTranscript, MultiplicationTranscript);
-    pub type OngoingSigningRequests = BTreeMap<RequestId, (BeaverTripleId, BeaverTripleId)>;
+    pub struct QuadrupleId;
+    pub type EcdsaQuadruple = (
+        RandomSkinnyTranscript,
+        MultiplicationTranscript,
+        RandomFatTranscript,
+        MultiplicationTranscript,
+    );
+    pub type OngoingSigningRequests = BTreeMap<RequestId, (QuadrupleId, QuadrupleId)>;
 }

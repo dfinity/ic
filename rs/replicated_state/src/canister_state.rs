@@ -171,6 +171,13 @@ impl CanisterState {
         self.system_state.memory_allocation
     }
 
+    pub fn memory_limit(&self, default_limit: NumBytes) -> NumBytes {
+        match self.memory_allocation() {
+            MemoryAllocation::Reserved(bytes) => bytes,
+            MemoryAllocation::BestEffort => default_limit,
+        }
+    }
+
     /// Returns the current compute allocation for the canister.
     pub fn compute_allocation(&self) -> ComputeAllocation {
         self.scheduler_state.compute_allocation
@@ -220,6 +227,12 @@ pub struct NumWasmPagesTag;
 /// page).
 pub type NumWasmPages = AmountOf<NumWasmPagesTag, u32>;
 
+/// Number of Wasm Pages (which can be of different size than host page).
+///
+/// Note: Allows for representing larger number of wasm pages, e.g. to support
+/// 64 bit memories.
+pub type NumWasmPages64 = AmountOf<NumWasmPagesTag, u64>;
+
 const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KB
 
 /// A session is represented by an array of bytes and a monotonic
@@ -228,6 +241,14 @@ pub type SessionNonce = ([u8; 32], u64);
 
 pub fn num_bytes_from(pages: NumWasmPages) -> NumBytes {
     NumBytes::from(pages.get() as u64 * WASM_PAGE_SIZE_IN_BYTES)
+}
+
+pub fn num_bytes_try_from64(pages: NumWasmPages64) -> Result<NumBytes, String> {
+    let (bytes, overflow) = pages.get().overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
+    if overflow {
+        return Err("Could not convert from wasm pages to number of bytes".to_string());
+    }
+    Ok(NumBytes::from(bytes))
 }
 
 pub mod testing {

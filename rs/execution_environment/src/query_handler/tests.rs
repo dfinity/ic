@@ -6,21 +6,24 @@ use crate::{
 };
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::Config;
-use ic_interfaces::execution_environment::{QueryHandler, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionParameters, QueryHandler, SubnetAvailableMemory,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
+    state_manager::FakeStateManager,
     types::{
         ids::{canister_test_id, subnet_test_id, user_test_id},
         messages::InstallCodeContextBuilder,
     },
+    universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
     with_test_replica_logger,
 };
-use ic_types::{ingress::WasmResult, messages::UserQuery};
+use ic_types::{ingress::WasmResult, messages::UserQuery, ComputeAllocation};
 use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions, SubnetId};
 use maplit::btreemap;
 use std::{path::Path, sync::Arc};
@@ -91,8 +94,9 @@ where
             hypervisor,
             subnet_id,
             subnet_type,
-            MEMORY_CAPACITY,
+            Config::default(),
             &metrics_registry,
+            Arc::new(FakeStateManager::new()),
         );
         f(query_handler, canister_manager, state);
     });
@@ -123,8 +127,12 @@ fn universal_canister(
                 .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
                 .build(),
             state,
-            INSTRUCTION_LIMIT,
-            SubnetAvailableMemory::new(MEMORY_CAPACITY),
+            ExecutionParameters {
+                instruction_limit: INSTRUCTION_LIMIT,
+                canister_memory_limit: MEMORY_CAPACITY,
+                subnet_available_memory: SubnetAvailableMemory::new(MEMORY_CAPACITY),
+                compute_allocation: ComputeAllocation::default(),
+            },
         )
         .1
         .unwrap();
@@ -313,5 +321,52 @@ fn query_metrics_are_reported() {
                     .instructions
                     .get_sample_sum() as u64
         )
+    });
+}
+
+#[test]
+fn query_compilied_once() {
+    with_setup(|query_handler, canister_manager, mut state| {
+        let canister_id = universal_canister(&canister_manager, &mut state);
+        let canister = state.canister_state_mut(&canister_id).unwrap();
+        // The canister was compiled during installation.
+        assert_eq!(1, query_handler.internal.hypervisor.compile_count());
+        // Drop the embedder cache to force compilation during query handling.
+        canister.execution_state.as_mut().unwrap().embedder_cache = None;
+
+        let result = query_handler.query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canister_id,
+                method_name: "query".to_string(),
+                method_payload: wasm().reply().build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(state.clone()),
+            vec![],
+        );
+        assert!(result.is_ok());
+
+        // Now we expect the compilation counter to increase because the query
+        // had to compile.
+        assert_eq!(2, query_handler.internal.hypervisor.compile_count());
+
+        let result = query_handler.query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canister_id,
+                method_name: "query".to_string(),
+                method_payload: wasm().reply().build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(state),
+            vec![],
+        );
+        assert!(result.is_ok());
+
+        // The last query should have reused the compiled code.
+        assert_eq!(2, query_handler.internal.hypervisor.compile_count());
     });
 }

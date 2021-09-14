@@ -1,5 +1,5 @@
 use crate::pb::v1::{AccountState, Gtc};
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
 use ic_nns_governance::pb::v1::neuron::DissolveState;

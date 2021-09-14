@@ -103,11 +103,10 @@ use std::{
 mod artifact_download_list;
 mod download_management;
 mod download_prioritization;
-mod event_handler;
-mod gossip_protocol;
+pub mod event_handler;
+pub mod gossip_protocol;
 mod malicious_gossip;
 mod metrics;
-pub mod p2p;
 
 /// Custom P2P result type returning a P2P error in case of error.
 pub(crate) type P2PResult<T> = std::result::Result<T, P2PError>;
@@ -144,7 +143,7 @@ pub(crate) mod utils {
 /// protocol results. Some results are also used for internal
 /// operation, i.e., they are not represented in the on-wire protocol.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub(crate) enum P2PErrorCode {
+pub enum P2PErrorCode {
     /// The requested entity artifact/chunk/server/client was not found
     NotFound = 1,
     /// An artifact (chunk) was received that already exists.
@@ -161,7 +160,7 @@ pub(crate) enum P2PErrorCode {
 
 /// Wrapper over a P2P error code.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct P2PError {
+pub struct P2PError {
     /// The P2P error code.
     p2p_error_code: P2PErrorCode,
 }

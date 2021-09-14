@@ -6,7 +6,7 @@ fn can_mmap_file() {
     let mut tmp = tempfile::tempfile().expect("failed to create a temporary file");
     tmp.write_all(b"TEST TEST")
         .expect("failed to write data to a tempfile");
-    let mmap = ScopedMmap::from_readonly_file(tmp, 9).expect("failed to mmap a temporary file");
+    let mmap = ScopedMmap::from_readonly_file(&tmp, 9).expect("failed to mmap a temporary file");
     assert_eq!(mmap.as_slice(), &b"TEST TEST"[..]);
 }
 

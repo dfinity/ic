@@ -19,6 +19,11 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::time::Duration;
 
+/// The acceptable gap between the finalized height and the certified height. If
+/// the actual gap is greater than this, consensus starts slowing down the block
+/// rate.
+pub const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 3;
+
 /// Rotate on_state_change calls with a round robin schedule to ensure fairness.
 #[derive(Default)]
 pub struct RoundRobin {
@@ -151,11 +156,13 @@ pub fn get_adjusted_notary_delay(
         (initial_delay + ranked_delay * 1.5_f32.powi(finality_gap)) as u64;
 
     // We adjust the delay based on the gap between the finalized height and the
-    // certified height: when the certified height is more than 3 rounds behind the
+    // certified height: when the certified height is more than
+    // ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP rounds behind the
     // finalized height, we increase the delay. More precisely, for every additional
     // round that certified height is behind finalized height, we add `unit_delay`.
-    let certified_gap =
-        finalized_height.saturating_sub(state_manager.latest_certified_height().get() + 3);
+    let certified_gap = finalized_height.saturating_sub(
+        state_manager.latest_certified_height().get() + ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP,
+    );
 
     let adjusted_delay = finality_adjusted_delay + unit_delay.as_millis() as u64 * certified_gap;
     Some(Duration::from_millis(adjusted_delay))
@@ -393,7 +400,7 @@ fn get_active_data_at(reader: &dyn ConsensusPoolCache, height: Height) -> Option
 /// Return the active DKGData active at the given height using the given summary
 /// block.
 fn get_active_data_at_given_summary(summary_block: &Block, height: Height) -> Option<DkgData> {
-    let dkg_summary = summary_block.payload.as_ref().as_summary();
+    let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
     if dkg_summary.current_interval_includes(height) {
         Some(DkgData {
             registry_version: dkg_summary.registry_version,

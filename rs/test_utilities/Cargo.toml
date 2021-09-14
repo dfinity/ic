@@ -16,7 +16,7 @@ ic-consensus-message = { path = "../consensus/message" }
 ic-cow-state = { path = "../cow_state" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
-ic-crypto-sha256 = { path = "../crypto/sha256" }
+ic-crypto-sha = { path = "../crypto/sha" }
 ic-crypto-test-utils = { path = "../crypto/test_utils" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }

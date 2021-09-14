@@ -10,7 +10,7 @@ mod tests;
 mod xnet_client_tests;
 
 use crate::{
-    certified_slice_pool::CertifiedSlicePool,
+    certified_slice_pool::{certified_slice_count_bytes, CertifiedSlicePool, CertifiedSliceResult},
     hyper::{ExecuteOnRuntime, TlsConnector},
     xnet_uri::XNetAuthority,
 };
@@ -25,7 +25,7 @@ use ic_interfaces::{
     },
     registry::RegistryClient,
     state_manager::{StateManager, StateManagerError},
-    validation::{ValidationError, ValidationResult},
+    validation::ValidationError,
 };
 use ic_logger::{info, log, warn, ReplicaLogger};
 use ic_metrics::{
@@ -193,6 +193,12 @@ pub struct XNetPayloadBuilderImpl {
     /// Handle to the pool refill task, used to asynchronously trigger refill.
     refill_task_handle: RefillTaskHandle,
 
+    /// Function to be used for calculating deterministic `CertifiedStreamSlice`
+    /// byte sizes. Always
+    /// `crate::certified_slice_pool::certified_slice_count_bytes()` in
+    /// production code, only replaced in unit tests.
+    count_bytes_fn: fn(&CertifiedStreamSlice) -> CertifiedSliceResult<usize>,
+
     metrics: Arc<XNetPayloadBuilderMetrics>,
 
     log: ReplicaLogger,
@@ -301,9 +307,22 @@ impl XNetPayloadBuilderImpl {
             registry,
             slice_pool,
             refill_task_handle,
+            count_bytes_fn: certified_slice_count_bytes,
             metrics,
             log,
         }
+    }
+
+    /// Testing only: replaces the function to be used for calculating
+    /// `CertifiedStreamSlice` byte sizes with the provided one.
+    #[doc(hidden)]
+    #[allow(dead_code)]
+    pub(crate) fn with_count_bytes_fn(
+        mut self,
+        certified_slice_count_bytes: fn(&CertifiedStreamSlice) -> CertifiedSliceResult<usize>,
+    ) -> Self {
+        self.count_bytes_fn = certified_slice_count_bytes;
+        self
     }
 
     /// Calculates the next expected message and signal indices for a given
@@ -441,6 +460,9 @@ impl XNetPayloadBuilderImpl {
     ///    indices;
     ///  * and ensures signals advance monotonically and only refer to current
     ///    messages.
+    ///
+    /// Returns the validation result, including the `CountBytes`-like estimate
+    /// (deterministic, but not exact) of the slice size in bytes if valid.
     fn validate_slice(
         &self,
         subnet_id: SubnetId,
@@ -581,6 +603,8 @@ impl XNetPayloadBuilderImpl {
                         .map(|messages| messages.end())
                         .unwrap_or(expected.message_index),
                     signals_end: slice.header().signals_end,
+                    byte_size: (self.count_bytes_fn)(certified_slice)
+                        .expect("Failed to unpack CertifiedStresmSlice"),
                 }
             }
 
@@ -834,8 +858,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         payload: &XNetPayload,
         validation_context: &ValidationContext,
         past_payloads: &[&XNetPayload],
-        _byte_limit: NumBytes,
-    ) -> ValidationResult<XNetPayloadValidationError> {
+    ) -> Result<NumBytes, XNetPayloadValidationError> {
         let timer = Timer::start();
         let state = match self
             .state_manager
@@ -851,6 +874,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
 
         // For every slice in `payload`, check certification and gaps/duplicates.
         let mut new_stream_positions = Vec::new();
+        let mut payload_byte_size = 0;
         for (subnet_id, certified_slice) in payload.stream_slices.iter() {
             let expected = self.expected_indices_for_stream(*subnet_id, &state, past_payloads);
             match self.validate_slice(
@@ -877,7 +901,11 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 SliceValidationResult::Valid {
                     messages_end,
                     signals_end,
-                } => new_stream_positions.push((*subnet_id, messages_end, signals_end)),
+                    byte_size,
+                } => {
+                    new_stream_positions.push((*subnet_id, messages_end, signals_end));
+                    payload_byte_size += byte_size;
+                }
             }
         }
 
@@ -901,116 +929,8 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
 
         self.metrics
             .observe_validate_duration(VALIDATION_STATUS_VALID, timer);
-        Ok(())
+        Ok(NumBytes::new(payload_byte_size as u64))
     }
-}
-
-// Byte size of a `CertifiedStreamSlice` witness with no messages.
-pub const NO_MESSAGES_WITNESS_BYTES: usize = 214;
-
-/// Calculates a `CountBytes`-like estimate (deterministic, but not exact) of
-/// the serialized byte size of a `CertifiedStreamSlice` witness, based only on
-/// the length of the originating stream and where the slice is cut from.
-///
-/// The slice length gives the exact number of labeled and known nodes in the
-/// witness. Knowing that every left subtree in the hash tree is a complete
-/// binary tree, we can compute how many `Pruned` nodes (corresponding to pruned
-/// subtrees) there are before and after the slice.
-///
-/// Panics if the inputs are invalid (e.g. stream begin after stream end or
-/// slice outside of stream).
-pub(crate) fn witness_count_bytes(
-    stream_begin: StreamIndex,
-    stream_end: StreamIndex,
-    slice_begin: Option<StreamIndex>,
-    slice_end: Option<StreamIndex>,
-) -> usize {
-    // Since most subtrees will be small (< 127 bytes when encoded), we assume 1
-    // byte length plus 1 byte for the combined tag and type for every struct /
-    // enum.
-
-    // Size of a `Pruned` node: 2 bytes enum, 1 byte length, digest.
-    const PRUNED_NODE_BYTES: usize = 3 + std::mem::size_of::<ic_crypto_tree_hash::Digest>();
-    // Size of a `Known` node under a `Node` with a `u64` label: 2 bytes `Node`
-    // enum, 2 each for `label` and `sub_witness`, 8 for label, 2 for `Known` enum.
-    const KNOWN_NODE_BYTES: usize = 16;
-    // Size of a `Fork` node: 2 bytes `Fork` enum, 2 bytes each for left and right.
-    const FORK_NODE_BYTES: usize = 6;
-
-    assert_eq!(slice_begin.is_none(), slice_end.is_none());
-    if stream_begin == stream_end || slice_begin == slice_end {
-        // Empty slice.
-        return NO_MESSAGES_WITNESS_BYTES;
-    }
-
-    let slice_begin = slice_begin.unwrap();
-    let slice_end = slice_end.unwrap();
-
-    assert!(stream_begin <= slice_begin);
-    assert!(slice_begin <= slice_end);
-    assert!(slice_end <= stream_end);
-
-    let total_leaves = (stream_end - stream_begin).get();
-    let begin_pruned_leaves = (slice_begin - stream_begin).get();
-    let end_pruned_leaves = (stream_end - slice_end).get();
-
-    // `Pruned` nodes from beginning of stream are all left children.
-    //
-    // After having subtracted `stream_begin`, the "normalized" leaf indices start
-    // at 0. Every `1` bit in `begin_pruned_leaves` is equivalent to following the
-    // right child and pruning the left. Thus, there is one `Pruned` node for every
-    // `1` bit in `begin_pruned_leaves`.
-    let begin_pruned_nodes = begin_pruned_leaves.count_ones();
-
-    // The minimal subtree containing all nodes pruned from stream end is not
-    // usually complete. We calculate the size of the complete tree of same height;
-    // and the number of remaining leaves after pruning; their difference is the
-    // equivalent number of leaves that would have had to be pruned from the
-    // complete tree. The count of `1` bits in this tells us how many `Pruned` nodes
-    // there are, because we will have pruned the same number of subtrees in both
-    // cases.
-    //
-    // E.g. considering the following hash tree (where 8, 4 and 1 represent complete
-    // binary trees with 8, 4 and respectively 1 leaves):
-    //
-    //       *
-    //      / \
-    //     8   *
-    //        / \
-    //       4   1
-    //
-    // Pruning 6 leaves on the right will leave us with 7 leaves, the equivalent of
-    // having pruned 9 leaves from a complete tree with 16 leaves (i.e. 2 subtrees,
-    // or 2 `Pruned` nodes). Pruning 4 leaves on the right will only affect the
-    // right subtree (of size 5) leaving it with 1 leaf; this is equivalent to
-    // having pruned 7 nodes (i.e. 3 subtrees, or 3 `Pruned` nodes) from a complete
-    // tree with 8 leaves.
-    let end_equivalent_pruned_leaves = if total_leaves.trailing_zeros()
-        + end_pruned_leaves.leading_zeros()
-        >= std::mem::size_of_val(&total_leaves) as u32 * 8
-    {
-        // Complete subtree.
-        end_pruned_leaves
-    } else {
-        let remaining_leaves = total_leaves - end_pruned_leaves;
-        let min_complete_subtree_leaves =
-            1u64.rotate_right((total_leaves ^ remaining_leaves).leading_zeros());
-        let complete_subtree_remaining_leaves =
-            remaining_leaves & (min_complete_subtree_leaves - 1);
-        min_complete_subtree_leaves - complete_subtree_remaining_leaves
-    };
-    // Same as at stream begin, the number of `Pruned` nodes is the number of `1`
-    // bits in the adjusted offset.
-    let end_pruned_nodes = end_equivalent_pruned_leaves.count_ones();
-
-    let pruned_nodes = (begin_pruned_nodes + end_pruned_nodes) as usize;
-    let slice_len = (slice_end - slice_begin).get() as usize;
-
-    let pruned_nodes_bytes = pruned_nodes * PRUNED_NODE_BYTES;
-    let known_nodes_bytes = slice_len * KNOWN_NODE_BYTES;
-    let fork_nodes_bytes = (pruned_nodes + slice_len - 1) * FORK_NODE_BYTES;
-
-    NO_MESSAGES_WITNESS_BYTES + pruned_nodes_bytes + known_nodes_bytes + fork_nodes_bytes
 }
 
 /// Retrieves the given node's operator ID at the given registry version.
@@ -1259,6 +1179,7 @@ enum SliceValidationResult {
     Valid {
         messages_end: StreamIndex,
         signals_end: StreamIndex,
+        byte_size: usize,
     },
     /// Slice is invalid for the given reason.
     Invalid(String),

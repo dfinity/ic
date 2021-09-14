@@ -12,7 +12,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_replicated_state::canister_state::QUEUE_INDEX_NONE;
 use ic_replicated_state::{
-    canister_state::testing::CanisterStateTesting, CallOrigin, ExportedFunctions, NumWasmPages,
+    canister_state::testing::CanisterStateTesting, CallOrigin, ExportedFunctions, NumWasmPages64,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -1968,12 +1968,36 @@ fn execution_round_metrics_are_recorded() {
             assert_eq!(1, scheduler.metrics.round.messages.get_sample_count());
             assert_eq!(13, scheduler.metrics.round.messages.get_sample_sum() as u64);
             assert_eq!(
+                1,
+                scheduler
+                    .metrics
+                    .round_subnet_queue
+                    .duration
+                    .get_sample_count()
+            );
+            assert_eq!(
+                1,
+                scheduler
+                    .metrics
+                    .round_subnet_queue
+                    .instructions
+                    .get_sample_count()
+            );
+            assert_eq!(
                 30,
                 scheduler
                     .metrics
                     .round_subnet_queue
                     .instructions
                     .get_sample_sum() as u64,
+            );
+            assert_eq!(
+                1,
+                scheduler
+                    .metrics
+                    .round_subnet_queue
+                    .messages
+                    .get_sample_count()
             );
             assert_eq!(
                 3,
@@ -1983,10 +2007,20 @@ fn execution_round_metrics_are_recorded() {
                     .messages
                     .get_sample_sum() as u64,
             );
+            assert_eq!(1, scheduler.metrics.round_inner.duration.get_sample_count());
+            assert_eq!(
+                1,
+                scheduler
+                    .metrics
+                    .round_inner
+                    .instructions
+                    .get_sample_count()
+            );
             assert_eq!(
                 100,
                 scheduler.metrics.round_inner.instructions.get_sample_sum() as u64,
             );
+            assert_eq!(1, scheduler.metrics.round_inner.messages.get_sample_count());
             assert_eq!(
                 10,
                 scheduler.metrics.round_inner.messages.get_sample_sum() as u64,
@@ -1996,6 +2030,14 @@ fn execution_round_metrics_are_recorded() {
                 scheduler
                     .metrics
                     .round_inner_iteration
+                    .duration
+                    .get_sample_count()
+            );
+            assert_eq!(
+                2,
+                scheduler
+                    .metrics
+                    .round_inner_iteration
                     .instructions
                     .get_sample_count(),
             );
@@ -2024,7 +2066,15 @@ fn execution_round_metrics_are_recorded() {
                     .get_sample_sum() as u64,
             );
             assert_eq!(
-                4,
+                2,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread
+                    .duration
+                    .get_sample_count()
+            );
+            assert_eq!(
+                2,
                 scheduler
                     .metrics
                     .round_inner_iteration_thread
@@ -2040,7 +2090,7 @@ fn execution_round_metrics_are_recorded() {
                     .get_sample_sum() as u64,
             );
             assert_eq!(
-                4,
+                2,
                 scheduler
                     .metrics
                     .round_inner_iteration_thread
@@ -2054,6 +2104,14 @@ fn execution_round_metrics_are_recorded() {
                     .round_inner_iteration_thread
                     .messages
                     .get_sample_sum() as u64,
+            );
+            assert_eq!(
+                10,
+                scheduler
+                    .metrics
+                    .round_inner_iteration_thread_message
+                    .duration
+                    .get_sample_count()
             );
             assert_eq!(
                 10,
@@ -2295,7 +2353,7 @@ fn test_uninstall_canister() {
     // Stable memory and exection state are dropped.
     assert_eq!(
         canister.system_state.stable_memory_size,
-        NumWasmPages::new(0)
+        NumWasmPages64::new(0)
     );
     assert_eq!(canister.execution_state, None);
 }

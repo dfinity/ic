@@ -16,7 +16,7 @@ ic-base-types = { path = "../base_types" }
 ic-error-types = { path = "../error_types" }
 ic-ic00-types = { path = "../ic00_types" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
-ic-crypto-sha256 = { path = "../../crypto/sha256" }
+ic-crypto-sha = { path = "../../crypto/sha" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-transport = { path = "../../registry/transport" }

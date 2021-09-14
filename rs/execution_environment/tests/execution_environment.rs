@@ -2156,7 +2156,7 @@ fn install_code_fails_on_invalid_memory_allocation() {
             vec![],
             vec![],
             None,
-            Some(1 << 50), // <-- Invalid. Should fail.
+            Some(u64::MAX), // <-- Invalid. Should fail.
             None,
         );
 
@@ -2181,16 +2181,17 @@ fn install_code_fails_on_invalid_memory_allocation() {
             )
             .0;
 
-        assert_eq!(state.get_ingress_status(&MessageId::from([0; 32])),
-                   IngressStatus::Failed {
-                       receiver: ic00::IC_00.get(),
-                       user_id: sender,
-                       error: UserError::new(
-                           ErrorCode::CanisterContractViolation,
-                           "MemoryAllocation expected to be in the range [0..8_589_934_592], got 1_125_899_906_842_624"
-                       ),
-                       time: mock_time(),
-                   });
+        assert_eq!(
+            state.get_ingress_status(&MessageId::from([0; 32])),
+            IngressStatus::Failed {
+                receiver: ic00::IC_00.get(),
+                user_id: sender,
+                error: UserError::new(
+                    ErrorCode::CanisterContractViolation,
+                    "MemoryAllocation expected to be in the range [0..12_884_901_888], got 18_446_744_073_709_551_615"
+                ),
+                time: mock_time(),
+            });
     });
 }
 

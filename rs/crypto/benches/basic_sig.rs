@@ -287,7 +287,7 @@ fn generate_ecdsa_key_and_sig(curve_name: Nid, bytes_to_sign: &[u8]) -> (Vec<u8>
 
 fn generate_rsa_key_and_sig(rng: &mut OsRng, bytes_to_sign: &[u8]) -> (Vec<u8>, Vec<u8>) {
     use ic_crypto_internal_basic_sig_rsa_pkcs1 as basic_sig_rsa;
-    use ic_crypto_sha256::Sha256;
+    use ic_crypto_sha::Sha256;
     use rsa::{Hash, PaddingScheme, PublicKeyParts, RSAPrivateKey};
 
     let bitlength = 2048; // minimum allowed

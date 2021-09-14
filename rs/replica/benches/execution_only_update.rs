@@ -4,7 +4,7 @@ use ic_config::{
     subnet_config::SubnetConfigs,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_execution_environment::{setup_execution, IngressHistoryReaderImpl};
+use ic_execution_environment::setup_execution;
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
@@ -93,7 +93,7 @@ impl BenchReplica {
 
     fn ingress_directly(
         &self,
-        ingress_hist_reader: &IngressHistoryReaderImpl,
+        ingress_hist_reader: &dyn IngressHistoryReader,
         message_routing: &MessageRoutingImpl,
         message_id: MessageId,
         signed_ingress: SignedIngress,
@@ -180,22 +180,11 @@ fn criterion_calls(criterion: &mut Criterion) {
             .own_subnet_config(subnet_type)
             .cycles_account_manager_config,
     ));
-
-    let (_, ingress_history_writer, _, scheduler) = setup_execution(
-        bench_replica.log.clone(),
-        &bench_replica.metrics_registry,
-        bench_replica.replica_config.subnet_id,
-        subnet_type,
-        subnet_config.scheduler_config,
-        ExecutionConfig::default(),
-        Arc::clone(&cycles_account_manager),
-    );
-
     let tmpdir = tempfile::Builder::new()
         .prefix("ic_config")
         .tempdir()
         .unwrap();
-    let state_manager = StateManagerImpl::new(
+    let state_manager = Arc::new(StateManagerImpl::new(
         Arc::new(FakeVerifier::new()),
         bench_replica.replica_config.subnet_id,
         subnet_type,
@@ -203,10 +192,18 @@ fn criterion_calls(criterion: &mut Criterion) {
         &bench_replica.metrics_registry,
         &StateManagerConfig::new(tmpdir.path().to_path_buf()),
         ic_types::malicious_flags::MaliciousFlags::default(),
-    );
-    let state_manager = Arc::new(state_manager);
+    ));
 
-    let ingress_hist_reader = IngressHistoryReaderImpl::new(Arc::clone(&state_manager) as Arc<_>);
+    let (_, ingress_history_writer, _, scheduler, ingress_hist_reader) = setup_execution(
+        bench_replica.log.clone(),
+        &bench_replica.metrics_registry,
+        bench_replica.replica_config.subnet_id,
+        subnet_type,
+        subnet_config.scheduler_config,
+        ExecutionConfig::default(),
+        Arc::clone(&cycles_account_manager),
+        Arc::clone(&state_manager) as Arc<_>,
+    );
 
     let mut group = criterion.benchmark_group("user calls");
 
@@ -227,7 +224,7 @@ fn criterion_calls(criterion: &mut Criterion) {
         signed_ingress: SignedIngress,
     }
 
-    bench_replica.install(&message_routing, &ingress_hist_reader);
+    bench_replica.install(&message_routing, ingress_hist_reader.as_ref());
 
     group.bench_function("single-node update", |bench| {
         bench.iter_with_setup(
@@ -253,7 +250,7 @@ fn criterion_calls(criterion: &mut Criterion) {
             },
             |data| {
                 bench_replica.ingress_directly(
-                    &ingress_hist_reader,
+                    ingress_hist_reader.as_ref(),
                     &message_routing,
                     data.message_id,
                     data.signed_ingress,

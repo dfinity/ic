@@ -6,6 +6,7 @@ use dfn_core::println;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::make_subnet_record_key;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
 use ic_types::p2p::build_default_gossip_config;
@@ -78,6 +79,7 @@ pub struct UpdateSubnetPayload {
     pub max_instructions_per_message: Option<u64>,
     pub max_instructions_per_round: Option<u64>,
     pub max_instructions_per_install_code: Option<u64>,
+    pub features: Option<SubnetFeatures>,
 }
 
 #[macro_use]
@@ -87,6 +89,17 @@ macro_rules! maybe_set {
     ($a:tt, $b:tt) => {
         if let Some(val) = $b {
             $a.$b = val.into();
+        }
+    };
+}
+
+#[macro_use]
+// Sets the value of an optional field in record `a` if the provided value `b`
+// is not `None`, otherwise does nothing.
+macro_rules! maybe_set_option {
+    ($a:tt, $b:tt) => {
+        if let Some(val) = $b {
+            $a.$b = Some(val.into());
         }
     };
 }
@@ -147,6 +160,7 @@ fn merge_subnet_record(
         max_instructions_per_message,
         max_instructions_per_round,
         max_instructions_per_install_code,
+        features,
     } = payload;
 
     maybe_set!(subnet_record, ingress_bytes_per_block_soft_cap);
@@ -186,6 +200,8 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, max_instructions_per_message);
     maybe_set!(subnet_record, max_instructions_per_round);
     maybe_set!(subnet_record, max_instructions_per_install_code);
+
+    maybe_set_option!(subnet_record, features);
     subnet_record
 }
 
@@ -226,6 +242,7 @@ mod tests {
             max_instructions_per_message: 5_000_000_000,
             max_instructions_per_round: 7_000_000_000,
             max_instructions_per_install_code: 200_000_000_000,
+            features: None,
         };
 
         let payload = UpdateSubnetPayload {
@@ -257,6 +274,9 @@ mod tests {
             max_instructions_per_message: Some(6_000_000_000),
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
+            features: Some(SubnetFeatures {
+                ecdsa_signatures: false,
+            }),
         };
 
         assert_eq!(
@@ -288,6 +308,12 @@ mod tests {
                 max_instructions_per_message: 6_000_000_000,
                 max_instructions_per_round: 8_000_000_000,
                 max_instructions_per_install_code: 300_000_000_000,
+                features: Some(
+                    SubnetFeatures {
+                        ecdsa_signatures: false,
+                    }
+                    .into()
+                ),
             }
         );
     }
@@ -321,6 +347,7 @@ mod tests {
             max_instructions_per_message: 5_000_000_000,
             max_instructions_per_round: 7_000_000_000,
             max_instructions_per_install_code: 200_000_000_000,
+            features: None,
         };
 
         let payload = UpdateSubnetPayload {
@@ -352,6 +379,7 @@ mod tests {
             max_instructions_per_message: None,
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: None,
+            features: None,
         };
 
         assert_eq!(
@@ -383,6 +411,7 @@ mod tests {
                 max_instructions_per_message: 5_000_000_000,
                 max_instructions_per_round: 8_000_000_000,
                 max_instructions_per_install_code: 200_000_000_000,
+                features: None,
             }
         );
     }
@@ -411,6 +440,7 @@ mod tests {
             max_instructions_per_message: 5_000_000_000,
             max_instructions_per_round: 7_000_000_000,
             max_instructions_per_install_code: 200_000_000_000,
+            features: None,
         };
 
         let payload = UpdateSubnetPayload {
@@ -442,6 +472,7 @@ mod tests {
             max_instructions_per_message: None,
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
+            features: None,
         };
 
         merge_subnet_record(subnet_record, payload);
@@ -467,6 +498,7 @@ mod tests {
             max_instructions_per_message: 5_000_000_000,
             max_instructions_per_round: 7_000_000_000,
             max_instructions_per_install_code: 200_000_000_000,
+            features: None,
         };
 
         let payload = UpdateSubnetPayload {
@@ -498,6 +530,7 @@ mod tests {
             max_instructions_per_message: None,
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
+            features: None,
         };
 
         assert_eq!(
@@ -529,6 +562,7 @@ mod tests {
                 max_instructions_per_message: 5_000_000_000,
                 max_instructions_per_round: 7_000_000_000,
                 max_instructions_per_install_code: 200_000_000_000,
+                features: None,
             }
         );
     }

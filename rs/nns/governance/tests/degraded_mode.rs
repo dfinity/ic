@@ -8,10 +8,15 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
     governance::{Environment, Governance, Ledger},
     pb::v1::{
-        claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
-        governance_error::ErrorType, neuron, proposal, ClaimOrRefreshNeuronFromAccount,
-        ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, Motion,
-        NetworkEconomics, Neuron, NnsFunction, Proposal,
+        governance_error::ErrorType,
+        manage_neuron::{
+            claim_or_refresh::{By, MemoAndController},
+            ClaimOrRefresh, Command,
+        },
+        manage_neuron_response::Command as CommandResponse,
+        neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
+        ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NnsFunction,
+        Proposal,
     },
 };
 use ledger_canister::{AccountIdentifier, ICPTs};
@@ -19,7 +24,6 @@ use maplit::hashmap;
 use std::convert::TryFrom;
 
 use ic_nns_governance::governance::{HeapGrowthPotential, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES};
-use ic_nns_governance::pb::v1::ClaimOrRefreshNeuronFromAccountResponse;
 use ledger_canister::Subaccount;
 
 struct DegradedEnv {}
@@ -167,17 +171,20 @@ fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
 fn test_cannot_create_neuron_in_degraded_mode() {
     let mut gov = degraded_governance();
 
-    assert_matches!(gov.claim_or_refresh_neuron_from_account(
-        &principal(57),
-        &ClaimOrRefreshNeuronFromAccount {
-            controller: None,
-            memo: 145,
-        },
-    )
+    assert_matches!(gov.manage_neuron(&principal(57), &ManageNeuron {
+        id: None,
+        command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+            by: Some(By::MemoAndController(MemoAndController {
+                memo: 145,
+                controller: None,
+            })),
+        })),
+        neuron_id_or_subaccount: None,
+    })
     .now_or_never()
     .unwrap(),
-     ClaimOrRefreshNeuronFromAccountResponse{
-     result: Some(ClaimOrRefreshResult::Error(e))
-     }   if e.error_type == ErrorType::ResourceExhausted as i32
+     ManageNeuronResponse {
+     command: Some(CommandResponse::Error(e))
+     }  if e.error_type == ErrorType::ResourceExhausted as i32
     );
 }

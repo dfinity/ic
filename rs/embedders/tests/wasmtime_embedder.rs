@@ -1,6 +1,6 @@
 use ic_config::embedders::PersistenceType;
 use ic_embedders::WasmtimeEmbedder;
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
+use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
 use ic_replicated_state::{Global, NumWasmPages};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, mock_time, state::SystemStateBuilder,
@@ -8,19 +8,26 @@ use ic_test_utilities::{
 };
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    ComputeAllocation, NumBytes,
+    ComputeAllocation, NumBytes, NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
-use lazy_static::lazy_static;
+use ic_wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use std::sync::Arc;
 
-lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX));
+fn execution_parameters() -> ExecutionParameters {
+    ExecutionParameters {
+        instruction_limit: NumInstructions::new(5_000_000_000),
+        canister_memory_limit: ic_types::NumBytes::from(4 << 30),
+        subnet_available_memory: SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX)),
+        compute_allocation: ComputeAllocation::default(),
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use ic_test_utilities::types::ids::canister_test_id;
+    use memory_tracker::DirtyPageTracking;
+
     use super::*;
 
     fn logger() -> ic_logger::ReplicaLogger {
@@ -36,8 +43,10 @@ mod tests {
         wabt::wat2wasm(wat).map(BinaryEncodedWasm::new)
     }
 
+    /// Ensures that attempts to execute messages on wasm modules that do not
+    /// define memory fails.
     #[test]
-    fn syscall_missing_memory() {
+    fn cannot_execute_wasm_without_memory() {
         let log = logger();
         let wasm = wabt::wat2wasm(
             r#"
@@ -47,28 +56,29 @@ mod tests {
             (func (export "canister_update should_fail_with_contract_violation")
               (call $ic0_msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 0))
             )
-            (memory 0)
           )
         "#,
         )
         .expect("wat");
 
-        let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log);
+        let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
+        let output =
+            instrument(&BinaryEncodedWasm::new(wasm), &InstructionCostTable::new()).unwrap();
 
         let compiled = embedder
-            .compile(
-                PersistenceType::Sigsegv,
-                &ic_wasm_types::BinaryEncodedWasm::new(wasm),
-            )
+            .compile(PersistenceType::Sigsegv, &output.binary)
             .expect("compiled");
 
         let mut instance = embedder.new_instance(
+            canister_test_id(1),
             &compiled,
             &[],
             ic_replicated_state::NumWasmPages::from(0),
             None,
             None,
+            DirtyPageTracking::Track,
         );
+        instance.set_num_instructions(NumInstructions::new(100));
 
         let user_id = ic_test_utilities::types::ids::user_test_id(24);
 
@@ -79,10 +89,9 @@ mod tests {
         let mut api = ic_system_api::SystemApiImpl::new(
             ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
             system_state_accessor,
-            ic_types::NumBytes::from(4 << 30),
             ic_types::NumBytes::from(0),
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            ComputeAllocation::default(),
+            execution_parameters(),
+            log,
         );
 
         let result = instance.run(
@@ -126,7 +135,7 @@ mod tests {
         )
         .expect("wat");
 
-        let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log);
+        let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
 
         let compiled = embedder
             .compile(
@@ -136,11 +145,13 @@ mod tests {
             .expect("compiled");
 
         let mut instance = embedder.new_instance(
+            canister_test_id(1),
             &compiled,
             &[],
             ic_replicated_state::NumWasmPages::from(0),
             None,
             None,
+            DirtyPageTracking::Track,
         );
 
         let user_id = ic_test_utilities::types::ids::user_test_id(24);
@@ -152,10 +163,9 @@ mod tests {
         let mut api = ic_system_api::SystemApiImpl::new(
             ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
             system_state_accessor,
-            ic_types::NumBytes::from(4 << 30),
             ic_types::NumBytes::from(0),
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            ComputeAllocation::default(),
+            execution_parameters(),
+            log,
         );
 
         let result = instance.run(
@@ -198,13 +208,15 @@ mod tests {
                     )"#,
         )
         .unwrap();
-        let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log);
+        let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
         let mut inst = embedder.new_instance(
+            canister_test_id(1),
             &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
             &[],
             NumWasmPages::from(0),
             None,
             None,
+            DirtyPageTracking::Track,
         );
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
@@ -219,10 +231,9 @@ mod tests {
                 &mut ic_system_api::SystemApiImpl::new(
                     ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
                     system_state_accessor,
-                    NumBytes::from(4 << 30),
-                    NumBytes::from(0),
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                    ComputeAllocation::default(),
+                    ic_types::NumBytes::from(0),
+                    execution_parameters(),
+                    log.clone(),
                 ),
                 FuncRef::Method(WasmMethod::Update("test".to_string())),
             )
@@ -231,11 +242,13 @@ mod tests {
 
         // Change the value of globals and verify we can get them back.
         let mut inst = embedder.new_instance(
+            canister_test_id(1),
             &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
             &[Global::I64(5), Global::I32(12)],
             NumWasmPages::from(0),
             None,
             None,
+            DirtyPageTracking::Track,
         );
         let system_state = SystemStateBuilder::default().build();
         let system_state_accessor =
@@ -245,10 +258,9 @@ mod tests {
                 &mut ic_system_api::SystemApiImpl::new(
                     ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
                     system_state_accessor,
-                    NumBytes::from(4 << 30),
-                    NumBytes::from(0),
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                    ComputeAllocation::default(),
+                    ic_types::NumBytes::from(0),
+                    execution_parameters(),
+                    log,
                 ),
                 FuncRef::Method(WasmMethod::Update("test".to_string())),
             )
@@ -274,13 +286,15 @@ mod tests {
                     )"#,
         )
         .unwrap();
-        let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log);
+        let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
         let mut inst = embedder.new_instance(
+            canister_test_id(1),
             &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
             &[],
             NumWasmPages::from(0),
             None,
             None,
+            DirtyPageTracking::Track,
         );
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
@@ -295,10 +309,9 @@ mod tests {
                 &mut ic_system_api::SystemApiImpl::new(
                     ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
                     system_state_accessor,
-                    NumBytes::from(4 << 30),
-                    NumBytes::from(0),
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                    ComputeAllocation::default(),
+                    ic_types::NumBytes::from(0),
+                    execution_parameters(),
+                    log.clone(),
                 ),
                 FuncRef::Method(WasmMethod::Update("test".to_string())),
             )
@@ -310,11 +323,13 @@ mod tests {
 
         // Change the value of globals and verify we can get them back.
         let mut inst = embedder.new_instance(
+            canister_test_id(1),
             &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
             &[Global::F64(5.3), Global::F32(12.37)],
             NumWasmPages::from(0),
             None,
             None,
+            DirtyPageTracking::Track,
         );
         let system_state = SystemStateBuilder::default().build();
         let system_state_accessor =
@@ -324,10 +339,9 @@ mod tests {
                 &mut ic_system_api::SystemApiImpl::new(
                     ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
                     system_state_accessor,
-                    NumBytes::from(4 << 30),
-                    NumBytes::from(0),
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                    ComputeAllocation::default(),
+                    ic_types::NumBytes::from(0),
+                    execution_parameters(),
+                    log,
                 ),
                 FuncRef::Method(WasmMethod::Update("test".to_string())),
             )
@@ -353,11 +367,13 @@ mod tests {
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log);
         // Should fail because of not correct type of the second one.
         embedder.new_instance(
+            canister_test_id(1),
             &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
             &[Global::I64(5), Global::I64(12)],
             NumWasmPages::from(0),
             None,
             None,
+            DirtyPageTracking::Track,
         );
     }
 
@@ -381,6 +397,7 @@ mod tests {
         let log = logger();
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log);
         embedder.new_instance(
+            canister_test_id(1),
             &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
             &[Global::I64(0); DEFAULT_GLOBALS_LENGTH + 1]
                 .iter()
@@ -389,6 +406,7 @@ mod tests {
             NumWasmPages::from(0),
             None,
             None,
+            DirtyPageTracking::Track,
         );
     }
 }

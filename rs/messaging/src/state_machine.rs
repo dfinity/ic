@@ -4,6 +4,7 @@ use ic_interfaces::execution_environment::Scheduler;
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::Timer;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::{batch::Batch, ExecutionRound};
 use std::sync::Arc;
@@ -22,6 +23,7 @@ pub(crate) trait StateMachine: Send {
         network_topology: NetworkTopology,
         batch: Batch,
         provisional_whitelist: ProvisionalWhitelist,
+        subnet_features: SubnetFeatures,
     ) -> ReplicatedState;
 }
 pub(crate) struct StateMachineImpl {
@@ -66,6 +68,7 @@ impl StateMachine for StateMachineImpl {
         network_topology: NetworkTopology,
         batch: Batch,
         provisional_whitelist: ProvisionalWhitelist,
+        subnet_features: SubnetFeatures,
     ) -> ReplicatedState {
         let phase_timer = Timer::start();
 
@@ -74,6 +77,7 @@ impl StateMachine for StateMachineImpl {
         let mut metadata = state.system_metadata().clone();
         metadata.batch_time = batch.time;
         metadata.network_topology = network_topology;
+        metadata.own_subnet_features = subnet_features;
         state.set_system_metadata(metadata);
 
         // Preprocess messages and add messages to the induction pool through the Demux.

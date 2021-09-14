@@ -16,8 +16,11 @@ pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{execute, Hypervisor, HypervisorMetrics};
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::{
-    IngressHistoryWriter, IngressMessageFilter, QueryHandler, Scheduler,
+use ic_interfaces::{
+    execution_environment::{
+        IngressHistoryReader, IngressHistoryWriter, IngressMessageFilter, QueryHandler, Scheduler,
+    },
+    state_manager::StateReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -62,11 +65,13 @@ pub fn setup_execution(
     scheduler_config: SchedulerConfig,
     config: Config,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> (
     Box<dyn IngressMessageFilter<State = ReplicatedState>>,
     Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     Arc<dyn QueryHandler<State = ReplicatedState>>,
     Box<dyn Scheduler<State = ReplicatedState>>,
+    Box<dyn IngressHistoryReader>,
 ) {
     let hypervisor = Arc::new(Hypervisor::new(
         config.clone(),
@@ -82,6 +87,7 @@ pub fn setup_execution(
         logger.clone(),
         &metrics_registry,
     ));
+    let ingress_history_reader = Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
 
     let exec_env = Arc::new(ExecutionEnvironmentImpl::new(
         logger.clone(),
@@ -98,8 +104,9 @@ pub fn setup_execution(
         hypervisor,
         own_subnet_id,
         own_subnet_type,
-        config.subnet_memory_capacity,
+        config,
         &metrics_registry,
+        Arc::clone(&state_reader),
     ));
 
     let ingress_message_filter = Box::new(IngressMessageFilterImpl::new(Arc::clone(&exec_env)));
@@ -119,5 +126,6 @@ pub fn setup_execution(
         ingress_history_writer,
         http_query_handler,
         scheduler,
+        ingress_history_reader,
     )
 }

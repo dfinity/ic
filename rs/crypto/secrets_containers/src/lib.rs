@@ -19,5 +19,8 @@
 pub mod secret_array;
 pub use secret_array::*;
 
+pub mod secret_vec;
+pub use secret_vec::*;
+
 #[cfg(test)]
 mod tests;

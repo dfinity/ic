@@ -1,6 +1,9 @@
 use ic_config::embedders::{Config, PersistenceType};
 use ic_embedders::{wasmtime_embedder::WasmtimeInstance, InstanceRunResult, WasmtimeEmbedder};
+use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
+use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_system_api::{ApiType, SystemApiImpl};
 use ic_test_utilities::{
@@ -18,6 +21,7 @@ use ic_wasm_types::BinaryEncodedWasm;
 use ic_wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use lazy_static::lazy_static;
 use maplit::btreemap;
+use proptest::prelude::*;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -29,6 +33,7 @@ lazy_static! {
 }
 
 fn test_api_for_update(
+    log: ReplicaLogger,
     caller: Option<PrincipalId>,
     payload: Vec<u8>,
     subnet_type: SubnetType,
@@ -65,10 +70,14 @@ fn test_api_for_update(
             subnet_records,
         ),
         system_state_accessor,
-        canister_memory_limit,
         canister_current_memory_usage,
-        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-        ComputeAllocation::default(),
+        ExecutionParameters {
+            instruction_limit: MAX_NUM_INSTRUCTIONS,
+            canister_memory_limit,
+            subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            compute_allocation: ComputeAllocation::default(),
+        },
+        log,
     )
 }
 
@@ -120,10 +129,6 @@ fn make_module_wat(heap_size: usize) -> String {
     )
 }
 
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_registry_subnet_type::SubnetType;
-use proptest::prelude::*;
-
 #[derive(Debug, Clone)]
 pub struct Write {
     dst: u32,
@@ -154,7 +159,7 @@ fn write_bytes(inst: &mut WasmtimeInstance, dst: u32, bytes: &[u8]) -> InstanceR
     let mut payload = dst.to_le_bytes().to_vec();
     payload.extend(bytes.iter());
 
-    let mut api = test_api_for_update(None, payload, SubnetType::Application);
+    let mut api = test_api_for_update(no_op_logger(), None, payload, SubnetType::Application);
     inst.run(
         &mut api,
         FuncRef::Method(WasmMethod::Update("write_bytes".to_string())),
@@ -186,7 +191,160 @@ mod tests {
     // Get .current() trait method
     use ic_interfaces::execution_environment::HypervisorError;
     use ic_logger::ReplicaLogger;
+    use ic_test_utilities::types::ids::canister_test_id;
+    use memory_tracker::DirtyPageTracking;
     use proptest::strategy::ValueTree;
+
+    fn apply_writes_and_check_heap(writes: Vec<Write>, dirty_page_tracking: DirtyPageTracking) {
+        with_test_replica_logger(|log| {
+            let wat = make_module_wat(TEST_NUM_PAGES);
+            let wasm = wat2wasm(&wat).unwrap();
+
+            let output_instrumentation = instrument(&wasm, &InstructionCostTable::new()).unwrap();
+
+            // we will perform identical writes to wasm module's heap and this buffer
+            let mut test_heap = vec![0; TEST_HEAP_SIZE_BYTES];
+            // use SIGSEGV tracking and later compare against /proc/pic/pagemap
+            let config = Config {
+                persistence_type: PersistenceType::Sigsegv,
+                ..Default::default()
+            };
+            let embedder = WasmtimeEmbedder::new(config, log);
+            let mut inst = embedder.new_instance(
+                canister_test_id(1),
+                &embedder
+                    .compile(PersistenceType::Sigsegv, &output_instrumentation.binary)
+                    .unwrap(),
+                &[],
+                NumWasmPages::from(0),
+                None,
+                None,
+                dirty_page_tracking,
+            );
+            inst.set_num_instructions(MAX_NUM_INSTRUCTIONS);
+
+            let mut sigsegv_dirty_pages: BTreeSet<u64> = BTreeSet::new();
+
+            #[cfg(target_os = "macos")]
+            {
+                use libc::{mmap, munmap, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_NONE};
+                use std::os::unix::io::AsRawFd;
+                use tempfile::tempfile;
+
+                // MacOS pagemap implementation does not support
+                // anonymous memory. Hence we use non anonymous memory
+                // here
+
+                let heap_addr = unsafe { inst.heap_addr() };
+                let size_in_bytes = inst.heap_size().get() as usize * WASM_PAGE_SIZE_BYTES;
+
+                let temp_file = tempfile().expect("file creation failed");
+                temp_file
+                    .set_len(size_in_bytes as u64)
+                    .expect("unable to grow file");
+
+                unsafe {
+                    munmap(heap_addr as *mut libc::c_void, size_in_bytes);
+                }
+
+                let heap_addr = unsafe {
+                    mmap(
+                        heap_addr as *mut libc::c_void,
+                        size_in_bytes as usize,
+                        PROT_NONE,
+                        MAP_PRIVATE | MAP_FIXED,
+                        temp_file.as_raw_fd(),
+                        0,
+                    )
+                };
+
+                assert_ne!(heap_addr, MAP_FAILED);
+            }
+
+            let wasm_heap: &[u8] = unsafe {
+                let addr = inst.heap_addr();
+                let size_in_bytes = inst.heap_size().get() as usize * WASM_PAGE_SIZE_BYTES;
+                std::slice::from_raw_parts_mut(addr as *mut _, size_in_bytes)
+            };
+            println!(
+                "Wasm heap: addr={:?}, size={}",
+                wasm_heap.as_ptr(),
+                wasm_heap.len()
+            );
+
+            for w in &writes {
+                // apply the write to the test buffer
+                buf_apply_write(&mut test_heap, w);
+
+                // and to wasm instance
+                let result = write_bytes(&mut inst, w.dst, &w.bytes);
+
+                if dirty_page_tracking == DirtyPageTracking::Track {
+                    // collect dirty pages
+                    sigsegv_dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
+
+                    // verify that wasm heap and test buffer are the same
+                    // each write is up to 128 bytes so will affect a single page
+                    let i = result.dirty_pages.last().unwrap().get();
+                    let offset = i as usize * *ic_sys::PAGE_SIZE as usize;
+                    let page1 = unsafe { test_heap.as_ptr().add(offset) };
+                    let page2 = unsafe { wasm_heap.as_ptr().add(offset) };
+                    let pages_match = unsafe {
+                        libc::memcmp(
+                            page1 as *const libc::c_void,
+                            page2 as *const libc::c_void,
+                            *ic_sys::PAGE_SIZE,
+                        )
+                    };
+                    assert!(
+                        pages_match == 0,
+                        "page({}) of test buffer and Wasm heap doesn't match",
+                        i
+                    );
+                }
+            }
+
+            // first we need to make the heap readable. regions which have not
+            // been accessed are still PROT_NONE
+            unsafe {
+                libc::mprotect(
+                    wasm_heap.as_ptr() as *mut _,
+                    wasm_heap.len(),
+                    libc::PROT_READ,
+                );
+            };
+
+            // make a final check of the entire heap.
+            assert_eq!(test_heap[..], wasm_heap[..]);
+
+            if dirty_page_tracking == DirtyPageTracking::Track {
+                let sigsegv_dirty_pages = sigsegv_dirty_pages.iter().cloned().collect::<Vec<u64>>();
+
+                let writes_pages: Vec<u64> = {
+                    let mut result = BTreeSet::new();
+                    // pre-populate with page(0). This is because despite 0 does
+                    // not appear in any writes, calling $write_bytes dirties
+                    // page(0) by copying the 4-byte value to addr=0.
+                    result.insert(0);
+                    // add the target pages
+                    result.extend(
+                        writes
+                            .iter()
+                            .map(|w| w.dst as u64 / *ic_sys::PAGE_SIZE as u64),
+                    );
+                    // covnert to vector
+                    result.iter().cloned().collect()
+                };
+
+                // check SIGSEGV against expected
+                assert_eq!(
+                sigsegv_dirty_pages,
+                writes_pages,
+                "dirty pages returned by SIGSEGV tracking (left) don't match the expected value (right)"
+            );
+            }
+        });
+    }
 
     fn random_payload() -> Vec<u8> {
         let mut runner = proptest::test_runner::TestRunner::deterministic();
@@ -354,9 +512,10 @@ mod tests {
             ..Default::default()
         };
 
-        let embedder = WasmtimeEmbedder::new(config, log);
+        let embedder = WasmtimeEmbedder::new(config, log.clone());
         let output_instrumentation = instrument(&wasm, &InstructionCostTable::new()).unwrap();
         let mut inst = embedder.new_instance(
+            canister_test_id(1),
             &embedder
                 .compile(PersistenceType::Sigsegv, &output_instrumentation.binary)
                 .unwrap(),
@@ -364,10 +523,11 @@ mod tests {
             NumWasmPages::from(0),
             None,
             None,
+            DirtyPageTracking::Track,
         );
         inst.set_num_instructions(max_num_instructions);
 
-        let mut api = test_api_for_update(None, payload, subnet_type);
+        let mut api = test_api_for_update(log, None, payload, subnet_type);
         inst.run(
             &mut api,
             FuncRef::Method(WasmMethod::Update("write_bytes".to_string())),
@@ -391,147 +551,23 @@ mod tests {
             .filter(|w| !w.bytes.is_empty())
             .cloned()
             .collect();
-        with_test_replica_logger(|log| {
-            let wat = make_module_wat(TEST_NUM_PAGES);
-            let wasm = wat2wasm(&wat).unwrap();
+        apply_writes_and_check_heap(writes, DirtyPageTracking::Track);
+    }
 
-            let output_instrumentation = instrument(&wasm, &InstructionCostTable::new()).unwrap();
-
-            // we will perform identical writes to wasm module's heap and this buffer
-            let mut test_heap = vec![0; TEST_HEAP_SIZE_BYTES];
-            // use SIGSEGV tracking and later compare against /proc/pic/pagemap
-            let config = Config {
-                persistence_type: PersistenceType::Sigsegv,
-                ..Default::default()
-            };
-            let embedder = WasmtimeEmbedder::new(config, log);
-            let mut inst = embedder.new_instance(
-                &embedder
-                    .compile(PersistenceType::Sigsegv, &output_instrumentation.binary)
-                    .unwrap(),
-                &[],
-                NumWasmPages::from(0),
-                None,
-                None,
-            );
-            inst.set_num_instructions(MAX_NUM_INSTRUCTIONS);
-
-            let mut sigsegv_dirty_pages: BTreeSet<u64> = BTreeSet::new();
-
-            #[cfg(target_os = "macos")]
-            {
-                use libc::{mmap, munmap, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_NONE};
-                use std::os::unix::io::AsRawFd;
-                use tempfile::tempfile;
-
-                // MacOS pagemap implementation does not support
-                // anonymous memory. Hence we use non anonymous memory
-                // here
-
-                let heap_addr = unsafe { inst.heap_addr() };
-                let size_in_bytes = inst.heap_size().get() as usize * WASM_PAGE_SIZE_BYTES;
-
-                let temp_file = tempfile().expect("file creation failed");
-                temp_file
-                    .set_len(size_in_bytes as u64)
-                    .expect("unable to grow file");
-
-                unsafe {
-                    munmap(heap_addr as *mut libc::c_void, size_in_bytes);
-                }
-
-                let heap_addr = unsafe {
-                    mmap(
-                        heap_addr as *mut libc::c_void,
-                        size_in_bytes as usize,
-                        PROT_NONE,
-                        MAP_PRIVATE | MAP_FIXED,
-                        temp_file.as_raw_fd(),
-                        0,
-                    )
-                };
-
-                assert_ne!(heap_addr, MAP_FAILED);
-            }
-
-            let wasm_heap: &[u8] = unsafe {
-                let addr = inst.heap_addr();
-                let size_in_bytes = inst.heap_size().get() as usize * WASM_PAGE_SIZE_BYTES;
-                std::slice::from_raw_parts_mut(addr as *mut _, size_in_bytes)
-            };
-            println!(
-                "Wasm heap: addr={:?}, size={}",
-                wasm_heap.as_ptr(),
-                wasm_heap.len()
-            );
-
-            for w in &writes {
-                // apply the write to the test buffer
-                buf_apply_write(&mut test_heap, w);
-
-                // and to wasm instance
-                let result = write_bytes(&mut inst, w.dst, &w.bytes);
-
-                // collect dirty pages
-                sigsegv_dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
-
-                // verify that wasm heap and test buffer are the same
-                // each write is up to 128 bytes so will affect a single page
-                let i = result.dirty_pages.last().unwrap().get();
-                let offset = i as usize * *ic_sys::PAGE_SIZE as usize;
-                let page1 = unsafe { test_heap.as_ptr().add(offset) };
-                let page2 = unsafe { wasm_heap.as_ptr().add(offset) };
-                let pages_match = unsafe {
-                    libc::memcmp(
-                        page1 as *const libc::c_void,
-                        page2 as *const libc::c_void,
-                        *ic_sys::PAGE_SIZE,
-                    )
-                };
-                assert!(
-                    pages_match == 0,
-                    "page({}) of test buffer and Wasm heap doesn't match",
-                    i
-                );
-            }
-
-            // first we need to make the heap readable. regions which have not
-            // been accessed are still PROT_NONE
-            unsafe {
-                libc::mprotect(
-                    wasm_heap.as_ptr() as *mut _,
-                    wasm_heap.len(),
-                    libc::PROT_READ,
-                );
-            };
-
-            // make a final check of the entire heap.
-            assert_eq!(test_heap[..], wasm_heap[..]);
-
-            let sigsegv_dirty_pages = sigsegv_dirty_pages.iter().cloned().collect::<Vec<u64>>();
-
-            let writes_pages: Vec<u64> = {
-                let mut result = BTreeSet::new();
-                // pre-populate with page(0). This is because despite 0 does
-                // not appear in any writes, calling $write_bytes dirties
-                // page(0) by copying the 4-byte value to addr=0.
-                result.insert(0);
-                // add the target pages
-                result.extend(
-                    writes
-                        .iter()
-                        .map(|w| w.dst as u64 / *ic_sys::PAGE_SIZE as u64),
-                );
-                // covnert to vector
-                result.iter().cloned().collect()
-            };
-
-            // check SIGSEGV against expected
-            assert_eq!(
-                sigsegv_dirty_pages,
-                writes_pages,
-                "dirty pages returned by SIGSEGV tracking (left) don't match the expected value (right)"
-            );
-        });
+    #[test]
+    fn wasmtime_random_memory_writes_ignore_dirty_pages() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        apply_writes_and_check_heap(writes, DirtyPageTracking::Ignore);
     }
 }

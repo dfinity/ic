@@ -9,7 +9,7 @@ bytes = "1.0.1"
 byte-unit = "3.1.3"
 candid = "0.7.4"
 crc32fast = "1.2.0"
-ic-crypto-sha256 = { path = "../../crypto/sha256" }
+ic-crypto-sha = { path = "../../crypto/sha" }
 ic-protobuf = { path = "../../protobuf" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prost = "0.7.0"

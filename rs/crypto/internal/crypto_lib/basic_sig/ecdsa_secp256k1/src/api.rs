@@ -1,6 +1,7 @@
 //! ECDSA signature methods
 use super::types;
 use ic_crypto_internal_basic_sig_der_utils::PkixAlgorithmIdentifier;
+use ic_crypto_secrets_containers::SecretVec;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use openssl::bn::{BigNum, BigNumContext};
 use openssl::ec::{EcGroup, EcKey, EcPoint};
@@ -22,7 +23,7 @@ pub fn algorithm_identifier() -> PkixAlgorithmIdentifier {
     )
 }
 
-// NOTE: both `new_keypair()` and `sign()` are marked as `#[cfg(test)]`
+// NOTE: `new_keypair()` is marked as `#[cfg(test)]`
 // because the focus is on the signature verification (rather than creation),
 // which is the only ECDSA functionality needed currently.
 // For the same reason the majority of tests is using signature verification
@@ -45,13 +46,14 @@ pub fn new_keypair() -> CryptoResult<(types::SecretKeyBytes, types::PublicKeyByt
         EcKey::generate(&group).map_err(|e| wrap_openssl_err(e, "unable to generate EC key"))?;
     let mut ctx =
         BigNumContext::new().map_err(|e| wrap_openssl_err(e, "unable to create BigNumContext"))?;
-    let sk_der = ec_key
-        .private_key_to_der()
-        .map_err(|e| CryptoError::AlgorithmNotSupported {
-            algorithm: AlgorithmId::EcdsaSecp256k1,
-            reason: format!("OpenSSL failed with error {}", e.to_string()),
-        })?;
-    let sk = types::SecretKeyBytes::from(sk_der);
+    let mut sk_der =
+        ec_key
+            .private_key_to_der()
+            .map_err(|e| CryptoError::AlgorithmNotSupported {
+                algorithm: AlgorithmId::EcdsaSecp256k1,
+                reason: format!("OpenSSL failed with error {}", e.to_string()),
+            })?;
+    let sk = types::SecretKeyBytes(SecretVec::new_and_zeroize_argument(&mut sk_der));
     let pk_bytes = ec_key
         .public_key()
         .to_bytes(
@@ -98,13 +100,16 @@ pub fn secret_key_from_components(
                 internal_error: "OpenSSL error".to_string(), // don't leak sensitive information
             }
         })?;
-    let sk_der = ec_key
-        .private_key_to_der()
-        .map_err(|e| CryptoError::AlgorithmNotSupported {
-            algorithm: AlgorithmId::EcdsaSecp256k1,
-            reason: format!("OpenSSL failed with error {}", e.to_string()),
-        })?;
-    Ok(types::SecretKeyBytes::from(sk_der))
+    let mut sk_der =
+        ec_key
+            .private_key_to_der()
+            .map_err(|e| CryptoError::AlgorithmNotSupported {
+                algorithm: AlgorithmId::EcdsaSecp256k1,
+                reason: format!("OpenSSL failed with error {}", e.to_string()),
+            })?;
+    Ok(types::SecretKeyBytes(SecretVec::new_and_zeroize_argument(
+        &mut sk_der,
+    )))
 }
 
 /// Parse a secp256k1 public key from the DER enncoding
@@ -235,11 +240,12 @@ fn secp256k1_sig_to_bytes(
 /// # Returns
 /// The generated signature
 pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> CryptoResult<types::SignatureBytes> {
-    let signing_key =
-        EcKey::private_key_from_der(&sk.0).map_err(|_| CryptoError::MalformedSecretKey {
+    let signing_key = EcKey::private_key_from_der(&sk.0.expose_secret()).map_err(|_| {
+        CryptoError::MalformedSecretKey {
             algorithm: AlgorithmId::EcdsaSecp256k1,
             internal_error: "OpenSSL error".to_string(), // don't leak sensitive information
-        })?;
+        }
+    })?;
     let secp256k1_sig =
         EcdsaSig::sign(msg, &signing_key).map_err(|e| CryptoError::InvalidArgument {
             message: format!("ECDSA signing failed with error {}", e),

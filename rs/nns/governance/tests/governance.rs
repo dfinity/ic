@@ -8,26 +8,26 @@ use async_trait::async_trait;
 use candid::Encode;
 use futures::future::FutureExt;
 use ic_base_types::PrincipalId;
-use ic_crypto_sha256::Sha256;
+use ic_crypto_sha::Sha256;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::ids::{TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
-        Environment, Governance, Ledger, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
+        subaccount_from_slice, Environment, Governance, Ledger,
+        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
         REWARD_DISTRIBUTION_PERIOD_SECONDS,
     },
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
         add_or_remove_node_provider::Change,
-        claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
         governance_error::ErrorType,
         governance_error::ErrorType::InsufficientFunds,
         governance_error::ErrorType::NotAuthorized,
         governance_error::ErrorType::PreconditionFailed,
         manage_neuron,
-        manage_neuron::claim_or_refresh::By,
+        manage_neuron::claim_or_refresh::{By, MemoAndController},
         manage_neuron::configure::Operation,
         manage_neuron::disburse::Amount,
         manage_neuron::ClaimOrRefresh,
@@ -41,16 +41,18 @@ use ic_nns_governance::{
         manage_neuron::Spawn,
         manage_neuron::Split,
         manage_neuron::StartDissolving,
-        manage_neuron_response, neuron,
+        manage_neuron_response,
+        manage_neuron_response::Command as CommandResponse,
+        neuron,
         neuron::DissolveState,
         neuron::Followees,
         proposal,
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
-        AddOrRemoveNodeProvider, Ballot, BallotInfo, ClaimOrRefreshNeuronFromAccount,
-        ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ListNeurons,
-        ListNeuronsResponse, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron,
-        NeuronStakeTransfer, NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData,
-        ProposalStatus, RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
+        AddOrRemoveNodeProvider, Ballot, BallotInfo, Empty, ExecuteNnsFunction,
+        Governance as GovernanceProto, GovernanceError, ListNeurons, ListNeuronsResponse,
+        ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron, NeuronState, NnsFunction,
+        NodeProvider, Proposal, ProposalData, ProposalStatus, RewardEvent, RewardNodeProvider,
+        SetDefaultFollowees, Tally, Topic, Vote,
     },
 };
 use ledger_canister::{AccountIdentifier, ICPTs, Memo};
@@ -234,6 +236,16 @@ impl FakeDriver {
             Entry::Occupied(_) => panic!("Account exists"),
             Entry::Vacant(v) => {
                 v.insert(amount_e8s);
+            }
+        }
+    }
+
+    fn add_funds_to_account(&mut self, to: AccountIdentifier, amount_e8s: u64) {
+        let accounts = &mut self.state.try_lock().unwrap().accounts;
+        match accounts.entry(to) {
+            Entry::Vacant(_) => panic!("Account doesn't exist"),
+            Entry::Occupied(mut o) => {
+                *o.get_mut() += amount_e8s;
             }
         }
     }
@@ -2761,10 +2773,43 @@ fn empty_fixture() -> GovernanceProto {
     }
 }
 
+fn claim_or_refresh_neuron_by_memo(
+    gov: &mut Governance,
+    caller: &PrincipalId,
+    controller: Option<PrincipalId>,
+    _subaccount: Subaccount,
+    memo: Memo,
+    neuron_id_or_subaccount: Option<NeuronIdOrSubaccount>,
+) -> Result<NeuronId, GovernanceError> {
+    let manage_neuron_response = gov
+        .manage_neuron(
+            caller,
+            &ManageNeuron {
+                id: None,
+                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                    by: Some(By::MemoAndController(MemoAndController {
+                        memo: memo.0,
+                        controller,
+                    })),
+                })),
+                neuron_id_or_subaccount,
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    match manage_neuron_response.command.unwrap() {
+        CommandResponse::Error(error) => Err(error),
+        CommandResponse::ClaimOrRefresh(claim_or_refresh_response) => {
+            Ok(claim_or_refresh_response.refreshed_neuron_id.unwrap())
+        }
+        _ => panic!("Unexpected command response."),
+    }
+}
+
 fn governance_with_staked_neuron(
     dissolve_delay_seconds: u64,
     neuron_stake_e8s: u64,
-    block_height: u64,
+    _block_height: u64,
     from: PrincipalId,
     nonce: u64,
 ) -> (FakeDriver, Governance, NeuronId, Subaccount) {
@@ -2794,19 +2839,9 @@ fn governance_with_staked_neuron(
     );
 
     // Add a stake transfer for this neuron, emulating a ledger call.
-    let nid = gov
-        .claim_or_top_up_neuron_from_notification(NeuronStakeTransfer {
-            transfer_timestamp: driver.get_fake_env().now(),
-            from: Some(from),
-            from_subaccount: Vec::new(),
-            to_subaccount: to_subaccount.to_vec(),
-            neuron_stake_e8s,
-            block_height,
-            memo: nonce,
-        })
-        .now_or_never()
-        .unwrap()
-        .unwrap();
+    let nid =
+        claim_or_refresh_neuron_by_memo(&mut gov, &from, None, to_subaccount, Memo(nonce), None)
+            .unwrap();
 
     assert_eq!(gov.proto.neurons.len(), 1);
 
@@ -2858,15 +2893,6 @@ fn create_mature_neuron(dissolved: bool) -> (FakeDriver, Governance, Neuron) {
             created_timestamp_seconds: driver.now(),
             aging_since_timestamp_seconds: driver.now(),
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
-            transfer: Some(NeuronStakeTransfer {
-                transfer_timestamp: driver.now(),
-                from: Some(from),
-                from_subaccount: Vec::new(),
-                to_subaccount: to_subaccount.to_vec(),
-                neuron_stake_e8s,
-                block_height,
-                memo: nonce,
-            }),
             kyc_verified: true,
             ..Default::default()
         }
@@ -3060,72 +3086,367 @@ fn test_disburse_to_main_acccount() {
     );
 }
 
-#[test]
-fn test_top_up_stake() {
-    let (mut driver, mut gov, neuron) = create_mature_neuron(true);
-    let nid = neuron.id.unwrap();
-    let neuron = gov.get_neuron_mut(&nid).unwrap();
-    let account = neuron.account.clone();
+// Test cases for claim and refresh
+// - Claim with memo
+//   - Controller
+//   - Someone else for the controller
+//   - It's not possible for someone else to claim for themselves
+// - Refresh with memo
+//   - Anyone can do it
+// - Refresh with subaccount
+//   - Anyone can do it
 
-    // Increase the dissolve delay, this will make the neuron start aging from
-    // 'now'.
-    neuron
-        .configure(
-            &*TEST_NEURON_1_OWNER_PRINCIPAL,
-            driver.now(),
-            &Configure {
-                operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
-                    additional_dissolve_delay_seconds: 6
-                        * ic_nns_governance::governance::ONE_MONTH_SECONDS as u32,
+// Builds governance with a staked, but unclaimed, neuron.
+fn governance_with_staked_unclaimed_neuron(
+    from: &PrincipalId,
+    nonce: u64,
+    stake: ICPTs,
+) -> (FakeDriver, Governance, Subaccount) {
+    let to_subaccount = Subaccount({
+        let mut sha = Sha256::new();
+        sha.write(&[0x0c]);
+        sha.write(b"neuron-stake");
+        sha.write(&from.as_slice());
+        sha.write(&nonce.to_be_bytes());
+        sha.finish()
+    });
+
+    let driver = FakeDriver::default()
+        .at(56)
+        .with_ledger_accounts(vec![FakeAccount {
+            id: AccountIdentifier::new(
+                ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+                Some(to_subaccount),
+            ),
+            amount_e8s: stake.get_e8s(),
+        }])
+        .with_supply(ICPTs::from_icpts(400_000_000).unwrap());
+
+    let gov = Governance::new(
+        empty_fixture(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+    );
+
+    (driver, gov, to_subaccount)
+}
+
+/// Tests that the controller of a neuron (the principal whose hash was used
+/// to build the subaccount) can claim a neuron just with the memo.
+#[test]
+fn test_claim_neuron_by_memo_only() {
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let memo = 1234u64;
+    let stake = ICPTs::from_icpts(10u64).unwrap();
+    let (_, mut gov, _) = governance_with_staked_unclaimed_neuron(&owner, memo, stake);
+
+    let manage_neuron_response = gov
+        .manage_neuron(
+            &owner,
+            &ManageNeuron {
+                neuron_id_or_subaccount: None,
+                id: None,
+                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                    by: Some(By::MemoAndController(MemoAndController {
+                        memo,
+                        controller: None,
+                    })),
                 })),
             },
         )
-        .unwrap();
-
-    // Advance the current time, so that the neuron has accumulated
-    // some age.
-    driver.advance_time_by(6 * ic_nns_governance::governance::ONE_MONTH_SECONDS);
-
-    assert_eq!(
-        neuron.aging_since_timestamp_seconds,
-        driver.now() - 6 * ic_nns_governance::governance::ONE_MONTH_SECONDS - 1,
-    );
-
-    let block_height = 543212234;
-    // Note that the nonce must match the nonce chosen in the original
-    // transfer.
-    let nonce = 1234u64;
-
-    // Double the stake of the existing neuron.
-    let nid_result = gov
-        .claim_or_top_up_neuron_from_notification(NeuronStakeTransfer {
-            transfer_timestamp: driver.now(),
-            from: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-            from_subaccount: Vec::new(),
-            to_subaccount: account,
-            neuron_stake_e8s: 100_000_000,
-            block_height,
-            memo: nonce,
-        })
         .now_or_never()
-        .unwrap()
         .unwrap();
 
-    assert_eq!(nid_result, nid);
-    let neuron = gov.get_neuron_mut(&nid).unwrap();
-    assert_eq!(neuron.cached_neuron_stake_e8s, 200_000_000);
-    assert_eq!(
-        neuron.aging_since_timestamp_seconds,
-        driver.now() - 3 * ic_nns_governance::governance::ONE_MONTH_SECONDS
-    );
+    let nid = match manage_neuron_response.command.unwrap() {
+        CommandResponse::ClaimOrRefresh(response) => response.refreshed_neuron_id,
+        CommandResponse::Error(error) => panic!("Error claiming neuron: {:?}", error),
+        _ => panic!("Invalid response."),
+    };
+
+    assert!(nid.is_some());
+    let nid = nid.unwrap();
+    let neuron = gov.get_neuron(&nid).unwrap();
+    assert_eq!(neuron.controller.unwrap(), owner);
+    assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
 }
 
 #[test]
-fn test_claim_or_top_up_neuron_from_notification_does_not_overflow() {
+fn test_claim_neuron_without_minimum_stake_fails() {
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let memo = 1234u64;
+    let stake = ICPTs::from_e8s(50000000u64);
+    let (_, mut gov, _) = governance_with_staked_unclaimed_neuron(&owner, memo, stake);
+
+    let manage_neuron_response = gov
+        .manage_neuron(
+            &owner,
+            &ManageNeuron {
+                neuron_id_or_subaccount: None,
+                id: None,
+                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                    by: Some(By::MemoAndController(MemoAndController {
+                        memo,
+                        controller: None,
+                    })),
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap();
+
+    match manage_neuron_response.command.unwrap() {
+        CommandResponse::Error(error) => {
+            assert_eq!(
+                ErrorType::from_i32(error.error_type).unwrap(),
+                ErrorType::InsufficientFunds
+            );
+        }
+        _ => panic!("Invalid response."),
+    };
+}
+
+fn claim_neuron_by_memo_and_controller(owner: PrincipalId, caller: PrincipalId) {
+    let memo = 1234u64;
+    let stake = ICPTs::from_icpts(10u64).unwrap();
+    let (_, mut gov, _) =
+        governance_with_staked_unclaimed_neuron(&owner, memo, ICPTs::from_icpts(10u64).unwrap());
+
+    let manage_neuron_response = gov
+        .manage_neuron(
+            &caller,
+            &ManageNeuron {
+                neuron_id_or_subaccount: None,
+                id: None,
+                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                    by: Some(By::MemoAndController(MemoAndController {
+                        memo,
+                        controller: Some(owner),
+                    })),
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap();
+
+    let nid = match manage_neuron_response.command.unwrap() {
+        CommandResponse::ClaimOrRefresh(response) => response.refreshed_neuron_id,
+        CommandResponse::Error(error) => panic!("Error claiming neuron: {:?}", error),
+        _ => panic!("Invalid response."),
+    };
+
+    assert!(nid.is_some());
+    let nid = nid.unwrap();
+    let neuron = gov.get_neuron(&nid).unwrap();
+    assert_eq!(neuron.controller.unwrap(), owner);
+    assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
+}
+
+/// Like the above, but explicitely sets the controller in the MemoAndController
+/// struct.
+#[test]
+fn test_claim_neuron_memo_and_controller_by_controller() {
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    claim_neuron_by_memo_and_controller(owner, owner);
+}
+
+/// Tests that a non-controller can claim a neuron for the controller (the
+/// principal whose id was used to build the subaccount).
+#[test]
+fn test_claim_neuron_memo_and_controller_by_proxy() {
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let caller = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    claim_neuron_by_memo_and_controller(owner, caller);
+}
+
+/// Tests that a non-controller can't claim a neuron for themselves.
+#[test]
+fn test_non_controller_cant_claim_neuron_for_themselves() {
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let claimer = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    let memo = 1234u64;
+    let (_, mut gov, _) =
+        governance_with_staked_unclaimed_neuron(&owner, memo, ICPTs::from_icpts(10u64).unwrap());
+
+    let manage_neuron_response = gov
+        .manage_neuron(
+            &claimer,
+            &ManageNeuron {
+                neuron_id_or_subaccount: None,
+                id: None,
+                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                    by: Some(By::MemoAndController(MemoAndController {
+                        memo,
+                        controller: Some(claimer),
+                    })),
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap();
+
+    match manage_neuron_response.command.unwrap() {
+        CommandResponse::Error(_) => (),
+        _ => panic!("Claim should have failed."),
+    };
+}
+
+fn refresh_neuron_by_memo(owner: PrincipalId, caller: PrincipalId) {
+    let stake = ICPTs::from_icpts(10u64).unwrap();
+    let memo = Memo(1234u64);
+    let (mut driver, mut gov, nid, subaccount) =
+        governance_with_staked_neuron(1, stake.get_e8s(), 0, owner, memo.0);
+
+    let neuron = gov.get_neuron(&nid).unwrap();
+    assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
+
+    driver.add_funds_to_account(
+        AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount)),
+        stake.get_e8s(),
+    );
+
+    // stake shouldn't have changed.
+    let neuron = gov.get_neuron(&nid).unwrap();
+    assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
+
+    let manage_neuron_response = gov
+        .manage_neuron(
+            &caller,
+            &ManageNeuron {
+                neuron_id_or_subaccount: None,
+                id: None,
+                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                    by: Some(By::MemoAndController(MemoAndController {
+                        memo: memo.0,
+                        controller: Some(owner),
+                    })),
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap();
+
+    let nid = match manage_neuron_response.command.unwrap() {
+        CommandResponse::ClaimOrRefresh(response) => response.refreshed_neuron_id,
+        CommandResponse::Error(error) => panic!("Error claiming neuron: {:?}", error),
+        _ => panic!("Invalid response."),
+    };
+
+    assert!(nid.is_some());
+    let nid = nid.unwrap();
+    let neuron = gov.get_neuron(&nid).unwrap();
+    assert_eq!(neuron.controller.unwrap(), owner);
+    assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s() * 2);
+}
+
+/// Tests that a neuron can be refreshed by memo by it's controller.
+#[test]
+fn test_refresh_neuron_by_memo_by_controller() {
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    refresh_neuron_by_memo(owner, owner);
+}
+
+/// Tests that a neuron can be refreshed by memo by proxy.
+#[test]
+fn test_refresh_neuron_by_memo_by_proxy() {
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let caller = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    refresh_neuron_by_memo(owner, caller);
+}
+
+enum RefreshBy {
+    NeuronId,
+    Subaccount,
+}
+
+fn refresh_neuron_by_id_or_subaccount(
+    owner: PrincipalId,
+    caller: PrincipalId,
+    refresh_by: RefreshBy,
+) {
+    let stake = ICPTs::from_icpts(10u64).unwrap();
+    let memo = Memo(1234u64);
+    let (mut driver, mut gov, nid, subaccount) =
+        governance_with_staked_neuron(1, stake.get_e8s(), 0, owner, memo.0);
+
+    let neuron = gov.get_neuron(&nid).unwrap();
+    assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
+
+    driver.add_funds_to_account(
+        AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount)),
+        stake.get_e8s(),
+    );
+
+    // stake shouldn't have changed.
+    let neuron = gov.get_neuron(&nid).unwrap().clone();
+    assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
+
+    let neuron_id_or_subaccount = match refresh_by {
+        RefreshBy::NeuronId => NeuronIdOrSubaccount::NeuronId(neuron.id.as_ref().unwrap().clone()),
+        RefreshBy::Subaccount => NeuronIdOrSubaccount::Subaccount(subaccount.clone().into()),
+    };
+
+    let manage_neuron_response = gov
+        .manage_neuron(
+            &caller,
+            &ManageNeuron {
+                neuron_id_or_subaccount: Some(neuron_id_or_subaccount),
+                id: None,
+                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                    by: Some(By::NeuronIdOrSubaccount(Empty {})),
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap();
+
+    let nid = match manage_neuron_response.command.unwrap() {
+        CommandResponse::ClaimOrRefresh(response) => response.refreshed_neuron_id,
+        CommandResponse::Error(error) => panic!("Error claiming neuron: {:?}", error),
+        _ => panic!("Invalid response."),
+    };
+
+    assert!(nid.is_some());
+    let nid = nid.unwrap();
+    let neuron = gov.get_neuron(&nid).unwrap();
+    assert_eq!(neuron.controller.unwrap(), owner);
+    assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s() * 2);
+}
+
+#[test]
+fn test_refresh_neuron_by_id_by_controller() {
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    refresh_neuron_by_id_or_subaccount(owner, owner, RefreshBy::NeuronId);
+}
+
+#[test]
+fn test_refresh_neuron_by_id_by_proxy() {
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    refresh_neuron_by_id_or_subaccount(owner, caller, RefreshBy::NeuronId);
+}
+
+/// Tests that a neuron can be refreshed by subaccount, and that anyone can do
+/// it.
+#[test]
+fn test_refresh_neuron_by_subaccount_by_controller() {
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    refresh_neuron_by_id_or_subaccount(owner, owner, RefreshBy::Subaccount);
+}
+
+#[test]
+fn test_refresh_neuron_by_subaccount_by_proxy() {
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    refresh_neuron_by_id_or_subaccount(owner, caller, RefreshBy::Subaccount);
+}
+
+#[test]
+fn test_claim_or_refresh_neuron_does_not_overflow() {
     let (mut driver, mut gov, neuron) = create_mature_neuron(true);
     let nid = neuron.id.unwrap();
     let neuron = gov.get_neuron_mut(&nid).unwrap();
-    let account = neuron.account.clone();
+    let _account = neuron.account.clone();
+    let subaccount = subaccount_from_slice(&neuron.account).unwrap().unwrap();
 
     // Increase the dissolve delay, this will make the neuron start aging from
     // 'now'.
@@ -3151,25 +3472,28 @@ fn test_claim_or_top_up_neuron_from_notification_does_not_overflow() {
         driver.now() - 12 * ic_nns_governance::governance::ONE_MONTH_SECONDS - 1,
     );
 
-    let block_height = 543212234;
+    let _block_height = 543212234;
+    // Note that the nonce must match the nonce chosen in the original
+    // transfer.
+    let _nonce = 1234u64;
+
+    driver.add_funds_to_account(
+        AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount)),
+        100_000_000_000_000,
+    );
+
     // Note that the nonce must match the nonce chosen in the original
     // transfer.
     let nonce = 1234u64;
-
-    // Double the stake of the existing neuron.
-    let nid_result = gov
-        .claim_or_top_up_neuron_from_notification(NeuronStakeTransfer {
-            transfer_timestamp: driver.now(),
-            from: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-            from_subaccount: Vec::new(),
-            to_subaccount: account,
-            neuron_stake_e8s: 100_000_000_000_000,
-            block_height,
-            memo: nonce,
-        })
-        .now_or_never()
-        .unwrap()
-        .unwrap();
+    let nid_result = claim_or_refresh_neuron_by_memo(
+        &mut gov,
+        &TEST_NEURON_1_OWNER_PRINCIPAL,
+        None,
+        subaccount,
+        Memo(nonce),
+        None,
+    )
+    .unwrap();
 
     assert_eq!(nid_result, nid);
     let neuron = gov.get_neuron_mut(&nid).unwrap();
@@ -3288,228 +3612,6 @@ fn test_set_dissolve_delay() {
     driver.advance_time_by(1);
     // Now the neuron should be dissolved.
     assert_eq!(neuron.state(driver.now()), NeuronState::Dissolved);
-}
-
-#[test]
-fn test_refresh_stake() {
-    let (mut driver, mut gov, neuron) = create_mature_neuron(true);
-    let nid = neuron.id.unwrap();
-    let neuron = gov.get_neuron_mut(&nid).unwrap();
-    let account = neuron.account.clone();
-
-    // Increase the dissolve delay, this will make the neuron start
-    // aging from some time <= now.
-    neuron
-        .configure(
-            &*TEST_NEURON_1_OWNER_PRINCIPAL,
-            driver.now(),
-            &Configure {
-                operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
-                    additional_dissolve_delay_seconds: 6
-                        * ic_nns_governance::governance::ONE_MONTH_SECONDS as u32,
-                })),
-            },
-        )
-        .unwrap();
-    // Advance the current time, so that the neuron has accumulated
-    // some age.
-    driver.advance_time_by(6 * ic_nns_governance::governance::ONE_MONTH_SECONDS);
-
-    let age_before_refresh = neuron.age_seconds(driver.now());
-    assert!(age_before_refresh > 0);
-
-    // Transfer more into the neuron's account (by minting).
-    let new_transfer = ICPTs::from_icpts(1).unwrap();
-    let memo = Memo(1234);
-    let controller = neuron.controller.unwrap();
-    driver
-        .get_fake_ledger()
-        .transfer_funds(
-            new_transfer.get_e8s(),
-            0,
-            None,
-            AccountIdentifier::new(
-                GOVERNANCE_CANISTER_ID.get(),
-                Some(Subaccount(account[..].try_into().unwrap())),
-            ),
-            memo.0,
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap();
-
-    let result = gov
-        .claim_or_refresh_neuron_from_account(
-            &controller,
-            &ClaimOrRefreshNeuronFromAccount {
-                controller: None,
-                memo: memo.0,
-            },
-        )
-        .now_or_never()
-        .unwrap();
-
-    if let ClaimOrRefreshResult::Error(_) = result.result.unwrap() {
-        panic!("Result returned an error.");
-    }
-
-    let neuron = gov.get_neuron_mut(&nid).unwrap();
-    assert_eq!(neuron.cached_neuron_stake_e8s, 200_000_000);
-    // Doubling the stake should half the age.
-    assert_eq!(neuron.age_seconds(driver.now()), age_before_refresh / 2);
-}
-
-#[test]
-fn test_claim_neuron_from_account() {
-    // Create the ledger with an account corresponding to a neuron stake event
-    // of which the governance canister was not notified.
-    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
-    let memo = Memo(12345);
-    let stake = ICPTs::from_icpts(1000).unwrap();
-    let gov_subaccount = Subaccount::try_from(
-        &{
-            let mut state = Sha256::new();
-            state.write(&[0x0c]);
-            state.write(b"neuron-stake");
-            state.write(&owner.as_slice());
-            state.write(&memo.0.to_be_bytes());
-            state.finish()
-        }[..],
-    )
-    .expect("Couldn't build subaccount from hash.");
-    let driver = FakeDriver::default()
-        .at(56)
-        .with_ledger_accounts(vec![FakeAccount {
-            id: AccountIdentifier::new(
-                ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-                Some(gov_subaccount),
-            ),
-            amount_e8s: stake.get_e8s(),
-        }])
-        .with_supply(ICPTs::from_icpts(400_000_000).unwrap());
-    let mut gov = Governance::new(
-        empty_fixture(),
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-    );
-
-    let result = gov
-        .claim_or_refresh_neuron_from_account(
-            &owner,
-            &ClaimOrRefreshNeuronFromAccount {
-                controller: None,
-                memo: memo.0,
-            },
-        )
-        .now_or_never()
-        .unwrap();
-
-    match result.result.unwrap() {
-        ClaimOrRefreshResult::Error(_) => panic!("Result returned an error"),
-        ClaimOrRefreshResult::NeuronId(nid) => {
-            let neuron = gov.get_neuron(&nid);
-            assert!(neuron.is_ok());
-            let neuron = neuron.unwrap();
-            assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
-        }
-    }
-}
-
-#[test]
-fn test_claim_through_management() {
-    // Create the ledger with an account corresponding to a neuron stake event
-    // of which the governance canister was not notified.
-    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
-    let memo = Memo(12345);
-    let stake = ICPTs::from_icpts(1000).unwrap();
-    let gov_subaccount = Subaccount::try_from(
-        &{
-            let mut state = Sha256::new();
-            state.write(&[0x0c]);
-            state.write(b"neuron-stake");
-            state.write(&owner.as_slice());
-            state.write(&memo.0.to_be_bytes());
-            state.finish()
-        }[..],
-    )
-    .expect("Couldn't build subaccount from hash.");
-    let driver = FakeDriver::default()
-        .at(56)
-        .with_ledger_accounts(vec![FakeAccount {
-            id: AccountIdentifier::new(
-                ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-                Some(gov_subaccount),
-            ),
-            amount_e8s: stake.get_e8s(),
-        }])
-        .with_supply(ICPTs::from_icpts(400_000_000).unwrap());
-
-    let mut gov = Governance::new(
-        empty_fixture(),
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-    );
-
-    // Check you can refresh by subaccount
-    let result = gov
-        .manage_neuron(
-            &owner,
-            &ManageNeuron {
-                id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(
-                    gov_subaccount.to_vec(),
-                )),
-                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
-                    by: Some(By::Memo(memo.0)),
-                })),
-            },
-        )
-        .now_or_never()
-        .unwrap();
-
-    let nid = match result.command.unwrap() {
-        manage_neuron_response::Command::ClaimOrRefresh(
-            manage_neuron_response::ClaimOrRefreshResponse {
-                refreshed_neuron_id: Some(nid),
-            },
-        ) => {
-            let neuron = gov.get_neuron(&nid);
-            assert!(neuron.is_ok());
-            let neuron = neuron.unwrap();
-            assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
-            nid
-        }
-        _ => panic!("Unexpected response from ClaimOrRefresh"),
-    };
-
-    // Check you can refresh by neuron ID
-    let result = gov
-        .manage_neuron(
-            &owner,
-            &ManageNeuron {
-                id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(nid)),
-                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
-                    by: Some(By::Memo(memo.0)),
-                })),
-            },
-        )
-        .now_or_never()
-        .unwrap();
-
-    match result.command.unwrap() {
-        manage_neuron_response::Command::ClaimOrRefresh(
-            manage_neuron_response::ClaimOrRefreshResponse {
-                refreshed_neuron_id: Some(nid),
-            },
-        ) => {
-            let neuron = gov.get_neuron(&nid);
-            assert!(neuron.is_ok());
-            let neuron = neuron.unwrap();
-            assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
-        }
-        _ => panic!("Unexpected response from ClaimOrRefresh"),
-    };
 }
 
 #[test]
@@ -3781,7 +3883,7 @@ fn test_neuron_split() {
         child_neuron,
         &Neuron {
             id: Some(child_nid.clone()),
-            account: child_subaccount.clone(),
+            account: child_subaccount,
             controller: parent_neuron.controller,
             cached_neuron_stake_e8s: 100_000_000,
             created_timestamp_seconds: parent_neuron.created_timestamp_seconds,
@@ -3789,15 +3891,6 @@ fn test_neuron_split() {
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                 parent_neuron.dissolve_delay_seconds(driver.get_fake_env().now())
             )),
-            transfer: Some(NeuronStakeTransfer {
-                transfer_timestamp: driver.now(),
-                from: Some(ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID)),
-                from_subaccount: parent_neuron.account.clone(),
-                to_subaccount: child_subaccount,
-                neuron_stake_e8s: 100_000_000,
-                block_height: 0,
-                memo: child_neuron.transfer.as_ref().unwrap().memo,
-            }),
             kyc_verified: true,
             ..Default::default()
         }
@@ -3909,7 +4002,7 @@ fn test_neuron_spawn() {
         child_neuron,
         &Neuron {
             id: Some(child_nid.clone()),
-            account: child_subaccount.clone(),
+            account: child_subaccount,
             controller: Some(child_controller),
             cached_neuron_stake_e8s: parent_maturity_e8s_equivalent,
             created_timestamp_seconds: driver.now(),
@@ -3921,15 +4014,6 @@ fn test_neuron_spawn() {
                     .unwrap()
                     .neuron_spawn_dissolve_delay_seconds
             )),
-            transfer: Some(NeuronStakeTransfer {
-                transfer_timestamp: driver.now(),
-                from: Some(ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID)),
-                from_subaccount: Vec::new(),
-                to_subaccount: child_subaccount,
-                neuron_stake_e8s: parent_maturity_e8s_equivalent,
-                block_height: 0,
-                memo: child_neuron.transfer.as_ref().unwrap().memo,
-            }),
             kyc_verified: true,
             ..Default::default()
         }
@@ -3988,7 +4072,7 @@ fn test_disburse_to_neuron() {
     let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
     let neuron_stake_e8s = 10 * 100_000_000; // 10 ICPT
 
-    let (mut driver, mut gov, id, to_subaccount) = governance_with_staked_neuron(
+    let (mut driver, mut gov, id, _to_subaccount) = governance_with_staked_neuron(
         dissolve_delay_seconds,
         neuron_stake_e8s,
         block_height,
@@ -4058,21 +4142,12 @@ fn test_disburse_to_neuron() {
         child_neuron,
         &Neuron {
             id: Some(child_nid.clone()),
-            account: child_subaccount.clone(),
+            account: child_subaccount,
             controller: Some(child_controller),
             cached_neuron_stake_e8s: 2 * 100_000_000,
             created_timestamp_seconds: driver.now(),
             aging_since_timestamp_seconds: driver.now(),
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(24 * 60 * 60)),
-            transfer: Some(NeuronStakeTransfer {
-                transfer_timestamp: driver.now(),
-                from: Some(ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID)),
-                from_subaccount: to_subaccount.to_vec(),
-                to_subaccount: child_subaccount,
-                neuron_stake_e8s: 2 * 100_000_000,
-                block_height: 0,
-                memo: child_neuron.transfer.as_ref().unwrap().memo,
-            }),
             kyc_verified: true,
             ..Default::default()
         }
@@ -4603,7 +4678,7 @@ fn test_manage_and_reward_node_providers() {
         .proto
         .neurons
         .iter()
-        .find(|(_, x)| x.controller == Some(np_pid) && x.transfer.is_some())
+        .find(|(_, x)| x.controller == Some(np_pid))
         .unwrap();
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
@@ -4884,7 +4959,7 @@ fn test_manage_and_reward_multiple_node_providers() {
         .proto
         .neurons
         .iter()
-        .find(|(_, x)| x.controller == Some(np_pid_2) && x.transfer.is_some())
+        .find(|(_, x)| x.controller == Some(np_pid_2))
         .unwrap();
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
@@ -5104,20 +5179,9 @@ fn test_default_followees() {
         neuron_stake_e8s,
     );
 
-    // Add a stake transfer for this neuron, emulating a ledger call.
-    let id = gov
-        .claim_or_top_up_neuron_from_notification(NeuronStakeTransfer {
-            transfer_timestamp: driver.get_fake_env().now(),
-            from: Some(from),
-            from_subaccount: Vec::new(),
-            to_subaccount: to_subaccount.to_vec(),
-            neuron_stake_e8s,
-            block_height: 0,
-            memo: nonce,
-        })
-        .now_or_never()
-        .unwrap()
-        .unwrap();
+    let id =
+        claim_or_refresh_neuron_by_memo(&mut gov, &from, None, to_subaccount, Memo(nonce), None)
+            .unwrap();
 
     assert_eq!(gov.get_neuron(&id).unwrap().followees, default_followees);
 
@@ -5178,19 +5242,9 @@ fn test_default_followees() {
         neuron_stake_e8s,
     );
 
-    let id2 = gov
-        .claim_or_top_up_neuron_from_notification(NeuronStakeTransfer {
-            transfer_timestamp: driver.get_fake_env().now(),
-            from: Some(from),
-            from_subaccount: Vec::new(),
-            to_subaccount: to_subaccount.to_vec(),
-            neuron_stake_e8s,
-            block_height: 0,
-            memo: nonce,
-        })
-        .now_or_never()
-        .unwrap()
-        .unwrap();
+    let id2 =
+        claim_or_refresh_neuron_by_memo(&mut gov, &from, None, to_subaccount, Memo(nonce), None)
+            .unwrap();
 
     // The second neuron should have the default followees we set with the proposal.
     assert!(id != id2);
