@@ -733,6 +733,11 @@ fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::
         "Timestamp of the latest reward event, in seconds since the Unix epoch.",
     )?;
     w.encode_gauge(
+        "governance_seconds_since_latest_reward_event",
+        (governance.env.now() - governance.latest_reward_event().actual_timestamp_seconds) as f64,
+        "Seconds since the latest reward event",
+    )?;
+    w.encode_gauge(
         "governance_last_rewards_event_e8s",
         governance.latest_reward_event().distributed_e8s_equivalent as f64,
         "Total number of e8s distributed in the latest reward event.",
@@ -751,6 +756,65 @@ fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::
         total_voting_power,
         "The total voting power, according to the most recent proposal.",
     )?;
+
+    if let Some(metrics) = &governance.proto.metrics {
+        w.encode_gauge(
+            "governance_total_supply_icp",
+            metrics.total_supply_icp as f64,
+            "Total number of minted ICP, at the time the metrics were last calculated, as reported by the ledger canister.",
+        )?;
+
+        w.encode_gauge(
+            "governance_total_staked_e8s",
+            metrics.total_staked_e8s as f64,
+            "Total number of e8s that are staked.",
+        )?;
+
+        w.encode_gauge(
+            "governance_dissolved_neurons_count",
+            metrics.dissolved_neurons_count as f64,
+            "Total number of neurons in the \"dissolved\" state.",
+        )?;
+
+        w.encode_gauge(
+            "governance_dissolved_neurons_e8s",
+            metrics.dissolved_neurons_e8s as f64,
+            "Total e8s held in neurons that are in the \"dissolved\" state.",
+        )?;
+
+        w.encode_gauge(
+            "governance_garbage_collectable_neurons_count",
+            metrics.garbage_collectable_neurons_count as f64,
+            "Total number of neurons that can be garbage collected.",
+        )?;
+
+        w.encode_gauge(
+            "governance_neurons_with_invalid_stake_count",
+            metrics.neurons_with_invalid_stake_count as f64,
+            "Total number of neurons having an invalid stake, e.g. less than the minimum allowed stake.",
+        )?;
+
+        w.encode_histogram(
+            "governance_dissolving_neurons_e8s",
+            metrics
+                .dissolving_neurons_e8s_buckets
+                .iter()
+                .map(|(k, v)| (*k as f64, *v)),
+            metrics.dissolving_neurons_count as f64,
+            "Total e8s held in dissolving neurons, grouped by dissolve delay (in years)",
+        )?;
+
+        w.encode_histogram(
+            "governance_not_dissolving_neurons_e8s",
+            metrics
+                .not_dissolving_neurons_e8s_buckets
+                .iter()
+                .map(|(k, v)| (*k as f64, *v)),
+            metrics.not_dissolving_neurons_count as f64,
+            "Total e8s held in not dissolving neurons, grouped by dissolve delay (in years)",
+        )?;
+    }
+
     Ok(())
 }
 

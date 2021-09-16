@@ -1,12 +1,17 @@
 //! TLS error types
 
+#[cfg(test)]
+mod tests;
+
 use ic_crypto_internal_tls::{CreateTlsAcceptorError, CreateTlsConnectorError};
 use ic_crypto_tls_interfaces::{
     MalformedPeerCertificateError, TlsClientHandshakeError, TlsServerHandshakeError,
 };
 
+use std::fmt;
+
 /// Errors occurring during a TLS handshake
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum CspTlsClientHandshakeError {
     MalformedServerCertificate(CspMalformedPeerCertificateError),
     CreateConnectorError {
@@ -21,6 +26,43 @@ pub enum CspTlsClientHandshakeError {
     SecretKeyNotFound,
     MalformedSecretKey,
     WrongSecretKeyType,
+}
+impl fmt::Debug for CspTlsClientHandshakeError {
+    /// Prints in a developer-friendly format.
+    ///
+    /// The standard rust encoding is used for all fields except DER
+    /// certificates, which are printed as base64 rather than arrays of
+    /// integers.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use CspTlsClientHandshakeError::*;
+        match self {
+            MalformedServerCertificate(cert) => write!(
+                f,
+                "CspTlsClientHandshakeError::MalformedServerCertificate({:?})",
+                cert
+            ),
+            CreateConnectorError {
+                description,
+                client_cert_der,
+                server_cert_der,
+                internal_error,
+            } => {
+                write!(f, "CspTlsClientHandshakeError::CreateConnectorError{{ description: {}, client_cert_der: {:?}, server_cert_der: {:?}, internal_error: {}}}",
+                          description,
+                          client_cert_der.as_ref().map(|der| base64::encode(&der)),
+                          server_cert_der.as_ref().map(|der| base64::encode(&der)),
+                          internal_error)
+            }
+            HandshakeError { internal_error } => write!(
+                f,
+                "CspTlsClientHandshakeError::HandshakeError{{ internal_error: {} }}",
+                internal_error
+            ),
+            SecretKeyNotFound => write!(f, "CspTlsClientHandshakeError::SecretKeyNotFound"),
+            MalformedSecretKey => write!(f, "CspTlsClientHandshakeError::MalformedSecretKey"),
+            WrongSecretKeyType => write!(f, "CspTlsClientHandshakeError::WrongSecretKeyType"),
+        }
+    }
 }
 
 /// The TLS peer certificate was malformed
@@ -80,7 +122,7 @@ impl From<CreateTlsConnectorError> for CspTlsClientHandshakeError {
 }
 
 /// TLS handshake failed (server side)
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum CspTlsServerHandshakeError {
     MalformedClientCertificate(CspMalformedPeerCertificateError),
     CreateAcceptorError {
@@ -94,6 +136,27 @@ pub enum CspTlsServerHandshakeError {
     SecretKeyNotFound,
     MalformedSecretKey,
     WrongSecretKeyType,
+}
+impl fmt::Debug for CspTlsServerHandshakeError {
+    /// Prints in a developer-friendly format.
+    ///
+    /// The standard rust encoding is used for all fields except DER
+    /// certificates, which are printed as base64 rather than arrays of
+    /// integers.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use CspTlsServerHandshakeError::*;
+        match self {
+            MalformedClientCertificate(error) => write!(f, "CspTlsServerHandshakeError::MalformedClientCertificate({:?})", error),
+            CreateAcceptorError{description, cert_der, internal_error} => write!(f, "CspTlsServerHandshakeError::CreateAcceptorError{{ description: {}, cert_der: {:?}, internal_error: {:?}}}",
+                                                                                 description,
+                                                                                 cert_der.as_ref().map(|der| base64::encode(&der[..])),
+                                                                                 internal_error),
+            HandshakeError{internal_error} => write!(f, "CspTlsServerHandshakeError::HandshakeError{{ internal_error: {} }}", internal_error),
+            SecretKeyNotFound => write!(f, "CspTlsServerHandshakeError::SecretKeyNotFound"),
+            MalformedSecretKey => write!(f, "CspTlsServerHandshakeError::MalformedSecretKey"),
+            WrongSecretKeyType => write!(f, "CspTlsServerHandshakeError::WrongSecretKeyType"),
+        }
+    }
 }
 
 impl From<CspTlsServerHandshakeError> for TlsServerHandshakeError {

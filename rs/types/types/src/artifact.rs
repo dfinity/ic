@@ -405,8 +405,7 @@ pub struct DkgMessageAttribute {
 // -----------------------------------------------------------------------------
 // ECDSA artifacts
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EcdsaMessageId;
+pub type EcdsaMessageId = CryptoHashOf<EcdsaMessage>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaMessageAttribute;

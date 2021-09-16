@@ -211,12 +211,12 @@ fn build_streams_success() {
         );
         assert_eq!(14, fetch_routed_payload_count(&metrics_registry));
         assert_eq!(
-            metric_vec(&[(&[(LABEL_DESTINATION, &REMOTE_SUBNET.to_string())], 14)]),
+            metric_vec(&[(&[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())], 14)]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MESSAGES)
         );
         assert_eq!(
             metric_vec(&[(
-                &[(LABEL_DESTINATION, &REMOTE_SUBNET.to_string())],
+                &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
                 expected_stream_bytes
             )]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)
@@ -310,12 +310,12 @@ fn build_streams_local_canisters() {
         );
         assert_eq!(14, fetch_routed_payload_count(&metrics_registry));
         assert_eq!(
-            metric_vec(&[(&[(LABEL_DESTINATION, &LOCAL_SUBNET.to_string())], 14)]),
+            metric_vec(&[(&[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())], 14)]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MESSAGES)
         );
         assert_eq!(
             metric_vec(&[(
-                &[(LABEL_DESTINATION, &LOCAL_SUBNET.to_string())],
+                &[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())],
                 expected_stream_bytes
             )]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)
@@ -441,12 +441,12 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
         );
         assert_eq!(1, fetch_routed_payload_count(&metrics_registry));
         assert_eq!(
-            metric_vec(&[(&[(LABEL_DESTINATION, &REMOTE_SUBNET.to_string())], 1)]),
+            metric_vec(&[(&[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())], 1)]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MESSAGES)
         );
         assert_eq!(
             metric_vec(&[(
-                &[(LABEL_DESTINATION, &REMOTE_SUBNET.to_string())],
+                &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
                 expected_stream_bytes
             )]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)

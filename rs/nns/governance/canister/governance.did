@@ -85,6 +85,7 @@ type Followees = record { followees : vec NeuronId };
 type Governance = record {
   default_followees : vec record { int32; Followees };
   wait_for_quiet_threshold_seconds : nat64;
+  metrics : opt GovernanceCachedMetrics;
   node_providers : vec NodeProvider;
   economics : opt NetworkEconomics;
   latest_reward_event : opt RewardEvent;
@@ -94,6 +95,23 @@ type Governance = record {
   in_flight_commands : vec record { nat64; NeuronInFlightCommand };
   neurons : vec record { nat64; Neuron };
   genesis_timestamp_seconds : nat64;
+};
+type GovernanceCachedMetrics = record {
+  not_dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
+  garbage_collectable_neurons_count : nat64;
+  neurons_with_invalid_stake_count : nat64;
+  not_dissolving_neurons_count_buckets : vec record { nat64; nat64 };
+  total_supply_icp : nat64;
+  neurons_with_less_than_6_months_dissolve_delay_count : nat64;
+  dissolved_neurons_count : nat64;
+  total_staked_e8s : nat64;
+  not_dissolving_neurons_count : nat64;
+  dissolved_neurons_e8s : nat64;
+  neurons_with_less_than_6_months_dissolve_delay_e8s : nat64;
+  dissolving_neurons_count_buckets : vec record { nat64; nat64 };
+  dissolving_neurons_count : nat64;
+  dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
+  timestamp_seconds : nat64;
 };
 type GovernanceError = record { error_message : text; error_type : int32 };
 type IncreaseDissolveDelay = record {

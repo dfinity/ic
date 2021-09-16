@@ -18,7 +18,7 @@ use std::convert::TryFrom;
 // It should uniquely identify a transcript.
 // Can be a string decided by Consensus, e.g. by hashing the fields below, or a
 // u64. (CRP-1104)
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IDkgTranscriptId(pub usize);
 
 /// A set of receivers for interactive DKG.
@@ -254,6 +254,7 @@ pub struct VerifiedIDkgDealing {
 }
 
 // IDkgComplaint against an indivdual dealing in a transcript.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub struct IDkgComplaint {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,

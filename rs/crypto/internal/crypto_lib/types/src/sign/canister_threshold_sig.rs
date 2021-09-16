@@ -3,7 +3,7 @@
 #[derive(Clone, Debug)]
 pub struct CspIDkgDealing {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CspIDkgComplaint {}
 
 #[derive(Clone, Debug)]

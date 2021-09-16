@@ -24,17 +24,9 @@ pub struct AccountIdentifier {
 }
 
 impl TryFrom<&proto::AccountIdentifier> for AccountIdentifier {
-    type Error = String;
-    fn try_from(id: &proto::AccountIdentifier) -> Result<Self, String> {
-        Ok(AccountIdentifier {
-            hash: id.hash.as_slice().try_into().map_err(|_| {
-                format!(
-                    "Received an invalid AccountIdentifier proto containing a \
-                    field 'hash' of length {} bytes instead of the expected 28.",
-                    id.hash.len()
-                )
-            })?,
-        })
+    type Error = AccountIdParseError;
+    fn try_from(id: &proto::AccountIdentifier) -> Result<Self, AccountIdParseError> {
+        Self::from_slice(id.hash.as_slice())
     }
 }
 
@@ -65,25 +57,40 @@ impl AccountIdentifier {
 
     pub fn from_hex(hex_str: &str) -> Result<AccountIdentifier, String> {
         let hex: Vec<u8> = hex::decode(hex_str).map_err(|e| e.to_string())?;
-        Self::from_slice(&hex[..])
+        Self::from_slice(&hex[..]).map_err(|err| match err {
+            // Since the input was provided in hex, return an error that is hex-friendly.
+            AccountIdParseError::InvalidLength(_) => format!(
+                "{} has a length of {} but we expected a length of 64 or 56",
+                hex_str,
+                hex_str.len()
+            ),
+            AccountIdParseError::InvalidChecksum(err) => err.to_string(),
+        })
     }
 
-    /// Goes from the canonical format (with checksum) encoded in bytes rather
-    /// than hex to AccountIdentifier
-    pub fn from_slice(v: &[u8]) -> Result<AccountIdentifier, String> {
-        // Trim this down when we reach rust 1.48
-        let hex: Box<[u8; 32]> = match v.to_vec().into_boxed_slice().try_into() {
-            Ok(h) => h,
-            Err(_) => {
-                let hex_str = hex::encode(v);
-                return Err(format!(
-                    "{} has a length of {} but we expected a length of 64",
-                    hex_str,
-                    hex_str.len()
-                ));
+    /// Converts a blob into an `AccountIdentifier`.
+    ///
+    /// The blob can be either:
+    ///
+    /// 1. The 32-byte canonical format (4 byte checksum + 28 byte hash).
+    /// 2. The 28-byte hash.
+    ///
+    /// If the 32-byte canonical format is provided, the checksum is verified.
+    pub fn from_slice(v: &[u8]) -> Result<AccountIdentifier, AccountIdParseError> {
+        // Try parsing it as a 32-byte blob.
+        match v.try_into() {
+            Ok(h) => {
+                // It's a 32-byte blob. Validate the checksum.
+                check_sum(h).map_err(AccountIdParseError::InvalidChecksum)
             }
-        };
-        check_sum(*hex)
+            Err(_) => {
+                // Try parsing it as a 28-byte hash.
+                match v.try_into() {
+                    Ok(hash) => Ok(AccountIdentifier { hash }),
+                    Err(_) => Err(AccountIdParseError::InvalidLength(v.to_vec())),
+                }
+            }
+        }
     }
 
     pub fn to_hex(&self) -> String {
@@ -148,7 +155,7 @@ impl From<CanisterId> for AccountIdentifier {
     }
 }
 
-fn check_sum(hex: [u8; 32]) -> Result<AccountIdentifier, String> {
+fn check_sum(hex: [u8; 32]) -> Result<AccountIdentifier, ChecksumError> {
     // Get the checksum provided
     let found_checksum = &hex[0..4];
 
@@ -163,12 +170,11 @@ fn check_sum(hex: [u8; 32]) -> Result<AccountIdentifier, String> {
     if expected_checksum == found_checksum {
         Ok(account_id)
     } else {
-        Err(format!(
-            "Checksum failed for {}, expected check bytes {} but found {}",
-            hex::encode(&hex[..]),
-            hex::encode(expected_checksum),
-            hex::encode(found_checksum),
-        ))
+        Err(ChecksumError {
+            input: hex,
+            expected_checksum,
+            found_checksum: found_checksum.try_into().unwrap(),
+        })
     }
 }
 
@@ -251,6 +257,46 @@ impl Display for Subaccount {
     }
 }
 
+/// An error for reporting invalid checksums.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ChecksumError {
+    input: [u8; 32],
+    expected_checksum: [u8; 4],
+    found_checksum: [u8; 4],
+}
+
+impl Display for ChecksumError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Checksum failed for {}, expected check bytes {} but found {}",
+            hex::encode(&self.input[..]),
+            hex::encode(self.expected_checksum),
+            hex::encode(self.found_checksum),
+        )
+    }
+}
+
+/// An error for reporting invalid Account Identifiers.
+#[derive(Debug, PartialEq, Eq)]
+pub enum AccountIdParseError {
+    InvalidChecksum(ChecksumError),
+    InvalidLength(Vec<u8>),
+}
+
+impl Display for AccountIdParseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidChecksum(err) => write!(f, "{}", err),
+            Self::InvalidLength(input) => write!(
+                f,
+                "Received an invalid AccountIdentifier with length {} bytes instead of the expected 28 or 32.",
+                input.len()
+            ),
+        }
+    }
+}
+
 #[test]
 fn check_round_trip() {
     let ai = AccountIdentifier { hash: [7; 28] };
@@ -287,22 +333,129 @@ fn check_encoding() {
 }
 
 #[test]
-fn check_try_from() {
-    let too_short = proto::AccountIdentifier {
+fn test_account_id_try_from() {
+    let length_27 = proto::AccountIdentifier {
         hash: b"123456789_123456789_1234567".to_vec(),
     };
-    let too_short_msg = AccountIdentifier::try_from(&too_short).unwrap_err();
-    assert!(too_short_msg.to_lowercase().contains("invalid"));
+    assert_eq!(
+        AccountIdentifier::try_from(&length_27),
+        Err(AccountIdParseError::InvalidLength(length_27.hash))
+    );
 
-    let too_long = proto::AccountIdentifier {
-        hash: b"123456789_123456789_1234567_A".to_vec(),
-    };
-    let too_long_msg = AccountIdentifier::try_from(&too_long).unwrap_err();
-    assert!(too_long_msg.to_lowercase().contains("invalid"));
-
-    let just_right = proto::AccountIdentifier {
+    let length_28 = proto::AccountIdentifier {
         hash: b"123456789_123456789_12345678".to_vec(),
     };
-    let acc_id = AccountIdentifier::try_from(&just_right).unwrap();
-    assert_eq!(just_right, acc_id.into());
+    assert_eq!(
+        AccountIdentifier::try_from(&length_28),
+        Ok(AccountIdentifier {
+            hash: length_28.hash.try_into().unwrap()
+        })
+    );
+
+    let length_29 = proto::AccountIdentifier {
+        hash: b"123456789_123456789_123456789".to_vec(),
+    };
+    assert_eq!(
+        AccountIdentifier::try_from(&length_29),
+        Err(AccountIdParseError::InvalidLength(length_29.hash))
+    );
+
+    let length_32 = proto::AccountIdentifier {
+        hash: [0; 32].to_vec(),
+    };
+    assert_eq!(
+        AccountIdentifier::try_from(&length_32),
+        Err(AccountIdParseError::InvalidChecksum(ChecksumError {
+            input: length_32.hash.try_into().unwrap(),
+            expected_checksum: [128, 112, 119, 233],
+            found_checksum: [0, 0, 0, 0],
+        }))
+    );
+
+    // A 32-byte address with a valid checksum
+    let length_32 = proto::AccountIdentifier {
+        hash: [
+            128, 112, 119, 233, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .to_vec(),
+    };
+    assert_eq!(
+        AccountIdentifier::try_from(&length_32),
+        Ok(AccountIdentifier { hash: [0; 28] })
+    );
+}
+
+#[test]
+fn test_account_id_from_slice() {
+    let length_27 = b"123456789_123456789_1234567".to_vec();
+    assert_eq!(
+        AccountIdentifier::from_slice(&length_27),
+        Err(AccountIdParseError::InvalidLength(length_27))
+    );
+
+    let length_28 = b"123456789_123456789_12345678".to_vec();
+    assert_eq!(
+        AccountIdentifier::from_slice(&length_28),
+        Ok(AccountIdentifier {
+            hash: length_28.try_into().unwrap()
+        })
+    );
+
+    let length_29 = b"123456789_123456789_123456789".to_vec();
+    assert_eq!(
+        AccountIdentifier::from_slice(&length_29),
+        Err(AccountIdParseError::InvalidLength(length_29))
+    );
+
+    let length_32 = [0; 32].to_vec();
+    assert_eq!(
+        AccountIdentifier::from_slice(&length_32),
+        Err(AccountIdParseError::InvalidChecksum(ChecksumError {
+            input: length_32.try_into().unwrap(),
+            expected_checksum: [128, 112, 119, 233],
+            found_checksum: [0, 0, 0, 0],
+        }))
+    );
+
+    // A 32-byte address with a valid checksum
+    let length_32 = [
+        128, 112, 119, 233, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0,
+    ]
+    .to_vec();
+    assert_eq!(
+        AccountIdentifier::from_slice(&length_32),
+        Ok(AccountIdentifier { hash: [0; 28] })
+    );
+}
+
+#[test]
+fn test_account_id_from_hex() {
+    let length_56 = "00000000000000000000000000000000000000000000000000000000";
+    assert_eq!(
+        AccountIdentifier::from_hex(length_56),
+        Ok(AccountIdentifier { hash: [0; 28] })
+    );
+
+    let length_57 = "000000000000000000000000000000000000000000000000000000000";
+    assert!(AccountIdentifier::from_hex(length_57).is_err());
+
+    let length_58 = "0000000000000000000000000000000000000000000000000000000000";
+    assert_eq!(
+        AccountIdentifier::from_hex(length_58),
+        Err("0000000000000000000000000000000000000000000000000000000000 has a length of 58 but we expected a length of 64 or 56".to_string())
+    );
+
+    let length_64 = "0000000000000000000000000000000000000000000000000000000000000000";
+    assert!(AccountIdentifier::from_hex(length_64)
+        .unwrap_err()
+        .contains("Checksum failed"));
+
+    // Try again with correct checksum
+    let length_64 = "807077e900000000000000000000000000000000000000000000000000000000";
+    assert_eq!(
+        AccountIdentifier::from_hex(length_64),
+        Ok(AccountIdentifier { hash: [0; 28] })
+    );
 }

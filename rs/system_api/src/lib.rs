@@ -47,6 +47,16 @@ pub enum ResponseStatus {
     JustRepliedWith(Option<WasmResult>),
 }
 
+/// This enum indicates whether execution of a non-replicated query
+/// should keep track of the state or not. The distinction is necessary
+/// because some non-replicated queries can call other queries. In such
+/// a case the caller has too keep the state until the callee returns.
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub enum NonReplicatedQueryKind {
+    Stateful,
+    Pure,
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Serialize, Deserialize)]
 pub enum ApiType {
@@ -106,6 +116,7 @@ pub enum ApiType {
         response_data: Vec<u8>,
         response_status: ResponseStatus,
         max_reply_size: NumBytes,
+        query_kind: NonReplicatedQueryKind,
     },
 
     // For executing closures when a `Reply` is received
@@ -273,6 +284,7 @@ impl ApiType {
         own_subnet_id: SubnetId,
         routing_table: Arc<RoutingTable>,
         data_certificate: Option<Vec<u8>>,
+        query_kind: NonReplicatedQueryKind,
     ) -> Self {
         Self::NonReplicatedQuery {
             time,
@@ -286,6 +298,7 @@ impl ApiType {
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
             max_reply_size: MAX_NON_REPLICATED_QUERY_REPLY_SIZE,
+            query_kind,
         }
     }
 
@@ -1232,6 +1245,10 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::Init { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_simple")),
             ApiType::Update {
@@ -1244,6 +1261,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 call_context_id,
                 own_subnet_id,
                 routing_table,
+                query_kind: NonReplicatedQueryKind::Stateful,
                 ..
             }
             | ApiType::Heartbeat {
@@ -1361,6 +1379,10 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            }
             | ApiType::Cleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_new")),
@@ -1368,7 +1390,9 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 outgoing_request, ..
             }
             | ApiType::NonReplicatedQuery {
-                outgoing_request, ..
+                outgoing_request,
+                query_kind: NonReplicatedQueryKind::Stateful,
+                ..
             }
             | ApiType::Heartbeat {
                 outgoing_request, ..
@@ -1407,6 +1431,10 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_data_append")),
@@ -1414,7 +1442,9 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 outgoing_request, ..
             }
             | ApiType::NonReplicatedQuery {
-                outgoing_request, ..
+                outgoing_request,
+                query_kind: NonReplicatedQueryKind::Stateful,
+                ..
             }
             | ApiType::Heartbeat {
                 outgoing_request, ..
@@ -1438,6 +1468,10 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            }
             | ApiType::Cleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_on_cleanup")),
@@ -1445,7 +1479,9 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 outgoing_request, ..
             }
             | ApiType::NonReplicatedQuery {
-                outgoing_request, ..
+                outgoing_request,
+                query_kind: NonReplicatedQueryKind::Stateful,
+                ..
             }
             | ApiType::Heartbeat {
                 outgoing_request, ..
@@ -1486,6 +1522,10 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            }
             | ApiType::Cleanup { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_perform")),
@@ -1564,6 +1604,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 own_subnet_id,
                 outgoing_request,
                 routing_table,
+                query_kind: NonReplicatedQueryKind::Stateful,
                 ..
             } => {
                 let req_in_prep = outgoing_request.take().ok_or_else(|| {
@@ -1705,9 +1746,9 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         }
     }
 
-    fn ic0_stable_size64(&self) -> HypervisorResult<u64> {
+    fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
         match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_stable_size64")),
+            ApiType::Start {} => Err(self.error_for("ic0_stable64_size")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
             | ApiType::Update { .. }
@@ -1717,13 +1758,13 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self.system_state_accessor.stable_size64(),
+            | ApiType::InspectMessage { .. } => self.system_state_accessor.stable64_size(),
         }
     }
 
-    fn ic0_stable_grow64(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
+    fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
         match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_stable_grow64")),
+            ApiType::Start {} => Err(self.error_for("ic0_stable64_grow")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
             | ApiType::Update { .. }
@@ -1737,7 +1778,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 match self.memory_usage.increase_usage(additional_pages) {
                     Ok(()) => {
                         let native_memory_grow_res =
-                            self.system_state_accessor.stable_grow64(additional_pages)?;
+                            self.system_state_accessor.stable64_grow(additional_pages)?;
                         if native_memory_grow_res == -1 {
                             self.memory_usage.decrease_usage(additional_pages);
                             return Ok(-1);
@@ -1750,7 +1791,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         }
     }
 
-    fn ic0_stable_read64(
+    fn ic0_stable64_read(
         &self,
         dst: u64,
         offset: u64,
@@ -1758,7 +1799,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_stable_read64")),
+            ApiType::Start {} => Err(self.error_for("ic0_stable64_read")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
             | ApiType::Update { .. }
@@ -1770,11 +1811,11 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => self
                 .system_state_accessor
-                .stable_read64(dst, offset, size, heap),
+                .stable64_read(dst, offset, size, heap),
         }
     }
 
-    fn ic0_stable_write64(
+    fn ic0_stable64_write(
         &mut self,
         offset: u64,
         src: u64,
@@ -1782,7 +1823,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         heap: &[u8],
     ) -> HypervisorResult<()> {
         match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_stable_write64")),
+            ApiType::Start {} => Err(self.error_for("ic0_stable64_write")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
             | ApiType::Update { .. }
@@ -1794,7 +1835,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => self
                 .system_state_accessor
-                .stable_write64(offset, src, size, heap)
+                .stable64_write(offset, src, size, heap)
                 .map(|_| {
                     self.memory_usage.stable_memory_delta +=
                         (size as usize / *PAGE_SIZE) + std::cmp::min(1, size as usize % *PAGE_SIZE);
@@ -2345,10 +2386,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());
@@ -2409,10 +2450,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());
@@ -2431,7 +2472,7 @@ mod test {
     }
 
     #[test]
-    fn test_canister_query_support() {
+    fn test_canister_replicated_query_support() {
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let system_state = SystemStateBuilder::default().build();
         let mut api = get_system_api(
@@ -2467,10 +2508,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());
@@ -2489,7 +2530,65 @@ mod test {
     }
 
     #[test]
-    fn test_inter_canister_query_support() {
+    fn test_canister_pure_query_support() {
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        let system_state = SystemStateBuilder::default().build();
+        let mut api = get_system_api(
+            ApiType::replicated_query(mock_time(), vec![], user_test_id(1).get(), None),
+            system_state,
+            cycles_account_manager,
+        );
+
+        assert_api_supported(api.ic0_msg_arg_data_size());
+        assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_msg_caller_size());
+        assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_msg_method_name_size());
+        assert_api_not_supported(api.ic0_msg_method_name_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_accept_message());
+        assert_api_supported(api.ic0_msg_reply());
+        assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+        assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
+        assert_api_not_supported(api.ic0_msg_reject_code());
+        assert_api_not_supported(api.ic0_msg_reject_msg_size());
+        assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_canister_self_size());
+        assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_controller_size());
+        assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_data_append(0, 0, &[]));
+        assert_api_not_supported(api.ic0_call_on_cleanup(0, 0));
+        assert_api_not_supported(api.ic0_call_cycles_add(0));
+        assert_api_not_supported(api.ic0_call_perform());
+        assert_api_supported(api.ic0_stable_size());
+        assert_api_supported(api.ic0_stable_grow(1));
+        assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_time());
+        assert_api_supported(api.ic0_canister_cycle_balance());
+        assert_api_supported(api.ic0_canister_cycles_balance128());
+        assert_api_not_supported(api.ic0_msg_cycles_available());
+        assert_api_not_supported(api.ic0_msg_cycles_available128());
+        assert_api_not_supported(api.ic0_msg_cycles_refunded());
+        assert_api_not_supported(api.ic0_msg_cycles_refunded128());
+        assert_api_not_supported(api.ic0_msg_cycles_accept(0));
+        assert_api_not_supported(api.ic0_msg_cycles_accept128(Cycles::zero()));
+        assert_api_supported(api.ic0_data_certificate_present());
+        assert_api_not_supported(api.ic0_data_certificate_size());
+        assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
+        assert_api_supported(api.ic0_canister_status());
+        assert_api_not_supported(api.ic0_mint_cycles(0));
+    }
+
+    #[test]
+    fn test_canister_stateful_query_support() {
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let system_state = SystemStateBuilder::default().build();
         let (subnet_id, _, routing_table, _) = setup();
@@ -2502,6 +2601,7 @@ mod test {
                 subnet_id,
                 routing_table,
                 Some(vec![1]),
+                NonReplicatedQueryKind::Stateful,
             ),
             system_state,
             cycles_account_manager,
@@ -2534,10 +2634,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());
@@ -2607,10 +2707,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());
@@ -2659,10 +2759,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());
@@ -2723,10 +2823,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());
@@ -2785,10 +2885,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());
@@ -2843,10 +2943,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());
@@ -2897,10 +2997,10 @@ mod test {
         assert_api_not_supported(api.ic0_stable_grow(1));
         assert_api_not_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_not_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_not_supported(api.ic0_stable_size64());
-        assert_api_not_supported(api.ic0_stable_grow64(1));
-        assert_api_not_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_not_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_not_supported(api.ic0_stable64_size());
+        assert_api_not_supported(api.ic0_stable64_grow(1));
+        assert_api_not_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_not_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_not_supported(api.ic0_time());
         assert_api_not_supported(api.ic0_canister_cycle_balance());
         assert_api_not_supported(api.ic0_canister_cycles_balance128());
@@ -2955,10 +3055,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());
@@ -3018,10 +3118,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());
@@ -3084,10 +3184,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());
@@ -3153,10 +3253,10 @@ mod test {
         assert_api_supported(api.ic0_stable_grow(1));
         assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
         assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-        assert_api_supported(api.ic0_stable_size64());
-        assert_api_supported(api.ic0_stable_grow64(1));
-        assert_api_supported(api.ic0_stable_read64(0, 0, 0, &mut []));
-        assert_api_supported(api.ic0_stable_write64(0, 0, 0, &[]));
+        assert_api_supported(api.ic0_stable64_size());
+        assert_api_supported(api.ic0_stable64_grow(1));
+        assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+        assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         assert_api_supported(api.ic0_time());
         assert_api_supported(api.ic0_canister_cycle_balance());
         assert_api_supported(api.ic0_canister_cycles_balance128());

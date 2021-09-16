@@ -12,10 +12,12 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::MemoryRegion;
 use ic_replicated_state::{
     canister_state::testing::CanisterQueuesTesting, CallContextAction, CallOrigin, CanisterState,
     ExecutionState, Global, NumWasmPages, NumWasmPages64, SystemState,
 };
+use ic_replicated_state::{PageIndex, PageMap};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ApiType;
 use ic_test_utilities::types::messages::{IngressBuilder, RequestBuilder};
@@ -42,6 +44,8 @@ use ic_utils::ic_features::cow_state_feature;
 use ic_wasm_utils::validation::WasmValidationLimits;
 use lazy_static::lazy_static;
 use maplit::btreemap;
+use proptest::prelude::*;
+use std::path::PathBuf;
 use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, time::Duration};
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
@@ -686,35 +690,34 @@ fn exercise_stable_memory_delta_2() {
 }
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
 fn exercise_stable_memory_delta64() {
     with_hypervisor(|hypervisor, tmp_path| {
         let wasm_module = r#"
                 (module
-                    (import "ic0" "stable_size64" (func $stable_size64 (result i64)))
-                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
-                    (import "ic0" "stable_write64"
-                        (func $stable_write64 (param $offset i64) (param $src i64) (param $size i64)))
+                    (import "ic0" "stable64_size" (func $stable64_size (result i64)))
+                    (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+                    (import "ic0" "stable64_write"
+                        (func $stable64_write (param $offset i64) (param $src i64) (param $size i64)))
                     (import "ic0" "msg_reply" (func $msg_reply))
 
                     (func $grow
-                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 0))
+                        (if (i64.ne (call $stable64_grow (i64.const 1)) (i64.const 0))
                             (then (unreachable))
                         )
-                        (if (i64.ne (call $stable_size64) (i64.const 1))
+                        (if (i64.ne (call $stable64_size) (i64.const 1))
                             (then (unreachable))
                         )
                         (call $msg_reply)
                     )
 
                     (func $write
-                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 0))
+                        (if (i64.ne (call $stable64_grow (i64.const 1)) (i64.const 0))
                             (then (unreachable))
                         )
-                        (if (i64.ne (call $stable_size64) (i64.const 1))
+                        (if (i64.ne (call $stable64_size) (i64.const 1))
                             (then (unreachable))
                         )
-                        (call $stable_write64 (i64.const 0) (i64.const 0) (i64.const 6144))
+                        (call $stable64_write (i64.const 0) (i64.const 0) (i64.const 6144))
                         (call $msg_reply)
                     )
 
@@ -762,35 +765,34 @@ fn exercise_stable_memory_delta64() {
 }
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
 fn exercise_stable_memory_delta64_exact_page() {
     with_hypervisor(|hypervisor, tmp_path| {
         let wasm_module = r#"
                 (module
-                    (import "ic0" "stable_size64" (func $stable_size64 (result i64)))
-                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
-                    (import "ic0" "stable_write64"
-                        (func $stable_write64 (param $offset i64) (param $src i64) (param $size i64)))
+                    (import "ic0" "stable64_size" (func $stable64_size (result i64)))
+                    (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+                    (import "ic0" "stable64_write"
+                        (func $stable64_write (param $offset i64) (param $src i64) (param $size i64)))
                     (import "ic0" "msg_reply" (func $msg_reply))
 
                     (func $grow
-                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 0))
+                        (if (i64.ne (call $stable64_grow (i64.const 1)) (i64.const 0))
                             (then (unreachable))
                         )
-                        (if (i64.ne (call $stable_size64) (i64.const 1))
+                        (if (i64.ne (call $stable64_size) (i64.const 1))
                             (then (unreachable))
                         )
                         (call $msg_reply)
                     )
 
                     (func $write
-                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 0))
+                        (if (i64.ne (call $stable64_grow (i64.const 1)) (i64.const 0))
                             (then (unreachable))
                         )
-                        (if (i64.ne (call $stable_size64) (i64.const 1))
+                        (if (i64.ne (call $stable64_size) (i64.const 1))
                             (then (unreachable))
                         )
-                        (call $stable_write64 (i64.const 0) (i64.const 0) (i64.const 8192))
+                        (call $stable64_write (i64.const 0) (i64.const 0) (i64.const 8192))
                         (call $msg_reply)
                     )
 
@@ -876,38 +878,37 @@ fn sys_api_call_stable_grow_too_many_pages() {
 }
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
-fn sys_api_call_stable_grow64() {
+fn sys_api_call_stable64_grow() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
             execute_update_with_cycles_memory_time(
                 &hypervisor,
                 r#"
                 (module
-                    (import "ic0" "stable_size64" (func $stable_size64 (result i64)))
-                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
+                    (import "ic0" "stable64_size" (func $stable64_size (result i64)))
+                    (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
                     (import "ic0" "msg_reply" (func $msg_reply))
 
                     (func $test
                         ;; Grow the memory by 1 page and verify that the return value
                         ;; is the previous number of pages, which should be 0.
-                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 0))
+                        (if (i64.ne (call $stable64_grow (i64.const 1)) (i64.const 0))
                             (then (unreachable))
                         )
 
                         ;; Grow the memory by 5 more pages and verify that the return value
                         ;; is the previous number of pages, which should be 1.
-                        (if (i64.ne (call $stable_grow64 (i64.const 5)) (i64.const 1))
+                        (if (i64.ne (call $stable64_grow (i64.const 5)) (i64.const 1))
                             (then (unreachable))
                         )
 
                         ;; Grow the memory by 2^64-1 more pages. This should fail.
-                        (if (i64.ne (call $stable_grow64 (i64.const 18446744073709551615)) (i64.const -1))
+                        (if (i64.ne (call $stable64_grow (i64.const 18446744073709551615)) (i64.const -1))
                             (then (unreachable))
                         )
 
                         ;; Stable memory size now should be 6.
-                        (if (i64.ne (call $stable_size64) (i64.const 6))
+                        (if (i64.ne (call $stable64_size) (i64.const 6))
                             (then (unreachable))
                         )
                         (call $msg_reply)
@@ -932,7 +933,6 @@ fn sys_api_call_stable_grow64() {
 }
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
 fn sys_api_call_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
@@ -940,13 +940,13 @@ fn sys_api_call_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
                 &hypervisor,
                 r#"
                 (module
-                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
+                    (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
                     (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
                     (import "ic0" "msg_reply" (func $msg_reply))
 
                     (func $test
                         ;; Grow the memory to 4GiB.
-                        (if (i64.ne (call $stable_grow64 (i64.const 65536)) (i64.const 0))
+                        (if (i64.ne (call $stable64_grow (i64.const 65536)) (i64.const 0))
                             (then (unreachable))
                         )
                         ;; Grow the memory by 0 pages using 32-bit API. This should succeed.
@@ -954,7 +954,7 @@ fn sys_api_call_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
                             (then (unreachable))
                         )
                         ;; Grow the memory by 1 page. This should succeed.
-                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 65536))
+                        (if (i64.ne (call $stable64_grow (i64.const 1)) (i64.const 65536))
                             (then (unreachable))
                         )
 
@@ -983,7 +983,6 @@ fn sys_api_call_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
 }
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
 fn sys_api_call_stable_grow_by_traps_if_memory_exceeds_4gb() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
@@ -991,13 +990,13 @@ fn sys_api_call_stable_grow_by_traps_if_memory_exceeds_4gb() {
                 &hypervisor,
                 r#"
                 (module
-                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
+                    (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
                     (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
                     (import "ic0" "msg_reply" (func $msg_reply))
 
                     (func $test
                         ;; Grow the memory to 4GiB.
-                        (if (i64.ne (call $stable_grow64 (i64.const 65536)) (i64.const 0))
+                        (if (i64.ne (call $stable64_grow (i64.const 65536)) (i64.const 0))
                             (then (unreachable))
                         )
                         ;; Grow the memory by 0 pages using 32-bit API. This should succeed.
@@ -1005,7 +1004,7 @@ fn sys_api_call_stable_grow_by_traps_if_memory_exceeds_4gb() {
                             (then (unreachable))
                         )
                         ;; Grow the memory by 1 page. This should succeed.
-                        (if (i64.ne (call $stable_grow64 (i64.const 1)) (i64.const 65536))
+                        (if (i64.ne (call $stable64_grow (i64.const 1)) (i64.const 65536))
                             (then (unreachable))
                         )
 
@@ -1470,24 +1469,23 @@ fn sys_api_call_stable_read_at_max_size_handled_gracefully() {
 
 // --------------------------------------------------------------------------
 
-// ----------------- Edge cases for stable_read64/write64 -------------------
+// ----------------- Edge cases for stable64_read/write64 -------------------
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
-fn sys_api_call_stable_read64_traps_when_out_of_bounds() {
+fn sys_api_call_stable64_read_traps_when_out_of_bounds() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
             execute_update(
                 &hypervisor,
                 r#"
                 (module
-                    (import "ic0" "stable_read64"
-                        (func $stable_read64 (param $dst i64) (param $offset i64) (param $size i64)))
+                    (import "ic0" "stable64_read"
+                        (func $stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
 
                     (func $test
                         ;; Reading from stable memory should fail, since the memory size is
                         ;; initially zero.
-                        (call $stable_read64 (i64.const 0) (i64.const 0) (i64.const 4))
+                        (call $stable64_read (i64.const 0) (i64.const 0) (i64.const 4))
                     )
 
                     (memory 1)
@@ -1508,24 +1506,23 @@ fn sys_api_call_stable_read64_traps_when_out_of_bounds() {
 }
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
-fn sys_api_call_stable_read64_can_handle_overflows() {
+fn sys_api_call_stable64_read_can_handle_overflows() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
             execute_update(
                 &hypervisor,
                 r#"
                 (module
-                    (import "ic0" "stable_grow64"
-                        (func $stable_grow64 (param $additional_pages i64) (result i64)))
-                    (import "ic0" "stable_read64"
-                        (func $stable_read64 (param $dst i64) (param $offset i64) (param $size i64)))
+                    (import "ic0" "stable64_grow"
+                        (func $stable64_grow (param $additional_pages i64) (result i64)))
+                    (import "ic0" "stable64_read"
+                        (func $stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
 
                     (func $test
                         ;; Grow the memory by 1 page.
-                        (drop (call $stable_grow64 (i64.const 1)))
+                        (drop (call $stable64_grow (i64.const 1)))
                         ;; Ensure reading from stable memory with overflow doesn't panic.
-                        (call $stable_read64 (i64.const 0) (i64.const 18446744073709551615) (i64.const 10))
+                        (call $stable64_read (i64.const 0) (i64.const 18446744073709551615) (i64.const 10))
                     )
 
                     (memory 1)
@@ -1546,20 +1543,19 @@ fn sys_api_call_stable_read64_can_handle_overflows() {
 }
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
-fn sys_api_call_stable_write64_traps_when_out_of_bounds() {
+fn sys_api_call_stable64_write_traps_when_out_of_bounds() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
             execute_update(
                 &hypervisor,
                 r#"
                 (module
-                    (import "ic0" "stable_write64"
-                        (func $stable_write64 (param $offset i64) (param $src i64) (param $size i64)))
+                    (import "ic0" "stable64_write"
+                        (func $stable64_write (param $offset i64) (param $src i64) (param $size i64)))
 
                     (func $test
                         ;; Writing to stable memory should fail, since the memory size is zero.
-                        (call $stable_write64 (i64.const 0) (i64.const 0) (i64.const 4))
+                        (call $stable64_write (i64.const 0) (i64.const 0) (i64.const 4))
                     )
 
                     (memory 1)
@@ -1580,25 +1576,24 @@ fn sys_api_call_stable_write64_traps_when_out_of_bounds() {
 }
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
-fn sys_api_call_stable_write64_can_handle_overflows() {
+fn sys_api_call_stable64_write_can_handle_overflows() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
             execute_update(
                 &hypervisor,
                 r#"
                 (module
-                    (import "ic0" "stable_grow64"
-                        (func $stable_grow64 (param $additional_pages i64) (result i64)))
-                    (import "ic0" "stable_write64"
-                        (func $stable_write64 (param $offset i64) (param $src i64) (param $size i64)))
+                    (import "ic0" "stable64_grow"
+                        (func $stable64_grow (param $additional_pages i64) (result i64)))
+                    (import "ic0" "stable64_write"
+                        (func $stable64_write (param $offset i64) (param $src i64) (param $size i64)))
 
                     (func $test
                         ;; Grow the memory by 1 page.
-                        (drop (call $stable_grow64 (i64.const 1)))
+                        (drop (call $stable64_grow (i64.const 1)))
                         ;; Writing to stable memory with the maximum possible size.
                         ;; Ensure the function errors gracefully and doesn't panick due to overflow.
-                        (call $stable_write64 (i64.const 18446744073709551615) (i64.const 0) (i64.const 10))
+                        (call $stable64_write (i64.const 18446744073709551615) (i64.const 0) (i64.const 10))
                     )
 
                     (memory 1)
@@ -1619,24 +1614,23 @@ fn sys_api_call_stable_write64_can_handle_overflows() {
 }
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
-fn sys_api_call_stable_read64_traps_when_heap_out_of_bounds() {
+fn sys_api_call_stable64_read_traps_when_heap_out_of_bounds() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
             execute_update(
                 &hypervisor,
                 r#"
                 (module
-                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
-                    (import "ic0" "stable_read64"
-                        (func $stable_read64 (param $dst i64) (param $offset i64) (param $size i64)))
+                    (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+                    (import "ic0" "stable64_read"
+                        (func $stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
 
                     (func $test
                         ;; Grow stable memory by 2 page.
-                        (drop (call $stable_grow64 (i64.const 2)))
+                        (drop (call $stable64_grow (i64.const 2)))
 
                         ;; Attempting to read 2 pages into memory of size 1. This should fail.
-                        (call $stable_read64
+                        (call $stable64_read
                             (i64.const 0)
                             (i64.const 0)
                             (i64.mul (i64.const 2) (i64.const 65536))
@@ -1660,23 +1654,22 @@ fn sys_api_call_stable_read64_traps_when_heap_out_of_bounds() {
 }
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
-fn sys_api_call_stable_write64_traps_when_heap_out_of_bounds() {
+fn sys_api_call_stable64_write_traps_when_heap_out_of_bounds() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
             execute_update(
                 &hypervisor,
                 r#"
                 (module
-                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
-                    (import "ic0" "stable_write64"
-                        (func $stable_write64 (param $offset i64) (param $src i64) (param $size i64)))
+                    (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+                    (import "ic0" "stable64_write"
+                        (func $stable64_write (param $offset i64) (param $src i64) (param $size i64)))
 
                     (func $test
-                        (drop (call $stable_grow64 (i64.const 2)))
+                        (drop (call $stable64_grow (i64.const 2)))
 
                         ;; Attempting to copy 2 pages from memory of size 1. This should fail.
-                        (call $stable_write64
+                        (call $stable64_write
                             (i64.const 0)
                             (i64.const 0)
                             (i64.mul (i64.const 2) (i64.const 65536)))
@@ -1699,25 +1692,24 @@ fn sys_api_call_stable_write64_traps_when_heap_out_of_bounds() {
 }
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
-fn sys_api_call_stable_read64_does_not_trap_at_end_of_page() {
+fn sys_api_call_stable64_read_does_not_trap_at_end_of_page() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
             execute_update(
                 &hypervisor,
                 r#"
                 (module
-                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
-                    (import "ic0" "stable_read64"
-                        (func $stable_read64 (param $dst i64) (param $offset i64) (param $size i64)))
+                    (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+                    (import "ic0" "stable64_read"
+                        (func $stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
                     (import "ic0" "msg_reply" (func $msg_reply))
 
                     (func $test
                         ;; Grow stable memory by 1 page (64kb)
-                        (drop (call $stable_grow64 (i64.const 1)))
+                        (drop (call $stable64_grow (i64.const 1)))
 
                         ;; Reading from stable memory at end of page should not fail.
-                        (call $stable_read64 (i64.const 0) (i64.const 0) (i64.const 65536))
+                        (call $stable64_read (i64.const 0) (i64.const 0) (i64.const 65536))
                         (call $msg_reply)
                     )
 
@@ -1739,24 +1731,23 @@ fn sys_api_call_stable_read64_does_not_trap_at_end_of_page() {
 }
 
 #[test]
-#[ignore] // TODO(EXC-387): Enable the test after shipping 64-bit stable memory.
-fn sys_api_call_stable_read64_traps_beyond_end_of_page() {
+fn sys_api_call_stable64_read_traps_beyond_end_of_page() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
             execute_update(
                 &hypervisor,
                 r#"
                 (module
-                    (import "ic0" "stable_grow64" (func $stable_grow64 (param i64) (result i64)))
-                    (import "ic0" "stable_read64"
-                        (func $stable_read64 (param $dst i64) (param $offset i64) (param $size i64)))
+                    (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+                    (import "ic0" "stable64_read"
+                        (func $stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
 
                     (func $test
                         ;; Grow stable memory by 1 page (64kb)
-                        (drop (call $stable_grow64 (i64.const 1)))
+                        (drop (call $stable64_grow (i64.const 1)))
 
                         ;; Reading from stable memory just after the page should trap.
-                        (call $stable_read64 (i64.const 0) (i64.const 65536) (i64.const 1))
+                        (call $stable64_read (i64.const 0) (i64.const 65536) (i64.const 1))
                     )
 
                     (memory 1)
@@ -4277,4 +4268,433 @@ fn execute_system_produces_heap_delta() {
         // of delta.
         assert_eq!(heap_delta.get(), (*PAGE_SIZE) as u64);
     });
+}
+
+fn memory_module_wat(wasm_pages: i32) -> String {
+    format!(
+        r#"
+        (module
+            (import "ic0" "msg_reply"
+                (func $ic0_msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $ic0_msg_reply_data_append (param i32) (param i32)))
+            (import "ic0" "msg_arg_data_copy"
+                (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
+            (import "ic0" "msg_arg_data_size"
+                (func $ic0_msg_arg_data_size (result i32)))
+
+            ;; $read(addr: i32, len: i32) -> &[u8]
+            ;; Read the slice at the given location in memory.
+            (func $read
+                ;; copy the i32 `addr` to heap[0;4]
+                (call $ic0_msg_arg_data_copy
+                  (i32.const 0) ;; dst
+                  (i32.const 0) ;; off
+                  (i32.const 4) ;; len
+                )
+                ;; copy the i32 `len` to heap[4;8]
+                (call $ic0_msg_arg_data_copy
+                  (i32.const 4) ;; dst
+                  (i32.const 4) ;; off
+                  (i32.const 4) ;; len
+                )
+                (call $ic0_msg_reply_data_append
+                  ;; addr
+                  (i32.load (i32.const 0))
+                  ;; size
+                  (i32.load (i32.const 4))
+                )
+                (call $ic0_msg_reply)
+            )
+
+            ;; $write(addr: i32, bytes: &[u8])
+            ;; Copies the slice into the memory starting at the given address.
+            (func $write
+                ;; copy the i32 `addr` to heap[0;4]
+                (call $ic0_msg_arg_data_copy
+                  (i32.const 0) ;; dst
+                  (i32.const 0) ;; off
+                  (i32.const 4) ;; len
+                )
+                ;; copy the remainder of the payload to the heap[addr;size]
+                (call $ic0_msg_arg_data_copy
+                  ;; addr
+                  (i32.load (i32.const 0))
+                  ;; offset
+                  (i32.const 4)
+                  ;; size
+                  (i32.sub
+                    (call $ic0_msg_arg_data_size)
+                    (i32.const 4)
+                  )
+                )
+            )
+
+            ;; $grow_and_read() -> &[u8]
+            ;; Grows the memory by 1 Wasm page (64KiB) and return its contents.
+            (func $grow_and_read
+                (call $ic0_msg_reply_data_append
+                  ;; addr
+                  (i32.mul (memory.grow (i32.const 1)) (i32.const 65536))
+                  ;; size
+                  (i32.const 65536)
+                )
+                (call $ic0_msg_reply)
+            )
+
+            ;; $grow_and_write(value: u8)
+            ;; Grows the memory by 1 Wasm page (64KiB) and fills it with
+            ;; the given value.
+            (func $grow_and_write
+                (call $ic0_msg_arg_data_copy
+                  ;; addr
+                  (i32.mul (memory.grow (i32.const 1)) (i32.const 65536))
+                  ;; offset
+                  (i32.const 0)
+                  ;; size
+                  (call $ic0_msg_arg_data_size)
+                )
+            )
+
+            (memory {wasm_pages})
+
+            (export "canister_update read" (func $read))
+            (export "canister_update write" (func $write))
+            (export "canister_update grow_and_read" (func $grow_and_read))
+            (export "canister_update grow_and_write" (func $grow_and_write))
+        )"#,
+        wasm_pages = wasm_pages,
+    )
+}
+
+const WASM_PAGE_SIZE: i32 = 65536;
+
+// A helper for executing read/write/grow operations.
+struct MemoryAccessor {
+    hypervisor: Hypervisor,
+    canister: CanisterState,
+    routing_table: Arc<RoutingTable>,
+    subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+    execution_parameters: ExecutionParameters,
+}
+
+impl MemoryAccessor {
+    fn new(wasm_pages: i32, hypervisor: Hypervisor, tmp_path: PathBuf) -> Self {
+        let wat = memory_module_wat(wasm_pages);
+        let mut execution_state = ExecutionState::new(
+            wabt::wat2wasm(wat).unwrap(),
+            tmp_path,
+            WasmValidationLimits::default(),
+        )
+        .unwrap();
+        execution_state.page_map = PageMap::default();
+
+        let canister = canister_from_exec_state(execution_state);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
+        let (_, _, routing_table, subnet_records) = setup();
+        Self {
+            hypervisor,
+            canister,
+            routing_table,
+            subnet_records,
+            execution_parameters,
+        }
+    }
+
+    fn write(&mut self, addr: i32, bytes: &[u8]) -> CallContextAction {
+        let mut payload = addr.to_le_bytes().to_vec();
+        payload.extend(bytes.iter());
+        let method = "write";
+        let caller = user_test_id(24).get();
+        let req = IngressBuilder::new()
+            .method_name(method.to_string())
+            .method_payload(payload)
+            .source(UserId::from(caller))
+            .build();
+
+        let result = self.hypervisor.execute_update(
+            self.canister.clone(),
+            RequestOrIngress::Ingress(req),
+            mock_time(),
+            Arc::clone(&self.routing_table),
+            Arc::clone(&self.subnet_records),
+            self.execution_parameters.clone(),
+        );
+        self.canister = result.0;
+        result.2
+    }
+
+    fn read(&mut self, addr: i32, size: i32) -> CallContextAction {
+        let mut payload = addr.to_le_bytes().to_vec();
+        payload.extend(size.to_le_bytes().to_vec());
+        let method = "read";
+        let caller = user_test_id(24).get();
+        let req = IngressBuilder::new()
+            .method_name(method.to_string())
+            .method_payload(payload)
+            .source(UserId::from(caller))
+            .build();
+
+        let result = self.hypervisor.execute_update(
+            self.canister.clone(),
+            RequestOrIngress::Ingress(req),
+            mock_time(),
+            Arc::clone(&self.routing_table),
+            Arc::clone(&self.subnet_records),
+            self.execution_parameters.clone(),
+        );
+        self.canister = result.0;
+        result.2
+    }
+
+    fn grow_and_read(&mut self) -> CallContextAction {
+        let method = "grow_and_read";
+        let caller = user_test_id(24).get();
+        let req = IngressBuilder::new()
+            .method_name(method.to_string())
+            .method_payload(EMPTY_PAYLOAD)
+            .source(UserId::from(caller))
+            .build();
+
+        let result = self.hypervisor.execute_update(
+            self.canister.clone(),
+            RequestOrIngress::Ingress(req),
+            mock_time(),
+            Arc::clone(&self.routing_table),
+            Arc::clone(&self.subnet_records),
+            self.execution_parameters.clone(),
+        );
+        self.canister = result.0;
+        result.2
+    }
+
+    fn grow_and_write(&mut self, bytes: &[u8]) -> CallContextAction {
+        let payload = bytes.to_vec();
+        let method = "grow_and_write";
+        let caller = user_test_id(24).get();
+        let req = IngressBuilder::new()
+            .method_name(method.to_string())
+            .method_payload(payload)
+            .source(UserId::from(caller))
+            .build();
+
+        let result = self.hypervisor.execute_update(
+            self.canister.clone(),
+            RequestOrIngress::Ingress(req),
+            mock_time(),
+            Arc::clone(&self.routing_table),
+            Arc::clone(&self.subnet_records),
+            self.execution_parameters.clone(),
+        );
+        self.canister = result.0;
+        result.2
+    }
+
+    fn verify_dirty_pages(&self, is_dirty_page: &[bool]) {
+        if cow_state_feature::is_enabled(cow_state_feature::cow_state) {
+            return;
+        }
+        for (page_index, is_dirty_page) in is_dirty_page.iter().enumerate() {
+            match self
+                .canister
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .page_map
+                .get_memory_region(PageIndex::new(page_index as u64))
+            {
+                MemoryRegion::Zeros(_) | MemoryRegion::BackedByFile(_, _) => {
+                    assert!(!is_dirty_page,);
+                }
+                MemoryRegion::BackedByPage(_) => {
+                    assert!(is_dirty_page);
+                }
+            }
+        }
+    }
+}
+
+fn with_memory_accessor<F>(wasm_pages: i32, test: F)
+where
+    F: FnOnce(MemoryAccessor),
+{
+    with_hypervisor(|hypervisor, tmp_path| {
+        let memory_accessor = MemoryAccessor::new(wasm_pages, hypervisor, tmp_path);
+        test(memory_accessor);
+    });
+}
+
+#[test]
+fn write_last_page() {
+    let wasm_pages = 1;
+    with_memory_accessor(wasm_pages, |mut memory_accessor| {
+        let memory_size = WASM_PAGE_SIZE * wasm_pages;
+        memory_accessor.write(memory_size - 8, &[42; 8]);
+    });
+}
+
+#[test]
+fn read_last_page() {
+    let wasm_pages = 1;
+    with_memory_accessor(wasm_pages, |mut memory_accessor| {
+        let memory_size = WASM_PAGE_SIZE * wasm_pages;
+        assert_eq!(
+            CallContextAction::Reply {
+                payload: vec![0; 8],
+                refund: Cycles::new(0)
+            },
+            memory_accessor.read(memory_size - 8, 8),
+        );
+    });
+}
+
+#[test]
+fn write_and_read_last_page() {
+    let wasm_pages = 1;
+    with_memory_accessor(wasm_pages, |mut memory_accessor| {
+        let memory_size = WASM_PAGE_SIZE * wasm_pages;
+        memory_accessor.write(memory_size - 8, &[42; 8]);
+        assert_eq!(
+            CallContextAction::Reply {
+                payload: vec![42; 8],
+                refund: Cycles::new(0)
+            },
+            memory_accessor.read(memory_size - 8, 8),
+        );
+    });
+}
+
+#[test]
+fn read_after_grow() {
+    let wasm_pages = 1;
+    with_memory_accessor(wasm_pages, |mut memory_accessor| {
+        // Skip the beginning of the memory because it is used as a scratchpad.
+        memory_accessor.write(100, &[42; WASM_PAGE_SIZE as usize - 100]);
+        // The new page should have only zeros.
+        assert_eq!(
+            CallContextAction::Reply {
+                payload: vec![0; 65536],
+                refund: Cycles::new(0)
+            },
+            memory_accessor.grow_and_read(),
+        );
+    });
+}
+
+#[test]
+fn write_after_grow() {
+    let wasm_pages = 1;
+    with_memory_accessor(wasm_pages, |mut memory_accessor| {
+        memory_accessor.grow_and_write(&[42; WASM_PAGE_SIZE as usize]);
+        assert_eq!(
+            CallContextAction::Reply {
+                payload: vec![42; WASM_PAGE_SIZE as usize],
+                refund: Cycles::new(0)
+            },
+            memory_accessor.read(wasm_pages * WASM_PAGE_SIZE, 65536),
+        );
+    });
+}
+
+#[derive(Debug, Clone)]
+enum Operation {
+    Read(i32),
+    Write(i32, u8),
+    GrowAndRead,
+    GrowAndWrite(u8),
+}
+
+fn random_operations(
+    num_pages: i32,
+    num_operations: usize,
+) -> impl Strategy<Value = Vec<Operation>> {
+    let operation = (0..100).prop_flat_map(move |p| match p {
+        0 => Just(Operation::GrowAndRead).boxed(),
+        1 => (0..100_u8).prop_map(Operation::GrowAndWrite).boxed(),
+        _ => prop_oneof![
+            (1..num_pages).prop_map(Operation::Read),
+            (1..num_pages, 0..100_u8).prop_map(|(page, value)| Operation::Write(page, value))
+        ]
+        .boxed(),
+    });
+    prop::collection::vec(operation, 1..num_operations)
+}
+
+proptest! {
+    // Limit the number of cases to keep the running time low.
+    #![proptest_config(ProptestConfig { cases: 20, .. ProptestConfig::default() })]
+    #[test]
+    fn random_memory_accesses(operations in random_operations(10, 100)) {
+        const PAGES_PER_WASM_PAGE: i32 = WASM_PAGE_SIZE / 4096;
+        let mut pages = vec![0_u8; 10 * PAGES_PER_WASM_PAGE as usize];
+        let mut dirty = vec![false; 10 * PAGES_PER_WASM_PAGE as usize];
+        with_memory_accessor(10, |mut memory_accessor| {
+            for op in operations {
+                match op {
+                    Operation::Read (page) => {
+                        assert_eq!(
+                            CallContextAction::Reply {
+                                payload: vec![pages[page as usize]; 4096],
+                                refund: Cycles::new(0)
+                            },
+                            memory_accessor.read(page * 4096, 4096),
+                        );
+                        // Read uses the first page as a scratchpad for arguments.
+                        dirty[0] = true;
+                    }
+                    Operation::Write (page, value) => {
+                        assert_eq!(
+                            CallContextAction::NoResponse {
+                                refund: Cycles::new(0)
+                            },
+                            memory_accessor.write(page * 4096, &[value; 4096]),
+                        );
+
+                        // Confirm that the write was correct by reading the page.
+                        assert_eq!(
+                            CallContextAction::Reply {
+                                payload: vec![value; 4096],
+                                refund: Cycles::new(0)
+                            },
+                            memory_accessor.read(page * 4096, 4096),
+                        );
+                        pages[page as usize] = value;
+                        dirty[page as usize] = true;
+                        // Write uses the first page as a scratchpad for arguments.
+                        dirty[0] = true;
+                    },
+                    Operation::GrowAndRead => {
+                        assert_eq!(
+                            CallContextAction::Reply {
+                                payload: vec![0; 65536],
+                                refund: Cycles::new(0)
+                            },
+                            memory_accessor.grow_and_read(),
+                        );
+                        pages.extend(vec![0_u8; PAGES_PER_WASM_PAGE as usize]);
+                        dirty.extend(vec![false; PAGES_PER_WASM_PAGE as usize]);
+                    },
+                    Operation::GrowAndWrite (value) => {
+                        assert_eq!(
+                            CallContextAction::NoResponse {
+                                refund: Cycles::new(0)
+                            },
+                            memory_accessor.grow_and_write(&[value; WASM_PAGE_SIZE as usize]),
+                        );
+                        // Confirm that the write was correct by reading the pages.
+                        assert_eq!(
+                            CallContextAction::Reply {
+                                payload: vec![value; WASM_PAGE_SIZE as usize],
+                                refund: Cycles::new(0)
+                            },
+                            memory_accessor.read(pages.len() as i32 * 4096, WASM_PAGE_SIZE),
+                        );
+                        pages.extend(vec![value; PAGES_PER_WASM_PAGE as usize]);
+                        dirty.extend(vec![true; PAGES_PER_WASM_PAGE as usize]);
+                    }
+                }
+            }
+            memory_accessor.verify_dirty_pages(&dirty);
+        });
+    }
 }

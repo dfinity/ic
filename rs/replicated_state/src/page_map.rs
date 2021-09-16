@@ -436,6 +436,14 @@ impl PageMap {
         }
     }
 
+    /// Returns the whole checkpoint memory region.
+    pub fn get_checkpoint_memory_region(&self) -> MemoryRegion {
+        let start = PageIndex::new(0);
+        let end = PageIndex::new(u64::MAX);
+        self.checkpoint
+            .get_memory_region(start, Range { start, end })
+    }
+
     /// Removes the page delta from this page map.
     pub fn strip_delta(&mut self) -> PageDelta {
         std::mem::take(&mut self.page_delta)

@@ -376,6 +376,46 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
+            "stable64_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValueType::I64],
+                },
+            )],
+        ),
+        (
+            "stable64_grow",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValueType::I64],
+                    return_type: vec![ValueType::I64],
+                },
+            )],
+        ),
+        (
+            "stable64_read",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValueType::I64, ValueType::I64, ValueType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "stable64_write",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValueType::I64, ValueType::I64, ValueType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "time",
             vec![(
                 API_VERSION_IC0,
@@ -737,11 +777,15 @@ fn validate_export_section(module: &Module) -> Result<usize, WasmValidationError
                     // The function section contains only the functions defined locally in the
                     // module, so we need to subtract the number of imported functions to get the
                     // correct index from the general function space.
-                    // Note: parity-wasm provides a well defined order of the sections in the
-                    // module. Due to this, indices of exported functions will
-                    // always be greater or equal than the number of imports.
-                    let actual_fn_index =
-                        *fn_index as usize - module.import_count(ImportCountType::Function);
+                    let fn_index = *fn_index as usize;
+                    let import_count = module.import_count(ImportCountType::Function);
+                    if fn_index < import_count {
+                        return Err(WasmValidationError::InvalidFunctionIndex {
+                            index: fn_index,
+                            import_count,
+                        });
+                    }
+                    let actual_fn_index = fn_index - import_count;
                     let type_index =
                         module.function_section().unwrap().entries()[actual_fn_index].type_ref();
                     validate_function_signature(

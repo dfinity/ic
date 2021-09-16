@@ -42,6 +42,8 @@ pub enum WasmValidationError {
     TooManyGlobals { defined: usize, allowed: usize },
     /// Module contains too many functions.
     TooManyFunctions { defined: usize, allowed: usize },
+    /// Module defines an invalid index for a local function.
+    InvalidFunctionIndex { index: usize, import_count: usize },
 }
 
 impl std::fmt::Display for WasmValidationError {
@@ -74,6 +76,14 @@ impl std::fmt::Display for WasmValidationError {
                 f,
                 "Wasm module defined {} functions which exceeds the maximum number allowed {}.",
                 defined, allowed
+            ),
+            Self::InvalidFunctionIndex {
+                index,
+                import_count,
+            } => write!(
+                f,
+                "Function has index {} but should start from {}.",
+                index, import_count
             ),
         }
     }

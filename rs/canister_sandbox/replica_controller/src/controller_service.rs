@@ -564,7 +564,7 @@ impl ControllerService for ControllerServer {
                         Reply::StableGrow(StableGrowReply { result })
                     }
                     Request::StableGrow64(req) => {
-                        let result = system_state_accessor.stable_grow64(req.additional_pages);
+                        let result = system_state_accessor.stable64_grow(req.additional_pages);
                         Reply::StableGrow64(StableGrow64Reply { result })
                     }
                     Request::GetNumInstructionsFromBytes(req) => {
@@ -586,7 +586,7 @@ impl ControllerService for ControllerServer {
                         let mut buf = Vec::<u8>::new();
                         buf.resize(req.size as usize, 0);
                         let result =
-                            system_state_accessor.stable_read64(0, req.offset, req.size, &mut buf);
+                            system_state_accessor.stable64_read(0, req.offset, req.size, &mut buf);
                         let result = result.map_or_else(Err, |_| Ok(buf));
                         Reply::StableRead(StableReadReply { result })
                     }
@@ -605,7 +605,7 @@ impl ControllerService for ControllerServer {
                     }
                     Request::StableWrite64(req) => {
                         let result = if req.data.len() <= (u64::MAX as usize) {
-                            system_state_accessor.stable_write64(
+                            system_state_accessor.stable64_write(
                                 req.offset,
                                 0,
                                 req.data.len() as u64,

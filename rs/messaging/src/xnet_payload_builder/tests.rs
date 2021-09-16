@@ -27,14 +27,15 @@ async fn build_payload_no_subnets() {
 
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
-        assert_matches!(
+        assert_eq!(
+            XNetPayload {
+                stream_slices: Default::default()
+            },
             xnet_payload_builder.get_xnet_payload(
-                Height::from(0),
                 &fixture.validation_context,
                 &fixture.past_payloads(),
                 PAYLOAD_BYTES_LIMIT,
-            ),
-            Ok(payload) if payload.stream_slices == Default::default()
+            )
         );
         assert_eq!(
             metric_vec(&[(&[("status", "success")], 1)]),

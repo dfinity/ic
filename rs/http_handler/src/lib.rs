@@ -89,7 +89,11 @@ const MAX_REQUESTS_PER_SECOND: usize = 500;
 // The maximum time we should wait for a peeking the first bytes on a TCP
 // connection. Effectively, if we can't read the first bytes within the
 // timeout the connection is broken.
-const MAX_TCP_PEEK_TIMEOUT_SECS: u64 = 5;
+// If you modify this constant please also adjust:
+// - `ic_canister_client::agent::MAX_POLL_INTERVAL`,
+// - `canister_test::canister::MAX_BACKOFF_INTERVAL`.
+// See VER-1060 for details.
+const MAX_TCP_PEEK_TIMEOUT_SECS: u64 = 11;
 
 // Request with body size bigger than 'MAX_REQUEST_SIZE_BYTES' will be rejected
 // and appropriate error code will be returned to the user.
@@ -705,11 +709,11 @@ fn load_root_delegation(
     for _ in 0..MAX_FETCH_DELEGATION_ATTEMPTS {
         info!(log, "Fetching delegation from the nns subnet...");
 
-        let log_err_and_backoff = |err: reqwest::Error| {
+        let log_err_and_backoff = |err: &dyn std::error::Error| {
             // Fetching the NNS delegation failed. Do a random backoff and try again.
             let mut rng = rand::thread_rng();
             let backoff = Duration::from_secs(rng.gen_range(1..15));
-            error!(
+            warn!(
                 log,
                 "Fetching delegation from nns subnet failed. Retrying again in {} seconds...\n\
                     Error received: {}",
@@ -775,7 +779,7 @@ fn load_root_delegation(
         {
             Ok(res) => res.bytes(),
             Err(err) => {
-                log_err_and_backoff(err);
+                log_err_and_backoff(&err);
                 continue;
             }
         };
@@ -784,8 +788,13 @@ fn load_root_delegation(
             Ok(raw_response) => {
                 debug!(log, "Response from nns subnet: {:?}", raw_response);
 
-                let response: HttpReadStateResponse = serde_cbor::from_slice(&raw_response)
-                    .expect("Incomprehensible response when fetching delegation from nns subnet");
+                let response: HttpReadStateResponse = match serde_cbor::from_slice(&raw_response) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log_err_and_backoff(&e);
+                        continue;
+                    }
+                };
 
                 let delegation = CertificateDelegation {
                     subnet_id: Blob(subnet_id.get().to_vec()),
@@ -797,7 +806,7 @@ fn load_root_delegation(
             }
             Err(err) => {
                 // Fetching the NNS delegation failed. Do a random backoff and try again.
-                log_err_and_backoff(err);
+                log_err_and_backoff(&err);
             }
         }
     }

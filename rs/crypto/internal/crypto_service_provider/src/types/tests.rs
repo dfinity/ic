@@ -135,6 +135,52 @@ fn should_redact_csp_secret_key_fs_encryption_debug() {
 }
 
 #[test]
+fn should_return_correct_algorithm_id() {
+    // Ed25519
+    let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+        SecretArray::new_and_dont_zeroize_argument(&[0; ed25519_types::SecretKeyBytes::SIZE]),
+    ));
+    assert_eq!(key.algorithm_id(), AlgorithmId::Ed25519);
+
+    // MultiBls12_381
+    let key = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes(
+        [0; multi_types::SecretKeyBytes::SIZE],
+    ));
+    assert_eq!(key.algorithm_id(), AlgorithmId::MultiBls12_381);
+
+    // ThresBls12_381
+    let key = CspSecretKey::ThresBls12_381(threshold_types::SecretKeyBytes(
+        [0; threshold_types::SecretKeyBytes::SIZE],
+    ));
+    assert_eq!(key.algorithm_id(), AlgorithmId::ThresBls12_381);
+
+    // Secp256k1WithPublicKey
+    let key = CspSecretKey::Secp256k1WithPublicKey(EphemeralKeySetBytes {
+        secret_key_bytes: EphemeralSecretKeyBytes([0; EphemeralSecretKeyBytes::SIZE]),
+        public_key_bytes: EphemeralPublicKeyBytes([0; EphemeralPublicKeyBytes::SIZE]),
+        pop_bytes: EphemeralPopBytes([0; EphemeralPopBytes::SIZE]),
+    });
+    assert_eq!(key.algorithm_id(), AlgorithmId::Secp256k1);
+
+    // TlsEd25519
+    let key = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes { bytes: vec![] });
+    assert_eq!(key.algorithm_id(), AlgorithmId::Ed25519);
+
+    // FsEncryption
+    let key = CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20_Bls12_381(
+        FsEncryptionKeySet {
+            public_key: FsEncryptionPublicKey(G1Bytes([0; G1Bytes::SIZE])),
+            secret_key: FsEncryptionSecretKey { bte_nodes: vec![] },
+            pok: FsEncryptionPok {
+                blinder: G1Bytes([0; G1Bytes::SIZE]),
+                response: FrBytes([0; FrBytes::SIZE]),
+            },
+        },
+    ));
+    assert_eq!(key.algorithm_id(), AlgorithmId::NiDkg_Groth20_Bls12_381);
+}
+
+#[test]
 fn should_return_correct_ed25519_pubkey_bytes_for_ed25519_pubkey() {
     let ed25519_csp_pk = CspPublicKey::ed25519_from_hex(TESTVEC_RFC8032_ED25519_SHA_ABC_PK);
 

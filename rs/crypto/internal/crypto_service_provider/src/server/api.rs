@@ -24,7 +24,9 @@ pub enum CspBasicSignatureError {
     UnsupportedAlgorithm {
         algorithm: AlgorithmId,
     },
-    WrongSecretKeyType {},
+    WrongSecretKeyType {
+        algorithm_id: AlgorithmId,
+    },
     MalformedSecretKey {
         algorithm: AlgorithmId,
     },

@@ -200,12 +200,13 @@ fn query_metrics_are_reported() {
                 .messages
                 .get_sample_count()
         );
-        // We expect three messages:
-        // - canister_a.query()
-        // - canister_b.query()
+        // We expect four messages:
+        // - canister_a.query() as pure
+        // - canister_a.query() as stateful
+        // - canister_b.query() as stateful
         // - canister_a.on_reply()
         assert_eq!(
-            3,
+            4,
             query_handler
                 .internal
                 .metrics
@@ -256,6 +257,15 @@ fn query_metrics_are_reported() {
                 .query_initial_call
                 .messages
                 .get_sample_sum() as u64
+        );
+        assert_eq!(
+            1,
+            query_handler
+                .internal
+                .metrics
+                .query_retry_call
+                .duration
+                .get_sample_count()
         );
         assert_eq!(
             1,
@@ -317,10 +327,49 @@ fn query_metrics_are_reported() {
                 + query_handler
                     .internal
                     .metrics
+                    .query_retry_call
+                    .instructions
+                    .get_sample_sum() as u64
+                + query_handler
+                    .internal
+                    .metrics
                     .query_spawned_calls
                     .instructions
                     .get_sample_sum() as u64
         )
+    });
+}
+
+#[test]
+fn query_call_with_side_effects() {
+    with_setup(|query_handler, canister_manager, mut state| {
+        // In this test we have two canisters A and B.
+        // Canister A does a side-effectful operation (stable_grow) and then
+        // calls canister B. The side effect must happen once and only once.
+
+        let canister_a = universal_canister(&canister_manager, &mut state);
+        let canister_b = universal_canister(&canister_manager, &mut state);
+        let output = query_handler.query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canister_a,
+                method_name: "query".to_string(),
+                method_payload: wasm()
+                    .stable_grow(10)
+                    .inter_query(
+                        canister_b,
+                        call_args()
+                            .other_side(wasm().reply_data(&b"ignore".to_vec()))
+                            .on_reply(wasm().stable_size().reply_int()),
+                    )
+                    .build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(state),
+            vec![],
+        );
+        assert_eq!(output, Ok(WasmResult::Reply(10_i32.to_le_bytes().to_vec())));
     });
 }
 

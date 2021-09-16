@@ -1246,6 +1246,28 @@ message Governance {
   // time since the proposal was made, the proposal is rejected.
   uint64 short_voting_period_seconds = 14;
 
+  // Stores metrics that are too costly to compute each time metrics are
+  // requested
+  message GovernanceCachedMetrics {
+    uint64 timestamp_seconds = 1;
+    uint64 total_supply_icp = 2;
+    uint64 dissolving_neurons_count = 3;
+    map<uint64, double> dissolving_neurons_e8s_buckets = 4;
+    map<uint64, uint64> dissolving_neurons_count_buckets = 5;
+    uint64 not_dissolving_neurons_count = 6;
+    map<uint64, double> not_dissolving_neurons_e8s_buckets = 7;
+    map<uint64, uint64> not_dissolving_neurons_count_buckets = 8;
+    uint64 dissolved_neurons_count = 9;
+    uint64 dissolved_neurons_e8s = 10;
+    uint64 garbage_collectable_neurons_count = 11;
+    uint64 neurons_with_invalid_stake_count = 12;
+    uint64 total_staked_e8s = 13;
+    uint64 neurons_with_less_than_6_months_dissolve_delay_count = 14;
+    uint64 neurons_with_less_than_6_months_dissolve_delay_e8s = 15;
+  }
+
+  GovernanceCachedMetrics metrics = 15;
+
   reserved 6;
   reserved "authz";
 }

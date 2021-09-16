@@ -50,7 +50,7 @@ const LABEL_VALUE_SENDER_SUBNET_UNKNOWN: &str = "SenderSubnetUnknown";
 const LABEL_TYPE: &str = "type";
 const LABEL_VALUE_TYPE_REQUEST: &str = "request";
 const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
-const LABEL_SUBNET: &str = "subnet";
+const LABEL_REMOTE: &str = "remote";
 
 impl StreamHandlerMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -71,8 +71,8 @@ impl StreamHandlerMetrics {
         );
         let xnet_message_backlog = metrics_registry.int_gauge_vec(
             METRIC_XNET_MESSAGE_BACKLOG,
-            "Backlog of XNet messages, pre sending subnet.",
-            &[LABEL_SUBNET],
+            "Backlog of XNet messages, by sending subnet.",
+            &[LABEL_REMOTE],
         );
 
         // Initialize all `inducted_xnet_messages` counters with zero, so they are all
@@ -118,7 +118,11 @@ pub(crate) trait StreamHandler: Send {
 pub(crate) struct StreamHandlerImpl {
     subnet_id: SubnetId,
     metrics: StreamHandlerMetrics,
+    /// Per-destination-subnet histogram of wall time spent by messages in the
+    /// stream before they are garbage collected.
     time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
+    /// Per-source-subnet histogram of wall time between finding out about the
+    /// existence of a message from an incoming stream header; and inducting it.
     time_in_backlog_metrics: RefCell<LatencyMetrics>,
     log: ReplicaLogger,
 }
@@ -151,11 +155,13 @@ impl StreamHandler for StreamHandlerImpl {
         trace!(self.log, "Process certified stream slices");
 
         {
+            // Record having learned about the existence of all messages "mentioned" in
+            // `stream_slices` headers.
             let mut time_in_backlog_metrics = self.time_in_backlog_metrics.borrow_mut();
             stream_slices
                 .iter()
                 .for_each(|(remote_subnet, stream_slice)| {
-                    time_in_backlog_metrics.observe_header(*remote_subnet, stream_slice.header());
+                    time_in_backlog_metrics.record_header(*remote_subnet, stream_slice.header());
                 });
         }
 
@@ -166,7 +172,7 @@ impl StreamHandler for StreamHandlerImpl {
         state = self.garbage_collect_local_state(state, &stream_slices);
 
         // Induct messsages from the slices, adding signals as appropriate.
-        self.observe_stream_slices(&stream_slices);
+        self.observe_backlog_durations(&stream_slices);
         self.induct_stream_slices(state, stream_slices)
     }
 }
@@ -277,8 +283,9 @@ impl StreamHandlerImpl {
         );
 
         {
+            // Observe the enqueuing duration of all garbage collected messages.
             let mut time_in_stream_metrics = self.time_in_stream_metrics.lock().unwrap();
-            time_in_stream_metrics.observe_indexes(
+            time_in_stream_metrics.observe_message_durations(
                 remote_subnet,
                 stream.messages_begin()..stream_slice.header().signals_end,
             );
@@ -295,13 +302,14 @@ impl StreamHandlerImpl {
         stream.discard_before(new_begin);
     }
 
-    /// Records latency metrics for the provided stream slices.
-    fn observe_stream_slices(&self, stream_slices: &BTreeMap<SubnetId, StreamSlice>) {
+    /// Observes "time in backlog" (since learning about their existence from
+    /// the stream header) for each of the given inducted messages.
+    fn observe_backlog_durations(&self, stream_slices: &BTreeMap<SubnetId, StreamSlice>) {
         let mut time_in_backlog_metrics = self.time_in_backlog_metrics.borrow_mut();
         for (remote_subnet_id, stream_slice) in stream_slices {
             if let Some(messages) = stream_slice.messages() {
                 time_in_backlog_metrics
-                    .observe_indexes(*remote_subnet_id, messages.begin()..messages.end());
+                    .observe_message_durations(*remote_subnet_id, messages.begin()..messages.end());
             }
         }
     }

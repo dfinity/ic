@@ -458,7 +458,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_missing() {
         CryptoError::MalformedPop {
             algorithm: AlgorithmId::MultiBls12_381,
             pop_bytes: vec![0u8; 0],
-            internal_error: "MissingProofData".to_string(),
+            internal_error: "CspPopFromPublicKeyProtoError::MissingProofData".to_string(),
         }
     );
 }

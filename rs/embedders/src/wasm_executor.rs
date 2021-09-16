@@ -11,7 +11,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{EmbedderCache, PageDelta, PageIndex};
-use ic_system_api::{ApiType, SystemApiImpl, SystemStateAccessorDirect};
+use ic_system_api::{ApiType, NonReplicatedQueryKind, SystemApiImpl, SystemStateAccessorDirect};
 use ic_types::{
     methods::{FuncRef, SystemMethod, WasmMethod},
     NumInstructions,
@@ -238,9 +238,12 @@ impl WasmExecutor {
         let commit_dirty_pages = func_ref.to_commit();
 
         let dirty_page_tracking = match &api_type {
-            ApiType::ReplicatedQuery { .. } | ApiType::InspectMessage { .. } => {
-                DirtyPageTracking::Ignore
+            ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
             }
+            | ApiType::InspectMessage { .. } => DirtyPageTracking::Ignore,
             _ => DirtyPageTracking::Track,
         };
 
@@ -296,13 +299,11 @@ impl WasmExecutor {
                     system_api.set_execution_error(err);
                 }
             };
-            let mut instance_stats = instance.get_stats();
-            instance_stats.dirty_pages += system_api.get_stable_memory_delta_pages();
             (
                 system_api.take_execution_result(),
                 instance.get_num_instructions(),
                 system_api.release_system_state_accessor(),
-                instance_stats,
+                instance.get_stats(),
             )
         };
 
@@ -320,9 +321,11 @@ impl WasmExecutor {
     }
 }
 
-// Utility function to compute the page delta. It creates a copy of `Instance`
-// dirty pages.
-fn compute_page_delta(instance: &WasmtimeInstance, dirty_pages: &[PageIndex]) -> PageDelta {
+/// Utility function to compute the page delta. It creates a copy of `Instance`
+/// dirty pages. The function is public because it is used in
+/// `wasmtime_random_memory_writes` tests.
+#[doc(hidden)]
+pub fn compute_page_delta(instance: &WasmtimeInstance, dirty_pages: &[PageIndex]) -> PageDelta {
     // heap pointer is only valid as long as the `Instance` is alive.
     let heap_addr: *const u8 = unsafe { instance.heap_addr() };
 

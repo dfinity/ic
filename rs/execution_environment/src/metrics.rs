@@ -7,6 +7,7 @@ use std::{cell::RefCell, rc::Rc, time::Instant};
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
     pub query_initial_call: ScopedMetrics,
+    pub query_retry_call: ScopedMetrics,
     pub query_spawned_calls: ScopedMetrics,
 }
 
@@ -45,6 +46,25 @@ impl QueryHandlerMetrics {
                 messages: messages_histogram(
                     "execution_query_initial_call_messages",
                     "The number of messages executed in the initial call in \
+                    query handling",
+                    metrics_registry,
+                ),
+            },
+            query_retry_call: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_query_retry_call_duration_seconds",
+                    "The duration of the retry call in query handling",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_query_retry_call_instructions",
+                    "The number of instructions executed in the retry call \
+                    in query handling",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_query_retry_call_messages",
+                    "The number of messages executed in the retry call in \
                     query handling",
                     metrics_registry,
                 ),

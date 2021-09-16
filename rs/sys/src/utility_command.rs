@@ -2,7 +2,7 @@ use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::process::{Command as StdCommand, ExitStatus, Stdio};
 
-const VSOCK_AGENT_PATH: &str = "/opt/dfinity/vsock_agent";
+const VSOCK_AGENT_PATH: &str = "/opt/ic/bin/vsock_agent";
 
 #[derive(Clone, Debug)]
 pub enum UtilityCommandError {

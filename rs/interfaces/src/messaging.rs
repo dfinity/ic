@@ -57,11 +57,10 @@ pub trait XNetPayloadBuilder: Send + Sync {
     /// above the certified height, in descending block height order).
     fn get_xnet_payload(
         &self,
-        height: Height,
         validation_context: &ValidationContext,
         past_payloads: &[&XNetPayload],
         byte_limit: NumBytes,
-    ) -> Result<XNetPayload, XNetPayloadError>;
+    ) -> XNetPayload;
 
     /// Checks whether the provided `XNetPayload` is valid given a
     /// `ValidationContext` (certified height and registry version) and
@@ -79,18 +78,3 @@ pub trait XNetPayloadBuilder: Send + Sync {
         past_payloads: &[&XNetPayload],
     ) -> Result<NumBytes, XNetPayloadValidationError>;
 }
-
-/// Possible errors in making XNetPayload.
-#[derive(Clone, Debug)]
-pub enum XNetPayloadError {
-    /// Payload making has started, but the result is not ready yet.
-    Pending,
-}
-
-impl std::fmt::Display for XNetPayloadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::error::Error for XNetPayloadError {}

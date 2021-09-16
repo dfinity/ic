@@ -16,7 +16,7 @@ use hex_literal::hex;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal_canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("8115659b4d5242654f4ce4ebf4e4acf6928df430707afadffcd94772c9cbd2fe");
+    hex!("bd111e8c24349802b1af970e64d5c9357f5e011cb68442e2ccc4c8b5e8047def");
 
 /// Operands used in encoding UC payloads.
 enum Ops {
@@ -53,6 +53,10 @@ enum Ops {
     TrapIfEq = 43,
     CallOnCleanup = 44,
     StableFill = 45,
+    StableSize64 = 46,
+    StableGrow64 = 47,
+    StableRead64 = 48,
+    StableWrite64 = 49,
 }
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
@@ -135,6 +139,11 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn stable64_size(mut self) -> Self {
+        self.0.push(Ops::StableSize64 as u8);
+        self
+    }
+
     pub fn push_bytes(mut self, data: &[u8]) -> Self {
         self.0.push(Ops::PushBytes as u8);
         self.0.extend_from_slice(&(data.len() as u32).to_le_bytes());
@@ -148,6 +157,12 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn stable64_grow(mut self, additional_pages: u64) -> Self {
+        self = self.push_int64(additional_pages);
+        self.0.push(Ops::StableGrow64 as u8);
+        self
+    }
+
     pub fn stable_read(mut self, offset: u32, size: u32) -> Self {
         self = self.push_int(offset);
         self = self.push_int(size);
@@ -155,10 +170,25 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn stable64_read(mut self, offset: u64, size: u64) -> Self {
+        self = self.push_int64(offset);
+        self = self.push_int64(size);
+        self.0.push(Ops::StableRead64 as u8);
+        self
+    }
+
     pub fn stable_write(mut self, offset: u32, data: &[u8]) -> Self {
         self = self.push_int(offset);
         self = self.push_bytes(data);
         self.0.push(Ops::StableWrite as u8);
+        self
+    }
+
+    pub fn stable64_write(mut self, offset: u64, data: u64, length: u64) -> Self {
+        self = self.push_int64(offset);
+        self = self.push_int64(data);
+        self = self.push_int64(length);
+        self.0.push(Ops::StableWrite64 as u8);
         self
     }
 

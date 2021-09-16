@@ -197,12 +197,12 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
         Ok(())
     }
 
-    fn stable_size64(&self) -> HypervisorResult<u64> {
+    fn stable64_size(&self) -> HypervisorResult<u64> {
         Ok(self.system_state.borrow().stable_memory_size.get())
     }
 
-    fn stable_grow64(&self, additional_pages: u64) -> HypervisorResult<i64> {
-        let initial_page_count = self.stable_size64()?;
+    fn stable64_grow(&self, additional_pages: u64) -> HypervisorResult<i64> {
+        let initial_page_count = self.stable64_size()?;
 
         let (page_count, overflow) = additional_pages.overflowing_add(initial_page_count);
         if overflow || page_count > MAX_64_BIT_STABLE_MEMORY_IN_PAGES {
@@ -215,7 +215,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
         Ok(initial_page_count as i64)
     }
 
-    fn stable_read64(
+    fn stable64_read(
         &self,
         dst: u64,
         offset: u64,
@@ -225,7 +225,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
         let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
 
         let (stable_memory_size_in_bytes, overflow) = self
-            .stable_size64()?
+            .stable64_size()?
             .overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
         if overflow {
             return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
@@ -246,7 +246,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
         Ok(())
     }
 
-    fn stable_write64(
+    fn stable64_write(
         &self,
         offset: u64,
         src: u64,
@@ -256,7 +256,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
         let (src, offset, size) = (src as usize, offset as usize, size as usize);
 
         let (stable_memory_size_in_bytes, overflow) = self
-            .stable_size64()?
+            .stable64_size()?
             .overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
         if overflow {
             return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));

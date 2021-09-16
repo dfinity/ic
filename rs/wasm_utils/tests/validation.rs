@@ -500,3 +500,18 @@ fn can_validate_module_cycles_related_imports() {
         })
     );
 }
+
+#[test]
+fn can_validate_valid_export_section_with_invalid_function_index() {
+    let wasm = BinaryEncodedWasm::new(
+        include_bytes!("./instrumentation-test-data/in/export_section_invalid_function_index.wasm")
+            .to_vec(),
+    );
+    assert_matches!(
+        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        Err(WasmValidationError::InvalidFunctionIndex {
+            index: 0,
+            import_count: 1
+        })
+    );
+}

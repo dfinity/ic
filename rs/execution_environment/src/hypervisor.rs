@@ -21,7 +21,7 @@ use ic_replicated_state::{
     SchedulerState, SystemState,
 };
 use ic_sys::PAGE_SIZE;
-use ic_system_api::ApiType;
+use ic_system_api::{ApiType, NonReplicatedQueryKind};
 use ic_types::{
     ingress::WasmResult,
     messages::Payload,
@@ -315,6 +315,7 @@ impl Hypervisor {
             QueryExecutionType::NonReplicated {
                 call_context_id,
                 routing_table,
+                query_kind,
             } => {
                 if execution_state.cow_mem_mgr.is_valid() {
                     // Non replicated queries execute against
@@ -338,6 +339,7 @@ impl Hypervisor {
                     self.own_subnet_id,
                     routing_table,
                     data_certificate,
+                    query_kind.clone(),
                 );
                 // As we are executing the query in non-replicated mode, we can
                 // modify the canister as the caller is not going to be able to
@@ -348,14 +350,24 @@ impl Hypervisor {
                     memory_usage,
                     execution_parameters,
                     FuncRef::Method(method),
-                    execution_state,
+                    execution_state.clone(),
                     Arc::clone(&self.cycles_account_manager),
                     Arc::clone(&self.metrics),
                     Arc::clone(&self.wasm_executor),
                 );
 
+                let new_execution_state = match query_kind {
+                    NonReplicatedQueryKind::Pure => {
+                        // Updating embedder cache should be the only modification
+                        // of the canister state
+                        execution_state.embedder_cache = output.execution_state.embedder_cache;
+                        execution_state
+                    }
+                    NonReplicatedQueryKind::Stateful => output.execution_state,
+                };
+
                 let canister = CanisterState::from_parts(
-                    Some(output.execution_state),
+                    Some(new_execution_state),
                     output.system_state,
                     scheduler_state,
                 );

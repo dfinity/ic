@@ -50,15 +50,15 @@ pub trait SystemStateAccessor {
     fn stable_write(&self, offset: u32, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
 
     /// Determines size of stable memory in Web assembly pages.
-    fn stable_size64(&self) -> HypervisorResult<u64>;
+    fn stable64_size(&self) -> HypervisorResult<u64>;
 
     /// Grows stable memory by specified amount.
-    fn stable_grow64(&self, additional_pages: u64) -> HypervisorResult<i64>;
+    fn stable64_grow(&self, additional_pages: u64) -> HypervisorResult<i64>;
 
     /// Reads from stable memory back to heap.
     ///
     /// Supports bigger stable memory indexed by 64 bit pointers.
-    fn stable_read64(
+    fn stable64_read(
         &self,
         dst: u64,
         offset: u64,
@@ -69,7 +69,7 @@ pub trait SystemStateAccessor {
     /// Writes from heap to stable memory.
     ///
     /// Supports bigger stable memory indexed by 64 bit pointers.
-    fn stable_write64(&self, offset: u64, src: u64, size: u64, heap: &[u8])
+    fn stable64_write(&self, offset: u64, src: u64, size: u64, heap: &[u8])
         -> HypervisorResult<()>;
 
     /// Current cycles balance of the canister.

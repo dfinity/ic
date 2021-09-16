@@ -494,7 +494,7 @@ impl ToProto for AccountIdentifier {
     type Proto = protobuf::AccountIdentifier;
 
     fn from_proto(pb: Self::Proto) -> Result<Self, String> {
-        AccountIdentifier::from_slice(&pb.hash[..])
+        AccountIdentifier::from_slice(&pb.hash[..]).map_err(|e| e.to_string())
     }
 
     fn into_proto(self) -> Self::Proto {

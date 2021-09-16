@@ -1,11 +1,18 @@
 //! ECDSA related public interfaces.
 
 use crate::artifact_pool::UnvalidatedArtifact;
-use ic_types::artifact::{EcdsaMessageAttribute, EcdsaMessageId, PriorityFn};
 use ic_types::consensus::ecdsa::EcdsaMessage;
+use ic_types::{
+    artifact::{EcdsaMessageAttribute, EcdsaMessageId, PriorityFn},
+    crypto::CryptoHashOf,
+};
 
 #[derive(Debug)]
-pub enum EcdsaChangeAction {}
+pub enum EcdsaChangeAction {
+    AddToValidated(EcdsaMessage),
+    MoveToValidated(EcdsaMessage),
+    HandleInvalid(CryptoHashOf<EcdsaMessage>),
+}
 
 pub type EcdsaChangeSet = Vec<EcdsaChangeAction>;
 

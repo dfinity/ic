@@ -5,7 +5,7 @@ use ic_interfaces::{
     consensus::PayloadValidationError,
     ingress_manager::{IngressSelector, IngressSetQuery},
     ingress_pool::IngressPoolSelect,
-    messaging::{XNetPayloadBuilder, XNetPayloadError},
+    messaging::XNetPayloadBuilder,
     validation::ValidationResult,
 };
 use ic_metrics::MetricsRegistry;
@@ -28,17 +28,12 @@ pub trait PayloadBuilder: Send + Sync {
     /// `past_payloads` contains the `Payloads` from all blocks above the
     /// certified height provided in `context`, in descending block height
     /// order.
-    ///
-    /// It returns a `BatchPayload` if the payload building is success, or
-    /// an error if it fails (which at the moment is only a transient error from
-    /// building XNet payload, but will be extended in the future).
     fn get_payload(
         &self,
-        height: Height,
         ingress_pool: &dyn IngressPoolSelect,
         past_payloads: &[(Height, Time, Payload)],
         context: &ValidationContext,
-    ) -> Result<BatchPayload, XNetPayloadError>;
+    ) -> BatchPayload;
 
     /// Checks whether the provided `payload` is valid given `past_payloads` and
     /// `context`.
@@ -114,11 +109,10 @@ impl PayloadBuilderImpl {
 impl PayloadBuilder for PayloadBuilderImpl {
     fn get_payload(
         &self,
-        height: Height,
         ingress_pool: &dyn IngressPoolSelect,
         past_payloads: &[(Height, Time, Payload)],
         context: &ValidationContext,
-    ) -> Result<BatchPayload, XNetPayloadError> {
+    ) -> BatchPayload {
         let _timer = self.metrics.get_payload_duration.start_timer();
         let mut ingress_payload_cache = self.ingress_payload_cache.write().unwrap();
         let min_block_time = match past_payloads.last() {
@@ -127,18 +121,16 @@ impl PayloadBuilder for PayloadBuilderImpl {
         };
         let (past_ingress, past_xnet) =
             split_past_payloads(&mut ingress_payload_cache, past_payloads);
-
-        // Try making xnet payload first, since it may not be ready.
-        let xnet = self.xnet_payload_builder.get_xnet_payload(
-            height,
-            context,
-            &past_xnet,
-            MAX_XNET_PAYLOAD_IN_BYTES,
-        )?;
-
         self.metrics
             .past_payloads_length
             .observe(past_payloads.len() as f64);
+
+        let xnet = self.xnet_payload_builder.get_xnet_payload(
+            context,
+            &past_xnet,
+            MAX_XNET_PAYLOAD_IN_BYTES,
+        );
+
         let ingress_query = IngressSets::new(past_ingress, min_block_time);
         let ingress =
             self.ingress_selector
@@ -148,7 +140,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
             .ingress_payload_cache_size
             .set(ingress_payload_cache.len() as i64);
 
-        Ok(BatchPayload { ingress, xnet })
+        BatchPayload { ingress, xnet }
     }
 
     fn validate_payload(
@@ -286,8 +278,7 @@ mod test {
             };
 
             let (ingress_msgs, stream_msgs) = payload_builder
-                .get_payload(Height::from(1), &ingress_pool, &prev_payloads, &context)
-                .unwrap()
+                .get_payload(&ingress_pool, &prev_payloads, &context)
                 .into_messages()
                 .unwrap();
 

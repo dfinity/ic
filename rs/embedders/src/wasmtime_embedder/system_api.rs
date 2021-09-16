@@ -631,15 +631,15 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
-        .func("ic0", "stable_size64", {
+        .func("ic0", "stable64_size", {
             let api = api.clone();
             move || {
                 let mut api = api.get_system_api();
-                api.ic0_stable_size64()
+                api.ic0_stable64_size()
                     .map_err(|e| process_err(&mut *api, e))
                     .and_then(|s| {
                         i64::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0_stable_size64 failed: {}", e))
+                            wasmtime::Trap::new(format!("ic0_stable64_size failed: {}", e))
                         })
                     })
             }
@@ -647,18 +647,18 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
-        .func("ic0", "stable_grow64", {
+        .func("ic0", "stable64_grow", {
             let api = api.clone();
             move |additional_pages: i64| {
                 let mut api = api.get_system_api();
-                api.ic0_stable_grow64(additional_pages as u64)
+                api.ic0_stable64_grow(additional_pages as u64)
                     .map_err(|e| process_err(&mut *api, e))
             }
         })
         .unwrap();
 
     linker
-        .func("ic0", "stable_read64", {
+        .func("ic0", "stable64_read", {
             let api = api.clone();
             let memory_charger = memory_charger.clone();
             move |caller: Caller<'_>, dst: i64, offset: i64, size: i64| {
@@ -666,21 +666,21 @@ pub(crate) fn syscalls(
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
                 memory_charger.charge_for_memory_used(api.deref_mut(), size as u64)?;
-                api.ic0_stable_read64(dst as u64, offset as u64, size as u64, memory)
+                api.ic0_stable64_read(dst as u64, offset as u64, size as u64, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
         })
         .unwrap();
 
     linker
-        .func("ic0", "stable_write64", {
+        .func("ic0", "stable64_write", {
             let api = api.clone();
             move |caller: Caller<'_>, offset: i64, src: i64, size: i64| {
                 let mut api = api.get_system_api();
                 let mem = get_memory(caller, &mut *api)?;
                 let memory = unsafe { mem.data_unchecked_mut() };
                 memory_charger.charge_for_memory_used(api.deref_mut(), size as u64)?;
-                api.ic0_stable_write64(offset as u64, src as u64, size as u64, memory)
+                api.ic0_stable64_write(offset as u64, src as u64, size as u64, memory)
                     .map_err(|e| process_err(&mut *api, e))
             }
         })

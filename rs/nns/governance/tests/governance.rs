@@ -76,8 +76,9 @@ use std::sync::Mutex;
 
 use ic_nns_governance::governance::{
     HeapGrowthPotential, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
-    MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
+    MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, ONE_YEAR_SECONDS,
 };
+use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
 use ic_nns_governance::pb::v1::governance_error::ErrorType::{NotFound, ResourceExhausted};
 use ic_nns_governance::pb::v1::manage_neuron::MergeMaturity;
 use ic_nns_governance::pb::v1::manage_neuron_response::MergeMaturityResponse;
@@ -6591,4 +6592,213 @@ fn test_update_stake() {
         neuron.cached_neuron_stake_e8s,
         ICPTs::new(58, 0).unwrap().get_e8s()
     );
+}
+
+#[test]
+fn test_compute_cached_metrics() {
+    let now = 100;
+    let mut neurons = HashMap::<u64, Neuron>::new();
+
+    // Not Dissolving neurons
+    neurons.insert(
+        1,
+        Neuron {
+            cached_neuron_stake_e8s: 100_000_000,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
+            ..Default::default()
+        },
+    );
+
+    neurons.insert(
+        2,
+        Neuron {
+            cached_neuron_stake_e8s: 234_000_000,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
+            ..Default::default()
+        },
+    );
+
+    neurons.insert(
+        3,
+        Neuron {
+            cached_neuron_stake_e8s: 568_000_000,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS * 4)),
+            ..Default::default()
+        },
+    );
+
+    neurons.insert(
+        4,
+        Neuron {
+            cached_neuron_stake_e8s: 1_123_000_000,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS * 4)),
+            ..Default::default()
+        },
+    );
+
+    neurons.insert(
+        5,
+        Neuron {
+            cached_neuron_stake_e8s: 6_087_000_000,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS * 8)),
+            ..Default::default()
+        },
+    );
+
+    // Zero stake
+    neurons.insert(
+        6,
+        Neuron {
+            cached_neuron_stake_e8s: 0,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(5)),
+            ..Default::default()
+        },
+    );
+
+    // Less than minimum stake
+    neurons.insert(
+        7,
+        Neuron {
+            cached_neuron_stake_e8s: 100,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(5)),
+            ..Default::default()
+        },
+    );
+
+    // Dissolving neurons
+    neurons.insert(
+        8,
+        Neuron {
+            cached_neuron_stake_e8s: 234_000_000,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                now + ONE_YEAR_SECONDS,
+            )),
+            ..Default::default()
+        },
+    );
+
+    neurons.insert(
+        9,
+        Neuron {
+            cached_neuron_stake_e8s: 568_000_000,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                now + ONE_YEAR_SECONDS * 3,
+            )),
+            ..Default::default()
+        },
+    );
+
+    neurons.insert(
+        10,
+        Neuron {
+            cached_neuron_stake_e8s: 1_123_000_000,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                now + ONE_YEAR_SECONDS * 5,
+            )),
+            ..Default::default()
+        },
+    );
+
+    neurons.insert(
+        11,
+        Neuron {
+            cached_neuron_stake_e8s: 6_087_000_000,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                now + ONE_YEAR_SECONDS * 5,
+            )),
+            ..Default::default()
+        },
+    );
+
+    neurons.insert(
+        12,
+        Neuron {
+            cached_neuron_stake_e8s: 18_000_000_000,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                now + ONE_YEAR_SECONDS * 7,
+            )),
+            ..Default::default()
+        },
+    );
+
+    // Dissolved neurons
+    neurons.insert(
+        13,
+        Neuron {
+            cached_neuron_stake_e8s: 4_450_000_000,
+            ..Default::default()
+        },
+    );
+
+    neurons.insert(
+        14,
+        Neuron {
+            cached_neuron_stake_e8s: 1_220_000_000,
+            ..Default::default()
+        },
+    );
+
+    neurons.insert(
+        15,
+        Neuron {
+            cached_neuron_stake_e8s: 100_000_000,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
+            ..Default::default()
+        },
+    );
+
+    let economics = NetworkEconomics {
+        neuron_minimum_stake_e8s: 100_000_000,
+        ..Default::default()
+    };
+
+    let gov = GovernanceProto {
+        economics: Some(economics),
+        neurons,
+        ..Default::default()
+    };
+
+    let actual_metrics = gov.compute_cached_metrics(now, ICPTs::new(147, 0).unwrap());
+
+    let expected_metrics = GovernanceCachedMetrics {
+        timestamp_seconds: 100,
+        total_supply_icp: 147,
+        dissolving_neurons_count: 5,
+        dissolving_neurons_e8s_buckets: [
+            (3, 568000000.0),
+            (5, 7210000000.0),
+            (1, 234000000.0),
+            (7, 18000000000.0),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+        dissolving_neurons_count_buckets: [(5, 2), (3, 1), (7, 1), (1, 1)]
+            .iter()
+            .cloned()
+            .collect(),
+        not_dissolving_neurons_count: 7,
+        not_dissolving_neurons_e8s_buckets: [
+            (8, 6087000000.0),
+            (4, 1691000000.0),
+            (1, 234000000.0),
+            (0, 100000100.0),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+        not_dissolving_neurons_count_buckets: [(0, 3), (1, 1), (4, 2), (8, 1)]
+            .iter()
+            .cloned()
+            .collect(),
+        dissolved_neurons_count: 3,
+        dissolved_neurons_e8s: 5770000000,
+        garbage_collectable_neurons_count: 2,
+        neurons_with_invalid_stake_count: 1,
+        total_staked_e8s: 39_894_000_100,
+        neurons_with_less_than_6_months_dissolve_delay_count: 6,
+        neurons_with_less_than_6_months_dissolve_delay_e8s: 5870000100,
+    };
+
+    assert_eq!(expected_metrics, actual_metrics);
 }

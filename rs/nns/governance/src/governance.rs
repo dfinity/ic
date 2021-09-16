@@ -46,6 +46,7 @@ use async_trait::async_trait;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
+use crate::pb::v1::governance::GovernanceCachedMetrics;
 use crate::pb::v1::manage_neuron_response::MergeMaturityResponse;
 use crate::pb::v1::proposal::Action;
 use dfn_core::api::spawn;
@@ -1363,6 +1364,84 @@ impl GovernanceProto {
             }
         }
         Ok(())
+    }
+
+    /// Iterate over all neurons and compute `GovernanceCachedMetrics`
+    pub fn compute_cached_metrics(&self, now: u64, icp_supply: ICPTs) -> GovernanceCachedMetrics {
+        let mut metrics = GovernanceCachedMetrics {
+            timestamp_seconds: now,
+            total_supply_icp: icp_supply.get_icpts(),
+            ..Default::default()
+        };
+
+        let minimum_stake_e8s = if let Some(economics) = self.economics.as_ref() {
+            economics.neuron_minimum_stake_e8s
+        } else {
+            0
+        };
+
+        for (_, neuron) in self.neurons.iter() {
+            metrics.total_staked_e8s += neuron.cached_neuron_stake_e8s;
+
+            if neuron.cached_neuron_stake_e8s < TRANSACTION_FEE.get_e8s() {
+                metrics.garbage_collectable_neurons_count += 1;
+            }
+            if 0 < neuron.cached_neuron_stake_e8s
+                && neuron.cached_neuron_stake_e8s < minimum_stake_e8s
+            {
+                metrics.neurons_with_invalid_stake_count += 1;
+            }
+
+            let dissolve_delay_seconds = neuron.dissolve_delay_seconds(now);
+
+            if dissolve_delay_seconds < 6 * ONE_MONTH_SECONDS {
+                metrics.neurons_with_less_than_6_months_dissolve_delay_count += 1;
+                metrics.neurons_with_less_than_6_months_dissolve_delay_e8s +=
+                    neuron.cached_neuron_stake_e8s;
+            }
+
+            match neuron.state(now) {
+                NeuronState::Unspecified => (),
+                NeuronState::Dissolved => {
+                    metrics.dissolved_neurons_count += 1;
+                    metrics.dissolved_neurons_e8s += neuron.cached_neuron_stake_e8s;
+                }
+                NeuronState::Dissolving => {
+                    metrics.dissolving_neurons_count += 1;
+                    let bucket = dissolve_delay_seconds / ONE_YEAR_SECONDS;
+
+                    let e8s_entry = metrics
+                        .dissolving_neurons_e8s_buckets
+                        .entry(bucket)
+                        .or_insert(0.0);
+                    *e8s_entry += neuron.cached_neuron_stake_e8s as f64;
+
+                    let count_entry = metrics
+                        .dissolving_neurons_count_buckets
+                        .entry(bucket)
+                        .or_insert(0);
+                    *count_entry += 1;
+                }
+                NeuronState::NotDissolving => {
+                    metrics.not_dissolving_neurons_count += 1;
+                    let bucket = dissolve_delay_seconds / ONE_YEAR_SECONDS;
+
+                    let e8s_entry = metrics
+                        .not_dissolving_neurons_e8s_buckets
+                        .entry(bucket)
+                        .or_insert(0.0);
+                    *e8s_entry += neuron.cached_neuron_stake_e8s as f64;
+
+                    let count_entry = metrics
+                        .not_dissolving_neurons_count_buckets
+                        .entry(bucket)
+                        .or_insert(0);
+                    *count_entry += 1;
+                }
+            }
+        }
+
+        metrics
     }
 }
 
@@ -5038,34 +5117,39 @@ impl Governance {
     /// process.
     pub async fn run_periodic_tasks(&mut self) {
         self.process_proposals();
-        self.consider_distributing_rewards().await;
+
+        // Getting the total ICP supply from the ledger is expensive enough that we
+        // don't want to do it on every call to `run_periodic_tasks`. So we only
+        // fetch it when it's needed, which is when either rewards should be
+        // distributed or metrics should be computed.
+        if self.should_distribute_rewards() || self.should_compute_cached_metrics() {
+            match self.ledger.total_supply().await {
+                Ok(supply) => {
+                    // Distribute rewards if enough time has passed since the last reward
+                    // event. If there is no reward event, attempt to compute cached
+                    // metrics. We ensure that both rewards and metrics computations don't
+                    // both execute in the same call in order to limit the amount of
+                    // time/cycles that run_periodic_tasks uses.
+                    if self.should_distribute_rewards() {
+                        self.distribute_rewards(supply);
+                    } else if self.should_compute_cached_metrics() {
+                        let metrics = self.proto.compute_cached_metrics(self.env.now(), supply);
+                        self.proto.metrics = Some(metrics);
+                    }
+                }
+                Err(e) => println!("{}Error when getting total ICP supply: {}", LOG_PREFIX, e),
+            }
+        }
+
         self.maybe_gc();
     }
 
-    /// Triggers reward distribution if enough time has passed since the last.
-    async fn consider_distributing_rewards(&mut self) {
-        if self.env.now()
+    /// Return `true` if rewards should be distributed, `false` otherwise
+    fn should_distribute_rewards(&self) -> bool {
+        self.env.now()
             >= self.proto.genesis_timestamp_seconds
                 + (self.latest_reward_event().day_after_genesis + 1)
                     * REWARD_DISTRIBUTION_PERIOD_SECONDS
-        {
-            match self.ledger.total_supply().await {
-                Ok(supply) => {
-                    println!(
-                        "{}consider_distributing_rewards. Supply: {:?}",
-                        LOG_PREFIX, supply
-                    );
-
-                    self.distribute_rewards(supply);
-                }
-                Err(e) => {
-                    println!(
-                        "{}consider_distributing_rewards. Error when getting total ICP supply: {}",
-                        LOG_PREFIX, e
-                    );
-                }
-            }
-        }
     }
 
     /// Create a reward event.
@@ -5076,6 +5160,8 @@ impl Governance {
     /// not yet been considered in a reward event.
     /// * Associate those proposals to the new reward event
     fn distribute_rewards(&mut self, supply: ICPTs) {
+        println!("{}distribute_rewards. Supply: {:?}", LOG_PREFIX, supply);
+
         let day_after_genesis = (self.env.now() - self.proto.genesis_timestamp_seconds)
             / REWARD_DISTRIBUTION_PERIOD_SECONDS;
 
@@ -5195,6 +5281,15 @@ impl Governance {
             settled_proposals: considered_proposals,
             distributed_e8s_equivalent: actually_distributed_e8s_equivalent,
         })
+    }
+
+    /// Recompute cached metrics once per day
+    pub fn should_compute_cached_metrics(&self) -> bool {
+        if let Some(metrics) = self.proto.metrics.as_ref() {
+            self.env.now() - metrics.timestamp_seconds > ONE_DAY_SECONDS
+        } else {
+            true
+        }
     }
 
     /// Return the effective _voting period_ of a given topic.

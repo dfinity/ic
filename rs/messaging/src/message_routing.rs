@@ -57,7 +57,7 @@ pub(crate) const METRIC_TIME_IN_BACKLOG: &str = "mr_time_in_backlog";
 pub(crate) const METRIC_TIME_IN_STREAM: &str = "mr_time_in_stream";
 
 const LABEL_STATUS: &str = "status";
-pub(crate) const LABEL_SUBNET: &str = "subnet";
+pub(crate) const LABEL_REMOTE: &str = "remote";
 
 const STATUS_IGNORED: &str = "ignored";
 const STATUS_QUEUE_FULL: &str = "queue_full";
@@ -69,8 +69,8 @@ const PHASE_COMMIT: &str = "commit";
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
 
-/// Records the timestamp when a message and those before/after it up to the
-/// next `MessageTime` were first learned about in a stream.
+/// Records the timestamp when all messages before the given index (down to the
+/// previous `MessageTime`) were first added to / learned about in a stream.
 struct MessageTime {
     index: StreamIndex,
     time: Timer,
@@ -87,14 +87,20 @@ impl MessageTime {
 
 /// A timeline consisting of the timestamps of messages in a stream (usually at
 /// block boundaries) providing the base for computing the time spent in the
-/// stream / time spent in the backlog by each message; plus a histogram to
-/// record these observations.
+/// stream / backlog by each message; plus a histogram to record these
+/// observations.
 struct StreamTimeline {
+    /// A [`MessageTime`] queue with strictly increasing `index` and `time`
+    /// values.
     entries: VecDeque<MessageTime>,
+
+    /// Histogram to record the duration spent by a message in a stream /
+    /// backlog.
     histogram: Histogram,
 }
 
 impl StreamTimeline {
+    /// Creates a timeline to record message durations in the given `Histogram`.
     fn new(histogram: Histogram) -> Self {
         StreamTimeline {
             entries: VecDeque::new(),
@@ -102,6 +108,8 @@ impl StreamTimeline {
         }
     }
 
+    /// Adds a [`MessageTime`] with the given index and the current wall time to
+    /// `entries` iff `index > self.entries.back().index`.
     fn add_entry(&mut self, index: StreamIndex) {
         match self.entries.back() {
             None => self.entries.push_back(MessageTime::new(index)),
@@ -112,6 +120,9 @@ impl StreamTimeline {
         };
     }
 
+    /// Records one histogram observation for every message in the given index
+    /// range, with the time elapsed since the matching `MessageTime` entry (the
+    /// first one with `index >= message.index`).
     fn observe(&mut self, index_range: Range<StreamIndex>) {
         for index in index_range.start.get()..index_range.end.get() {
             let entry = loop {
@@ -135,7 +146,10 @@ impl StreamTimeline {
 /// Bundle of message latency metrics for incoming or outgoing streams and the
 /// corresponding [`StreamTimelines`](StreamTimeline) needed to compute them.
 pub(crate) struct LatencyMetrics {
+    /// Map of message timelines by remote subnet ID.
     timelines: BTreeMap<SubnetId, StreamTimeline>,
+
+    /// Per-remote-subnet histograms of message durations.
     histograms: HistogramVec,
 }
 
@@ -149,27 +163,34 @@ impl LatencyMetrics {
 
         Self {
             timelines: BTreeMap::new(),
-            histograms: metrics_registry.histogram_vec(name, description, buckets, &[LABEL_SUBNET]),
+            histograms: metrics_registry.histogram_vec(name, description, buckets, &[LABEL_REMOTE]),
         }
     }
 
+    /// Creates the `LatencyMetrics` to record [`METRIC_TIME_IN_STREAM`]
+    /// observations.
     pub(crate) fn new_time_in_stream(metrics_registry: &MetricsRegistry) -> LatencyMetrics {
         LatencyMetrics::new(
             metrics_registry,
             METRIC_TIME_IN_STREAM,
-            "Time messages spend in the stream before they are garbage collected based\
-                            on a signal from the receiving subnet",
+            "Per-destination-subnet histogram of wall time spent by messages in the stream \
+                before they are garbage collected.",
         )
     }
 
+    /// Creates the `LatencyMetrics` to record [`METRIC_TIME_IN_BACKLOG`]
+    /// observations.
     pub(crate) fn new_time_in_backlog(metrics_registry: &MetricsRegistry) -> LatencyMetrics {
         LatencyMetrics::new(
             metrics_registry,
             METRIC_TIME_IN_BACKLOG,
-            "Average time it takes to consume a message from the backlog, per sending subnet",
+            "Per-source-subnet histogram of wall time between finding out about the \
+                existence of a message from an incoming stream header; and inducting it.",
         )
     }
 
+    /// Helper function: invokes the given function on the [`StreamTimeline`]
+    /// for the given remote subnet, creating one if it doesn't exist yet.
     fn with_timeline(&mut self, subnet_id: SubnetId, f: impl FnOnce(&mut StreamTimeline)) {
         use std::collections::btree_map::Entry;
 
@@ -182,11 +203,20 @@ impl LatencyMetrics {
         }
     }
 
-    pub(crate) fn observe_header(&mut self, subnet_id: SubnetId, header: &StreamHeader) {
+    /// Records a `MessageTime` entry for messages to/from `subnet_id` before
+    /// `header.end` (if not already recorded).
+    pub(crate) fn record_header(&mut self, subnet_id: SubnetId, header: &StreamHeader) {
         self.with_timeline(subnet_id, |t| t.add_entry(header.end));
     }
 
-    pub(crate) fn observe_indexes(&mut self, subnet_id: SubnetId, index_range: Range<StreamIndex>) {
+    /// Observes message durations for all messages to/from `subnet_id` with
+    /// indices in the given `index_range`, as the time elapsed since the
+    /// respective matching timeline entries.
+    pub(crate) fn observe_message_durations(
+        &mut self,
+        subnet_id: SubnetId,
+        index_range: Range<StreamIndex>,
+    ) {
         self.with_timeline(subnet_id, |t| t.observe(index_range));
     }
 }

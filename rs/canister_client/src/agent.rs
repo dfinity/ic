@@ -32,6 +32,8 @@ const INGRESS_TIMEOUT: Duration = Duration::from_secs(60 * 6);
 const QUERY_TIMEOUT: Duration = Duration::from_secs(30);
 
 const MIN_POLL_INTERVAL: Duration = Duration::from_millis(500);
+// The value must be smaller than `ic_http_handler::MAX_TCP_PEEK_TIMEOUT_SECS`.
+// See VER-1060 for details.
 const MAX_POLL_INTERVAL: Duration = Duration::from_secs(10);
 const POLL_INTERVAL_MULTIPLIER: f64 = 1.2;
 

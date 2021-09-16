@@ -4,8 +4,7 @@
 #![allow(clippy::ptr_arg)]
 
 use ic_interfaces::messaging::{
-    MessageRouting, MessageRoutingError, XNetPayloadBuilder, XNetPayloadError,
-    XNetPayloadValidationError,
+    MessageRouting, MessageRoutingError, XNetPayloadBuilder, XNetPayloadValidationError,
 };
 use ic_interfaces::state_manager::{CertificationScope, StateManager};
 use ic_replicated_state::ReplicatedState;
@@ -97,11 +96,10 @@ mock! {
     trait XNetPayloadBuilder{
         fn get_xnet_payload<'a>(
             &self,
-            height: Height,
             validation_context: &ValidationContext,
             past_payloads: &[&'a XNetPayload],
             byte_limit : NumBytes,
-        ) -> Result<XNetPayload, XNetPayloadError>;
+        ) -> XNetPayload;
 
         fn validate_xnet_payload<'a>(
             &self,

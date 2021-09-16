@@ -7,16 +7,16 @@ use crate::{
     dkg::create_payload,
 };
 use ic_interfaces::{
-    dkg::DkgPool, ingress_pool::IngressPoolSelect, messaging::XNetPayloadError,
-    registry::RegistryClient, state_manager::StateManager, time_source::TimeSource,
+    dkg::DkgPool, ingress_pool::IngressPoolSelect, registry::RegistryClient,
+    state_manager::StateManager, time_source::TimeSource,
 };
-use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
+use ic_logger::{debug, error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{consensus::dkg, replica_config::ReplicaConfig, time::current_time, ReplicaVersion};
 use std::{
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
     time::Duration,
 };
 
@@ -39,7 +39,6 @@ pub struct BlockMaker {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
     log: ReplicaLogger,
-    payload_context_cache: Mutex<Option<(CryptoHashOf<Block>, ValidationContext)>>,
     // The minimal age of the registry version we want to use for the validation context of a new
     // block. The older is the version, the higher is the probability, that it's universally
     // available across the subnet.
@@ -73,7 +72,6 @@ impl BlockMaker {
             state_manager,
             log,
             metrics: BlockMakerMetrics::new(metrics_registry),
-            payload_context_cache: Mutex::new(None),
             stable_registry_version_age,
         }
     }
@@ -180,21 +178,18 @@ impl BlockMaker {
         // If we have previously tried to make a payload but got an error at the given
         // height, We should try again with the same context. Otherwise create a
         // new context.
-        let context = match self.payload_context_cache.lock().unwrap().take() {
-            Some((hash, context)) if hash == parent_hash => context,
-            _ => ValidationContext {
-                certified_height,
-                // To ensure that other replicas can validate our block proposal, we need to use a
-                // registry version that is present on most replicas. But since every registry
-                // version can become available to different replicas at different times, we should
-                // not use the latest one. Instead, we pick an older version we consider "stable",
-                // the one which has reached most replicas by now.
-                registry_version: self.get_stable_registry_version(&parent)?,
-                // Below we skip proposing the block if this context is behind the parent's context.
-                // We set the time so that block making is not skipped due to local time being
-                // behind the network time.
-                time: std::cmp::max(self.time_source.get_relative_time(), parent.context.time),
-            },
+        let context = ValidationContext {
+            certified_height,
+            // To ensure that other replicas can validate our block proposal, we need to use a
+            // registry version that is present on most replicas. But since every registry
+            // version can become available to different replicas at different times, we should
+            // not use the latest one. Instead, we pick an older version we consider "stable",
+            // the one which has reached most replicas by now.
+            registry_version: self.get_stable_registry_version(&parent)?,
+            // Below we skip proposing the block if this context is behind the parent's context.
+            // We set the time so that block making is not skipped due to local time being
+            // behind the network time.
+            time: std::cmp::max(self.time_source.get_relative_time(), parent.context.time),
         };
 
         if !context.greater_or_equal(&parent.context) {
@@ -202,6 +197,7 @@ impl BlockMaker {
             // values included in the parent block. To avoid proposing an invalid block, we
             // simply do not propose a block now.
             warn!(
+                every_n_seconds => 5,
                 self.log,
                 "Cannot propose block as the locally available validation context is \
                         smaller than the parent validation context \
@@ -280,11 +276,9 @@ impl BlockMaker {
                     let batch_payload = match self.build_batch_payload(
                         pool,
                         ingress_pool,
-                        height,
                         certified_height,
                         &context,
                         &parent,
-                        &parent_hash,
                         &replica_version,
                     ) {
                         None => return None,
@@ -330,11 +324,9 @@ impl BlockMaker {
         &self,
         pool: &PoolReader<'_>,
         ingress_pool: &dyn IngressPoolSelect,
-        height: Height,
         certified_height: Height,
         context: &ValidationContext,
         parent: &Block,
-        parent_hash: &CryptoHashOf<Block>,
         replica_version: &ReplicaVersion,
     ) -> Option<BatchPayload> {
         // Use empty payload if the (agreed) replica_version is not supported.
@@ -359,37 +351,14 @@ impl BlockMaker {
         } else {
             let past_payloads =
                 pool.get_payloads_from_height(certified_height.increment(), parent.clone());
-            match self
+            let payload = self
                 .payload_builder
-                .get_payload(height, ingress_pool, &past_payloads, context)
-            {
-                Ok(payload) => {
-                    self.metrics
-                        .get_payload_calls
-                        .with_label_values(&["success"])
-                        .inc();
-                    Some(payload)
-                }
-                Err(XNetPayloadError::Pending) => {
-                    // In case xnet payload builder has yet to finish preparing a payload,
-                    // we will try again later.
-                    //
-                    // The necessary context is remembered in a local cache so that we can
-                    // use the same context when trying again.
-                    *self.payload_context_cache.lock().unwrap() =
-                        Some((parent_hash.clone(), context.clone()));
-                    self.metrics
-                        .get_payload_calls
-                        .with_label_values(&["pending"])
-                        .inc();
-
-                    info!(
-                        self.log,
-                        "XNet payload builder has yet to finish. Blockmaker will try again later."
-                    );
-                    None
-                }
-            }
+                .get_payload(ingress_pool, &past_payloads, context);
+            self.metrics
+                .get_payload_calls
+                .with_label_values(&["success"])
+                .inc();
+            Some(payload)
         }
     }
 
@@ -749,10 +718,10 @@ mod tests {
 
             payload_builder
                 .expect_get_payload()
-                .withf(move |_, _, payloads, context| {
+                .withf(move |_, payloads, context| {
                     matches_expected_payloads(payloads) && context == &expected_context
                 })
-                .return_const(Ok(BatchPayload::default()));
+                .return_const(BatchPayload::default());
 
             let pool_reader = PoolReader::new(&pool);
             let replica_config = ReplicaConfig {
@@ -881,7 +850,7 @@ mod tests {
             let mut payload_builder = MockPayloadBuilder::new();
             payload_builder
                 .expect_get_payload()
-                .return_const(Ok(BatchPayload::default()));
+                .return_const(BatchPayload::default());
             let membership =
                 Membership::new(pool.get_cache(), registry.clone(), replica_config.subnet_id);
             let membership = Arc::new(membership);
@@ -927,7 +896,7 @@ mod tests {
             let mut payload_builder = MockPayloadBuilder::new();
             payload_builder
                 .expect_get_payload()
-                .return_const(Ok(BatchPayload::default()));
+                .return_const(BatchPayload::default());
 
             let block_maker = BlockMaker::new(
                 Arc::clone(&time_source) as Arc<_>,
@@ -1004,7 +973,7 @@ mod tests {
             let mut payload_builder = MockPayloadBuilder::new();
             payload_builder
                 .expect_get_payload()
-                .return_const(Ok(BatchPayload::default()));
+                .return_const(BatchPayload::default());
             let membership = Arc::new(Membership::new(
                 pool.get_cache(),
                 registry.clone(),

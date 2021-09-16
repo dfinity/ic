@@ -17,12 +17,8 @@
 //! into a complete finalization, at which point the block and its ancestors
 //! become finalized.
 use crate::consensus::{
-    membership::Membership,
-    metrics::FinalizerMetrics,
-    pool_reader::PoolReader,
-    prelude::*,
-    utils::{crypto_hashable_to_seed, get_block_hash_string, lookup_replica_version},
-    ConsensusCrypto,
+    batch_delivery::deliver_batches, membership::Membership, metrics::FinalizerMetrics,
+    pool_reader::PoolReader, prelude::*,
 };
 use ic_interfaces::{
     ingress_manager::IngressSelector,
@@ -30,19 +26,11 @@ use ic_interfaces::{
     registry::RegistryClient,
     state_manager::StateManager,
 };
-use ic_logger::{debug, info, trace, warn, ReplicaLogger};
+use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::log::consensus_log_entry::v1::ConsensusLogEntry;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet::Remote, NiDkgTranscript},
-    messages::Response,
-    replica_config::ReplicaConfig,
-    CountBytes, ReplicaVersion,
-};
+use ic_types::replica_config::ReplicaConfig;
 use std::cell::RefCell;
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 pub struct Finalizer {
@@ -93,8 +81,46 @@ impl Finalizer {
         let notarized_height = pool.get_notarized_height();
         let finalized_height = pool.get_finalized_height();
 
+        let h = self.message_routing.expected_batch_height();
+        if *self.prev_finalized_height.borrow() < finalized_height {
+            debug!(
+                self.log,
+                "finalized_height {:?} expected_batch_height {:?}", finalized_height, h,
+            );
+            *self.prev_finalized_height.borrow_mut() = finalized_height;
+        }
         // Try to deliver finalized batches to messaging
-        self.deliver_batches(pool, finalized_height);
+        let _ = deliver_batches(
+            &*self.message_routing,
+            pool,
+            &*self.state_manager,
+            &*self.registry_client,
+            self.replica_config.subnet_id,
+            ReplicaVersion::default(),
+            &self.log,
+            &|result,
+              batch_height,
+              ingress_count,
+              ingress_bytes,
+              xnet_bytes,
+              ingress_ids,
+              block_hash,
+              block_height,
+              block_context_certified_height| {
+                self.process_batch_delivery_result(
+                    result,
+                    batch_height,
+                    ingress_count,
+                    ingress_bytes,
+                    xnet_bytes,
+                    ingress_ids,
+                    block_hash,
+                    block_height,
+                    block_context_certified_height,
+                )
+            },
+            false,
+        );
 
         // Try to finalize rounds from finalized_height + 1 up to (and including)
         // notarized_height
@@ -103,131 +129,21 @@ impl Finalizer {
             .collect()
     }
 
-    /// Deliver all finalized blocks from
-    /// `message_routing.expected_batch_height` to `finalized_height` via
-    /// `Messaging`.
-    fn deliver_batches(&self, pool: &PoolReader<'_>, finalized_height: Height) {
-        let mut h = self.message_routing.expected_batch_height();
-        assert!(
-            h.get() > 0,
-            "deliver_batches: expected_batch_height must be greater than 0"
-        );
-        if *self.prev_finalized_height.borrow() < finalized_height {
-            debug!(
-                self.log,
-                "finalized_height {:?} expected_batch_height {:?}", finalized_height, h,
-            );
-            *self.prev_finalized_height.borrow_mut() = finalized_height;
-        }
-        while h <= finalized_height {
-            match (pool.get_finalized_block(h), pool.get_random_tape(h)) {
-                (Some(block), Some(tape)) => {
-                    debug!(
-                        self.log,
-                        "Finalized height";
-                        consensus => ConsensusLogEntry { height: Some(h.get()), hash: Some(get_block_hash_string(&block)) }
-                    );
-                    self.metrics
-                        .finalization_certified_state_difference
-                        .set((block.height() - block.context.certified_height).get() as i64);
-                    let mut consensus_responses = Vec::<Response>::new();
-                    if block.payload.is_summary() {
-                        let summary = block.payload.as_ref().as_summary();
-                        info!(
-                            self.log,
-                            "New DKG summary with config ids created: {:?}",
-                            summary.dkg.configs.keys().collect::<Vec<_>>()
-                        );
-                        // Compute consensus' responses to subnet calls.
-                        consensus_responses = generate_responses_to_subnet_calls(
-                            &*self.state_manager,
-                            block.context.certified_height,
-                            summary.dkg.transcripts_for_new_subnets(),
-                            &self.log,
-                        );
-                    }
-                    // When we are not deliverying CUP block, we must check replica_version
-                    else {
-                        match pool.registry_version(h).and_then(|registry_version| {
-                            lookup_replica_version(
-                                self.registry_client.as_ref(),
-                                self.replica_config.subnet_id,
-                                &self.log,
-                                registry_version,
-                            )
-                        }) {
-                            Some(replica_version)
-                                if replica_version != ReplicaVersion::default() =>
-                            {
-                                debug!(
-                                self.log,
-                                "Batch of height {} is not delivered before replica upgrades to new version {}",
-                                h,
-                                replica_version.as_ref()
-                            );
-                                return;
-                            }
-                            None => {
-                                warn!(
-                                    self.log,
-                                    "Skipping batch delivery because replica version is unknown",
-                                );
-                                return;
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    let block_hash = get_block_hash_string(&block);
-
-                    let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
-                    let batch = Batch {
-                        batch_number: h,
-                        requires_full_state_hash: block.payload.is_summary(),
-                        payload: if block.payload.is_summary() {
-                            BatchPayload::default()
-                        } else {
-                            BlockPayload::from(block.payload).into_batch_payload()
-                        },
-                        randomness,
-                        registry_version: block.context.registry_version,
-                        time: block.context.time,
-                        consensus_responses,
-                    };
-                    if !self.deliver_batch(batch, &block_hash) {
-                        break;
-                    }
-                    h = h.increment();
-                }
-                (None, _) => {
-                    trace!(
-                        self.log,
-                        "Do not deliver height {:?} because no finalized block was found. This should indicate we are waiting for state sync.",
-                        h);
-                    break;
-                }
-                (_, None) => {
-                    // Do not deliver batch if we don't have random tape
-                    trace!(
-                        self.log,
-                        "Do not deliver height {:?} because RandomTape is not ready. Will re-try later",
-                        h);
-                    break;
-                }
-            }
-        }
-    }
-
-    /// Deliver the given batch to Message Routing. Returns `true` if the
-    /// delivery was successful, returns false otherwise.
-    fn deliver_batch(&self, batch: Batch, block_hash: &str) -> bool {
-        let batch_height = batch.batch_number.get();
-        debug!(self.log, "deliver batch {:?}", batch_height);
-        let ingress_count = batch.payload.ingress.message_count();
-        let ingress_bytes = batch.payload.ingress.count_bytes();
-        let xnet_bytes = batch.payload.xnet.count_bytes();
-        let ingress_ids = batch.payload.ingress.message_ids();
-        match self.message_routing.deliver_batch(batch) {
+    // Write logs, report metrics depending on the batch deliver result.
+    #[allow(clippy::too_many_arguments)]
+    fn process_batch_delivery_result(
+        &self,
+        result: &Result<(), MessageRoutingError>,
+        batch_height: u64,
+        ingress_count: usize,
+        ingress_bytes: usize,
+        xnet_bytes: usize,
+        ingress_ids: Vec<ic_types::artifact::IngressMessageId>,
+        block_hash: &str,
+        block_height: u64,
+        block_context_certified_height: u64,
+    ) {
+        match result {
             Ok(()) => {
                 self.metrics
                     .batches_delivered
@@ -241,6 +157,9 @@ impl Finalizer {
                     .ingress_message_bytes_delivered
                     .observe(ingress_bytes as f64);
                 self.metrics.xnet_bytes_delivered.observe(xnet_bytes as f64);
+                self.metrics
+                    .finalization_certified_state_difference
+                    .set((block_height - block_context_certified_height) as i64);
                 debug!(
                     self.log,
                     "block_delivered";
@@ -255,14 +174,12 @@ impl Finalizer {
                 }
                 self.ingress_selector
                     .request_purge_finalized_messages(ingress_ids);
-                true
             }
             Err(MessageRoutingError::QueueIsFull) => {
                 self.metrics
                     .batches_delivered
                     .with_label_values(&["MessageRoutingError::QueueIsFull"])
                     .inc();
-                false
             }
             Err(MessageRoutingError::Ignored { .. }) => {
                 unreachable!("Unexpected error on a valid batch number");
@@ -357,6 +274,7 @@ impl Finalizer {
     #[cfg(feature = "malicious_code")]
     pub(crate) fn maliciously_finalize_all(&self, pool: &PoolReader<'_>) -> Vec<FinalizationShare> {
         use ic_interfaces::consensus_pool::HeightRange;
+        use ic_logger::info;
         use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
             MaliciousBehaviour, MaliciousBehaviourLogEntry,
         };
@@ -426,116 +344,11 @@ impl Finalizer {
     }
 }
 
-/// This function creates responses to the message routing with computed DKG key
-/// material for remote subnets.
-pub fn generate_responses_to_subnet_calls(
-    state_manager: &dyn StateManager<State = ReplicatedState>,
-    certified_height: Height,
-    transcripts_for_new_subnets: &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
-    log: &ReplicaLogger,
-) -> Vec<Response> {
-    use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
-    use ic_types::{crypto::threshold_sig::ni_dkg::NiDkgTag, ic00::SetupInitialDKGResponse};
-
-    let mut consensus_responses = Vec::<Response>::new();
-    if let Ok(state) = state_manager.get_state_at(certified_height) {
-        let contexts = &state
-            .get_ref()
-            .metadata
-            .subnet_call_context_manager
-            .setup_initial_dkg_contexts;
-        for (callback_id, context) in contexts.iter() {
-            let target_id = context.target_id;
-
-            let transcript = |dkg_tag| {
-                transcripts_for_new_subnets
-                    .iter()
-                    .filter_map(|(id, transcript)| {
-                        if id.dkg_tag == dkg_tag && id.target_subnet == Remote(target_id) {
-                            Some(transcript)
-                        } else {
-                            None
-                        }
-                    })
-                    .last()
-            };
-
-            let payload = match (
-                transcript(NiDkgTag::LowThreshold),
-                transcript(NiDkgTag::HighThreshold),
-            ) {
-                (Some(Ok(low_threshold_transcript)), Some(Ok(high_threshold_transcript))) => {
-                    info!(
-                        log,
-                        "Found transcripts for other subnets with ids {:?} and {:?}",
-                        low_threshold_transcript.dkg_id,
-                        high_threshold_transcript.dkg_id
-                    );
-                    let low_threshold_transcript_record =
-                        initial_ni_dkg_transcript_record_from_transcript(
-                            low_threshold_transcript.clone(),
-                        );
-                    let high_threshold_transcript_record =
-                        initial_ni_dkg_transcript_record_from_transcript(
-                            high_threshold_transcript.clone(),
-                        );
-
-                    // This is what we expect consensus to reply with.
-                    let threshold_sig_pk = high_threshold_transcript.public_key();
-                    let subnet_threshold_public_key = PublicKeyProto::from(threshold_sig_pk);
-                    let key_der: Vec<u8> =
-                        ic_crypto::threshold_sig_public_key_to_der(threshold_sig_pk).unwrap();
-                    let fresh_subnet_id =
-                        SubnetId::new(PrincipalId::new_self_authenticating(key_der.as_slice()));
-
-                    let initial_transcript_records = SetupInitialDKGResponse {
-                        low_threshold_transcript_record,
-                        high_threshold_transcript_record,
-                        fresh_subnet_id,
-                        subnet_threshold_public_key,
-                    };
-
-                    Some(messages::Payload::Data(initial_transcript_records.encode()))
-                }
-                (Some(Err(err_str1)), Some(Err(err_str2))) => {
-                    Some(messages::Payload::Reject(messages::RejectContext {
-                        code: ic_types::user_error::RejectCode::CanisterReject,
-                        message: format!("{}{}", err_str1, err_str2),
-                    }))
-                }
-                (Some(Err(err_str)), _) => {
-                    Some(messages::Payload::Reject(messages::RejectContext {
-                        code: ic_types::user_error::RejectCode::CanisterReject,
-                        message: err_str.to_string(),
-                    }))
-                }
-                (_, Some(Err(err_str))) => {
-                    Some(messages::Payload::Reject(messages::RejectContext {
-                        code: ic_types::user_error::RejectCode::CanisterReject,
-                        message: err_str.to_string(),
-                    }))
-                }
-                _ => None,
-            };
-
-            if let Some(response_payload) = payload {
-                consensus_responses.push(Response {
-                    originator: CanisterId::ic_00(),
-                    respondent: CanisterId::ic_00(),
-                    originator_reply_callback: *callback_id,
-                    refund: Cycles::zero(),
-                    response_payload,
-                });
-            }
-        }
-    }
-    consensus_responses
-}
-
 #[cfg(test)]
 mod tests {
     //! Finalizer unit tests
     use super::*;
+    use crate::consensus::generate_responses_to_subnet_calls;
     use crate::consensus::mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
     use ic_interfaces::state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
@@ -552,10 +365,13 @@ mod tests {
         types::ids::{node_test_id, subnet_test_id},
     };
     use ic_types::{
-        crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
+        crypto::threshold_sig::ni_dkg::{
+            NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+        },
         ic00::SetupInitialDKGResponse,
         messages::{CallbackId, Request},
     };
+    use std::collections::BTreeMap;
     use std::{collections::BTreeSet, path::PathBuf, str::FromStr, sync::Arc};
 
     /// Given a single block, just finalize it

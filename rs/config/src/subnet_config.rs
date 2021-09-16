@@ -46,6 +46,9 @@ const SYSTEM_SUBNET_FACTOR: u64 = 10;
 // value of 200MB.
 const MAX_HEAP_DELTA_PER_ITERATION: NumBytes = NumBytes::new(200 * M);
 
+// Log all messages that took more than this value to execute.
+pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
+
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone)]
 pub struct SchedulerConfig {
@@ -77,6 +80,12 @@ pub struct SchedulerConfig {
     /// continue iterations or not. This serves as a proxy for memory bound
     /// instructions that are more expensive and may slow down finalization.
     pub max_heap_delta_per_iteration: NumBytes,
+
+    /// This value is used to decide whether to emit a warn log after
+    /// message execution or not.
+    /// Once execution duration of a message exceeds this value,
+    /// specific information about the message is logged as a warn.
+    pub max_message_duration_before_warn_in_seconds: f64,
 }
 
 impl SchedulerConfig {
@@ -93,6 +102,8 @@ impl SchedulerConfig {
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
+            max_message_duration_before_warn_in_seconds:
+                MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
         }
     }
 
@@ -110,6 +121,8 @@ impl SchedulerConfig {
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE * SYSTEM_SUBNET_FACTOR,
             max_instructions_per_install_code,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
+            max_message_duration_before_warn_in_seconds:
+                MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
         }
     }
 
@@ -126,6 +139,8 @@ impl SchedulerConfig {
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             max_instructions_per_install_code: NumInstructions::from(1_000 * B),
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
+            max_message_duration_before_warn_in_seconds:
+                MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
         }
     }
 

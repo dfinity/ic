@@ -1,4 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use ic_config::embedders::PersistenceType;
 use memory_tracker::*;
 
 use libc::{self, c_void};
@@ -9,6 +10,7 @@ use std::time::Duration;
 use lazy_static::lazy_static;
 
 use ic_logger::replica_logger::no_op_logger;
+use ic_replicated_state::PageMap;
 use ic_sys::PAGE_SIZE;
 
 lazy_static! {
@@ -18,6 +20,7 @@ lazy_static! {
 struct BenchData {
     ptr: *mut c_void,
     tracker: SigsegvMemoryTracker,
+    page_map: Option<PageMap>,
 }
 
 /// Test the first execution of the sigsegv handler for a memory address.
@@ -41,21 +44,27 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
     group.bench_function("fault handler sim read", |bench| {
         bench.iter_with_setup(
             // Setup input data for measurement
-            || BenchData {
-                ptr,
-                tracker: SigsegvMemoryTracker::new(
+            || {
+                let page_map = PageMap::new();
+                BenchData {
                     ptr,
-                    *PAGE_SIZE,
-                    no_op_logger(),
-                    DirtyPageTracking::Track,
-                )
-                .unwrap(),
+                    tracker: SigsegvMemoryTracker::new(
+                        PersistenceType::Sigsegv,
+                        ptr,
+                        *PAGE_SIZE,
+                        no_op_logger(),
+                        DirtyPageTracking::Track,
+                        Some(page_map.clone()),
+                    )
+                    .unwrap(),
+                    page_map: Some(page_map),
+                }
             },
             // Do the actual measurement
             |data| {
-                sigsegv_fault_handler_mprotect(
+                sigsegv_fault_handler_old(
                     black_box(&data.tracker),
-                    &(|_| Some(&ZEROED_PAGE)),
+                    &data.page_map,
                     black_box(data.ptr),
                 )
             },
@@ -85,26 +94,30 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
         bench.iter_with_setup(
             // Setup input data for measurement
             || {
+                let page_map = PageMap::new();
                 let data = BenchData {
                     ptr,
                     tracker: SigsegvMemoryTracker::new(
+                        PersistenceType::Sigsegv,
                         ptr,
                         *PAGE_SIZE,
                         no_op_logger(),
                         DirtyPageTracking::Track,
+                        Some(page_map.clone()),
                     )
                     .unwrap(),
+                    page_map: Some(page_map),
                 };
 
-                sigsegv_fault_handler_mprotect(&data.tracker, &(|_| Some(&ZEROED_PAGE)), data.ptr);
+                sigsegv_fault_handler_old(&data.tracker, &data.page_map, data.ptr);
 
                 data
             },
             // Do the actual measurement
             |data| {
-                sigsegv_fault_handler_mprotect(
+                sigsegv_fault_handler_old(
                     black_box(&data.tracker),
-                    &(|_| Some(&ZEROED_PAGE)),
+                    &data.page_map,
                     black_box(data.ptr),
                 )
             },

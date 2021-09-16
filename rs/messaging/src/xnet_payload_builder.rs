@@ -20,7 +20,7 @@ use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
     messaging::{
-        InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadError, XNetPayloadValidationError,
+        InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
         XNetTransientValidationError,
     },
     registry::RegistryClient,
@@ -824,11 +824,10 @@ impl XNetEndpointResolver {
 impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
     fn get_xnet_payload(
         &self,
-        _: Height,
         validation_context: &ValidationContext,
         past_payloads: &[&XNetPayload],
         byte_limit: NumBytes,
-    ) -> Result<XNetPayload, XNetPayloadError> {
+    ) -> XNetPayload {
         let timer = Timer::start();
         let payload =
             match self.get_xnet_payload_impl(validation_context, past_payloads, byte_limit) {
@@ -850,7 +849,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         // just behind.
         self.refill_task_handle.trigger_refill();
 
-        Ok(payload)
+        payload
     }
 
     fn validate_xnet_payload(

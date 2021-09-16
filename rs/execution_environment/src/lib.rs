@@ -27,6 +27,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
+use ic_system_api::NonReplicatedQueryKind;
 use ic_types::{messages::CallContextId, SubnetId};
 use ingress_message_filter::IngressMessageFilterImpl;
 use query_handler::HttpQueryHandlerImpl;
@@ -51,6 +52,7 @@ pub enum QueryExecutionType {
     NonReplicated {
         call_context_id: CallContextId,
         routing_table: Arc<RoutingTable>,
+        query_kind: NonReplicatedQueryKind,
     },
 }
 

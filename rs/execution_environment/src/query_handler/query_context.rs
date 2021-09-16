@@ -51,6 +51,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContextAction, CallOrigin, CanisterState, EmbedderCache, ExecutionState, ReplicatedState,
 };
+use ic_system_api::NonReplicatedQueryKind;
 use ic_types::{
     ingress::WasmResult,
     messages::{
@@ -64,6 +65,8 @@ use std::{
     collections::BTreeMap,
     sync::{Arc, RwLock},
 };
+
+const ENABLE_QUERY_OPTIMIZATION: bool = true;
 
 const LOOP_DETECTED_ERROR_MSG: &str =
     "Loop detected.  MVP inter-canister queries do not support loops.";
@@ -165,20 +168,50 @@ impl<'a> QueryContext<'a> {
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         debug!(self.log, "Executing query for {}", canister_id);
-        let canister = self.get_canister_from_state(&canister_id)?;
+        let old_canister = self.get_canister_from_state(&canister_id)?;
         let call_origin = CallOrigin::Query(query.source);
-        let (mut canister, result) = {
+        let query_kind = if ENABLE_QUERY_OPTIMIZATION {
+            NonReplicatedQueryKind::Pure
+        } else {
+            NonReplicatedQueryKind::Stateful
+        };
+
+        // First try to run the query as `Pure` assuming that it is not going to
+        // call other queries. `Pure` queries are about 2x faster than `Stateful`.
+        let (mut canister, mut result) = {
             let measurement_scope =
                 MeasurementScope::nested(&metrics.query_initial_call, measurement_scope);
             self.execute_query(
-                canister,
-                call_origin,
+                old_canister,
+                call_origin.clone(),
                 query.method_name.as_str(),
                 query.method_payload.as_slice(),
                 query.source.clone().get(),
+                query_kind.clone(),
                 &measurement_scope,
             )
         };
+
+        // An attempt to call another query will result in `ContractViolation`.
+        // If that's the case then retry query execution as `Stateful`.
+        if query_kind == NonReplicatedQueryKind::Pure {
+            if let Err(HypervisorError::ContractViolation(..)) = result {
+                let measurement_scope =
+                    MeasurementScope::nested(&metrics.query_retry_call, measurement_scope);
+                let old_canister = self.get_canister_from_state(&canister_id)?;
+                let (new_canister, new_result) = self.execute_query(
+                    old_canister,
+                    call_origin,
+                    query.method_name.as_str(),
+                    query.method_payload.as_slice(),
+                    query.source.clone().get(),
+                    NonReplicatedQueryKind::Stateful,
+                    &measurement_scope,
+                );
+                canister = new_canister;
+                result = new_result;
+            };
+        }
 
         match result {
             // If the canister produced a result or if execution failed then it
@@ -406,6 +439,7 @@ impl<'a> QueryContext<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn execute_query(
         &mut self,
         mut canister: CanisterState,
@@ -413,6 +447,7 @@ impl<'a> QueryContext<'a> {
         method_name: &str,
         method_payload: &[u8],
         source: PrincipalId,
+        query_kind: NonReplicatedQueryKind,
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, HypervisorResult<Option<WasmResult>>) {
         // If the canister state was loaded from a checkpoint then its embedder cache is
@@ -446,6 +481,7 @@ impl<'a> QueryContext<'a> {
             QueryExecutionType::NonReplicated {
                 call_context_id,
                 routing_table: self.routing_table.clone(),
+                query_kind,
             },
             method_name,
             method_payload,
@@ -599,6 +635,7 @@ impl<'a> QueryContext<'a> {
             request.method_name.as_str(),
             request.method_payload.as_slice(),
             request.sender.clone().get(),
+            NonReplicatedQueryKind::Stateful,
             measurement_scope,
         );
 

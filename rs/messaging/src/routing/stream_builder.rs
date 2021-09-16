@@ -34,7 +34,7 @@ const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
-const LABEL_DESTINATION: &str = "destination";
+const LABEL_REMOTE: &str = "remote";
 
 const LABEL_VALUE_TYPE_REQUEST: &str = "request";
 const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
@@ -46,12 +46,12 @@ impl StreamBuilderMetrics {
         let stream_messages = metrics_registry.int_gauge_vec(
             METRIC_STREAM_MESSAGES,
             "Messages currently enqueued in streams, by destination subnet.",
-            &[LABEL_DESTINATION],
+            &[LABEL_REMOTE],
         );
         let stream_bytes = metrics_registry.int_gauge_vec(
             METRIC_STREAM_BYTES,
             "Stream byte size including header, by destination subnet.",
-            &[LABEL_DESTINATION],
+            &[LABEL_REMOTE],
         );
         let routed_messages = metrics_registry.int_counter_vec(
             METRIC_ROUTED_MESSAGES,
@@ -261,12 +261,13 @@ impl StreamBuilder for StreamBuilderImpl {
             });
 
         {
+            // Record the enqueuing time of any messages newly enqueued into `streams`.
             let mut time_in_stream_metrics = self.time_in_stream_metrics.lock().unwrap();
             for (subnet_id, stream) in &streams {
                 if *subnet_id == self.subnet_id {
                     continue;
                 }
-                time_in_stream_metrics.observe_header(*subnet_id, &stream.header());
+                time_in_stream_metrics.record_header(*subnet_id, &stream.header());
             }
         }
 

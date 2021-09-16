@@ -8,6 +8,7 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1.41"
 hex = "0.4.2"
+base64 = "0.11.0"
 ic-config = { path = "../../../config" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../crypto_lib/basic_sig/der_utils" }
 ic-crypto-internal-basic-sig-cose = { path = "../crypto_lib/basic_sig/cose" }

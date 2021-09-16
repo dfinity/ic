@@ -4,7 +4,7 @@
 #![allow(clippy::ptr_arg)]
 
 use super::*;
-use crate::message_routing::{LABEL_SUBNET, METRIC_TIME_IN_BACKLOG, METRIC_TIME_IN_STREAM};
+use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_IN_STREAM};
 use ic_base_types::NumSeconds;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -735,7 +735,7 @@ fn process_certified_stream_slices_success() {
             .time_in_stream_metrics
             .lock()
             .unwrap()
-            .observe_header(REMOTE_SUBNET, &initial_stream.header());
+            .record_header(REMOTE_SUBNET, &initial_stream.header());
         initial_state.put_streams(
             btreemap![LOCAL_SUBNET => loopback_stream.clone(), REMOTE_SUBNET => initial_stream],
         );
@@ -831,15 +831,15 @@ fn process_certified_stream_slices_success() {
         );
 
         assert_eq!(
-            metric_vec(&[(&[(LABEL_SUBNET, &REMOTE_SUBNET.to_string())], 5)]),
+            metric_vec(&[(&[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())], 5)]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_XNET_MESSAGE_BACKLOG)
         );
         assert_eq!(
-            metric_vec(&[(&[(&LABEL_SUBNET, &REMOTE_SUBNET.to_string().as_str())], 2)]),
+            metric_vec(&[(&[(&LABEL_REMOTE, &REMOTE_SUBNET.to_string().as_str())], 2)]),
             fetch_histogram_vec_count(&metrics_registry, METRIC_TIME_IN_STREAM),
         );
         assert_eq!(
-            metric_vec(&[(&[(&LABEL_SUBNET, &&*REMOTE_SUBNET.to_string().as_str())], 2)]),
+            metric_vec(&[(&[(&LABEL_REMOTE, &&*REMOTE_SUBNET.to_string().as_str())], 2)]),
             fetch_histogram_vec_count(&metrics_registry, METRIC_TIME_IN_BACKLOG),
         );
     });

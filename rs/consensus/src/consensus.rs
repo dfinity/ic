@@ -1,6 +1,7 @@
 //! This module encapsulates all components required for establishing of a
 //! distributed consensus.
 
+pub mod batch_delivery;
 mod block_maker;
 mod catchup_package_maker;
 pub(crate) mod crypto;
@@ -21,8 +22,8 @@ mod share_aggregator;
 pub mod utils;
 mod validator;
 
+pub use batch_delivery::generate_responses_to_subnet_calls;
 pub use crypto::ConsensusCrypto;
-pub use finalizer::generate_responses_to_subnet_calls;
 pub use membership::Membership;
 
 #[cfg(test)]

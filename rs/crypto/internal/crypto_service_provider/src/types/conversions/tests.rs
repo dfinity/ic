@@ -113,3 +113,15 @@ mod proto_to_csp_pop_tests {
         );
     }
 }
+
+#[test]
+fn csp_pop_from_public_key_proto_error_debug_print() {
+    let test_vectors = vec![
+        (CspPopFromPublicKeyProtoError::NoPopForAlgorithm{algorithm: AlgorithmId::Ed25519 }, "CspPopFromPublicKeyProtoError::NoPopForAlgorithm{ algorithm: Ed25519 }"),
+        (CspPopFromPublicKeyProtoError::MissingProofData, "CspPopFromPublicKeyProtoError::MissingProofData"),
+        (CspPopFromPublicKeyProtoError::MalformedPop{pop_bytes: vec![1,2,3], internal_error: "Foo".to_string()}, "CspPopFromPublicKeyProtoError::MalformedPop{ pop_bytes: \"010203\", internal_error: Foo }")
+    ];
+    for (value, formatted) in test_vectors {
+        assert_eq!(format!("{:?}", value), *formatted);
+    }
+}

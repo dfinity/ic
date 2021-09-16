@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use ic_interfaces::{
-    certified_stream_store::CertifiedStreamStore,
-    messaging::{XNetPayloadBuilder, XNetPayloadError},
+    certified_stream_store::CertifiedStreamStore, messaging::XNetPayloadBuilder,
     registry::RegistryClient,
 };
 use ic_logger::ReplicaLogger;
@@ -100,10 +99,7 @@ impl XNetPayloadBuilderFixture {
 
     /// Calls `get_xnet_payload()` on the wrapped `XNetPayloadBuilder` and
     /// decodes all slices in the payload.
-    fn get_xnet_payload(
-        &self,
-        byte_limit: usize,
-    ) -> Result<BTreeMap<SubnetId, StreamSlice>, XNetPayloadError> {
+    fn get_xnet_payload(&self, byte_limit: usize) -> BTreeMap<SubnetId, StreamSlice> {
         let time = mock_time();
         let validation_context = ValidationContext {
             registry_version: REGISTRY_VERSION,
@@ -112,26 +108,18 @@ impl XNetPayloadBuilderFixture {
         };
 
         self.xnet_payload_builder
-            .get_xnet_payload(
-                self.certified_height,
-                &validation_context,
-                &[],
-                (byte_limit as u64).into(),
-            )
-            .map(|payload| {
-                payload
-                    .stream_slices
-                    .into_iter()
-                    .map(|(k, v)| {
-                        (
-                            k,
-                            self.state_manager
-                                .decode_certified_stream_slice(k, REGISTRY_VERSION, &v)
-                                .unwrap(),
-                        )
-                    })
-                    .collect()
+            .get_xnet_payload(&validation_context, &[], (byte_limit as u64).into())
+            .stream_slices
+            .into_iter()
+            .map(|(k, v)| {
+                (
+                    k,
+                    self.state_manager
+                        .decode_certified_stream_slice(k, REGISTRY_VERSION, &v)
+                        .unwrap(),
+                )
             })
+            .collect()
     }
 
     /// Pools the provided slice coming from a given subnet and returns its byte
@@ -301,8 +289,7 @@ proptest! {
 
             // Build the payload.
             let payload = xnet_payload_builder
-                .get_xnet_payload(std::usize::MAX)
-                .unwrap();
+                .get_xnet_payload(std::usize::MAX);
 
             // Payload should contain 1 slice...
             assert_eq!(
@@ -370,8 +357,7 @@ proptest! {
 
             // Build a payload with a byte limit just under the total size of the 2 slices.
             let payload = xnet_payload_builder
-                .get_xnet_payload(slice_bytes_sum - 1)
-                .unwrap();
+                .get_xnet_payload(slice_bytes_sum - 1);
 
             // Payload should contain 2 slices.
             assert_eq!(
@@ -420,7 +406,7 @@ proptest! {
             xnet_payload_builder.pool_slice(REMOTE_SUBNET, &stream, from, msg_count, &log);
 
             // Build a payload with a byte limit too small even for an empty slice.
-            let payload = xnet_payload_builder.get_xnet_payload(1).unwrap();
+            let payload = xnet_payload_builder.get_xnet_payload(1);
 
             // Payload should contain no slices.
             assert!(
@@ -469,8 +455,7 @@ proptest! {
 
             // Build a payload.
             let payload = xnet_payload_builder
-                .get_xnet_payload(std::usize::MAX)
-                .unwrap();
+                .get_xnet_payload(std::usize::MAX);
 
             // Payload should be empty (we already have all signals in the slice).
             assert!(payload.is_empty(), "Expecting empty in payload, got a slice");
@@ -482,8 +467,7 @@ proptest! {
 
             // Build a payload again.
             let payload = xnet_payload_builder
-                .get_xnet_payload(std::usize::MAX)
-                .unwrap();
+                .get_xnet_payload(std::usize::MAX);
 
             // Payload should now contain 1 empty slice from REMOTE_SUBNET.
             assert_eq!(
@@ -549,8 +533,7 @@ proptest! {
             );
 
             let payload = xnet_payload_builder
-                .get_xnet_payload(std::usize::MAX)
-                .unwrap();
+                .get_xnet_payload(std::usize::MAX);
 
             assert_eq!(1, payload.len());
             if let Some(slice) = payload.get(&REMOTE_SUBNET) {

@@ -70,6 +70,20 @@ pub enum CspSecretKey {
     FsEncryption(CspFsEncryptionKeySet),
 }
 
+impl CspSecretKey {
+    /// Return the algorithm identifier of this secret key
+    pub fn algorithm_id(&self) -> AlgorithmId {
+        match self {
+            Self::Ed25519(_) => AlgorithmId::Ed25519,
+            Self::MultiBls12_381(_) => AlgorithmId::MultiBls12_381,
+            Self::ThresBls12_381(_) => AlgorithmId::ThresBls12_381,
+            Self::Secp256k1WithPublicKey(_) => AlgorithmId::Secp256k1,
+            Self::TlsEd25519(_) => AlgorithmId::Ed25519,
+            Self::FsEncryption(_) => AlgorithmId::NiDkg_Groth20_Bls12_381,
+        }
+    }
+}
+
 #[cfg(test)]
 impl std::fmt::Debug for CspSecretKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

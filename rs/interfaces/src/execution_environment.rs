@@ -468,7 +468,7 @@ pub trait SystemApi {
     /// Returns the current size of the stable memory in WebAssembly pages.
     ///
     /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable_size64(&self) -> HypervisorResult<u64>;
+    fn ic0_stable64_size(&self) -> HypervisorResult<u64>;
 
     /// Tries to grow the stable memory by additional_pages many pages
     /// containing zeros.
@@ -476,7 +476,7 @@ pub trait SystemApi {
     /// Otherwise, returns -1
     ///
     /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable_grow64(&mut self, additional_pages: u64) -> HypervisorResult<i64>;
+    fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64>;
 
     /// Copies the data from location [offset, offset+size) of the stable memory
     /// to the location [dst, dst+size) in the canister memory.
@@ -485,7 +485,7 @@ pub trait SystemApi {
     /// memory or offset+size exceeds the size of the stable memory.
     ///
     /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable_read64(
+    fn ic0_stable64_read(
         &self,
         dst: u64,
         offset: u64,
@@ -500,7 +500,7 @@ pub trait SystemApi {
     /// memory or offset+size exceeds the size of the stable memory.
     ///
     /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable_write64(
+    fn ic0_stable64_write(
         &mut self,
         offset: u64,
         src: u64,

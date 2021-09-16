@@ -4,7 +4,7 @@ use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
     consensus::PayloadValidationError, ingress_pool::IngressPoolSelect,
-    messaging::XNetPayloadError, validation::ValidationResult,
+    validation::ValidationResult,
 };
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client::fake::FakeRegistryClient;
@@ -33,11 +33,10 @@ mock! {
     pub trait PayloadBuilder {
         fn get_payload<'a>(
             &self,
-            height: Height,
             ingress_pool: &'a (dyn IngressPoolSelect + 'a),
             past_payloads: &[(Height, Time, Payload)],
             context: &ValidationContext
-        ) -> Result<BatchPayload, XNetPayloadError>;
+        ) -> BatchPayload;
         fn validate_payload(
             &self,
             payload: &Payload,

@@ -157,7 +157,7 @@ impl WasmtimeEmbedder {
         exported_globals: &[Global],
         heap_size: NumWasmPages,
         memory_creator: Option<Arc<CowMemoryCreator>>,
-        memory_initializer: Option<PageMap>,
+        page_map: Option<PageMap>,
         dirty_page_tracking: DirtyPageTracking,
     ) -> WasmtimeInstance {
         let (module, memory_creator_proxy) = cache
@@ -276,25 +276,20 @@ impl WasmtimeEmbedder {
             .map(Arc::new);
 
         // if `wasmtime::Instance` does not have memory we don't need a memory tracker
-        let memory_tracker =
-            instance_memory
-                .as_ref()
-                .map(|instance_memory| match persistence_type {
-                    PersistenceType::Sigsegv => sigsegv_memory_tracker(
-                        Arc::downgrade(instance_memory),
-                        &store,
-                        memory_initializer,
-                        self.log.clone(),
-                        dirty_page_tracking,
-                    ),
-                    PersistenceType::Pagemap => sigsegv_memory_tracker(
-                        Arc::downgrade(instance_memory),
-                        &store,
-                        None,
-                        self.log.clone(),
-                        dirty_page_tracking,
-                    ),
-                });
+        let memory_tracker = instance_memory.as_ref().map(|instance_memory| {
+            let page_map = match persistence_type {
+                PersistenceType::Sigsegv => page_map,
+                PersistenceType::Pagemap => None,
+            };
+            sigsegv_memory_tracker(
+                persistence_type,
+                Arc::downgrade(instance_memory),
+                &store,
+                page_map,
+                self.log.clone(),
+                dirty_page_tracking,
+            )
+        });
         let signal_stack = WasmtimeSignalStack::new();
 
         // canister_num_instructions_global is an Option because some wasmtime tests
@@ -311,14 +306,19 @@ impl WasmtimeEmbedder {
             signal_stack,
             canister_num_instructions_global,
             log: self.log.clone(),
+            instance_stats: InstanceStats {
+                accessed_pages: 0,
+                dirty_pages: 0,
+            },
         }
     }
 }
 
 fn sigsegv_memory_tracker(
+    persistence_type: PersistenceType,
     instance_memory: std::sync::Weak<wasmtime::Memory>,
     store: &wasmtime::Store,
-    memory_initializer: Option<PageMap>,
+    page_map: Option<PageMap>,
     log: ReplicaLogger,
     dirty_page_tracking: DirtyPageTracking,
 ) -> Rc<SigsegvMemoryTracker> {
@@ -338,8 +338,15 @@ fn sigsegv_memory_tracker(
             "heap size must be a multiple of page size"
         );
         std::rc::Rc::new(
-            SigsegvMemoryTracker::new(base, size, log, dirty_page_tracking)
-                .expect("failed to instantiate SIGSEGV memory tracker"),
+            SigsegvMemoryTracker::new(
+                persistence_type,
+                base,
+                size,
+                log,
+                dirty_page_tracking,
+                page_map,
+            )
+            .expect("failed to instantiate SIGSEGV memory tracker"),
         )
     };
 
@@ -358,10 +365,8 @@ fn sigsegv_memory_tracker(
             false
         };
 
-        let memory_initializer = Rc::new(memory_initializer);
         let handler = crate::signal_handler::sigsegv_memory_tracker_handler(
             std::rc::Rc::clone(&sigsegv_memory_tracker),
-            memory_initializer,
             current_heap_size,
             default_handler,
             || true,
@@ -385,6 +390,7 @@ pub struct WasmtimeInstance {
     signal_stack: WasmtimeSignalStack,
     canister_num_instructions_global: Rc<RefCell<Option<wasmtime::Global>>>,
     log: ReplicaLogger,
+    instance_stats: InstanceStats,
 }
 
 impl WasmtimeInstance {
@@ -406,17 +412,15 @@ impl WasmtimeInstance {
 
     fn dirty_pages(&self) -> Vec<PageIndex> {
         if let Some(memory_tracker) = self.memory_tracker.as_ref() {
-            let base = memory_tracker.area().addr();
-            let page_size = *ic_sys::PAGE_SIZE;
-            memory_tracker
-                .dirty_pages()
+            let speculatively_dirty_pages = memory_tracker.take_speculatively_dirty_pages();
+            let dirty_pages = memory_tracker.take_dirty_pages();
+            dirty_pages
                 .into_iter()
-                .map(|addr| {
-                    let off = addr as usize - base as usize;
-                    debug_assert!(off % page_size == 0);
-                    let page_num = off / page_size;
-                    PageIndex::from(page_num as u64)
-                })
+                .chain(
+                    speculatively_dirty_pages
+                        .into_iter()
+                        .filter_map(|p| memory_tracker.validate_speculatively_dirty_page(p)),
+                )
                 .collect::<Vec<PageIndex>>()
         } else {
             debug!(
@@ -448,7 +452,7 @@ impl WasmtimeInstance {
         self.system_api_handle.replace(system_api);
         let _alt_sig_stack = unsafe { self.signal_stack.register() };
 
-        match &func_ref {
+        let result = match &func_ref {
             FuncRef::Method(wasm_method) => self.invoke_export(&wasm_method.to_string(), &[]),
             FuncRef::QueryClosure(closure) | FuncRef::UpdateClosure(closure) => self
                 .instance
@@ -473,14 +477,27 @@ impl WasmtimeInstance {
                 .map_err(trap_to_error)
                 .map(|boxed_slice| boxed_slice.to_vec()),
         }
-        .map_err(|e| system_api.get_execution_error().cloned().unwrap_or(e))?;
+        .map_err(|e| system_api.get_execution_error().cloned().unwrap_or(e));
 
         self.system_api_handle.clear();
 
-        Ok(InstanceRunResult {
-            exported_globals: self.get_exported_globals(),
-            dirty_pages: self.dirty_pages(),
-        })
+        let dirty_pages = self.dirty_pages();
+        let num_accessed_pages = self
+            .memory_tracker
+            .as_ref()
+            .map_or(0, |tracker| tracker.num_accessed_pages());
+        let num_dirty_pages = dirty_pages.len();
+        self.instance_stats.accessed_pages += num_accessed_pages;
+        self.instance_stats.dirty_pages += num_dirty_pages;
+        self.instance_stats.dirty_pages += system_api.get_stable_memory_delta_pages();
+
+        match result {
+            Ok(_) => Ok(InstanceRunResult {
+                exported_globals: self.get_exported_globals(),
+                dirty_pages,
+            }),
+            Err(err) => Err(err),
+        }
     }
 
     /// Sets the number of instructions for a method execution.
@@ -545,15 +562,6 @@ impl WasmtimeInstance {
     ///
     /// Note that stats must be available even if this instance trapped.
     pub fn get_stats(&self) -> InstanceStats {
-        InstanceStats {
-            accessed_pages: self
-                .memory_tracker
-                .as_ref()
-                .map_or(0, |tracker| tracker.num_accessed_pages()),
-            dirty_pages: self
-                .memory_tracker
-                .as_ref()
-                .map_or(0, |tracker| tracker.num_dirty_pages()),
-        }
+        self.instance_stats.clone()
     }
 }

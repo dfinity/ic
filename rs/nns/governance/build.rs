@@ -325,6 +325,10 @@ fn main() {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
+        "ic_nns_governance.pb.v1.Governance.GovernanceCachedMetrics",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.ClaimOrRefreshNeuronFromAccount",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );

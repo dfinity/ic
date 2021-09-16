@@ -1,3 +1,4 @@
+mod basic_sig;
 mod threshold_sig;
 
 use crate::secret_key_store::SecretKeyStore;

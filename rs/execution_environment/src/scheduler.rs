@@ -371,8 +371,25 @@ impl SchedulerMetrics {
     }
 }
 
-// Log all messages that took more than `MIN_MESSAGE_DURATION_LOG` to execute.
-pub const MIN_MESSAGE_DURATION_LOG: f64 = 5.0;
+#[derive(Clone)]
+pub(crate) struct CanisterExecutionLimits {
+    total_instruction_limit: NumInstructions,
+    max_heap_delta_per_iteration: NumBytes,
+    instruction_limit_per_message: NumInstructions,
+    max_message_duration_before_warn_in_seconds: f64,
+}
+
+impl CanisterExecutionLimits {
+    pub fn from(config: &SchedulerConfig) -> Self {
+        Self {
+            total_instruction_limit: config.max_instructions_per_round,
+            max_heap_delta_per_iteration: config.max_heap_delta_per_iteration,
+            instruction_limit_per_message: config.max_instructions_per_message,
+            max_message_duration_before_warn_in_seconds: config
+                .max_message_duration_before_warn_in_seconds,
+        }
+    }
+}
 
 pub(crate) struct SchedulerImpl {
     config: SchedulerConfig,
@@ -751,13 +768,13 @@ impl SchedulerImpl {
     ) {
         let thread_pool = &mut self.thread_pool.borrow_mut();
         let exec_env = self.exec_env.as_ref();
-        let max_instructions_per_round = current_config.max_instructions_per_round;
-        let max_heap_delta_per_iteration = current_config.max_heap_delta_per_iteration;
-        let max_instructions_per_message = current_config.max_instructions_per_message;
+        let canister_execution_limits = CanisterExecutionLimits::from(&current_config);
 
         // If we don't have enough instructions to execute a single message,
         // then skip execution and return unchanged canisters.
-        if max_instructions_per_round < max_instructions_per_message {
+        if canister_execution_limits.total_instruction_limit
+            < canister_execution_limits.instruction_limit_per_message
+        {
             return (
                 canisters_by_thread.into_iter().flatten().collect(),
                 vec![],
@@ -787,13 +804,12 @@ impl SchedulerImpl {
                 let subnet_records = Arc::clone(&subnet_records);
                 let metrics = Arc::clone(&self.metrics);
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
+                let canister_execution_limits = canister_execution_limits.clone();
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
                         canisters,
                         exec_env,
-                        max_instructions_per_round,
-                        max_heap_delta_per_iteration,
-                        max_instructions_per_message,
+                        canister_execution_limits,
                         metrics,
                         round_id,
                         time,
@@ -1063,6 +1079,7 @@ impl Scheduler for SchedulerImpl {
                     &provisional_whitelist,
                     subnet_available_memory.clone(),
                 );
+
                 state = new_state;
                 let instructions_consumed =
                     self.config.max_instructions_per_message - instructions_left;
@@ -1196,9 +1213,7 @@ struct ExecutionThreadResult {
 fn execute_canisters_on_thread(
     canisters_to_execute: Vec<CanisterState>,
     exec_env: &dyn ExecutionEnvironment,
-    total_instruction_limit: NumInstructions,
-    max_heap_delta_per_iteration: NumBytes,
-    instruction_limit_per_message: NumInstructions,
+    canister_execution_limits: CanisterExecutionLimits,
     metrics: Arc<SchedulerMetrics>,
     round_id: ExecutionRound,
     time: Time,
@@ -1224,8 +1239,9 @@ fn execute_canisters_on_thread(
         // If there are not enough instructions to execute a message or if we already
         // have large heap delta, then skip the execution of the canister and
         // keep its old state.
-        if total_instructions_executed + instruction_limit_per_message > total_instruction_limit
-            || total_heap_delta >= max_heap_delta_per_iteration
+        if total_instructions_executed + canister_execution_limits.instruction_limit_per_message
+            > canister_execution_limits.total_instruction_limit
+            || total_heap_delta >= canister_execution_limits.max_heap_delta_per_iteration
         {
             canisters.push(canister);
             continue;
@@ -1242,7 +1258,7 @@ fn execute_canisters_on_thread(
             let (new_canister, num_instructions_left, result) = exec_env
                 .execute_canister_heartbeat(
                     canister,
-                    instruction_limit_per_message,
+                    canister_execution_limits.instruction_limit_per_message,
                     Arc::clone(&routing_table),
                     Arc::clone(&subnet_records),
                     time,
@@ -1252,12 +1268,13 @@ fn execute_canisters_on_thread(
                 Ok(heap_delta) => heap_delta,
                 Err(_) => NumBytes::from(0),
             };
-            let instructions_consumed = instruction_limit_per_message - num_instructions_left;
+            let instructions_consumed =
+                canister_execution_limits.instruction_limit_per_message - num_instructions_left;
             measurement_scope.add(instructions_consumed, NumMessages::from(1));
             observe_instructions_consumed_per_message(
                 &metrics,
                 instructions_consumed,
-                instruction_limit_per_message,
+                canister_execution_limits.instruction_limit_per_message,
             );
             canister = new_canister;
             total_instructions_executed += instructions_consumed;
@@ -1270,7 +1287,8 @@ fn execute_canisters_on_thread(
         // - either its input queue is empty.
         // - or the instruction limit is reached.
         while canister.has_input() {
-            if total_instructions_executed + instruction_limit_per_message > total_instruction_limit
+            if total_instructions_executed + canister_execution_limits.instruction_limit_per_message
+                > canister_execution_limits.total_instruction_limit
             {
                 canister
                     .system_state
@@ -1287,20 +1305,20 @@ fn execute_canisters_on_thread(
             let timer = metrics.msg_execution_duration.start_timer();
             let result = exec_env.execute_canister_message(
                 canister,
-                instruction_limit_per_message,
+                canister_execution_limits.instruction_limit_per_message,
                 message,
                 time,
                 Arc::clone(&routing_table),
                 Arc::clone(&subnet_records),
                 subnet_available_memory.clone(),
             );
-            let instructions_consumed =
-                instruction_limit_per_message - result.num_instructions_left;
+            let instructions_consumed = canister_execution_limits.instruction_limit_per_message
+                - result.num_instructions_left;
             measurement_scope.add(instructions_consumed, NumMessages::from(1));
             observe_instructions_consumed_per_message(
                 &metrics,
                 instructions_consumed,
-                instruction_limit_per_message,
+                canister_execution_limits.instruction_limit_per_message,
             );
             canister = result.canister;
             ingress_results.extend(result.ingress_status);
@@ -1308,7 +1326,9 @@ fn execute_canisters_on_thread(
             total_messages_executed.inc_assign();
             total_heap_delta += result.heap_delta;
             let msg_execution_duration = timer.stop_and_record();
-            if msg_execution_duration > MIN_MESSAGE_DURATION_LOG {
+            if msg_execution_duration
+                > canister_execution_limits.max_message_duration_before_warn_in_seconds
+            {
                 warn!(
                     logger,
                     "Finished executing message type {:?} on canister {:?} after {:?} seconds",
@@ -1318,7 +1338,7 @@ fn execute_canisters_on_thread(
                     messaging.canister_id => canister.canister_id().to_string(),
                 );
             }
-            if total_heap_delta >= max_heap_delta_per_iteration {
+            if total_heap_delta >= canister_execution_limits.max_heap_delta_per_iteration {
                 break;
             }
         }
@@ -1334,9 +1354,10 @@ fn execute_canisters_on_thread(
         canisters.push(canister);
     }
 
-    metrics
-        .compute_utilization_per_core
-        .observe(total_instructions_executed.get() as f64 / total_instruction_limit.get() as f64);
+    metrics.compute_utilization_per_core.observe(
+        total_instructions_executed.get() as f64
+            / canister_execution_limits.total_instruction_limit.get() as f64,
+    );
 
     ExecutionThreadResult {
         canisters,

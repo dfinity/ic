@@ -266,6 +266,9 @@ message Burn {
 
 message AccountIdentifier {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
+  // Can contain either:
+  //  * the 32 byte identifier (4 byte checksum + 28 byte hash)
+  //  * the 28 byte hash
   bytes hash = 1        [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 
 }

@@ -9,6 +9,7 @@ edition = "2018"
 bit-vec = "0.5"
 byteorder = "1.3.4"
 ic-logger = { path = "../monitoring/logger" }
+ic-config = { path = "../config" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
 ic-utils = { path = "../utils" }
@@ -26,6 +27,7 @@ default = []
 sigsegv_handler_debug = []
 
 [dev-dependencies]
+tempfile = "3.1.0"
 criterion = "0.3"
 
 [[bench]]
