@@ -5,10 +5,11 @@ use ic_types::{
 };
 use phantom_newtype::BitMask;
 use std::sync::Arc;
+use thiserror::Error;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StateManagerError {
-    /// The state at the specified height was removed and can not be recovered
+    /// The state at the specified height was removed and cannot be recovered
     /// anymore.
     StateRemoved(Height),
     /// The state at the specified height is not committed yet.
@@ -31,6 +32,38 @@ impl std::fmt::Display for StateManagerError {
 impl std::error::Error for StateManagerError {}
 
 pub type StateManagerResult<T> = Result<T, StateManagerError>;
+
+/// Errors for functions returning state hashes that are permanent (i.e. no
+/// point in retrying)
+#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum PermanentStateHashError {
+    #[error("state at height {0} has already been removed and cannot be recovered anymore")]
+    StateRemoved(Height),
+    #[error("state at height {0} was committed with CertificationScope::Metadata, not CertificationScope::Full")]
+    StateNotFullyCertified(Height),
+}
+
+/// Errors for functions returning state hashes that rely on asynchronous
+/// computations that have not finished yet.
+#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum TransientStateHashError {
+    #[error("state at height {0} is not committed yet")]
+    StateNotCommittedYet(Height),
+    #[error("hash of state at height {0} is not fully computed yet")]
+    HashNotComputedYet(Height),
+}
+
+/// Errors for functions returning state hashes
+#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum StateHashError {
+    /// The error is permanent and will not change if retried later
+    #[error(transparent)]
+    Permanent(#[from] PermanentStateHashError),
+    /// The error is temporary and possibly due to asynchronous computations not
+    /// having finished yet. May succeed if retried.
+    #[error(transparent)]
+    Transient(#[from] TransientStateHashError),
+}
 
 /// Indicates the subset of the state that needs to be certified.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -152,21 +185,36 @@ pub trait StateManager: StateReader {
 
     /// Returns the hash of the state at the specified `height`.
     ///
-    /// The state hash can be computed asynchronously.  If the state itself is
-    /// available, but the hash is not computed yet, this method returns
-    /// `Ok(None)`.
-    ///
     /// # Errors
     ///
-    /// * If the state at `height` was already removed, the `StateRemoved` error
-    ///   is returned.
+    /// * If the state at `height` was already removed with a call to
+    ///   `remove_states_below()`, the `Permanent(StateRemoved)` error is
+    ///   returned.
+    ///
+    /// * If the state at `height` was not committed with
+    ///   `CertificationScope::Full`, the `Permanent(StateNotFullyCertified)`
+    ///   error is returned. See `commit_and_certify()`.
     ///
     /// * If the state at `height` is not committed yet, the
-    ///   `StateNotCommittedYet` error is returned.
-    fn get_state_hash_at(&self, height: Height) -> StateManagerResult<Option<CryptoHashOfState>>;
+    ///   `Transient(StateNotCommittedYet)` error is returned. See
+    ///   `commit_and_certify()`.
+    ///
+    /// * The state hash can be computed asynchronously.  If the state itself is
+    ///   available, but the hash is not computed yet, the
+    ///   `Transient(StateNoteComputedYet)` error is returned.
+    fn get_state_hash_at(&self, height: Height) -> Result<CryptoHashOfState, StateHashError>;
 
     /// Initiates asynchronous procedure of state synchronization with the
     /// target state specified by its height and root hash.
+    ///
+    /// # Parameters
+    ///
+    /// * `height` - the height of the state to be fetched.
+    /// * `root_hash` - the expected root hash of the state. States with
+    ///   matching height but mismatching root_hash will be ignored.
+    /// * `cup_interval_length` - the interval between state heights eligible
+    ///   for state sync (CUP = Catch Up Package). Also known as DKG
+    ///   (Distributed Key Generation) interval.
     ///
     /// Does nothing if `self.latest_state_height() >= height`.
     ///
@@ -179,7 +227,12 @@ pub trait StateManager: StateReader {
     ///
     /// Panics if the state is already known and its root_hash differs, i.e.
     /// `self.get_state_hash_at(height) = Ok(Some(h)) ∧ h ≠ root_hash`
-    fn fetch_state(&self, height: Height, root_hash: CryptoHashOfState);
+    fn fetch_state(
+        &self,
+        height: Height,
+        root_hash: CryptoHashOfState,
+        cup_interval_length: Height,
+    );
 
     /// Returns the list of heights corresponding to accessible states matching
     /// the mask.  E.g. `list_state_heights(CERT_ANY)` will return all

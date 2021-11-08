@@ -58,7 +58,7 @@ impl HttpCanisterUpdate {
     }
 }
 
-/// Describes the contents of a /api/v1/submit request.
+/// Describes the contents of a /api/v2/canister/_/call request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(Arbitrary))]
 #[serde(rename_all = "snake_case")]
@@ -111,7 +111,7 @@ pub struct HttpReadState {
     pub ingress_expiry: u64,
 }
 
-/// Describes the contents of a /api/v1/read request.
+/// Describes the contents of a /api/v2/canister/_/{read_state|query} request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "request_type")]
@@ -289,7 +289,8 @@ impl<C> HttpRequest<C> {
     }
 }
 
-/// Internal representation of the content of a `api/v1/read` request.
+/// Internal representation of the content of a
+/// `api/v2/canister/_/{read_state|query}` request.
 #[derive(Debug, PartialEq, Clone)]
 pub enum ReadContent {
     Query(UserQuery),
@@ -497,7 +498,8 @@ pub enum HttpReply {
     Empty {},
 }
 
-/// The response to `/api/v1/read` with `request_type` set to `query`.
+/// The response to `/api/v2/canister/_/{read_state|query}` with `request_type`
+/// set to `query`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "status")]
@@ -552,7 +554,7 @@ pub enum ReplicaHealthStatus {
     Healthy,
 }
 
-/// The response to `/api/v1/status`.
+/// The response to `/api/v2/status`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct HttpStatusResponse {

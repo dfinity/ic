@@ -132,6 +132,7 @@ fn prepare(
         });
         changeset.push(ChangeAction::MoveToValidated((
             message_id,
+            node_test_id(peer_id),
             0,
             attribute,
             integrity_hash,

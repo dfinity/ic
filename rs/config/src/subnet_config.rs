@@ -49,6 +49,18 @@ const MAX_HEAP_DELTA_PER_ITERATION: NumBytes = NumBytes::new(200 * M);
 // Log all messages that took more than this value to execute.
 pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
 
+// The gen 1 production machines should have 64 cores.
+// We could in theory use 32 threads, leaving other threads for query handling,
+// Wasm compilation, and other replica components. We currently use only four
+// threads for two reasons:
+// 1) Due to poor scaling of syscalls and signals with the number of threads
+//    in a process, four threads yield the maximum overall execution throughput.
+// 2) The memory capacity of a subnet is divided between the number of threads.
+//    We needs to ensure:
+//    `SUBNET_MEMORY_CAPACITY / number_of_threads >= max_canister_memory`
+//    If you change this number please adjust other constants as well.
+const NUMBER_OF_EXECUTION_THREADS: usize = 4;
+
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone)]
 pub struct SchedulerConfig {
@@ -86,17 +98,25 @@ pub struct SchedulerConfig {
     /// Once execution duration of a message exceeds this value,
     /// specific information about the message is logged as a warn.
     pub max_message_duration_before_warn_in_seconds: f64,
+
+    /// Indicates whether we want to limit tracking of heartbeat errors to
+    /// system level errors. Generally this should be `false` for system subnets
+    /// because we should monitor all errors in the system subnets, but should
+    /// be `true` for other subnets because we don't want to raise alerts for
+    /// errors in user code.
+    pub only_track_system_heartbeat_errors: bool,
+
+    /// Denotes how much heap delta each canister is allowed to generate per
+    /// round. Canisters may go over this limit in a single round, but will
+    /// then not run for several rounds until they are back under the allowed
+    /// rate.
+    pub heap_delta_rate_limit: NumBytes,
 }
 
 impl SchedulerConfig {
     pub fn application_subnet() -> Self {
         Self {
-            // The gen 1 production machines should have 64 cores. We expect
-            // that up to half might be needed for the IC protocol so we
-            // allow the scheduler to use the other half for running
-            // canisters in parallel.
-            scheduler_cores: 32,
-
+            scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
@@ -104,18 +124,15 @@ impl SchedulerConfig {
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
+            only_track_system_heartbeat_errors: true,
+            heap_delta_rate_limit: NumBytes::from(200 * 1024 * 1024),
         }
     }
 
     pub fn system_subnet() -> Self {
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         Self {
-            // The gen 1 production machines should have 64 cores. We expect
-            // that up to half might be needed for the IC protocol so we
-            // allow the scheduler to use the other half for running
-            // canisters in parallel.
-            scheduler_cores: 32,
-
+            scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND * SYSTEM_SUBNET_FACTOR,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE * SYSTEM_SUBNET_FACTOR,
@@ -123,24 +140,25 @@ impl SchedulerConfig {
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
+            only_track_system_heartbeat_errors: false,
+            // This limit should be high enough to effectively disable rate-limiting for the system
+            // subnets.
+            heap_delta_rate_limit: NumBytes::from(4 * 1024 * 1024 * 1024),
         }
     }
 
     pub fn verified_application_subnet() -> Self {
         Self {
-            // The gen 1 production machines should have 64 cores. We expect
-            // that up to half might be needed for the IC protocol so we
-            // allow the scheduler to use the other half for running
-            // canisters in parallel.
-            scheduler_cores: 32,
-
+            scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
-            max_instructions_per_install_code: NumInstructions::from(1_000 * B),
+            max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
+            only_track_system_heartbeat_errors: true,
+            heap_delta_rate_limit: NumBytes::from(200 * 1024 * 1024),
         }
     }
 

@@ -322,6 +322,11 @@ impl CertWithPrivateKey {
     pub fn cert_pem(&self) -> Vec<u8> {
         self.x509.to_pem().expect("unable to PEM encode cert")
     }
+
+    /// Returns a DER encoding of the X.509 certificate.
+    pub fn cert_der(&self) -> Vec<u8> {
+        self.x509.to_der().expect("unable to DER encode cert")
+    }
 }
 
 fn x509_name_with_cn(common_name: &str, duplicate: bool) -> X509Name {

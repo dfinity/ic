@@ -1,9 +1,20 @@
-use candid::CandidType;
+use std::collections::BTreeMap;
+use std::convert::{TryFrom, TryInto};
+use std::sync::RwLock;
+use std::time::Duration;
+
+use candid::{CandidType, Encode};
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
+use dfn_core::api::set_certified_data;
 use dfn_core::{api::caller, over, over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
+use ic_crypto_tree_hash::MixedHashTree;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_protobuf::messaging::xnet::v1::{
+    mixed_hash_tree::{Labeled, TreeEnum},
+    MixedHashTree as MixedHashTreePb,
+};
 use ic_types::ic00::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, Method, IC_00};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use lazy_static::lazy_static;
@@ -14,12 +25,10 @@ use ledger_canister::{
 use on_wire::{FromWire, IntoWire, NewType};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::convert::TryInto;
-use std::sync::RwLock;
-use std::time::Duration;
 
 mod limiter;
+
+const LABEL_ICP_XDR_CONVERSION_RATE: &[u8] = b"ICP_XDR_CONVERSION_RATE";
 
 #[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
 struct State {
@@ -33,6 +42,9 @@ struct State {
     authorized_subnets: BTreeMap<PrincipalId, Vec<SubnetId>>,
 
     default_subnets: Vec<SubnetId>,
+
+    /// How many XDR 1 ICP is worth, along with a timestamp.
+    icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
 
     /// How many cycles 1 XDR is worth.
     cycles_per_xdr: Cycles,
@@ -57,6 +69,7 @@ impl State {
             minting_account_id: None,
             authorized_subnets: BTreeMap::new(),
             default_subnets: vec![],
+            icp_xdr_conversion_rate: None,
             cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
             cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
             limiter: limiter::Limiter::new(resolution, max_age),
@@ -144,6 +157,103 @@ fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetI
     }
 }
 
+fn convert_data_to_mixed_hash_tree(label: &[u8], buf: Vec<u8>) -> MixedHashTreePb {
+    MixedHashTreePb {
+        tree_enum: Some(TreeEnum::Labeled(Box::new(Labeled {
+            label: label.to_vec(),
+            subtree: Some(Box::new(MixedHashTreePb {
+                tree_enum: Some(TreeEnum::LeafData(buf)),
+            })),
+        }))),
+    }
+}
+
+/// Retrieves the current `xdr_permyriad_per_icp` as a certified response.
+#[export_name = "canister_query get_icp_xdr_conversion_rate"]
+fn get_icp_xdr_conversion_rate_() {
+    use ic_nns_common::registry::encode_or_panic;
+
+    let buf = Encode!(&get_icp_xdr_conversion_rate()).unwrap();
+    let mixed_hash_tree_pb = convert_data_to_mixed_hash_tree(LABEL_ICP_XDR_CONVERSION_RATE, buf);
+
+    over(
+        candid_one,
+        |_: ()| -> IcpXdrConversionRateCertifiedResponse {
+            IcpXdrConversionRateCertifiedResponse {
+                data: encode_or_panic(&mixed_hash_tree_pb),
+                certificate: dfn_core::api::data_certificate().unwrap(),
+            }
+        },
+    )
+}
+
+/// Retrieves the current ICP/XDR conversion rate
+fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRate {
+    *STATE
+        .read()
+        .unwrap()
+        .icp_xdr_conversion_rate
+        .as_ref()
+        .unwrap()
+}
+
+#[export_name = "canister_update set_icp_xdr_conversion_rate"]
+fn set_icp_xdr_conversion_rate_() {
+    let caller = caller();
+    let governance_canister_id = STATE.read().unwrap().governance_canister_id;
+    assert_eq!(
+        CanisterId::new(caller),
+        Ok(governance_canister_id),
+        "{} is not authorized to call this method: {}",
+        caller,
+        "set_icp_xdr_conversion_rate"
+    );
+
+    over(
+        candid_one,
+        |proposed_conversion_rate: IcpXdrConversionRate| -> Result<(), String> {
+            set_icp_xdr_conversion_rate(proposed_conversion_rate)
+        },
+    );
+}
+
+/// Validates the proposed conversion rate, sets it in state, and sets the
+/// canister's certified data
+fn set_icp_xdr_conversion_rate(
+    proposed_conversion_rate: IcpXdrConversionRate,
+) -> Result<(), String> {
+    print(format!(
+        "[cycles] conversion rate update: {:?}",
+        proposed_conversion_rate
+    ));
+
+    if proposed_conversion_rate.xdr_permyriad_per_icp == 0 {
+        return Err("Proposed conversion rate must be greater than 0".to_string());
+    }
+
+    let mut state = STATE.write().unwrap();
+    if let Some(current_conversion_rate) = state.icp_xdr_conversion_rate {
+        if proposed_conversion_rate.timestamp_seconds <= current_conversion_rate.timestamp_seconds
+            && proposed_conversion_rate.xdr_permyriad_per_icp
+                != current_conversion_rate.xdr_permyriad_per_icp
+        {
+            return Err(
+                "Proposed conversion rate must have greater timestamp than current one".to_string(),
+            );
+        }
+    }
+
+    state.icp_xdr_conversion_rate = Some(proposed_conversion_rate);
+
+    let buf = Encode!(&proposed_conversion_rate).unwrap();
+    let mixed_hash_tree_pb = convert_data_to_mixed_hash_tree(LABEL_ICP_XDR_CONVERSION_RATE, buf);
+
+    let mixed_hash_tree = MixedHashTree::try_from(mixed_hash_tree_pb).unwrap();
+    set_certified_data(&mixed_hash_tree.digest().as_bytes());
+
+    Ok(())
+}
+
 #[export_name = "canister_update remove_subnet_from_authorized_subnet_list"]
 fn remove_subnet_from_authorized_subnet_list_() {
     let caller = caller();
@@ -218,7 +328,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
 
-        let xdr_permyriad_per_icp = get_icp_xdr_conversion_rate().await;
+        let xdr_permyriad_per_icp = get_icp_xdr_conversion_rate().xdr_permyriad_per_icp;
 
         let cycles = IcptsToCycles {
             xdr_permyriad_per_icp,
@@ -255,7 +365,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
 
-        let xdr_permyriad_per_icp = get_icp_xdr_conversion_rate().await;
+        let xdr_permyriad_per_icp = get_icp_xdr_conversion_rate().xdr_permyriad_per_icp;
 
         let cycles = IcptsToCycles {
             xdr_permyriad_per_icp,
@@ -585,13 +695,6 @@ async fn get_rng() -> Result<StdRng, String> {
     })?;
 
     Ok(StdRng::from_seed(bytes[0..32].try_into().unwrap()))
-}
-
-async fn get_icp_xdr_conversion_rate() -> u64 {
-    match ic_nns_common::registry::get_icp_xdr_conversion_rate_record().await {
-        None => panic!("ICP/XDR conversion rate is not available."),
-        Some((rate_record, _)) => rate_record.xdr_permyriad_per_icp,
-    }
 }
 
 #[export_name = "canister_pre_upgrade"]

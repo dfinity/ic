@@ -2,7 +2,7 @@ use super::*;
 use bytes::Bytes;
 use ic_interfaces::state_manager::{CertificationScope, StateManager};
 use ic_protobuf::{messaging::xnet::v1 as pb, proxy::ProtoProxy};
-use ic_replicated_state::{ReplicatedState, Stream};
+use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
 use ic_test_utilities::{
     crypto::fake_tls_handshake::FakeTlsHandshake,
     metrics::{
@@ -243,12 +243,12 @@ fn assert_response_is_slice(
     );
 }
 
-/// Asserts that the response has status 400 Bad Request and contains an index
-/// out of bounds error message.
+/// Asserts that the response has status 416 Range Not Satisfiable and contains
+/// an index out of bounds error message.
 fn assert_response_is_index_out_of_bounds(status_code: u16, body: Vec<u8>, msg_begin: StreamIndex) {
     assert_eq!(
         (
-            400,
+            416,
             format!(
                 "Requested slice begin {} is outside of stream message bounds [{}, {})",
                 msg_begin,
@@ -268,7 +268,7 @@ async fn handle_stream_index_before_begin() {
 
     assert_response_is_index_out_of_bounds(status_code, body, msg_begin);
     assert_eq!(
-        metric_vec(&[(&[("resource", "stream"), ("status", "400")], 1)]),
+        metric_vec(&[(&[("resource", "stream"), ("status", "416")], 1)]),
         fixture.request_counts()
     );
     assert_eq!(0, fixture.slice_payload_size_stats().count);
@@ -337,7 +337,7 @@ async fn handle_stream_index_after_end() {
 
     assert_response_is_index_out_of_bounds(status_code, body, msg_begin);
     assert_eq!(
-        metric_vec(&[(&[("resource", "stream"), ("status", "400")], 1)]),
+        metric_vec(&[(&[("resource", "stream"), ("status", "416")], 1)]),
         fixture.request_counts()
     );
     assert_eq!(0, fixture.slice_payload_size_stats().count);
@@ -504,7 +504,7 @@ fn put_replicated_state_for_testing(
 ) {
     let (_height, mut state) = state_manager.take_tip();
     let stream = get_stream_for_testing();
-    state.put_streams(btreemap![DST_SUBNET => stream]);
+    state.with_streams(btreemap![DST_SUBNET => stream]);
     state_manager.commit_and_certify(state, h, CertificationScope::Metadata);
 }
 

@@ -26,8 +26,9 @@ use ic_interfaces::{
     crypto::{Crypto, IngressSigVerifier},
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::{IngressEventHandler, P2PRunner},
+    p2p::{IngressIngestionService, P2PRunner},
     registry::RegistryClient,
+    self_validating_payload::SelfValidatingPayloadBuilder,
     state_manager::StateManager,
     time_source::SysTimeSource,
     transport::Transport,
@@ -36,7 +37,7 @@ use ic_logger::{debug, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p::{
     event_handler::{
-        fetch_gossip_config, AdvertSubscriber, IngressEventHandlerImpl, IngressThrottler,
+        fetch_gossip_config, AdvertSubscriber, IngressEventHandler, IngressThrottler,
         P2PEventHandlerImpl,
     },
     gossip_protocol::GossipImpl,
@@ -46,6 +47,7 @@ use ic_state_manager::StateManagerImpl;
 use ic_transport::transport::create_transport;
 use ic_types::{
     artifact::{Advert, ArtifactKind, ArtifactTag, FileTreeSyncAttribute},
+    canonical_error::{internal_error, resource_exhausted_error, CanonicalError},
     consensus::catchup::CUPWithOriginalProtobuf,
     crypto::CryptoHash,
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
@@ -56,14 +58,30 @@ use ic_types::{
 };
 use std::sync::{
     atomic::{AtomicBool, Ordering::SeqCst},
-    Arc, RwLock,
+    Arc, Mutex, RwLock,
 };
 use std::time::Duration;
 use tokio::task::JoinHandle;
+use tower::{load_shed::error::Overloaded, ServiceBuilder, ServiceExt};
+use tower_util::BoxService;
 
 /// Periodic timer duration in milliseconds between polling calls to the P2P
 /// component.
 const P2P_TIMER_DURATION_MS: u64 = 100;
+/// Max number of ingress message we can buffer until the P2P layer is ready to
+/// accept them.
+// The latency SLO for 'call' requests is set for 2s. Given the rate limiter of
+// 100 per second this buffer should not be bigger than 200. We are conservite
+// setting it to 100.
+const MAX_BUFFERED_INGRESS_MESSAGES: usize = 100;
+/// Max number of inflight requests into P2P. Note each each requests requires a
+/// dedicated thread to execute on so this number should be relatively small.
+// Do not increase the number until we get to the root cause of NET-743.
+const MAX_INFLIGHT_INGRESS_MESSAGES: usize = 1;
+/// Max ingress messages per second that can go into P2P.
+// There is some internal contention inside P2P (NET-743). We achieve lower
+// throughput if we process messages one after the other.
+const MAX_INGRESS_MESSAGES_PER_SECOND: u64 = 100;
 
 /// The P2P struct, which encapsulates all relevant components including gossip
 /// and event handler control.
@@ -122,6 +140,7 @@ pub fn create_networking_stack(
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_sync_client: P2PStateSyncClient,
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
+    self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     message_router: Arc<dyn MessageRouting>,
     crypto: Arc<dyn Crypto + Send + Sync>,
     consensus_crypto: Arc<dyn ConsensusCrypto + Send + Sync>,
@@ -135,7 +154,7 @@ pub fn create_networking_stack(
     registry_poll_delay_duration_ms: u64,
 ) -> Result<
     (
-        Arc<dyn IngressEventHandler>,
+        IngressIngestionService,
         Box<dyn P2PRunner>,
         Arc<dyn ConsensusPoolCache>,
     ),
@@ -171,7 +190,6 @@ pub fn create_networking_stack(
 
     // Now we setup the Artifact Pools and the manager.
     let (artifact_manager, consensus_pool_cache, ingress_throttle) = setup_artifact_manager(
-        rt_handle.clone(),
         node_id,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&consensus_crypto) as Arc<_>,
@@ -186,6 +204,7 @@ pub fn create_networking_stack(
         state_manager,
         state_sync_client,
         xnet_payload_builder,
+        self_validating_payload_builder,
         message_router,
         ingress_history_reader,
         catch_up_package,
@@ -200,6 +219,7 @@ pub fn create_networking_stack(
     let gossip = Arc::new(GossipImpl::new(
         node_id,
         subnet_id,
+        consensus_pool_cache.clone(),
         registry_client.clone(),
         artifact_manager.clone(),
         transport.clone(),
@@ -213,19 +233,44 @@ pub fn create_networking_stack(
 
     let p2p = P2P {
         log,
-        rt_handle,
+        rt_handle: rt_handle.clone(),
         gossip: gossip.clone(),
         task_handles: Vec::new(),
         killed: Arc::new(AtomicBool::new(false)),
         event_handler,
     };
 
-    let ingress_handler = Arc::from(IngressEventHandlerImpl::new(
+    let ingress_event_handler = BoxService::new(IngressEventHandler::new(
+        rt_handle,
         ingress_throttle,
         gossip,
         node_id,
     ));
-    Ok((ingress_handler, Box::new(p2p), consensus_pool_cache))
+    let ingress_ingestion_service = BoxService::new(
+        ServiceBuilder::new()
+            .load_shed()
+            .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
+            .concurrency_limit(MAX_INFLIGHT_INGRESS_MESSAGES)
+            .rate_limit(MAX_INGRESS_MESSAGES_PER_SECOND, Duration::from_secs(1))
+            .service(ingress_event_handler)
+            .map_err(|err| {
+                if err.is::<CanonicalError>() {
+                    return *err
+                        .downcast::<CanonicalError>()
+                        .expect("Downcasting must succeed.");
+                }
+                if err.is::<Overloaded>() {
+                    return resource_exhausted_error("The service is overloaded.");
+                }
+                internal_error(&format!("Could not convert {:?} to CanonicalError", err))
+            }),
+    );
+
+    Ok((
+        ingress_ingestion_service,
+        Box::new(p2p),
+        consensus_pool_cache,
+    ))
 }
 
 impl P2PRunner for P2P {
@@ -264,7 +309,6 @@ impl Drop for P2P {
 /// The Artifact Manager runs all artifact clients as separate actors.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn setup_artifact_manager(
-    rt_handle: tokio::runtime::Handle,
     node_id: NodeId,
     _crypto: Arc<dyn Crypto>,
     // ConsensusCrypto is an extension of the Crypto trait and we can
@@ -281,6 +325,7 @@ fn setup_artifact_manager(
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_sync_client: P2PStateSyncClient,
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
+    self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     message_router: Arc<dyn MessageRouting>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     catch_up_package: CUPWithOriginalProtobuf,
@@ -321,7 +366,6 @@ fn setup_artifact_manager(
             metrics_registry,
             processors::BoxOrArcClient::ArcClient(client_on_state_change),
             move |advert| c_event_handler.broadcast_advert(advert.into()),
-            rt_handle,
         );
         artifact_manager_maker.add_arc_client(client, addr);
         return Ok((
@@ -337,7 +381,6 @@ fn setup_artifact_manager(
             metrics_registry.clone(),
             processors::BoxOrArcClient::ArcClient(Arc::clone(&state_sync_client) as Arc<_>),
             move |advert| event_handler.broadcast_advert(advert.into()),
-            rt_handle.clone(),
         );
         artifact_manager_maker.add_arc_client(state_sync_client, addr);
     }
@@ -364,6 +407,14 @@ fn setup_artifact_manager(
     );
     let ingress_manager = Arc::new(ingress_manager);
 
+    let dkg_key_manager = Arc::new(Mutex::new(
+        ic_consensus::consensus::dkg_key_manager::DkgKeyManager::new(
+            metrics_registry.clone(),
+            Arc::clone(&consensus_crypto),
+            replica_logger.clone(),
+        ),
+    ));
+
     {
         // Create the consensus client.
         let event_handler = event_handler.clone();
@@ -378,7 +429,9 @@ fn setup_artifact_manager(
                     Arc::clone(&consensus_crypto),
                     Arc::clone(&ingress_manager) as Arc<_>,
                     Arc::clone(&xnet_payload_builder) as Arc<_>,
+                    Arc::clone(&self_validating_payload_builder) as Arc<_>,
                     Arc::clone(&dkg_pool) as Arc<_>,
+                    Arc::clone(&dkg_key_manager) as Arc<_>,
                     Arc::clone(&message_router) as Arc<_>,
                     Arc::clone(&state_manager) as Arc<_>,
                     Arc::clone(&time_source) as Arc<_>,
@@ -392,7 +445,6 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&consensus_pool),
             Arc::clone(&ingress_pool),
-            rt_handle.clone(),
             replica_logger.clone(),
             metrics_registry.clone(),
         );
@@ -407,9 +459,9 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&ingress_pool),
             ingress_manager,
-            rt_handle.clone(),
             replica_logger.clone(),
             metrics_registry.clone(),
+            node_id,
             malicious_flags,
         );
         artifact_manager_maker.add_client(ingress_client, actor);
@@ -433,7 +485,6 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&consensus_cache) as Arc<_>,
             Arc::clone(&cert_pool),
-            rt_handle.clone(),
             replica_logger.clone(),
             metrics_registry.clone(),
         );
@@ -450,6 +501,7 @@ fn setup_artifact_manager(
                         consensus_replica_config.node_id,
                         Arc::clone(&consensus_crypto),
                         Arc::clone(&consensus_cache),
+                        dkg_key_manager,
                         metrics_registry.clone(),
                         replica_logger.clone(),
                     ),
@@ -458,7 +510,6 @@ fn setup_artifact_manager(
             },
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&dkg_pool),
-            rt_handle,
             replica_logger.clone(),
             metrics_registry.clone(),
         );

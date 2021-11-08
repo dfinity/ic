@@ -211,9 +211,8 @@ pub fn socket_read_demux<
         while let Some(frame) = decoder.decode(&mut buf) {
             hdl.handle(frame);
         }
-        if buf.capacity() < 4096 {
-            buf.reserve(4096);
-        }
+        const MIN_READ_SIZE: usize = 16384;
+        buf.reserve(MIN_READ_SIZE);
         let p = buf.as_mut_ptr();
         #[cfg(not(target_os = "linux"))]
         let flags = 0;
@@ -228,7 +227,7 @@ pub fn socket_read_demux<
             libc::recv(
                 fd,
                 p.add(buf.len()) as *mut std::ffi::c_void,
-                buf.capacity(),
+                MIN_READ_SIZE,
                 flags,
             )
         };

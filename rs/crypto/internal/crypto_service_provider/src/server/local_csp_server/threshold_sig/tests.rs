@@ -241,7 +241,7 @@ pub mod util {
         let threshold = NumberOfNodes::from(rng.gen_range(0, 10));
         let number_of_signers = NumberOfNodes::from(rng.gen_range(0, 10));
 
-        let mut csp_server = {
+        let csp_server = {
             let key_store = TempSecretKeyStore::new();
             let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
             LocalCspServer::new_for_test(csprng, key_store)

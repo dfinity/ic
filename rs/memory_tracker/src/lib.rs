@@ -5,66 +5,54 @@ use ic_replicated_state::{
     page_map::{FileDescriptor, MemoryRegion},
     PageIndex, PageMap,
 };
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PageBytes, PAGE_SIZE};
 use nix::sys::mman::{mmap, mprotect, MapFlags, ProtFlags};
 use std::{
     cell::{Cell, RefCell},
     ops::Range,
 };
 
-// The new signal handler requires `AccessKind` which currently available only
-// on Linux.
-#[cfg(target_os = "linux")]
-const ENABLE_NEW_SIGNAL_HANDLER: bool = true;
-#[cfg(not(target_os = "linux"))]
-const ENABLE_NEW_SIGNAL_HANDLER: bool = false;
-
 const MAX_PAGES_TO_MAP: usize = 32;
 const MAX_PAGES_TO_COPY: usize = 32;
+
+/// The new signal handler requires `AccessKind` which currently available only
+/// on Linux without WSL.
+fn new_signal_handler_available() -> bool {
+    cfg!(target_os = "linux") && !*ic_sys::IS_WSL
+}
 
 // Represents a memory area: address + size. Address must be page-aligned and
 // size must be a multiple of PAGE_SIZE.
 #[derive(Clone)]
 pub struct MemoryArea {
     // base address of the tracked memory area
-    addr: *const libc::c_void,
+    addr: usize,
     // size of the tracked memory area
     size: Cell<usize>,
 }
 
 impl MemoryArea {
     pub fn new(addr: *const libc::c_void, size: usize) -> Self {
-        assert!(addr as usize % *PAGE_SIZE == 0, "address is page-aligned");
-        assert!(size % *PAGE_SIZE == 0, "size is a multiple of page size");
+        let addr = addr as usize;
+        assert!(addr % PAGE_SIZE == 0, "address is page-aligned");
+        assert!(size % PAGE_SIZE == 0, "size is a multiple of page size");
         let size = Cell::new(size);
         MemoryArea { addr, size }
     }
 
     #[inline]
     pub fn is_within(&self, a: *const libc::c_void) -> bool {
-        (self.addr <= a) && (a < unsafe { self.addr.add(self.size.get()) })
+        (self.addr <= a as usize) && ((a as usize) < self.addr + (self.size.get()))
     }
 
     #[inline]
-    pub fn addr(&self) -> *const libc::c_void {
-        self.addr
+    pub fn addr(&self) -> usize {
+        self.addr as usize
     }
 
     #[inline]
     pub fn size(&self) -> usize {
         self.size.get()
-    }
-
-    #[inline]
-    pub fn page_addr(&self, page_num: usize) -> *const libc::c_void {
-        assert!(
-            page_num < self.size.get() / *PAGE_SIZE,
-            "page({}) is not within memory area addr={:?}, size={}",
-            page_num,
-            self.addr,
-            self.size.get()
-        );
-        unsafe { self.addr.add(page_num * *PAGE_SIZE) }
     }
 }
 
@@ -205,6 +193,7 @@ pub struct SigsegvMemoryTracker {
     speculatively_dirty_pages: RefCell<Vec<PageIndex>>,
     dirty_page_tracking: DirtyPageTracking,
     page_map: Option<PageMap>,
+    use_new_signal_handler: bool,
 }
 
 impl SigsegvMemoryTracker {
@@ -217,7 +206,8 @@ impl SigsegvMemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: Option<PageMap>,
     ) -> nix::Result<Self> {
-        let num_pages = size / *PAGE_SIZE;
+        assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
+        let num_pages = size / PAGE_SIZE;
         debug!(
             log,
             "SigsegvMemoryTracker::new: addr={:?}, size={}, num_pages={}", addr, size, num_pages
@@ -228,6 +218,7 @@ impl SigsegvMemoryTracker {
         let dirty_bitmap = RefCell::new(PageBitmap::new(num_pages));
         let dirty_pages = RefCell::new(Vec::new());
         let speculatively_dirty_pages = RefCell::new(Vec::new());
+        let use_new_signal_handler = new_signal_handler_available();
         let tracker = SigsegvMemoryTracker {
             persistence_type,
             memory_area,
@@ -237,11 +228,12 @@ impl SigsegvMemoryTracker {
             speculatively_dirty_pages,
             dirty_page_tracking,
             page_map,
+            use_new_signal_handler,
         };
 
         // Map the memory and make the range inaccessible to track it with SIGSEGV.
         match tracker.persistence_type {
-            PersistenceType::Sigsegv => match (&tracker.page_map, ENABLE_NEW_SIGNAL_HANDLER) {
+            PersistenceType::Sigsegv => match (&tracker.page_map, tracker.use_new_signal_handler) {
                 (Some(page_map), true) => match page_map.get_checkpoint_memory_region() {
                     MemoryRegion::BackedByFile(page_map_range, FileDescriptor { fd }) => {
                         // Pages outside `mmap_range` will be automatically initialized to zeros
@@ -251,7 +243,7 @@ impl SigsegvMemoryTracker {
                         // The checkpoint page range must be a subset of the Wasm memory page range.
                         assert_eq!(mmap_range, page_map_range);
                         let start_addr = tracker.page_start_addr_from(mmap_range.start);
-                        let start_offset_in_file = mmap_range.start.get() as usize * *PAGE_SIZE;
+                        let start_offset_in_file = mmap_range.start.get() as usize * PAGE_SIZE;
                         let actual_addr = unsafe {
                             mmap(
                                 start_addr,
@@ -287,7 +279,7 @@ impl SigsegvMemoryTracker {
         fault_address: *mut libc::c_void,
     ) -> bool {
         match self.persistence_type {
-            PersistenceType::Sigsegv => match (&self.page_map, ENABLE_NEW_SIGNAL_HANDLER) {
+            PersistenceType::Sigsegv => match (&self.page_map, self.use_new_signal_handler) {
                 (Some(page_map), true) => {
                     sigsegv_fault_handler_new(self, page_map, access_kind.unwrap(), fault_address)
                 }
@@ -325,7 +317,7 @@ impl SigsegvMemoryTracker {
         let page_map = self.page_map.as_ref().unwrap();
         let maybe_dirty_page = self.page_start_addr_from(page_index);
         let original_page = page_map.get_page(page_index).as_ptr() as *const libc::c_void;
-        match unsafe { libc::memcmp(maybe_dirty_page, original_page, *PAGE_SIZE) } {
+        match unsafe { libc::memcmp(maybe_dirty_page, original_page, PAGE_SIZE) } {
             0 => None,
             _ => Some(page_index),
         }
@@ -336,16 +328,15 @@ impl SigsegvMemoryTracker {
     }
 
     fn page_index_from(&self, addr: *mut libc::c_void) -> PageIndex {
-        let page_start_mask = !(*PAGE_SIZE as usize - 1);
+        let page_start_mask = !(PAGE_SIZE as usize - 1);
         let page_start_addr = (addr as usize) & page_start_mask;
 
-        let page_index = (page_start_addr - self.memory_area.addr() as usize) / *PAGE_SIZE;
+        let page_index = (page_start_addr - self.memory_area.addr()) / PAGE_SIZE;
         PageIndex::new(page_index as u64)
     }
 
     fn page_start_addr_from(&self, page_index: PageIndex) -> *mut libc::c_void {
-        let page_start_addr =
-            self.memory_area.addr() as usize + page_index.get() as usize * *PAGE_SIZE;
+        let page_start_addr = self.memory_area.addr() + page_index.get() as usize * PAGE_SIZE;
         page_start_addr as *mut libc::c_void
     }
 
@@ -386,16 +377,16 @@ pub fn sigsegv_fault_handler_old(
 ) -> bool {
     // We need to handle page faults in units of pages(!). So, round faulting
     // address down to page boundary
-    let fault_address_page_boundary = fault_address as usize & !(*PAGE_SIZE as usize - 1);
+    let fault_address_page_boundary = fault_address as usize & !(PAGE_SIZE as usize - 1);
 
-    let page_num = (fault_address_page_boundary - tracker.memory_area.addr() as usize) / *PAGE_SIZE;
+    let page_num = (fault_address_page_boundary - tracker.memory_area.addr()) / PAGE_SIZE;
 
     #[cfg(feature = "sigsegv_handler_debug")]
     eprintln!(
         "> Thread: {:?} sigsegv_fault_handler: base_addr = 0x{:x}, page_size = 0x{:x}, fault_address = 0x{:x}, fault_address_page_boundary = 0x{:x}, page = {}",
         std::thread::current().id(),
         tracker.memory_area.addr() as u64,
-        *PAGE_SIZE,
+        PAGE_SIZE,
         fault_address as u64,
         fault_address_page_boundary,
         page_num
@@ -422,12 +413,12 @@ pub fn sigsegv_fault_handler_old(
         eprintln!(
             "> sigsegv_fault_handler: page({}) is already faulted: mprotect(addr=0x{:x}, len=0x{:x}, prot=PROT_READ|PROT_WRITE)",
             page_num,
-            fault_address_page_boundary, *PAGE_SIZE
+            fault_address_page_boundary, PAGE_SIZE
         );
         unsafe {
             nix::sys::mman::mprotect(
                 fault_address_page_boundary as *mut libc::c_void,
-                *PAGE_SIZE,
+                PAGE_SIZE,
                 nix::sys::mman::ProtFlags::PROT_READ | nix::sys::mman::ProtFlags::PROT_WRITE,
             )
             .unwrap()
@@ -446,14 +437,14 @@ pub fn sigsegv_fault_handler_old(
             "> sigsegv_fault_handler: page({}) has not been faulted: mprotect(addr=0x{:x}, len=0x{:x}, prot=PROT_READ)",
             page_num,
             fault_address_page_boundary,
-            *PAGE_SIZE
+            PAGE_SIZE
         );
         // Temporarily allow writes to the page, to populate contents with the right
         // data
         unsafe {
             nix::sys::mman::mprotect(
                 fault_address_page_boundary as *mut libc::c_void,
-                *PAGE_SIZE,
+                PAGE_SIZE,
                 nix::sys::mman::ProtFlags::PROT_READ | nix::sys::mman::ProtFlags::PROT_WRITE,
             )
             .unwrap()
@@ -468,13 +459,13 @@ pub fn sigsegv_fault_handler_old(
             eprintln!(
                 "> sigsegv_fault_handler: setting page({}) contents to {}",
                 page_num,
-                show_bytes_compact(&page)
+                show_bytes_compact(page)
             );
             unsafe {
                 std::ptr::copy_nonoverlapping(
                     page.as_ptr(),
                     fault_address_page_boundary as *mut u8,
-                    *PAGE_SIZE,
+                    PAGE_SIZE,
                 )
             };
         } else {
@@ -484,7 +475,7 @@ pub fn sigsegv_fault_handler_old(
         unsafe {
             nix::sys::mman::mprotect(
                 fault_address_page_boundary as *mut libc::c_void,
-                *PAGE_SIZE,
+                PAGE_SIZE,
                 nix::sys::mman::ProtFlags::PROT_READ,
             )
             .unwrap()
@@ -690,7 +681,7 @@ fn map_unaccessed_pages(
             );
 
             // Get the largest contiguous memory region backed by pages.
-            let mut pages: [Option<&[u8]>; MAX_PAGES_TO_COPY] = [None; MAX_PAGES_TO_COPY];
+            let mut pages: [Option<&PageBytes>; MAX_PAGES_TO_COPY] = [None; MAX_PAGES_TO_COPY];
             pages[0] = Some(contents);
             let mut count = 1;
             while count < range_count(&prefetch_range) {
@@ -726,8 +717,8 @@ fn map_unaccessed_pages(
                     unsafe {
                         std::ptr::copy_nonoverlapping(
                             contents.as_ptr(),
-                            (page_start_addr as *mut u8).add(index * *PAGE_SIZE),
-                            *PAGE_SIZE,
+                            (page_start_addr as *mut u8).add(index * PAGE_SIZE),
+                            PAGE_SIZE,
                         )
                     };
                 }
@@ -764,7 +755,7 @@ fn range_intersection(range1: &Range<PageIndex>, range2: &Range<PageIndex>) -> R
 }
 
 fn range_size_in_bytes(range: &Range<PageIndex>) -> usize {
-    (range.end.get() - range.start.get()) as usize * *PAGE_SIZE
+    (range.end.get() - range.start.get()) as usize * PAGE_SIZE
 }
 
 fn range_from_count(page: PageIndex, count: usize) -> Range<PageIndex> {
@@ -780,7 +771,7 @@ fn range_count(range: &Range<PageIndex>) -> usize {
 
 #[allow(dead_code)]
 #[cfg(feature = "sigsegv_handler_debug")]
-pub(crate) fn show_bytes_compact(bytes: &[u8]) -> String {
+pub(crate) fn show_bytes_compact(bytes: &PageBytes) -> String {
     let mut result = String::new();
     let mut count = 1;
     let mut current = None;

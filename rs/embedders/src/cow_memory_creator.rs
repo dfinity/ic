@@ -42,7 +42,11 @@ pub struct MappedStateMemory {
     base_addr: *mut libc::c_void,
 }
 
+/// SAFETY: This type is not actually Send/Sync but this it is only used
+/// internally by `wasmtime` where they should be synchronizing access to the
+/// pointers themselves.
 unsafe impl Send for MappedStateMemory {}
+unsafe impl Sync for MappedStateMemory {}
 
 impl crate::LinearMemory for MappedStateMemory {
     fn as_ptr(&self) -> *mut libc::c_void {

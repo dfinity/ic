@@ -1,10 +1,11 @@
 mod canister_manager;
 mod canister_settings;
+mod common;
 mod execution_environment;
 mod execution_environment_metrics;
 mod history;
 mod hypervisor;
-mod ingress_message_filter;
+mod ingress_filter;
 mod metrics;
 mod query_handler;
 mod scheduler;
@@ -18,7 +19,8 @@ use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
     execution_environment::{
-        IngressHistoryReader, IngressHistoryWriter, IngressMessageFilter, QueryHandler, Scheduler,
+        IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
+        QueryHandler, Scheduler,
     },
     state_manager::StateReader,
 };
@@ -28,11 +30,25 @@ use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_system_api::NonReplicatedQueryKind;
-use ic_types::{messages::CallContextId, SubnetId};
-use ingress_message_filter::IngressMessageFilterImpl;
-use query_handler::HttpQueryHandlerImpl;
+use ic_types::{
+    canonical_error::{
+        deadline_exceeded_error, internal_error, resource_exhausted_error, CanonicalError,
+    },
+    ingress::MAX_INGRESS_TTL,
+    messages::CallContextId,
+    SubnetId,
+};
+use ingress_filter::IngressFilter;
+use query_handler::{HttpQueryHandlerImpl, InternalHttpQueryHandlerImpl};
 use scheduler::SchedulerImpl;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use tower::{
+    load_shed::error::Overloaded, timeout::error::Elapsed, util::BoxService, BoxError,
+    ServiceBuilder, ServiceExt,
+};
+
+const QUERY_EXECUTION_THREADS: usize = 1;
+const QUERY_EXECUTION_MAX_BUFFERED_QUERIES: usize = 1000;
 
 /// When executing a wasm method of query type, this enum indicates if we are
 /// running in an replicated or non-replicated context. This information is
@@ -56,6 +72,21 @@ pub enum QueryExecutionType {
     },
 }
 
+fn box_error_to_canonical_error(value: BoxError) -> CanonicalError {
+    if value.is::<CanonicalError>() {
+        return *value
+            .downcast::<CanonicalError>()
+            .expect("Downcasting must succeed.");
+    }
+    if value.is::<Overloaded>() {
+        return resource_exhausted_error("The service is overloaded.");
+    }
+    if value.is::<Elapsed>() {
+        return deadline_exceeded_error("The request timed out while waiting for the service.");
+    }
+    internal_error(&format!("Could not convert {:?} to CanonicalError", value))
+}
+
 /// Helper function to constructs the public facing components that the
 /// `ExecutionEnvironment` crate exports.
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
@@ -69,11 +100,12 @@ pub fn setup_execution(
     cycles_account_manager: Arc<CyclesAccountManager>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> (
-    Box<dyn IngressMessageFilter<State = ReplicatedState>>,
+    IngressFilterService,
     Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
-    Arc<dyn QueryHandler<State = ReplicatedState>>,
-    Box<dyn Scheduler<State = ReplicatedState>>,
     Box<dyn IngressHistoryReader>,
+    Arc<dyn QueryHandler<State = ReplicatedState>>,
+    QueryExecutionService,
+    Box<dyn Scheduler<State = ReplicatedState>>,
 ) {
     let hypervisor = Arc::new(Hypervisor::new(
         config.clone(),
@@ -101,17 +133,54 @@ pub fn setup_execution(
         config.clone(),
         Arc::clone(&cycles_account_manager),
     ));
-    let http_query_handler = Arc::new(HttpQueryHandlerImpl::new(
+    let sync_query_handler = Arc::new(InternalHttpQueryHandlerImpl::new(
         logger.clone(),
         hypervisor,
         own_subnet_id,
         own_subnet_type,
         config,
         &metrics_registry,
-        Arc::clone(&state_reader),
+        scheduler_config.max_instructions_per_message,
     ));
+    let threadpool = threadpool::Builder::new()
+        .num_threads(QUERY_EXECUTION_THREADS)
+        .thread_name("query_execution".into())
+        .thread_stack_size(8_192_000)
+        .build();
 
-    let ingress_message_filter = Box::new(IngressMessageFilterImpl::new(Arc::clone(&exec_env)));
+    let threadpool = Arc::new(Mutex::new(threadpool));
+
+    let async_query_handler = HttpQueryHandlerImpl::new(
+        Arc::clone(&sync_query_handler) as Arc<_>,
+        Arc::clone(&threadpool),
+        Arc::clone(&state_reader),
+    );
+
+    let async_query_handler = BoxService::new(
+        ServiceBuilder::new()
+            // If the buffer is full shed load (reject queries with 429 Too Many Requests).
+            .load_shed()
+            // Use a bounded buffer for incoming requests.
+            .buffer(QUERY_EXECUTION_MAX_BUFFERED_QUERIES)
+            .concurrency_limit(QUERY_EXECUTION_THREADS)
+            .service(async_query_handler)
+            .map_err(|err| box_error_to_canonical_error(err)),
+    );
+
+    let ingress_filter =
+        IngressFilter::new(threadpool, Arc::clone(&state_reader), Arc::clone(&exec_env));
+
+    let ingress_filter = BoxService::new(
+        ServiceBuilder::new()
+            // If the buffer is full shed load (reject queries with 429 Too Many Requests).
+            .load_shed()
+            // Use a bounded buffer for incoming requests.
+            .buffer(QUERY_EXECUTION_MAX_BUFFERED_QUERIES)
+            .timeout(MAX_INGRESS_TTL)
+            .concurrency_limit(QUERY_EXECUTION_THREADS)
+            .service(ingress_filter)
+            .map_err(|err| box_error_to_canonical_error(err)),
+    );
 
     let scheduler = Box::new(SchedulerImpl::new(
         scheduler_config,
@@ -124,10 +193,11 @@ pub fn setup_execution(
     ));
 
     (
-        ingress_message_filter,
+        ingress_filter,
         ingress_history_writer,
-        http_query_handler,
-        scheduler,
         ingress_history_reader,
+        sync_query_handler,
+        async_query_handler,
+        scheduler,
     )
 }

@@ -4,7 +4,7 @@ use ic_types::{
     artifact::{IngressMessageAttribute, IngressMessageId},
     crypto::CryptoHash,
     messages::{MessageId, SignedIngress},
-    CountBytes, Time,
+    CountBytes, NodeId, Time,
 };
 // tag::interface[]
 
@@ -56,7 +56,13 @@ pub type UnvalidatedIngressArtifact = UnvalidatedArtifact<IngressPoolObject>;
 /// Change set for processing unvalidated ingress messages
 pub type ChangeSet = Vec<ChangeAction>;
 
-pub type IngressChangeArtifact = (IngressMessageId, usize, IngressMessageAttribute, CryptoHash);
+pub type IngressChangeArtifact = (
+    IngressMessageId,
+    NodeId,
+    usize,
+    IngressMessageAttribute,
+    CryptoHash,
+);
 
 /// Change actions applicable to the ingress pool.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

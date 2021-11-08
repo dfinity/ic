@@ -12,6 +12,7 @@ use crate::{
             find_lowest_ranked_proposals, is_time_to_make_block, lookup_replica_version,
             RoundRobin,
         },
+        ConsensusMessageId,
     },
     dkg,
 };
@@ -22,10 +23,10 @@ use ic_interfaces::{
     dkg::DkgPool,
     messaging::MessageRouting,
     registry::RegistryClient,
-    state_manager::{StateManager, StateManagerError},
+    state_manager::{StateHashError, StateManager},
     validation::{ValidationError, ValidationResult},
 };
-use ic_logger::{debug, trace, warn, ReplicaLogger};
+use ic_logger::{trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError},
@@ -35,6 +36,14 @@ use ic_types::{
 };
 use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
+
+/// The number of seconds spent in unvalidated pool, after which we start
+/// logging why we cannot validate an artifact.
+const SECONDS_TO_LOG_UNVALIDATED: u64 = 300;
+
+/// How often we log an old unvalidated artifact.
+const LOG_EVERY_N_SECONDS: i32 = 60;
 
 /// Possible validator transient errors.
 #[derive(Debug)]
@@ -45,8 +54,7 @@ enum TransientError {
     DkgPayloadValidationError(crate::dkg::TransientError),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
-    StateManagerError(StateManagerError),
-    StateNotAvailable(Height),
+    StateHashError(StateHashError),
     BlockNotFound(CryptoHashOf<Block>, Height),
     FinalizedBlockNotFound(Height),
     FailedToGetRegistryVersion,
@@ -251,7 +259,7 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
 
 /// `NotaryIssued` is a trait that exists to deduplicate the validation code of
 /// Notarization, Finalization and the corresponding shares.
-trait NotaryIssued: Sized + HasHeight {
+trait NotaryIssued: Sized + HasHeight + std::fmt::Debug {
     fn block(&self) -> &CryptoHashOf<Block>;
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
@@ -264,7 +272,7 @@ trait NotaryIssued: Sized + HasHeight {
         registry_version: RegistryVersion,
     ) -> ValidationResult<CryptoError>;
     fn is_duplicate(&self, pool: &PoolReader) -> bool;
-    fn dependencies_validated(&self, pool: &PoolReader) -> bool;
+    fn dependencies_validated(&self, pool: &PoolReader) -> Result<(), &str>;
 }
 
 impl NotaryIssued for NotarizationContent {
@@ -298,10 +306,17 @@ impl NotaryIssued for NotarizationContent {
 
     /// Checks that there is a validated block with the given hash and the
     /// previous beacon is available to compute the notarization committee.
-    fn dependencies_validated(&self, pool: &PoolReader) -> bool {
-        self.height != Height::from(0)
-            && pool.get_block(&self.block, self.height).is_ok()
-            && get_previous_beacon(pool, self.height).is_ok()
+    fn dependencies_validated(&self, pool: &PoolReader) -> Result<(), &str> {
+        if self.height == Height::from(0) {
+            return Err("Cannot validate height 0 notarization: ");
+        }
+        if pool.get_block(&self.block, self.height).is_err() {
+            return Err("Cannot validate notarization without valid proposal: ");
+        }
+        if get_previous_beacon(pool, self.height).is_err() {
+            return Err("Cannot validate notarization without previous beacon: ");
+        }
+        Ok(())
     }
 }
 
@@ -336,10 +351,17 @@ impl NotaryIssued for FinalizationContent {
 
     /// Checks that there is a *notarized* block with the given hash and the
     /// previous beacon is available to compute the notarization committee.
-    fn dependencies_validated(&self, pool: &PoolReader) -> bool {
-        self.height != Height::from(0)
-            && pool.get_notarized_block(&self.block, self.height).is_ok()
-            && get_previous_beacon(pool, self.height).is_ok()
+    fn dependencies_validated(&self, pool: &PoolReader) -> Result<(), &str> {
+        if self.height == Height::from(0) {
+            return Err("Cannot validate height 0 finalization: ");
+        }
+        if pool.get_notarized_block(&self.block, self.height).is_err() {
+            return Err("Cannot validate finalization without valid notarization: ");
+        }
+        if get_previous_beacon(pool, self.height).is_err() {
+            return Err("Cannot validate finalization without previous beacon: ");
+        }
+        Ok(())
     }
 }
 
@@ -696,14 +718,28 @@ impl Validator {
         // This is checked before entering this function.
         debug_assert!(notary_issued.height() > pool_reader.get_finalized_height());
         if notary_issued.content.is_duplicate(pool_reader) {
-            Some(ChangeAction::RemoveFromUnvalidated(
+            return Some(ChangeAction::RemoveFromUnvalidated(
                 notary_issued.into_message(),
-            ))
-        } else if notary_issued.content.dependencies_validated(pool_reader) {
-            let verification = self.verify_signature(pool_reader, &notary_issued);
-            self.compute_action_from_sig_verification(verification, notary_issued.into_message())
-        } else {
-            None
+            ));
+        }
+        match notary_issued.content.dependencies_validated(pool_reader) {
+            Ok(()) => {
+                let verification = self.verify_signature(pool_reader, &notary_issued);
+                self.compute_action_from_sig_verification(
+                    pool_reader,
+                    verification,
+                    notary_issued.into_message(),
+                )
+            }
+            Err(err) => {
+                if self.unvalidated_for_too_long(pool_reader, &notary_issued.get_id()) {
+                    warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                          self.log,
+                          "{} {:?}", err, notary_issued.content
+                    );
+                }
+                None
+            }
         }
     }
 
@@ -713,9 +749,9 @@ impl Validator {
     fn validate_blocks(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
         let mut change_set = Vec::new();
 
-        let beacon_height = pool_reader.get_random_beacon_height();
+        let notarization_height = pool_reader.get_notarized_height();
         let finalized_height = pool_reader.get_finalized_height();
-        let max_height = beacon_height.increment();
+        let max_height = notarization_height.increment();
         let range = HeightRange::new(finalized_height.increment(), max_height);
         // Collect the min of validated block proposal ranks in the range.
         let mut known_ranks: BTreeMap<Height, Option<Rank>> =
@@ -774,6 +810,15 @@ impl Validator {
                     if proposal.rank() > *min_rank {
                         // Skip them instead of removal because we don't want to end up
                         // requesting these artifacts again.
+                        let id = proposal.get_id();
+                        if self.unvalidated_for_too_long(pool_reader, &id) {
+                            warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                                  self.log,
+                                  "Due a valid proposal with a lower rank {}, /
+                                  skipping validating the proposal: {:?} with rank {}",
+                                  min_rank.0, id, proposal.rank().0
+                            );
+                        }
                         continue;
                     }
                 }
@@ -803,7 +848,12 @@ impl Validator {
                         ChangeAction::HandleInvalid(proposal.into_message(), format!("{:?}", err)),
                     ),
                     Err(ValidationError::Transient(err)) => {
-                        debug!(self.log, "Couldn't check the block validity: {:?}", err)
+                        if self.unvalidated_for_too_long(pool_reader, &proposal.get_id()) {
+                            warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                                  self.log,
+                                  "Couldn't check the block validity: {:?}", err
+                            );
+                        }
                     }
                 }
             } else {
@@ -947,31 +997,33 @@ impl Validator {
     /// Return a `ChangeSet` of `RandomBeacon` artifacts. See
     /// `validate_beacon_artifacts` for details about exactly what is checked.
     fn validate_beacons(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
-        let beacon_height = pool_reader.get_random_beacon_height();
+        let last_beacon = pool_reader.get_random_beacon_tip();
         // Only a single height is validated, per round.
         self.validate_beacon_artifacts(
             pool_reader,
+            &last_beacon,
             pool_reader
                 .pool()
                 .unvalidated()
                 .random_beacon()
-                .get_by_height(beacon_height.increment()),
+                .get_by_height(last_beacon.height().increment()),
         )
     }
 
     /// Return a `ChangeSet` of `RandomBeaconShare` artifacts. See
     /// `validate_beacon_artifacts` for details about exactly what is checked.
     fn validate_beacon_shares(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
-        let beacon_height = pool_reader.get_random_beacon_height();
+        let last_beacon = pool_reader.get_random_beacon_tip();
         // Since the parent beacon is required to be already validated, only a single
         // height is checked.
         self.validate_beacon_artifacts(
             pool_reader,
+            &last_beacon,
             pool_reader
                 .pool()
                 .unvalidated()
                 .random_beacon_share()
-                .get_by_height(beacon_height.increment()),
+                .get_by_height(last_beacon.height().increment()),
         )
     }
 
@@ -980,16 +1032,17 @@ impl Validator {
     /// * points to this parent,
     /// * is signed by member(s) of the threshold group,
     /// * has a valid signature.
+    /// Precondition: all elements in beacons must be at height last_beacon + 1
     fn validate_beacon_artifacts<S>(
         &self,
         pool_reader: &PoolReader<'_>,
+        last_beacon: &RandomBeacon,
         beacons: Box<dyn Iterator<Item = Signed<RandomBeaconContent, S>>>,
     ) -> ChangeSet
     where
         Signed<RandomBeaconContent, S>: SignatureVerify + ConsensusMessageHashable + Clone,
     {
-        let last_beacon = pool_reader.get_random_beacon_tip();
-        let last_hash: CryptoHashOf<RandomBeacon> = ic_crypto::crypto_hash(&last_beacon);
+        let last_hash: CryptoHashOf<RandomBeacon> = ic_crypto::crypto_hash(last_beacon);
         let last_height = last_beacon.content.height();
         beacons
             .filter_map(|beacon| {
@@ -1002,7 +1055,11 @@ impl Validator {
                     ))
                 } else {
                     let verification = self.verify_signature(pool_reader, &beacon);
-                    self.compute_action_from_sig_verification(verification, beacon.into_message())
+                    self.compute_action_from_sig_verification(
+                        pool_reader,
+                        verification,
+                        beacon.into_message(),
+                    )
                 }
             })
             .collect()
@@ -1091,7 +1148,11 @@ impl Validator {
                     Some(ChangeAction::RemoveFromUnvalidated(tape.into_message()))
                 } else {
                     let verification = self.verify_signature(pool_reader, &tape);
-                    self.compute_action_from_sig_verification(verification, tape.into_message())
+                    self.compute_action_from_sig_verification(
+                        pool_reader,
+                        verification,
+                        tape.into_message(),
+                    )
                 }
             })
             .collect()
@@ -1145,6 +1206,7 @@ impl Validator {
                     .map_err(ValidatorError::from);
 
                 self.compute_action_from_sig_verification(
+                    pool_reader,
                     verification,
                     catch_up_package.into_message(),
                 )
@@ -1196,6 +1258,7 @@ impl Validator {
                             },
                         );
                         self.compute_action_from_sig_verification(
+                            pool_reader,
                             verification,
                             share.into_message(),
                         )
@@ -1205,10 +1268,13 @@ impl Validator {
                         format!("{:?}", err),
                     )),
                     Err(ValidationError::Transient(err)) => {
-                        debug!(
-                            self.log,
-                            "Couldn't validate the catch-up package share: {:?}", err
-                        );
+                        if self.unvalidated_for_too_long(pool_reader, &share.get_id()) {
+                            warn!(
+                                every_n_seconds => LOG_EVERY_N_SECONDS,
+                                self.log,
+                                "Couldn't validate the catch-up package share: {:?}", err
+                            );
+                        }
                         None
                     }
                 }
@@ -1252,8 +1318,7 @@ impl Validator {
         let hash = self
             .state_manager
             .get_state_hash_at(height)
-            .map_err(TransientError::StateManagerError)?
-            .ok_or(TransientError::StateNotAvailable(height))?;
+            .map_err(TransientError::StateHashError)?;
         if hash != share_content.state_hash {
             warn!( self.log, "State hash from received CatchUpContent does not match local state hash: {:?} {:?}", share_content, hash);
             Err(PermanentError::MismatchedStateHashInCatchUpPackageShare)?
@@ -1283,6 +1348,7 @@ impl Validator {
 
     fn compute_action_from_sig_verification(
         &self,
+        pool_reader: &PoolReader<'_>,
         result: ValidationResult<ValidatorError>,
         message: ConsensusMessage,
     ) -> Option<ChangeAction> {
@@ -1292,9 +1358,29 @@ impl Validator {
                 Some(ChangeAction::HandleInvalid(message, format!("{:?}", s)))
             }
             Err(ValidationError::Transient(err)) => {
-                debug!(self.log, "Couldn't verify signature: {:?}", err);
+                if self.unvalidated_for_too_long(pool_reader, &message.get_id()) {
+                    warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                          self.log,
+                          "Could not verify signature: {:?}", err
+                    );
+                }
                 None
             }
+        }
+    }
+
+    fn unvalidated_for_too_long(
+        &self,
+        pool_reader: &PoolReader<'_>,
+        id: &ConsensusMessageId,
+    ) -> bool {
+        match pool_reader.pool().unvalidated().get_timestamp(id) {
+            Some(timestamp) => {
+                let now = self.time_source.get_relative_time();
+                now >= timestamp // otherwise subtraction can panic!
+                    && now - timestamp >= Duration::from_secs(SECONDS_TO_LOG_UNVALIDATED)
+            }
+            None => false, // should never happen.
         }
     }
 }
@@ -1324,7 +1410,7 @@ pub(crate) fn maliciously_validate_all_blocks(
     }
 
     if !change_set.is_empty() {
-        debug!(
+        ic_logger::debug!(
             logger,
             "[MALICIOUS] maliciously validating all {} proposals",
             change_set.len()
@@ -1467,7 +1553,7 @@ pub mod test {
                 .write()
                 .unwrap()
                 .expect_get_state_hash_at()
-                .return_const(Ok(Some(state_hash.clone())));
+                .return_const(Ok(state_hash.clone()));
 
             let cup_share = Signed {
                 content: CatchUpShareContent::from(&CatchUpContent::new(
@@ -1707,7 +1793,7 @@ pub mod test {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(Some(CryptoHashOfState::from(CryptoHash(Vec::new())))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
             let expected_batch_height = Arc::new(RwLock::new(Height::from(1)));
             let expected_batch_height_clone = expected_batch_height.clone();
             Arc::get_mut(&mut message_routing)
@@ -2547,7 +2633,7 @@ pub mod test {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(Some(CryptoHashOfState::from(CryptoHash(Vec::new())))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
 
             let validator = Validator::new(
                 replica_config,

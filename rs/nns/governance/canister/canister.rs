@@ -9,6 +9,7 @@
 // annotated with `#[candid_method(query/update)]` to be able to generate the
 // did definition of the method.
 
+use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
 use rand::rngs::StdRng;
 use rand_core::{RngCore, SeedableRng};
 use std::boxed::Box;
@@ -530,6 +531,20 @@ async fn manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
         .await
 }
 
+/// Returns the full neuron corresponding to the neuron id or subaccount.
+#[export_name = "canister_query get_full_neuron_by_id_or_subaccount"]
+fn get_full_neuron_by_id_or_subaccount() {
+    println!("{}get_full_neuron_by_id_or_subaccount", LOG_PREFIX);
+    over(candid_one, get_full_neuron_by_id_or_subaccount_)
+}
+
+#[candid_method(query, rename = "get_full_neuron_by_id_or_subaccount")]
+fn get_full_neuron_by_id_or_subaccount_(
+    by: NeuronIdOrSubaccount,
+) -> Result<Neuron, GovernanceError> {
+    governance().get_full_neuron_by_id_or_subaccount(&by, &caller())
+}
+
 /// Returns the full neuron corresponding to the neuron id.
 #[export_name = "canister_query get_full_neuron"]
 fn get_full_neuron() {
@@ -552,6 +567,20 @@ fn get_neuron_info() {
 #[candid_method(query, rename = "get_neuron_info")]
 fn get_neuron_info_(neuron_id: NeuronId) -> Result<NeuronInfo, GovernanceError> {
     governance().get_neuron_info(&NeuronIdProto::from(neuron_id))
+}
+
+/// Returns the public neuron info corresponding to the neuron id or subaccount.
+#[export_name = "canister_query get_neuron_info_by_id_or_subaccount"]
+fn get_neuron_info_by_id_or_subaccount() {
+    println!("{}get_neuron_info_by_subaccount", LOG_PREFIX);
+    over(candid_one, get_neuron_info_by_id_or_subaccount_)
+}
+
+#[candid_method(query, rename = "get_neuron_info_by_id_or_subaccount")]
+fn get_neuron_info_by_id_or_subaccount_(
+    by: NeuronIdOrSubaccount,
+) -> Result<NeuronInfo, GovernanceError> {
+    governance().get_neuron_info_by_id_or_subaccount(&by)
 }
 
 #[export_name = "canister_query get_proposal_info"]
@@ -805,6 +834,16 @@ fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::
         )?;
 
         w.encode_histogram(
+            "governance_dissolving_neurons_count",
+            metrics
+                .dissolving_neurons_count_buckets
+                .iter()
+                .map(|(k, v)| (*k as f64, *v as f64)),
+            metrics.dissolving_neurons_count as f64,
+            "Total number of dissolving neurons, grouped by dissolve delay (in years)",
+        )?;
+
+        w.encode_histogram(
             "governance_not_dissolving_neurons_e8s",
             metrics
                 .not_dissolving_neurons_e8s_buckets
@@ -812,6 +851,28 @@ fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::
                 .map(|(k, v)| (*k as f64, *v)),
             metrics.not_dissolving_neurons_count as f64,
             "Total e8s held in not dissolving neurons, grouped by dissolve delay (in years)",
+        )?;
+
+        w.encode_histogram(
+            "governance_not_dissolving_neurons_count",
+            metrics
+                .not_dissolving_neurons_count_buckets
+                .iter()
+                .map(|(k, v)| (*k as f64, *v as f64)),
+            metrics.not_dissolving_neurons_count as f64,
+            "Total number of not dissolving neurons, grouped by dissolve delay (in years)",
+        )?;
+
+        w.encode_gauge(
+            "governance_neurons_with_less_than_6_months_dissolve_delay_count",
+            metrics.neurons_with_less_than_6_months_dissolve_delay_count as f64,
+            "Total number of neurons having a dissolve delay less than 6 months.",
+        )?;
+
+        w.encode_gauge(
+            "governance_neurons_with_less_than_6_months_dissolve_delay_e8s",
+            metrics.neurons_with_less_than_6_months_dissolve_delay_e8s as f64,
+            "Total e8s held in neurons that have a dissolve delay less than 6 months.",
         )?;
     }
 

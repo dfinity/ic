@@ -2,12 +2,14 @@ mod framework;
 
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool};
+use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::{certification::CertifierImpl, consensus::ConsensusImpl, dkg};
 use ic_consensus_message::make_genesis;
 use ic_interfaces::{state_manager::Labeled, time_source::TimeSource};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities::registry::{setup_registry, SubnetRecordBuilder};
+use ic_test_utilities::self_validating_payload_builder::FakeSelfValidatingPayloadBuilder;
 use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities::{
     crypto::CryptoReturningOk,
@@ -24,7 +26,7 @@ use ic_types::{
     CryptoHashOfState, Height,
 };
 use std::convert::TryInto;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 /// Test that the batches that Consensus produces contain expected batch
@@ -41,6 +43,8 @@ fn consensus_produces_expected_batches() {
 
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
         let xnet_payload_builder = Arc::new(xnet_payload_builder);
+        let self_validating_payload_builder = FakeSelfValidatingPayloadBuilder::new();
+        let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
         let mut state_manager = MockStateManager::new();
         state_manager.expect_remove_states_below().return_const(());
         state_manager
@@ -54,7 +58,7 @@ fn consensus_produces_expected_batches() {
             .return_const(Height::from(0));
         state_manager
             .expect_get_state_hash_at()
-            .return_const(Ok(Some(CryptoHashOfState::from(CryptoHash(vec![])))));
+            .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![]))));
         state_manager
             .expect_get_state_at()
             .return_const(Ok(Labeled::new(
@@ -105,6 +109,11 @@ fn consensus_produces_expected_batches() {
             replica_config.subnet_id,
         );
         let membership = Arc::new(membership);
+        let dkg_key_manager = Arc::new(Mutex::new(DkgKeyManager::new(
+            metrics_registry.clone(),
+            Arc::clone(&fake_crypto) as Arc<_>,
+            no_op_logger(),
+        )));
 
         let consensus = ConsensusImpl::new(
             replica_config.clone(),
@@ -114,7 +123,9 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&ingress_selector) as Arc<_>,
             Arc::clone(&xnet_payload_builder) as Arc<_>,
+            Arc::clone(&self_validating_payload_builder) as Arc<_>,
             Arc::clone(&dkg_pool) as Arc<_>,
+            dkg_key_manager.clone(),
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&time) as Arc<_>,
@@ -128,6 +139,7 @@ fn consensus_produces_expected_batches() {
             replica_config.node_id,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&consensus_cache),
+            dkg_key_manager,
             metrics_registry.clone(),
             no_op_logger(),
         );

@@ -23,6 +23,7 @@ use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_protobuf::registry::subnet::v1::RegistryStoreUri;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
+    make_subnet_record_key,
 };
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 use std::convert::TryFrom;
@@ -34,13 +35,17 @@ impl Registry {
     pub async fn do_recover_subnet(&mut self, payload: RecoverSubnetPayload) {
         println!("{}do_recover_subnet: {:?}", LOG_PREFIX, payload);
 
+        let pre_call_registry_version = self.latest_version();
+
         let subnet_id = SubnetId::from(payload.subnet_id);
         let cup_contents_key = make_catch_up_package_contents_key(subnet_id).into_bytes();
         let RegistryValue {
             value: cup_contents_vec,
-            version: cup_version,
+            version: pre_call_cup_version,
             deletion_marker: _,
-        } = self.get(&cup_contents_key, self.latest_version()).unwrap();
+        } = self
+            .get(&cup_contents_key, pre_call_registry_version)
+            .unwrap();
         let mut cup_contents =
             decode_registry_value::<CatchUpPackageContents>(cup_contents_vec.clone());
 
@@ -58,6 +63,40 @@ impl Registry {
         } else {
             cup_contents.registry_store_uri = None;
 
+            let RegistryValue {
+                value: _,
+                version: pre_call_subnet_version,
+                deletion_marker: _,
+            } = self
+                .get(
+                    &make_subnet_record_key(subnet_id).into_bytes(),
+                    pre_call_registry_version,
+                )
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{}subnet record for {:} not found in the registry.",
+                        LOG_PREFIX, subnet_id
+                    )
+                });
+
+            let RegistryValue {
+                value: _,
+                version: pre_call_pubkey_version,
+                deletion_marker: _,
+            } = self
+                .get(
+                    &make_crypto_threshold_signing_pubkey_key(subnet_id)
+                        .as_bytes()
+                        .to_vec(),
+                    pre_call_registry_version,
+                )
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{}subnet pubkey for subnet ID {:} not found in the registry.",
+                        LOG_PREFIX, subnet_id
+                    )
+                });
+
             let dkg_nodes = if let Some(replacement_nodes) = payload.replacement_nodes.clone() {
                 let replace_nodes_mutations = self
                     .make_replace_subnet_membership_mutation(subnet_id, replacement_nodes.clone());
@@ -73,11 +112,9 @@ impl Registry {
                     .collect()
             };
 
-            let registry_version = self.latest_version();
-
             let request = SetupInitialDKGArgs {
                 node_ids: dkg_nodes.iter().map(|n| n.get()).collect(),
-                registry_version,
+                registry_version: pre_call_registry_version,
             };
 
             let response_bytes = call(
@@ -89,13 +126,63 @@ impl Registry {
             .await
             .unwrap();
 
+            let post_call_registry_version = self.latest_version();
+
             let RegistryValue {
                 value: _,
-                version: new_cup_version,
+                version: post_call_subnet_version,
                 deletion_marker: _,
-            } = self.get(&cup_contents_key, self.latest_version()).unwrap();
+            } = self
+                .get(
+                    &make_subnet_record_key(subnet_id).into_bytes(),
+                    post_call_registry_version,
+                )
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{}subnet record for {:} not found in the registry.",
+                        LOG_PREFIX, subnet_id
+                    )
+                });
 
-            if cup_version != new_cup_version {
+            if post_call_subnet_version != pre_call_subnet_version {
+                panic!(
+                    "Subnet with ID {} was updated during the `setup_initial_dkg` call",
+                    subnet_id
+                );
+            }
+
+            let RegistryValue {
+                value: _,
+                version: post_call_pubkey_version,
+                deletion_marker: _,
+            } = self
+                .get(
+                    &make_crypto_threshold_signing_pubkey_key(subnet_id).into_bytes(),
+                    post_call_registry_version,
+                )
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{}subnet record for {:} not found in the registry.",
+                        LOG_PREFIX, subnet_id
+                    )
+                });
+
+            if post_call_pubkey_version != pre_call_pubkey_version {
+                panic!(
+                    "Threshold Signing Pubkey for Subnet {} was updated during the `setup_initial_dkg` call",
+                    subnet_id
+                );
+            }
+
+            let RegistryValue {
+                value: _,
+                version: post_call_cup_version,
+                deletion_marker: _,
+            } = self
+                .get(&cup_contents_key, post_call_registry_version)
+                .unwrap();
+
+            if post_call_cup_version != pre_call_cup_version {
                 panic!(
                     "CUP for Subnet {} was updated during the `setup_initial_dkg` call",
                     subnet_id

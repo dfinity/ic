@@ -2,6 +2,7 @@ use super::delivery::*;
 use super::execution::*;
 use super::types::*;
 use ic_config::artifact_pool::ArtifactPoolConfig;
+use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::{
     certification::CertifierImpl,
     consensus::{ConsensusImpl, Membership},
@@ -17,6 +18,7 @@ use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
 use slog::Drain;
 use std::cell::{RefCell, RefMut};
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 fn stop_immediately(_: &ConsensusInstance<'_>) -> bool {
@@ -121,7 +123,14 @@ impl<'a> ConsensusRunner<'a> {
 
         let mut context = self.logger.get_context();
         context.node_id = format!("{}", node_id.clone().get());
+
         let replica_logger = self.logger.with_new_context(context);
+
+        let dkg_key_manager = Arc::new(Mutex::new(DkgKeyManager::new(
+            deps.metrics_registry.clone(),
+            Arc::clone(&fake_crypto) as Arc<_>,
+            replica_logger.clone(),
+        )));
 
         let consensus = ConsensusImpl::new(
             deps.replica_config.clone(),
@@ -131,7 +140,9 @@ impl<'a> ConsensusRunner<'a> {
             fake_crypto.clone(),
             deps.ingress_selector.clone(),
             deps.xnet_payload_builder.clone(),
+            deps.self_validating_payload_builder.clone(),
             deps.dkg_pool.clone(),
+            dkg_key_manager.clone(),
             deps.message_routing.clone(),
             deps.state_manager.clone(),
             Arc::clone(&self.time) as Arc<_>,
@@ -145,6 +156,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.replica_config.node_id,
             fake_crypto.clone(),
             deps.consensus_pool.read().unwrap().get_cache(),
+            dkg_key_manager,
             deps.metrics_registry.clone(),
             replica_logger.clone(),
         );

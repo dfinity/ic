@@ -180,13 +180,13 @@ where
                 metadata.batch_time = history_cl.batch_time();
                 Labeled::new(
                     Height::from(1),
-                    Arc::new(ReplicatedState {
-                        canister_states: BTreeMap::new(),
+                    Arc::new(ReplicatedState::new_from_checkpoint(
+                        BTreeMap::new(),
                         metadata,
-                        subnet_queues: CanisterQueues::default(),
-                        consensus_queue: Vec::new(),
-                        root: std::path::PathBuf::new(),
-                    }),
+                        CanisterQueues::default(),
+                        Vec::new(),
+                        std::path::PathBuf::new(),
+                    )),
                 )
             });
 

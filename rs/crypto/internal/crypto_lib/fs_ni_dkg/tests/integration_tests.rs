@@ -38,19 +38,6 @@ fn potpourri() {
     }
     let epoch10 = Epoch::from(10);
     let tau10 = tau_from_epoch(sys, epoch10);
-    let message = 123;
-    println!("plaintext: {}", message);
-    let ct = enc_single(&pk.key_value, message, &tau10, rng, sys);
-    println!(
-        "encrypted: {} {} {} {}",
-        ct.cc.tostring(),
-        ct.rr.tostring(),
-        ct.ss.tostring(),
-        ct.zz.tostring()
-    );
-    let plain = dec_single(&mut dk, &ct, sys);
-    println!("decrypted: {}", plain);
-    assert!(plain == message, "decrypt . encrypt == id");
 
     let mut keys = Vec::new();
     for i in 0..3 {

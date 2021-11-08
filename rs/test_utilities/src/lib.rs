@@ -13,14 +13,15 @@ pub mod notification;
 pub mod p2p;
 pub mod port_allocation;
 pub mod registry;
+pub mod self_validating_payload_builder;
 pub mod stable_memory_reader;
 pub mod state;
 pub mod state_manager;
 pub mod thread_transport;
 pub mod transport;
 pub mod types;
-pub use ic_universal_canister as universal_canister;
 pub mod xnet_payload_builder;
+pub use ic_universal_canister as universal_canister;
 
 mod logger;
 mod util;

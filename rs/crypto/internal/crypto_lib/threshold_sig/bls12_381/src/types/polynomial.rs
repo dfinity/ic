@@ -1,9 +1,9 @@
-//! Polynomials over `Fr`.
+//! Polynomials over `Scalar`.
 //!
 //! Note: This file is largely based on https://github.com/poanetwork/threshold_crypto/blob/master/src/poly.rs
 
+use bls12_381::Scalar;
 use ff::Field;
-use pairing::bls12_381::Fr;
 use rand_core::RngCore;
 use std::iter;
 use zeroize::Zeroize;
@@ -25,5 +25,5 @@ mod tests;
 ///       Polynomial{ coefficients: [3,2,1,0,-1] }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Polynomial {
-    pub coefficients: Vec<Fr>,
+    pub coefficients: Vec<Scalar>,
 }

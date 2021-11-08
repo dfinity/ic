@@ -10,6 +10,7 @@ use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
     registry::RegistryClient,
+    self_validating_payload::SelfValidatingPayloadBuilder,
     state_manager::StateManager,
     time_source::TimeSource,
 };
@@ -19,6 +20,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
 use ic_test_utilities::{
     ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
+    self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
 };
 use ic_types::{
@@ -135,6 +137,7 @@ struct RcXNetPayloadBuilder {
 pub struct ConsensusDependencies {
     pub(crate) xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     pub(crate) ingress_selector: Arc<dyn IngressSelector>,
+    pub(crate) self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
     pub message_routing: Arc<dyn MessageRouting>,
@@ -174,6 +177,7 @@ impl ConsensusDependencies {
             )),
             ingress_selector: Arc::new(FakeIngressSelector::new()),
             xnet_payload_builder: Arc::new(xnet_payload_builder),
+            self_validating_payload_builder: Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             state_manager,
             metrics_registry,
             replica_config,

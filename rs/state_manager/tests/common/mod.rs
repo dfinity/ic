@@ -1,15 +1,16 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::state_manager::Config;
-use ic_interfaces::validation::ValidationResult;
 use ic_interfaces::{
     certification::{CertificationPermanentError, Verifier, VerifierError},
     certified_stream_store::DecodeStreamError,
+    validation::ValidationResult,
 };
 use ic_interfaces::{certified_stream_store::CertifiedStreamStore, state_manager::*};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{ReplicatedState, Stream};
+use ic_replicated_state::canister_state::execution_state::WasmBinary;
+use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
 use ic_state_layout::{CheckpointLayout, RwPolicy};
 use ic_state_manager::{stream_encoding, StateManagerImpl};
 use ic_test_utilities::{
@@ -119,9 +120,9 @@ pub fn encode_decode_stream_test<
 
         let destination_subnet = destination_subnet.unwrap_or_else(|| subnet_test_id(42));
 
-        let mut streams = state.take_streams();
-        streams.insert(destination_subnet, stream.clone());
-        state.put_streams(streams);
+        state.modify_streams(|streams| {
+            streams.insert(destination_subnet, stream.clone());
+        });
 
         state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata);
 
@@ -174,9 +175,9 @@ pub fn encode_partial_slice_test(
 
         let destination_subnet = subnet_test_id(42);
 
-        let mut streams = state.take_streams();
-        streams.insert(destination_subnet, stream.clone());
-        state.put_streams(streams);
+        state.modify_streams(|streams| {
+            streams.insert(destination_subnet, stream.clone());
+        });
 
         state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata);
 
@@ -264,10 +265,10 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
 
     let (_height, mut state) = state_manager.take_tip();
 
-    let mut streams = state.take_streams();
-    streams.clear();
-    streams.insert(subnet_test_id(42), modified_stream);
-    state.put_streams(streams);
+    state.modify_streams(|streams| {
+        streams.clear();
+        streams.insert(subnet_test_id(42), modified_stream);
+    });
 
     state_manager.commit_and_certify(state, Height::new(2), CertificationScope::Metadata);
 
@@ -293,13 +294,23 @@ pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> Cryp
     let timeout = Duration::from_secs(10);
     let started = Instant::now();
     while started.elapsed() < timeout {
-        if let Some(hash) = state_manager
-            .get_state_hash_at(h)
-            .expect("state must be committed before calling wait_for_checkpoint")
-        {
-            return hash;
+        match state_manager.get_state_hash_at(h) {
+            Ok(hash) => return hash,
+            Err(StateHashError::Permanent(err)) => {
+                panic!("Unable to get checkpoint @{}: {:?}", h, err);
+            }
+            Err(StateHashError::Transient(err)) => match err {
+                TransientStateHashError::StateNotCommittedYet(_) => {
+                    panic!(
+                        "state must be committed before calling wait_for_checkpoint: {:?}",
+                        err
+                    );
+                }
+                TransientStateHashError::HashNotComputedYet(_) => {
+                    std::thread::sleep(Duration::from_millis(500));
+                }
+            },
         }
-        std::thread::sleep(Duration::from_millis(500));
     }
 
     panic!("Checkpoint @{} didn't complete in {:?}", h, timeout)
@@ -318,7 +329,7 @@ pub fn insert_dummy_canister(state: &mut ReplicatedState, canister_id: CanisterI
         NumSeconds::from(100_000),
     );
     let mut execution_state = initial_execution_state(Some(can_layout.raw_path()));
-    execution_state.wasm_binary = wasm;
+    execution_state.wasm_binary = WasmBinary::new(wasm);
     canister_state.execution_state = Some(execution_state);
     state.put_canister_state(canister_state);
 }

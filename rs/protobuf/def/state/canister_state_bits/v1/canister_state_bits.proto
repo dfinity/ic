@@ -176,4 +176,8 @@ message CanisterStateBits {
   // - `stable_memory_size == min(u32::MAX, stable_memory_size64)`
   // The values of the two fields are in sync as long as the value fits `u32`.
   uint64 stable_memory_size64 = 27;
+  // The memory delta debit of this canister at the last time it ran a full
+  // execution. This is tracked for the purposes of rate limiting the amount
+  // of memory delta generated per round.
+  uint64 heap_delta_debit = 28;
 }

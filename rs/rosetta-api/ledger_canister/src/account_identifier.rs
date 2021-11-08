@@ -23,6 +23,12 @@ pub struct AccountIdentifier {
     pub hash: [u8; 28],
 }
 
+impl AsRef<[u8]> for AccountIdentifier {
+    fn as_ref(&self) -> &[u8] {
+        &self.hash
+    }
+}
+
 impl TryFrom<&proto::AccountIdentifier> for AccountIdentifier {
     type Error = AccountIdParseError;
     fn try_from(id: &proto::AccountIdentifier) -> Result<Self, AccountIdParseError> {

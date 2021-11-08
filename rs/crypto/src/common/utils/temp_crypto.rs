@@ -15,27 +15,32 @@ use ic_crypto_tls_interfaces::{
 };
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, CanisterSigVerifier, IDkgTranscriptGenerator,
-    MultiSigVerifier, Signable, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
+    MultiSigVerifier, Signable, ThresholdEcdsaSignature, ThresholdSigVerifier,
+    ThresholdSigVerifierByPublicKey,
 };
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgComplaintVerificationError, IDkgDealingError, IDkgDealingVerificationError,
-    IDkgOpeningVerificationError, IDkgTranscriptCreationError, IDkgTranscriptLoadError,
-    IDkgTranscriptOpeningError, IDkgTranscriptVerificationError,
+    CombineSignatureError, EcdsaPublicKeyError, IDkgComplaintVerificationError, IDkgDealingError,
+    IDkgDealingVerificationError, IDkgOpeningVerificationError, IDkgTranscriptCreationError,
+    IDkgTranscriptLoadError, IDkgTranscriptOpeningError, IDkgTranscriptVerificationError,
+    ThresholdSignatureGenerationError, ThresholdSignatureVerificationError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
     IDkgTranscriptParams, VerifiedIDkgDealing,
+};
+use ic_types::crypto::canister_threshold_sig::{
+    EcdsaPublicKey, ThresholdSignatureInputs, ThresholdSignatureMsg,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
 use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
     IndividualMultiSigOf, ThresholdSigShareOf, UserPublicKey,
 };
-use ic_types::{NodeId, Randomness, RegistryVersion, SubnetId};
+use ic_types::{NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
@@ -184,7 +189,7 @@ impl TempCryptoComponent {
         (temp_crypto, node_pubkeys)
     }
 
-    fn new_with(
+    pub fn new_with(
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
         config: &CryptoConfig,
@@ -214,6 +219,10 @@ impl TempCryptoComponent {
                 (*node, temp_crypto)
             })
             .collect()
+    }
+
+    pub fn temp_dir_path(&self) -> &std::path::Path {
+        self.temp_dir.path()
     }
 }
 
@@ -407,6 +416,47 @@ impl<C: CryptoServiceProvider> IDkgTranscriptGenerator for TempCryptoComponentGe
             .retain_active_transcripts(active_transcripts)
     }
 }
+
+impl<C: CryptoServiceProvider> ThresholdEcdsaSignature for TempCryptoComponentGeneric<C> {
+    fn sign_threshold(
+        &self,
+        inputs: &ThresholdSignatureInputs,
+    ) -> Result<ThresholdSignatureMsg, ThresholdSignatureGenerationError> {
+        self.crypto_component.sign_threshold(inputs)
+    }
+
+    fn validate_threshold_sig_share(
+        &self,
+        signer: NodeId,
+        inputs: &ThresholdSignatureInputs,
+        output: &ThresholdSignatureMsg,
+    ) -> Result<(), ThresholdSignatureVerificationError> {
+        self.crypto_component
+            .validate_threshold_sig_share(signer, inputs, output)
+    }
+
+    fn combine_threshold_sig_shares(
+        &self,
+        inputs: &ThresholdSignatureInputs,
+        outputs: &[ThresholdSignatureMsg],
+    ) -> Result<Vec<u8>, CombineSignatureError> {
+        ThresholdEcdsaSignature::combine_threshold_sig_shares(
+            &self.crypto_component,
+            inputs,
+            outputs,
+        )
+    }
+
+    fn get_ecdsa_public_key(
+        &self,
+        canister_id: PrincipalId,
+        key_transcript: IDkgTranscript,
+    ) -> Result<EcdsaPublicKey, EcdsaPublicKeyError> {
+        self.crypto_component
+            .get_ecdsa_public_key(canister_id, key_transcript)
+    }
+}
+
 #[async_trait]
 impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponentGeneric<C> {
     async fn perform_tls_server_handshake(
@@ -417,6 +467,17 @@ impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponen
     ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
         self.crypto_component
             .perform_tls_server_handshake(tcp_stream, allowed_clients, registry_version)
+            .await
+    }
+
+    async fn perform_tls_server_handshake_with_rustls(
+        &self,
+        tcp_stream: TcpStream,
+        allowed_clients: AllowedClients,
+        registry_version: RegistryVersion,
+    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
+        self.crypto_component
+            .perform_tls_server_handshake_with_rustls(tcp_stream, allowed_clients, registry_version)
             .await
     }
 
@@ -453,6 +514,17 @@ impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponen
     ) -> Result<TlsStream, TlsClientHandshakeError> {
         self.crypto_component
             .perform_tls_client_handshake(tcp_stream, server, registry_version)
+            .await
+    }
+
+    async fn perform_tls_client_handshake_with_rustls(
+        &self,
+        tcp_stream: TcpStream,
+        server: NodeId,
+        registry_version: RegistryVersion,
+    ) -> Result<TlsStream, TlsClientHandshakeError> {
+        self.crypto_component
+            .perform_tls_client_handshake_with_rustls(tcp_stream, server, registry_version)
             .await
     }
 }
@@ -530,8 +602,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
         shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
         dkg_id: DkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>> {
-        self.crypto_component
-            .combine_threshold_sig_shares(shares, dkg_id)
+        ThresholdSigVerifier::combine_threshold_sig_shares(&self.crypto_component, shares, dkg_id)
     }
 
     fn verify_threshold_sig_combined(

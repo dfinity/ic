@@ -9,6 +9,7 @@ use ic_crypto_internal_types::sign::canister_threshold_sig::{
     CspIDkgComplaint, CspIDkgDealing, CspIDkgOpening,
 };
 use ic_crypto_internal_types::NodeIndex;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
@@ -18,11 +19,18 @@ use std::convert::TryFrom;
 // It should uniquely identify a transcript.
 // Can be a string decided by Consensus, e.g. by hashing the fields below, or a
 // u64. (CRP-1104)
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscriptId(pub usize);
 
+impl IDkgTranscriptId {
+    /// Return the next value of this id.
+    pub fn increment(self) -> IDkgTranscriptId {
+        IDkgTranscriptId(self.0 + 1)
+    }
+}
+
 /// A set of receivers for interactive DKG.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct IDkgReceivers {
     receivers: BTreeSet<NodeId>,
 
@@ -94,7 +102,7 @@ impl IDkgReceivers {
 }
 
 /// A set of dealers for interactive DKG.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct IDkgDealers {
     dealers: BTreeSet<NodeId>,
 
@@ -165,7 +173,7 @@ impl IDkgDealers {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscriptParams {
     pub transcript_id: IDkgTranscriptId,
     pub max_corrupt_dealers: NumberOfNodes,
@@ -174,8 +182,8 @@ pub struct IDkgTranscriptParams {
     pub receivers: IDkgReceivers,
     pub verification_threshold: NumberOfNodes,
     pub registry_version: RegistryVersion,
-    pub transcript_type: IDkgTranscriptType,
     pub algorithm_id: AlgorithmId,
+    pub operation_type: IDkgTranscriptOperation,
 }
 
 impl IDkgTranscriptParams {
@@ -188,8 +196,8 @@ impl IDkgTranscriptParams {
         receivers: IDkgReceivers,
         verification_threshold: NumberOfNodes,
         registry_version: RegistryVersion,
-        transcript_type: IDkgTranscriptType,
         algorithm_id: AlgorithmId,
+        operation_type: IDkgTranscriptOperation,
     ) -> Self {
         // TODO. Check that
         // * |dealers| > max_corrupt_dealers
@@ -204,8 +212,8 @@ impl IDkgTranscriptParams {
             receivers,
             verification_threshold,
             registry_version,
-            transcript_type,
             algorithm_id,
+            operation_type,
         }
     }
 }
@@ -213,20 +221,41 @@ impl IDkgTranscriptParams {
 // Design consideration:
 // We could use either full transcripts or IDkgTranscriptId in the Resharing and
 // Multiplication variants.
-#[derive(Clone, Debug)]
-pub enum IDkgTranscriptType {
-    RandomSkinny,
-    RandomFat,
-    Resharing(IDkgTranscript),
-    Multiplication(IDkgTranscript, IDkgTranscript),
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub enum IDkgMaskedTranscriptOrigin {
+    Random,
+    MaskedTimesMasked(IDkgTranscriptId, IDkgTranscriptId),
+    UnmaskedTimesMasked(IDkgTranscriptId, IDkgTranscriptId),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub enum IDkgUnmaskedTranscriptOrigin {
+    ReshareMasked(IDkgTranscriptId),
+    ReshareUnmasked(IDkgTranscriptId),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub enum IDkgTranscriptType {
+    Masked(IDkgMaskedTranscriptOrigin),
+    Unmasked(IDkgUnmaskedTranscriptOrigin),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,
     pub receivers: IDkgReceivers,
     pub registry_version: RegistryVersion,
     pub verified_dealings: BTreeMap<NodeId, VerifiedIDkgDealing>,
+    pub transcript_type: IDkgTranscriptType,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub enum IDkgTranscriptOperation {
+    Random,
+    ReshareOfMasked(IDkgTranscript),
+    ReshareOfUnmasked(IDkgTranscript),
+    MaskedTimesMasked(IDkgTranscript, IDkgTranscript),
+    UnmaskedTimesMasked(IDkgTranscript, IDkgTranscript),
 }
 
 impl IDkgTranscript {
@@ -237,16 +266,28 @@ impl IDkgTranscript {
     pub fn serialize(&self) -> Vec<u8> {
         unimplemented!("IDkgTranscript::serialize");
     }
+
+    pub fn get_type(&self) -> &IDkgTranscriptType {
+        &self.transcript_type
+    }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgDealing {
     // The identity of the dealer is usually part of the consensus types, and verified there.
     //pub dealer_id:  NodeId,
     pub internal_dealing: CspIDkgDealing,
 }
 
-#[derive(Clone, Debug)]
+impl IDkgDealing {
+    pub fn dummy_for_tests() -> Self {
+        Self {
+            internal_dealing: CspIDkgDealing {},
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct VerifiedIDkgDealing {
     pub signature: CombinedMultiSigOf<IDkgDealing>,
     pub signers: BTreeSet<NodeId>,
@@ -254,7 +295,7 @@ pub struct VerifiedIDkgDealing {
 }
 
 // IDkgComplaint against an indivdual dealing in a transcript.
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct IDkgComplaint {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,
@@ -268,6 +309,16 @@ impl IDkgComplaint {
 
     pub fn serialize(&self) -> Vec<u8> {
         unimplemented!("IDkgComplaint::serialize");
+    }
+
+    pub fn dummy_for_tests() -> Self {
+        use crate::PrincipalId;
+
+        Self {
+            transcript_id: IDkgTranscriptId(1),
+            dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
+            internal_complaint: CspIDkgComplaint {},
+        }
     }
 }
 
@@ -284,6 +335,16 @@ impl IDkgOpening {
 
     pub fn serialize(&self) -> Vec<u8> {
         unimplemented!("IDkgOpening::serialize");
+    }
+
+    pub fn dummy_for_tests() -> Self {
+        use crate::PrincipalId;
+
+        Self {
+            transcript_id: IDkgTranscriptId(1),
+            dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
+            internal_opening: CspIDkgOpening {},
+        }
     }
 }
 

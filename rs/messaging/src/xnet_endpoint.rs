@@ -462,8 +462,10 @@ fn handle_stream(
             )
         }
         Err(EncodeStreamError::NoStreamForSubnet(_)) => no_content(),
-        Err(e @ EncodeStreamError::InvalidSliceBegin { .. })
-        | Err(e @ EncodeStreamError::InvalidSliceIndices { .. }) => bad_request(e.to_string()),
+        Err(e @ EncodeStreamError::InvalidSliceBegin { .. }) => {
+            range_not_satisfiable(e.to_string())
+        }
+        Err(e @ EncodeStreamError::InvalidSliceIndices { .. }) => bad_request(e.to_string()),
     }
 }
 
@@ -534,6 +536,14 @@ fn bad_request<T: Into<Body>>(msg: T) -> Response<Body> {
 fn not_found<T: Into<Body>>(msg: T) -> Response<Body> {
     Response::builder()
         .status(StatusCode::NOT_FOUND)
+        .body(msg.into())
+        .unwrap()
+}
+
+/// Produces a 416 Range Not Satisfiable response with the given content.
+fn range_not_satisfiable<T: Into<Body>>(msg: T) -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::RANGE_NOT_SATISFIABLE)
         .body(msg.into())
         .unwrap()
 }

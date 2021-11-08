@@ -1,4 +1,4 @@
-use ic_types::batch::{BatchPayload, IngressPayload, XNetPayload};
+use ic_types::batch::{BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload};
 
 pub struct PayloadBuilder {
     payload: BatchPayload,
@@ -11,6 +11,8 @@ impl Default for PayloadBuilder {
             payload: BatchPayload {
                 ingress: super::ingress_payload::IngressPayloadBuilder::default().build(),
                 xnet: super::xnet_payload::XNetPayloadBuilder::default().build(),
+                // TODO(MR-70): use payload builder
+                self_validating: SelfValidatingPayload::new(),
             },
         }
     }
@@ -48,6 +50,7 @@ fn batch_payload_serialize_then_deserialize() {
     let batch_payload_0 = BatchPayload {
         ingress: IngressPayload::from(vec![ingress_0]),
         xnet: XNetPayload::default(),
+        self_validating: SelfValidatingPayload::default(),
     };
     let vec = serde_cbor::ser::to_vec(&batch_payload_0).unwrap();
     let batch_payload_1: BatchPayload = serde_cbor::de::from_slice(&vec).unwrap();
@@ -77,8 +80,8 @@ fn payload_serialize_then_deserialize() {
     assert_eq!(payload_0, payload_1);
     // this compares actual payload.
     assert_eq!(
-        payload_0.as_ref().as_batch_payload(),
-        payload_1.as_ref().as_batch_payload()
+        payload_0.as_ref().as_data().batch,
+        payload_1.as_ref().as_data().batch
     );
 
     // Test with a ingress message
@@ -88,6 +91,7 @@ fn payload_serialize_then_deserialize() {
     let batch_payload_0 = BatchPayload {
         ingress: IngressPayload::from(vec![ingress_0]),
         xnet: XNetPayload::default(),
+        self_validating: SelfValidatingPayload::default(),
     };
     let payload_0 = Payload::new(
         ic_crypto::crypto_hash,
@@ -99,7 +103,7 @@ fn payload_serialize_then_deserialize() {
     assert_eq!(payload_0, payload_1);
     // this compares actual payload.
     assert_eq!(
-        payload_0.as_ref().as_batch_payload(),
-        payload_1.as_ref().as_batch_payload()
+        payload_0.as_ref().as_data().batch,
+        payload_1.as_ref().as_data().batch
     );
 }

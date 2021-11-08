@@ -3,8 +3,8 @@ use crate::protobuf::transaction::Transfer as PTransfer;
 use crate::{
     AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockRes, CyclesResponse, EncodedBlock,
     GetBlocksArgs, GetBlocksRes, HashOf, ICPTs, IterBlocksArgs, IterBlocksRes, Memo,
-    NotifyCanisterArgs, SendArgs, Subaccount, TimeStamp, TipOfChainRes, TotalSupplyArgs,
-    Transaction, TransactionNotification, Transfer, HASH_LENGTH, TRANSACTION_FEE,
+    NotifyCanisterArgs, Operation, SendArgs, Subaccount, TimeStamp, TipOfChainRes, TotalSupplyArgs,
+    Transaction, TransactionNotification, HASH_LENGTH, TRANSACTION_FEE,
 };
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, CanisterIdError};
@@ -542,18 +542,18 @@ impl ToProto for Transaction {
             None => Memo(0),
         };
         let created_at_time: TimeStamp = pb.created_at_time.unwrap_or_else(|| TimeStamp::new(0, 0));
-        let transfer = match pb.transfer.ok_or("This block has no transaction")? {
+        let operation = match pb.transfer.ok_or("This block has no transaction")? {
             PTransfer::Burn(protobuf::Burn {
                 from: Some(from),
                 amount: Some(amount),
-            }) => Transfer::Burn {
+            }) => Operation::Burn {
                 from: AccountIdentifier::from_proto(from)?,
                 amount: ICPTs::from_proto(amount)?,
             },
             PTransfer::Mint(protobuf::Mint {
                 to: Some(to),
                 amount: Some(amount),
-            }) => Transfer::Mint {
+            }) => Operation::Mint {
                 to: AccountIdentifier::from_proto(to)?,
                 amount: ICPTs::from_proto(amount)?,
             },
@@ -562,7 +562,7 @@ impl ToProto for Transaction {
                 from: Some(from),
                 amount: Some(amount),
                 max_fee,
-            }) => Transfer::Send {
+            }) => Operation::Transfer {
                 to: AccountIdentifier::from_proto(to)?,
                 from: AccountIdentifier::from_proto(from)?,
                 amount: ICPTs::from_proto(amount)?,
@@ -574,7 +574,7 @@ impl ToProto for Transaction {
             t => return Err(format!("Transaction lacked a required field: {:?}", t)),
         };
         Ok(Transaction {
-            transfer,
+            operation,
             memo,
             created_at_time,
         })
@@ -584,20 +584,20 @@ impl ToProto for Transaction {
         let Transaction {
             memo,
             created_at_time,
-            transfer,
+            operation,
         } = self;
-        let transfer = match transfer {
-            Transfer::Burn { from, amount } => PTransfer::Burn(protobuf::Burn {
+        let transfer = match operation {
+            Operation::Burn { from, amount } => PTransfer::Burn(protobuf::Burn {
                 from: Some(from.into_proto()),
                 amount: Some(amount.into_proto()),
             }),
 
-            Transfer::Mint { to, amount } => PTransfer::Mint(protobuf::Mint {
+            Operation::Mint { to, amount } => PTransfer::Mint(protobuf::Mint {
                 to: Some(to.into_proto()),
                 amount: Some(amount.into_proto()),
             }),
 
-            Transfer::Send {
+            Operation::Transfer {
                 to,
                 amount,
                 from,

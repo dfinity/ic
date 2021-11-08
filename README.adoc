@@ -107,7 +107,7 @@ Note: we have observed that to build all the pieces it takes around 30-50 minute
 Run the bash script in the repo to build a docker image that includes:
 
   - The repo you have cloned
-  - Third-party binary dependencies (e.g. rustup, ubuntu, etc). For the purpose of transparency and security, you can look at the https://github.com/dfinity-lab/dfinity/blob/master/gitlab-ci/docker/Dockerfile[dockerfile] file to see what these binaries are
+  - Third-party binary dependencies (e.g. rustup, ubuntu, etc). For the purpose of transparency and security, you can look at the https://gitlab.com/dfinity-lab/core/ic/blob/master/gitlab-ci/docker/Dockerfile[dockerfile] file to see what these binaries are
 
 
 ----
@@ -191,5 +191,6 @@ Now that the Internet Computer is launched, the source code of the three primary
 All code of the Internet Computer is be licensed under the Apache 2.0 license, except for a
 few components licensed under the http://dfinity.org/licenses/IC-1.0[Internet Computer Community
 Source License] and http://dfinity.org/licenses/IC-shared-1.0[Internet Computer Shared Community Source License] which are more restrictive than the Apache 2.0 license to protect the Intellectual Property (IP) of the DFINITY Foundation.
+
 
 While we adapt our development processes and security reviews for a world of developing with our code in the open, we are not accepting any pull requests at this time. For now, please join our developer community at https://forum.dfinity.org. If you discover any bugs and vulnerabilities, please follow the procedure at https://dfinity.org/vulnerability-disclosure-program/. 

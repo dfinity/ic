@@ -5,11 +5,11 @@ pub mod batch_delivery;
 mod block_maker;
 mod catchup_package_maker;
 pub(crate) mod crypto;
-mod dkg_key_manager;
+pub mod dkg_key_manager;
 mod finalizer;
 mod malicious_consensus;
 pub(crate) mod membership;
-mod metrics;
+pub(crate) mod metrics;
 mod notary;
 pub mod payload_builder;
 pub mod pool_reader;
@@ -56,6 +56,7 @@ use ic_interfaces::{
     ingress_pool::IngressPoolSelect,
     messaging::{MessageRouting, XNetPayloadBuilder},
     registry::{self, LocalStoreCertifiedTimeReader, RegistryClient},
+    self_validating_payload::SelfValidatingPayloadBuilder,
     state_manager::StateManager,
     time_source::TimeSource,
 };
@@ -68,11 +69,11 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
 };
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
+use std::{cell::RefCell, sync::Mutex};
 use strum_macros::AsRefStr;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, AsRefStr)]
@@ -109,7 +110,7 @@ pub struct ConsensusImpl {
     metrics: ConsensusMetrics,
     time_source: Arc<dyn TimeSource>,
     registry_client: Arc<dyn RegistryClient>,
-    dkg_key_manager: DkgKeyManager,
+    dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     last_invoked: RefCell<BTreeMap<ConsensusSubcomponent, Time>>,
     schedule: RoundRobin,
     subnet_id: SubnetId,
@@ -131,7 +132,9 @@ impl ConsensusImpl {
         crypto: Arc<dyn ConsensusCrypto>,
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
+        self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
+        dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         time_source: Arc<dyn TimeSource>,
@@ -144,6 +147,7 @@ impl ConsensusImpl {
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
             ingress_selector.clone(),
             xnet_payload_builder,
+            self_validating_payload_builder,
             metrics_registry.clone(),
         ));
 
@@ -158,11 +162,6 @@ impl ConsensusImpl {
         last_invoked.insert(ConsensusSubcomponent::Validator, current_time);
         last_invoked.insert(ConsensusSubcomponent::Aggregator, current_time);
         last_invoked.insert(ConsensusSubcomponent::Purger, current_time);
-        let dkg_key_manager = DkgKeyManager::new(
-            metrics_registry.clone(),
-            Arc::clone(&crypto),
-            logger.clone(),
-        );
 
         ConsensusImpl {
             dkg_key_manager,
@@ -364,7 +363,10 @@ impl Consensus for ConsensusImpl {
         trace!(self.log, "on_state_change");
 
         // Load new transcripts, remove outdated keys.
-        self.dkg_key_manager.on_state_change(&pool_reader);
+        self.dkg_key_manager
+            .lock()
+            .unwrap()
+            .on_state_change(&pool_reader);
 
         // For non-root subnets, we must halt if our registry is outdated
         if let Ok(false) = is_root_subnet(
@@ -374,6 +376,7 @@ impl Consensus for ConsensusImpl {
         ) {
             if let Err(e) = self.check_registry_outdated() {
                 info!(
+                    every_n_seconds => 5,
                     self.log,
                     "consensus is halted due to outdated registry. {:?}", e
                 );
@@ -384,6 +387,7 @@ impl Consensus for ConsensusImpl {
         // Consensus halts if instructed by the registry
         if self.should_halt_by_subnet_record() {
             info!(
+                every_n_seconds => 5,
                 self.log,
                 "consensus is halted by instructions of the subnet record in the registry"
             );
@@ -568,7 +572,9 @@ pub fn setup(
     crypto: Arc<dyn ConsensusCrypto>,
     ingress_selector: Arc<dyn IngressSelector>,
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
+    self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     message_routing: Arc<dyn MessageRouting>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     time_source: Arc<dyn TimeSource>,
@@ -586,6 +592,7 @@ pub fn setup(
     // between >0 and the sum of both polling intervals. To accomodate for that,
     // we use this sum as the minimal age of a registry version we consider as
     // stable.
+
     let stable_registry_version_age =
         registry::POLLING_PERIOD + Duration::from_millis(registry_poll_delay_duration_ms);
     (
@@ -597,7 +604,9 @@ pub fn setup(
             crypto,
             ingress_selector,
             xnet_payload_builder,
+            self_validating_payload_builder,
             dkg_pool,
+            dkg_key_manager,
             message_routing.clone(),
             state_manager,
             time_source,
@@ -625,6 +634,7 @@ mod tests {
         ingress_selector::FakeIngressSelector,
         message_routing::FakeMessageRouting,
         registry::{FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder},
+        self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
         types::ids::{node_test_id, subnet_test_id},
         xnet_payload_builder::FakeXNetPayloadBuilder,
         FastForwardTimeSource,
@@ -660,23 +670,31 @@ mod tests {
         state_manager
             .get_mut()
             .expect_get_state_hash_at()
-            .return_const(Ok(Some(CryptoHashOfState::from(CryptoHash(Vec::new())))));
+            .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+
+        let metrics_registry = MetricsRegistry::new();
 
         let consensus_impl = ConsensusImpl::new(
             replica_config,
             ConsensusConfig::default(),
             registry,
             membership,
-            crypto,
+            crypto.clone(),
             Arc::new(FakeIngressSelector::new()),
             Arc::new(FakeXNetPayloadBuilder::new()),
+            Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             dkg_pool,
+            Arc::new(Mutex::new(DkgKeyManager::new(
+                metrics_registry.clone(),
+                crypto,
+                no_op_logger(),
+            ))),
             Arc::new(FakeMessageRouting::new()),
             state_manager,
             time_source.clone(),
             Duration::from_secs(0),
             MaliciousFlags::default(),
-            MetricsRegistry::new(),
+            metrics_registry,
             no_op_logger(),
             Some(Arc::new(FakeLocalStoreCertifiedTimeReader::new(
                 time_source.clone(),

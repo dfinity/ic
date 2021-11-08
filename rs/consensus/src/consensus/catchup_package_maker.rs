@@ -17,7 +17,9 @@ use crate::consensus::{
     utils::active_high_threshold_transcript, ConsensusCrypto,
 };
 use ic_interfaces::messaging::MessageRouting;
-use ic_interfaces::state_manager::{StateManager, StateManagerError};
+use ic_interfaces::state_manager::{
+    PermanentStateHashError::*, StateHashError, StateManager, TransientStateHashError::*,
+};
 use ic_logger::{debug, error, trace, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::replica_config::ReplicaConfig;
@@ -63,8 +65,21 @@ impl<'a> CatchUpPackageMaker {
             // if message routing expects a batch for a height smaller than the
             // height of the latest CUP, we will need to invoke state sync, as
             // the artifacts lower than the CUP height are purged
-            self.state_manager
-                .fetch_state(catch_up_height, catch_up_package.content.state_hash);
+            let cup_interval_length = catch_up_package
+                .content
+                .block
+                .into_inner()
+                .payload
+                .as_ref()
+                .as_summary()
+                .dkg
+                .interval_length;
+
+            self.state_manager.fetch_state(
+                catch_up_height,
+                catch_up_package.content.state_hash,
+                cup_interval_length,
+            );
         }
     }
 
@@ -73,7 +88,7 @@ impl<'a> CatchUpPackageMaker {
     /// does not.
     fn report_state_divergence_if_required(&self, pool: &PoolReader<'_>) {
         let catch_up_package = pool.get_highest_catch_up_package();
-        if let Ok(Some(hash)) = self
+        if let Ok(hash) = self
             .state_manager
             .get_state_hash_at(catch_up_package.height())
         {
@@ -134,7 +149,7 @@ impl<'a> CatchUpPackageMaker {
         }
 
         match self.state_manager.get_state_hash_at(height) {
-            Err(StateManagerError::StateNotCommittedYet(_)) => {
+            Err(StateHashError::Transient(StateNotCommittedYet(_))) => {
                 // TODO: Setup a delay before retry
                 debug!(
                     self.log,
@@ -143,19 +158,25 @@ impl<'a> CatchUpPackageMaker {
                 );
                 None
             }
-            Err(StateManagerError::StateRemoved(_)) => {
-                // This should never happen as we don't want to remove the state
-                // for CUP before the hash is fetched.
-                panic!(
-                    "State at height {} had disappeared before we had a chance to make a CUP. This should not happen.",
-                    height,
-                )
-            }
-            Ok(None) => {
+            Err(StateHashError::Transient(HashNotComputedYet(_))) => {
                 debug!(self.log, "Cannot make CUP at height {} because state hash is not computed yet. Will retry", height);
                 None
             }
-            Ok(Some(state_hash)) => {
+            Err(StateHashError::Permanent(StateRemoved(_))) => {
+                // This should never happen as we don't want to remove the state
+                // for CUP before the hash is fetched.
+                panic!(
+		    "State at height {} had disappeared before we had a chance to make a CUP. This should not happen.",
+		    height,
+		);
+            }
+            Err(StateHashError::Permanent(StateNotFullyCertified(_))) => {
+                panic!(
+                    "Height {} is not a fully certified height. This should not happen.",
+                    height,
+                );
+            }
+            Ok(state_hash) => {
                 let content = CatchUpContent::new(
                     HashedBlock::new(ic_crypto::crypto_hash, start_block),
                     HashedRandomBeacon::new(ic_crypto::crypto_hash, random_beacon),
@@ -230,7 +251,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(Some(CryptoHashOfState::from(CryptoHash(Vec::new())))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
 
             let message_routing = FakeMessageRouting::new();
             *message_routing.next_batch_height.write().unwrap() = Height::from(2);
@@ -302,16 +323,15 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(Some(CryptoHashOfState::from(CryptoHash(Vec::new())))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
 
             let fetch_height = Arc::new(RwLock::new(Height::from(0)));
             let fetch_height_cl = fetch_height.clone();
-            state_manager
-                .get_mut()
-                .expect_fetch_state()
-                .returning(move |height, _hash| {
+            state_manager.get_mut().expect_fetch_state().returning(
+                move |height, _hash, _cup_interval_length| {
                     *fetch_height_cl.write().unwrap() = height;
-                });
+                },
+            );
 
             let message_routing = FakeMessageRouting::new();
             *message_routing.next_batch_height.write().unwrap() = Height::from(2);
@@ -378,7 +398,9 @@ mod tests {
                 .get_mut()
                 .expect_get_state_hash_at()
                 .times(1)
-                .return_const(Err(StateManagerError::StateNotCommittedYet(cup_height)));
+                .return_const(Err(StateHashError::Transient(StateNotCommittedYet(
+                    cup_height,
+                ))));
 
             // Nothing happens, because the state is not commited yet.
             assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
@@ -387,7 +409,9 @@ mod tests {
                 .get_mut()
                 .expect_get_state_hash_at()
                 .times(1)
-                .return_const(Ok(None));
+                .return_const(Err(StateHashError::Transient(HashNotComputedYet(
+                    cup_height,
+                ))));
 
             // Still nothing happens, because the state hash is not computed
             // yet.
@@ -398,7 +422,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(Some(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3])))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
 
             state_manager
                 .get_mut()

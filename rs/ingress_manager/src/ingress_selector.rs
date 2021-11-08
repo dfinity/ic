@@ -263,28 +263,25 @@ impl IngressManager {
         // Skip the message if there aren't enough cycles to induct the message.
         let msg = signed_ingress.content();
         match self.cycles_account_manager.ingress_induction_cost(msg) {
-            Ok(IngressInductionCost::Fee { payer, cost }) => match state.canister_state(&payer) {
+            Ok(IngressInductionCost::Fee {
+                payer,
+                cost: ingress_cost,
+            }) => match state.canister_state(&payer) {
                 Some(canister) => {
-                    let canister_cycles_needed = cycles_needed
+                    let cumulative_ingress_cost = cycles_needed
                         .entry(payer)
                         .or_insert_with(|| Cycles::from(0));
-                    let cycles_available = self
-                        .cycles_account_manager
-                        .cycles_balance_above_storage_reserve(
-                            &canister.system_state,
-                            canister.memory_usage(),
-                            canister.scheduler_state.compute_allocation,
-                        );
-                    if *canister_cycles_needed + cost > cycles_available {
+                    if let Err(err) = self.cycles_account_manager.can_withdraw_cycles(
+                        &canister.system_state,
+                        *cumulative_ingress_cost + ingress_cost,
+                        canister.memory_usage(),
+                        canister.scheduler_state.compute_allocation,
+                    ) {
                         return Err(ValidationError::Permanent(
-                            IngressPermanentError::InsufficientCycles(
-                                payer,
-                                *canister_cycles_needed,
-                                cycles_available,
-                            ),
+                            IngressPermanentError::InsufficientCycles(err),
                         ));
                     }
-                    *canister_cycles_needed += cost;
+                    *cumulative_ingress_cost += ingress_cost;
                 }
                 None => {
                     return Err(ValidationError::Permanent(
@@ -563,6 +560,7 @@ mod tests {
                     });
                     ingress_pool.apply_changeset(vec![ChangeAction::MoveToValidated((
                         message_id.clone(),
+                        node_test_id(0),
                         m.count_bytes(),
                         attribute,
                         crypto_hash(m.binary()).get(),
@@ -747,6 +745,7 @@ mod tests {
                 let ingress_size1 = ingress_msg1.count_bytes();
                 ingress_pool.apply_changeset(vec![ChangeAction::MoveToValidated((
                     message_id,
+                    node_test_id(0),
                     ingress_size1,
                     attribute,
                     crypto_hash(ingress_msg1.binary()).get(),
@@ -801,6 +800,7 @@ mod tests {
                 let ingress_size1 = ingress_msg1.count_bytes();
                 ingress_pool.apply_changeset(vec![ChangeAction::MoveToValidated((
                     message_id,
+                    node_test_id(0),
                     ingress_size1,
                     attribute,
                     crypto_hash(ingress_msg1.binary()).get(),
@@ -871,6 +871,7 @@ mod tests {
                 });
                 ingress_pool.apply_changeset(vec![ChangeAction::MoveToValidated((
                     message_id,
+                    node_test_id(0),
                     ingress_msg1.count_bytes(),
                     attribute,
                     crypto_hash(ingress_msg1.binary()).get(),
@@ -885,6 +886,7 @@ mod tests {
                 });
                 ingress_pool.apply_changeset(vec![ChangeAction::MoveToValidated((
                     message_id,
+                    node_test_id(0),
                     ingress_msg2.count_bytes(),
                     attribute,
                     crypto_hash(ingress_msg2.binary()).get(),
@@ -951,6 +953,7 @@ mod tests {
                 });
                 ingress_pool.apply_changeset(vec![ChangeAction::MoveToValidated((
                     message_id,
+                    node_test_id(0),
                     ingress_msg1.count_bytes(),
                     attribute,
                     crypto_hash(ingress_msg1.binary()).get(),
@@ -965,6 +968,7 @@ mod tests {
                 });
                 ingress_pool.apply_changeset(vec![ChangeAction::MoveToValidated((
                     message_id,
+                    node_test_id(0),
                     ingress_msg2.count_bytes(),
                     attribute,
                     crypto_hash(ingress_msg2.binary()).get(),
@@ -1126,6 +1130,7 @@ mod tests {
                 });
                 ingress_pool.apply_changeset(vec![ChangeAction::MoveToValidated((
                     message_id1,
+                    node_test_id(0),
                     ingress_msg1.count_bytes(),
                     attribute,
                     crypto_hash(ingress_msg1.binary()).get(),
@@ -1139,6 +1144,7 @@ mod tests {
                 });
                 ingress_pool.apply_changeset(vec![ChangeAction::MoveToValidated((
                     message_id2,
+                    node_test_id(0),
                     ingress_msg2.count_bytes(),
                     attribute,
                     crypto_hash(ingress_msg2.binary()).get(),
@@ -1391,6 +1397,7 @@ mod tests {
                     });
                     ingress_pool.apply_changeset(vec![ChangeAction::MoveToValidated((
                         message_id.clone(),
+                        node_test_id(0),
                         m.count_bytes(),
                         attribute,
                         crypto_hash(m.binary()).get(),
@@ -1458,7 +1465,7 @@ mod tests {
                 assert_matches!(
                     ingress_validation,
                     Err(ValidationError::Permanent(
-                        IngressPermanentError::InsufficientCycles(_, _, _)
+                        IngressPermanentError::InsufficientCycles(_)
                     ))
                 );
             },
@@ -1644,8 +1651,8 @@ mod tests {
                         ),
                         // Validation should fail since the canister that needs to pay for the
                         // message doesn't have enough cycles.
-                        Err(ValidationError::Permanent(IngressPermanentError::InsufficientCycles(canister_id, _, _)))
-                            if canister_id == canister_test_id(2)
+                        Err(ValidationError::Permanent(IngressPermanentError::InsufficientCycles(err)))
+                            if err.canister_id == canister_test_id(2)
                     );
                 }
             },

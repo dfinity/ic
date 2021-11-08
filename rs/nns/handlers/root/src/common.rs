@@ -1,6 +1,7 @@
 use candid::{CandidType, Deserialize};
 use dfn_core::api::CanisterId;
 use ic_base_types::{CanisterInstallMode, PrincipalId};
+use ic_crypto_sha::Sha256;
 use ic_nns_common::types::MethodAuthzChange;
 use ic_nns_constants::memory_allocation_of;
 
@@ -68,7 +69,7 @@ impl CanisterStatusResult {
 }
 
 /// The payload to a proposal to upgrade a canister.
-#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+#[derive(candid::CandidType, candid::Deserialize, Clone)]
 pub struct ChangeNnsCanisterProposalPayload {
     /// Whether the canister should first be stopped before the install_code
     /// method is called.
@@ -110,6 +111,41 @@ pub struct ChangeNnsCanisterProposalPayload {
 
     /// A list of authz changes to enact, in addition to changing new canister.
     pub authz_changes: Vec<MethodAuthzChange>,
+}
+
+impl ChangeNnsCanisterProposalPayload {
+    fn format(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut wasm_sha = Sha256::new();
+        wasm_sha.write(&self.wasm_module);
+        let wasm_sha = wasm_sha.finish();
+        let mut arg_sha = Sha256::new();
+        arg_sha.write(&self.arg);
+        let arg_sha = arg_sha.finish();
+
+        f.debug_struct("ChangeNnsCanisterProposalPayload")
+            .field("stop_before_installing", &self.stop_before_installing)
+            .field("mode", &self.mode)
+            .field("canister_id", &self.canister_id)
+            .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
+            .field("arg_sha256", &format!("{:x?}", arg_sha))
+            .field("compute_allocation", &self.compute_allocation)
+            .field("memory_allocation", &self.memory_allocation)
+            .field("query_allocation", &self.query_allocation)
+            .field("authz_changes", &self.authz_changes)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for ChangeNnsCanisterProposalPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.format(f)
+    }
+}
+
+impl std::fmt::Display for ChangeNnsCanisterProposalPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.format(f)
+    }
 }
 
 impl ChangeNnsCanisterProposalPayload {

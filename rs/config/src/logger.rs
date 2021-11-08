@@ -56,15 +56,17 @@ pub struct Config {
     pub enabled_tags: Vec<String>,
     #[serde(default = "default_logtarget")]
     pub target: LogTarget,
-
-    // If `true` the async channel for low-priority messages will block instead of drop messages.
-    // This behavior is required for instrumentation in System Testing until we have a
-    // dedicated solution for instrumentation.
-    //
-    // The default for this value is `false` and thus matches the previously expected behavior in
-    // production use cases.
-    #[serde(default = "Default::default")]
+    /// If set to `false`, the logging thread will _not_ block even if the queue
+    /// is full.
+    #[serde(default = "default_block_on_overflow")]
     pub block_on_overflow: bool,
+}
+
+/// Messages are logged asynchronously. That is, log messages are sent over an
+/// MPSC-channel to the log drain which writes out the log messages. The default
+/// behavior is to block when the async-queue is full.
+fn default_block_on_overflow() -> bool {
+    true
 }
 
 impl Default for Config {
@@ -78,7 +80,7 @@ impl Default for Config {
             sampling_rates: HashMap::new(),
             enabled_tags: vec![],
             target: default_logtarget(),
-            block_on_overflow: false,
+            block_on_overflow: true,
         }
     }
 }

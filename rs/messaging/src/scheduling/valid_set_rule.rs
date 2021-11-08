@@ -246,8 +246,9 @@ impl ValidSetRuleImpl {
             IngressInductionCost::Free => {
                 // Only subnet methods can be free. These are enqueued directly.
                 assert!(is_subnet_message(&msg, self.own_subnet_id));
-                state.subnet_queues.push_ingress(msg.into());
+                state.push_ingress(msg)
             }
+
             IngressInductionCost::Fee { payer, cost } => {
                 // Get the paying canister from the state.
                 let canister = match state.canister_states.get_mut(&payer) {
@@ -277,27 +278,12 @@ impl ValidSetRuleImpl {
                     compute_allocation,
                     cost,
                 ) {
-                    return Err(StateError::CanisterOutOfCycles {
-                        canister_id: err.canister_id,
-                        available: err.available,
-                        requested: err.requested,
-                    });
+                    return Err(StateError::CanisterOutOfCycles(err));
                 }
 
-                // Add message to the appropriate queue.
-                if is_subnet_message(&msg, self.own_subnet_id) {
-                    state.subnet_queues.push_ingress(msg.into());
-                } else {
-                    let canister = match state.canister_states.get_mut(&payer) {
-                        Some(canister) => canister,
-                        None => return Err(StateError::CanisterNotFound(payer)),
-                    };
-                    canister.system_state.queues.push_ingress(msg.into());
-                }
+                state.push_ingress(msg)
             }
         }
-
-        Ok(())
     }
 }
 

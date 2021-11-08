@@ -12,6 +12,7 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_replica::{args::ReplicaArgs, setup};
+use ic_sys::PAGE_SIZE;
 use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion, SubnetId};
 use ic_utils::ic_features::*;
 use nix::unistd::{setpgid, Pid};
@@ -79,6 +80,9 @@ async fn main() {
 async fn run() -> io::Result<()> {
     // We do not support 32 bits architectures and probably never will.
     assert_eq_size!(usize, u64);
+
+    // Ensure that the hardcoded constant matches the OS page size.
+    assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
 
     // At this point we need to setup a new process group. This is
     // done to ensure all our children processes belong to the same
@@ -287,7 +291,8 @@ async fn run() -> io::Result<()> {
     let (
         crypto,
         state_manager,
-        query_handler,
+        _,
+        async_query_handler,
         mut p2p_runner,
         p2p_event_handler,
         consensus_pool_cache,
@@ -314,8 +319,9 @@ async fn run() -> io::Result<()> {
     task::spawn(ic_http_handler::start_server(
         metrics_registry.clone(),
         config.http_handler.clone(),
+        ingress_message_filter,
         p2p_event_handler,
-        query_handler,
+        async_query_handler,
         state_manager,
         registry,
         Arc::clone(&crypto) as Arc<dyn TlsHandshake + Send + Sync>,
@@ -325,7 +331,6 @@ async fn run() -> io::Result<()> {
         logger.clone(),
         consensus_pool_cache,
         config.artifact_pool.backup.map(|config| config.spool_path),
-        Arc::from(ingress_message_filter),
         subnet_type,
         malicious_behaviour.malicious_flags.clone(),
     ));
@@ -384,7 +389,7 @@ fn frames_post_processor() -> impl Fn(&mut pprof::Frames) {
 #[cfg(feature = "profiler")]
 fn finalize_report(guard: &ProfilerGuard) {
     if let Ok(report) = guard.report().build() {
-        println!("report: {}", &report);
+        println!("report: {:?}", &report);
 
         let file = File::create("flamegraph.svg").unwrap();
         report.flamegraph(file).unwrap();
@@ -396,7 +401,7 @@ fn finalize_report(guard: &ProfilerGuard) {
         profile.encode(&mut content).unwrap();
         file.write_all(&content).unwrap();
 
-        println!("report: {}", &report);
+        println!("report: {:?}", &report);
     };
 
     if let Ok(report) = guard

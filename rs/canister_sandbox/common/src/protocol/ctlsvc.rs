@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct ExecFinishedRequest {
     // Id for this run, as set up by controller.
     pub exec_id: String,
+
     pub exec_output: structs::ExecOutput,
 }
 #[derive(Serialize, Deserialize, Clone)]

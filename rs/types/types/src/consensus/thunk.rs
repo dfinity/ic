@@ -39,7 +39,14 @@ impl<T> Thunk<T> {
     /// Convert a `Thunk<T>` object into its inner value of type `T`.
     /// It will force an evaluation if necessary.
     pub fn into_inner(self) -> T {
-        self.thunk.into_inner()
+        // Force the thunk to ensure that `into_value` succeeds.
+        Lazy::force(&self.thunk);
+        match Lazy::into_value(self.thunk) {
+            Ok(value) => value,
+            Err(_) => {
+                unreachable!("Forced thunk is not evaluated. This cannot happen.")
+            }
+        }
     }
 }
 

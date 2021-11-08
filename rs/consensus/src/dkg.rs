@@ -2,7 +2,9 @@
 //! component into the consensus algorithm that is implemented within this
 //! crate.
 
-use crate::consensus::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use crate::consensus::{
+    crypto::ConsensusCrypto, dkg_key_manager::DkgKeyManager, pool_reader::PoolReader,
+};
 use ic_crypto::crypto_hash;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
@@ -49,7 +51,7 @@ use prometheus::{Histogram, IntCounterVec};
 use rayon::prelude::*;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
 
@@ -162,6 +164,7 @@ pub struct DkgImpl {
     node_id: NodeId,
     crypto: Arc<dyn ConsensusCrypto>,
     consensus_cache: Arc<dyn ConsensusPoolCache>,
+    dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     logger: ReplicaLogger,
     metrics: Metrics,
 }
@@ -175,6 +178,7 @@ impl DkgImpl {
         node_id: NodeId,
         crypto: Arc<dyn ConsensusCrypto>,
         consensus_cache: Arc<dyn ConsensusPoolCache>,
+        dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
         metrics_registry: ic_metrics::MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
@@ -182,6 +186,7 @@ impl DkgImpl {
             crypto,
             consensus_cache,
             node_id,
+            dkg_key_manager,
             logger,
             metrics: Metrics {
                 on_state_change_duration: metrics_registry.histogram(
@@ -213,11 +218,29 @@ impl DkgImpl {
             return None;
         }
 
+        // If the transcript is being loaded at the moment, we return early.
+        // The transcript will be available at a later point in time.
+        if let Some(transcript) = config.resharing_transcript() {
+            if !self
+                .dkg_key_manager
+                .lock()
+                .unwrap()
+                .is_transcript_loaded(&transcript.dkg_id)
+            {
+                return None;
+            }
+        }
+
         let content =
             match ic_interfaces::crypto::NiDkgAlgorithm::create_dealing(&*self.crypto, config) {
                 Ok(dealing) => DealingContent::new(dealing, config.dkg_id()),
                 Err(err) => {
-                    error!(self.logger, "Couldn't create a DKG dealing: {:?}", err);
+                    error!(
+                        self.logger,
+                        "Couldn't create a DKG dealing at height {:?}: {:?}",
+                        config.dkg_id().start_block_height,
+                        err
+                    );
                     return None;
                 }
             };
@@ -470,7 +493,7 @@ pub fn validate_payload(
             dkg_pool,
             &last_dkg_summary,
             payload.dkg_interval_start_height(),
-            &payload.as_dealings().messages,
+            &payload.as_data().dealings.messages,
             &parent,
             metrics,
         )
@@ -1129,7 +1152,8 @@ fn get_dkg_dealings(
         .take_while(|block| !block.payload.is_summary())
         .fold(Default::default(), |mut acc, block| {
             BlockPayload::from(block.payload)
-                .into_dealings()
+                .into_data()
+                .dealings
                 .messages
                 .into_iter()
                 .for_each(|msg| {
@@ -1412,6 +1436,7 @@ mod tests {
         CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetRecord,
     };
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SetupInitialDkgContext;
+    use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
         consensus::fake::FakeContentSigner,
         crypto::CryptoReturningOk,
@@ -1424,7 +1449,7 @@ mod tests {
     };
     use ic_types::{
         batch::BatchPayload,
-        consensus::{DataPayload, HasVersion},
+        consensus::{ecdsa, DataPayload, HasVersion},
         crypto::threshold_sig::ni_dkg::{
             NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
@@ -1460,15 +1485,18 @@ mod tests {
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
                 let replica_1 = node_test_id(1);
+                let dkg_key_manager = new_dkg_key_manager(crypto.clone(), logger.clone());
                 let dkg = DkgImpl::new(
                     replica_1,
                     crypto.clone(),
                     pool.get_cache(),
+                    dkg_key_manager.clone(),
                     MetricsRegistry::new(),
                     logger.clone(),
                 );
 
                 // Creates two dealings for both thresholds and add them to the pool.
+                sync_dkg_key_manager(&dkg_key_manager, &pool);
                 let change_set = dkg.on_state_change(&*dkg_pool.read().unwrap());
                 assert_eq!(change_set.len(), 2);
                 dkg_pool.write().unwrap().apply_changes(change_set);
@@ -1477,7 +1505,7 @@ mod tests {
                 // into the block.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                let dealings = BlockPayload::from(block.payload).into_dealings();
+                let dealings = BlockPayload::from(block.payload).into_data().dealings;
                 if dealings.start_height != Height::from(0) {
                     panic!(
                         "Expected start height in dealings {:?}, but found {:?}",
@@ -1496,7 +1524,7 @@ mod tests {
                 // block anymore.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                let dealings = BlockPayload::from(block.payload).into_dealings();
+                let dealings = BlockPayload::from(block.payload).into_data().dealings;
                 assert_eq!(dealings.messages.len(), 0);
 
                 // Now we empty the dkg pool, add new dealings from this dealer and make sure
@@ -1517,20 +1545,23 @@ mod tests {
                 // Advance the pool and make sure the dealing are not included.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                let dealings = BlockPayload::from(block.payload).into_dealings();
+                let dealings = BlockPayload::from(block.payload).into_data().dealings;
                 assert_eq!(dealings.messages.len(), 0);
 
                 // Create another dealer and add his dealings into the unvalidated pool of
                 // replica 1.
                 let replica_2 = node_test_id(2);
+                let dkg_key_manager_2 = new_dkg_key_manager(crypto.clone(), logger.clone());
                 let dkg_2 = DkgImpl::new(
                     replica_2,
                     crypto,
                     pool.get_cache(),
+                    dkg_key_manager_2.clone(),
                     MetricsRegistry::new(),
                     logger,
                 );
                 let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new());
+                sync_dkg_key_manager(&dkg_key_manager_2, &pool);
                 match &dkg_2.on_state_change(&dkg_pool_2).as_slice() {
                     &[ChangeAction::AddToValidated(message), ChangeAction::AddToValidated(message2)] =>
                     {
@@ -1561,7 +1592,7 @@ mod tests {
                 // Now we create a new block and make sure, the dealings made into the payload.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                let dealings = BlockPayload::from(block.payload).into_dealings();
+                let dealings = BlockPayload::from(block.payload).into_data().dealings;
                 if dealings.start_height != Height::from(0) {
                     panic!(
                         "Expected start height in dealings {:?}, but found {:?}",
@@ -1960,25 +1991,30 @@ mod tests {
                 } = dependencies(pool_config.clone(), 2);
                 let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new());
                 // Let's check that replica 3, who's not a dealer, does not produce dealings.
+                let dkg_key_manager = new_dkg_key_manager(crypto.clone(), logger.clone());
                 let dkg = DkgImpl::new(
                     node_test_id(3),
                     crypto.clone(),
                     pool.get_cache(),
+                    dkg_key_manager,
                     MetricsRegistry::new(),
                     logger.clone(),
                 );
                 assert!(dkg.on_state_change(&dkg_pool).is_empty());
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
+                let dkg_key_manager = new_dkg_key_manager(crypto.clone(), logger.clone());
                 let dkg = DkgImpl::new(
                     node_test_id(1),
                     crypto,
                     pool.get_cache(),
+                    dkg_key_manager.clone(),
                     MetricsRegistry::new(),
                     logger,
                 );
 
                 // Make sure the replica creates two dealings for both thresholds.
+                sync_dkg_key_manager(&dkg_key_manager, &pool);
                 let change_set = dkg.on_state_change(&dkg_pool);
                 match &change_set.as_slice() {
                     &[ChangeAction::AddToValidated(_), ChangeAction::AddToValidated(_)] => {}
@@ -2087,10 +2123,12 @@ mod tests {
                 );
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
+                let dkg_key_manager = new_dkg_key_manager(crypto.clone(), logger.clone());
                 let dkg = DkgImpl::new(
                     node_test_id(1),
                     crypto,
                     pool.get_cache(),
+                    dkg_key_manager.clone(),
                     MetricsRegistry::new(),
                     logger,
                 );
@@ -2099,6 +2137,7 @@ mod tests {
                 // are not added to a summary block yet. That's why we see two dealings for
                 // local thresholds.
                 let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new());
+                sync_dkg_key_manager(&dkg_key_manager, &pool);
                 let change_set = dkg.on_state_change(&dkg_pool);
                 match &change_set.as_slice() {
                     &[ChangeAction::AddToValidated(a), ChangeAction::AddToValidated(b)] => {
@@ -2219,7 +2258,21 @@ mod tests {
         });
     }
 
-    fn run_validation_test(f: &dyn Fn(DkgPoolImpl, DkgPoolImpl, DkgImpl, DkgImpl, NodeId)) {
+    /// These components are used for the validation tests.
+    struct ValidationTestComponents {
+        dkg: DkgImpl,
+        dkg_pool: DkgPoolImpl,
+        dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
+        pool: TestConsensusPool,
+    }
+
+    impl ValidationTestComponents {
+        fn sync_key_manager(&self) {
+            sync_dkg_key_manager(&self.dkg_key_manager, &self.pool);
+        }
+    }
+
+    fn run_validation_test(f: &dyn Fn(ValidationTestComponents, ValidationTestComponents, NodeId)) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config_1| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config_2| {
                 let crypto = Arc::new(CryptoReturningOk::default());
@@ -2233,21 +2286,40 @@ mod tests {
 
                 with_test_replica_logger(|logger| {
                     // We instantiate the DKG component for node Id = 1 nd Id = 2.
+                    let dkg_key_manager_1 = new_dkg_key_manager(crypto.clone(), logger.clone());
                     let dkg_1 = DkgImpl::new(
                         node_id_1,
                         crypto.clone(),
                         consensus_pool_1.get_cache(),
+                        dkg_key_manager_1.clone(),
                         MetricsRegistry::new(),
                         logger.clone(),
                     );
+
+                    let dkg_key_manager_2 = new_dkg_key_manager(crypto.clone(), logger.clone());
                     let dkg_2 = DkgImpl::new(
                         node_id_2,
-                        crypto,
+                        crypto.clone(),
                         consensus_pool_2.get_cache(),
+                        dkg_key_manager_2.clone(),
                         MetricsRegistry::new(),
                         logger,
                     );
-                    f(dkg_pool_1, dkg_pool_2, dkg_1, dkg_2, node_id_1);
+                    f(
+                        ValidationTestComponents {
+                            dkg: dkg_1,
+                            dkg_pool: dkg_pool_1,
+                            dkg_key_manager: dkg_key_manager_1,
+                            pool: consensus_pool_1,
+                        },
+                        ValidationTestComponents {
+                            dkg: dkg_2,
+                            dkg_pool: dkg_pool_2,
+                            dkg_key_manager: dkg_key_manager_2,
+                            pool: consensus_pool_2,
+                        },
+                        node_id_1,
+                    );
                 });
             });
         });
@@ -2257,23 +2329,22 @@ mod tests {
     // validated section.
     #[test]
     fn test_validate_dealing_works_1() {
-        run_validation_test(&|dkg_pool_1: DkgPoolImpl,
-                              mut dkg_pool_2: DkgPoolImpl,
-                              dkg_1: DkgImpl,
-                              dkg_2: DkgImpl,
+        run_validation_test(&|node_1: ValidationTestComponents,
+                              mut node_2: ValidationTestComponents,
                               node_id_1| {
             // Make sure the replica 1 creates two dealings, which we insert as unvalidated
             // message into the pool of replica 2 and save one of them for later.
             let valid_dealing_message = {
-                match &dkg_1.on_state_change(&dkg_pool_1).as_slice() {
+                node_1.sync_key_manager();
+                match &node_1.dkg.on_state_change(&node_1.dkg_pool).as_slice() {
                     &[ChangeAction::AddToValidated(message), ChangeAction::AddToValidated(message2)] =>
                     {
-                        dkg_pool_2.insert(UnvalidatedArtifact {
+                        node_2.dkg_pool.insert(UnvalidatedArtifact {
                             message: message.clone(),
                             peer_id: node_id_1,
                             timestamp: UNIX_EPOCH,
                         });
-                        dkg_pool_2.insert(UnvalidatedArtifact {
+                        node_2.dkg_pool.insert(UnvalidatedArtifact {
                             message: message2.clone(),
                             peer_id: node_id_1,
                             timestamp: UNIX_EPOCH,
@@ -2285,24 +2356,25 @@ mod tests {
             };
 
             // Let replica 2 create its dealings for L/H thresholds.
-            let change_set = dkg_2.on_state_change(&dkg_pool_2);
+            node_2.sync_key_manager();
+            let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
                 &[ChangeAction::AddToValidated(_), ChangeAction::AddToValidated(_)] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
-            dkg_pool_2.apply_changes(change_set);
+            node_2.dkg_pool.apply_changes(change_set);
 
             // Make sure both dealings from replica 1 is successfully validated and apply
             // the changes.
-            let change_set = dkg_2.on_state_change(&dkg_pool_2);
+            let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
                 &[ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_)] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
-            dkg_pool_2.apply_changes(change_set);
+            node_2.dkg_pool.apply_changes(change_set);
 
             // Now we try to add another identical dealing from replica 1.
-            dkg_pool_2.insert(UnvalidatedArtifact {
+            node_2.dkg_pool.insert(UnvalidatedArtifact {
                 message: valid_dealing_message,
                 peer_id: node_id_1,
                 timestamp: UNIX_EPOCH,
@@ -2310,7 +2382,7 @@ mod tests {
 
             // This dealing is identical to the one in the validated section, so we just
             // ignore it.
-            assert!(dkg_2.on_state_change(&dkg_pool_2).is_empty());
+            assert!(node_2.dkg.on_state_change(&node_2.dkg_pool).is_empty());
         });
     }
 
@@ -2319,23 +2391,22 @@ mod tests {
     // dealer already exists.
     #[test]
     fn test_validate_dealing_works_2() {
-        run_validation_test(&|dkg_pool_1: DkgPoolImpl,
-                              mut dkg_pool_2: DkgPoolImpl,
-                              dkg_1: DkgImpl,
-                              dkg_2: DkgImpl,
+        run_validation_test(&|node_1: ValidationTestComponents,
+                              mut node_2: ValidationTestComponents,
                               node_id_1| {
             // Make sure the replica 1 creates two dealings, which we insert as unvalidated
             // messages into the pool of replica 2 and save one of them for later.
             let valid_dealing_message = {
-                match &dkg_1.on_state_change(&dkg_pool_1).as_slice() {
+                node_1.sync_key_manager();
+                match &node_1.dkg.on_state_change(&node_1.dkg_pool).as_slice() {
                     &[ChangeAction::AddToValidated(message), ChangeAction::AddToValidated(message2)] =>
                     {
-                        dkg_pool_2.insert(UnvalidatedArtifact {
+                        node_2.dkg_pool.insert(UnvalidatedArtifact {
                             message: message2.clone(),
                             peer_id: node_id_1,
                             timestamp: UNIX_EPOCH,
                         });
-                        dkg_pool_2.insert(UnvalidatedArtifact {
+                        node_2.dkg_pool.insert(UnvalidatedArtifact {
                             message: message.clone(),
                             peer_id: node_id_1,
                             timestamp: UNIX_EPOCH,
@@ -2347,26 +2418,27 @@ mod tests {
             };
 
             // Let replica 2 create its dealings for L/H thresholds.
-            let change_set = dkg_2.on_state_change(&dkg_pool_2);
+            node_2.sync_key_manager();
+            let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
                 &[ChangeAction::AddToValidated(_), ChangeAction::AddToValidated(_)] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
-            dkg_pool_2.apply_changes(change_set);
+            node_2.dkg_pool.apply_changes(change_set);
 
             // Make sure both dealings from replica 1 is successfully validated and apply
             // the changes.
-            let change_set = dkg_2.on_state_change(&dkg_pool_2);
+            let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
                 &[ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_)] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
-            dkg_pool_2.apply_changes(change_set);
+            node_2.dkg_pool.apply_changes(change_set);
 
             // Now we try to add a different dealing but still from replica 1.
             let mut invalid_dealing_message = valid_dealing_message.clone();
             invalid_dealing_message.content.dealing = NiDkgDealing::dummy_dealing_for_tests(1);
-            dkg_pool_2.insert(UnvalidatedArtifact {
+            node_2.dkg_pool.insert(UnvalidatedArtifact {
                 message: invalid_dealing_message,
                 peer_id: node_id_1,
                 timestamp: UNIX_EPOCH,
@@ -2374,7 +2446,7 @@ mod tests {
 
             // We expect that this dealing will be invalidated, since we have a valid one
             // from that dealer already.
-            let change_set = dkg_2.on_state_change(&dkg_pool_2);
+            let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
                 &[ChangeAction::HandleInvalid(_, reason)] => {
                     assert_eq!(
@@ -2387,7 +2459,7 @@ mod tests {
                 }
                 val => panic!("Unexpected change set: {:?}", val),
             };
-            dkg_pool_2.apply_changes(change_set);
+            node_2.dkg_pool.apply_changes(change_set);
 
             // Now we create a message with an unknown Dkg id and verify
             // that it gets rejected.
@@ -2396,13 +2468,13 @@ mod tests {
             let mut invalid_dealing_message = valid_dealing_message.clone();
             invalid_dealing_message.content.dkg_id = invalid_dkg_id;
 
-            dkg_pool_2.insert(UnvalidatedArtifact {
+            node_2.dkg_pool.insert(UnvalidatedArtifact {
                 message: invalid_dealing_message.clone(),
                 peer_id: node_id_1,
                 timestamp: UNIX_EPOCH,
             });
 
-            let change_set = dkg_2.on_state_change(&dkg_pool_2);
+            let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
                 &[ChangeAction::HandleInvalid(_, reason)] => {
                     assert_eq!(
@@ -2415,20 +2487,20 @@ mod tests {
                 }
                 val => panic!("Unexpected change set: {:?}", val),
             };
-            dkg_pool_2.apply_changes(change_set);
+            node_2.dkg_pool.apply_changes(change_set);
 
             // Now we create a message from a non-dealer and verify it gets marked as
             // invalid.
             let mut invalid_dealing_message = valid_dealing_message.clone();
             invalid_dealing_message.signature.signer = node_test_id(101);
 
-            dkg_pool_2.insert(UnvalidatedArtifact {
+            node_2.dkg_pool.insert(UnvalidatedArtifact {
                 message: invalid_dealing_message.clone(),
                 peer_id: node_id_1,
                 timestamp: UNIX_EPOCH,
             });
 
-            let change_set = dkg_2.on_state_change(&dkg_pool_2);
+            let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
                 &[ChangeAction::HandleInvalid(_, reason)] => {
                     assert_eq!(
@@ -2441,7 +2513,7 @@ mod tests {
                 }
                 val => panic!("Unexpected change set: {:?}", val),
             };
-            dkg_pool_2.apply_changes(change_set);
+            node_2.dkg_pool.apply_changes(change_set);
 
             // Now we create a message, which refers a DKG interval above our finalized
             // height and make sure we skip it.
@@ -2454,13 +2526,13 @@ mod tests {
             let mut dealing_message_from_future = valid_dealing_message;
             dealing_message_from_future.content.dkg_id = dkg_id_from_future;
 
-            dkg_pool_2.insert(UnvalidatedArtifact {
+            node_2.dkg_pool.insert(UnvalidatedArtifact {
                 message: dealing_message_from_future,
                 peer_id: node_id_1,
                 timestamp: UNIX_EPOCH,
             });
 
-            assert!(dkg_2.on_state_change(&dkg_pool_2).is_empty());
+            assert!(node_2.dkg.on_state_change(&node_2.dkg_pool).is_empty());
         });
     }
 
@@ -2468,24 +2540,23 @@ mod tests {
     // get invalidated.
     #[test]
     fn test_validate_dealing_works_3() {
-        run_validation_test(&|dkg_pool_1: DkgPoolImpl,
-                              mut dkg_pool_2: DkgPoolImpl,
-                              dkg_1: DkgImpl,
-                              dkg_2: DkgImpl,
+        run_validation_test(&|node_1: ValidationTestComponents,
+                              mut node_2: ValidationTestComponents,
                               node_id_1| {
             // Make sure the replica 1 creates dealing for H/L thresholds, which we insert
             // as unvalidated messages into the pool of replica 2 and save one of them
             // for later.
             let valid_dealing_message = {
-                match &dkg_1.on_state_change(&dkg_pool_1).as_slice() {
+                node_1.sync_key_manager();
+                match &node_1.dkg.on_state_change(&node_1.dkg_pool).as_slice() {
                     &[ChangeAction::AddToValidated(message), ChangeAction::AddToValidated(message2)] =>
                     {
-                        dkg_pool_2.insert(UnvalidatedArtifact {
+                        node_2.dkg_pool.insert(UnvalidatedArtifact {
                             message: message.clone(),
                             peer_id: node_id_1,
                             timestamp: UNIX_EPOCH,
                         });
-                        dkg_pool_2.insert(UnvalidatedArtifact {
+                        node_2.dkg_pool.insert(UnvalidatedArtifact {
                             message: message2.clone(),
                             peer_id: node_id_1,
                             timestamp: UNIX_EPOCH,
@@ -2499,22 +2570,24 @@ mod tests {
             // Now we try to add a different dealing but still from replica 1.
             let mut dealing_message_2 = valid_dealing_message;
             dealing_message_2.content.dealing = NiDkgDealing::dummy_dealing_for_tests(1);
-            dkg_pool_2.insert(UnvalidatedArtifact {
+            node_2.dkg_pool.insert(UnvalidatedArtifact {
                 message: dealing_message_2,
                 peer_id: node_id_1,
                 timestamp: UNIX_EPOCH,
             });
 
             // Let replica 2 create dealings for L/H thresholds.
-            let change_set = dkg_2.on_state_change(&dkg_pool_2);
+            node_2.sync_key_manager();
+            let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
                 &[ChangeAction::AddToValidated(_), ChangeAction::AddToValidated(_)] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
-            dkg_pool_2.apply_changes(change_set);
+            node_2.dkg_pool.apply_changes(change_set);
 
             // Make sure we validate one dealing, and handle another two as invalid.
-            let change_set = dkg_2.on_state_change(&dkg_pool_2);
+            node_2.sync_key_manager();
+            let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
                 &[ChangeAction::HandleInvalid(_, reason1), ChangeAction::HandleInvalid(_, reason2), ChangeAction::MoveToValidated(_)] =>
                 {
@@ -2533,21 +2606,20 @@ mod tests {
     // Creates two dealings for both thresholds and make sure they get validated.
     #[test]
     fn test_validate_dealing_works_4() {
-        run_validation_test(&|dkg_pool_1: DkgPoolImpl,
-                              mut dkg_pool_2: DkgPoolImpl,
-                              dkg_1: DkgImpl,
-                              dkg_2: DkgImpl,
+        run_validation_test(&|node_1: ValidationTestComponents,
+                              mut node_2: ValidationTestComponents,
                               node_id_1| {
             // Make sure the replica 1 creates two dealings for L/H thresholds, which we
             // insert as unvalidated messages into the pool of replica 2.
-            match &dkg_1.on_state_change(&dkg_pool_1).as_slice() {
+            node_1.sync_key_manager();
+            match &node_1.dkg.on_state_change(&node_1.dkg_pool).as_slice() {
                 &[ChangeAction::AddToValidated(message), ChangeAction::AddToValidated(message2)] => {
-                    dkg_pool_2.insert(UnvalidatedArtifact {
+                    node_2.dkg_pool.insert(UnvalidatedArtifact {
                         message: message.clone(),
                         peer_id: node_id_1,
                         timestamp: UNIX_EPOCH,
                     });
-                    dkg_pool_2.insert(UnvalidatedArtifact {
+                    node_2.dkg_pool.insert(UnvalidatedArtifact {
                         message: message2.clone(),
                         peer_id: node_id_1,
                         timestamp: UNIX_EPOCH,
@@ -2557,15 +2629,16 @@ mod tests {
             }
 
             // Make sure the replica produces its dealings.
-            let change_set = dkg_2.on_state_change(&dkg_pool_2);
+            node_2.sync_key_manager();
+            let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
                 &[ChangeAction::AddToValidated(_), ChangeAction::AddToValidated(_)] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
-            dkg_pool_2.apply_changes(change_set);
+            node_2.dkg_pool.apply_changes(change_set);
 
             // Make sure we validate both dealings from replica 1
-            let change_set = dkg_2.on_state_change(&dkg_pool_2);
+            let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
                 &[ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_)] => {}
                 val => panic!("Unexpected change set: {:?}", val),
@@ -2666,17 +2739,21 @@ mod tests {
                     }
 
                     // Now we instantiate the DKG components. Node Id = 1 is a dealer.
+                    let dgk_key_manager_1 = new_dkg_key_manager(crypto_1.clone(), logger.clone());
                     let dkg_1 = DkgImpl::new(
                         node_test_id(1),
                         crypto_1,
                         pool_1.get_cache(),
+                        dgk_key_manager_1.clone(),
                         MetricsRegistry::new(),
                         logger.clone(),
                     );
+
                     let dkg_2 = DkgImpl::new(
                         node_test_id(2),
-                        crypto_2,
+                        crypto_2.clone(),
                         pool_2.get_cache(),
+                        new_dkg_key_manager(crypto_2, logger.clone()),
                         MetricsRegistry::new(),
                         logger,
                     );
@@ -2691,6 +2768,7 @@ mod tests {
                         val => panic!("Unexpected change set: {:?}", val),
                     };
                     dkg_pool_1.apply_changes(change_set);
+                    sync_dkg_key_manager(&dgk_key_manager_1, &pool_1);
 
                     // The last summary contains two local and two remote configs.
                     // dkg.on_state_change should create 4 dealings for those
@@ -3186,6 +3264,7 @@ mod tests {
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
                     dealings: dkg::Dealings::new(Height::from(0), messages.clone()),
+                    ecdsa: ecdsa::Payload::default(),
                 }),
             );
             let mut parent = Block::from(pool.make_next_block());
@@ -3642,5 +3721,28 @@ mod tests {
             &ReplicaVersion::try_from("TestID").unwrap()
         );
         assert_eq!(result.signature.signer.dealer_subnet, subnet_test_id(0));
+    }
+
+    fn new_dkg_key_manager(
+        crypto: Arc<dyn ConsensusCrypto>,
+        logger: ReplicaLogger,
+    ) -> Arc<Mutex<DkgKeyManager>> {
+        Arc::new(Mutex::new(DkgKeyManager::new(
+            MetricsRegistry::new(),
+            crypto,
+            logger,
+        )))
+    }
+
+    // Since the `DkgKeyManager` component is not running, we need to allow it to
+    // make progess occasionally.
+    //
+    // This function calls on_state_change and sync, to allow the transcripts to be
+    // loaded.
+    fn sync_dkg_key_manager(mngr: &Arc<Mutex<DkgKeyManager>>, pool: &TestConsensusPool) {
+        let mut mngr = mngr.lock().unwrap();
+
+        mngr.on_state_change(&PoolReader::new(pool));
+        mngr.sync();
     }
 }

@@ -34,6 +34,7 @@ message Block {
 	// Payloads
 	IngressPayload ingress_payload = 9;
 	XNetPayload xnet_payload = 10;
+	SelfValidatingPayload self_validating_payload = 12;
 	bytes payload_hash = 11;
 }
 
@@ -78,6 +79,9 @@ message Notarization {
 message SubnetStreamSlice {
 	SubnetId subnet_id = 1;
 	messaging.xnet.v1.CertifiedStreamSlice stream_slice = 2;
+}
+
+message SelfValidatingPayload {
 }
 
 message XNetPayload {

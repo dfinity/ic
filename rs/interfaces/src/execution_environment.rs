@@ -2,19 +2,21 @@
 mod errors;
 
 use crate::state_manager::StateManagerError;
-pub use errors::{CanisterHeartbeatError, MessageAcceptanceError};
-pub use errors::{HypervisorError, TrapCode};
+pub use errors::{CanisterHeartbeatError, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_types::ComputeAllocation;
 use ic_types::{
+    canonical_error::CanonicalError,
     ingress::{IngressStatus, WasmResult},
-    messages::{CertificateDelegation, MessageId, SignedIngressContent, UserQuery},
+    messages::{
+        CertificateDelegation, HttpQueryResponse, MessageId, SignedIngressContent, UserQuery,
+    },
     user_error::UserError,
-    Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
+    ComputeAllocation, Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
+use tower::util::BoxService;
 
 /// Instance execution statistics. The stats are cumulative and
 /// contain measurements from the point in time when the instance was
@@ -45,7 +47,7 @@ pub enum SubnetAvailableMemoryError {
 /// The problem is that when canisters with no memory reservations want to
 /// expand their memory consumption, we need to ensure that they do not go over
 /// subnet's capacity. As we execute canisters in parallel, we need to
-/// provide them with a way to view the latest state of memory availble in a
+/// provide them with a way to view the latest state of memory available in a
 /// thread safe way. Hence, we use `Arc<RwLock<>>` here.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SubnetAvailableMemory(Arc<RwLock<NumBytes>>);
@@ -105,6 +107,14 @@ pub struct ExecuteMessageResult<CanisterState> {
 
 pub type HypervisorResult<T> = Result<T, HypervisorError>;
 
+/// Interface for the component to filter out ingress messages that
+/// the canister is not willing to accept.
+pub type IngressFilterService =
+    BoxService<(ProvisionalWhitelist, SignedIngressContent), (), CanonicalError>;
+
+pub type QueryExecutionService =
+    BoxService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, CanonicalError>;
+
 /// Interface for the component to execute queries on canisters.  It can be used
 /// by the HttpHandler and other system components to execute queries.
 pub trait QueryHandler: Send + Sync {
@@ -121,37 +131,6 @@ pub trait QueryHandler: Send + Sync {
         state: Arc<Self::State>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError>;
-
-    // Non-blocking version of the function call above. The method uses the latest
-    // certified state.
-    // The callee must call the callback with the appropriate result when the
-    // computation has finished. The callback can be called inlined (immediately)
-    // before the function returns. The callback should not block the thread.
-    fn query_latest_certified_state(
-        &self,
-        query: UserQuery,
-        certificate_delegation: Option<CertificateDelegation>,
-        callback: Box<dyn FnOnce(Result<WasmResult, UserError>) + Send + 'static>,
-    );
-}
-
-/// Interface for the component to filter out ingress messages that
-/// the canister is not willing to accept.
-pub trait IngressMessageFilter: Send + Sync {
-    /// Type of state managed by StateReader.
-    ///
-    /// Should typically be `ic_replicated_state::ReplicatedState`.
-    // Note [Associated Types in Interfaces]
-    type State;
-
-    /// Asks the canister if it is willing to accept the provided ingress
-    /// message.
-    fn should_accept_ingress_message(
-        &self,
-        state: Arc<Self::State>,
-        provisional_whitelist: &ProvisionalWhitelist,
-        ingress: &SignedIngressContent,
-    ) -> Result<(), MessageAcceptanceError>;
 }
 
 /// Errors that can be returned when reading/writing from/to ingress history.

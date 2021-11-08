@@ -2,6 +2,7 @@ use ic_config::embedders::PersistenceType;
 use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
 use ic_replicated_state::{Global, NumWasmPages};
+use ic_system_api::SystemStateAccessor;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, mock_time, state::SystemStateBuilder,
     types::ids::user_test_id,
@@ -69,24 +70,14 @@ mod tests {
             .compile(PersistenceType::Sigsegv, &output.binary)
             .expect("compiled");
 
-        let mut instance = embedder.new_instance(
-            canister_test_id(1),
-            &compiled,
-            &[],
-            ic_replicated_state::NumWasmPages::from(0),
-            None,
-            None,
-            DirtyPageTracking::Track,
-        );
-        instance.set_num_instructions(NumInstructions::new(100));
-
         let user_id = ic_test_utilities::types::ids::user_test_id(24);
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
-        let mut api = ic_system_api::SystemApiImpl::new(
+        let api = ic_system_api::SystemApiImpl::new(
+            system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
             system_state_accessor,
             ic_types::NumBytes::from(0),
@@ -94,12 +85,27 @@ mod tests {
             log,
         );
 
-        let result = instance.run(
-            &mut api,
-            ic_types::methods::FuncRef::Method(ic_types::methods::WasmMethod::Update(
+        let mut instance = embedder
+            .new_instance(
+                canister_test_id(1),
+                &compiled,
+                &[],
+                ic_replicated_state::NumWasmPages::from(0),
+                None,
+                None,
+                DirtyPageTracking::Track,
+                api,
+            )
+            .map_err(|r| r.0)
+            .expect("Failed to create instance");
+        // Note: system API calls get charged per call, see system_api::charges
+        instance.set_num_instructions(NumInstructions::new(1000));
+
+        let result = instance.run(ic_types::methods::FuncRef::Method(
+            ic_types::methods::WasmMethod::Update(
                 "should_fail_with_contract_violation".to_string(),
-            )),
-        );
+            ),
+        ));
 
         match result {
             Ok(_) => panic!("Expected a HypervisorError::ContractViolation"),
@@ -144,23 +150,14 @@ mod tests {
             )
             .expect("compiled");
 
-        let mut instance = embedder.new_instance(
-            canister_test_id(1),
-            &compiled,
-            &[],
-            ic_replicated_state::NumWasmPages::from(0),
-            None,
-            None,
-            DirtyPageTracking::Track,
-        );
-
         let user_id = ic_test_utilities::types::ids::user_test_id(24);
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
-        let mut api = ic_system_api::SystemApiImpl::new(
+        let api = ic_system_api::SystemApiImpl::new(
+            system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
             system_state_accessor,
             ic_types::NumBytes::from(0),
@@ -168,12 +165,23 @@ mod tests {
             log,
         );
 
-        let result = instance.run(
-            &mut api,
-            ic_types::methods::FuncRef::Method(ic_types::methods::WasmMethod::Update(
-                "f".to_string(),
-            )),
-        );
+        let mut instance = embedder
+            .new_instance(
+                canister_test_id(1),
+                &compiled,
+                &[],
+                ic_replicated_state::NumWasmPages::from(0),
+                None,
+                None,
+                DirtyPageTracking::Track,
+                api,
+            )
+            .map_err(|r| r.0)
+            .expect("Failed to create instance");
+
+        let result = instance.run(ic_types::methods::FuncRef::Method(
+            ic_types::methods::WasmMethod::Update("f".to_string()),
+        ));
 
         match result {
             Ok(_) => panic!("Expected a HypervisorError::Trapped"),
@@ -209,61 +217,69 @@ mod tests {
         )
         .unwrap();
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
-        let mut inst = embedder.new_instance(
-            canister_test_id(1),
-            &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
-            &[],
-            NumWasmPages::from(0),
-            None,
-            None,
-            DirtyPageTracking::Track,
-        );
-
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+
         let system_state = SystemStateBuilder::default().build();
         let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
             system_state,
             Arc::clone(&cycles_account_manager),
         );
+        let api = ic_system_api::SystemApiImpl::new(
+            system_state_accessor.canister_id(),
+            ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
+            system_state_accessor,
+            ic_types::NumBytes::from(0),
+            execution_parameters(),
+            log.clone(),
+        );
+        let mut inst = embedder
+            .new_instance(
+                canister_test_id(1),
+                &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
+                &[],
+                NumWasmPages::from(0),
+                None,
+                None,
+                DirtyPageTracking::Track,
+                api,
+            )
+            .map_err(|r| r.0)
+            .expect("Failed to create instance");
+
         // Initial read, the globals should have a value of 0 and 42 respectively.
         let res = inst
-            .run(
-                &mut ic_system_api::SystemApiImpl::new(
-                    ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
-                    system_state_accessor,
-                    ic_types::NumBytes::from(0),
-                    execution_parameters(),
-                    log.clone(),
-                ),
-                FuncRef::Method(WasmMethod::Update("test".to_string())),
-            )
+            .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
             .unwrap();
         assert_eq!(res.exported_globals[..], [Global::I64(0), Global::I32(42)]);
 
         // Change the value of globals and verify we can get them back.
-        let mut inst = embedder.new_instance(
-            canister_test_id(1),
-            &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
-            &[Global::I64(5), Global::I32(12)],
-            NumWasmPages::from(0),
-            None,
-            None,
-            DirtyPageTracking::Track,
-        );
         let system_state = SystemStateBuilder::default().build();
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
-        let res = inst
-            .run(
-                &mut ic_system_api::SystemApiImpl::new(
-                    ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
-                    system_state_accessor,
-                    ic_types::NumBytes::from(0),
-                    execution_parameters(),
-                    log,
-                ),
-                FuncRef::Method(WasmMethod::Update("test".to_string())),
+        let api = ic_system_api::SystemApiImpl::new(
+            system_state_accessor.canister_id(),
+            ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
+            system_state_accessor,
+            ic_types::NumBytes::from(0),
+            execution_parameters(),
+            log,
+        );
+
+        let mut inst = embedder
+            .new_instance(
+                canister_test_id(1),
+                &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
+                &[Global::I64(5), Global::I32(12)],
+                NumWasmPages::from(0),
+                None,
+                None,
+                DirtyPageTracking::Track,
+                api,
             )
+            .map_err(|r| r.0)
+            .expect("Failed to create instance");
+        let res = inst
+            .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
             .unwrap();
         assert_eq!(res.exported_globals[..], [Global::I64(5), Global::I32(12)]);
     }
@@ -287,34 +303,37 @@ mod tests {
         )
         .unwrap();
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
-        let mut inst = embedder.new_instance(
-            canister_test_id(1),
-            &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
-            &[],
-            NumWasmPages::from(0),
-            None,
-            None,
-            DirtyPageTracking::Track,
-        );
-
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = SystemStateBuilder::default().build();
         let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
             system_state,
             Arc::clone(&cycles_account_manager),
         );
+        let api = ic_system_api::SystemApiImpl::new(
+            system_state_accessor.canister_id(),
+            ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
+            system_state_accessor,
+            ic_types::NumBytes::from(0),
+            execution_parameters(),
+            log.clone(),
+        );
+        let mut inst = embedder
+            .new_instance(
+                canister_test_id(1),
+                &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
+                &[],
+                NumWasmPages::from(0),
+                None,
+                None,
+                DirtyPageTracking::Track,
+                api,
+            )
+            .map_err(|r| r.0)
+            .expect("Failed to create instance");
+
         // Initial read, the globals should have a value of 0.0 and 42.42 respectively.
         let res = inst
-            .run(
-                &mut ic_system_api::SystemApiImpl::new(
-                    ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
-                    system_state_accessor,
-                    ic_types::NumBytes::from(0),
-                    execution_parameters(),
-                    log.clone(),
-                ),
-                FuncRef::Method(WasmMethod::Update("test".to_string())),
-            )
+            .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
             .unwrap();
         assert_eq!(
             res.exported_globals[..],
@@ -322,29 +341,32 @@ mod tests {
         );
 
         // Change the value of globals and verify we can get them back.
-        let mut inst = embedder.new_instance(
-            canister_test_id(1),
-            &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
-            &[Global::F64(5.3), Global::F32(12.37)],
-            NumWasmPages::from(0),
-            None,
-            None,
-            DirtyPageTracking::Track,
-        );
         let system_state = SystemStateBuilder::default().build();
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
-        let res = inst
-            .run(
-                &mut ic_system_api::SystemApiImpl::new(
-                    ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
-                    system_state_accessor,
-                    ic_types::NumBytes::from(0),
-                    execution_parameters(),
-                    log,
-                ),
-                FuncRef::Method(WasmMethod::Update("test".to_string())),
+        let api = ic_system_api::SystemApiImpl::new(
+            system_state_accessor.canister_id(),
+            ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
+            system_state_accessor,
+            ic_types::NumBytes::from(0),
+            execution_parameters(),
+            log,
+        );
+        let mut inst = embedder
+            .new_instance(
+                canister_test_id(1),
+                &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
+                &[Global::F64(5.3), Global::F32(12.37)],
+                NumWasmPages::from(0),
+                None,
+                None,
+                DirtyPageTracking::Track,
+                api,
             )
+            .map_err(|r| r.0)
+            .expect("Failed to create instance");
+        let res = inst
+            .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
             .unwrap();
         assert_eq!(
             res.exported_globals[..],
@@ -364,17 +386,33 @@ mod tests {
                     )"#,
         )
         .unwrap();
+        let system_state = SystemStateBuilder::default().build();
+        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+        let system_state_accessor =
+            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let api = ic_system_api::SystemApiImpl::new(
+            system_state_accessor.canister_id(),
+            ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
+            system_state_accessor,
+            ic_types::NumBytes::from(0),
+            execution_parameters(),
+            log.clone(),
+        );
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log);
         // Should fail because of not correct type of the second one.
-        embedder.new_instance(
-            canister_test_id(1),
-            &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
-            &[Global::I64(5), Global::I64(12)],
-            NumWasmPages::from(0),
-            None,
-            None,
-            DirtyPageTracking::Track,
-        );
+        embedder
+            .new_instance(
+                canister_test_id(1),
+                &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
+                &[Global::I64(5), Global::I64(12)],
+                NumWasmPages::from(0),
+                None,
+                None,
+                DirtyPageTracking::Track,
+                api,
+            )
+            .map_err(|r| r.0)
+            .expect("Failed to create instance");
     }
 
     #[test]
@@ -395,18 +433,34 @@ mod tests {
         .unwrap();
 
         let log = logger();
-        let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log);
-        embedder.new_instance(
-            canister_test_id(1),
-            &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
-            &[Global::I64(0); DEFAULT_GLOBALS_LENGTH + 1]
-                .iter()
-                .cloned()
-                .collect::<Vec<Global>>(),
-            NumWasmPages::from(0),
-            None,
-            None,
-            DirtyPageTracking::Track,
+        let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
+        let system_state = SystemStateBuilder::default().build();
+        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+        let system_state_accessor =
+            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let api = ic_system_api::SystemApiImpl::new(
+            system_state_accessor.canister_id(),
+            ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
+            system_state_accessor,
+            ic_types::NumBytes::from(0),
+            execution_parameters(),
+            log,
         );
+        embedder
+            .new_instance(
+                canister_test_id(1),
+                &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
+                &[Global::I64(0); DEFAULT_GLOBALS_LENGTH + 1]
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<Global>>(),
+                NumWasmPages::from(0),
+                None,
+                None,
+                DirtyPageTracking::Track,
+                api,
+            )
+            .map_err(|r| r.0)
+            .expect("Failed to create instance");
     }
 }

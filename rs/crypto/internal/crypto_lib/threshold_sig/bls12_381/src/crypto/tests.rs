@@ -9,11 +9,10 @@ use super::super::types::{
 };
 use crate::crypto::hash_message_to_g1;
 use crate::types::PublicKey;
-use ff::Field;
-use ic_crypto_internal_bls12381_common::{g1_to_bytes, hash_to_fr};
+use bls12_381::Scalar;
+use ic_crypto_internal_bls12381_common::{g1_to_bytes, hash_to_fr, random_bls12_381_scalar};
 use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
-use pairing::bls12_381::Fr;
 use proptest::prelude::*;
 use proptest::std_facade::HashSet;
 use rand::seq::IteratorRandom;
@@ -21,14 +20,14 @@ use rand::Rng;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use std::convert::TryFrom;
+use std::ops::{AddAssign, SubAssign};
 
 pub mod util {
     use super::{
         crypto, select_n, IndividualSignature, InvalidArgumentError, NodeIndex, NumberOfNodes,
         Polynomial, PublicCoefficients, Randomness, SecretKey,
     };
-    use ff::Field;
-    use pairing::bls12_381::Fr;
+    use bls12_381::Scalar;
 
     // A public key as computed by the holder of the private key is the same as the
     // public key as computed from the public public_coefficients.
@@ -50,7 +49,7 @@ pub mod util {
     /// Useful for testing with the standard dealing API that throws away the
     /// original secret polynomial.
     fn combined_secret_key(secret_keys: &[SecretKey]) -> SecretKey {
-        let coordinates: Vec<(Fr, SecretKey)> = secret_keys
+        let coordinates: Vec<(Scalar, SecretKey)> = secret_keys
             .iter()
             .zip(0_u32..)
             .map(|(y, index)| (crypto::x_for_index(index), *y))
@@ -224,15 +223,15 @@ pub mod util {
 #[test]
 fn x_for_index_is_correct() {
     // First N values:
-    let mut x = Fr::one();
+    let mut x = Scalar::one();
     for i in 0..100 {
         assert_eq!(crypto::x_for_index(i), x);
-        x.add_assign(&Fr::one());
+        x.add_assign(&Scalar::one());
     }
     // Binary 0, 1, 11, 111, ... all the way up to the maximum NodeIndex.
     // The corresponding x values are binary 1, 10, 100, ... and the last value is
     // one greater than the maximum NodeIndex.
-    let mut x = Fr::one();
+    let mut x = Scalar::one();
     let mut i: NodeIndex = 0;
     loop {
         assert_eq!(crypto::x_for_index(i), x);
@@ -389,7 +388,7 @@ proptest! {
             let mut rng = ChaChaRng::from_seed(seed.get());
             let receivers_size = (threshold+redundancy+idle_receivers) as usize;
 
-            let secret_key = SecretKey::random(&mut rng);
+            let secret_key = random_bls12_381_scalar(&mut rng);
 
             let eligibility = {
                 let mut eligibility = vec![true;receivers_size];
@@ -415,7 +414,7 @@ proptest! {
 
 mod resharing_util {
     use super::*;
-    use pairing::bls12_381::G2;
+    use bls12_381::G2Projective;
 
     pub type ToyDealing = (PublicCoefficients, Vec<Option<SecretKey>>);
 
@@ -468,14 +467,14 @@ mod resharing_util {
     /// Given multiple public keys (y values) at different points (which give x
     /// values) interpolate the value at zero.
     pub fn interpolate_public_key(shares: &[Option<PublicKey>]) -> PublicKey {
-        let shares: Vec<(SecretKey, G2)> = shares
+        let shares: Vec<(SecretKey, G2Projective)> = shares
             .iter()
             .enumerate()
             .filter_map(|(index, share_maybe)| {
                 share_maybe.map(|share| (crypto::x_for_index(index as NodeIndex), share.0))
             })
             .collect();
-        PublicKey(PublicCoefficients::interpolate(&shares).unwrap())
+        PublicKey(PublicCoefficients::interpolate_g2(&shares).unwrap())
     }
 
     /// For each active new receiver, this provides a single encrypted secret

@@ -16,7 +16,6 @@ use crate::types::{PublicCoefficients, SecretKeyBytes};
 pub use ic_crypto_internal_types::sign::threshold_sig::dkg::encryption_public_key::secp256k1::EphemeralPublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_types::NodeIndex;
-use pairing::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 use std::collections::btree_map::BTreeMap;
 use zeroize::Zeroize;

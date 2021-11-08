@@ -36,6 +36,8 @@ else
     DOCKER_RUN_ARGS+=(-v /etc/passwd:/etc/passwd)
     DOCKER_RUN_ARGS+=(-v /etc/group:/etc/group)
     DOCKER_RUN_ARGS+=(-u $(id -u):$(id -g))
+    DOCKER_RUN_ARGS+=(-v ${SSH_AUTH_SOCK}:/ssh-agent)
+    DOCKER_RUN_ARGS+=(-e SSH_AUTH_SOCK=/ssh-agent)
 fi
 
 if [[ ! -r "$SSL_DIR/private.pem" ]]; then

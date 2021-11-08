@@ -5,6 +5,7 @@ edition = "2018"
 
 [dependencies]
 hex = "0.4.2"
+base64 = "0.11.0"
 ic-certified-vars = { path = "../../../../../certified_vars" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
@@ -17,7 +18,6 @@ serde_cbor = "0.11"
 simple_asn1 = "0.5.4"
 
 [dev-dependencies]
-base64 = "0.13.0"
 # TODO (CRP-912) Replace ic-crypto with ic-crypto-utils-threshold-sig
 ic-crypto = { path = "../../../../../crypto" }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }

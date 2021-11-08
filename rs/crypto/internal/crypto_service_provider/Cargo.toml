@@ -7,8 +7,8 @@ edition = "2018"
 
 [dependencies]
 async-trait = "0.1.41"
+base64 = "0.11"
 hex = "0.4.2"
-base64 = "0.11.0"
 ic-config = { path = "../../../config" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../crypto_lib/basic_sig/der_utils" }
 ic-crypto-internal-basic-sig-cose = { path = "../crypto_lib/basic_sig/cose" }
@@ -35,12 +35,13 @@ ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
 ic-utils = { path = "../../../utils" }
 lazy_static = "1.4.0"
-openssl = "0.10.29"
+openssl = "0.10.36"
 parking_lot = "0.11.1"
-prost = "0.7.0"
+prost = "0.8.0"
 rand = "0.7.3"
 rand_chacha = "0.2.2"
 rand_core = "0.5.1"
+ring = "0.16.20"
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_cbor = "0.11.1"
 simple_asn1 = "0.5.4"
@@ -52,7 +53,7 @@ tokio-openssl = "0.6.0"
 zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
 
 [build-dependencies]
-prost-build = "0.7.0"
+prost-build = "0.8.0"
 
 [dev-dependencies]
 hex = "0.4.2"

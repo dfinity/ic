@@ -1,5 +1,6 @@
 //! Domain separation context types for hashing.
 use std::convert::TryFrom;
+use std::fmt;
 
 #[cfg(test)]
 mod tests;
@@ -11,7 +12,6 @@ pub trait Context {
 
 /// A domain separation context based on a `String` to separate domains when
 /// hashing.
-#[derive(Debug)]
 pub struct DomainSeparationContext {
     domain: String,
     bytes: Vec<u8>,
@@ -42,6 +42,16 @@ impl DomainSeparationContext {
     #[allow(dead_code)]
     pub fn domain(&self) -> &String {
         &self.domain
+    }
+}
+
+impl fmt::Debug for DomainSeparationContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "DomainSeparationContext{{ domain: \"{}\" }}",
+            &self.domain
+        )
     }
 }
 

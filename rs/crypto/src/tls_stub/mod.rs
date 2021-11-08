@@ -15,6 +15,7 @@ use std::str::FromStr;
 use tokio::net::TcpStream;
 
 mod client_handshake;
+mod rustls;
 mod server_handshake;
 
 #[async_trait]
@@ -50,6 +51,16 @@ where
             crypto.error => log_err(result.as_ref().err()),
         );
         result
+    }
+
+    async fn perform_tls_server_handshake_with_rustls(
+        &self,
+        _tcp_stream: TcpStream,
+        _allowed_clients: AllowedClients,
+        _registry_version: RegistryVersion,
+    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
+        // TODO: CRP-1109: Implement the server handshake with rustls
+        todo!()
     }
 
     async fn perform_tls_server_handshake_temp_with_optional_client_auth(
@@ -124,6 +135,36 @@ where
         );
         debug!(logger; crypto.description => "start",);
         let result = client_handshake::perform_tls_client_handshake(
+            &self.csp,
+            self.node_id,
+            &self.registry_client,
+            tcp_stream,
+            server,
+            registry_version,
+        )
+        .await;
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
+
+    async fn perform_tls_client_handshake_with_rustls(
+        &self,
+        tcp_stream: TcpStream,
+        server: NodeId,
+        registry_version: RegistryVersion,
+    ) -> Result<TlsStream, TlsClientHandshakeError> {
+        let logger = new_logger!(&self.logger;
+            crypto.trait_name => "TlsHandshake",
+            crypto.method_name => "perform_tls_client_handshake_with_rustls",
+            crypto.registry_version => registry_version.get(),
+            crypto.tls_server => format!("{}", server),
+        );
+        debug!(logger; crypto.description => "start",);
+        let result = rustls::client_handshake::perform_tls_client_handshake(
             &self.csp,
             self.node_id,
             &self.registry_client,

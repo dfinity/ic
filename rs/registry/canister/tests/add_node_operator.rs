@@ -19,6 +19,7 @@ use registry_canister::{
 };
 
 use assert_matches::assert_matches;
+use std::collections::BTreeMap;
 
 #[test]
 fn test_the_anonymous_user_cannot_add_a_node_operator() {
@@ -30,6 +31,8 @@ fn test_the_anonymous_user_cannot_add_a_node_operator() {
             node_operator_principal_id: Some(PrincipalId::new_anonymous()),
             node_allowance: 5,
             node_provider_principal_id: Some(PrincipalId::new_anonymous()),
+            dc_id: "AN1".into(),
+            rewardable_nodes: BTreeMap::new(),
         };
 
         // The anonymous end-user tries to add a node operator, bypassing the proposals
@@ -71,6 +74,8 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_a_node_operator
             node_operator_principal_id: Some(PrincipalId::new_anonymous()),
             node_allowance: 5,
             node_provider_principal_id: Some(PrincipalId::new_anonymous()),
+            dc_id: "AN1".into(),
+            rewardable_nodes: BTreeMap::new(),
         };
 
         // The attacker canister tries to add a node operator, pretending to be the
@@ -121,6 +126,8 @@ fn test_accepted_proposal_mutates_the_registry() {
             node_operator_principal_id: Some(PrincipalId::new_anonymous()),
             node_allowance: 5,
             node_provider_principal_id: Some(PrincipalId::new_anonymous()),
+            dc_id: "AN1".into(),
+            rewardable_nodes: BTreeMap::new(),
         };
 
         assert!(
@@ -145,6 +152,8 @@ fn test_accepted_proposal_mutates_the_registry() {
                 node_operator_principal_id: PrincipalId::new_anonymous().to_vec(),
                 node_allowance: 5,
                 node_provider_principal_id: PrincipalId::new_anonymous().to_vec(),
+                dc_id: "AN1".into(),
+                rewardable_nodes: BTreeMap::new(),
             }
         );
 
@@ -153,6 +162,8 @@ fn test_accepted_proposal_mutates_the_registry() {
             node_operator_principal_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
             node_allowance: 120,
             node_provider_principal_id: Some(PrincipalId::new_anonymous()),
+            dc_id: "BC1".into(),
+            rewardable_nodes: BTreeMap::new(),
         };
 
         assert!(
@@ -175,6 +186,8 @@ fn test_accepted_proposal_mutates_the_registry() {
                 node_operator_principal_id: TEST_NEURON_1_OWNER_PRINCIPAL.to_vec(),
                 node_allowance: 120,
                 node_provider_principal_id: PrincipalId::new_anonymous().to_vec(),
+                dc_id: "BC1".into(),
+                rewardable_nodes: BTreeMap::new(),
             }
         );
 
@@ -183,6 +196,8 @@ fn test_accepted_proposal_mutates_the_registry() {
             node_operator_principal_id: Some(PrincipalId::new_anonymous()),
             node_allowance: 567,
             node_provider_principal_id: Some(PrincipalId::new_anonymous()),
+            dc_id: "CA1".into(),
+            rewardable_nodes: BTreeMap::new(),
         };
 
         assert!(

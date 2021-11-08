@@ -9,6 +9,7 @@ bincode = "1.2.1"
 crossbeam-channel = "0.5.0"
 enum-map = "0.6.2"
 futures = "0.3.10"
+rand = "0.7.3"
 ic-artifact-manager = { path = "../artifact_manager" }
 ic-base-thread = { path = "../base/thread" }
 ic-config = { path = "../config" }
@@ -29,6 +30,7 @@ slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "rel
 strum = "0.18.0"
 strum_macros = "0.18.0"
 tokio = { version = "1.9.0", features = ["full"] }
+tower-service = "0.3.1"
 
 [dev-dependencies]
 ic-consensus-message = { path = "../consensus/message" }

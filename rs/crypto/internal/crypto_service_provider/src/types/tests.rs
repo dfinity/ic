@@ -1,8 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
-use ic_crypto_internal_test_vectors::basic_sig::TESTVEC_ED25519_STABILITY_1_SIG;
 use ic_crypto_internal_test_vectors::ed25519::{
-    TESTVEC_RFC8032_ED25519_1_SIG, TESTVEC_RFC8032_ED25519_2_SIG,
+    TESTVEC_ED25519_STABILITY_1_SIG, TESTVEC_RFC8032_ED25519_1_SIG, TESTVEC_RFC8032_ED25519_2_SIG,
     TESTVEC_RFC8032_ED25519_SHA_ABC_PK, TESTVEC_RFC8032_ED25519_SHA_ABC_SIG,
     TESTVEC_RFC8032_ED25519_SHA_ABC_SK,
 };
@@ -364,4 +363,21 @@ fn should_fail_conversion_to_csp_public_key_if_multi_bls12_381_pk_proto_is_too_l
     let multi_csp_pk_result = CspPublicKey::try_from(pk_proto);
     assert!(multi_csp_pk_result.is_err());
     assert!(multi_csp_pk_result.unwrap_err().is_malformed_public_key());
+}
+
+#[test]
+fn csp_signatures_should_have_a_nice_debug_representation() {
+    let test_vectors = vec![
+        (CspSignature::EcdsaP256(ecdsa_secp256r1_types::SignatureBytes([0u8; ecdsa_secp256r1_types::SignatureBytes::SIZE])), "CspSignature::EcdsaP256(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")"),
+        (CspSignature::EcdsaSecp256k1(ecdsa_secp256k1_types::SignatureBytes([0u8; ecdsa_secp256k1_types::SignatureBytes::SIZE])), "CspSignature::EcdsaSecp256k1(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")"),
+        (CspSignature::Ed25519(ed25519_types::SignatureBytes([0u8;ed25519_types::SignatureBytes::SIZE])), "CspSignature::Ed25519(SignatureBytes(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\"))"),
+        (CspSignature::MultiBls12_381(MultiBls12_381_Signature::Individual(multi_types::IndividualSignatureBytes([0u8;multi_types::IndividualSignatureBytes::SIZE]))), "CspSignature::MultiBls12_381(Individual(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))"),
+        (CspSignature::MultiBls12_381(MultiBls12_381_Signature::Combined(multi_types::CombinedSignatureBytes([0u8;multi_types::CombinedSignatureBytes::SIZE]))), "CspSignature::MultiBls12_381(Combined(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))"),
+        (CspSignature::ThresBls12_381(ThresBls12_381_Signature::Individual(threshold_types::IndividualSignatureBytes([0u8;multi_types::IndividualSignatureBytes::SIZE]))), "CspSignature::ThresBls12_381(Individual(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))"),
+        (CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined(threshold_types::CombinedSignatureBytes([0u8;multi_types::CombinedSignatureBytes::SIZE]))), "CspSignature::ThresBls12_381(Combined(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))"),
+        (CspSignature::RsaSha256(vec![1,2,3,4]), "CspSignature::RsaSha256(\"AQIDBA==\")")
+    ];
+    for (value, formatted) in test_vectors {
+        assert_eq!(format!("{:?}", value), *formatted);
+    }
 }

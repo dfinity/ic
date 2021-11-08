@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod canister_state {
-    use ic_replicated_state::StateError;
+    use ic_replicated_state::{testing::SystemStateTesting, StateError};
     use ic_test_utilities::state::{
         get_running_canister, get_stopped_canister, get_stopping_canister,
     };
@@ -14,7 +14,7 @@ mod canister_state {
         let mut canister = get_running_canister(canister_test_id(0));
 
         assert_eq!(
-            canister.push_input(
+            canister.system_state.queues_mut().push_input(
                 QueueIndex::new(0),
                 RequestOrResponse::Request(RequestBuilder::new().build())
             ),
@@ -37,7 +37,7 @@ mod canister_state {
         );
 
         assert_eq!(
-            canister.push_input(
+            canister.system_state.queues_mut().push_input(
                 QueueIndex::new(0),
                 RequestOrResponse::Response(
                     ResponseBuilder::new()
@@ -81,7 +81,13 @@ mod canister_state {
                 .respondent(canister_test_id(1))
                 .build(),
         );
-        assert_eq!(canister.push_input(QueueIndex::new(0), response), Ok(()));
+        assert_eq!(
+            canister
+                .system_state
+                .queues_mut()
+                .push_input(QueueIndex::new(0), response),
+            Ok(())
+        );
     }
 
     #[test]

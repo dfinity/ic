@@ -21,6 +21,7 @@ harness = false
 [dependencies]
 async-trait = "0.1.42"
 candid = "0.7.4"
+cycles-minting-canister = { path = "../../rosetta-api/cycles_minting_canister" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
@@ -29,9 +30,10 @@ ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
+ic-protobuf = { path = "../../protobuf" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 on_wire = { path = "../../rust_canisters/on_wire" }
-prost = "0.7.0"
+prost = "0.8.0"
 serde = { version = "1.0", features = ["derive"] }
 rand = "0.7.3"
 rand_core = "0.5.1"
@@ -51,7 +53,7 @@ maplit = "1.0.2"
 
 [build-dependencies]
 ic-base-types = { path = "../../types/base_types" }
-prost-build = "0.7.0"
+prost-build = "0.8.0"
 
 [dev-dependencies]
 criterion = "0.3"

@@ -134,31 +134,14 @@ fn is_running() -> bool {
     RUNNING.with(|r| *r.borrow())
 }
 
-/// Enqueues a `fanout()` "loopback" call for next round.
-fn schedule_fanout() {
+/// Canister heartbeat, calls `fanout()` if `RUNNING` is `true`.
+#[export_name = "canister_heartbeat"]
+fn heartbeat() {
     if !is_running() {
         return;
     }
 
-    let noop = |_| ();
-    let err_code = api::call_raw(
-        api::id(),
-        "fanout",
-        &[][..],
-        noop,
-        noop,
-        None,
-        std::ptr::null_mut(),
-        api::Funds::zero(),
-    );
-    if err_code != 0 {
-        // This is a critical error (no more requests will be sent once this happens).
-        log(&format!(
-            "{} CRITICAL: fanout failed with {}\n",
-            time_nanos() / 1_000_000,
-            err_code
-        ));
-    }
+    fanout();
 }
 
 /// Appends a message to the log, ensuring log size stays below 2000 bytes.
@@ -195,8 +178,6 @@ fn start() {
 
     RUNNING.with(|r| *r.borrow_mut() = true);
 
-    schedule_fanout();
-
     candid_reply(&"started");
 }
 
@@ -207,15 +188,10 @@ fn stop() {
     candid_reply(&"stopped");
 }
 
-/// An internal endpoint that sends a messages to a random canister on each of
-/// the remote subnets. This endpoint is repeatedly triggered from the "start"
-/// call.
-#[export_name = "canister_update fanout"]
+/// Sends `PER_SUBNET_RATE` messages to random canisters on the remote subnets.
+/// Invoked by the canister heartbeat handler as long as `RUNNING` is `true`
+/// (`start()` was and `stop()` was not yet called).
 fn fanout() {
-    if !is_running() {
-        return;
-    }
-
     let self_id = api::id();
 
     let network_topology =
@@ -265,10 +241,6 @@ fn fanout() {
             }
         }
     }
-
-    candid_reply(&"ok");
-
-    schedule_fanout();
 }
 
 /// Endpoint that handles requests from canisters located on remote subnets.

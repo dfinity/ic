@@ -11,7 +11,7 @@ mod tests;
 
 impl From<SecretKeyBytes> for SecretKey {
     fn from(val: SecretKeyBytes) -> Self {
-        bls::fr_from_bytes(&val.0)
+        bls::fr_from_bytes_unchecked(&val.0)
     }
 }
 impl From<SecretKey> for SecretKeyBytes {
@@ -24,10 +24,10 @@ impl TryFrom<PublicKeyBytes> for PublicKey {
     type Error = CryptoError;
 
     fn try_from(public_key_bytes: PublicKeyBytes) -> Result<Self, Self::Error> {
-        bls::g2_from_bytes(&public_key_bytes.0).map_err(|e| CryptoError::MalformedPublicKey {
+        bls::g2_from_bytes(&public_key_bytes.0).map_err(|_| CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::MultiBls12_381,
             key_bytes: Some(public_key_bytes.0.to_vec()),
-            internal_error: e.to_string(),
+            internal_error: "Point decoding failed".to_string(),
         })
     }
 }
@@ -41,10 +41,10 @@ impl TryInto<IndividualSignature> for IndividualSignatureBytes {
     type Error = CryptoError;
 
     fn try_into(self) -> Result<IndividualSignature, CryptoError> {
-        bls::g1_from_bytes(&self.0).map_err(|e| CryptoError::MalformedSignature {
+        bls::g1_from_bytes(&self.0).map_err(|_| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::MultiBls12_381,
             sig_bytes: self.0.to_vec(),
-            internal_error: e.to_string(),
+            internal_error: "Point decoding failed".to_string(),
         })
     }
 }
@@ -58,10 +58,10 @@ impl TryFrom<PopBytes> for Pop {
     type Error = CryptoError;
 
     fn try_from(pop_bytes: PopBytes) -> Result<Self, Self::Error> {
-        bls::g1_from_bytes(&pop_bytes.0).map_err(|e| CryptoError::MalformedPop {
+        bls::g1_from_bytes(&pop_bytes.0).map_err(|_| CryptoError::MalformedPop {
             algorithm: AlgorithmId::MultiBls12_381,
             pop_bytes: pop_bytes.0.to_vec(),
-            internal_error: e.to_string(),
+            internal_error: "Point decoding failed".to_string(),
         })
     }
 }
@@ -75,10 +75,10 @@ impl TryInto<CombinedSignature> for CombinedSignatureBytes {
     type Error = CryptoError;
 
     fn try_into(self) -> Result<CombinedSignature, CryptoError> {
-        bls::g1_from_bytes(&self.0).map_err(|e| CryptoError::MalformedSignature {
+        bls::g1_from_bytes(&self.0).map_err(|_| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::MultiBls12_381,
             sig_bytes: self.0.to_vec(),
-            internal_error: e.to_string(),
+            internal_error: "Point decoding failed".to_string(),
         })
     }
 }

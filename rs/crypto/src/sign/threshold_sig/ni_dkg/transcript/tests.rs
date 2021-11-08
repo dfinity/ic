@@ -399,7 +399,7 @@ mod load_transcript {
     use crate::sign::tests::REG_V1;
     use crate::sign::threshold_sig::ni_dkg::test_utils::dummy_transcript;
     use crate::sign::threshold_sig::ni_dkg::utils::epoch;
-    use crate::sign::threshold_sig::tests::NI_DKG_ID;
+    use crate::sign::threshold_sig::tests::NI_DKG_ID_1;
     use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgLoadPrivateKeyError;
     use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
     use ic_logger::replica_logger::no_op_logger;
@@ -414,7 +414,7 @@ mod load_transcript {
     fn should_insert_transcript_pub_coeffs_into_store() {
         let pub_coeffs = vec![PK_BYTES_1, PK_BYTES_2];
         let transcript = NiDkgTranscript {
-            dkg_id: NI_DKG_ID,
+            dkg_id: NI_DKG_ID_1,
             internal_csp_transcript: csp_ni_dkg_transcript(&pub_coeffs),
             ..dummy_transcript()
         };
@@ -429,7 +429,7 @@ mod load_transcript {
             &no_op_logger(),
         );
 
-        let transcript_data = transcript_data_from_store(&threshold_sig_data_store, NI_DKG_ID);
+        let transcript_data = transcript_data_from_store(&threshold_sig_data_store, NI_DKG_ID_1);
         assert_eq!(
             transcript_data.public_coefficients(),
             &csp_pub_coeffs(pub_coeffs)
@@ -440,7 +440,7 @@ mod load_transcript {
     #[test]
     fn should_insert_transcript_data_into_store_and_return_ok_if_csp_returns_key_not_found_error() {
         let transcript = NiDkgTranscript {
-            dkg_id: NI_DKG_ID,
+            dkg_id: NI_DKG_ID_1,
             ..dummy_transcript()
         };
         let csp = csp_with_load_threshold_signing_key_returning(Err(key_not_found_error()));
@@ -455,7 +455,7 @@ mod load_transcript {
         );
 
         let transcript_data =
-            transcript_data_from_store_option(&threshold_sig_data_store, NI_DKG_ID);
+            transcript_data_from_store_option(&threshold_sig_data_store, NI_DKG_ID_1);
         assert!(transcript_data.is_some());
         assert_eq!(result, Ok(LoadTranscriptResult::SigningKeyUnavailable));
     }
@@ -464,7 +464,7 @@ mod load_transcript {
     fn should_return_node_indices_from_store_in_sorted_order() {
         let transcript = NiDkgTranscript {
             committee: receivers(&[NODE_2, NODE_1, NODE_3]),
-            dkg_id: NI_DKG_ID,
+            dkg_id: NI_DKG_ID_1,
             ..dummy_transcript()
         };
         let csp = csp_with_load_threshold_signing_key_returning(Ok(()));
@@ -478,7 +478,7 @@ mod load_transcript {
             &no_op_logger(),
         );
 
-        let transcript_data = transcript_data_from_store(&threshold_sig_data_store, NI_DKG_ID);
+        let transcript_data = transcript_data_from_store(&threshold_sig_data_store, NI_DKG_ID_1);
         assert_eq!(transcript_data.index(NODE_1), Some(&0));
         assert_eq!(transcript_data.index(NODE_2), Some(&1));
         assert_eq!(transcript_data.index(NODE_3), Some(&2));
@@ -489,7 +489,7 @@ mod load_transcript {
     fn should_insert_single_node_index_into_store() {
         let transcript = NiDkgTranscript {
             committee: receivers(&[NODE_1]),
-            dkg_id: NI_DKG_ID,
+            dkg_id: NI_DKG_ID_1,
             ..dummy_transcript()
         };
         let csp = csp_with_load_threshold_signing_key_returning(Ok(()));
@@ -503,7 +503,7 @@ mod load_transcript {
             &no_op_logger(),
         );
 
-        let transcript_data = transcript_data_from_store(&threshold_sig_data_store, NI_DKG_ID);
+        let transcript_data = transcript_data_from_store(&threshold_sig_data_store, NI_DKG_ID_1);
         assert_eq!(transcript_data.index(NODE_1), Some(&0));
         assert!(result.is_ok());
     }
@@ -532,7 +532,7 @@ mod load_transcript {
     fn should_call_csp_load_threshold_signing_key_correctly_if_in_committee() {
         let csp_transcript = csp_transcript();
         let transcript = NiDkgTranscript {
-            dkg_id: NI_DKG_ID,
+            dkg_id: NI_DKG_ID_1,
             committee: receivers(&[NODE_3, NODE_1, NODE_2]),
             registry_version: REG_V1,
             internal_csp_transcript: csp_transcript.clone(),
@@ -543,7 +543,7 @@ mod load_transcript {
             .withf(
                 move |algorithm_id, dkg_id, epoch_, transcript, receiver_index| {
                     *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
-                        && *dkg_id == NI_DKG_ID
+                        && *dkg_id == NI_DKG_ID_1
                         && *epoch_ == epoch(REG_V1)
                         && *transcript == csp_transcript
                         && *receiver_index == 2 // index of NODE_3 in (sorted)
@@ -632,7 +632,7 @@ mod load_transcript {
         );
 
         let transcript_data =
-            transcript_data_from_store_option(&threshold_sig_data_store, NI_DKG_ID);
+            transcript_data_from_store_option(&threshold_sig_data_store, NI_DKG_ID_1);
         assert!(transcript_data.is_none());
         assert!(result.is_err());
     }
@@ -640,7 +640,7 @@ mod load_transcript {
     #[test]
     fn should_insert_transcript_data_into_store_and_return_ok_if_csp_returns_epoch_too_old_error() {
         let transcript = NiDkgTranscript {
-            dkg_id: NI_DKG_ID,
+            dkg_id: NI_DKG_ID_1,
             ..dummy_transcript()
         };
         let csp = csp_with_load_threshold_signing_key_returning(Err(epoch_too_old_error()));
@@ -655,7 +655,7 @@ mod load_transcript {
         );
 
         let transcript_data =
-            transcript_data_from_store_option(&threshold_sig_data_store, NI_DKG_ID);
+            transcript_data_from_store_option(&threshold_sig_data_store, NI_DKG_ID_1);
         assert!(transcript_data.is_some());
         assert_eq!(
             result,

@@ -98,6 +98,53 @@ impl MetricsRegistry {
         self.register(IntCounterVec::new(Opts::new(name, help), label_names).unwrap())
     }
 
+    /// Creates a `critical_errors{error="<error>"}` counter for the given error
+    /// type. Any increase in the counter is intended to trigger an alert and
+    /// should always be paired with a log message to aid in debugging.
+    ///
+    /// Panics if `error_counter()` has already been called with the same
+    /// `error` value.
+    ///
+    /// Sample usage:
+    /// ```
+    /// use ic_logger::{error, ReplicaLogger};
+    /// use ic_metrics::MetricsRegistry;
+    /// use prometheus::IntCounter;
+    ///
+    /// pub struct FooMetrics {
+    ///     bar_above_limit: IntCounter,
+    /// }
+    ///
+    /// impl FooMetrics {
+    ///     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    ///         FooMetrics {
+    ///             bar_above_limit: metrics_registry.error_counter("foo_bar_above_limit"),
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// fn set_bar(new_bar: u64, metrics: &FooMetrics, log: &ReplicaLogger) {
+    ///     if new_bar > 13 {
+    ///         error!(log, "foo_bar_above_limit: bar {} > 13", new_bar);
+    ///         metrics.bar_above_limit.inc();
+    ///     }
+    ///
+    ///     // ...
+    /// }
+    /// ```
+    pub fn error_counter(&self, error: &str) -> IntCounter {
+        self.register(
+            IntCounter::with_opts(
+                Opts::new(
+                    "critical_errors",
+                    "Count of encountered critical errors, by type. Intended to trigger alerts and always paired with a log message to aid in debugging.",
+                )
+                .const_label("error", error),
+            )
+            .unwrap(),
+        )
+    }
+
     pub fn prometheus_registry(&self) -> &prometheus::Registry {
         &self.registry
     }

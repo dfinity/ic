@@ -27,6 +27,7 @@ use crate::pb::v1::{
     RewardEvent, RewardNodeProvider, Tally, Topic, Vote,
 };
 use candid::Decode;
+use cycles_minting_canister::IcpXdrConversionRate;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
@@ -35,11 +36,10 @@ use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
 };
+use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ledger_canister::{AccountIdentifier, Subaccount, TRANSACTION_FEE};
-use registry_canister::mutations::{
-    do_add_node_operator::AddNodeOperatorPayload,
-    do_update_icp_xdr_conversion_rate::UpdateIcpXdrConversionRatePayload,
-};
+use prost::Message;
+use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
 use async_trait::async_trait;
 
@@ -57,6 +57,8 @@ pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
 pub const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
+// The maximum amount of bytes in an NNS proposal.
+const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
 // Proposal validation
 // 15000 B
 const PROPOSAL_SUMMARY_BYTES_MAX: usize = 15000;
@@ -400,7 +402,7 @@ impl NnsFunction {
             }
             NnsFunction::UpdateConfigOfSubnet => (REGISTRY_CANISTER_ID, "update_subnet"),
             NnsFunction::IcpXdrConversionRate => {
-                (REGISTRY_CANISTER_ID, "update_icp_xdr_conversion_rate")
+                (CYCLES_MINTING_CANISTER_ID, "set_icp_xdr_conversion_rate")
             }
             NnsFunction::ClearProvisionalWhitelist => {
                 (REGISTRY_CANISTER_ID, "clear_provisional_whitelist")
@@ -412,6 +414,12 @@ impl NnsFunction {
             NnsFunction::StopOrStartNnsCanister => (ROOT_CANISTER_ID, "stop_or_start_nns_canister"),
             NnsFunction::RemoveNodes => (REGISTRY_CANISTER_ID, "remove_nodes"),
             NnsFunction::UninstallCode => (CanisterId::ic_00(), "uninstall_code"),
+            NnsFunction::UpdateNodeRewardsTable => {
+                (REGISTRY_CANISTER_ID, "update_node_rewards_table")
+            }
+            NnsFunction::AddOrRemoveDataCenters => {
+                (REGISTRY_CANISTER_ID, "add_or_remove_data_centers")
+            }
         };
         Ok((canister_id, method))
     }
@@ -873,6 +881,7 @@ impl Neuron {
             recent_ballots: self.recent_ballots.clone(),
             voting_power: self.voting_power(now_seconds),
             created_timestamp_seconds: self.created_timestamp_seconds,
+            stake_e8s: self.stake_e8s(),
         }
     }
 
@@ -983,6 +992,8 @@ impl Proposal {
                             NnsFunction::SetAuthorizedSubnetworks => Topic::Governance,
                             NnsFunction::SetFirewallConfig => Topic::SubnetManagement,
                             NnsFunction::UninstallCode => Topic::Governance,
+                            NnsFunction::UpdateNodeRewardsTable => Topic::NetworkEconomics,
+                            NnsFunction::AddOrRemoveDataCenters => Topic::ParticipantManagement,
                         }
                     } else {
                         Topic::Unspecified
@@ -3055,19 +3066,28 @@ impl Governance {
         Ok(neuron.get_neuron_info(self.env.now()))
     }
 
-    /// Returns the complete neuron data for a given neuron `id` after
-    /// checking that the `caller` is authorized. The neuron's
-    /// controller and hot keys are authorized, as are the controllers
-    /// and hot keys of any neurons that are listed as followees of
-    /// the requested neuron on the `ManageNeuron` topic.
-    pub fn get_full_neuron(
+    /// Returns the neuron info for a neuron identified by id or subaccount.
+    /// This method does not require authorization, so the `NeuronInfo` of a
+    /// neuron is accessible to any caller.
+    pub fn get_neuron_info_by_id_or_subaccount(
         &self,
-        id: &NeuronId,
+        by: &NeuronIdOrSubaccount,
+    ) -> Result<NeuronInfo, GovernanceError> {
+        let neuron = self.find_neuron(by)?;
+        Ok(neuron.get_neuron_info(self.env.now()))
+    }
+
+    /// Returns the complete neuron data for a given neuron `id` or
+    /// `subaccount` after checking that the `caller` is authorized. The
+    /// neuron's controller and hot keys are authorized, as are the
+    /// controllers and hot keys of any neurons that are listed as followees
+    /// of the requested neuron on the `ManageNeuron` topic.
+    pub fn get_full_neuron_by_id_or_subaccount(
+        &self,
+        by: &NeuronIdOrSubaccount,
         caller: &PrincipalId,
     ) -> Result<Neuron, GovernanceError> {
-        let neuron = self.proto.neurons.get(&id.id).ok_or_else(|| {
-            GovernanceError::new_with_message(ErrorType::NotFound, "Neuron not found.")
-        })?;
+        let neuron = self.find_neuron(by)?;
         // Check that the caller is authorized for the requested
         // neuron (controller or hot key).
         if !neuron.is_authorized_to_vote(caller) {
@@ -3089,6 +3109,22 @@ impl Governance {
             }
         }
         Ok(neuron.clone())
+    }
+
+    /// Returns the complete neuron data for a given neuron `id` after
+    /// checking that the `caller` is authorized. The neuron's
+    /// controller and hot keys are authorized, as are the controllers
+    /// and hot keys of any neurons that are listed as followees of
+    /// the requested neuron on the `ManageNeuron` topic.
+    pub fn get_full_neuron(
+        &self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+    ) -> Result<Neuron, GovernanceError> {
+        self.get_full_neuron_by_id_or_subaccount(
+            &NeuronIdOrSubaccount::NeuronId(id.clone()),
+            caller,
+        )
     }
 
     // Returns the set of currently registered node providers.
@@ -4022,11 +4058,22 @@ impl Governance {
         // Create a new proposal ID for this proposal.
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
+
+        let title = Some(format!(
+            "Manage neuron proposal for neuron: {}",
+            managed_neuron
+                .id
+                .as_ref()
+                .expect("Neurons must have an id")
+                .id
+        ));
+
         // Create the proposal.
         let info = ProposalData {
             id: Some(proposal_id),
             proposer: Some(proposer_id.clone()),
             proposal: Some(Proposal {
+                title,
                 summary: summary.to_string(),
                 url: url.to_string(),
                 action: Some(proposal::Action::ManageNeuron(Box::new(
@@ -4082,6 +4129,24 @@ impl Governance {
     }
 
     fn validate_proposal(&mut self, proposal: &Proposal) -> Result<(), GovernanceError> {
+        if proposal.topic() == Topic::Unspecified {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Topic not specified",
+            ));
+        }
+
+        // TODO(NNS1-798) validate that there is a title, currently we don't to
+        // that to prevent breaking downstream integrations.
+        if let Some(title) = &proposal.title {
+            if title.len() > PROPOSAL_TITLE_BYTES_MAX {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Proposal title is too big",
+                ));
+            }
+        }
+
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
         }
@@ -4110,7 +4175,7 @@ impl Governance {
                     PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX,
                     update.payload.len())
             } else if update.nns_function == NnsFunction::IcpXdrConversionRate as i32 {
-                match Decode!(&update.payload, UpdateIcpXdrConversionRatePayload) {
+                match Decode!(&update.payload, IcpXdrConversionRate) {
                     Ok(payload) => {
                         if payload.xdr_permyriad_per_icp
                             < self
@@ -4123,13 +4188,16 @@ impl Governance {
                             GovernanceError::new(ErrorType::Unavailable))?
                                 .minimum_icp_xdr_rate
                         {
-                            format!("The proposed rate {} is below the minimum allowable rate", payload.xdr_permyriad_per_icp)
+                            format!(
+                                "The proposed rate {} is below the minimum allowable rate",
+                                payload.xdr_permyriad_per_icp
+                            )
                         } else {
                             return Ok(());
                         }
                     }
                     Err(e) => format!(
-                        "The payload could not be decoded into a UpdateIcpXdrConversionRatePayload: {}",
+                        "The payload could not be decoded into a IcpXdrConversionRate: {}",
                         e
                     ),
                 }
@@ -4154,6 +4222,21 @@ impl Governance {
                     },
                     Err(e) => format!(
                         "The payload could not be decoded into a AddNodeOperatorPayload: {}",
+                        e
+                    ),
+                }
+            } else if update.nns_function == NnsFunction::AddOrRemoveDataCenters as i32 {
+                match AddOrRemoveDataCentersProposalPayload::decode(update.payload.as_slice()) {
+                    Ok(payload) => match payload.validate() {
+                        Ok(_) => {
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            format!("The given AddOrRemoveDataCentersProposalPayload is invalid: {}", e)
+                        }
+                    },
+                    Err(e) => format!(
+                        "The payload could not be decoded into a AddOrRemoveDataCentersProposalPayload: {}",
                         e
                     ),
                 }
@@ -4190,15 +4273,9 @@ impl Governance {
     ) -> Result<ProposalId, GovernanceError> {
         let topic = proposal.topic();
         let now_seconds = self.env.now();
-        if topic == Topic::Unspecified {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Topic not specified",
-            ));
-        }
 
         // Validate proposal
-        self.validate_proposal(proposal)?;
+        self.validate_proposal(&proposal)?;
 
         if let Some(proposal::Action::ManageNeuron(m)) = &proposal.action {
             assert_eq!(topic, Topic::NeuronManagement);

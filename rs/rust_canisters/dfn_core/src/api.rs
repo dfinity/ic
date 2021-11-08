@@ -75,6 +75,10 @@ pub mod ic0 {
         pub fn stable_grow(additional_pages: u32) -> i32;
         pub fn stable_read(dst: u32, offset: u32, size: u32);
         pub fn stable_write(offset: u32, src: u32, size: u32);
+        pub fn stable64_size() -> u64;
+        pub fn stable64_grow(additional_pages: u64) -> i64;
+        pub fn stable64_read(dst: u64, offset: u64, size: u64);
+        pub fn stable64_write(offset: u64, src: u64, size: u64);
         pub fn time() -> u64;
         pub fn canister_cycle_balance() -> u64;
         pub fn msg_cycles_available() -> u64;
@@ -213,6 +217,22 @@ pub mod ic0 {
 
     pub unsafe fn stable_write(_offset: u32, _src: u32, _size: u32) {
         wrong_arch("stable_write")
+    }
+
+    pub unsafe fn stable64_size() -> u64 {
+        wrong_arch("stable64_size")
+    }
+
+    pub unsafe fn stable64_grow(_additional_pages: u64) -> i64 {
+        wrong_arch("stable64_grow")
+    }
+
+    pub unsafe fn stable64_read(_dst: u64, _offset: u64, _size: u64) {
+        wrong_arch("stable64_read")
+    }
+
+    pub unsafe fn stable64_write(_offset: u64, _src: u64, _size: u64) {
+        wrong_arch("stable64_write")
     }
 
     pub unsafe fn time() -> u64 {

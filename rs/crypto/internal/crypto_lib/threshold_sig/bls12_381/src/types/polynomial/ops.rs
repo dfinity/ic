@@ -6,6 +6,7 @@ use ff::Field;
 use std::borrow::Borrow;
 use std::iter::Sum;
 use std::ops;
+use std::ops::{AddAssign, MulAssign};
 
 #[cfg(test)]
 mod tests;
@@ -24,10 +25,10 @@ impl<B: Borrow<Polynomial>> ops::AddAssign<B> for Polynomial {
         let len = self.coefficients.len();
         let rhs_len = rhs.borrow().coefficients.len();
         if rhs_len > len {
-            self.coefficients.resize(rhs_len, Fr::zero());
+            self.coefficients.resize(rhs_len, Scalar::zero());
         }
         for (self_c, rhs_c) in self.coefficients.iter_mut().zip(&rhs.borrow().coefficients) {
-            Field::add_assign(self_c, rhs_c);
+            *self_c += rhs_c;
         }
         self.remove_zeros();
     }
@@ -50,10 +51,10 @@ impl<B: Borrow<Polynomial>> ops::Add<B> for Polynomial {
     }
 }
 
-impl<'a> ops::Add<Fr> for Polynomial {
+impl<'a> ops::Add<Scalar> for Polynomial {
     type Output = Polynomial;
 
-    fn add(mut self, rhs: Fr) -> Self::Output {
+    fn add(mut self, rhs: Scalar) -> Self::Output {
         if !rhs.is_zero() {
             if self.is_zero() {
                 self.coefficients.push(rhs);
@@ -71,10 +72,10 @@ impl<B: Borrow<Polynomial>> ops::SubAssign<B> for Polynomial {
         let len = self.coefficients.len();
         let rhs_len = rhs.borrow().coefficients.len();
         if rhs_len > len {
-            self.coefficients.resize(rhs_len, Fr::zero());
+            self.coefficients.resize(rhs_len, Scalar::zero());
         }
         for (self_c, rhs_c) in self.coefficients.iter_mut().zip(&rhs.borrow().coefficients) {
-            Field::sub_assign(self_c, rhs_c);
+            *self_c -= rhs_c;
         }
         self.remove_zeros();
     }
@@ -99,12 +100,11 @@ impl<B: Borrow<Polynomial>> ops::Sub<B> for Polynomial {
 
 // Clippy thinks using `+` in a `Sub` implementation is suspicious.
 #[allow(clippy::suspicious_arithmetic_impl)]
-impl<'a> ops::Sub<Fr> for Polynomial {
+impl<'a> ops::Sub<Scalar> for Polynomial {
     type Output = Polynomial;
 
-    fn sub(self, mut rhs: Fr) -> Self::Output {
-        rhs.negate();
-        self + rhs
+    fn sub(self, rhs: Scalar) -> Self::Output {
+        self + rhs.neg()
     }
 }
 
@@ -119,8 +119,8 @@ impl<'a, B: Borrow<Polynomial>> ops::Mul<B> for &'a Polynomial {
             return Polynomial::zero();
         }
         let n_coeffs = self.coefficients.len() + rhs.coefficients.len() - 1;
-        let mut coeffs = vec![Fr::zero(); n_coeffs];
-        let mut tmp = Fr::zero();
+        let mut coeffs = vec![Scalar::zero(); n_coeffs];
+        let mut tmp = Scalar::zero();
         for (i, ca) in self.coefficients.iter().enumerate() {
             for (j, cb) in rhs.coefficients.iter().enumerate() {
                 tmp = *ca;
@@ -147,23 +147,23 @@ impl<B: Borrow<Self>> ops::MulAssign<B> for Polynomial {
     }
 }
 
-impl ops::MulAssign<Fr> for Polynomial {
-    fn mul_assign(&mut self, rhs: Fr) {
+impl ops::MulAssign<Scalar> for Polynomial {
+    fn mul_assign(&mut self, rhs: Scalar) {
         if rhs.is_zero() {
             self.zeroize();
             self.coefficients.clear();
         } else {
             for c in &mut self.coefficients {
-                Field::mul_assign(c, &rhs);
+                *c *= rhs;
             }
         }
     }
 }
 
-impl<'a> ops::Mul<&'a Fr> for Polynomial {
+impl<'a> ops::Mul<&'a Scalar> for Polynomial {
     type Output = Polynomial;
 
-    fn mul(mut self, rhs: &Fr) -> Self::Output {
+    fn mul(mut self, rhs: &Scalar) -> Self::Output {
         if rhs.is_zero() {
             self.zeroize();
             self.coefficients.clear();
@@ -174,27 +174,27 @@ impl<'a> ops::Mul<&'a Fr> for Polynomial {
     }
 }
 
-impl ops::Mul<Fr> for Polynomial {
+impl ops::Mul<Scalar> for Polynomial {
     type Output = Polynomial;
 
-    fn mul(self, rhs: Fr) -> Self::Output {
+    fn mul(self, rhs: Scalar) -> Self::Output {
         let rhs = &rhs;
         self * rhs
     }
 }
 
-impl<'a> ops::Mul<&'a Fr> for &'a Polynomial {
+impl<'a> ops::Mul<&'a Scalar> for &'a Polynomial {
     type Output = Polynomial;
 
-    fn mul(self, rhs: &Fr) -> Self::Output {
+    fn mul(self, rhs: &Scalar) -> Self::Output {
         (*self).clone() * rhs
     }
 }
 
-impl<'a> ops::Mul<Fr> for &'a Polynomial {
+impl<'a> ops::Mul<Scalar> for &'a Polynomial {
     type Output = Polynomial;
 
-    fn mul(self, rhs: Fr) -> Self::Output {
+    fn mul(self, rhs: Scalar) -> Self::Output {
         (*self).clone() * rhs
     }
 }

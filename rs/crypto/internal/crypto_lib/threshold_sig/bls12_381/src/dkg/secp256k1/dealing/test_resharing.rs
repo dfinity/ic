@@ -2,10 +2,9 @@ use crate::dkg::secp256k1::test_fixtures::{
     StateWithEphemeralKeys, StateWithResharedDealings, StateWithThresholdKey,
 };
 use crate::types::PublicKey;
-use group::CurveProjective;
+use bls12_381::G2Projective;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::Randomness;
-use pairing::bls12_381::G2;
 use proptest::prelude::*;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
@@ -24,10 +23,10 @@ fn test_resharing_dealing(seed: Randomness) {
         let mut state = state;
         let current_first_term = state.initial_state.public_coefficients.coefficients[0];
         state.initial_state.public_coefficients.coefficients[0] = PublicKeyBytes::from(
-            if current_first_term == PublicKeyBytes::from(PublicKey(G2::zero())) {
-                PublicKey(G2::one())
+            if current_first_term == PublicKeyBytes::from(PublicKey(G2Projective::identity())) {
+                PublicKey(G2Projective::generator())
             } else {
-                PublicKey(G2::zero())
+                PublicKey(G2Projective::identity())
             },
         );
         assert!(

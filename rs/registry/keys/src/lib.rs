@@ -15,6 +15,7 @@ const SUBNET_LIST_KEY: &str = "subnet_list";
 /// particular.
 pub const ROOT_SUBNET_ID_KEY: &str = "nns_subnet_id";
 const XDR_PER_ICP_KEY: &str = "xdr_per_icp";
+pub const NODE_REWARDS_TABLE_KEY: &str = "node_rewards_table";
 
 pub const NODE_RECORD_KEY_PREFIX: &str = "node_record_";
 pub const NODE_OPERATOR_RECORD_KEY_PREFIX: &str = "node_operator_record_";
@@ -23,6 +24,7 @@ pub const SUBNET_RECORD_KEY_PREFIX: &str = "subnet_record_";
 pub const CRYPTO_RECORD_KEY_PREFIX: &str = "crypto_record_";
 pub const CRYPTO_TLS_CERT_KEY_PREFIX: &str = "crypto_tls_cert_";
 pub const CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX: &str = "crypto_threshold_signing_public_key_";
+pub const DATA_CENTER_KEY_PREFIX: &str = "data_center_record_";
 
 /// Returns the only key whose payload is the ICP/XDR conversion rate.
 pub fn make_icp_xdr_conversion_rate_record_key() -> String {
@@ -68,13 +70,6 @@ pub fn make_node_operator_record_key(node_operator_principal_id: PrincipalId) ->
     )
 }
 
-pub fn principal_id_to_u64(principal_id: PrincipalId) -> u64 {
-    let vec = principal_id.into_vec();
-    let mut arr: [u8; 8] = [0; 8];
-    arr.copy_from_slice(&vec[..8]);
-    u64::from_le_bytes(arr)
-}
-
 /// Makes a key for a TLS certificate registry entry for a node.
 pub fn make_crypto_tls_cert_key(node_id: NodeId) -> String {
     format!("{}{}", CRYPTO_TLS_CERT_KEY_PREFIX, node_id.get())
@@ -94,6 +89,11 @@ pub fn maybe_parse_crypto_tls_cert_key(key: &str) -> Option<NodeId> {
 /// Makes a key for a NodeRecord registry entry.
 pub fn make_node_record_key(node_id: NodeId) -> String {
     format!("{}{}", NODE_RECORD_KEY_PREFIX, node_id.get())
+}
+
+/// Makes a key for a DataCenterRecord registry entry.
+pub fn make_data_center_record_key(dc_id: &str) -> String {
+    format!("{}{}", DATA_CENTER_KEY_PREFIX, dc_id)
 }
 
 /// Checks whether a given key is a node record key

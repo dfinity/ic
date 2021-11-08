@@ -17,8 +17,6 @@ pub mod test_utils;
 ///
 /// If errors occur regarding reading from or writing to the underlying
 /// persistency layer, the methods panic.
-#[allow(clippy::trivially_copy_pass_by_ref)] // TODO (CRP-819): remove/revisit once it is clear if KeyId stays u64 or becomes
-                                             // something else such as UUID
 pub trait SecretKeyStore: Send + Sync {
     /// Adds a key with a given `id` to the store.
     ///

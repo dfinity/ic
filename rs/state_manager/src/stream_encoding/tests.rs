@@ -1,7 +1,7 @@
 use super::*;
 use ic_base_types::NumSeconds;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState};
 use ic_test_utilities::{
     state::{arb_stream, new_canister_state},
     types::ids::{canister_test_id, subnet_test_id, user_test_id},
@@ -17,10 +17,10 @@ proptest! {
         let mut state = ReplicatedState::new_rooted_at(subnet_test_id(1), SubnetType::Application, "NOT_USED".into());
 
         let subnet = subnet_test_id(42);
-        let mut streams = state.take_streams();
         let stream_slice: StreamSlice = stream.clone().into();
-        streams.insert(subnet, stream);
-        state.put_streams(streams);
+        state.modify_streams(|streams| {
+            streams.insert(subnet, stream);
+        });
 
         // Add some noise, for good measure.
         state.put_canister_state(new_canister_state(
@@ -41,10 +41,10 @@ proptest! {
         let mut state = ReplicatedState::new_rooted_at(subnet_test_id(1), SubnetType::Application, "NOT_USED".into());
 
         let subnet = subnet_test_id(42);
-        let mut streams = state.take_streams();
         let stream_slice: StreamSlice = stream.clone().into();
-        streams.insert(subnet, stream);
-        state.put_streams(streams);
+        state.modify_streams(|streams| {
+            streams.insert(subnet, stream);
+        });
 
         let tree_encoding = encode_stream_slice(&state, subnet, stream_slice.header().begin, stream_slice.header().end, Some(size_limit)).0;
         let bytes = encode_tree(tree_encoding.clone());

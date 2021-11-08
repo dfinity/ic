@@ -1,0 +1,27 @@
+syntax = "proto3";
+package registry.node_rewards.v2;
+
+// The reward rate for a node
+message NodeRewardRate {
+  // The number of 10,000ths of IMF SDR (currency code XDR) to be rewarded per
+  // node per month.
+  uint64 xdr_permyriad_per_node_per_month = 1;
+}
+
+// The reward rates for a set of node types
+message NodeRewardRates {
+  // Maps node types to the reward rate for that node type
+  map<string, NodeRewardRate> rates = 1;
+}
+
+// Contains the node reward rates for each region where IC nodes are operated
+message NodeRewardsTable {
+  // Maps regions to the node reward rates in that region
+  map<string, NodeRewardRates> table = 1;
+}
+
+// The payload of a proposal to update the node rewards table
+message UpdateNodeRewardsTableProposalPayload {
+  // Maps regions to the node reward rates in that region
+  map<string, NodeRewardRates> new_entries = 1;
+}

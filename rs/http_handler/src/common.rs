@@ -12,6 +12,10 @@ use prost::Message;
 use serde::Serialize;
 use std::sync::Arc;
 
+pub const CONTENT_TYPE_HTML: &str = "text/html";
+pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
+pub const CONTENT_TYPE_PROTOBUF: &str = "application/x-protobuf";
+
 /// Helper function to generate a response.
 pub fn make_response(status_code: StatusCode, body: &str) -> Response<Body> {
     let mut resp = Response::new(Body::from(body.to_string()));
@@ -57,7 +61,7 @@ pub(crate) fn cbor_response<R: Serialize>(r: &R) -> Response<Body> {
     *response.headers_mut() = get_cors_headers();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
-        header::HeaderValue::from_static("application/cbor"),
+        header::HeaderValue::from_static(CONTENT_TYPE_CBOR),
     );
     response
 }
@@ -86,7 +90,7 @@ pub(crate) fn protobuf_response<R: Message>(r: &R) -> Response<Body> {
     *response.headers_mut() = get_cors_headers();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
-        header::HeaderValue::from_static("application/x-protobuf"),
+        header::HeaderValue::from_static(CONTENT_TYPE_PROTOBUF),
     );
     response
 }

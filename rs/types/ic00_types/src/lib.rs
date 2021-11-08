@@ -37,6 +37,10 @@ pub enum Method {
     // They should be removed afterwards.
     ProvisionalCreateCanisterWithCycles,
     ProvisionalTopUpCanister,
+
+    // Mock implementations
+    GetMockECDSAPublicKey,
+    SignWithMockECDSA,
 }
 
 /// A trait to be implemented by all structs that are used as payloads
@@ -606,3 +610,25 @@ impl ProvisionalTopUpCanisterArgs {
 }
 
 impl Payload<'_> for ProvisionalTopUpCanisterArgs {}
+
+/// Struct used for encoding/decoding
+/// `(record {
+/// message_hash : blob;
+/// derivation_path : blob;
+/// })`
+#[derive(CandidType, Deserialize, Debug)]
+pub struct SignWithECDSAArgs {
+    pub message_hash: Vec<u8>,
+    pub derivation_path: Vec<u8>,
+}
+
+impl Payload<'_> for SignWithECDSAArgs {}
+
+impl SignWithECDSAArgs {
+    pub fn new(message_hash: Vec<u8>, derivation_path: Vec<u8>) -> Self {
+        Self {
+            message_hash,
+            derivation_path,
+        }
+    }
+}

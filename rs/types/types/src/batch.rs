@@ -64,14 +64,23 @@ impl ValidationContext {
 pub struct BatchPayload {
     pub ingress: IngressPayload,
     pub xnet: XNetPayload,
+    pub self_validating: SelfValidatingPayload,
 }
 
 /// Return ingress messages, xnet messages, and consensus responses.
 pub type IngressAndXNetMessages = (Vec<SignedIngress>, BTreeMap<SubnetId, CertifiedStreamSlice>);
 
 impl BatchPayload {
-    pub fn new(ingress: IngressPayload, xnet: XNetPayload) -> Self {
-        BatchPayload { ingress, xnet }
+    pub fn new(
+        ingress: IngressPayload,
+        xnet: XNetPayload,
+        self_validating: SelfValidatingPayload,
+    ) -> Self {
+        BatchPayload {
+            ingress,
+            xnet,
+            self_validating,
+        }
     }
 
     /// Extract and return the set of ingress and xnet messages in a
@@ -83,6 +92,36 @@ impl BatchPayload {
 
     pub fn is_empty(&self) -> bool {
         self.ingress.is_empty() && self.xnet.stream_slices.is_empty()
+    }
+}
+
+/// Payload that contains SelfValidating messages.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SelfValidatingPayload {}
+
+impl SelfValidatingPayload {
+    pub fn new() -> SelfValidatingPayload {
+        SelfValidatingPayload {}
+    }
+}
+
+impl From<&SelfValidatingPayload> for pb::SelfValidatingPayload {
+    fn from(_self_validating_payload: &SelfValidatingPayload) -> Self {
+        Self {}
+    }
+}
+
+impl TryFrom<pb::SelfValidatingPayload> for SelfValidatingPayload {
+    type Error = String;
+
+    fn try_from(_value: pb::SelfValidatingPayload) -> Result<Self, Self::Error> {
+        Ok(Self {})
+    }
+}
+
+impl CountBytes for SelfValidatingPayload {
+    fn count_bytes(&self) -> usize {
+        0
     }
 }
 

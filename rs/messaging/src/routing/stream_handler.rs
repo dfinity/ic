@@ -3,11 +3,11 @@ use ic_logger::{debug, trace, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE,
-    metadata_state::Stream,
+    metadata_state::StreamHandle,
     replicated_state::{
-        LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
-        LABEL_VALUE_CANISTER_STOPPED, LABEL_VALUE_CANISTER_STOPPING,
-        LABEL_VALUE_INVALID_SUBNET_PAYLOAD, LABEL_VALUE_QUEUE_FULL,
+        ReplicatedStateMessageRouting, LABEL_VALUE_CANISTER_NOT_FOUND,
+        LABEL_VALUE_CANISTER_OUT_OF_CYCLES, LABEL_VALUE_CANISTER_STOPPED,
+        LABEL_VALUE_CANISTER_STOPPING, LABEL_VALUE_INVALID_SUBNET_PAYLOAD, LABEL_VALUE_QUEUE_FULL,
         LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
     },
     ReplicatedState, StateError,
@@ -184,7 +184,7 @@ impl StreamHandlerImpl {
     /// responses, with all initial messages garbage collected and signals
     /// generated for them.
     fn induct_loopback_stream(&self, mut state: ReplicatedState) -> ReplicatedState {
-        let loopback_stream = state.get_stream(self.subnet_id);
+        let loopback_stream = state.get_stream(&self.subnet_id);
 
         // All done if the loopback stream does not exist or is empty.
         if loopback_stream.is_none() || loopback_stream.unwrap().messages().is_empty() {
@@ -213,7 +213,7 @@ impl StreamHandlerImpl {
         state = self.induct_stream_slices(state, stream_slices);
 
         // We know for sure that the loopback stream exists, so it is safe to unwrap.
-        let loopback_stream = state.get_mut_stream(self.subnet_id).unwrap();
+        let loopback_stream = state.mut_streams().get_mut(&self.subnet_id).unwrap();
         // Garbage collect all initial messages.
         self.discard_messages_before(loopback_stream, loopback_stream_messages_end);
 
@@ -228,8 +228,9 @@ impl StreamHandlerImpl {
         mut state: ReplicatedState,
         stream_slices: &BTreeMap<SubnetId, StreamSlice>,
     ) -> ReplicatedState {
+        let streams = state.mut_streams();
         for (remote_subnet, stream_slice) in stream_slices {
-            match state.get_mut_stream(*remote_subnet) {
+            match streams.get_mut(remote_subnet) {
                 Some(stream) => {
                     self.garbage_collect_messages(stream, *remote_subnet, stream_slice);
                 }
@@ -268,7 +269,7 @@ impl StreamHandlerImpl {
     /// nonexistent (already garbage collected or future) message.
     fn garbage_collect_messages(
         &self,
-        stream: &mut Stream,
+        stream: StreamHandle,
         remote_subnet: SubnetId,
         stream_slice: &StreamSlice,
     ) {
@@ -297,7 +298,7 @@ impl StreamHandlerImpl {
 
     /// Helper function, discards all messages before `new_begin` while
     /// recording the number of garbage collected messages.
-    fn discard_messages_before(&self, stream: &mut Stream, new_begin: StreamIndex) {
+    fn discard_messages_before(&self, mut stream: StreamHandle, new_begin: StreamIndex) {
         self.observe_gced_messages(stream.messages_begin(), new_begin);
         stream.discard_before(new_begin);
     }
@@ -326,10 +327,10 @@ impl StreamHandlerImpl {
         for (remote_subnet_id, mut stream_slice) in stream_slices {
             // Output stream, for resulting signals and (in the initial iteration) reject
             // `Responses`.
-            let stream = streams.entry(remote_subnet_id).or_default();
+            let mut stream = streams.get_mut_or_insert(remote_subnet_id);
 
             while let Some((stream_index, msg)) = stream_slice.pop_message() {
-                self.induct_message(msg, remote_subnet_id, stream_index, &mut state, stream);
+                self.induct_message(msg, remote_subnet_id, stream_index, &mut state, &mut stream);
             }
         }
 
@@ -353,7 +354,7 @@ impl StreamHandlerImpl {
         remote_subnet_id: SubnetId,
         stream_index: StreamIndex,
         state: &mut ReplicatedState,
-        stream: &mut Stream,
+        stream: &mut StreamHandle,
     ) {
         let payload_size = match &msg {
             RequestOrResponse::Request(req) => req.payload_size_bytes().get(),
@@ -445,7 +446,7 @@ impl StreamHandlerImpl {
         msg: RequestOrResponse,
         reject_code: RejectCode,
         reject_message: String,
-        stream: &mut Stream,
+        stream: &mut StreamHandle,
     ) {
         match msg {
             RequestOrResponse::Request(_) => {
@@ -500,7 +501,7 @@ fn generate_reject_response(msg: RequestOrResponse, context: RejectContext) -> R
 fn reject_code_for_state_error(err: &StateError) -> RejectCode {
     match err {
         StateError::QueueFull { .. } => RejectCode::SysTransient,
-        StateError::CanisterOutOfCycles { .. } => RejectCode::SysTransient,
+        StateError::CanisterOutOfCycles(_) => RejectCode::SysTransient,
         StateError::CanisterNotFound(_) => RejectCode::DestinationInvalid,
         StateError::CanisterStopped(_) => RejectCode::CanisterReject,
         StateError::CanisterStopping(_) => RejectCode::CanisterReject,

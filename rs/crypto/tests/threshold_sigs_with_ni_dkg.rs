@@ -265,6 +265,35 @@ mod non_interactive_distributed_key_generation {
     }
 
     #[test]
+    fn should_not_reshare_ni_dkg_without_loaded_transcript() {
+        let (initial_subnet_size, max_subnet_size) = (3, 10);
+
+        // In practise, resharing is done only for high threshold configs
+        let config = RandomNiDkgConfig::builder()
+            .subnet_size(initial_subnet_size)
+            .dkg_tag(NiDkgTag::HighThreshold)
+            .registry_version(REG_V1)
+            .build();
+        let mut env = NiDkgTestEnvironment::new_for_config(&config.get());
+        let transcript =
+            run_ni_dkg_and_create_single_transcript(&config.get(), &env.crypto_components);
+
+        let reshare_config = RandomNiDkgConfig::reshare(transcript, -2..=2, max_subnet_size);
+        env.update_for_config(reshare_config.get());
+
+        for dealer in reshare_config.get().dealers().get() {
+            let result = crypto_for(*dealer, &env.crypto_components)
+                .create_dealing(reshare_config.get())
+                .unwrap_err();
+
+            assert!(matches!(
+                result,
+                DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore(_)
+            ));
+        }
+    }
+
+    #[test]
     fn should_run_resharing_ni_dkg_over_multiple_epochs() {
         let (initial_subnet_size, max_subnet_size, epochs) = (3, 10, 10);
 

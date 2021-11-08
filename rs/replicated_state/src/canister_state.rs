@@ -1,11 +1,14 @@
 pub mod execution_state;
 mod queues;
 pub mod system_state;
+#[cfg(test)]
+mod tests;
 
 use crate::canister_state::system_state::{CanisterStatus, SystemState};
 use crate::StateError;
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_interfaces::messages::CanisterInputMessage;
+use ic_types::messages::MAX_RESPONSE_COUNT_BYTES;
 use ic_types::methods::SystemMethod;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
@@ -18,6 +21,8 @@ use phantom_newtype::AmountOf;
 pub use queues::{CanisterQueues, QUEUE_INDEX_NONE};
 use std::collections::BTreeSet;
 use std::convert::From;
+
+pub const ENFORCE_MESSAGE_MEMORY_USAGE: bool = false;
 
 #[derive(Clone, Debug, PartialEq)]
 /// State maintained by the scheduler.
@@ -35,6 +40,10 @@ pub struct SchedulerState {
     /// rounds. In the scheduler analysis documentation, this value is the entry
     /// in the vector d that corresponds to this canister.
     pub accumulated_priority: AccumulatedPriority,
+
+    /// The amount of heap delta debit left from the canister's last full
+    /// execution round.
+    pub heap_delta_debit: NumBytes,
 }
 
 impl Default for SchedulerState {
@@ -43,6 +52,7 @@ impl Default for SchedulerState {
             last_full_execution_round: ExecutionRound::from(0),
             compute_allocation: ComputeAllocation::default(),
             accumulated_priority: AccumulatedPriority::default(),
+            heap_delta_debit: NumBytes::from(0),
         }
     }
 }
@@ -87,9 +97,6 @@ impl CanisterState {
     }
 
     /// See `SystemState::push_input` for documentation.
-    ///
-    /// Warning! this is only exposed for test purposes and should not be used
-    /// outside of this crate.
     pub fn push_input(
         &mut self,
         index: QueueIndex,
@@ -111,7 +118,7 @@ impl CanisterState {
     /// Returns true if there is at least one message in the canister's output
     /// queues, false otherwise.
     pub fn has_output(&self) -> bool {
-        self.system_state.queues.has_output()
+        self.system_state.queues().has_output()
     }
 
     /// See `SystemState::push_output_request` for documentation.
@@ -124,10 +131,10 @@ impl CanisterState {
         self.system_state.push_output_response(msg)
     }
 
-    /// Unconditionally pushes an ingress message into the input queue of the
+    /// Unconditionally pushes an ingress message into the ingress pool of the
     /// canister.
     pub fn push_ingress(&mut self, msg: Ingress) {
-        self.system_state.queues.push_ingress(msg)
+        self.system_state.push_ingress(msg)
     }
 
     /// See `CanisterQueues::output_into_iter` for documentation.
@@ -135,7 +142,7 @@ impl CanisterState {
         &mut self,
     ) -> impl std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)> + '_ {
         let canister_id = self.system_state.canister_id;
-        self.system_state.queues_mut().output_into_iter(canister_id)
+        self.system_state.output_into_iter(canister_id)
     }
 
     pub fn into_parts(self) -> (Option<ExecutionState>, SystemState, SchedulerState) {
@@ -160,10 +167,20 @@ impl CanisterState {
 
     /// The amount of memory currently being used by the canister.
     pub fn memory_usage(&self) -> NumBytes {
-        self.execution_state
+        let mut memory_usage = self
+            .execution_state
             .as_ref()
             .map_or(NumBytes::from(0), |es| es.memory_usage())
-            + self.system_state.memory_usage()
+            + self.system_state.memory_usage();
+
+        if ENFORCE_MESSAGE_MEMORY_USAGE {
+            let queues = self.system_state.queues();
+            let message_memory_usage =
+                queues.responses_size_bytes() + queues.reserved_slots() * MAX_RESPONSE_COUNT_BYTES;
+            memory_usage += (message_memory_usage as u64).into();
+        }
+
+        memory_usage
     }
 
     /// Returns the current memory allocation of the canister.
@@ -252,145 +269,29 @@ pub fn num_bytes_try_from64(pages: NumWasmPages64) -> Result<NumBytes, String> {
 }
 
 pub mod testing {
+    use ic_types::{messages::RequestOrResponse, QueueIndex};
+
+    use crate::{CanisterState, StateError};
+
     pub use super::queues::testing::CanisterQueuesTesting;
-    use ic_types::{messages::RequestOrResponse, CanisterId, QueueIndex};
 
-    /// Exposes public testing-only `CanisterState` methods to be used in other
-    /// crates' unit tests.
+    /// Exposes `CanisterState` internals for use in other crates' unit tests.
     pub trait CanisterStateTesting {
-        /// Returns the number of messages in the ingress queue.
-        fn ingress_queue_size(&self) -> usize;
-
-        /// Pops the next message from the output queue associated with
-        /// `dst_canister`.
-        fn pop_canister_output(
+        /// Testing only: Publicly exposes `CanisterState::push_input()`.
+        fn push_input(
             &mut self,
-            dst_canister: &CanisterId,
-        ) -> Option<(QueueIndex, RequestOrResponse)>;
-
-        /// Returns the number of output queues, empty or not.
-        fn output_queues_len(&self) -> usize;
+            index: QueueIndex,
+            msg: RequestOrResponse,
+        ) -> Result<(), (StateError, RequestOrResponse)>;
     }
 
-    impl CanisterStateTesting for super::CanisterState {
-        fn ingress_queue_size(&self) -> usize {
-            self.system_state.queues.ingress_queue_size()
-        }
-
-        fn pop_canister_output(
+    impl CanisterStateTesting for CanisterState {
+        fn push_input(
             &mut self,
-            dst_canister: &CanisterId,
-        ) -> Option<(QueueIndex, RequestOrResponse)> {
-            self.system_state
-                .queues_mut()
-                .pop_canister_output(dst_canister)
+            index: QueueIndex,
+            msg: RequestOrResponse,
+        ) -> Result<(), (StateError, RequestOrResponse)> {
+            (self as &mut CanisterState).push_input(index, msg)
         }
-
-        fn output_queues_len(&self) -> usize {
-            self.system_state.queues.output_queues_len()
-        }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use ic_base_types::NumSeconds;
-    use ic_test_utilities::types::{
-        ids::{canister_test_id, user_test_id},
-        messages::{RequestBuilder, ResponseBuilder},
-    };
-    use ic_types::Cycles;
-    use ic_wasm_types::BinaryEncodedWasm;
-
-    const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
-
-    fn canister_state_test<F, R>(f: F) -> R
-    where
-        F: FnOnce(CanisterState) -> R,
-    {
-        let scheduler_state = SchedulerState::default();
-        let system_state = SystemState::new_running(
-            canister_test_id(42),
-            user_test_id(24).get(),
-            INITIAL_CYCLES,
-            NumSeconds::from(100_000),
-        );
-        let canister_state = CanisterState::new(system_state, None, scheduler_state);
-        f(canister_state)
-    }
-
-    #[test]
-    #[should_panic]
-    fn canister_state_push_input_request_mismatched_sender() {
-        canister_state_test(|mut canister_state| {
-            canister_state
-                .push_input(
-                    QueueIndex::from(0),
-                    RequestBuilder::default()
-                        .sender(canister_test_id(13))
-                        .build()
-                        .into(),
-                )
-                .unwrap();
-        })
-    }
-
-    #[test]
-    #[should_panic]
-    fn canister_state_push_input_response_mismatched_respondent() {
-        canister_state_test(|mut canister_state| {
-            canister_state
-                .push_input(
-                    QueueIndex::from(0),
-                    ResponseBuilder::default()
-                        .respondent(canister_test_id(13))
-                        .build()
-                        .into(),
-                )
-                .unwrap();
-        })
-    }
-
-    #[test]
-    #[should_panic]
-    fn canister_state_push_output_request_mismatched_sender() {
-        canister_state_test(|mut canister_state| {
-            canister_state
-                .push_output_request(
-                    RequestBuilder::default()
-                        .sender(canister_test_id(13))
-                        .build(),
-                )
-                .unwrap();
-        })
-    }
-
-    #[test]
-    #[should_panic]
-    fn canister_state_push_output_response_mismatched_respondent() {
-        canister_state_test(|mut canister_state| {
-            canister_state.push_output_response(
-                ResponseBuilder::default()
-                    .respondent(canister_test_id(13))
-                    .build(),
-            );
-        })
-    }
-
-    #[test]
-    fn wasm_can_be_loaded_from_a_file() {
-        use std::io::Write;
-
-        let mut tmp = tempfile::NamedTempFile::new().expect("failed to create a temporary file");
-        let wasm_in_memory = BinaryEncodedWasm::new(vec![0x00, 0x61, 0x73, 0x6d]);
-        tmp.write_all(wasm_in_memory.as_slice())
-            .expect("failed to write Wasm to a temporary file");
-        let wasm_on_disk = BinaryEncodedWasm::new_from_file(tmp.path().to_owned())
-            .expect("failed to read Wasm from disk");
-
-        assert_eq!(wasm_in_memory.file(), None);
-        assert_eq!(wasm_on_disk.file(), Some(tmp.path()));
-        assert_eq!(wasm_in_memory, wasm_on_disk);
     }
 }

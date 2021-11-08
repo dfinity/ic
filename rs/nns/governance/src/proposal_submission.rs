@@ -7,12 +7,14 @@ use ic_nns_common::types::{NeuronId, ProposalId};
 
 /// Simplified the process of creating an ExternalUpdate proposal.
 pub fn create_external_update_proposal_candid<T: CandidType>(
-    summary: String,
-    url: String,
+    title: &str,
+    summary: &str,
+    url: &str,
     nns_function: NnsFunction,
     payload: T,
 ) -> Proposal {
     create_external_update_proposal_binary(
+        title,
         summary,
         url,
         nns_function,
@@ -21,14 +23,16 @@ pub fn create_external_update_proposal_candid<T: CandidType>(
 }
 
 pub fn create_external_update_proposal_binary(
-    summary: String,
-    url: String,
+    title: &str,
+    summary: &str,
+    url: &str,
     nns_function: NnsFunction,
     payload: Vec<u8>,
 ) -> Proposal {
     Proposal {
-        summary,
-        url,
+        title: Some(title.to_string()),
+        summary: summary.to_string(),
+        url: url.to_string(),
         action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: nns_function as i32,
             payload,

@@ -11,6 +11,18 @@ macro_rules! impl_display_using_debug {
     };
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum PresignatureQuadrupleCreationError {
+    WrongTypes,
+}
+impl_display_using_debug!(PresignatureQuadrupleCreationError);
+
+#[derive(Copy, Clone, Debug)]
+pub enum ThresholdSignatureInputsCreationError {
+    NonmatchingTranscriptIds,
+}
+impl_display_using_debug!(ThresholdSignatureInputsCreationError);
+
 // The errors that might occur are still TBD
 #[derive(Copy, Clone, Debug)]
 pub enum IDkgParamsValidationError {
@@ -20,6 +32,10 @@ pub enum IDkgParamsValidationError {
     DealersEmpty,
 }
 impl_display_using_debug!(IDkgParamsValidationError);
+
+#[derive(Copy, Clone, Debug)]
+pub enum EcdsaPublicKeyError {}
+impl_display_using_debug!(EcdsaPublicKeyError);
 
 #[derive(Copy, Clone, Debug)]
 pub enum IDkgTranscriptParsingError {}

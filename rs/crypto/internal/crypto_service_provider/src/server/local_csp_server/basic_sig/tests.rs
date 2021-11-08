@@ -4,7 +4,7 @@ use crate::imported_test_utils::ed25519::csp_testvec;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::server::api::{
-    BasicSignatureCspServer, CspBasicSignatureError, CspSignatureKeygenError,
+    BasicSignatureCspServer, CspBasicSignatureError, CspBasicSignatureKeygenError,
 };
 use crate::server::local_csp_server::LocalCspServer;
 use crate::Csp;
@@ -38,7 +38,7 @@ fn should_fail_to_generate_key_for_wrong_algorithm_id() {
         if algorithm_id != AlgorithmId::Ed25519 {
             assert_eq!(
                 csp_server.gen_key_pair(algorithm_id).unwrap_err(),
-                CspSignatureKeygenError::UnsupportedAlgorithm {
+                CspBasicSignatureKeygenError::UnsupportedAlgorithm {
                     algorithm: algorithm_id,
                 }
             );
@@ -160,7 +160,7 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
 
     let mut rng = thread_rng();
 
-    let mut csp_server = {
+    let csp_server = {
         let key_store = TempSecretKeyStore::new();
         let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
         LocalCspServer::new_for_test(csprng, key_store)
@@ -180,7 +180,7 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
     assert_eq!(
         result.unwrap_err(),
         CspBasicSignatureError::WrongSecretKeyType {
-            algorithm_id: AlgorithmId::ThresBls12_381
+            algorithm: AlgorithmId::ThresBls12_381
         }
     );
 }

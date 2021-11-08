@@ -20,26 +20,6 @@ fn fs_keys_should_be_valid() {
     );
 }
 
-#[test]
-fn encrypt_decrypt_single() {
-    let sys = &mk_sys_params();
-    let rng = &mut RAND_ChaCha20::new([45; 32]);
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 5u8, 0u8, 4u8];
-
-    let (mut pk, mut dk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
-    let v = pk.serialize();
-    pk = PublicKeyWithPop::deserialize(&v);
-    assert!(
-        pk.verify(KEY_GEN_ASSOCIATED_DATA),
-        "Forward secure public key failed validation"
-    );
-    let epoch0 = vec![Bit::Zero; 5];
-    let message = 123;
-    let ct = enc_single(&pk.key_value, message, &epoch0, rng, sys);
-    let plain = dec_single(&mut dk, &ct, sys);
-    assert!(plain == message, "plaintext mismatch");
-}
-
 fn keys_and_ciphertext_for(
     epoch: Epoch,
     associated_data: &[u8],

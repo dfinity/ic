@@ -27,4 +27,6 @@ pub use visitor::{Control, Visitor};
 ///   1. Added canister module hash and controller.
 ///   2. Added support for multiple canister controllers.
 ///   3. Added subnet to canister ID ranges routing tables.
-pub const CURRENT_CERTIFICATION_VERSION: u32 = 3;
+///   4. Added optional `Request::cycles_payment` and `Response::cycles_refund`
+///      fields that are not yet populated.
+pub const CURRENT_CERTIFICATION_VERSION: u32 = 4;

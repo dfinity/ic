@@ -17,6 +17,7 @@ use strum::IntoEnumIterator;
 pub mod util {
     use super::*;
     use crate::api::CspThresholdSignError;
+    use crate::server::api::ThresholdSignatureCspServer;
     use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_csp_pub_coeffs;
 
     /// Test that a set of threshold signatures behaves correctly.
@@ -56,7 +57,8 @@ pub mod util {
         let signatures: Result<Vec<CspSignature>, CspThresholdSignError> = signers
             .iter()
             .map(|(csp, key_id)| {
-                csp.threshold_sign_to_be_removed(AlgorithmId::ThresBls12_381, message, *key_id)
+                csp.csp_server
+                    .threshold_sign(AlgorithmId::ThresBls12_381, message, *key_id)
             })
             .collect();
         let signatures = signatures.expect("Signing failed");
@@ -67,7 +69,8 @@ pub mod util {
                 if algorithm_id != AlgorithmId::ThresBls12_381 {
                     if let Some((csp, key_id)) = signers.get(0) {
                         assert!(
-                            csp.threshold_sign_to_be_removed(algorithm_id, message, *key_id)
+                            csp.csp_server
+                                .threshold_sign(algorithm_id, message, *key_id)
                                 .is_err(),
                             "Managed to threshold sign with algorithm ID {:?}",
                             algorithm_id
@@ -85,12 +88,9 @@ pub mod util {
                     "Bad RNG: A randomly generated KeyId was in the list of keys"
                 );
                 assert!(
-                    csp.threshold_sign_to_be_removed(
-                        AlgorithmId::ThresBls12_381,
-                        message,
-                        wrong_key_id
-                    )
-                    .is_err(),
+                    csp.csp_server
+                        .threshold_sign(AlgorithmId::ThresBls12_381, message, wrong_key_id)
+                        .is_err(),
                     "A randomly generated key_id managed to sign"
                 );
             }
@@ -285,51 +285,5 @@ proptest! {
     #[test]
     fn test_threshold_scheme_with_basic_keygen(seed: [u8;32], message in proptest::collection::vec(any::<u8>(), 0..100)) {
         util::test_threshold_scheme_with_basic_keygen(Randomness::from(seed), &message);
-    }
-}
-
-mod secret_key_injector {
-    use super::*;
-    use crate::api::CspSecretKeyInjector;
-    use crate::imported_test_utils::ed25519::csp_testvec;
-    use crate::secret_key_store::test_utils::MockSecretKeyStore;
-    use crate::secret_key_store::SecretKeyStore;
-    use crate::types::CspSecretKey;
-    use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_SHA_ABC;
-
-    #[test]
-    fn should_inject_secret_key_into_secret_key_store() {
-        let (secret_key, _, _, _) = csp_testvec(RFC8032_ED25519_SHA_ABC);
-        let key_id = KeyId::from([42; 32]);
-        let mut sks = MockSecretKeyStore::new();
-        let expected_secret_key = secret_key.clone();
-        sks.expect_insert()
-            .withf(move |id, key, _scope| *id == key_id && *key == expected_secret_key)
-            .times(1)
-            .return_const(Ok(()));
-        let mut csp = Csp::of(dummy_csprng(), sks);
-
-        csp.insert_secret_key(key_id, secret_key);
-    }
-
-    #[test]
-    fn should_not_panic_if_key_with_existing_id_is_inserted() {
-        let (secret_key, _, _, _) = csp_testvec(RFC8032_ED25519_SHA_ABC);
-        let key_id = KeyId::from([42; 32]);
-        let sks = secret_key_store_with(key_id, secret_key.clone());
-        let mut csp = Csp::of(dummy_csprng(), sks);
-
-        csp.insert_secret_key(key_id, secret_key);
-    }
-
-    fn dummy_csprng() -> impl CryptoRng + Rng {
-        ChaChaRng::seed_from_u64(42)
-    }
-
-    fn secret_key_store_with(key_id: KeyId, secret_key: CspSecretKey) -> impl SecretKeyStore {
-        let mut temp_store = TempSecretKeyStore::new();
-        let scope = None;
-        temp_store.insert(key_id, secret_key, scope).unwrap();
-        temp_store
     }
 }

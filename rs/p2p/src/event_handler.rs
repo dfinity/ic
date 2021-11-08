@@ -69,8 +69,7 @@
 //! ```
 use crate::{
     gossip_protocol::{
-        Gossip, GossipChunk, GossipChunkRequest, GossipImpl, GossipMessage,
-        GossipRetransmissionRequest,
+        Gossip, GossipChunk, GossipChunkRequest, GossipMessage, GossipRetransmissionRequest,
     },
     metrics::EventHandlerMetrics,
     P2PErrorCode, P2PResult,
@@ -82,9 +81,7 @@ use futures::future::select_all;
 use futures::future::FutureExt;
 use ic_base_thread::async_safe_block_on_await;
 use ic_interfaces::{
-    artifact_manager::OnArtifactError,
     ingress_pool::IngressPoolThrottler,
-    p2p::IngressEventHandler,
     registry::RegistryClient,
     transport::{AsyncTransportEventHandler, SendError},
 };
@@ -96,12 +93,12 @@ use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_types::transport::{TransportError, TransportErrorCode, TransportFlowInfo};
 use ic_types::{
-    artifact::Artifact,
+    canonical_error::{unavailable_error, CanonicalError},
     messages::SignedIngress,
-    transport::{FlowId, TransportNotification, TransportPayload},
+    p2p::{GossipAdvert, GossipAdvertSendRequest},
+    transport::{FlowId, TransportNotification, TransportPayload, TransportStateChange},
     NodeId, SubnetId,
 };
-use ic_types::{p2p::GossipAdvert, transport};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -118,8 +115,9 @@ use tokio::{
     sync::mpsc::error::TrySendError,
     sync::mpsc::{channel, Receiver, Sender},
     task::JoinHandle,
-    time::{sleep, Duration},
+    time::{timeout, Duration},
 };
+use tower_service::Service;
 
 /// The trait for P2P event handler control, exposing methods to start and stop
 /// control, as well as add nodes.
@@ -293,18 +291,15 @@ impl<T: Send + 'static> PeerFlowQueueMap<T> {
         F: Fn(T, NodeId) + Clone + 'static,
     {
         let mut receive_map: ReceiveMap<T> = Vec::with_capacity(MAX_PEERS_HINT);
+        let receive_duration = Duration::from_millis(500);
         while Self::process_management_commands(&mut receive_map, &mut mgmt_cmd_receive).is_ok() {
             let receive_futures = receive_map
                 .iter_mut()
                 .map(|(_, receiver)| receiver.recv().boxed())
                 .collect::<Vec<_>>();
-            let timeout = sleep(Duration::from_millis(500));
-            tokio::pin!(timeout);
-            let received_item = tokio::select! {
-                        _ = &mut timeout => { None }
-                        (item, idx, _rem) = select_all(receive_futures) => {
-            Some((item,  idx))
-                        }
+            let received_item = match timeout(receive_duration, select_all(receive_futures)).await {
+                Ok((item, idx, _rem)) => Some((item, idx)),
+                _ => None,
             };
 
             // Process the ready channel up to `BATCH_LIMIT`.
@@ -377,7 +372,7 @@ struct PeerFlows {
     /// The current flows of retransmission requests.
     retransmission: PeerFlowQueueMap<GossipRetransmissionRequest>,
     /// The current flows of adverts being sent.
-    send_advert: PeerFlowQueueMap<GossipAdvert>,
+    send_advert: PeerFlowQueueMap<GossipAdvertSendRequest>,
     /// The current flows of transport notifications.
     transport: PeerFlowQueueMap<TransportNotification>,
 }
@@ -389,7 +384,7 @@ impl PeerFlows {
             request: PeerFlowQueueMap::<GossipChunkRequest>::new(rt_handle.clone()),
             chunk: PeerFlowQueueMap::<GossipChunk>::new(rt_handle.clone()),
             retransmission: PeerFlowQueueMap::<GossipRetransmissionRequest>::new(rt_handle.clone()),
-            send_advert: PeerFlowQueueMap::<GossipAdvert>::new(rt_handle.clone()),
+            send_advert: PeerFlowQueueMap::<GossipAdvertSendRequest>::new(rt_handle.clone()),
             transport: PeerFlowQueueMap::<TransportNotification>::new(rt_handle),
         }
     }
@@ -707,7 +702,7 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
     }
 
     /// The method changes the state of the P2P event handler.
-    async fn state_changed(&self, state_change: transport::TransportStateChange) {
+    async fn state_changed(&self, state_change: TransportStateChange) {
         let sender = {
             let send_map = self.peer_flows.transport.send_map.read().unwrap();
             send_map
@@ -752,61 +747,77 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
 }
 
 /// Interface between the ingress handler and P2P.
-pub struct IngressEventHandlerImpl {
+pub struct IngressEventHandler {
+    /// Tokio runtime handle used for spawning ingestion tasks.
+    rt_handle: tokio::runtime::Handle,
     /// The ingress throttler.
     ingress_throttler: IngressThrottler,
     /// The shared *Gossip* instance (using automatic reference counting).
-    c_gossip: GossipArc,
+    gossip: GossipArc,
     /// The node ID.
     node_id: NodeId,
 }
 
-impl IngressEventHandlerImpl {
-    /// The function creates an `IngressEventHandlerImpl` instance.
+impl IngressEventHandler {
+    /// The function creates an `IngressEventHandler` instance.
     pub fn new(
-        ingress_throttle: IngressThrottler,
-        c_gossip: Arc<GossipImpl>,
+        rt_handle: tokio::runtime::Handle,
+        ingress_throttler: IngressThrottler,
+        gossip: GossipArc,
         node_id: NodeId,
     ) -> Self {
         Self {
-            ingress_throttler: ingress_throttle,
-            c_gossip,
+            rt_handle,
+            ingress_throttler,
+            gossip,
             node_id,
         }
     }
 }
 
-/// `IngressEventHandlerImpl` implements the `IngressEventHandler` trait.
-impl IngressEventHandler for IngressEventHandlerImpl {
+/// `IngressEventHandler` implements the `IngressEventHandler` trait.
+impl Service<SignedIngress> for IngressEventHandler {
+    type Response = ();
+    type Error = CanonicalError;
+    #[allow(clippy::type_complexity)]
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
     /// The method is called when an ingress message is received.
-    fn on_ingress_message(
-        &self,
-        signed_ingress: SignedIngress,
-    ) -> Result<(), OnArtifactError<Artifact>> {
-        if self.ingress_throttler.read().unwrap().exceeds_threshold() {
-            return Err(OnArtifactError::Throttled);
-        }
-        self.c_gossip.on_user_ingress(signed_ingress, self.node_id)
+    fn call(&mut self, signed_ingress: SignedIngress) -> Self::Future {
+        let gossip = Arc::clone(&self.gossip);
+        let throttler = Arc::clone(&self.ingress_throttler);
+        let node_id = self.node_id;
+        let jh = self.rt_handle.spawn_blocking(move || {
+            if throttler.read().unwrap().exceeds_threshold() {
+                return Err(unavailable_error("Service Unavailable!"));
+            }
+            gossip.on_user_ingress(signed_ingress, node_id)
+        });
+        Box::pin(async move { jh.await.expect("Ingress ingestion task MUST NOT panic.") })
     }
 }
 
 /// This trait is used as the interface between Artifact Manager and P2P.
 pub trait AdvertSubscriber {
     /// The method broadcasts the given advert.
-    fn broadcast_advert(&self, advert: GossipAdvert);
+    fn broadcast_advert(&self, advert_request: GossipAdvertSendRequest);
 }
 
 /// `P2PEventHandlerImpl` implements the `AdvertSubscriber` trait.
 impl AdvertSubscriber for P2PEventHandlerImpl {
     /// The method broadcasts the given advert.
-    fn broadcast_advert(&self, advert: GossipAdvert) {
+    fn broadcast_advert(&self, advert_request: GossipAdvertSendRequest) {
         let sender = {
             let send_map = self.peer_flows.send_advert.send_map.read().unwrap();
             // channel for self.node_id is populated in the constructor
             send_map.get(&self.node_id).unwrap().clone()
         };
         sender
-            .try_send(advert)
+            .try_send(advert_request)
             .or_else::<TrySendError<GossipAdvert>, _>(|e| {
                 if let TrySendError::Closed(_) = e {
                     info!(self.log, "Send advert channel closed");
@@ -825,9 +836,9 @@ pub mod tests {
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{p2p::p2p_test_setup_logger, types::ids::node_test_id};
-    use ic_types::transport::FlowTag;
-    use ic_types::transport::TransportStateChange;
-    use tokio::time::Duration;
+    use ic_types::p2p::GossipAdvertType;
+    use ic_types::transport::{FlowTag, TransportClientType};
+    use tokio::time::{sleep, Duration};
 
     struct TestThrottle();
     impl IngressPoolThrottler for TestThrottle {
@@ -918,13 +929,13 @@ pub mod tests {
             &self,
             _ingress: Self::Ingress,
             peer_id: Self::NodeId,
-        ) -> Result<(), OnArtifactError<Artifact>> {
+        ) -> Result<(), CanonicalError> {
             TestGossip::increment_or_set(&self.num_ingress, peer_id);
             Ok(())
         }
 
         /// The method broadcasts the given advert.
-        fn broadcast_advert(&self, _advert: GossipAdvert) {
+        fn broadcast_advert(&self, _advert: GossipAdvertSendRequest) {
             TestGossip::increment_or_set(&self.num_advert_bcasts, self.node_id);
         }
 
@@ -981,7 +992,7 @@ pub mod tests {
             let _ = handler
                 .send_message(
                     FlowId {
-                        client_type: transport::TransportClientType::P2P,
+                        client_type: TransportClientType::P2P,
                         peer_id,
                         flow_tag: FlowTag::from(0),
                     },
@@ -995,7 +1006,10 @@ pub mod tests {
     async fn broadcast_advert(count: usize, handler: &P2PEventHandlerImpl) {
         for i in 0..count {
             let message = make_gossip_advert(i as u64);
-            handler.broadcast_advert(message);
+            handler.broadcast_advert(GossipAdvertSendRequest {
+                advert: message,
+                advert_type: GossipAdvertType::Produced,
+            });
         }
     }
 

@@ -251,7 +251,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(Some(CryptoHashOfState::from(CryptoHash(Vec::new())))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
             let execution_height = Arc::new(RwLock::new(Height::from(0)));
             let execution_height_clone = Arc::clone(&execution_height);
             let increment_execution_state = move || {

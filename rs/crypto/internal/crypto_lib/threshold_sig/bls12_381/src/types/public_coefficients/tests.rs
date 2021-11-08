@@ -4,9 +4,9 @@
 use super::super::Polynomial;
 use super::PublicCoefficients;
 use crate::types::PublicKey;
-use ff::Field;
+use bls12_381::Scalar;
 use ic_crypto_internal_bls12381_common::test_utils::{int_to_fr, uint_to_fr, uint_to_g2};
-use pairing::bls12_381::Fr;
+use std::ops::MulAssign;
 
 /// Polynomial evaluation for small polynomials; this will overflow and panic if
 /// used for large values.
@@ -147,8 +147,8 @@ mod public_coefficients {
     #[allow(clippy::identity_op)]
     fn test_lagrange_coefficients_are_correct() {
         let x_values = [1, 3, 4, 7];
-        let x_values_as_fr: Vec<Fr> = x_values.iter().map(|x| int_to_fr(*x)).collect();
-        let lagrange_coefficients: Vec<Fr> = {
+        let x_values_as_fr: Vec<Scalar> = x_values.iter().map(|x| int_to_fr(*x)).collect();
+        let lagrange_coefficients: Vec<Scalar> = {
             // The lagrange coefficient numerators and denominators:
             let as_integers = [
                 (3 * 4 * 7, (3 - 1) * (4 - 1) * (7 - 1)),
@@ -156,15 +156,16 @@ mod public_coefficients {
                 (1 * 3 * 7, (1 - 4) * (3 - 4) * (7 - 4)),
                 (1 * 3 * 4, (1 - 7) * (3 - 7) * (4 - 7)),
             ];
-            let as_fr: Vec<(Fr, Fr)> = as_integers
+            let as_fr: Vec<(Scalar, Scalar)> = as_integers
                 .iter()
                 .map(|(numerator, denominator)| (int_to_fr(*numerator), int_to_fr(*denominator)))
                 .collect();
-            let divided: Vec<Fr> = as_fr
+            let divided: Vec<Scalar> = as_fr
                 .iter()
                 .map(|(numerator, denominator)| {
                     let mut ans = *numerator;
-                    ans.mul_assign(&denominator.inverse().expect("Denominator is zero"));
+                    let inv = denominator.invert().unwrap();
+                    ans.mul_assign(&inv);
                     ans
                 })
                 .collect();
@@ -192,7 +193,7 @@ mod public_coefficients {
         );
         let random_points = [x_5, x_3, x_8];
         let interpolated_polynomial_at_0 =
-            PublicCoefficients::interpolate(&random_points).expect("Failed to interpolate");
+            PublicCoefficients::interpolate_g2(&random_points).expect("Failed to interpolate");
         assert_eq!(interpolated_polynomial_at_0, uint_to_g2(2));
     }
 }

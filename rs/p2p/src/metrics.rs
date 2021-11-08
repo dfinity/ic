@@ -81,8 +81,10 @@ pub struct DownloadManagementMetrics {
     pub chunks_verification_failed: IntCounter,
 
     // Advert fields.
-    /// The number of sent adverts.
+    /// The number of sent adverts(total).
     pub adverts_sent: IntCounter,
+    /// The number of sent adverts(relayed).
+    pub adverts_relayed: IntCounter,
     /// The number of failures to send adverts.
     pub adverts_send_failed: IntCounter,
     /// The number of received adverts.
@@ -213,7 +215,11 @@ impl DownloadManagementMetrics {
             // Adverts fields.
             adverts_sent: metrics_registry.int_counter(
                 "gossip_adverts_sent",
-                "Number of artifact advertisements sent",
+                "Total number of artifact advertisements sent",
+            ),
+            adverts_relayed: metrics_registry.int_counter(
+                "gossip_adverts_relayed",
+                "Total number of relayed artifact advertisements sent",
             ),
             adverts_send_failed: metrics_registry
                 .int_counter("adverts_send_failed", "Number of advert send failures"),

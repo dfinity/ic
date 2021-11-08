@@ -15,7 +15,7 @@ impl SecretKeyBytes {
 }
 
 /// A wrapper for Ed25519 public key bytes.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct PublicKeyBytes(pub [u8; PublicKeyBytes::SIZE]);
 ic_crypto_internal_types::derive_serde!(PublicKeyBytes, PublicKeyBytes::SIZE);

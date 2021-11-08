@@ -24,6 +24,7 @@ use ic_types::{crypto::KeyPurpose, NodeId};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 
 use prost::Message;
+use std::collections::BTreeMap;
 
 #[test]
 fn node_is_created_on_receiving_the_request() {
@@ -220,6 +221,8 @@ fn init_mutation_with_node_allowance(node_allowance: u64) -> RegistryAtomicMutat
         node_allowance,
         // This doesn't go through Governance validation
         node_provider_principal_id: vec![],
+        dc_id: "".into(),
+        rewardable_nodes: BTreeMap::new(),
     };
     RegistryAtomicMutateRequest {
         mutations: vec![RegistryMutation {

@@ -10,8 +10,9 @@ use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::NodeId;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::{
     crypto::v1::NodePublicKeys,
     registry::{
@@ -236,14 +237,12 @@ fn valid_keys_from_payload(
         })?;
 
     // 3. get the node id from the node_signing_pk
-    // Unfortunately, crypto crate doesn't expose any direct conversion from
-    // PublicKey -> NodeId. Until that changes, we manually construct UserPublicKey
-    // and perform derivation.
-    // TODO(CRP-690): Switch to a crypto function for this, instead of doing it
-    // manually.
-    let node_id = NodeId::from(PrincipalId::new_self_authenticating(
-        &ed25519_public_key_to_der(node_signing_pk.key_value.clone()),
-    ));
+    let node_id = crypto_basicsig_conversions::derive_node_id(&node_signing_pk).map_err(|e| {
+        format!(
+            "node signing public key couldn't be converted to a NodeId: {:?}",
+            e
+        )
+    })?;
 
     // 4. get the keys for verification -- for that, we need to create
     let node_pks = NodePublicKeys {
@@ -259,16 +258,6 @@ fn valid_keys_from_payload(
         Ok(valid_pks) => Ok((node_id, valid_pks)),
         Err(e) => Err(format!("Could not validate public keys, due to {:?}", e)),
     }
-}
-
-/// This is copied from ic_canister_client::agent::ed25519_public_key_to_der to
-/// avoid having to import that crate.
-fn ed25519_public_key_to_der(mut key: Vec<u8>) -> Vec<u8> {
-    let mut encoded: Vec<u8> = vec![
-        0x30, 0x2A, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65, 0x70, 0x03, 0x21, 0x00,
-    ];
-    encoded.append(&mut key);
-    encoded
 }
 
 #[cfg(test)]

@@ -5,11 +5,15 @@ edition = "2018"
 
 [dependencies]
 ic-wasm-types = { path = "../types/wasm_types" }
-parity-wasm = { version = "0.42.2", features = [ "std", "multi_value" ] }
-wasmtime = { git = "https://github.com/dfinity-lab/wasmtime", rev = "3b3326ca0bc3059acb27811dd5a7e0be1065a59d", features = ["posix-signals-on-macos"] }
+parity-wasm = { version = "0.42.2", features = [ "std", "multi_value", "bulk" ] }
+wasmtime = { version = "0.29.0", default_features = false, features = ['async', 'parallel-compilation', 'posix-signals-on-macos']}
+serde = { version = "1.0.99", features = [ "derive" ] }
+ic-config = { path = "../config" }
+ic-sys = { path = "../sys" }
 
 [dev-dependencies]
 assert_matches = "1.3.0"
+insta = "1.8.0"
 pretty_assertions = "0.6.1"
 wabt = "0.10.0"
 

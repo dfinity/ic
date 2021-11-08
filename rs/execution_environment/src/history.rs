@@ -87,31 +87,35 @@ impl IngressHistoryWriterImpl {
             message_state_transition_completed_ic_duration_seconds: metrics_registry.histogram(
                 "message_state_transition_completed_ic_duration_seconds",
                 "The IC time taken for a message to transition from the Received state to Completed state",
-                decimal_buckets(-4, 0),
+                // 100μs, 200μs, 500μs, ..., 10s, 20s, 50s
+                decimal_buckets(-4, 1),
             ),
             message_state_transition_completed_wall_clock_duration_seconds: metrics_registry.histogram(
                 "message_state_transition_completed_wallclock_duration_seconds",
                 "The wall-clock time taken for a message to transition from the Received state to Completed state",
-                decimal_buckets(-4, 0),
+                // 100μs, 200μs, 500μs, ..., 10s, 20s, 50s
+                decimal_buckets(-4, 1),
             ),
             message_state_transition_failed_ic_duration_seconds: metrics_registry.histogram_vec(
                 "message_state_transition_failed_ic_duration_seconds",
                 "The IC time taken for a message to transition from the Received state to Failed state",
+                // 100μs, 200μs, 500μs, ..., 10s, 20s, 50s
+                decimal_buckets(-4, 1),
                 // The `reject_code` label corresponds to the rejection codes described in
                 // the public spec.
                 // The `user_error_code` label is internal information that provides more
                 // detail about the reason for rejection.
-                decimal_buckets(-4, 0),
                 &["reject_code", "user_error_code"],
             ),
             message_state_transition_failed_wall_clock_duration_seconds: metrics_registry.histogram_vec(
                 "message_state_transition_failed_wall_clock_duration_seconds",
                 "The wall-clock time taken for a message to transition from the Received state to Failed state",
+                // 100μs, 200μs, 500μs, ..., 10s, 20s, 50s
+                decimal_buckets(-4, 1),
                 // The `reject_code` label corresponds to the rejection codes described in
                 // the public spec.
                 // The `user_error_code` label is internal information that provides more
                 // detail about the reason for rejection.
-                decimal_buckets(-4, 0),
                 &["reject_code", "user_error_code"],
             )
         }
@@ -249,5 +253,8 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         InvalidManagementPayload => "Invalid management message payload",
         InsufficientCyclesInCall => "Canister tried to keep more cycles than available in the call",
         CanisterWasmEngineError => "Wasm engine error",
+        CanisterCyclesLimitExceeded => {
+            "Canister Cycles Limit for Single Message Execution Exceeded"
+        }
     }
 }

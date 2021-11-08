@@ -3,7 +3,7 @@
 
 use super::*;
 
-pub fn zeroize_fr(fr: &mut Fr) {
+pub fn zeroize_fr(fr: &mut Scalar) {
     /*
     Safety of write_volatile requires that the destination be non-NULL
     and properly aligned. Both of these preconditions follow from fr
@@ -13,7 +13,7 @@ pub fn zeroize_fr(fr: &mut Fr) {
     in the zeroize crate.
     */
     unsafe {
-        std::ptr::write_volatile(fr, Fr::zero());
+        std::ptr::write_volatile(fr, Scalar::zero());
     }
     std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
 }

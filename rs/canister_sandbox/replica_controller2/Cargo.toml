@@ -1,0 +1,21 @@
+[package]
+name = "ic-canister-sandbox-replica-controller2"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-canister-sandbox-common = { path = "../common" }
+ic-canister-sandbox-backend-lib = { path = "../backend_lib" }
+ic-embedders = { path = "../../embedders" }
+ic-interfaces = { path = "../../interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-sys = { path = "../../sys" }
+ic-system-api = { path = "../../system_api" }
+ic-types = { path = "../../types/types" }
+libc = "0.2.91"
+nix = "0.20.0"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+
+[dev-dependencies]
+ic-test-utilities = { path = "../../test_utilities" }

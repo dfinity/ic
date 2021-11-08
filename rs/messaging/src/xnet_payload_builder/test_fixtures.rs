@@ -10,7 +10,9 @@ use ic_protobuf::registry::{
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
-use ic_replicated_state::{ReplicatedState, Stream};
+use ic_replicated_state::{
+    metadata_state::StreamMap, testing::ReplicatedStateTesting, ReplicatedState, Stream,
+};
 use ic_test_utilities::{
     mock_time,
     registry::test_subnet_record,
@@ -164,10 +166,10 @@ pub(crate) fn get_xnet_state_for_testing(
 /// Commits a `ReplicatedState` containing the given streams.
 pub(crate) fn put_replicated_state_for_testing(
     state_manager: &dyn StateManager<State = ReplicatedState>,
-    streams: BTreeMap<SubnetId, Stream>,
+    streams: StreamMap,
 ) {
     let (_height, mut state) = state_manager.take_tip();
-    state.put_streams(streams);
+    state.with_streams(streams);
     state_manager.commit_and_certify(state, CERTIFIED_HEIGHT, CertificationScope::Metadata);
 }
 
@@ -180,7 +182,7 @@ pub(crate) fn make_certified_stream_slice(
     let state_manager = FakeStateManager::new();
     let (_height, mut state) = state_manager.take_tip();
     let stream = generate_stream(&config);
-    state.put_streams(btreemap![from => stream]);
+    state.with_streams(btreemap![from => stream]);
     state_manager.commit_and_certify(state, CERTIFIED_HEIGHT, CertificationScope::Metadata);
     state_manager
         .encode_certified_stream_slice(

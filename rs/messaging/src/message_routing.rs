@@ -335,18 +335,9 @@ impl BatchProcessorImpl {
         for canister in state.canister_states.values() {
             memory_usage += canister.memory_usage();
         }
-
-        // Based on
-        // https://prometheus.io/docs/introduction/faq/#why-are-all-sample-values-64-bit-floats-i-want-integers,
-        // this number cannot be larger than 2^53. 2^53 is 8192 TiB. We will
-        // probably not be supporting so much storage on a single subnet anytime
-        // soon.
-        let ceiling: i64 = 1 << 53;
-        let memory_usage = std::cmp::min(
-            i64::try_from(memory_usage.get()).unwrap_or(ceiling),
-            ceiling,
-        );
-        self.metrics.canisters_memory_usage_bytes.set(memory_usage);
+        self.metrics
+            .canisters_memory_usage_bytes
+            .set(memory_usage.get() as i64);
     }
 
     // Retrieve the `ProvisionalWhitelist` from the registry.  We do this at the

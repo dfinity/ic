@@ -9,7 +9,8 @@ use ic_crypto_tree_hash::Label;
 use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
     canister_state::CanisterState,
-    metadata_state::{IngressHistoryState, Streams, SubnetTopology, SystemMetadata},
+    metadata_state::{IngressHistoryState, StreamMap, SubnetTopology, SystemMetadata},
+    replicated_state::ReplicatedStateMessageRouting,
     ReplicatedState,
 };
 use ic_types::{
@@ -205,7 +206,7 @@ fn state_as_tree(state: &ReplicatedState) -> LazyTree<'_> {
         FiniteMap::default()
             .with("metadata", move || metadata_as_tree(&state.metadata))
             .with("streams", move || {
-                streams_as_tree(&*state.metadata.streams, certification_version)
+                streams_as_tree(state.streams(), certification_version)
             })
             .with("canister", move || {
                 canisters_as_tree(&state.canister_states, certification_version)
@@ -231,9 +232,9 @@ fn state_as_tree(state: &ReplicatedState) -> LazyTree<'_> {
     )
 }
 
-fn streams_as_tree(streams: &Streams, certification_version: u32) -> LazyTree<'_> {
+fn streams_as_tree(streams: &StreamMap, certification_version: u32) -> LazyTree<'_> {
     fork(MapTransformFork {
-        map: &*streams,
+        map: streams,
         certification_version,
         mk_tree: |_subnet_id, stream, certification_version| {
             fork(
@@ -325,7 +326,7 @@ fn canisters_as_tree(
                     .with_tree_if(
                         certification_version > 0,
                         "module_hash",
-                        blob(move || execution_state.wasm_binary.hash_sha256().to_vec()),
+                        blob(move || execution_state.wasm_binary.binary.hash_sha256().to_vec()),
                     )
                     .with_tree_if(
                         certification_version > 1,

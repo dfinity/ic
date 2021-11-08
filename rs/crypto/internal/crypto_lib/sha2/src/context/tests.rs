@@ -49,3 +49,14 @@ fn should_be_instantiable_from_str() {
     let context = DomainSeparationContext::new("test");
     assert_eq!(context.domain, "test");
 }
+
+#[test]
+fn should_debug_pretty_print_domain_separation_context() {
+    let test_vectors = vec![(
+        DomainSeparationContext::new("test"),
+        "DomainSeparationContext{ domain: \"test\" }",
+    )];
+    for (value, formatted) in test_vectors {
+        assert_eq!(format!("{:?}", value), *formatted);
+    }
+}

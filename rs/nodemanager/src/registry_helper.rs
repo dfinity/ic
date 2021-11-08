@@ -151,6 +151,18 @@ impl RegistryHelper {
         }
     }
 
+    /// Return the subnet that this node belongs to at the given
+    /// registry version
+    pub(crate) fn get_own_subnet_record(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> NodeManagerResult<(SubnetId, SubnetRecord)> {
+        let new_subnet_id = self.get_subnet_id(registry_version)?;
+        let new_subnet_record = self.get_subnet_record(new_subnet_id, registry_version)?;
+
+        Ok((new_subnet_id, new_subnet_record))
+    }
+
     /// Return the `ReplicaVersionRecord` for the given replica version
     pub(crate) fn get_replica_version_record(
         &self,

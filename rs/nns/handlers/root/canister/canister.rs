@@ -1,8 +1,10 @@
 use dfn_candid::candid;
 use dfn_core::{
+    api::caller,
     endpoint::{over, over_async},
     stable,
 };
+use ic_base_types::PrincipalId;
 use ic_nns_common::access_control::check_caller_is_governance;
 use ic_nns_handler_root::{
     canister_management,
@@ -10,6 +12,7 @@ use ic_nns_handler_root::{
         AddNnsCanisterProposalPayload, CanisterIdRecord, ChangeNnsCanisterProposalPayload,
         StopOrStartNnsCanisterProposalPayload, LOG_PREFIX,
     },
+    root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
 };
 
 fn main() {}
@@ -61,6 +64,42 @@ fn submit_change_nns_canister_proposal() {
             Use instead function `manage_neuron` on the Governance canister \
             to submit a proposal to change an NNS canister."
     );
+}
+
+#[export_name = "canister_update submit_root_proposal_to_upgrade_governance_canister"]
+fn submit_root_proposal_to_upgrade_governance_canister() {
+    over_async(
+        candid,
+        |(expected_governance_wasm_sha, payload): (Vec<u8>, ChangeNnsCanisterProposalPayload)| {
+            ic_nns_handler_root::root_proposals::submit_root_proposal_to_upgrade_governance_canister(
+                caller(),
+                expected_governance_wasm_sha,
+                payload,
+            )
+        },
+    );
+}
+
+#[export_name = "canister_update vote_on_root_proposal_to_upgrade_governance_canister"]
+fn vote_on_root_proposal_to_upgrade_governance_canister() {
+    over_async(
+        candid,
+        |(proposer, wasm_sha256, ballot): (PrincipalId, Vec<u8>, RootProposalBallot)| {
+            ic_nns_handler_root::root_proposals::vote_on_root_proposal_to_upgrade_governance_canister(
+                caller(),
+                proposer,
+                wasm_sha256,
+                ballot,
+            )
+        },
+    );
+}
+
+#[export_name = "canister_update get_pending_root_proposals_to_upgrade_governance_canister"]
+fn get_pending_root_proposals_to_upgrade_governance_canister() {
+    over(candid, |()| -> Vec<GovernanceUpgradeRootProposal> {
+        ic_nns_handler_root::root_proposals::get_pending_root_proposals_to_upgrade_governance_canister()
+    })
 }
 
 /// Executes a proposal to change an NNS canister.

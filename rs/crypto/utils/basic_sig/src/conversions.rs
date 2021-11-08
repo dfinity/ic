@@ -1,6 +1,9 @@
 //! Conversion of keys into various formats
+use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
+use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_types::sign::eddsa::ed25519 as internal_types;
+use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use simple_asn1::{oid, OID};
 use std::convert::TryFrom;
 pub mod pem;
@@ -76,16 +79,9 @@ pub enum Ed25519PemParseError {
 
 impl Ed25519Conversions for internal_types::PublicKey {
     fn to_der(&self) -> Vec<u8> {
-        // Prefixing the following bytes to the key is sufficient to DER-encode it.
-        let mut der_pk = vec![
-            48, 42, // A sequence of 42 bytes follows.
-            48, 5, // An element of 5 bytes follows.
-            6, 3, 43, 101, 112, // The OID
-            3, 33, // A bitstring of 33 bytes follows.
-            0,  // The bitstring (32 bytes) is divisible by 8
-        ];
-        der_pk.extend_from_slice(&self.0);
-        der_pk
+        let key = ed25519::types::PublicKeyBytes(self.0);
+
+        ed25519::public_key_to_der(key)
     }
 
     fn from_der(pk_der: &[u8]) -> Result<Self, Ed25519DerParseError>
@@ -216,4 +212,28 @@ fn should_be_able_to_generate_pkcs8_of_ed25519_keypair() {
 
     assert_eq!(hex::encode(pkcs8),
                "3053020101300506032b6570042204202323232323232323232323232323232323232323232323232323232323232323a1230321002323232323232323232323232323232323232323232323232323232323232323");
+}
+
+#[derive(Debug, Clone)]
+pub enum InvalidNodePublicKey {
+    MalformedRawBytes { internal_error: String },
+}
+
+/// Computes the NodeId associated to the given (Protobuf-serialized) public key
+///
+/// # Errors
+/// * `InvalidNodePublicKey::MalformedRawBytes` if the provided key is not a
+///   proper Ed25519 public key
+///
+/// # Returns
+/// * The NodeId associated to the key
+pub fn derive_node_id(node_signing_pk: &PublicKeyProto) -> Result<NodeId, InvalidNodePublicKey> {
+    let raw_key = &node_signing_pk.key_value;
+    let pk_bytes = internal_types::PublicKey::try_from(&raw_key[..]).map_err(|e| {
+        InvalidNodePublicKey::MalformedRawBytes {
+            internal_error: format!("{:?}", e),
+        }
+    })?;
+    let der_pk = pk_bytes.to_der();
+    Ok(NodeId::from(PrincipalId::new_self_authenticating(&der_pk)))
 }

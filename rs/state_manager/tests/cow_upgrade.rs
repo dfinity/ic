@@ -5,7 +5,7 @@ use ic_interfaces::certification::Verifier;
 use ic_interfaces::state_manager::*;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{PageDelta, PageIndex};
+use ic_replicated_state::PageIndex;
 use ic_state_manager::StateManagerImpl;
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
@@ -32,7 +32,7 @@ fn get_page_nr(partition_nr: u64, offset_pages: u64) -> u64 {
 }
 
 fn get_page_off(pg_nr: u64) -> usize {
-    pg_nr as usize * *PAGE_SIZE
+    pg_nr as usize * PAGE_SIZE
 }
 
 #[test]
@@ -67,17 +67,15 @@ fn cow_state_can_handle_upgrade() {
         let p0_o20 = get_page_nr(0, 20);
         let p0_o257 = get_page_nr(0, 257);
 
-        let random_bytes: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
-        let random_bytes1: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
-        let random_bytes2: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+        let random_bytes = [rand::random::<u8>(); PAGE_SIZE];
+        let random_bytes1 = [rand::random::<u8>(); PAGE_SIZE];
+        let random_bytes2 = [rand::random::<u8>(); PAGE_SIZE];
 
-        let pd = PageDelta::from(
-            &[
-                (PageIndex::from(p0_o10), random_bytes.as_slice()),
-                (PageIndex::from(p0_o20), random_bytes1.as_slice()),
-                (PageIndex::from(p0_o257), random_bytes2.as_slice()),
-            ][..],
-        );
+        let pd = &[
+            (PageIndex::new(p0_o10), &random_bytes),
+            (PageIndex::new(p0_o20), &random_bytes1),
+            (PageIndex::new(p0_o257), &random_bytes2),
+        ];
 
         let (_height, mut state) = src_state_manager.take_tip();
 
@@ -124,17 +122,17 @@ fn cow_state_can_handle_upgrade() {
         let base = mapped_state.get_heap_base();
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o10)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o10)), PAGE_SIZE).to_vec()
         };
 
         assert_eq!(read_bytes, random_bytes);
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o20)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o20)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes1);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o257)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o257)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes2);
 
@@ -145,9 +143,9 @@ fn cow_state_can_handle_upgrade() {
         let p2_o100 = get_page_nr(2, 100);
         let p3_o100 = get_page_nr(3, 100);
 
-        let random_bytes3: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
-        let random_bytes4: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
-        let random_bytes5: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+        let random_bytes3 = [rand::random::<u8>(); PAGE_SIZE];
+        let random_bytes4 = [rand::random::<u8>(); PAGE_SIZE];
+        let random_bytes5 = [rand::random::<u8>(); PAGE_SIZE];
 
         mapped_state.update_heap_page(p0_o200, &random_bytes3);
         mapped_state.update_heap_page(p0_o205, &random_bytes4);
@@ -187,43 +185,41 @@ fn cow_state_can_handle_upgrade() {
         let mut es = canister_state.execution_state.clone().unwrap();
         assert!(!es.cow_mem_mgr.is_valid());
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o10));
-        assert_eq!(read_bytes, random_bytes.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o10));
+        assert_eq!(read_bytes, &random_bytes);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o20));
-        assert_eq!(read_bytes, random_bytes1.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o20));
+        assert_eq!(read_bytes, &random_bytes1);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o257));
-        assert_eq!(read_bytes, random_bytes2.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o257));
+        assert_eq!(read_bytes, &random_bytes2);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o200));
-        assert_eq!(read_bytes, random_bytes3.as_slice());
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o205));
-        assert_eq!(read_bytes, random_bytes4.as_slice());
-        let read_bytes = es.page_map.get_page(PageIndex::from(p1_o100));
-        assert_eq!(read_bytes, random_bytes5.as_slice());
-        let read_bytes = es.page_map.get_page(PageIndex::from(p2_o100));
-        assert_eq!(read_bytes, random_bytes1.as_slice());
-        let read_bytes = es.page_map.get_page(PageIndex::from(p3_o100));
-        assert_eq!(read_bytes, random_bytes2.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o200));
+        assert_eq!(read_bytes, &random_bytes3);
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o205));
+        assert_eq!(read_bytes, &random_bytes4);
+        let read_bytes = es.page_map.get_page(PageIndex::new(p1_o100));
+        assert_eq!(read_bytes, &random_bytes5);
+        let read_bytes = es.page_map.get_page(PageIndex::new(p2_o100));
+        assert_eq!(read_bytes, &random_bytes1);
+        let read_bytes = es.page_map.get_page(PageIndex::new(p3_o100));
+        assert_eq!(read_bytes, &random_bytes2);
 
         // add/overwrite few more pages
         let p0_o50 = get_page_nr(0, 50);
         let p0_o60 = get_page_nr(0, 60);
         let p3_o257 = get_page_nr(3, 257);
 
-        let random_bytes6: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
-        let random_bytes7: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
-        let random_bytes8: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+        let random_bytes6 = [rand::random::<u8>(); PAGE_SIZE];
+        let random_bytes7 = [rand::random::<u8>(); PAGE_SIZE];
+        let random_bytes8 = [rand::random::<u8>(); PAGE_SIZE];
 
-        let pd = PageDelta::from(
-            &[
-                (PageIndex::from(p0_o50), random_bytes6.as_slice()),
-                (PageIndex::from(p0_o60), random_bytes7.as_slice()),
-                (PageIndex::from(p0_o257), random_bytes8.as_slice()),
-                (PageIndex::from(p3_o257), random_bytes8.as_slice()),
-            ][..],
-        );
+        let pd = &[
+            (PageIndex::new(p0_o50), &random_bytes6),
+            (PageIndex::new(p0_o60), &random_bytes7),
+            (PageIndex::new(p0_o257), &random_bytes8),
+            (PageIndex::new(p3_o257), &random_bytes8),
+        ];
 
         es.page_map.update(pd);
 
@@ -278,14 +274,14 @@ fn cow_state_can_handle_upgrade() {
         let es = canister_state.execution_state.unwrap();
         assert!(!es.cow_mem_mgr.is_valid());
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o10));
-        assert_eq!(read_bytes, random_bytes.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o10));
+        assert_eq!(read_bytes, &random_bytes);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o20));
-        assert_eq!(read_bytes, random_bytes1.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o20));
+        assert_eq!(read_bytes, &random_bytes1);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o257));
-        assert_eq!(read_bytes, random_bytes2.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o257));
+        assert_eq!(read_bytes, &random_bytes2);
 
         // ============== now state_sync 2 make sure it comes back as cow correctly
         let msg_2 = src_state_manager
@@ -317,42 +313,42 @@ fn cow_state_can_handle_upgrade() {
         let base = mapped_state.get_heap_base();
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o10)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o10)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o20)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o20)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes1);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o257)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o257)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes2);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes3);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o205)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o205)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes4);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes5);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p2_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p2_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes1);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p3_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p3_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes2);
 
@@ -382,37 +378,37 @@ fn cow_state_can_handle_upgrade() {
         let es = canister_state.execution_state.unwrap();
         assert!(!es.cow_mem_mgr.is_valid());
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o10));
-        assert_eq!(read_bytes, random_bytes.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o10));
+        assert_eq!(read_bytes, &random_bytes);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o20));
-        assert_eq!(read_bytes, random_bytes1.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o20));
+        assert_eq!(read_bytes, &random_bytes1);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o50));
-        assert_eq!(read_bytes, random_bytes6.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o50));
+        assert_eq!(read_bytes, &random_bytes6);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o60));
-        assert_eq!(read_bytes, random_bytes7.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o60));
+        assert_eq!(read_bytes, &random_bytes7);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o257));
-        assert_eq!(read_bytes, random_bytes8.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o257));
+        assert_eq!(read_bytes, &random_bytes8);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p3_o257));
-        assert_eq!(read_bytes, random_bytes8.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p3_o257));
+        assert_eq!(read_bytes, &random_bytes8);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o200));
-        assert_eq!(read_bytes, random_bytes3.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o200));
+        assert_eq!(read_bytes, &random_bytes3);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p0_o205));
-        assert_eq!(read_bytes, random_bytes4.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o205));
+        assert_eq!(read_bytes, &random_bytes4);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p1_o100));
-        assert_eq!(read_bytes, random_bytes5.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p1_o100));
+        assert_eq!(read_bytes, &random_bytes5);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p2_o100));
-        assert_eq!(read_bytes, random_bytes1.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p2_o100));
+        assert_eq!(read_bytes, &random_bytes1);
 
-        let read_bytes = es.page_map.get_page(PageIndex::from(p3_o100));
-        assert_eq!(read_bytes, random_bytes2.as_slice());
+        let read_bytes = es.page_map.get_page(PageIndex::new(p3_o100));
+        assert_eq!(read_bytes, &random_bytes2);
     })
 }

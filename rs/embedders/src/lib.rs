@@ -38,8 +38,6 @@ pub struct InstanceRunResult {
 
 pub trait LinearMemory {
     fn as_ptr(&self) -> *mut libc::c_void;
-
-    fn grow_mem_to(&self, _new_size: u32) {}
 }
 
 pub trait ICMemoryCreator {

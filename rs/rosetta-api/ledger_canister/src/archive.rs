@@ -1,4 +1,4 @@
-use crate::{get_chain_prefix, spawn, EncodedBlock};
+use crate::{spawn, EncodedBlock};
 use candid::CandidType;
 use ic_types::ic00::{Method, IC_00};
 use ic_types::CanisterId;
@@ -96,39 +96,33 @@ impl Archive {
         &self.nodes
     }
 
-    pub async fn archive_blocks(
+    pub async fn send_blocks_to_archive(
         &mut self,
         mut blocks: VecDeque<EncodedBlock>,
-    ) -> Result<(), FailedToArchiveBlocks> {
-        print("[archive] archive_blocks(): start");
-        {
-            // This is horrible code from the perspective of encapsulation, but this is the
-            // only way I can think of not holding a lock while we're archiving.
-            // It's tempting to wrap this up in a function in lib, but I'd rather make it
-            // very obvious how horrible this is.
-            crate::LEDGER
-                .try_write()
-                .expect("Failed to gain a write lock on the ledger")
-                .blockchain
-                .add_num_archived_blocks(blocks.len() as u64);
-        }
-        // ^ write lock on the ledger is dropped here
+        max_ledger_msg_size_bytes: usize,
+    ) -> Result<usize, (usize, FailedToArchiveBlocks)> {
+        print("[archive] send_blocks_to_archive(): start");
+        let max_chunk_size = self.max_message_size_bytes.min(max_ledger_msg_size_bytes);
 
+        let mut num_sent_blocks = 0usize;
         while !blocks.is_empty() {
             print(format!(
-                "[archive] archive_blocks(): number of blocks remaining: {}",
+                "[archive] send_blocks_to_archive(): number of blocks remaining: {}",
                 blocks.len()
             ));
 
             // Get the CanisterId and remaining capacity of the node that can
             // accept at least the first block
-            let (node_canister_id, node_index, remaining_capacity) =
-                self.node_and_capacity(blocks[0].size_bytes()).await?;
+            let (node_canister_id, node_index, remaining_capacity) = self
+                .node_and_capacity(blocks[0].size_bytes())
+                .await
+                .map_err(|e| (num_sent_blocks, e))?;
 
             // Take as many blocks as can be sent and send those in
-            let mut first_blocks: VecDeque<_> =
-                get_chain_prefix(&mut blocks, remaining_capacity).into();
-            assert!(!first_blocks.is_empty());
+            let mut first_blocks: VecDeque<_> = take_prefix(&mut blocks, remaining_capacity).into();
+            if first_blocks.is_empty() {
+                return Err((num_sent_blocks, FailedToArchiveBlocks("empty chunk".into())));
+            }
 
             print(format!(
                 "[archive] appending blocks to node {:?}. number of blocks that fit: {}, remaining blocks to archive: {}",
@@ -139,9 +133,11 @@ impl Archive {
 
             // Additionally, need to respect the inter-canister message size
             while !first_blocks.is_empty() {
-                let chunk = get_chain_prefix(&mut first_blocks, self.max_message_size_bytes);
+                let chunk = take_prefix(&mut first_blocks, max_chunk_size);
                 let chunk_len = chunk.len() as u64;
-                assert!(!chunk.is_empty());
+                if chunk.is_empty() {
+                    return Err((num_sent_blocks, FailedToArchiveBlocks("empty chunk".into())));
+                }
                 print(format!(
                     "[archive] calling append_blocks() with a chunk of size {}",
                     chunk_len
@@ -154,10 +150,9 @@ impl Archive {
                 )
                 .await
                 {
-                    Ok(()) => (),
-                    Err((_, msg)) => return Err(FailedToArchiveBlocks(msg)),
+                    Ok(()) => num_sent_blocks += chunk_len as usize,
+                    Err((_, msg)) => return Err((num_sent_blocks, FailedToArchiveBlocks(msg))),
                 };
-                // DO NOT return FailedToArchiveBlocks after this
 
                 // Keep track of BlockHeights
                 let heights = self.nodes_block_ranges.get_mut(node_index);
@@ -192,8 +187,8 @@ impl Archive {
             }
         }
 
-        print("[archive] archive_blocks() done");
-        Ok(())
+        print("[archive] send_blocks_to_archive() done");
+        Ok(num_sent_blocks)
     }
 
     // Helper function to create a canister and install the node Wasm bytecode.
@@ -327,6 +322,19 @@ impl Archive {
             .zip(self.nodes.clone())
             .collect()
     }
+}
+
+/// Extract longest prefix from `blocks` which fits in `max_size`
+fn take_prefix(blocks: &mut VecDeque<EncodedBlock>, mut max_size: usize) -> Vec<EncodedBlock> {
+    let mut result = vec![];
+    while let Some(next) = blocks.front() {
+        if next.size_bytes() > max_size {
+            break;
+        }
+        max_size -= next.size_bytes();
+        result.push(blocks.pop_front().unwrap());
+    }
+    result
 }
 
 // Helper to print messages in green

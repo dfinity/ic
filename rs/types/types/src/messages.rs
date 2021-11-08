@@ -8,15 +8,15 @@ mod query;
 mod read_state;
 mod webauthn;
 
-use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
-pub use blob::Blob;
-pub use http::{
+pub use self::http::{
     Authentication, Certificate, CertificateDelegation, Delegation, HasCanisterId,
     HttpCanisterUpdate, HttpQueryResponse, HttpQueryResponseReply, HttpReadContent, HttpReadState,
     HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent, HttpRequestEnvelope,
     HttpResponseStatus, HttpStatusResponse, HttpSubmitContent, HttpUserQuery, RawHttpRequestVal,
     ReadContent, ReplicaHealthStatus, SignedDelegation,
 };
+use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
+pub use blob::Blob;
 pub use ic_base_types::CanisterInstallMode;
 use ic_base_types::{CanisterId, CanisterIdError, PrincipalId};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
@@ -30,8 +30,11 @@ pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
 pub use query::UserQuery;
 pub use read_state::ReadState;
 use serde::{Deserialize, Serialize};
+use std::mem::size_of;
 use std::{convert::TryFrom, error::Error, fmt};
 pub use webauthn::{WebAuthnEnvelope, WebAuthnSignature};
+
+const MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64: u64 = 2 * 1024 * 1024; // 2 MiB
 
 /// This sets the upper bound on how big a single inter-canister request or
 /// response can be.  We know that allowing messages larger than around 2MB has
@@ -40,7 +43,8 @@ pub use webauthn::{WebAuthnEnvelope, WebAuthnSignature};
 /// their blocks notarized; and when the consensus protocol is configured for
 /// smaller messages, a large message in the network can cause the finalization
 /// rate to drop.
-pub const MAX_INTER_CANISTER_PAYLOAD_IN_BYTES: NumBytes = NumBytes::new(2 * 1024 * 1024); // 2 MiB
+pub const MAX_INTER_CANISTER_PAYLOAD_IN_BYTES: NumBytes =
+    NumBytes::new(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64); // 2 MiB
 
 /// The maximum size of an inter-canister request or response that the IC can
 /// support.
@@ -51,7 +55,12 @@ pub const MAX_INTER_CANISTER_PAYLOAD_IN_BYTES: NumBytes = NumBytes::new(2 * 1024
 /// fields (e.g. sender: CanisterId), so it is not possible to statically
 /// compute an upper bound on their sizes.  Hopefully the additional space we
 /// have allocated here is sufficient.
-pub const MAX_XNET_PAYLOAD_IN_BYTES: NumBytes = NumBytes::new(2202009); // 2.1 MiB
+pub const MAX_XNET_PAYLOAD_IN_BYTES: NumBytes =
+    NumBytes::new(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 * 21 / 20); // 2.1 MiB
+
+/// Maximum byte size of a valid inter-canister `Response`.
+pub const MAX_RESPONSE_COUNT_BYTES: usize =
+    size_of::<RequestOrResponse>() + MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 
 /// An end user's signature.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

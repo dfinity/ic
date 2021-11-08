@@ -4,73 +4,65 @@ use crate::{
     common,
     metrics::HttpHandlerMetrics,
     types::{ApiReqType, RequestType},
+    ReplicaHealthStatus,
 };
 use hyper::{Body, Response, StatusCode};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path};
-use ic_interfaces::crypto::IngressSigVerifier;
-use ic_interfaces::execution_environment::QueryHandler;
-use ic_interfaces::state_manager::StateReader;
-use ic_logger::{info, trace, ReplicaLogger};
+use ic_interfaces::{
+    crypto::IngressSigVerifier, execution_environment::QueryExecutionService,
+    registry::RegistryClient, state_manager::StateReader,
+};
+use ic_logger::{trace, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    ingress::WasmResult,
+    canonical_error::{
+        invalid_argument_error, not_found_error, permission_denied_error, resource_exhausted_error,
+        CanonicalError,
+    },
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply,
-        HttpReadContent, HttpReadStateResponse, HttpRequest, HttpRequestEnvelope, MessageId,
-        ReadContent, ReadState, SignedRequestBytes, UserQuery, EXPECTED_MESSAGE_ID_LENGTH,
+        Blob, Certificate, CertificateDelegation, HttpReadContent, HttpReadStateResponse,
+        HttpRequest, HttpRequestEnvelope, MessageId, ReadContent, ReadState, SignedRequestBytes,
+        EXPECTED_MESSAGE_ID_LENGTH,
     },
     time::current_time,
-    user_error::RejectCode,
-    RegistryVersion, Time, UserId,
+    Time, UserId,
 };
 use ic_validator::{get_authorized_canisters, CanisterIdSet};
 use std::convert::TryFrom;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+use tokio::sync::Mutex;
+use tower::{Service, ServiceExt};
 
 const MAX_READ_STATE_REQUEST_IDS: u8 = 100;
-
-enum VerifyPathsError {
-    InvalidPath,
-    InvalidRequestId,
-    UnauthorizedRequestId,
-    TooManyRequests,
-}
-
-impl VerifyPathsError {
-    pub fn description(&self) -> String {
-        match self {
-            VerifyPathsError::InvalidRequestId => format!(
-                "Request IDs must be {} bytes in length.",
-                EXPECTED_MESSAGE_ID_LENGTH
-            ),
-            VerifyPathsError::InvalidPath => String::from("Invalid path requested."),
-            VerifyPathsError::UnauthorizedRequestId => {
-                String::from("Request IDs must be for requests signed by the caller.")
-            }
-            VerifyPathsError::TooManyRequests => format!(
-                "Can only request up to {} request IDs.",
-                MAX_READ_STATE_REQUEST_IDS
-            ),
-        }
-    }
-}
 
 /// Handles a call to /api/v2/canister/.../{query,read_state}
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle(
     log: &ReplicaLogger,
-    delegation_from_nns: Option<CertificateDelegation>,
-    query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
+    health_status: Arc<RwLock<ReplicaHealthStatus>>,
+    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    query_handler: Arc<Mutex<QueryExecutionService>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
-    registry_version: RegistryVersion,
+    registry_client: Arc<dyn RegistryClient>,
     body: Vec<u8>,
     metrics: Arc<HttpHandlerMetrics>,
     malicious_flags: MaliciousFlags,
 ) -> (Response<Body>, ApiReqType) {
     trace!(log, "in handle read");
     use ApiReqType::*;
+    if *health_status.read().unwrap() != ReplicaHealthStatus::Healthy {
+        return (
+            common::make_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Replica is starting. Check the /api/v2/status for more information.",
+            ),
+            Unknown,
+        );
+    }
+    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+
     let request =
         match <HttpRequestEnvelope<HttpReadContent>>::try_from(&SignedRequestBytes::from(body)) {
             Ok(request) => request,
@@ -104,7 +96,7 @@ pub(crate) async fn handle(
         &request,
         validator.as_ref(),
         current_time(),
-        registry_version,
+        registry_client.get_latest_version(),
         &malicious_flags,
     ) {
         Ok(targets) => targets,
@@ -118,18 +110,32 @@ pub(crate) async fn handle(
     };
 
     match request.content() {
-        ReadContent::Query(query) => (
-            handle_query(
-                log,
-                delegation_from_nns,
-                query_handler,
-                query.clone(),
-                targets,
-                metrics,
-            )
-            .await,
-            Query,
-        ),
+        ReadContent::Query(query) => {
+            if !targets.contains(&query.receiver) {
+                return (
+                    common::make_response(StatusCode::UNAUTHORIZED, "Unauthorized."),
+                    Query,
+                );
+            }
+            // Here we want to hold the mutex only for the duration of the non-blocking
+            // call, and not for duration until the query completes. Hence the await on
+            // the callback is after the mutex was released.
+            let callback = query_handler
+                .lock()
+                .await
+                .ready()
+                .await
+                .expect("The service must always be able to process requests")
+                .call((query.clone(), delegation_from_nns));
+            let result = match callback.await {
+                Ok(query_result) => common::cbor_response(&query_result),
+                Err(canonical_error) => common::make_response(
+                    StatusCode::from(canonical_error.code),
+                    canonical_error.message.as_str(),
+                ),
+            };
+            (result, Query)
+        }
         ReadContent::ReadState(read_state) => (
             handle_read_state(
                 delegation_from_nns,
@@ -140,74 +146,6 @@ pub(crate) async fn handle(
             ),
             ReadState,
         ),
-    }
-}
-
-// TODO(INF-328): The errors codes below are mostly 500. They should be more
-// descriptive.
-async fn handle_query(
-    log: &ReplicaLogger,
-    delegation_from_nns: Option<CertificateDelegation>,
-    query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    query: UserQuery,
-    targets: CanisterIdSet,
-    metrics: Arc<HttpHandlerMetrics>,
-) -> Response<Body> {
-    if !targets.contains(&query.receiver) {
-        return common::make_response(StatusCode::UNAUTHORIZED, "Unauthorized.");
-    }
-    metrics.observe_unreliable_request_acceptance_duration(
-        RequestType::Read,
-        ApiReqType::Query,
-        Time::from_nanos_since_unix_epoch(query.ingress_expiry),
-    );
-
-    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-    let c_log = log.clone();
-    let callback = move |res| {
-        if let Err(err) = tx.blocking_send(res) {
-            info!(
-                c_log,
-                "Broken channel (query execution). Most likely the user dropped the request: {}",
-                err
-            );
-        }
-    };
-    query_handler.query_latest_certified_state(query, delegation_from_nns, Box::new(callback));
-    // TODO: add a timeout for the await as a safety guard.
-    let res = match rx.recv().await {
-        None => {
-            return common::make_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Broken channel. Query execution didn't return a value.",
-            )
-        }
-        Some(res) => res,
-    };
-
-    match res {
-        Ok(res) => {
-            let response = match res {
-                WasmResult::Reply(vec) => HttpQueryResponse::Replied {
-                    reply: HttpQueryResponseReply { arg: Blob(vec) },
-                },
-                WasmResult::Reject(message) => HttpQueryResponse::Rejected {
-                    reject_code: RejectCode::CanisterReject as u64,
-                    reject_message: message,
-                },
-            };
-
-            common::cbor_response(&response)
-        }
-
-        Err(user_error) => {
-            info!(log, "Could not perform query on canister: {}", user_error);
-            let response = HttpQueryResponse::Rejected {
-                reject_code: user_error.reject_code() as u64,
-                reject_message: user_error.to_string(),
-            };
-            common::cbor_response(&response)
-        }
     }
 }
 
@@ -226,7 +164,7 @@ fn handle_read_state(
         &targets,
     ) {
         metrics.observe_forbidden_request(&RequestType::Read, "InvalidPaths");
-        return common::make_response(StatusCode::FORBIDDEN, &err.description());
+        return common::make_response(StatusCode::from(err.code), err.message.as_str());
     }
     metrics.observe_unreliable_request_acceptance_duration(
         RequestType::Read,
@@ -266,7 +204,7 @@ fn verify_paths(
     user: &UserId,
     paths: &[Path],
     targets: &CanisterIdSet,
-) -> Result<(), VerifyPathsError> {
+) -> Result<(), CanonicalError> {
     let state = state_reader.get_latest_state().take();
     let mut num_request_ids = 0;
 
@@ -288,7 +226,10 @@ fn verify_paths(
                 num_request_ids += 1;
 
                 if num_request_ids > MAX_READ_STATE_REQUEST_IDS {
-                    return Err(VerifyPathsError::TooManyRequests);
+                    return Err(resource_exhausted_error(&format!(
+                        "Can only request up to {} request IDs.",
+                        MAX_READ_STATE_REQUEST_IDS
+                    )));
                 }
 
                 // Verify that the request was signed by the same user.
@@ -298,17 +239,22 @@ fn verify_paths(
                     if let Some(ingress_user_id) = ingress_status.user_id() {
                         if let Some(receiver) = ingress_status.receiver() {
                             if ingress_user_id != *user || !targets.contains(&receiver) {
-                                return Err(VerifyPathsError::UnauthorizedRequestId);
+                                return Err(permission_denied_error(
+                                    "Request IDs must be for requests signed by the caller.",
+                                ));
                             }
                         }
                     }
                 } else {
-                    return Err(VerifyPathsError::InvalidRequestId);
+                    return Err(invalid_argument_error(&format!(
+                        "Request IDs must be {} bytes in length.",
+                        EXPECTED_MESSAGE_ID_LENGTH
+                    )));
                 }
             }
             _ => {
                 // All other paths are unsupported.
-                return Err(VerifyPathsError::InvalidPath);
+                return Err(not_found_error("Invalid path requested."));
             }
         }
     }

@@ -83,7 +83,7 @@ fn should_correctly_convert_tls_cert_hash_as_key_id() {
     assert_eq!(key_id, KeyId(expected_key_id));
 }
 
-fn csprng_seeded_with(seed: u64) -> impl CryptoRng + Rng {
+fn csprng_seeded_with(seed: u64) -> impl CryptoRng + Rng + Clone {
     ChaCha20Rng::seed_from_u64(seed)
 }
 
@@ -155,10 +155,9 @@ mod tls {
     use crate::secret_key_store::test_utils::MockSecretKeyStore;
     use openssl::pkey::{Id, PKey};
     use openssl::x509::X509VerifyResult;
+    use std::collections::BTreeSet;
 
     const NODE_1: u64 = 4241;
-    const NODE_2: u64 = 4242;
-    const NODE_3: u64 = 4243;
     const FIXED_SEED: u64 = 42;
     const NOT_AFTER: &str = "25670102030405Z";
 
@@ -272,16 +271,13 @@ mod tls {
     fn should_set_different_serial_numbers_for_multiple_certs() {
         let mut csp = Csp::of(rng(), volatile_key_store());
 
-        let cert_1 = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
-        let cert_2 = csp.gen_tls_key_pair(node_test_id(NODE_2), NOT_AFTER);
-        let cert_3 = csp.gen_tls_key_pair(node_test_id(NODE_3), NOT_AFTER);
-
-        let serial_1 = serial_number(&cert_1);
-        let serial_2 = serial_number(&cert_2);
-        let serial_3 = serial_number(&cert_3);
-        assert_ne!(serial_1, serial_2);
-        assert_ne!(serial_2, serial_3);
-        assert_ne!(serial_1, serial_3);
+        const SAMPLE_SIZE: usize = 20;
+        let mut serial_samples = BTreeSet::new();
+        for _i in 0..SAMPLE_SIZE {
+            let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+            serial_samples.insert(serial_number(&cert));
+        }
+        assert_eq!(serial_samples.len(), SAMPLE_SIZE);
     }
 
     #[test]
@@ -306,12 +302,12 @@ mod tls {
     #[should_panic(expected = "'not after' date must not be in the past")]
     fn should_panic_if_not_after_date_is_in_the_past() {
         let mut csp = Csp::of(rng(), volatile_key_store());
-        let date_in_the_past = "20000102030405Z";
+        let date_in_the_past = "20211004235959Z";
 
         let _panic = csp.gen_tls_key_pair(node_test_id(NODE_1), &date_in_the_past);
     }
 
-    fn rng() -> impl CryptoRng + Rng {
+    fn rng() -> impl CryptoRng + Rng + Clone {
         csprng_seeded_with(42)
     }
 

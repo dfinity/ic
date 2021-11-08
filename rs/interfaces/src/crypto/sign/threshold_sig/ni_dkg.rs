@@ -70,8 +70,11 @@ pub trait NiDkgAlgorithm {
     ///   available.
     /// * `DkgCreateDealingError::MalformedFsEncryptionPublicKey` if the
     ///   encryption public key fetched from the registry is malformed.
-    /// * `DkgCreateDealingError::FsDecryptionKeyNotInSecretKeyStore` if the
-    ///   forward secure decryption key is not in the secret key store.
+    /// * `DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore` if the
+    ///   threshold signing key to be reshared (in the case of resharing) is not
+    ///   in the secret key store.  This error indicates that
+    ///   `NiDkgAlgorithm::load_transcript`  must be called prior to calling
+    ///   this method.
     fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError>;
 
     /// Verifies a non-interactive DKG dealing.

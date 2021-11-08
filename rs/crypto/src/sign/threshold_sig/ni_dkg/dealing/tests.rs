@@ -342,52 +342,8 @@ mod create_dealing {
 mod create_dealing_with_resharing_transcript {
     use super::*;
     use crate::sign::threshold_sig::ni_dkg::test_utils::minimal_dkg_config_data_with_resharing;
-    use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
-        CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
-    };
-    use ic_types::crypto::error::{InvalidArgumentError, MalformedPublicKeyError};
-
-    #[test]
-    fn should_call_csp_load_private_key_with_correct_parameters() {
-        let resharing_transcript = transcript(
-            set_of(&[NODE_3, NODE_1, NODE_2]),
-            REG_V1,
-            RESHARING_TRANSCRIPT_DKG_ID,
-        );
-        let dkg_config = dkg_config(NiDkgConfigData {
-            dkg_id: DKG_ID,
-            receivers: set_of(&[NODE_3]),
-            dealers: set_of(&[NODE_1, NODE_3]),
-            threshold: THRESHOLD,
-            registry_version: REG_V2,
-            resharing_transcript: Some(resharing_transcript.clone()),
-            ..minimal_dkg_config_data_with_resharing()
-        });
-        let resharing_enc_pk_record = dealing_enc_pk_record(NODE_3, REG_V1, PK_VALUE_1);
-        let enc_pk_record = dealing_enc_pk_record(NODE_3, REG_V2, PK_VALUE_2);
-        let mut csp = MockAllCryptoServiceProvider::new();
-        csp.expect_load_threshold_signing_key()
-            .withf(
-                move |algorithm_id, dkg_id, epoch_, csp_transcript, receiver_index| {
-                    *dkg_id == RESHARING_TRANSCRIPT_DKG_ID
-                        && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
-                        && *epoch_ == epoch(REG_V1)
-                        && *csp_transcript == CspNiDkgTranscript::from(&resharing_transcript)
-                        && *receiver_index == 2 // index of NODE_3 in (sorted)
-                                                // resharing committee
-                },
-            )
-            .times(1)
-            .return_const(Ok(()));
-        expect_create_resharing_dealing_returning(&mut csp, Ok(csp_dealing(DEALING_VALUE_1)));
-
-        let _ = create_dealing(
-            &NODE_3,
-            &csp,
-            &registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]),
-            &dkg_config,
-        );
-    }
+    use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateReshareDealingError;
+    use ic_types::crypto::error::MalformedPublicKeyError;
 
     #[test]
     fn should_call_csp_create_resharing_dealing_with_correct_parameters() {
@@ -409,7 +365,6 @@ mod create_dealing_with_resharing_transcript {
         let resharing_enc_pk_record = dealing_enc_pk_record(NODE_3, REG_V1, PK_VALUE_1);
         let enc_pk_record = dealing_enc_pk_record(NODE_3, REG_V2, PK_VALUE_2);
         let mut csp = MockAllCryptoServiceProvider::new();
-        expect_load_threshold_signing_key_returning(&mut csp, Ok(()));
         csp.expect_create_resharing_dealing()
             .withf(
                 move |algorithm_id,
@@ -442,37 +397,6 @@ mod create_dealing_with_resharing_transcript {
     }
 
     #[test]
-    fn should_forward_error_from_csp_on_load_private_key() {
-        let dkg_config = dkg_config(NiDkgConfigData {
-            receivers: set_of(&[NODE_1]),
-            ..minimal_dkg_config_data_with_resharing()
-        });
-        let resharing_enc_pk_record = dealing_enc_pk_record(NODE_1, REG_V1, PK_VALUE_1);
-        let enc_pk_record = dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_2);
-        let mut csp = MockAllCryptoServiceProvider::new();
-        let invalid_arg_error = invalid_arg_error();
-        expect_load_threshold_signing_key_returning(
-            &mut csp,
-            Err(CspDkgLoadPrivateKeyError::InvalidTranscriptError(
-                invalid_arg_error.clone(),
-            )),
-        );
-
-        let error = create_dealing(
-            &NODE_1,
-            &csp,
-            &registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]),
-            &dkg_config,
-        )
-        .unwrap_err();
-
-        assert_eq!(
-            error,
-            DkgCreateDealingError::InvalidTranscript(invalid_arg_error)
-        );
-    }
-
-    #[test]
     fn should_forward_error_from_csp_on_create_dealing() {
         let dkg_config = dkg_config(NiDkgConfigData {
             receivers: set_of(&[NODE_1]),
@@ -481,7 +405,6 @@ mod create_dealing_with_resharing_transcript {
         let resharing_enc_pk_record = dealing_enc_pk_record(NODE_1, REG_V1, PK_VALUE_1);
         let enc_pk_record = dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_2);
         let mut csp = MockAllCryptoServiceProvider::new();
-        expect_load_threshold_signing_key_returning(&mut csp, Ok(()));
         expect_create_resharing_dealing_returning(&mut csp, Err(malformed_fs_pk()));
 
         let error = create_dealing(
@@ -510,7 +433,6 @@ mod create_dealing_with_resharing_transcript {
         let resharing_enc_pk_record = dealing_enc_pk_record(NODE_1, REG_V1, PK_VALUE_1);
         let enc_pk_record = dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_2);
         let mut csp = MockAllCryptoServiceProvider::new();
-        expect_load_threshold_signing_key_returning(&mut csp, Ok(()));
         expect_create_resharing_dealing_returning(&mut csp, Err(unsupported_algorithm_id()));
 
         let _panic = create_dealing(
@@ -521,15 +443,6 @@ mod create_dealing_with_resharing_transcript {
         );
     }
 
-    fn expect_load_threshold_signing_key_returning(
-        csp: &mut MockAllCryptoServiceProvider,
-        result: Result<(), CspDkgLoadPrivateKeyError>,
-    ) {
-        csp.expect_load_threshold_signing_key()
-            .times(1)
-            .return_const(result);
-    }
-
     fn expect_create_resharing_dealing_returning(
         csp: &mut MockAllCryptoServiceProvider,
         result: Result<CspNiDkgDealing, CspDkgCreateReshareDealingError>,
@@ -537,12 +450,6 @@ mod create_dealing_with_resharing_transcript {
         csp.expect_create_resharing_dealing()
             .times(1)
             .return_const(result);
-    }
-
-    fn invalid_arg_error() -> InvalidArgumentError {
-        InvalidArgumentError {
-            message: "some error".to_string(),
-        }
     }
 
     fn malformed_fs_pk() -> CspDkgCreateReshareDealingError {

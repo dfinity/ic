@@ -29,7 +29,7 @@ use ic_test_utilities::{
     registry::{add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder},
 };
 use ic_types::{
-    batch::{Batch, BatchPayload, IngressPayload, XNetPayload},
+    batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     ingress::{IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress},
     replica_config::ReplicaConfig,
@@ -181,7 +181,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         &cfg.state_manager,
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
-    let (_, ingress_history_writer, http_query_handler, scheduler, ingress_hist_reader) =
+    let (_, ingress_history_writer, ingress_hist_reader, query_handler, _, scheduler) =
         setup_execution(
             log.clone().into(),
             &metrics_registry,
@@ -226,7 +226,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
                 // NOTE: Data certificates aren't supported in drun yet.
                 // To support them, we'd need to do something similar to
                 // http_handler::get_latest_certified_state_and_data_certificate
-                print_query_result(http_query_handler.query(
+                print_query_result(query_handler.query(
                     q,
                     state_manager.get_latest_state().take(),
                     Vec::new(),
@@ -292,6 +292,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             xnet: XNetPayload {
                 stream_slices: Default::default(),
             },
+            self_validating: SelfValidatingPayload::default(),
         },
         randomness: Randomness::from([0; 32]),
         registry_version: RegistryVersion::from(1),

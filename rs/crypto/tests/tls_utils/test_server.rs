@@ -24,17 +24,17 @@ pub struct ServerBuilder {
 }
 
 impl ServerBuilder {
-    pub fn with_msg_for_client(mut self, msg: &str) -> ServerBuilder {
+    pub fn with_msg_for_client(mut self, msg: &str) -> Self {
         self.msg_for_client = Some(msg.to_string());
         self
     }
 
-    pub fn expect_msg_from_client(mut self, msg: &str) -> ServerBuilder {
+    pub fn expect_msg_from_client(mut self, msg: &str) -> Self {
         self.msg_expected_from_client = Some(msg.to_string());
         self
     }
 
-    pub fn add_allowed_client(mut self, client: NodeId) -> ServerBuilder {
+    pub fn add_allowed_client(mut self, client: NodeId) -> Self {
         match self.allowed_nodes {
             None => {
                 self.allowed_nodes = {
@@ -55,7 +55,7 @@ impl ServerBuilder {
         }
     }
 
-    pub fn allow_all_nodes(mut self) -> ServerBuilder {
+    pub fn allow_all_nodes(mut self) -> Self {
         match self.allowed_nodes {
             None => {
                 self.allowed_nodes = Some(SomeOrAllNodes::All);
@@ -68,7 +68,7 @@ impl ServerBuilder {
         }
     }
 
-    pub fn add_allowed_client_cert(mut self, cert: X509PublicKeyCert) -> ServerBuilder {
+    pub fn add_allowed_client_cert(mut self, cert: X509PublicKeyCert) -> Self {
         let cert = TlsPublicKeyCert::new_from_der(cert.certificate_der)
             .expect("failed to construct TlsPublicKeyCert from DER");
         self.allowed_certs.insert(cert);
@@ -122,22 +122,7 @@ impl Server {
 
         let (tls_stream, authenticated_node) = self
             .crypto
-            .perform_tls_server_handshake(tcp_stream, self.allowed_clients.clone(), REG_V1)
-            .await?;
-        let (tls_read_half, tls_write_half) = tls_stream.split();
-
-        self.send_msg_to_client_if_configured(tls_write_half).await;
-        self.expect_msg_from_client_if_configured(tls_read_half)
-            .await;
-        Ok(authenticated_node)
-    }
-
-    pub async fn run_with_optional_client_auth(self) -> Result<Peer, TlsServerHandshakeError> {
-        let tcp_stream = self.accept_connection_on_listener().await;
-
-        let (tls_stream, peer) = self
-            .crypto
-            .perform_tls_server_handshake_temp_with_optional_client_auth(
+            .perform_tls_server_handshake_with_rustls(
                 tcp_stream,
                 self.allowed_clients.clone(),
                 REG_V1,
@@ -148,22 +133,19 @@ impl Server {
         self.send_msg_to_client_if_configured(tls_write_half).await;
         self.expect_msg_from_client_if_configured(tls_read_half)
             .await;
-        Ok(peer)
+        Ok(authenticated_node)
+    }
+
+    pub async fn run_with_optional_client_auth(self) -> Result<Peer, TlsServerHandshakeError> {
+        // TODO (CRP-1195): introduce
+        // `perform_tls_server_handshake_temp_with_optional_client_auth` for rustls and
+        // use it here.
+        todo!("The rustls implementation does not support optional client auth.")
     }
 
     pub async fn run_without_client_auth(self) -> Result<(), TlsServerHandshakeError> {
-        let tcp_stream = self.accept_connection_on_listener().await;
-
-        let tls_stream = self
-            .crypto
-            .perform_tls_server_handshake_without_client_auth(tcp_stream, REG_V1)
-            .await?;
-        let (tls_read_half, tls_write_half) = tls_stream.split();
-
-        self.send_msg_to_client_if_configured(tls_write_half).await;
-        self.expect_msg_from_client_if_configured(tls_read_half)
-            .await;
-        Ok(())
+        // TODO (CRP-1195): consider removing this method and the corresponding tests.
+        todo!("The rustls implementation does not support disabling client auth.")
     }
 
     async fn accept_connection_on_listener(&self) -> TcpStream {

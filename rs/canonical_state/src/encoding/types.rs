@@ -14,7 +14,7 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
 use std::convert::{From, Into, TryFrom, TryInto};
 
-type Bytes = Vec<u8>;
+pub(crate) type Bytes = Vec<u8>;
 
 /// Canonical representation of `ic_types::xnet::StreamHeader`.
 #[derive(Debug, Serialize, Deserialize)]
@@ -48,6 +48,8 @@ pub struct Request {
     pub method_name: String,
     #[serde(with = "serde_bytes")]
     pub method_payload: Bytes,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cycles_payment: Option<Cycles>,
 }
 
 /// Canonical representation of `ic_types::messages::Response`.
@@ -61,6 +63,8 @@ pub struct Response {
     pub originator_reply_callback: u64,
     pub refund: Funds,
     pub response_payload: Payload,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cycles_refund: Option<Cycles>,
 }
 
 /// Canonical representation of `ic_types::funds::Cycles`.
@@ -185,6 +189,7 @@ impl From<(&ic_types::messages::Request, u32)> for Request {
             payment: funds,
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
+            cycles_payment: None,
         }
     }
 }
@@ -193,11 +198,17 @@ impl TryFrom<Request> for ic_types::messages::Request {
     type Error = ProxyDecodeError;
 
     fn try_from(request: Request) -> Result<Self, Self::Error> {
+        let payment = match request.cycles_payment {
+            Some(cycles) => cycles,
+            None => request.payment.cycles,
+        }
+        .try_into()?;
+
         Ok(Self {
             receiver: ic_types::CanisterId::new(request.receiver.as_slice().try_into()?)?,
             sender: ic_types::CanisterId::new(request.sender.as_slice().try_into()?)?,
             sender_reply_callback: request.sender_reply_callback.into(),
-            payment: request.payment.cycles.try_into()?,
+            payment,
             method_name: request.method_name,
             method_payload: request.method_payload,
         })
@@ -216,6 +227,7 @@ impl From<(&ic_types::messages::Response, u32)> for Response {
             originator_reply_callback: response.originator_reply_callback.get(),
             refund: funds,
             response_payload: (&response.response_payload, certification_version).into(),
+            cycles_refund: None,
         }
     }
 }
@@ -224,11 +236,17 @@ impl TryFrom<Response> for ic_types::messages::Response {
     type Error = ProxyDecodeError;
 
     fn try_from(response: Response) -> Result<Self, Self::Error> {
+        let refund = match response.cycles_refund {
+            Some(cycles) => cycles,
+            None => response.refund.cycles,
+        }
+        .try_into()?;
+
         Ok(Self {
             originator: ic_types::CanisterId::new(response.originator.as_slice().try_into()?)?,
             respondent: ic_types::CanisterId::new(response.respondent.as_slice().try_into()?)?,
             originator_reply_callback: response.originator_reply_callback.into(),
-            refund: response.refund.cycles.try_into()?,
+            refund,
             response_payload: response.response_payload.try_into()?,
         })
     }

@@ -32,7 +32,6 @@ mod tests;
 
 /// Create a key identifier from the public coefficients
 // TODO (CRP-821): Tests - take the existing ones from classic DKG.
-// TODO (CRP-821): Remove classic DKG conversion.
 pub fn key_id_from_csp_pub_coeffs(csp_public_coefficients: &CspPublicCoefficients) -> KeyId {
     let mut hash = Sha256::new();
     hash.update(

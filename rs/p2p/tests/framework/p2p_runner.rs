@@ -17,6 +17,7 @@ use ic_test_utilities::{
     metrics::fetch_int_gauge,
     p2p::*,
     port_allocation::allocate_ports,
+    self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state_manager::FakeStateManager,
     thread_transport::*,
     types::ids::{node_test_id, subnet_test_id},
@@ -67,6 +68,8 @@ fn execute_test(
         let fake_crypto = Arc::new(fake_crypto);
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
         let xnet_payload_builder = Arc::new(xnet_payload_builder);
+        let self_validating_payload_builder = FakeSelfValidatingPayloadBuilder::new();
+        let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
         let no_state_sync_client = P2PStateSyncClient::TestClient();
         let ingress_hist_reader = Box::new(IngressHistoryReaderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
@@ -95,6 +98,7 @@ fn execute_test(
             Arc::clone(&state_manager) as Arc<_>,
             no_state_sync_client,
             xnet_payload_builder as Arc<_>,
+            self_validating_payload_builder as Arc<_>,
             message_router as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
@@ -215,6 +219,8 @@ fn execute_test_chunking_pool(
         let message_router = Arc::new(message_router);
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
         let xnet_payload_builder = Arc::new(xnet_payload_builder);
+        let self_validating_payload_builder = FakeSelfValidatingPayloadBuilder::new();
+        let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
         let node_pool_dir = test_synchronizer.get_test_group_directory();
@@ -245,6 +251,7 @@ fn execute_test_chunking_pool(
             Arc::clone(&state_manager) as Arc<_>,
             state_sync_client,
             xnet_payload_builder,
+            self_validating_payload_builder,
             message_router,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,

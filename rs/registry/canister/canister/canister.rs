@@ -11,6 +11,10 @@ use ic_crypto_tree_hash::{LabeledTree, WitnessGenerator, WitnessGeneratorImpl};
 use ic_nns_common::{
     access_control::check_caller_is_root, pb::v1::CanisterAuthzInfo, types::MethodAuthzChange,
 };
+use ic_protobuf::registry::{
+    dc::v1::AddOrRemoveDataCentersProposalPayload,
+    node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
+};
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
@@ -511,6 +515,30 @@ fn set_firewall_config() {
         registry_mut().do_set_firewall_config(payload);
         recertify_registry();
     });
+}
+
+#[export_name = "canister_update update_node_rewards_table"]
+fn update_node_rewards_table() {
+    check_caller_is_governance_and_log("update_node_rewards_table");
+    over(
+        protobuf,
+        |payload: UpdateNodeRewardsTableProposalPayload| {
+            registry_mut().do_update_node_rewards_table(payload);
+            recertify_registry();
+        },
+    );
+}
+
+#[export_name = "canister_update add_or_remove_data_centers"]
+fn add_or_remove_data_centers() {
+    check_caller_is_governance_and_log("add_or_remove_data_centers");
+    over(
+        protobuf,
+        |payload: AddOrRemoveDataCentersProposalPayload| {
+            registry_mut().do_add_or_remove_data_centers(payload);
+            recertify_registry();
+        },
+    );
 }
 
 fn recertify_registry() {

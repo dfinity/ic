@@ -211,13 +211,13 @@ impl<T: AccessPolicy> MappedStateCommon<T> {
     fn get_heap_base(&self) -> *mut u8 {
         unsafe {
             self.get_mapped_base()
-                .add(self.meta.heap_offset as usize * *PAGE_SIZE)
+                .add(self.meta.heap_offset as usize * PAGE_SIZE)
         }
     }
 
     fn get_heap_len(&self) -> usize {
         if let Some(last_lba) = self.map_info.current_mappings.get_last_slot() {
-            (last_lba - HEAP_OFFSET) as usize * *PAGE_SIZE
+            (last_lba - HEAP_OFFSET) as usize * PAGE_SIZE
         } else {
             0
         }
@@ -226,12 +226,12 @@ impl<T: AccessPolicy> MappedStateCommon<T> {
     fn get_globals_base(&self) -> *mut u8 {
         unsafe {
             self.get_mapped_base()
-                .add(self.meta.globals_offset as usize * *PAGE_SIZE)
+                .add(self.meta.globals_offset as usize * PAGE_SIZE)
         }
     }
 
     fn get_globals_len(&self) -> usize {
-        self.meta.globals_len * *PAGE_SIZE
+        self.meta.globals_len * PAGE_SIZE
     }
 
     fn get_globals(&self) -> &[u8] {
@@ -257,7 +257,7 @@ impl<T: AccessPolicy> MappedStateCommon<T> {
 
     fn soft_commit(&self, pages: &[u64]) {
         let written_so_far = self.map_info.written_so_far.load(Ordering::Relaxed);
-        let to_write = pages.len() * *PAGE_SIZE;
+        let to_write = pages.len() * PAGE_SIZE;
         let file_len = self.map_info.file.metadata().unwrap().len() as usize;
 
         // if we will blow through the current file size after handling
@@ -287,7 +287,7 @@ impl<T: AccessPolicy> MappedStateCommon<T> {
         let mut allocated_slots = slot_mgr.alloc_free_slots(pages.len() as u32);
         for page_num in pages.iter() {
             let heap_page = *page_num;
-            let offset = heap_page as usize * *PAGE_SIZE;
+            let offset = heap_page as usize * PAGE_SIZE;
 
             let (is_shared, existing_pba) = self.map_info.current_mappings.get_slot_info(heap_page);
 
@@ -298,7 +298,7 @@ impl<T: AccessPolicy> MappedStateCommon<T> {
             };
 
             // dont overwrite physical metapage
-            let what_to_map = (slot_to_use + self.meta.meta_len as u64) * *PAGE_SIZE as u64;
+            let what_to_map = (slot_to_use + self.meta.meta_len as u64) * PAGE_SIZE as u64;
             #[cfg(target_os = "linux")]
             let mut copied = false;
             #[cfg(not(target_os = "linux"))]
@@ -321,7 +321,7 @@ impl<T: AccessPolicy> MappedStateCommon<T> {
                 unsafe {
                     let vec = nix::sys::uio::IoVec::from_slice(&::std::slice::from_raw_parts(
                         self.get_mapped_base().add(offset),
-                        *PAGE_SIZE,
+                        PAGE_SIZE,
                     ));
 
                     nix::fcntl::vmsplice(wpipe, &[vec], nix::fcntl::SpliceFFlags::SPLICE_F_GIFT)
@@ -338,7 +338,7 @@ impl<T: AccessPolicy> MappedStateCommon<T> {
                         None,
                         raw_fd,
                         Some(&mut (what_to_map as i64)),
-                        *PAGE_SIZE,
+                        PAGE_SIZE,
                         nix::fcntl::SpliceFFlags::SPLICE_F_MOVE,
                     )
                     .expect("splice failed");
@@ -351,7 +351,7 @@ impl<T: AccessPolicy> MappedStateCommon<T> {
                 unsafe {
                     let dst = mmap(
                         ptr::null_mut(),
-                        *PAGE_SIZE,
+                        PAGE_SIZE,
                         PROT_READ | PROT_WRITE,
                         MAP_SHARED,
                         raw_fd,
@@ -362,9 +362,9 @@ impl<T: AccessPolicy> MappedStateCommon<T> {
                     }
 
                     let src = self.get_mapped_base().add(offset);
-                    ptr::copy_nonoverlapping(src as *mut c_void, dst as *mut c_void, *PAGE_SIZE);
+                    ptr::copy_nonoverlapping(src as *mut c_void, dst as *mut c_void, PAGE_SIZE);
 
-                    munmap(dst, *PAGE_SIZE);
+                    munmap(dst, PAGE_SIZE);
                 }
             }
 
@@ -384,7 +384,7 @@ impl<T: AccessPolicy> MappedStateCommon<T> {
 
         // Account all the new writes so far
         let written = self.map_info.written_so_far.load(Ordering::Relaxed)
-            + mappings_to_put.len() * *PAGE_SIZE;
+            + mappings_to_put.len() * PAGE_SIZE;
 
         self.map_info
             .written_so_far
@@ -471,7 +471,7 @@ impl MappedState for MappedStateCommon<ReadWrite> {
         let len_to_copy = bytes.len();
         let heap_base = self.get_heap_base() as u64;
         let copy_base = heap_base + offset;
-        let page_size = *PAGE_SIZE as u64;
+        let page_size = PAGE_SIZE as u64;
 
         // find the aligned base address to reset the permissions from
         let aligned_base = (copy_base).prev_multiple_of(&page_size);
@@ -492,12 +492,12 @@ impl MappedState for MappedStateCommon<ReadWrite> {
     }
 
     fn update_heap_page(&self, page_idx: u64, bytes: &[u8]) {
-        let offset = page_idx as usize * *PAGE_SIZE;
+        let offset = page_idx as usize * PAGE_SIZE;
         assert!(bytes.len().is_multiple_of(&PAGE_SIZE));
         unsafe {
             let dst = self.get_heap_base().add(offset);
-            reset_mem_protection(dst, *PAGE_SIZE, PROT_READ | PROT_WRITE);
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), dst, *PAGE_SIZE);
+            reset_mem_protection(dst, PAGE_SIZE, PROT_READ | PROT_WRITE);
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), dst, PAGE_SIZE);
         };
     }
 
@@ -593,7 +593,7 @@ pub trait CowMemoryManager {
 
 fn reset_mem_protection(base: *mut u8, len: usize, new_permissions: libc::c_int) {
     unsafe {
-        let page_size = *PAGE_SIZE as u64;
+        let page_size = PAGE_SIZE as u64;
 
         // find the aligned base address to reset the permissions from
         let aligned_base = (base as u64).prev_multiple_of(&page_size);
@@ -687,21 +687,14 @@ impl CowMemoryManagerCommon<ReadOnly> {
         unsafe {
             // map just the header portion
             let raw_fd = state_file.as_raw_fd();
-            let header_base = mmap(
-                ptr::null_mut(),
-                *PAGE_SIZE,
-                PROT_READ,
-                MAP_SHARED,
-                raw_fd,
-                0,
-            );
+            let header_base = mmap(ptr::null_mut(), PAGE_SIZE, PROT_READ, MAP_SHARED, raw_fd, 0);
             if header_base == MAP_FAILED {
                 panic!("mmap failed: {}", Error::last_os_error());
             }
             let sm = std::ptr::read(header_base as *mut StateMeta);
 
             assert_eq!(sm.magic, STATE_MAGIC);
-            munmap(header_base, *PAGE_SIZE);
+            munmap(header_base, PAGE_SIZE);
             sm
         }
     }
@@ -761,7 +754,7 @@ impl CowMemoryManagerCommon<ReadWrite> {
             let raw_fd = state_file.as_raw_fd();
             let header_base = mmap(
                 ptr::null_mut(),
-                *PAGE_SIZE,
+                PAGE_SIZE,
                 PROT_READ | PROT_WRITE,
                 MAP_SHARED,
                 raw_fd,
@@ -790,7 +783,7 @@ impl CowMemoryManagerCommon<ReadWrite> {
                 std::ptr::write(header_base as *mut StateMeta, sm);
             }
 
-            munmap(header_base, *PAGE_SIZE);
+            munmap(header_base, PAGE_SIZE);
             sm
         }
     }
@@ -923,7 +916,7 @@ impl<T: AccessPolicy> CowMemoryManagerCommon<T> {
         let state_raw_fd = state_file.as_raw_fd();
 
         let total_size =
-            (self.meta.meta_len + self.meta.globals_len + self.meta.heap_len) * *PAGE_SIZE;
+            (self.meta.meta_len + self.meta.globals_len + self.meta.heap_len) * PAGE_SIZE;
 
         // embedders make only required amount of memory accessible
         // to canisters during execution along with wasmtime.
@@ -953,12 +946,12 @@ impl<T: AccessPolicy> CowMemoryManagerCommon<T> {
         } in current_mappings.into_iter()
         {
             unsafe {
-                let where_to_map = mapped_base.add(logical_slot as usize * *PAGE_SIZE);
-                let what_to_map = (physical_slot + self.meta.meta_len as u64) * *PAGE_SIZE as u64;
+                let where_to_map = mapped_base.add(logical_slot as usize * PAGE_SIZE);
+                let what_to_map = (physical_slot + self.meta.meta_len as u64) * PAGE_SIZE as u64;
 
                 let overlay_mem = mmap(
                     where_to_map as *mut c_void,
-                    map_len as usize * *PAGE_SIZE,
+                    map_len as usize * PAGE_SIZE,
                     PROT_NONE,
                     MAP_PRIVATE | MAP_NORESERVE | MAP_FIXED,
                     state_raw_fd,
@@ -1148,7 +1141,7 @@ const GROW_SIZE: usize = 12 * KB as usize;
 fn cow_test_file_grow() {
     cow_state_feature::enable(cow_state_feature::cow_state);
     use tempfile::tempdir;
-    let random_bytes: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+    let random_bytes: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
 
     let test_dir = tempdir().expect("Unable to create temp directory");
     let mut p = test_dir.path().to_path_buf();
@@ -1226,7 +1219,7 @@ fn cow_test_write_max_rounds() {
 
     // Write full heaps for max_rounds
     for i in 1..MAX_ROUNDS + 1 {
-        let random_bytes: Vec<u8> = (0..(HEAP_LEN * *PAGE_SIZE)).map(|_| i as u8).collect();
+        let random_bytes: Vec<u8> = (0..(HEAP_LEN * PAGE_SIZE)).map(|_| i as u8).collect();
         let mapped_state = cow_mem_mgr.get_map();
         let pages = mapped_state.copy_to_heap(0, &random_bytes);
         mapped_state.soft_commit(&pages);
@@ -1235,7 +1228,7 @@ fn cow_test_write_max_rounds() {
 
     // Verifiy that all are persisted correctly and can be retrieved
     for i in 1..MAX_ROUNDS + 1 {
-        let random_bytes: Vec<u8> = (0..(HEAP_LEN * *PAGE_SIZE)).map(|_| i as u8).collect();
+        let random_bytes: Vec<u8> = (0..(HEAP_LEN * PAGE_SIZE)).map(|_| i as u8).collect();
         let mapped_state = cow_mem_mgr.get_map_for_snapshot(i as u64).unwrap();
         let data = mapped_state.copy_from_heap(0, random_bytes.len() as u64);
 
@@ -1247,7 +1240,7 @@ fn cow_test_write_max_rounds() {
 
     // Write max_rounds - 1 to make sure that those can be persisted correctly
     for i in 1..MAX_ROUNDS {
-        let random_bytes: Vec<u8> = (0..(HEAP_LEN * *PAGE_SIZE))
+        let random_bytes: Vec<u8> = (0..(HEAP_LEN * PAGE_SIZE))
             .map(|_| (MAX_ROUNDS + i) as u8)
             .collect();
         let mapped_state = cow_mem_mgr.get_map();
@@ -1262,7 +1255,7 @@ fn cow_test_write_max_rounds() {
     // Verify all new modifications and one old modification is stored correctly
     let cow_mem_mgr = CowMemoryManagerImpl::open_readonly(test_dir.path().into());
     for i in 1..MAX_ROUNDS {
-        let random_bytes: Vec<u8> = (0..(HEAP_LEN * *PAGE_SIZE))
+        let random_bytes: Vec<u8> = (0..(HEAP_LEN * PAGE_SIZE))
             .map(|_| (MAX_ROUNDS + i) as u8)
             .collect();
         let mapped_state = cow_mem_mgr
@@ -1273,7 +1266,7 @@ fn cow_test_write_max_rounds() {
         assert_eq!(data, random_bytes.as_slice());
     }
 
-    let random_bytes: Vec<u8> = (0..(HEAP_LEN * *PAGE_SIZE))
+    let random_bytes: Vec<u8> = (0..(HEAP_LEN * PAGE_SIZE))
         .map(|_| MAX_ROUNDS as u8)
         .collect();
     let mapped_state = cow_mem_mgr.get_map_for_snapshot(MAX_ROUNDS as u64).unwrap();

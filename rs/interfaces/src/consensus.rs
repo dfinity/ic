@@ -6,6 +6,10 @@ use crate::{
     },
     ingress_pool::IngressPoolSelect,
     messaging::{InvalidXNetPayload, XNetPayloadValidationError, XNetTransientValidationError},
+    self_validating_payload::{
+        InvalidSelfValidatingPayload, SelfValidatingPayloadValidationError,
+        SelfValidatingTransientValidationError,
+    },
     validation::ValidationError,
 };
 use ic_types::artifact::{
@@ -51,12 +55,14 @@ pub trait ConsensusGossip: Send + Sync {
 pub enum PayloadPermanentError {
     XNetPayloadValidationError(InvalidXNetPayload),
     IngressPayloadValidationError(IngressPermanentError),
+    SelfValidatingPayloadValidationError(InvalidSelfValidatingPayload),
 }
 
 #[derive(Debug)]
 pub enum PayloadTransientError {
     XNetPayloadValidationError(XNetTransientValidationError),
     IngressPayloadValidationError(IngressTransientError),
+    SelfValidatingPayloadValidationError(SelfValidatingTransientValidationError),
 }
 
 /// Payload validation error
@@ -76,6 +82,15 @@ impl From<XNetPayloadValidationError> for PayloadValidationError {
         err.map(
             PayloadPermanentError::XNetPayloadValidationError,
             PayloadTransientError::XNetPayloadValidationError,
+        )
+    }
+}
+
+impl From<SelfValidatingPayloadValidationError> for PayloadValidationError {
+    fn from(err: SelfValidatingPayloadValidationError) -> Self {
+        err.map(
+            PayloadPermanentError::SelfValidatingPayloadValidationError,
+            PayloadTransientError::SelfValidatingPayloadValidationError,
         )
     }
 }

@@ -2,7 +2,6 @@
 
 use crate::{artifact::*, clients};
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
-use ic_base_thread::async_safe_block_on_await;
 use ic_interfaces::{
     artifact_manager::{ArtifactProcessor, ProcessingResult},
     artifact_pool::UnvalidatedArtifact,
@@ -26,13 +25,13 @@ use ic_types::{
     consensus::{certification::CertificationMessage, dkg, ConsensusMessage},
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
-    Time,
+    p2p::GossipAdvertType,
+    NodeId, Time,
 };
 use prometheus::{histogram_opts, labels, Histogram, IntCounter};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::{Arc, Mutex, RwLock};
-
-use tokio::task::JoinHandle;
+use std::thread::{Builder as ThreadBuilder, JoinHandle};
 
 /// A client may be either wrapped in `Box` or `Arc`.
 pub enum BoxOrArcClient<Artifact: ArtifactKind> {
@@ -49,7 +48,7 @@ impl<Artifact: ArtifactKind> BoxOrArcClient<Artifact> {
         &self,
         time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<Artifact::Message>>,
-    ) -> (Vec<Advert<Artifact>>, ProcessingResult) {
+    ) -> (Vec<AdvertSendRequest<Artifact>>, ProcessingResult) {
         match self {
             BoxOrArcClient::BoxClient(client) => client.process_changes(time_source, artifacts),
             BoxOrArcClient::ArcClient(client) => client.process_changes(time_source, artifacts),
@@ -130,12 +129,11 @@ pub struct ArtifactProcessorManager<Artifact: ArtifactKind + 'static> {
 }
 
 impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
-    pub fn new<S: Fn(Advert<Artifact>) + Send + 'static>(
+    pub fn new<S: Fn(AdvertSendRequest<Artifact>) + Send + 'static>(
         time_source: Arc<SysTimeSource>,
         metrics_registry: MetricsRegistry,
         client: BoxOrArcClient<Artifact>,
         send_advert: S,
-        rt_handle: tokio::runtime::Handle,
     ) -> Self
     where
         <Artifact as ic_types::artifact::ArtifactKind>::Message: Send,
@@ -148,18 +146,21 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
         let sender_cl = sender.clone();
         let pending_artifacts_cl = pending_artifacts.clone();
         let shutdown_cl = shutdown.clone();
-        let handle = rt_handle.spawn_blocking(move || {
-            Self::process_messages(
-                pending_artifacts_cl,
-                time_source,
-                client,
-                Box::new(send_advert),
-                sender_cl,
-                receiver,
-                ArtifactProcessorMetrics::new(metrics_registry, Artifact::TAG.to_string()),
-                shutdown_cl,
-            );
-        });
+        let handle = ThreadBuilder::new()
+            .name("ArtifactProcessorThread".to_string())
+            .spawn(move || {
+                Self::process_messages(
+                    pending_artifacts_cl,
+                    time_source,
+                    client,
+                    Box::new(send_advert),
+                    sender_cl,
+                    receiver,
+                    ArtifactProcessorMetrics::new(metrics_registry, Artifact::TAG.to_string()),
+                    shutdown_cl,
+                );
+            })
+            .unwrap();
 
         Self {
             pending_artifacts,
@@ -179,7 +180,7 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
 
     // The artifact processor thread loop
     #[allow(clippy::too_many_arguments)]
-    fn process_messages<S: Fn(Advert<Artifact>) + Send + 'static>(
+    fn process_messages<S: Fn(AdvertSendRequest<Artifact>) + Send + 'static>(
         pending_artifacts: Arc<Mutex<Vec<UnvalidatedArtifact<Artifact::Message>>>>,
         time_source: Arc<SysTimeSource>,
         client: BoxOrArcClient<Artifact>,
@@ -229,7 +230,7 @@ impl<Artifact: ArtifactKind + 'static> Drop for ArtifactProcessorManager<Artifac
     fn drop(&mut self) {
         if let Some(handle) = self.handle.take() {
             self.shutdown.store(true, SeqCst);
-            async_safe_block_on_await(handle).unwrap();
+            handle.join().unwrap();
         }
     }
 }
@@ -260,7 +261,7 @@ impl<
     pub fn build<
         C: Consensus + 'static,
         G: ConsensusGossip + 'static,
-        S: Fn(Advert<ConsensusArtifact>) + Send + 'static,
+        S: Fn(AdvertSendRequest<ConsensusArtifact>) + Send + 'static,
         F: FnOnce() -> (C, G),
     >(
         send_advert: S,
@@ -268,7 +269,6 @@ impl<
         time_source: Arc<SysTimeSource>,
         consensus_pool: Arc<RwLock<PoolConsensus>>,
         ingress_pool: Arc<RwLock<PoolIngress>>,
-        rt_handle: tokio::runtime::Handle,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> (
@@ -291,7 +291,6 @@ impl<
             metrics_registry,
             BoxOrArcClient::BoxClient(Box::new(client)),
             send_advert,
-            rt_handle,
         );
         (
             clients::ConsensusClient::new(consensus_pool, consensus_gossip),
@@ -310,7 +309,7 @@ impl<
         &self,
         time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<ConsensusMessage>>,
-    ) -> (Vec<Advert<ConsensusArtifact>>, ProcessingResult) {
+    ) -> (Vec<AdvertSendRequest<ConsensusArtifact>>, ProcessingResult) {
         {
             let mut consensus_pool = self.consensus_pool.write().unwrap();
             for artifact in artifacts {
@@ -345,10 +344,16 @@ impl<
             );
             match change_action {
                 ConsensusAction::AddToValidated(to_add) => {
-                    adverts.push(ConsensusArtifact::message_to_advert(to_add))
+                    adverts.push(ConsensusArtifact::message_to_advert_send_request(
+                        to_add,
+                        GossipAdvertType::Produced,
+                    ))
                 }
                 ConsensusAction::MoveToValidated(to_move) => {
-                    adverts.push(ConsensusArtifact::message_to_advert(to_move))
+                    adverts.push(ConsensusArtifact::message_to_advert_send_request(
+                        to_move,
+                        GossipAdvertType::Relayed,
+                    ))
                 }
                 ConsensusAction::RemoveFromValidated(_) => {}
                 ConsensusAction::RemoveFromUnvalidated(_) => {}
@@ -408,18 +413,20 @@ pub struct IngressProcessor<Pool> {
     ingress_pool: Arc<RwLock<Pool>>,
     /// The ingress handler.
     client: Arc<dyn IngressHandler + Send + Sync>,
+    /// Our node id
+    node_id: NodeId,
 }
 
 impl<Pool: MutableIngressPool + Send + Sync + 'static> IngressProcessor<Pool> {
     #[allow(clippy::too_many_arguments)]
-    pub fn build<S: Fn(Advert<IngressArtifact>) + Send + 'static>(
+    pub fn build<S: Fn(AdvertSendRequest<IngressArtifact>) + Send + 'static>(
         send_advert: S,
         time_source: Arc<SysTimeSource>,
         ingress_pool: Arc<RwLock<Pool>>,
         ingress_handler: Arc<dyn IngressHandler + Send + Sync>,
-        rt_handle: tokio::runtime::Handle,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
+        node_id: NodeId,
         malicious_flags: MaliciousFlags,
     ) -> (
         clients::IngressClient<Pool>,
@@ -428,13 +435,13 @@ impl<Pool: MutableIngressPool + Send + Sync + 'static> IngressProcessor<Pool> {
         let client = Self {
             ingress_pool: ingress_pool.clone(),
             client: ingress_handler,
+            node_id,
         };
         let manager = ArtifactProcessorManager::new(
             time_source.clone(),
             metrics_registry,
             BoxOrArcClient::BoxClient(Box::new(client)),
             send_advert,
-            rt_handle,
         );
         (
             clients::IngressClient::new(time_source, ingress_pool, log, malicious_flags),
@@ -451,7 +458,7 @@ impl<Pool: MutableIngressPool + Send + Sync> ArtifactProcessor<IngressArtifact>
         &self,
         _time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<SignedIngress>>,
-    ) -> (Vec<Advert<IngressArtifact>>, ProcessingResult) {
+    ) -> (Vec<AdvertSendRequest<IngressArtifact>>, ProcessingResult) {
         {
             let mut ingress_pool = self.ingress_pool.write().unwrap();
             for artifact in artifacts {
@@ -466,12 +473,26 @@ impl<Pool: MutableIngressPool + Send + Sync> ArtifactProcessor<IngressArtifact>
         let adverts = change_set
             .iter()
             .filter_map(|change_action| match change_action {
-                IngressAction::MoveToValidated((message_id, size, attribute, integrity_hash)) => {
-                    Some(Advert {
-                        size: *size,
-                        id: message_id.clone(),
-                        attribute: attribute.clone(),
-                        integrity_hash: integrity_hash.clone(),
+                IngressAction::MoveToValidated((
+                    message_id,
+                    source_node_id,
+                    size,
+                    attribute,
+                    integrity_hash,
+                )) => {
+                    let advert_type = if *source_node_id == self.node_id {
+                        GossipAdvertType::Produced
+                    } else {
+                        GossipAdvertType::Relayed
+                    };
+                    Some(AdvertSendRequest {
+                        advert: Advert {
+                            size: *size,
+                            id: message_id.clone(),
+                            attribute: attribute.clone(),
+                            integrity_hash: integrity_hash.clone(),
+                        },
+                        advert_type,
                     })
                 }
                 IngressAction::RemoveFromUnvalidated(_)
@@ -508,7 +529,7 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
     pub fn build<
         C: Certifier + 'static,
         G: CertifierGossip + 'static,
-        S: Fn(Advert<CertificationArtifact>) + Send + 'static,
+        S: Fn(AdvertSendRequest<CertificationArtifact>) + Send + 'static,
         F: FnOnce() -> (C, G),
     >(
         send_advert: S,
@@ -516,7 +537,6 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
         time_source: Arc<SysTimeSource>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         certification_pool: Arc<RwLock<PoolCertification>>,
-        rt_handle: tokio::runtime::Handle,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> (
@@ -539,7 +559,6 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
             metrics_registry,
             BoxOrArcClient::BoxClient(Box::new(client)),
             send_advert,
-            rt_handle,
         );
         (
             clients::CertificationClient::new(
@@ -560,7 +579,10 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
         &self,
         _time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<CertificationMessage>>,
-    ) -> (Vec<Advert<CertificationArtifact>>, ProcessingResult) {
+    ) -> (
+        Vec<AdvertSendRequest<CertificationArtifact>>,
+        ProcessingResult,
+    ) {
         {
             let mut certification_pool = self.certification_pool.write().unwrap();
             for artifact in artifacts {
@@ -581,10 +603,16 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
         for action in change_set.iter() {
             match action {
                 certification::ChangeAction::AddToValidated(msg) => {
-                    adverts.push(CertificationArtifact::message_to_advert(msg))
+                    adverts.push(CertificationArtifact::message_to_advert_send_request(
+                        msg,
+                        GossipAdvertType::Produced,
+                    ))
                 }
                 certification::ChangeAction::MoveToValidated(msg) => {
-                    adverts.push(CertificationArtifact::message_to_advert(msg))
+                    adverts.push(CertificationArtifact::message_to_advert_send_request(
+                        msg,
+                        GossipAdvertType::Relayed,
+                    ))
                 }
                 certification::ChangeAction::HandleInvalid(msg, reason) => {
                     self.invalidated_artifacts.inc();
@@ -622,14 +650,13 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
     pub fn build<
         C: Dkg + 'static,
         G: DkgGossip + 'static,
-        S: Fn(Advert<DkgArtifact>) + Send + 'static,
+        S: Fn(AdvertSendRequest<DkgArtifact>) + Send + 'static,
         F: FnOnce() -> (C, G),
     >(
         send_advert: S,
         setup: F,
         time_source: Arc<SysTimeSource>,
         dkg_pool: Arc<RwLock<PoolDkg>>,
-        rt_handle: tokio::runtime::Handle,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> (
@@ -651,7 +678,6 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
             metrics_registry,
             BoxOrArcClient::BoxClient(Box::new(client)),
             send_advert,
-            rt_handle,
         );
         (clients::DkgClient::new(dkg_pool, dkg_gossip), manager)
     }
@@ -665,7 +691,7 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> ArtifactProcessor<DkgArtif
         &self,
         _time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<dkg::Message>>,
-    ) -> (Vec<Advert<DkgArtifact>>, ProcessingResult) {
+    ) -> (Vec<AdvertSendRequest<DkgArtifact>>, ProcessingResult) {
         {
             let mut dkg_pool = self.dkg_pool.write().unwrap();
             for artifact in artifacts {
@@ -679,10 +705,16 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> ArtifactProcessor<DkgArtif
             for change_action in change_set.iter() {
                 match change_action {
                     DkgChangeAction::AddToValidated(to_add) => {
-                        adverts.push(DkgArtifact::message_to_advert(to_add))
+                        adverts.push(DkgArtifact::message_to_advert_send_request(
+                            to_add,
+                            GossipAdvertType::Produced,
+                        ))
                     }
                     DkgChangeAction::MoveToValidated(message) => {
-                        adverts.push(DkgArtifact::message_to_advert(message))
+                        adverts.push(DkgArtifact::message_to_advert_send_request(
+                            message,
+                            GossipAdvertType::Relayed,
+                        ))
                     }
                     DkgChangeAction::HandleInvalid(msg, reason) => {
                         self.invalidated_artifacts.inc();
@@ -715,7 +747,7 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
     pub fn build<
         C: Ecdsa + 'static,
         G: EcdsaGossip + 'static,
-        S: Fn(Advert<EcdsaArtifact>) + Send + 'static,
+        S: Fn(AdvertSendRequest<EcdsaArtifact>) + Send + 'static,
         F: FnOnce() -> (C, G),
     >(
         send_advert: S,
@@ -723,7 +755,6 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
         time_source: Arc<SysTimeSource>,
         ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
         metrics_registry: MetricsRegistry,
-        rt_handle: tokio::runtime::Handle,
     ) -> (
         clients::EcdsaClient<PoolEcdsa>,
         ArtifactProcessorManager<EcdsaArtifact>,
@@ -738,7 +769,6 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
             metrics_registry,
             BoxOrArcClient::BoxClient(Box::new(client)),
             send_advert,
-            rt_handle,
         );
         (clients::EcdsaClient::new(ecdsa_pool, ecdsa_gossip), manager)
     }
@@ -751,7 +781,7 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<Ecds
         &self,
         _time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<EcdsaMessage>>,
-    ) -> (Vec<Advert<EcdsaArtifact>>, ProcessingResult) {
+    ) -> (Vec<AdvertSendRequest<EcdsaArtifact>>, ProcessingResult) {
         {
             let mut ecdsa_pool = self.ecdsa_pool.write().unwrap();
             for artifact in artifacts {

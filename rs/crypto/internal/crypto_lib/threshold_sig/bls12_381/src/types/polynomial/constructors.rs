@@ -20,13 +20,13 @@ impl Polynomial {
             .all(|coefficient| coefficient.is_zero())
     }
 
-    pub fn constant(c: Fr) -> Self {
+    pub fn constant(c: Scalar) -> Self {
         Polynomial::from(vec![c])
     }
 
     /// Creates a random polynomial.
     pub fn random<R: RngCore>(number_of_coefficients: usize, rng: &mut R) -> Self {
-        let coefficients: Vec<Fr> = iter::repeat(())
+        let coefficients: Vec<Scalar> = iter::repeat(())
             .map(|()| random_bls12_381_scalar(rng))
             .take(number_of_coefficients)
             .collect();
@@ -49,8 +49,8 @@ impl Polynomial {
 
 /// Creates a new `Polynomial` instance from a vector of prime field elements
 /// representing the coefficients of the polynomial.
-impl From<Vec<Fr>> for Polynomial {
-    fn from(coefficients: Vec<Fr>) -> Self {
+impl From<Vec<Scalar>> for Polynomial {
+    fn from(coefficients: Vec<Scalar>) -> Self {
         let mut ans = Polynomial { coefficients };
         ans.remove_zeros();
         ans

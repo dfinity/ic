@@ -168,16 +168,34 @@ impl RequestOrResponse {
     }
 }
 
-impl CountBytes for RequestOrResponse {
+/// Convenience `CountBytes` implementation that returns the same value as
+/// `RequestOrResponse::Request(self).count_bytes()`, so we don't need to wrap
+/// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
+impl CountBytes for Request {
     fn count_bytes(&self) -> usize {
-        let var_fields_size = match self {
-            RequestOrResponse::Request(req) => req.method_name.len() + req.method_payload.len(),
-            RequestOrResponse::Response(resp) => match &resp.response_payload {
-                Payload::Data(data) => data.len(),
-                Payload::Reject(context) => context.message.len(),
-            },
+        size_of::<RequestOrResponse>() + self.method_name.len() + self.method_payload.len()
+    }
+}
+
+/// Convenience `CountBytes` implementation that returns the same value as
+/// `RequestOrResponse::Response(self).count_bytes()`, so we don't need to wrap
+/// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
+impl CountBytes for Response {
+    fn count_bytes(&self) -> usize {
+        let var_fields_size = match &self.response_payload {
+            Payload::Data(data) => data.len(),
+            Payload::Reject(context) => context.message.len(),
         };
         size_of::<RequestOrResponse>() + var_fields_size
+    }
+}
+
+impl CountBytes for RequestOrResponse {
+    fn count_bytes(&self) -> usize {
+        match self {
+            RequestOrResponse::Request(req) => req.count_bytes(),
+            RequestOrResponse::Response(resp) => resp.count_bytes(),
+        }
     }
 }
 

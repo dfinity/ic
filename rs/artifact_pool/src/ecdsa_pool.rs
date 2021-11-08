@@ -1,14 +1,27 @@
 //! ECDSA artifact pool implementation.
+//!
+//! 1. EcdsaPoolImpl implements the artifact pool. It is made of
+//! two EcdsaPoolSectionImpl, one each for the validated/unvalidated
+//! sections.
+//! 2. EcdsaPoolSectionImpl is a collection of individual EcdsaObjectPools,
+//! one for every type of EcdsaMessage (dealing, dealing support, etc)
+//! 3. EcdsaObjectPool is the backend storage for a particular artifact
+//! type. This is where the in memory artifacts are actually stored.
 
+use crate::ecdsa_objects::EcdsaObject;
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
-use ic_crypto::crypto_hash;
-use ic_interfaces::artifact_pool::{UnvalidatedArtifact, ValidatedArtifact};
-use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, MutableEcdsaPool};
+use ic_interfaces::artifact_pool::{IntoInner, UnvalidatedArtifact};
+use ic_interfaces::ecdsa::{
+    EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, MutableEcdsaPool,
+};
 use ic_interfaces::gossip_pool::{EcdsaGossipPool, GossipPool};
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::consensus::ecdsa::EcdsaMessage;
+use ic_types::artifact::EcdsaMessageId;
+use ic_types::consensus::ecdsa::{
+    EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash,
+};
 use ic_types::crypto::CryptoHashOf;
-use ic_types::time::current_time;
 
 use std::collections::BTreeMap;
 
@@ -18,60 +31,193 @@ const POOL_ECDSA: &str = "ecdsa";
 #[allow(dead_code)]
 const MESSAGE_SIZE_BYTES: usize = 0;
 
+/// The per-artifact type object pool
+struct EcdsaObjectPool<T: EcdsaObject> {
+    // The key is the hash of the sub-message type in EcdsaMessage.
+    objects: BTreeMap<CryptoHashOf<T>, T>,
+    metrics: PoolMetrics,
+}
+
+impl<T: EcdsaObject> EcdsaObjectPool<T> {
+    fn new(metrics: PoolMetrics) -> Self {
+        Self {
+            objects: BTreeMap::new(),
+            metrics,
+        }
+    }
+
+    fn insert_object(&mut self, object: T) {
+        self.metrics.observe_insert(MESSAGE_SIZE_BYTES);
+        if self.objects.insert(object.key(), object).is_some() {
+            self.metrics.observe_remove(MESSAGE_SIZE_BYTES);
+        }
+    }
+
+    fn get_object(&self, key: &CryptoHashOf<T>) -> Option<T> {
+        self.objects.get(key).cloned()
+    }
+
+    fn remove_object(&mut self, key: &CryptoHashOf<T>) -> Option<T> {
+        self.objects.remove(key).map(|value| {
+            self.metrics.observe_remove(MESSAGE_SIZE_BYTES);
+            value
+        })
+    }
+
+    fn iter(&self) -> Box<dyn Iterator<Item = (&CryptoHashOf<T>, &T)> + '_> {
+        Box::new(self.objects.iter())
+    }
+}
+
+/// The EcdsaPoolSectionImpl is just a collection of per-type
+/// object pools. The main role is to route the operations
+/// to the appropriate object pool.
+struct EcdsaPoolSectionImpl {
+    dealings: EcdsaObjectPool<EcdsaDealing>,
+    dealing_support: EcdsaObjectPool<EcdsaDealingSupport>,
+}
+
+impl EcdsaPoolSectionImpl {
+    fn new(metrics_registry: MetricsRegistry, pool: &str, pool_type: &str) -> Self {
+        let metrics = PoolMetrics::new(metrics_registry, pool, pool_type);
+        Self {
+            dealings: EcdsaObjectPool::new(metrics.clone()),
+            dealing_support: EcdsaObjectPool::new(metrics),
+        }
+    }
+
+    fn insert_object(&mut self, message: EcdsaMessage) {
+        match message {
+            EcdsaMessage::EcdsaDealing(object) => self.dealings.insert_object(object),
+            EcdsaMessage::EcdsaDealingSupport(object) => self.dealing_support.insert_object(object),
+        }
+    }
+
+    fn get_object(&self, id: &EcdsaMessageHash) -> Option<EcdsaMessage> {
+        match id {
+            EcdsaMessageHash::EcdsaDealing(_) => self
+                .dealings
+                .get_object(&EcdsaDealing::key_from_outer_hash(id))
+                .map(|object| object.into_outer()),
+            EcdsaMessageHash::EcdsaDealingSupport(_) => self
+                .dealing_support
+                .get_object(&EcdsaDealingSupport::key_from_outer_hash(id))
+                .map(|object| object.into_outer()),
+        }
+    }
+
+    fn remove_object(&mut self, id: &EcdsaMessageHash) -> Option<EcdsaMessage> {
+        match id {
+            EcdsaMessageHash::EcdsaDealing(_) => self
+                .dealings
+                .remove_object(&EcdsaDealing::key_from_outer_hash(id))
+                .map(|object| object.into_outer()),
+            EcdsaMessageHash::EcdsaDealingSupport(_) => self
+                .dealing_support
+                .remove_object(&EcdsaDealingSupport::key_from_outer_hash(id))
+                .map(|object| object.into_outer()),
+        }
+    }
+}
+
+impl EcdsaPoolSection for EcdsaPoolSectionImpl {
+    fn contains(&self, msg_id: &EcdsaMessageId) -> bool {
+        self.get_object(msg_id).is_some()
+    }
+
+    fn get(&self, msg_id: &EcdsaMessageId) -> Option<EcdsaMessage> {
+        self.get_object(msg_id)
+    }
+
+    fn dealings(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaDealing)> + '_> {
+        Box::new(
+            self.dealings
+                .iter()
+                .map(|(inner_hash, object)| (EcdsaDealing::key_to_outer_hash(inner_hash), object)),
+        )
+    }
+
+    fn dealing_support(
+        &self,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaDealingSupport)> + '_> {
+        Box::new(self.dealing_support.iter().map(|(inner_hash, object)| {
+            (EcdsaDealingSupport::key_to_outer_hash(inner_hash), object)
+        }))
+    }
+}
+
+/// The artifact pool implementation.
 struct EcdsaPoolImpl {
-    validated: PoolSection<CryptoHashOf<EcdsaMessage>, ValidatedArtifact<EcdsaMessage>>,
-    unvalidated: PoolSection<CryptoHashOf<EcdsaMessage>, UnvalidatedArtifact<EcdsaMessage>>,
+    validated: EcdsaPoolSectionImpl,
+    unvalidated: EcdsaPoolSectionImpl,
+    log: ReplicaLogger,
 }
 
 impl EcdsaPoolImpl {
     #[allow(dead_code)]
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub fn new(log: ReplicaLogger, metrics_registry: MetricsRegistry) -> Self {
         Self {
-            validated: PoolSection::new(metrics_registry.clone(), POOL_ECDSA, POOL_TYPE_VALIDATED),
-            unvalidated: PoolSection::new(metrics_registry, POOL_ECDSA, POOL_TYPE_UNVALIDATED),
+            validated: EcdsaPoolSectionImpl::new(
+                metrics_registry.clone(),
+                POOL_ECDSA,
+                POOL_TYPE_VALIDATED,
+            ),
+            unvalidated: EcdsaPoolSectionImpl::new(
+                metrics_registry,
+                POOL_ECDSA,
+                POOL_TYPE_UNVALIDATED,
+            ),
+            log,
         }
     }
 }
 
 impl EcdsaPool for EcdsaPoolImpl {
-    fn get_validated(&self) -> Box<dyn Iterator<Item = &EcdsaMessage> + '_> {
-        Box::new(self.validated.values().map(|artifact| artifact.as_ref()))
+    fn validated(&self) -> &dyn EcdsaPoolSection {
+        &self.validated
+    }
+
+    fn unvalidated(&self) -> &dyn EcdsaPoolSection {
+        &self.unvalidated
     }
 }
 
 impl MutableEcdsaPool for EcdsaPoolImpl {
     fn insert(&mut self, artifact: UnvalidatedArtifact<EcdsaMessage>) {
-        self.unvalidated
-            .insert(ic_crypto::crypto_hash(&artifact.message), artifact);
+        self.unvalidated.insert_object(artifact.into_inner());
     }
 
     fn apply_changes(&mut self, change_set: EcdsaChangeSet) {
         for action in change_set {
             match action {
-                EcdsaChangeAction::HandleInvalid(hash) => {
-                    self.unvalidated.remove(&hash);
-                }
                 EcdsaChangeAction::AddToValidated(message) => {
-                    self.validated.insert(
-                        ic_crypto::crypto_hash(&message),
-                        ValidatedArtifact {
-                            msg: message,
-                            timestamp: current_time(),
-                        },
-                    );
+                    self.validated.insert_object(message);
                 }
-                EcdsaChangeAction::MoveToValidated(message) => {
-                    let hash = crypto_hash(&message);
-                    self.unvalidated
-                        .remove(&hash)
-                        .expect("Unvalidated artifact was not found.");
-                    self.validated.insert(
-                        hash,
-                        ValidatedArtifact {
-                            msg: message,
-                            timestamp: current_time(),
-                        },
-                    );
+                EcdsaChangeAction::MoveToValidated(ref msg_id) => {
+                    if let Some(removed) = self.unvalidated.remove_object(&msg_id) {
+                        self.validated.insert_object(removed);
+                    } else {
+                        warn!(
+                            self.log,
+                            "MoveToValidated:: artifact was not found: {:?}", action
+                        );
+                    }
+                }
+                EcdsaChangeAction::RemoveUnvalidated(ref msg_id) => {
+                    if self.unvalidated.remove_object(&msg_id).is_none() {
+                        warn!(
+                            self.log,
+                            "RemoveUnvalidated:: artifact was not found: {:?}", action
+                        );
+                    }
+                }
+                EcdsaChangeAction::HandleInvalid(ref msg_id) => {
+                    if self.unvalidated.remove_object(&msg_id).is_none() {
+                        warn!(
+                            self.log,
+                            "HandleInvalid:: artifact was not found: {:?}", action
+                        );
+                    }
                 }
             }
         }
@@ -79,18 +225,15 @@ impl MutableEcdsaPool for EcdsaPoolImpl {
 }
 
 impl GossipPool<EcdsaMessage, EcdsaChangeSet> for EcdsaPoolImpl {
-    type MessageId = CryptoHashOf<EcdsaMessage>;
+    type MessageId = EcdsaMessageId;
     type Filter = ();
 
-    fn contains(&self, hash: &Self::MessageId) -> bool {
-        self.unvalidated.contains_key(hash) || self.validated.contains_key(hash)
+    fn contains(&self, msg_id: &Self::MessageId) -> bool {
+        self.unvalidated.contains(msg_id) || self.validated.contains(msg_id)
     }
 
-    fn get_validated_by_identifier(&self, id: &Self::MessageId) -> Option<EcdsaMessage> {
-        self.validated
-            .get(id)
-            .map(|artifact| artifact.as_ref())
-            .cloned()
+    fn get_validated_by_identifier(&self, msg_id: &Self::MessageId) -> Option<EcdsaMessage> {
+        self.validated.get(msg_id)
     }
 
     fn get_all_validated_by_filter(
@@ -103,47 +246,302 @@ impl GossipPool<EcdsaMessage, EcdsaChangeSet> for EcdsaPoolImpl {
 
 impl EcdsaGossipPool for EcdsaPoolImpl {}
 
-/// Validated/unvalidated sections.
-struct PoolSection<K, V> {
-    messages: BTreeMap<K, V>,
-    metrics: PoolMetrics,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_interfaces::time_source::TimeSource;
+    use ic_metrics::MetricsRegistry;
+    use ic_test_utilities::types::ids::NODE_1;
+    use ic_test_utilities::FastForwardTimeSource;
+    use ic_types::crypto::canister_threshold_sig::idkg::{
+        IDkgDealers, IDkgDealing, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptOperation,
+        IDkgTranscriptParams,
+    };
+    use ic_types::crypto::AlgorithmId;
+    use ic_types::{Height, NumberOfNodes, RegistryVersion};
+    use std::collections::BTreeSet;
 
-impl<K: Ord, V> PoolSection<K, V> {
-    #[allow(dead_code)]
-    fn new(metrics_registry: MetricsRegistry, pool: &str, pool_type: &str) -> Self {
-        Self {
-            messages: Default::default(),
-            metrics: PoolMetrics::new(metrics_registry, pool, pool_type),
+    fn create_ecdsa_dealing(id: IDkgTranscriptId) -> EcdsaDealing {
+        let mut nodes = BTreeSet::new();
+        nodes.insert(NODE_1);
+        let transcript_params = IDkgTranscriptParams::new(
+            id,
+            NumberOfNodes::from(1),
+            IDkgDealers::new(nodes.clone()).unwrap(),
+            NumberOfNodes::from(1),
+            IDkgReceivers::new(nodes).unwrap(),
+            NumberOfNodes::from(1),
+            RegistryVersion::from(0),
+            AlgorithmId::Placeholder,
+            IDkgTranscriptOperation::Random,
+        );
+
+        let dealing = IDkgDealing::dummy_for_tests();
+        EcdsaDealing {
+            finalized_height: Height::from(10),
+            dealer_id: NODE_1,
+            transcript_params,
+            dealing,
         }
     }
 
-    fn insert(&mut self, key: K, value: V) -> Option<V> {
-        self.metrics.observe_insert(MESSAGE_SIZE_BYTES);
-        let replaced = self.messages.insert(key, value);
-        if replaced.is_some() {
-            self.metrics.observe_remove(MESSAGE_SIZE_BYTES);
+    // Checks if the validated/unvalidated pool members are as expected
+    fn check_state(
+        ecdsa_pool: &EcdsaPoolImpl,
+        unvalidated_expected: &[EcdsaMessageHash],
+        validated_expected: &[EcdsaMessageHash],
+    ) {
+        let unvalidated_expected =
+            unvalidated_expected
+                .iter()
+                .fold(BTreeSet::new(), |mut acc, id| {
+                    acc.insert(id);
+                    acc
+                });
+        let validated_expected = validated_expected
+            .iter()
+            .fold(BTreeSet::new(), |mut acc, id| {
+                acc.insert(id);
+                acc
+            });
+
+        let unvalidated =
+            ecdsa_pool
+                .unvalidated()
+                .dealings()
+                .fold(BTreeSet::new(), |mut acc, (id, _)| {
+                    acc.insert(id);
+                    acc
+                });
+        let validated =
+            ecdsa_pool
+                .validated()
+                .dealings()
+                .fold(BTreeSet::new(), |mut acc, (id, _)| {
+                    acc.insert(id);
+                    acc
+                });
+
+        assert_eq!(validated.len(), validated_expected.len());
+        for id in &validated {
+            assert!(validated_expected.contains(id));
+            assert!(ecdsa_pool.contains(id));
+            assert!(ecdsa_pool.get_validated_by_identifier(&id).is_some());
+
+            assert!(ecdsa_pool.validated().contains(id));
+            assert!(ecdsa_pool.validated().get(id).is_some());
+
+            assert!(!ecdsa_pool.unvalidated().contains(id));
+            assert!(ecdsa_pool.unvalidated().get(id).is_none());
         }
-        replaced
-    }
 
-    fn remove(&mut self, key: &K) -> Option<V> {
-        let removed = self.messages.remove(key);
-        if removed.is_some() {
-            self.metrics.observe_remove(MESSAGE_SIZE_BYTES);
+        assert_eq!(unvalidated.len(), unvalidated_expected.len());
+        for id in &unvalidated {
+            assert!(unvalidated_expected.contains(id));
+            assert!(ecdsa_pool.contains(id));
+            assert!(ecdsa_pool.get_validated_by_identifier(&id).is_none());
+
+            assert!(ecdsa_pool.unvalidated().contains(id));
+            assert!(ecdsa_pool.unvalidated().get(id).is_some());
+
+            assert!(!ecdsa_pool.validated().contains(id));
+            assert!(ecdsa_pool.validated().get(id).is_none());
         }
-        removed
     }
 
-    fn get(&self, key: &K) -> Option<&V> {
-        self.messages.get(key)
+    #[test]
+    fn test_ecdsa_object_pool() {
+        let metrics_registry = MetricsRegistry::new();
+        let metrics = PoolMetrics::new(metrics_registry, POOL_ECDSA, POOL_TYPE_VALIDATED);
+        let mut object_pool: EcdsaObjectPool<EcdsaDealing> = EcdsaObjectPool::new(metrics);
+
+        let key_1 = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(100));
+            let key = ecdsa_dealing.key();
+            assert!(object_pool.get_object(&key).is_none());
+            object_pool.insert_object(ecdsa_dealing);
+            key
+        };
+        let key_2 = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let key = ecdsa_dealing.key();
+            assert!(object_pool.get_object(&key).is_none());
+            object_pool.insert_object(ecdsa_dealing);
+            key
+        };
+        assert!(object_pool.get_object(&key_1).is_some());
+        assert!(object_pool.get_object(&key_2).is_some());
+
+        let items: Vec<(&CryptoHashOf<EcdsaDealing>, &EcdsaDealing)> = object_pool.iter().collect();
+        assert_eq!(items.len(), 2);
+
+        let mut ids = BTreeSet::new();
+        ids.insert(items[0].0.clone());
+        ids.insert(items[1].0.clone());
+        assert!(ids.contains(&key_1));
+        assert!(ids.contains(&key_2));
+
+        assert!(object_pool.remove_object(&key_1).is_some());
+        assert!(object_pool.get_object(&key_1).is_none());
+        assert!(object_pool.remove_object(&key_1).is_none());
+
+        assert!(object_pool.remove_object(&key_2).is_some());
+        assert!(object_pool.get_object(&key_2).is_none());
+        assert!(object_pool.remove_object(&key_2).is_none());
+
+        let items: Vec<(&CryptoHashOf<EcdsaDealing>, &EcdsaDealing)> = object_pool.iter().collect();
+        assert_eq!(items.len(), 0);
     }
 
-    fn contains_key(&self, key: &K) -> bool {
-        self.messages.contains_key(key)
+    #[test]
+    fn test_ecdsa_pool_insert() {
+        let mut ecdsa_pool = EcdsaPoolImpl::new(
+            ic_logger::replica_logger::no_op_logger(),
+            MetricsRegistry::new(),
+        );
+        let time_source = FastForwardTimeSource::new();
+
+        let msg_id_1 = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(100));
+            let key = ecdsa_dealing.key();
+            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            ecdsa_pool.insert(UnvalidatedArtifact {
+                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                peer_id: NODE_1,
+                timestamp: time_source.get_relative_time(),
+            });
+            msg_id
+        };
+        let msg_id_2 = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let key = ecdsa_dealing.key();
+            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            ecdsa_pool.insert(UnvalidatedArtifact {
+                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                peer_id: NODE_1,
+                timestamp: time_source.get_relative_time(),
+            });
+            msg_id
+        };
+
+        check_state(&ecdsa_pool, &[msg_id_1, msg_id_2], &[]);
     }
 
-    fn values(&self) -> std::collections::btree_map::Values<'_, K, V> {
-        self.messages.values()
+    #[test]
+    fn test_ecdsa_pool_add_validated() {
+        let mut ecdsa_pool = EcdsaPoolImpl::new(
+            ic_logger::replica_logger::no_op_logger(),
+            MetricsRegistry::new(),
+        );
+        let time_source = FastForwardTimeSource::new();
+
+        let msg_id_1 = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(100));
+            let key = ecdsa_dealing.key();
+            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let change_set = vec![EcdsaChangeAction::AddToValidated(
+                EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+            )];
+            ecdsa_pool.apply_changes(change_set);
+            msg_id
+        };
+        let msg_id_2 = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let key = ecdsa_dealing.key();
+            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            ecdsa_pool.insert(UnvalidatedArtifact {
+                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                peer_id: NODE_1,
+                timestamp: time_source.get_relative_time(),
+            });
+            msg_id
+        };
+
+        check_state(&ecdsa_pool, &[msg_id_2], &[msg_id_1]);
+    }
+
+    #[test]
+    fn test_ecdsa_pool_move_validated() {
+        let mut ecdsa_pool = EcdsaPoolImpl::new(
+            ic_logger::replica_logger::no_op_logger(),
+            MetricsRegistry::new(),
+        );
+        let time_source = FastForwardTimeSource::new();
+
+        let msg_id_1 = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(100));
+            let key = ecdsa_dealing.key();
+            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let change_set = vec![EcdsaChangeAction::AddToValidated(
+                EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+            )];
+            ecdsa_pool.apply_changes(change_set);
+            msg_id
+        };
+        let msg_id_2 = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let key = ecdsa_dealing.key();
+            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            ecdsa_pool.insert(UnvalidatedArtifact {
+                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                peer_id: NODE_1,
+                timestamp: time_source.get_relative_time(),
+            });
+            msg_id
+        };
+        check_state(&ecdsa_pool, &[msg_id_2.clone()], &[msg_id_1.clone()]);
+
+        ecdsa_pool.apply_changes(vec![EcdsaChangeAction::MoveToValidated(msg_id_2.clone())]);
+        check_state(&ecdsa_pool, &[], &[msg_id_1, msg_id_2]);
+    }
+
+    #[test]
+    fn test_ecdsa_pool_remove_unvalidated() {
+        let mut ecdsa_pool = EcdsaPoolImpl::new(
+            ic_logger::replica_logger::no_op_logger(),
+            MetricsRegistry::new(),
+        );
+        let time_source = FastForwardTimeSource::new();
+
+        let msg_id = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let key = ecdsa_dealing.key();
+            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            ecdsa_pool.insert(UnvalidatedArtifact {
+                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                peer_id: NODE_1,
+                timestamp: time_source.get_relative_time(),
+            });
+            msg_id
+        };
+        check_state(&ecdsa_pool, &[msg_id.clone()], &[]);
+
+        ecdsa_pool.apply_changes(vec![EcdsaChangeAction::RemoveUnvalidated(msg_id)]);
+        check_state(&ecdsa_pool, &[], &[]);
+    }
+
+    #[test]
+    fn test_ecdsa_pool_handle_invalid() {
+        let mut ecdsa_pool = EcdsaPoolImpl::new(
+            ic_logger::replica_logger::no_op_logger(),
+            MetricsRegistry::new(),
+        );
+        let time_source = FastForwardTimeSource::new();
+
+        let msg_id = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let key = ecdsa_dealing.key();
+            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            ecdsa_pool.insert(UnvalidatedArtifact {
+                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                peer_id: NODE_1,
+                timestamp: time_source.get_relative_time(),
+            });
+            msg_id
+        };
+        check_state(&ecdsa_pool, &[msg_id.clone()], &[]);
+
+        ecdsa_pool.apply_changes(vec![EcdsaChangeAction::HandleInvalid(msg_id)]);
+        check_state(&ecdsa_pool, &[], &[]);
     }
 }

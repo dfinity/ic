@@ -1387,14 +1387,11 @@ fn test_query_for_manage_neuron() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
     );
-    // Test  that anybody  can call `get_neuron_info`  as long  as the
+    // Test that anybody can call `get_neuron_info` as long as the
     // neuron exists.
-    assert_eq!(
-        1066,
-        gov.get_neuron_info(&NeuronId { id: 1 })
-            .unwrap()
-            .created_timestamp_seconds
-    );
+    let neuron_info = gov.get_neuron_info(&NeuronId { id: 1 }).unwrap();
+    assert_eq!(1066, neuron_info.created_timestamp_seconds);
+    assert_eq!(1_000_000_000, neuron_info.stake_e8s,);
     // But not if it doesn't exist.
     assert_eq!(
         ErrorType::NotFound as i32,
@@ -1402,6 +1399,48 @@ fn test_query_for_manage_neuron() {
             .unwrap_err()
             .error_type
     );
+    // Test that the neuron info can be found by subaccount.
+    let neuron_1_subaccount = Subaccount(
+        gov.get_neuron(&NeuronId { id: 1 }).unwrap().account[..]
+            .try_into()
+            .unwrap(),
+    );
+    assert_eq!(
+        1066,
+        gov.get_neuron_info_by_id_or_subaccount(&NeuronIdOrSubaccount::Subaccount(
+            neuron_1_subaccount.to_vec()
+        ))
+        .unwrap()
+        .created_timestamp_seconds
+    );
+    assert_eq!(
+        1066,
+        gov.get_full_neuron_by_id_or_subaccount(
+            &NeuronIdOrSubaccount::Subaccount(neuron_1_subaccount.to_vec()),
+            &principal(1)
+        )
+        .unwrap()
+        .created_timestamp_seconds
+    );
+    // But not if it doesn't exist.
+    assert_eq!(
+        ErrorType::NotFound as i32,
+        gov.get_neuron_info_by_id_or_subaccount(&NeuronIdOrSubaccount::Subaccount(
+            [0u8; 32].to_vec()
+        ))
+        .unwrap_err()
+        .error_type
+    );
+    assert_eq!(
+        ErrorType::NotFound as i32,
+        gov.get_full_neuron_by_id_or_subaccount(
+            &NeuronIdOrSubaccount::Subaccount([0u8; 32].to_vec()),
+            &principal(1)
+        )
+        .unwrap_err()
+        .error_type
+    );
+
     // Test that the controller can get the full neuron
     assert_eq!(
         1066,
@@ -1984,6 +2023,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
             proposer: Some(NeuronId { id: 2 }),
             reject_cost_e8s: 0,
             proposal: Some(Proposal {
+                title: Some("Test motion proposal".to_string()),
                 summary: "A proposal voted on by a now-gone neuron".to_string(),
                 url: "https://oops".to_string(),
                 action: Some(Action::Motion(Motion {
@@ -4231,6 +4271,7 @@ fn test_not_for_profit_neurons() {
                     to_account: None,
                 })),
             }))),
+            title: Some("".to_string()),
             summary: "".to_string(),
             url: "".to_string(),
         },
@@ -4254,6 +4295,7 @@ fn test_not_for_profit_neurons() {
                     to_account: None,
                 })),
             }))),
+            title: Some("".to_string()),
             summary: "".to_string(),
             url: "".to_string(),
         },
@@ -4445,6 +4487,7 @@ fn test_manage_and_reward_node_providers() {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("NP reward proposal".to_string()),
                     summary: "Reward this NP...".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::RewardNodeProvider(RewardNodeProvider {
@@ -4487,6 +4530,7 @@ fn test_manage_and_reward_node_providers() {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("NP reward proposal".to_string()),
                     summary: "Just want to add this NP.".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::AddOrRemoveNodeProvider(
@@ -4528,6 +4572,7 @@ fn test_manage_and_reward_node_providers() {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("NP reward proposal".to_string()),
                     summary: "Just want to add this NP.".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::AddOrRemoveNodeProvider(
@@ -4561,6 +4606,7 @@ fn test_manage_and_reward_node_providers() {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("NP reward proposal".to_string()),
                     summary: "Reward this NP...".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::RewardNodeProvider(RewardNodeProvider {
@@ -4605,6 +4651,7 @@ fn test_manage_and_reward_node_providers() {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("NP reward proposal".to_string()),
                     summary: "Reward this NP...".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::RewardNodeProvider(RewardNodeProvider {
@@ -4648,6 +4695,7 @@ fn test_manage_and_reward_node_providers() {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("NP reward proposal".to_string()),
                     summary: "Reward this NP...".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::RewardNodeProvider(RewardNodeProvider {
@@ -4698,6 +4746,7 @@ fn test_manage_and_reward_node_providers() {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("NP reward proposal".to_string()),
                     summary: "Just want to remove this NP.".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::AddOrRemoveNodeProvider(
@@ -4762,6 +4811,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("NP reward proposal".to_string()),
                     summary: "Reward this NP...".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::RewardNodeProvider(RewardNodeProvider {
@@ -4809,6 +4859,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                         voter_neuron.clone(),
                     )),
                     command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                        title: Some("NP reward proposal".to_string()),
                         summary: "Just want to add this other NP.".to_string(),
                         url: "".to_string(),
                         action: Some(proposal::Action::AddOrRemoveNodeProvider(
@@ -4854,6 +4905,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                         voter_neuron.clone(),
                     )),
                     command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                        title: Some("Add NP".to_string()),
                         summary: "Just want to add this other NP.".to_string(),
                         url: "".to_string(),
                         action: Some(proposal::Action::AddOrRemoveNodeProvider(
@@ -4891,6 +4943,7 @@ fn test_manage_and_reward_multiple_node_providers() {
         id: None,
         neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
         command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+            title: Some("Reward NP".to_string()),
             summary: "Reward these NPs...".to_string(),
             url: "".to_string(),
             action: Some(proposal::Action::RewardNodeProviders(RewardNodeProviders {
@@ -4980,6 +5033,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("Remove NP".to_string()),
                     summary: "Just want to remove this NP.".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::AddOrRemoveNodeProvider(
@@ -5013,6 +5067,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("Remove NP".to_string()),
                     summary: "Just want to remove this NP.".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::AddOrRemoveNodeProvider(
@@ -5099,6 +5154,7 @@ fn test_network_economics_proposal() {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("Network Economics change".to_string()),
                     summary: "Just want to change this param.".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
@@ -5205,6 +5261,7 @@ fn test_default_followees() {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("Change Network Economics".to_string()),
                     summary: "Just want to change this param.".to_string(),
                     url: "".to_string(),
                     action: Some(proposal::Action::SetDefaultFollowees(SetDefaultFollowees {
@@ -6801,4 +6858,374 @@ fn test_compute_cached_metrics() {
     };
 
     assert_eq!(expected_metrics, actual_metrics);
+}
+
+/// Creates a fixture with one neuron, aging since the test start timestamp, in
+/// a given dissolve_state.
+fn fixture_for_dissolving_neuron_tests(id: u64, dissolve_state: DissolveState) -> GovernanceProto {
+    GovernanceProto {
+        economics: Some(NetworkEconomics::default()),
+        neurons: [(
+            1,
+            Neuron {
+                id: Some(NeuronId { id }),
+                controller: Some(principal(id)),
+                dissolve_state: Some(dissolve_state),
+                aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+                ..Neuron::default()
+            },
+        )]
+        .to_vec()
+        .into_iter()
+        .collect(),
+        ..Default::default()
+    }
+}
+
+/// Tests that a neuron in a non-dissolving state changes to a dissolving state
+/// when a "start_dissolving" command is issued. Also tests that the neuron ages
+/// appropriately in both states.
+#[test]
+fn test_start_dissolving() {
+    let fake_driver = FakeDriver::default();
+    let id: u64 = 1;
+    let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
+        id,
+        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
+    );
+    let mut gov = Governance::new(
+        fixture,
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+    );
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
+        Some(DissolveState::DissolveDelaySeconds(
+            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        ),)
+    );
+    // Assert that in one second the age of the neuron will be one second.
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id })
+            .unwrap()
+            .age_seconds(DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1),
+        1
+    );
+    gov.manage_neuron(
+        &principal(id),
+        &ManageNeuron {
+            id: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id })),
+            command: Some(manage_neuron::Command::Configure(
+                manage_neuron::Configure {
+                    operation: Some(manage_neuron::configure::Operation::StartDissolving(
+                        manage_neuron::StartDissolving {},
+                    )),
+                },
+            )),
+        },
+    )
+    .now_or_never()
+    .unwrap()
+    .expect("Manage neuron failed");
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(
+            DEFAULT_TEST_START_TIMESTAMP_SECONDS + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        ),)
+    );
+    // Assert that in one second the age of the neuron will be zero.
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id })
+            .unwrap()
+            .age_seconds(DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1),
+        0
+    );
+}
+
+/// Tests that a neuron in a dissolving state will panic if a "start_dissolving"
+/// command is issued.
+#[test]
+#[should_panic]
+fn test_start_dissolving_panics() {
+    let fake_driver = FakeDriver::default();
+    let id: u64 = 1;
+    let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
+        id,
+        DissolveState::WhenDissolvedTimestampSeconds(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+    );
+    let mut gov = Governance::new(
+        fixture,
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+    );
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
+        Some(DissolveState::DissolveDelaySeconds(
+            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        ))
+    );
+    gov.manage_neuron(
+        &principal(id),
+        &ManageNeuron {
+            id: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id })),
+            command: Some(manage_neuron::Command::Configure(
+                manage_neuron::Configure {
+                    operation: Some(manage_neuron::configure::Operation::StartDissolving(
+                        manage_neuron::StartDissolving {},
+                    )),
+                },
+            )),
+        },
+    )
+    .now_or_never()
+    .unwrap()
+    .expect("Manage neuron failed");
+}
+
+/// Tests that a neuron in a dissolving state will stop dissolving if a
+/// "stop_dissolving" command is issued, and that the neuron will age when not
+/// dissolving.
+#[test]
+fn test_stop_dissolving() {
+    let fake_driver = FakeDriver::default();
+    let id: u64 = 1;
+    let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
+        id,
+        DissolveState::WhenDissolvedTimestampSeconds(
+            DEFAULT_TEST_START_TIMESTAMP_SECONDS + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        ),
+    );
+    let mut gov = Governance::new(
+        fixture,
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+    );
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(
+            DEFAULT_TEST_START_TIMESTAMP_SECONDS + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        ),)
+    );
+    gov.manage_neuron(
+        &principal(id),
+        &ManageNeuron {
+            id: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id })),
+            command: Some(manage_neuron::Command::Configure(
+                manage_neuron::Configure {
+                    operation: Some(manage_neuron::configure::Operation::StopDissolving(
+                        manage_neuron::StopDissolving {},
+                    )),
+                },
+            )),
+        },
+    )
+    .now_or_never()
+    .unwrap()
+    .expect("Manage neuron failed");
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
+        Some(DissolveState::DissolveDelaySeconds(
+            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        ),)
+    );
+    // Assert that in one second the age of the neuron will be one second.
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id })
+            .unwrap()
+            .age_seconds(DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1),
+        1
+    );
+}
+
+/// Tests that a neuron in a non-dissolving state will panic if a
+/// "stop_dissolving" command is issued.
+#[test]
+#[should_panic]
+fn test_stop_dissolving_panics() {
+    let fake_driver = FakeDriver::default();
+    let id: u64 = 1;
+    let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
+        id,
+        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
+    );
+    let mut gov = Governance::new(
+        fixture,
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+    );
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
+        Some(DissolveState::DissolveDelaySeconds(
+            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        ))
+    );
+    gov.manage_neuron(
+        &principal(id),
+        &ManageNeuron {
+            id: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id })),
+            command: Some(manage_neuron::Command::Configure(
+                manage_neuron::Configure {
+                    operation: Some(manage_neuron::configure::Operation::StopDissolving(
+                        manage_neuron::StopDissolving {},
+                    )),
+                },
+            )),
+        },
+    )
+    .now_or_never()
+    .unwrap()
+    .expect("Manage neuron failed");
+}
+
+/// Helper function to increase a given neuron dissolve_delay.
+fn increase_dissolve_delay(
+    gov: &mut Governance,
+    principal_id: u64,
+    neuron_id: u64,
+    delay_increase: u32,
+) {
+    gov.manage_neuron(
+        &principal(principal_id),
+        &ManageNeuron {
+            id: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                id: neuron_id,
+            })),
+            command: Some(manage_neuron::Command::Configure(
+                manage_neuron::Configure {
+                    operation: Some(manage_neuron::configure::Operation::IncreaseDissolveDelay(
+                        manage_neuron::IncreaseDissolveDelay {
+                            additional_dissolve_delay_seconds: delay_increase,
+                        },
+                    )),
+                },
+            )),
+        },
+    )
+    .now_or_never()
+    .unwrap()
+    .expect("Manage neuron failed");
+}
+
+/// Tests the command to increase dissolve delay of a given neuron. Tests five
+/// scenarios:
+/// * A non dissolving neuron and an increment lower than the maximum one.
+/// * A non dissolving neuron and an increment higher than the maximum one.
+/// * A dissolving neuron and an increment lower than the maximum one.
+/// * A dissolving neuron and an increment higher than the maximun one.
+/// * A dissolved neuron.
+#[test]
+fn test_increase_dissolve_delay() {
+    let principal_id = 1;
+    let fake_driver = FakeDriver::default();
+    let fixture: GovernanceProto = GovernanceProto {
+        economics: Some(NetworkEconomics::default()),
+        neurons: [
+            (
+                1,
+                Neuron {
+                    id: Some(NeuronId { id: 1 }),
+                    controller: Some(principal(principal_id)),
+                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+                    )),
+                    ..Neuron::default()
+                },
+            ),
+            (
+                2,
+                Neuron {
+                    id: Some(NeuronId { id: 2 }),
+                    controller: Some(principal(principal_id)),
+                    dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                        DEFAULT_TEST_START_TIMESTAMP_SECONDS
+                            + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+                    )),
+                    ..Neuron::default()
+                },
+            ),
+            (
+                3,
+                Neuron {
+                    id: Some(NeuronId { id: 3 }),
+                    controller: Some(principal(principal_id)),
+                    dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                        DEFAULT_TEST_START_TIMESTAMP_SECONDS - 1,
+                    )),
+                    ..Neuron::default()
+                },
+            ),
+        ]
+        .to_vec()
+        .into_iter()
+        .collect(),
+        ..Default::default()
+    };
+    let mut gov = Governance::new(
+        fixture,
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+    );
+    // Tests for neuron 1. Non-dissolving.
+    increase_dissolve_delay(&mut gov, principal_id, 1, 1);
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id: 1 }).unwrap().dissolve_state,
+        Some(DissolveState::DissolveDelaySeconds(
+            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1
+        ),)
+    );
+    increase_dissolve_delay(
+        &mut gov,
+        principal_id,
+        1,
+        u32::try_from(MAX_DISSOLVE_DELAY_SECONDS + 1)
+            .expect("MAX_DISSOLVE_DELAY_SECONDS larger than u32"),
+    );
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id: 1 }).unwrap().dissolve_state,
+        Some(DissolveState::DissolveDelaySeconds(
+            MAX_DISSOLVE_DELAY_SECONDS
+        ),)
+    );
+    // Tests for neuron 2. Dissolving.
+    increase_dissolve_delay(&mut gov, principal_id, 2, 1);
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id: 2 }).unwrap().dissolve_state,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(
+            DEFAULT_TEST_START_TIMESTAMP_SECONDS
+                + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+                + 1,
+        ))
+    );
+    increase_dissolve_delay(
+        &mut gov,
+        principal_id,
+        2,
+        u32::try_from(MAX_DISSOLVE_DELAY_SECONDS + 1)
+            .expect("MAX_DISSOLVE_DELAY_SECONDS larger than u32"),
+    );
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id: 2 }).unwrap().dissolve_state,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(
+            DEFAULT_TEST_START_TIMESTAMP_SECONDS + MAX_DISSOLVE_DELAY_SECONDS,
+        ))
+    );
+    // Tests for neuron 3. Dissolved.
+    increase_dissolve_delay(
+        &mut gov,
+        principal_id,
+        3,
+        u32::try_from(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
+            .expect("MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS larger than u32"),
+    );
+    assert_eq!(
+        gov.get_neuron(&NeuronId { id: 3 }).unwrap().dissolve_state,
+        Some(DissolveState::DissolveDelaySeconds(
+            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        ),)
+    );
 }

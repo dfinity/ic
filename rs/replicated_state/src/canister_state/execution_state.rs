@@ -1,5 +1,5 @@
 use super::SessionNonce;
-use crate::{num_bytes_from, NumWasmPages, PageDelta, PageIndex, PageMap};
+use crate::{num_bytes_from, NumWasmPages, PageIndex, PageMap};
 use ic_config::embedders::PersistenceType;
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState, MappedStateImpl};
 use ic_interfaces::execution_environment::HypervisorResult;
@@ -7,14 +7,10 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
 };
-use ic_sys::PAGE_SIZE;
+use ic_sys::PageBytes;
 use ic_types::{methods::WasmMethod, ExecutionRound, NumBytes};
 use ic_utils::ic_features::cow_state_feature;
 use ic_wasm_types::BinaryEncodedWasm;
-use ic_wasm_utils::{
-    instrumentation::{instrument, InstructionCostTable, Segments},
-    validation::WasmValidationLimits,
-};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, convert::TryFrom, iter::FromIterator, path::PathBuf, sync::Arc};
 
@@ -143,6 +139,32 @@ impl TryFrom<Vec<pb::WasmMethod>> for ExportedFunctions {
     }
 }
 
+/// Represent a wasm binary.
+#[derive(debug_stub_derive::DebugStub)]
+pub struct WasmBinary {
+    /// The raw wasm binary (after validation). Remains immutable after
+    /// creating a WasmBinary object.
+    pub binary: BinaryEncodedWasm,
+
+    /// Cached compiled representation of the binary. Lower layers will assign
+    /// to this field to create a compiled representation of the wasm, and
+    /// ensure that this happens only once.
+    pub embedder_cache: std::sync::Mutex<Option<EmbedderCache>>,
+}
+
+impl WasmBinary {
+    pub fn new(binary: BinaryEncodedWasm) -> Arc<Self> {
+        Arc::new(WasmBinary {
+            binary,
+            embedder_cache: std::sync::Mutex::new(None),
+        })
+    }
+
+    pub fn clear_compilation_cache(&self) {
+        *self.embedder_cache.lock().unwrap() = None;
+    }
+}
+
 /// The part of the canister state that can be accessed during execution
 ///
 /// Note that execution state is used to track ephemeral information.
@@ -170,12 +192,14 @@ pub struct ExecutionState {
     /// enable continuations.
     pub session_nonce: Option<SessionNonce>,
 
-    /// The instrumented and validated Wasm module.
-    pub wasm_binary: BinaryEncodedWasm,
-
-    /// The an arbitrary piece of data that an embedder can store between module
-    /// instantiations in order to improve performance.
-    pub embedder_cache: Option<EmbedderCache>,
+    /// The wasm executable associated with this state. It represented here as
+    /// a reference-counted object such that:
+    /// - it is "shallow-copied" when cloning the execution state
+    /// - all execution states cloned from each other (and also having the same
+    ///   wasm_binary) share the same compilation cache object
+    /// The latter property ensures that compilation for queries is cached
+    /// properly when loading a state from checkpoint.
+    pub wasm_binary: Arc<WasmBinary>,
 
     /// The persistent heap of the module.
     #[debug_stub = "PageMap"]
@@ -207,14 +231,16 @@ pub struct ExecutionState {
 impl PartialEq for ExecutionState {
     fn eq(&self, rhs: &Self) -> bool {
         (
-            &self.wasm_binary,
+            &self.wasm_binary.binary,
             &self.page_map,
             &self.exported_globals,
+            &self.exports,
             self.heap_size,
         ) == (
-            &rhs.wasm_binary,
+            &rhs.wasm_binary.binary,
             &rhs.page_map,
             &rhs.exported_globals,
+            &rhs.exports,
             rhs.heap_size,
         )
     }
@@ -222,34 +248,19 @@ impl PartialEq for ExecutionState {
 
 impl ExecutionState {
     /// Initializes a new execution state for a canister.
-    ///
-    /// The wasm_binary is validated and instrumented to detect instrumentation
-    /// errors however just the validated binary is stored.  The expectation is
-    /// that the binary will be instrumented before compiling.  This is done
-    /// to support IC upgrades where the instrumentation changes.
     pub fn new(
-        wasm_binary: Vec<u8>,
+        wasm_binary: BinaryEncodedWasm,
         canister_root: PathBuf,
-        wasm_validation_config: WasmValidationLimits,
+        exports: ExportedFunctions,
+        pages: &[(PageIndex, Box<PageBytes>)],
     ) -> HypervisorResult<Self> {
-        let wasm_binary = BinaryEncodedWasm::new(wasm_binary);
-        ic_wasm_utils::validation::validate_wasm_binary(&wasm_binary, wasm_validation_config)?;
-        let output = instrument(&wasm_binary, &InstructionCostTable::new())?;
-
-        // Get all exported methods that are relevant to the IC.
-        // Methods relevant to the IC are:
-        //     - Queries (e.g. canister_query ___)
-        //     - Updates (e.g. canister_update ___)
-        //     - System methods (e.g. canister_init)
-        // Other methods are assumed to be private to the module and are ignored.
-        let exports = output
-            .exports
-            .iter()
-            .filter_map(|export| WasmMethod::try_from(export.to_string()).ok())
-            .collect();
-
         let mut page_map = PageMap::default();
-        page_map.update(data_to_page_delta(output.data));
+        page_map.update(
+            &pages
+                .iter()
+                .map(|(index, bytes)| (*index, bytes as &PageBytes))
+                .collect::<Vec<(PageIndex, &PageBytes)>>(),
+        );
 
         let cow_mem_mgr = Arc::new(CowMemoryManagerImpl::open_readwrite(canister_root.clone()));
         if cow_state_feature::is_enabled(cow_state_feature::cow_state) {
@@ -265,13 +276,14 @@ impl ExecutionState {
         }
         let session_nonce = None;
 
+        let wasm_binary = WasmBinary::new(wasm_binary);
+
         let execution_state = ExecutionState {
             canister_root,
             session_nonce,
             wasm_binary,
             exports,
             page_map,
-            embedder_cache: None,
             exported_globals: vec![],
             heap_size: NumWasmPages::from(0),
             last_executed_round: ExecutionRound::from(0),
@@ -291,7 +303,7 @@ impl ExecutionState {
     pub fn memory_usage(&self) -> NumBytes {
         // We use 8 bytes per global.
         let globals_size_bytes = 8 * self.exported_globals.len() as u64;
-        let wasm_binary_size_bytes = self.wasm_binary.len() as u64;
+        let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
         num_bytes_from(self.heap_size)
             + NumBytes::from(globals_size_bytes)
             + NumBytes::from(wasm_binary_size_bytes)
@@ -310,13 +322,4 @@ impl ExecutionState {
             PersistenceType::Sigsegv
         }
     }
-}
-
-fn data_to_page_delta(segments: Segments) -> PageDelta {
-    let chunks = segments.as_pages(*PAGE_SIZE);
-    let pages: Vec<_> = chunks
-        .iter()
-        .map(|(index, bytes)| (PageIndex::from(*index as u64), &bytes[..]))
-        .collect();
-    PageDelta::from(&pages[..])
 }

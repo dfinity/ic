@@ -38,6 +38,6 @@ pub fn secret_key_store_with_csp_key(
     sks
 }
 
-pub fn dummy_csprng() -> impl CryptoRng + Rng {
+pub fn dummy_csprng() -> impl CryptoRng + Rng + Clone {
     ChaChaRng::seed_from_u64(42)
 }

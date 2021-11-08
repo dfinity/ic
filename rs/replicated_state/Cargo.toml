@@ -12,6 +12,7 @@ ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
@@ -28,8 +29,3 @@ tempfile = "3.1.0"
 [dev-dependencies]
 criterion = "0.3"
 ic-test-utilities = { path = "../test_utilities" }
-im = { git = "https://github.com/dfinity-lab/im-rs", branch = "fix-remove-index-ordmap", features = [ "serde" ] }
-
-[[bench]]
-name = "bench_intmap"
-harness = false

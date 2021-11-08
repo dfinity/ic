@@ -7,6 +7,9 @@ edition = "2018"
 ic-crypto-internal-csp-test-utils = { path = "../internal/csp_test_utils" }
 ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 ic-protobuf = { path = "../../protobuf" }
+ic-registry-client = { path = "../../registry/client" }
+ic-registry-common = { path = "../../registry/common" }
+ic-registry-keys = { path = "../../registry/keys" }
 ic-types = { path = "../../types/types" }
 openssl = "0.10.29"
 phantom_newtype = { path = "../../phantom_newtype" }

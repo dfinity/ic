@@ -11,6 +11,7 @@ use ic_protobuf::{
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response, StopCanisterContext},
     nominal_cycles::NominalCycles,
+    xnet::QueueId,
     CanisterId, Cycles, MemoryAllocation, NumBytes, PrincipalId, QueueIndex,
 };
 use lazy_static::lazy_static;
@@ -49,8 +50,9 @@ pub struct CanisterMetrics {
 pub struct SystemState {
     pub controllers: BTreeSet<PrincipalId>,
     pub canister_id: CanisterId,
-    // EXE-92: This should be private
-    pub queues: CanisterQueues,
+    // This must remain private, in order to properly enforce system states (running, stopping,
+    // stopped) when enqueuing inputs; and to ensure message memory reservations are accurate.
+    queues: CanisterQueues,
     pub stable_memory_size: NumWasmPages64,
     pub stable_memory: PageMap,
     /// The canister's memory allocation.
@@ -254,13 +256,37 @@ impl SystemState {
         )
     }
 
-    pub fn canister_id(&self) -> CanisterId {
-        self.canister_id
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_from_checkpoint(
+        controllers: BTreeSet<PrincipalId>,
+        canister_id: CanisterId,
+        queues: CanisterQueues,
+        stable_memory_size: NumWasmPages64,
+        stable_memory: PageMap,
+        memory_allocation: MemoryAllocation,
+        freeze_threshold: NumSeconds,
+        status: CanisterStatus,
+        certified_data: Vec<u8>,
+        canister_metrics: CanisterMetrics,
+        cycles_balance: Cycles,
+    ) -> Self {
+        Self {
+            controllers,
+            canister_id,
+            queues,
+            stable_memory_size,
+            stable_memory,
+            memory_allocation,
+            freeze_threshold,
+            status,
+            certified_data,
+            canister_metrics,
+            cycles_balance,
+        }
     }
 
-    #[doc(hidden)]
-    pub fn set_canister_id(&mut self, canister_id: CanisterId) {
-        self.canister_id = canister_id;
+    pub fn canister_id(&self) -> CanisterId {
+        self.canister_id
     }
 
     /// This method is used for maintaining the backwards compatibility.
@@ -323,7 +349,7 @@ impl SystemState {
     pub fn push_output_request(&mut self, msg: Request) -> Result<(), (StateError, Request)> {
         assert_eq!(
             msg.sender, self.canister_id,
-            "Expected `Request` to have been sent by canister id {}, but instead got {}",
+            "Expected `Request` to have been sent by canister ID {}, but instead got {}",
             self.canister_id, msg.sender
         );
         self.queues.push_output_request(msg)
@@ -341,7 +367,7 @@ impl SystemState {
     pub fn push_output_response(&mut self, msg: Response) {
         assert_eq!(
             msg.respondent, self.canister_id,
-            "Expected `Response` to have been sent by canister id {}, but instead got {}",
+            "Expected `Response` to have been sent by canister ID {}, but instead got {}",
             self.canister_id, msg.respondent
         );
         self.queues.push_output_response(msg)
@@ -373,23 +399,19 @@ impl SystemState {
     ///
     /// # Errors
     ///
-    /// Returns a `StateError` along with the provided message:
+    /// On failure, returns the provided message along with a `StateError`:
     ///  * `QueueFull` if either the input queue or the matching output queue is
     ///    full when pushing a `Request` message.
-    ///  * `CanisterOutOfCycles` if the canister does not have enough cycles to
-    ///    be
+    ///  * `CanisterOutOfCycles` if the canister does not have enough cycles.
     ///  * `CanisterStopping` if the canister is stopping and inducting a
-    ///    `Request` is attempted.
+    ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
     ///
     /// # Panics
     ///
-    /// Panics if a `Response` message is pushed into a queue that does not
-    /// already exist or there is no reserved slot in the queue.
-    ///
-    /// Warning! this is only exposed for test purposes and should not be used
-    /// outside of this crate.
-    pub fn push_input(
+    /// Panics if a `Response` message is pushed onto a queue that does not
+    /// already exist or does not have a reserved slot.
+    pub(crate) fn push_input(
         &mut self,
         index: QueueIndex,
         msg: RequestOrResponse,
@@ -397,7 +419,7 @@ impl SystemState {
         assert_eq!(
             msg.receiver(),
             self.canister_id,
-            "Expected `RequestOrResponse` to be targeted to canister id {}, but instead got {}",
+            "Expected `RequestOrResponse` to be targeted to canister ID {}, but instead got {}",
             self.canister_id,
             msg.receiver()
         );
@@ -422,8 +444,35 @@ impl SystemState {
         }
     }
 
-    pub fn queues_mut(&mut self) -> &mut CanisterQueues {
-        &mut self.queues
+    /// Pushes an ingress message into the induction pool.
+    pub(crate) fn push_ingress(&mut self, msg: Ingress) {
+        self.queues.push_ingress(msg)
+    }
+
+    /// Returns an iterator that consumes all output messages.
+    pub fn output_into_iter(
+        &mut self,
+        owner: CanisterId,
+    ) -> impl std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)> + '_ {
+        self.queues.output_into_iter(owner)
+    }
+
+    /// For each output queue, invokes `f` on every message until `f` returns
+    /// `Err`; then moves on to the next output queue.
+    ///
+    /// All messages that `f` returned `Ok` for, are popped. Messages that `f`
+    /// returned `Err` for and all those following them in the output queue are
+    /// retained.
+    pub fn output_queues_for_each<F>(&mut self, f: F)
+    where
+        F: FnMut(&CanisterId, Arc<RequestOrResponse>) -> Result<(), ()>,
+    {
+        self.queues.output_queues_for_each(f)
+    }
+
+    /// Returns an immutable reference to the canister queues.
+    pub fn queues(&self) -> &CanisterQueues {
+        &self.queues
     }
 
     /// Returns a boolean whether the system state is ready to be `Stopped`.
@@ -486,5 +535,37 @@ impl SystemState {
             .map(|id| format!("{}", id))
             .collect::<Vec<String>>()
             .join(" ")
+    }
+
+    pub fn induct_messages_to_self(&mut self) {
+        match self.status {
+            CanisterStatus::Running { .. } => self.queues.induct_messages_to_self(self.canister_id),
+            CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => (),
+        }
+    }
+}
+
+pub mod testing {
+    use super::SystemState;
+    use crate::CanisterQueues;
+    use ic_types::CanisterId;
+
+    /// Exposes `SystemState` internals for use in other crates' unit tests.
+    pub trait SystemStateTesting {
+        /// Testing only: Sets the value of the `canister_id` field.
+        fn set_canister_id(&mut self, canister_id: CanisterId);
+
+        /// Testing only: Returns a mutable reference to `self.queues`.
+        fn queues_mut(&mut self) -> &mut CanisterQueues;
+    }
+
+    impl SystemStateTesting for SystemState {
+        fn set_canister_id(&mut self, canister_id: CanisterId) {
+            self.canister_id = canister_id;
+        }
+
+        fn queues_mut(&mut self) -> &mut CanisterQueues {
+            &mut self.queues
+        }
     }
 }

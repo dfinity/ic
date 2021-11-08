@@ -11,12 +11,13 @@ use ic_interfaces::time_source::TimeSource;
 use ic_replica_setup_ic_network::{
     TestArtifact, TestArtifactAttribute, TestArtifactId, TestArtifactMessage,
 };
-use ic_types::artifact::{Advert, ArtifactId, Priority};
+use ic_types::artifact::{Advert, AdvertSendRequest, ArtifactId, Priority};
 use ic_types::chunkable::Chunkable;
 use ic_types::crypto::CryptoHash;
 use ic_types::filetree_sync::{
     FileTreeSyncArtifact, FileTreeSyncChunksTracker, UnderConstructionState,
 };
+use ic_types::p2p::GossipAdvertType;
 use ic_types::NodeId;
 use std::collections::HashMap;
 use std::error::Error;
@@ -45,16 +46,19 @@ impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
         &self,
         _time_source: &dyn TimeSource,
         _artifacts: Vec<UnvalidatedArtifact<FileTreeSyncArtifact>>,
-    ) -> (Vec<Advert<TestArtifact>>, ProcessingResult) {
+    ) -> (Vec<AdvertSendRequest<TestArtifact>>, ProcessingResult) {
         let mut unvalidated_pool = self.file_tree_sync_unvalidated_pool.lock().unwrap();
         let mut validated_pool = self.file_tree_sync_validated_pool.lock().unwrap();
         let adverts = unvalidated_pool
             .iter()
-            .map(|(artifact_id, artifact)| Advert {
-                attribute: artifact.id.to_string(),
-                size: 0,
-                id: artifact.id.clone(),
-                integrity_hash: CryptoHash(artifact_id.clone().into_bytes()),
+            .map(|(artifact_id, artifact)| AdvertSendRequest {
+                advert: Advert {
+                    attribute: artifact.id.to_string(),
+                    size: 0,
+                    id: artifact.id.clone(),
+                    integrity_hash: CryptoHash(artifact_id.clone().into_bytes()),
+                },
+                advert_type: GossipAdvertType::Produced,
             })
             .collect::<Vec<_>>();
         let changed = if !adverts.is_empty() {

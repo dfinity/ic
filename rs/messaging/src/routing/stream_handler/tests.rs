@@ -10,7 +10,9 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::QUEUE_INDEX_NONE, replicated_state::LABEL_VALUE_CANISTER_NOT_FOUND,
+    canister_state::QUEUE_INDEX_NONE,
+    replicated_state::LABEL_VALUE_CANISTER_NOT_FOUND,
+    testing::{ReplicatedStateTesting, SystemStateTesting},
     ReplicatedState, Stream,
 };
 use ic_test_utilities::{
@@ -58,7 +60,7 @@ fn induct_loopback_stream_with_signals_panics() {
             message_count: 2,
             signals_end: 22,
         });
-        state.put_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+        state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
 
         stream_handler.induct_loopback_stream(state);
     });
@@ -78,7 +80,7 @@ fn induct_loopback_stream_signals_end_before_messages_begin_panics() {
             message_count: 2,
             signals_end: 20,
         });
-        state.put_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+        state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
 
         stream_handler.induct_loopback_stream(state);
     });
@@ -104,7 +106,7 @@ fn induct_loopback_stream_empty_loopback_stream() {
         });
 
         initial_state.put_canister_state(initial_canister_state);
-        initial_state.put_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+        initial_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
 
         let expected_state = initial_state.clone();
 
@@ -144,7 +146,7 @@ fn induct_loopback_stream_reject_response() {
         let msg = loopback_stream.messages().iter().next().unwrap().1.clone();
 
         initial_state.put_canister_state(initial_canister_state);
-        initial_state.put_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+        initial_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
 
         // Expecting an unchanged canister state...
         let mut expected_state = initial_state.clone();
@@ -161,7 +163,7 @@ fn induct_loopback_stream_reject_response() {
             StateError::CanisterNotFound(*REMOTE_CANISTER).to_string(),
         );
         expected_loopback_stream.push(generate_reject_response(msg, context));
-        expected_state.put_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
+        expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
 
         let inducted_state = stream_handler.induct_loopback_stream(initial_state);
 
@@ -204,7 +206,7 @@ fn induct_loopback_stream_success() {
         });
 
         initial_state.put_canister_state(initial_canister_state);
-        initial_state.put_streams(btreemap![LOCAL_SUBNET => loopback_stream.clone()]);
+        initial_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream.clone()]);
 
         // Expecting a canister state with the 2 messages inducted...
         let mut expected_canister_state = new_canister_state(
@@ -216,7 +218,10 @@ fn induct_loopback_stream_success() {
         for (_stream_index, msg) in loopback_stream.messages().iter() {
             assert_eq!(
                 Ok(()),
-                expected_canister_state.push_input(QUEUE_INDEX_NONE, msg.clone())
+                expected_canister_state
+                    .system_state
+                    .queues_mut()
+                    .push_input(QUEUE_INDEX_NONE, msg.clone())
             );
         }
 
@@ -228,7 +233,7 @@ fn induct_loopback_stream_success() {
         });
 
         expected_state.put_canister_state(expected_canister_state);
-        expected_state.put_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
+        expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
 
         let inducted_state = stream_handler.induct_loopback_stream(initial_state);
 
@@ -280,7 +285,12 @@ fn garbage_collect_messages_success() {
             signals_end: 43,
         });
 
-        stream_handler.garbage_collect_messages(&mut stream, REMOTE_SUBNET, &slice);
+        let mut stats = Default::default();
+        stream_handler.garbage_collect_messages(
+            StreamHandle::new(&mut stream, &mut stats),
+            REMOTE_SUBNET,
+            &slice,
+        );
 
         assert_eq!(expected_stream, stream);
         assert_eq!(
@@ -312,7 +322,12 @@ fn assert_garbage_collect_messages_last_signal_before_first_message() {
             signals_end: 24,
         });
 
-        stream_handler.garbage_collect_messages(&mut stream, REMOTE_SUBNET, &slice);
+        let mut stats = Default::default();
+        stream_handler.garbage_collect_messages(
+            StreamHandle::new(&mut stream, &mut stats),
+            REMOTE_SUBNET,
+            &slice,
+        );
     });
 }
 
@@ -338,7 +353,12 @@ fn assert_garbage_collect_messages_last_signal_after_last_message() {
             signals_end: 35,
         });
 
-        stream_handler.garbage_collect_messages(&mut stream, REMOTE_SUBNET, &slice);
+        let mut stats = Default::default();
+        stream_handler.garbage_collect_messages(
+            StreamHandle::new(&mut stream, &mut stats),
+            REMOTE_SUBNET,
+            &slice,
+        );
     });
 }
 
@@ -411,7 +431,7 @@ fn garbage_collect_local_state_success() {
             message_count: 3,
             signals_end: 43,
         });
-        initial_state.put_streams(btreemap![REMOTE_SUBNET => initial_stream]);
+        initial_state.with_streams(btreemap![REMOTE_SUBNET => initial_stream]);
 
         // 2 incoming messages, 3 partially overlapping incoming signals.
         let stream_slice = generate_stream_slice(StreamSliceConfig {
@@ -429,7 +449,7 @@ fn garbage_collect_local_state_success() {
             message_count: 1,
             signals_end: 43,
         });
-        expected_state.put_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+        expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
         let pruned_state = stream_handler
             .garbage_collect_local_state(initial_state, &btreemap![REMOTE_SUBNET => stream_slice]);
@@ -474,11 +494,12 @@ fn enqueue_reject_response_queue_full() {
         );
 
         let (stream_handler, _, _) = new_fixture(&log);
+        let mut stats = Default::default();
         stream_handler.try_enqueue_reject_response(
             msg_clone.into(),
             RejectCode::SysTransient,
             err.to_string(),
-            &mut stream,
+            &mut StreamHandle::new(&mut stream, &mut stats),
         );
 
         assert_eq!(expected_stream, stream);
@@ -517,11 +538,12 @@ fn enqueue_reject_response_canister_not_found() {
         );
 
         let (stream_handler, _, _) = new_fixture(&log);
+        let mut stats = Default::default();
         stream_handler.try_enqueue_reject_response(
             msg_clone.into(),
             RejectCode::DestinationInvalid,
             err.to_string(),
-            &mut stream,
+            &mut StreamHandle::new(&mut stream, &mut stats),
         );
 
         assert_eq!(expected_stream, stream);
@@ -558,7 +580,7 @@ fn induct_stream_slices_partial_success() {
         let mut expected_canister_state = initial_canister_state.clone();
 
         initial_state.put_canister_state(initial_canister_state);
-        initial_state.put_streams(btreemap![REMOTE_SUBNET => initial_stream]);
+        initial_state.with_streams(btreemap![REMOTE_SUBNET => initial_stream]);
 
         // 2 incoming requests, 2 signals...
         let mut stream_slice = generate_stream_slice(StreamSliceConfig {
@@ -578,7 +600,10 @@ fn induct_stream_slices_partial_success() {
             for (_stream_index, msg) in messages.iter() {
                 assert_eq!(
                     Ok(()),
-                    expected_canister_state.push_input(QUEUE_INDEX_NONE, msg.clone())
+                    expected_canister_state
+                        .system_state
+                        .queues_mut()
+                        .push_input(QUEUE_INDEX_NONE, msg.clone())
                 );
             }
         }
@@ -626,7 +651,7 @@ fn induct_stream_slices_partial_success() {
         expected_stream.increment_signals_end();
 
         expected_state.put_canister_state(expected_canister_state);
-        expected_state.put_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+        expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
         // Act
         let inducted_state = stream_handler
@@ -736,7 +761,7 @@ fn process_certified_stream_slices_success() {
             .lock()
             .unwrap()
             .record_header(REMOTE_SUBNET, &initial_stream.header());
-        initial_state.put_streams(
+        initial_state.with_streams(
             btreemap![LOCAL_SUBNET => loopback_stream.clone(), REMOTE_SUBNET => initial_stream],
         );
 
@@ -762,7 +787,10 @@ fn process_certified_stream_slices_success() {
         for (_stream_index, msg) in loopback_stream.messages().iter() {
             assert_eq!(
                 Ok(()),
-                expected_canister_state.push_input(QUEUE_INDEX_NONE, msg.clone())
+                expected_canister_state
+                    .system_state
+                    .queues_mut()
+                    .push_input(QUEUE_INDEX_NONE, msg.clone())
             );
         }
         // ...and the 2 incoming messages inducted.
@@ -770,7 +798,10 @@ fn process_certified_stream_slices_success() {
             for (_stream_index, msg) in messages.iter() {
                 assert_eq!(
                     Ok(()),
-                    expected_canister_state.push_input(QUEUE_INDEX_NONE, msg.clone())
+                    expected_canister_state
+                        .system_state
+                        .queues_mut()
+                        .push_input(QUEUE_INDEX_NONE, msg.clone())
                 );
             }
         }
@@ -792,7 +823,7 @@ fn process_certified_stream_slices_success() {
         });
 
         expected_state.put_canister_state(expected_canister_state);
-        expected_state.put_streams(
+        expected_state.with_streams(
             btreemap![LOCAL_SUBNET => expected_loopback_stream, REMOTE_SUBNET => expected_stream],
         );
 

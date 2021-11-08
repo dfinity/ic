@@ -1,5 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_replicated_state::SystemState;
+use ic_replicated_state::{testing::SystemStateTesting, SystemState};
 use ic_test_utilities::types::{
     ids::{canister_test_id, user_test_id},
     messages::{RequestBuilder, ResponseBuilder},
@@ -31,6 +31,7 @@ fn correct_charging_target_canister_for_a_response() {
 
     // Enqueue the Request.
     system_state
+        .queues_mut()
         .push_input(QueueIndex::from(0), request)
         .unwrap();
 
@@ -45,4 +46,70 @@ fn correct_charging_target_canister_for_a_response() {
     // Target canister should not be charged for receiving the request or sending
     // the response
     assert_eq!(initial_cycles_balance, system_state.cycles_balance);
+}
+
+#[test]
+fn induct_messages_to_self_in_running_status_works() {
+    let canister_id = canister_test_id(1);
+    let mut system_state = SystemState::new_running(
+        canister_id,
+        user_test_id(1).get(),
+        Cycles::new(5_000_000_000_000),
+        NumSeconds::new(0),
+    );
+    let request = RequestBuilder::default()
+        .sender(canister_id)
+        .receiver(canister_id)
+        .build();
+    system_state
+        .queues_mut()
+        .push_output_request(request)
+        .unwrap();
+    system_state.induct_messages_to_self();
+    assert!(system_state.has_input());
+    assert!(!system_state.queues().has_output());
+}
+
+#[test]
+fn induct_messages_to_self_in_stopped_status_does_not_work() {
+    let canister_id = canister_test_id(1);
+    let mut system_state = SystemState::new_stopped(
+        canister_id,
+        user_test_id(1).get(),
+        Cycles::new(5_000_000_000_000),
+        NumSeconds::new(0),
+    );
+    let request = RequestBuilder::default()
+        .sender(canister_id)
+        .receiver(canister_id)
+        .build();
+    system_state
+        .queues_mut()
+        .push_output_request(request)
+        .unwrap();
+    system_state.induct_messages_to_self();
+    assert!(!system_state.has_input());
+    assert!(system_state.queues().has_output());
+}
+
+#[test]
+fn induct_messages_to_self_in_stopping_status_does_not_work() {
+    let canister_id = canister_test_id(1);
+    let mut system_state = SystemState::new_stopping(
+        canister_id,
+        user_test_id(1).get(),
+        Cycles::new(5_000_000_000_000),
+        NumSeconds::new(0),
+    );
+    let request = RequestBuilder::default()
+        .sender(canister_id)
+        .receiver(canister_id)
+        .build();
+    system_state
+        .queues_mut()
+        .push_output_request(request)
+        .unwrap();
+    system_state.induct_messages_to_self();
+    assert!(!system_state.has_input());
+    assert!(system_state.queues().has_output());
 }

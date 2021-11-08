@@ -2,16 +2,18 @@ use super::{
     canister_state::CanisterState,
     metadata_state::{IngressHistoryState, Stream, Streams, SystemMetadata},
 };
-use crate::{canister_state::QUEUE_INDEX_NONE, CanisterQueues};
+use crate::{metadata_state::StreamMap, CanisterQueues};
 use ic_base_types::PrincipalId;
-use ic_logger::{fatal, ReplicaLogger};
+use ic_interfaces::{
+    execution_environment::CanisterOutOfCyclesError, messages::CanisterInputMessage,
+};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::messages::{RequestOrResponse, Response};
 use ic_types::{
     ingress::IngressStatus,
-    messages::MessageId,
+    messages::{is_subnet_message, MessageId, RequestOrResponse, Response, SignedIngressContent},
     user_error::{ErrorCode, UserError},
-    CanisterId, Cycles, MemoryAllocation, NumBytes, QueueIndex, SubnetId, Time,
+    xnet::QueueId,
+    CanisterId, MemoryAllocation, NumBytes, QueueIndex, SubnetId, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -33,11 +35,7 @@ pub enum StateError {
     CanisterStopping(CanisterId),
 
     /// Canister is out of cycles.
-    CanisterOutOfCycles {
-        canister_id: CanisterId,
-        available: Cycles,
-        requested: Cycles,
-    },
+    CanisterOutOfCycles(CanisterOutOfCyclesError),
 
     /// Message enqueuing failed due to calling an unknown subnet method.
     UnknownSubnetMethod(String),
@@ -64,7 +62,7 @@ impl StateError {
             StateError::QueueFull { .. } => LABEL_VALUE_QUEUE_FULL,
             StateError::CanisterStopped(_) => LABEL_VALUE_CANISTER_STOPPED,
             StateError::CanisterStopping(_) => LABEL_VALUE_CANISTER_STOPPING,
-            StateError::CanisterOutOfCycles { .. } => LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
+            StateError::CanisterOutOfCycles(_) => LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
             StateError::UnknownSubnetMethod(_) => LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
             StateError::InvalidSubnetPayload => LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
         }
@@ -88,15 +86,7 @@ impl std::fmt::Display for StateError {
             StateError::CanisterStopping(canister_id) => {
                 write!(f, "Canister {} is stopping", canister_id)
             }
-            StateError::CanisterOutOfCycles {
-                canister_id,
-                available,
-                requested,
-            } => write!(
-                f,
-                "Canister {} has currently {} available cycles, but {} was requested",
-                canister_id, available, requested
-            ),
+            StateError::CanisterOutOfCycles(err) => write!(f, "{}", err.to_string()),
             StateError::UnknownSubnetMethod(method) => write!(
                 f,
                 "Cannot enqueue management message. Method {} is unknown.",
@@ -127,8 +117,8 @@ pub struct ReplicatedState {
     pub metadata: SystemMetadata,
 
     /// Queues for holding messages sent/received by the subnet.
-    // EXE-92: this should be private
-    pub subnet_queues: CanisterQueues,
+    // Must remain private.
+    subnet_queues: CanisterQueues,
 
     /// Queue for holding responses arriving from Consensus.
     ///
@@ -170,6 +160,22 @@ impl ReplicatedState {
             metadata: SystemMetadata::new(own_subnet_id, own_subnet_type),
             subnet_queues: CanisterQueues::default(),
             consensus_queue: Vec::new(),
+        }
+    }
+
+    pub fn new_from_checkpoint(
+        canister_states: BTreeMap<CanisterId, CanisterState>,
+        metadata: SystemMetadata,
+        subnet_queues: CanisterQueues,
+        consensus_queue: Vec<Response>,
+        root: PathBuf,
+    ) -> Self {
+        Self {
+            canister_states,
+            metadata,
+            subnet_queues,
+            consensus_queue,
+            root,
         }
     }
 
@@ -251,21 +257,6 @@ impl ReplicatedState {
         self.metadata.ingress_history.prune(self.time());
     }
 
-    /// Removes the Streams from this ReplicatedState.
-    pub fn take_streams(&mut self) -> Streams {
-        std::mem::replace(Arc::make_mut(&mut self.metadata.streams), BTreeMap::new())
-    }
-
-    /// Atomically updates streams to the provided ones.
-    pub fn put_streams(&mut self, streams: Streams) {
-        *Arc::make_mut(&mut self.metadata.streams) = streams;
-    }
-
-    /// Returns a reference to all streams.
-    pub fn streams(&self) -> &Streams {
-        &self.metadata.streams
-    }
-
     /// Returns all subnets for which a stream is available.
     pub fn subnets_with_available_streams(&self) -> Vec<SubnetId> {
         self.metadata.streams.keys().cloned().collect()
@@ -273,21 +264,8 @@ impl ReplicatedState {
 
     /// Retrieves a reference to the stream from this subnet to the destination
     /// subnet, if such a stream exists.
-    pub fn get_stream(&self, destination_subnet_id: SubnetId) -> Option<&Stream> {
-        self.metadata.streams.get(&destination_subnet_id)
-    }
-
-    /// Retrieves a mutable reference to the stream from this subnet to the
-    /// destination subnet, if such a stream exists.
-    pub fn get_mut_stream(&mut self, destination_subnet_id: SubnetId) -> Option<&mut Stream> {
-        let streams = Arc::make_mut(&mut self.metadata.streams);
-        streams.get_mut(&destination_subnet_id)
-    }
-
-    pub fn modify_streams<F: FnOnce(&mut Streams)>(&mut self, f: F) {
-        let mut streams = self.take_streams();
-        f(&mut streams);
-        self.put_streams(streams);
+    pub fn get_stream(&self, destination_subnet_id: &SubnetId) -> Option<&Stream> {
+        self.metadata.streams.get(destination_subnet_id)
     }
 
     /// Returns the sum of reserved compute allocations of all currently
@@ -328,9 +306,8 @@ impl ReplicatedState {
         }
     }
 
-    /// Pushes a `RequestOrResponse` into the induction pool.
-    /// The induction pool can either be that of a canister or that of the
-    /// subnet.
+    /// Pushes a `RequestOrResponse` into the induction pool (canister or subnet
+    /// input queue).
     pub fn push_input(
         &mut self,
         index: QueueIndex,
@@ -349,64 +326,132 @@ impl ReplicatedState {
         }
     }
 
+    /// Pushes an ingress message into the induction pool (canister or subnet
+    /// ingress queue).
+    pub fn push_ingress(&mut self, msg: SignedIngressContent) -> Result<(), StateError> {
+        if is_subnet_message(&msg, self.metadata.own_subnet_id) {
+            self.subnet_queues.push_ingress(msg.into());
+        } else {
+            let canister_id = msg.canister_id();
+            let canister = match self.canister_states.get_mut(&canister_id) {
+                Some(canister) => canister,
+                None => return Err(StateError::CanisterNotFound(canister_id)),
+            };
+            canister.push_ingress(msg.into());
+        }
+        Ok(())
+    }
+
+    /// Extracts the next inter-canister or ingress message (in that order) from
+    /// `self.subnet_queues`.
+    pub fn pop_subnet_input(&mut self) -> Option<CanisterInputMessage> {
+        self.subnet_queues.pop_input()
+    }
+
+    /// Pushes a `Response` type message into the relevant subnet output queue.
+    /// The protocol should have already reserved a slot, so this cannot fail.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the queue does not already exist or there is no reserved slot
+    /// to push the `Response` into.
+    pub fn push_subnet_output_response(&mut self, msg: Response) {
+        self.subnet_queues.push_output_response(msg)
+    }
+
+    /// Returns an iterator that consumes all messages in all output queues
+    /// (canisters and subnet).
+    pub fn output_into_iter(
+        &mut self,
+    ) -> impl std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)> + '_ {
+        let own_subnet_id = self.metadata.own_subnet_id;
+        self.canister_states
+            .values_mut()
+            .flat_map(|canister| canister.output_into_iter())
+            .chain(
+                self.subnet_queues
+                    .output_into_iter(CanisterId::from(own_subnet_id)),
+            )
+    }
+
     pub fn time(&self) -> Time {
         self.metadata.time()
     }
 
-    /// Iterates over all canisters on the subnet, checking if a source canister
-    /// has output messages for a destination canister on the same subnet and
-    /// moving them from the source to the destination canister if the
-    /// destination canister has room for them.
-    ///
-    /// This method only handles messages sent to actual other canisters.
-    /// Messages sent to the subnet or self are not handled i.e. they take the
-    /// slow path through message routing.
-    pub fn induct_messages_on_same_subnet(&mut self, log: &ReplicaLogger) {
-        let mut canisters = self.take_canister_states();
+    /// Returns an immutable reference to `self.subnet_queues`.
+    pub fn subnet_queues(&self) -> &CanisterQueues {
+        &self.subnet_queues
+    }
+}
 
-        // Get a list of canisters in the map before we iterate over the map.
-        // This is because we cannot hold an immutable reference to the map
-        // while trying to simultaenously mutate it.
-        let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
+/// A trait exposing `ReplicatedState` functionality for the exclusive use of
+/// Message Routing.
+pub trait ReplicatedStateMessageRouting {
+    /// Returns a reference to the streams.
+    fn streams(&self) -> &StreamMap;
 
-        for source_canister_id in canister_ids {
-            // Remove the source canister from the map so that we can
-            // `get_mut()` on the map futher below for the destination canister.
-            // Borrow rules do not allow us to hold multiple mutable references.
-            let mut source_canister = match canisters.remove(&source_canister_id) {
-                None => fatal!(
-                    log,
-                    "Should be guaranteed that the canister exists in the map."
-                ),
-                Some(canister) => canister,
-            };
+    /// Returns a mutable reference to the streams.
+    fn mut_streams(&mut self) -> &mut Streams;
 
-            for (dest_canister_id, source_output_queue) in source_canister
-                .system_state
-                .queues_mut()
-                .output_queues_mut()
-                .iter_mut()
-            {
-                let dest_canister = match canisters.get_mut(&dest_canister_id) {
-                    None => continue,
-                    Some(canister) => canister,
-                };
+    /// Removes the streams from this `ReplicatedState`.
+    fn take_streams(&mut self) -> Streams;
 
-                while let Some((_, msg)) = source_output_queue.peek() {
-                    match dest_canister.push_input(QUEUE_INDEX_NONE, msg) {
-                        Err(_) => break,
-                        Ok(()) => match source_output_queue.pop() {
-                            Some(_) => (),
-                            None => fatal!(
-                                log,
-                                "Since peek above returned a message, popping it should not fail."
-                            ),
-                        },
-                    }
-                }
-            }
-            canisters.insert(source_canister_id, source_canister);
+    /// Atomically replaces the streams.
+    fn put_streams(&mut self, streams: Streams);
+}
+
+impl ReplicatedStateMessageRouting for ReplicatedState {
+    fn streams(&self) -> &StreamMap {
+        &self.metadata.streams.streams()
+    }
+
+    fn mut_streams(&mut self) -> &mut Streams {
+        Arc::make_mut(&mut self.metadata.streams)
+    }
+
+    fn take_streams(&mut self) -> Streams {
+        std::mem::take(Arc::make_mut(&mut self.metadata.streams))
+    }
+
+    fn put_streams(&mut self, streams: Streams) {
+        // Should never replace a non-empty Streams via `put_streams()`.
+        assert!(self.metadata.streams.streams().is_empty());
+
+        *Arc::make_mut(&mut self.metadata.streams) = streams;
+    }
+}
+
+pub mod testing {
+    use super::*;
+    use crate::metadata_state::testing::StreamsTesting;
+
+    /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
+    pub trait ReplicatedStateTesting {
+        /// Testing only: Returns a mutable reference to `self.subnet_queues`.
+        fn subnet_queues_mut(&mut self) -> &mut CanisterQueues;
+
+        /// Testing only: Replaces `SystemMetadata::streams` with the provided
+        /// ones.
+        fn with_streams(&mut self, streams: StreamMap);
+
+        /// Testing only: Modifies `SystemMetadata::streams` by applying the
+        /// provided function.
+        fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F);
+    }
+
+    impl ReplicatedStateTesting for ReplicatedState {
+        fn subnet_queues_mut(&mut self) -> &mut CanisterQueues {
+            &mut self.subnet_queues
         }
-        self.put_canister_states(canisters);
+
+        fn with_streams(&mut self, streams: StreamMap) {
+            self.modify_streams(|streamz| *streamz = streams);
+        }
+
+        fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
+            let mut streams = self.take_streams();
+            streams.modify_streams(f);
+            self.put_streams(streams);
+        }
     }
 }

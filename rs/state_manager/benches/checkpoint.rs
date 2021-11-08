@@ -1,10 +1,11 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use ic_base_types::NumSeconds;
+use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_layout::StateLayout;
-use ic_state_manager::checkpoint::make_checkpoint;
+use ic_state_manager::{checkpoint::make_checkpoint, CheckpointMetrics};
 use ic_test_utilities::{
     state::new_canister_state,
     types::ids::{canister_test_id, subnet_test_id, user_test_id},
@@ -22,6 +23,7 @@ fn criterion_make_checkpoint(c: &mut Criterion) {
         state: ReplicatedState,
         height: Height,
         layout: StateLayout,
+        metrics: CheckpointMetrics,
     }
 
     let mut group = c.benchmark_group("state manager");
@@ -51,16 +53,20 @@ fn criterion_make_checkpoint(c: &mut Criterion) {
                         INITIAL_CYCLES,
                         DEFAULT_FREEZE_THRESHOLD,
                     ));
+                    let metrics_registry = MetricsRegistry::new();
+                    let metrics = CheckpointMetrics::new(&metrics_registry);
                     BenchData {
                         state,
                         height: HEIGHT,
                         layout,
+                        metrics,
                     }
                 })
             },
             // Do the actual measurement
             |data| {
-                let _node_state = make_checkpoint(&data.state, data.height, &data.layout);
+                let _node_state =
+                    make_checkpoint(&data.state, data.height, &data.layout, &data.metrics);
             },
         )
     });

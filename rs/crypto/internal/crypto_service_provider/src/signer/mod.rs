@@ -2,7 +2,11 @@ use super::api::CspSigner;
 use super::types::{CspPop, CspPublicKey, CspSignature};
 use super::Csp;
 use crate::secret_key_store::SecretKeyStore;
-use crate::types::{CspSecretKey, MultiBls12_381_Signature};
+use crate::server::api::{
+    BasicSignatureCspServer, CspBasicSignatureError, CspMultiSignatureError,
+    MultiSignatureCspServer,
+};
+use crate::types::MultiBls12_381_Signature;
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
@@ -21,34 +25,15 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> CspSigner for Csp<R, S> {
         message: &[u8],
         key_id: KeyId,
     ) -> CryptoResult<CspSignature> {
-        let secret_key: CspSecretKey =
-            self.sks_read_lock()
-                .get(&key_id)
-                .ok_or(CryptoError::SecretKeyNotFound {
-                    algorithm: algorithm_id,
-                    key_id,
-                })?;
-
         match algorithm_id {
-            AlgorithmId::Ed25519 => match secret_key {
-                CspSecretKey::Ed25519(secret_key) => {
-                    let sig_bytes = ed25519::sign(message, &secret_key)?;
-                    Ok(CspSignature::Ed25519(sig_bytes))
-                }
-                _ => Err(CryptoError::MalformedSecretKey {
-                    algorithm: algorithm_id,
-                    internal_error: "Wrong private key type".to_string(),
-                }),
-            },
-            AlgorithmId::MultiBls12_381 => match secret_key {
-                CspSecretKey::MultiBls12_381(key) => Ok(CspSignature::MultiBls12_381(
-                    MultiBls12_381_Signature::Individual(multi_sig::sign(message, key)?),
-                )),
-                _ => Err(CryptoError::MalformedSecretKey {
-                    algorithm: algorithm_id,
-                    internal_error: "Wrong private key type".to_string(),
-                }),
-            },
+            AlgorithmId::Ed25519 => self
+                .csp_server
+                .sign(algorithm_id, message, key_id)
+                .map_err(CspBasicSignatureError::into),
+            AlgorithmId::MultiBls12_381 => self
+                .csp_server
+                .multi_sign(algorithm_id, message, key_id)
+                .map_err(CspMultiSignatureError::into),
             _ => Err(CryptoError::InvalidArgument {
                 message: format!("Cannot sign with unsupported algorithm: {:?}", algorithm_id),
             }),

@@ -14,6 +14,26 @@ const PAGE_SIZE: f64 = 64.0 * 1024.0;
 
 const LENGTH_BYTES: u32 = 4;
 
+pub fn stable64_size() -> u64 {
+    unsafe { ic0::stable64_size() }
+}
+
+pub fn stable64_grow(additional_pages: u64) -> i64 {
+    unsafe { ic0::stable64_grow(additional_pages) }
+}
+
+pub fn stable64_write(offset: u64, data: &[u8]) {
+    unsafe {
+        ic0::stable64_write(offset, data.as_ptr() as u64, data.len() as u64);
+    }
+}
+
+pub fn stable64_read(buf: &mut [u8], offset: u64, size: u64) {
+    unsafe {
+        ic0::stable64_read(buf.as_mut_ptr() as u64, offset, size);
+    }
+}
+
 /// Sets the contents of the stable memory
 pub fn set(content: &[u8]) {
     let len: u32 = content.len() as u32;

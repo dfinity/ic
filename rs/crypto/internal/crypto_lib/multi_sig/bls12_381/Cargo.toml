@@ -5,15 +5,14 @@ edition = "2018"
 
 [dependencies]
 base64 = "0.11.0"
-ff = "0.5.0"
-group = "0.2.0"
 hex = "0.4.2"
 ic-crypto-internal-bls12381-common = { path = "../../bls12_381/common"}
 ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-sha = { path= "../../../../sha"}
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
-pairing = "0.15.0"
+pairing = "0.20"
+bls12_381 = { version = "0.5.0", default-features = false, features = ["groups", "pairings", "alloc", "experimental"] }
 rand = "0.7.3"
 rand_chacha = "0.2.2"
 rand_core = "0.5.1"
@@ -24,4 +23,3 @@ zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 proptest = "0.9.4"
 proptest-derive = "0.1.0"
-rand_core = "0.5.1"

@@ -171,6 +171,7 @@ pub struct CanisterStateBits {
     pub certified_data: Vec<u8>,
     pub consumed_cycles_since_replica_started: NominalCycles,
     pub stable_memory_size: NumWasmPages64,
+    pub heap_delta_debit: NumBytes,
 }
 
 /// `StateLayout` provides convenience functions to construct correct
@@ -976,6 +977,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 Err(_) => u32::MAX,
             },
             stable_memory_size64: item.stable_memory_size.get(),
+            heap_delta_debit: item.heap_delta_debit.get(),
         }
     }
 }
@@ -1065,6 +1067,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             certified_data: value.certified_data,
             consumed_cycles_since_replica_started,
             stable_memory_size: NumWasmPages64::from(stable_memory_size),
+            heap_delta_debit: NumBytes::from(value.heap_delta_debit),
         })
     }
 }
@@ -1134,6 +1137,7 @@ mod test {
             certified_data: vec![],
             consumed_cycles_since_replica_started: NominalCycles::from(0),
             stable_memory_size: NumWasmPages64::from(0),
+            heap_delta_debit: NumBytes::from(0),
         };
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
@@ -1172,6 +1176,7 @@ mod test {
             certified_data: vec![],
             consumed_cycles_since_replica_started: NominalCycles::from(0),
             stable_memory_size: NumWasmPages64::from(0),
+            heap_delta_debit: NumBytes::from(0),
         };
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
@@ -1212,6 +1217,7 @@ mod test {
             certified_data: vec![],
             consumed_cycles_since_replica_started: NominalCycles::from(0),
             stable_memory_size: NumWasmPages64::from(0),
+            heap_delta_debit: NumBytes::from(0),
         };
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);

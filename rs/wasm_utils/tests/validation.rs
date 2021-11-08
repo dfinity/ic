@@ -1,12 +1,15 @@
 use assert_matches::assert_matches;
+use ic_config::embedders::{FeatureFlags, FeatureStatus};
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use ic_wasm_utils::validation::{
-    validate_wasm_binary, WasmImportsDetails, WasmValidationDetails, WasmValidationLimits,
-    RESERVED_SYMBOLS,
+    validate_wasm_binary, WasmImportsDetails, WasmValidationConfig, WasmValidationDetails,
+    WasmValidationLimits, RESERVED_SYMBOLS,
 };
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wabt::Error> {
-    wabt::wat2wasm(wat).map(BinaryEncodedWasm::new)
+    let mut features = wabt::Features::new();
+    features.enable_multi_value();
+    wabt::wat2wasm_with_features(wat, features).map(BinaryEncodedWasm::new)
 }
 
 #[test]
@@ -19,7 +22,7 @@ fn can_validate_valid_import_section() {
     )
     .unwrap();
     assert_eq!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
             imports_details: WasmImportsDetails::default(),
@@ -31,7 +34,7 @@ fn can_validate_valid_import_section() {
 fn can_validate_import_section_with_invalid_memory_import() {
     let wasm = wat2wasm(r#"(module (import "foo" "memory" (memory (;0;) 529)))"#).unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidImportSection(_))
     );
 }
@@ -40,7 +43,7 @@ fn can_validate_import_section_with_invalid_memory_import() {
 fn can_validate_import_section_with_invalid_table_import() {
     let wasm = wat2wasm(r#"(module (import "foo" "table" (table (;0;) 33 33 funcref)))"#).unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidImportSection(_))
     );
 }
@@ -50,7 +53,7 @@ fn can_validate_import_section_with_invalid_imported_function() {
     let wasm =
         wat2wasm(r#"(module (import "ic0" "msg_reply" (func $reply (param i64 i32))))"#).unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidFunctionSignature(_))
     );
 }
@@ -69,7 +72,7 @@ fn can_validate_valid_export_section() {
     .unwrap();
 
     assert_eq!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
             imports_details: WasmImportsDetails::default(),
@@ -93,7 +96,7 @@ fn can_validate_valid_export_section_with_reserved_functions() {
     )
     .unwrap();
     assert_eq!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 2,
             imports_details: WasmImportsDetails::default(),
@@ -110,7 +113,7 @@ fn can_validate_canister_init_with_invalid_return() {
     )
     .unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidFunctionSignature(_))
     );
 }
@@ -124,7 +127,7 @@ fn can_validate_canister_init_with_invalid_params() {
     )
     .unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidFunctionSignature(_))
     );
 }
@@ -138,7 +141,7 @@ fn can_validate_canister_heartbeat_with_invalid_return() {
     )
     .unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidFunctionSignature(_))
     );
 }
@@ -152,7 +155,7 @@ fn can_validate_canister_heartbeat_with_invalid_params() {
     )
     .unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidFunctionSignature(_))
     );
 }
@@ -166,7 +169,7 @@ fn can_validate_canister_pre_upgrade_with_invalid_return() {
     )
     .unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidFunctionSignature(_))
     );
 }
@@ -180,7 +183,7 @@ fn can_validate_canister_pre_upgrade_with_invalid_params() {
     )
     .unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidFunctionSignature(_))
     );
 }
@@ -194,7 +197,7 @@ fn can_validate_canister_post_upgrade_with_invalid_return() {
     )
     .unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidFunctionSignature(_))
     );
 }
@@ -208,7 +211,7 @@ fn can_validate_canister_post_upgrade_with_invalid_params() {
     )
     .unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidFunctionSignature(_))
     );
 }
@@ -222,7 +225,7 @@ fn can_validate_invalid_canister_query() {
     )
     .unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidFunctionSignature(_))
     );
 }
@@ -237,7 +240,7 @@ fn can_validate_duplicate_method_for_canister_query_and_canister_update() {
     )
     .unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidFunctionSignature(_))
     );
 }
@@ -252,7 +255,7 @@ fn can_validate_canister_query_update_method_name_with_whitespace() {
     )
     .unwrap();
     assert_eq!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
             imports_details: WasmImportsDetails::default(),
@@ -272,7 +275,7 @@ fn can_validate_valid_data_section() {
     )
     .unwrap();
     assert_eq!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
             imports_details: WasmImportsDetails::default(),
@@ -296,7 +299,7 @@ fn can_validate_invalid_offset_expression_in_data_section() {
     )
     .unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidImportSection(_))
     );
 }
@@ -306,7 +309,7 @@ fn can_validate_module_with_import_func() {
     // Accepts `msg_reply` from ic0 module.
     let wasm = wat2wasm(r#"(module (import "ic0" "msg_reply" (func $msg_reply)))"#).unwrap();
     assert_eq!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
             imports_details: WasmImportsDetails::default(),
@@ -322,7 +325,7 @@ fn can_validate_module_with_not_allowed_import_func() {
     )
     .unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidImportSection(_))
     );
 }
@@ -331,7 +334,7 @@ fn can_validate_module_with_not_allowed_import_func() {
 fn can_validate_module_with_wrong_import_module_for_func() {
     let wasm = wat2wasm(r#"(module (import "foo" "msg_reply" (func $reply)))"#).unwrap();
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidImportSection(_))
     );
 }
@@ -351,9 +354,12 @@ fn can_validate_module_with_too_many_globals() {
     assert_matches!(
         validate_wasm_binary(
             &wasm,
-            WasmValidationLimits {
-                max_globals: 2,
-                max_functions: 1024
+            WasmValidationConfig {
+                limits: WasmValidationLimits {
+                    max_globals: 2,
+                    max_functions: 1024
+                },
+                ..Default::default()
             }
         ),
         Err(WasmValidationError::TooManyGlobals {
@@ -381,9 +387,12 @@ fn can_validate_module_with_too_many_functions() {
     assert_matches!(
         validate_wasm_binary(
             &wasm,
-            WasmValidationLimits {
-                max_globals: 256,
-                max_functions: 5
+            WasmValidationConfig {
+                limits: WasmValidationLimits {
+                    max_globals: 256,
+                    max_functions: 5
+                },
+                ..Default::default()
             }
         ),
         Err(WasmValidationError::TooManyFunctions {
@@ -409,7 +418,7 @@ fn can_validate_module_with_reserved_symbols() {
             .unwrap(),
         );
         assert_matches!(
-            validate_wasm_binary(&wasm_global, WasmValidationLimits::default()),
+            validate_wasm_binary(&wasm_global, WasmValidationConfig::default()),
             Err(WasmValidationError::InvalidExportSection(_))
         );
 
@@ -426,7 +435,7 @@ fn can_validate_module_with_reserved_symbols() {
             .unwrap(),
         );
         assert_matches!(
-            validate_wasm_binary(&wasm_func, WasmValidationLimits::default()),
+            validate_wasm_binary(&wasm_func, WasmValidationConfig::default()),
             Err(WasmValidationError::InvalidExportSection(_))
         );
     }
@@ -435,13 +444,14 @@ fn can_validate_module_with_reserved_symbols() {
 #[test]
 fn can_reject_wasm_with_invalid_global_access() {
     // This wasm module defines one global but attempts to access global at index 1
-    // (which would be the instruction counter after instrumentation). This should
+    // (which would be the instruction counter after
+    // instrumentatwasm_utils/src/validation.rs:77:9ion). This should
     // fail validation.
     let wasm = BinaryEncodedWasm::new(
         include_bytes!("./instrumentation-test-data/in/invalid_global_access.wasm").to_vec(),
     );
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::WasmtimeValidation(_))
     );
 }
@@ -464,7 +474,7 @@ fn can_validate_module_with_call_simple_import() {
     .unwrap();
 
     assert_eq!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
             imports_details: WasmImportsDetails {
@@ -488,7 +498,7 @@ fn can_validate_module_cycles_related_imports() {
     .unwrap();
 
     assert_eq!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 0,
             imports_details: WasmImportsDetails {
@@ -508,10 +518,41 @@ fn can_validate_valid_export_section_with_invalid_function_index() {
             .to_vec(),
     );
     assert_matches!(
-        validate_wasm_binary(&wasm, WasmValidationLimits::default()),
+        validate_wasm_binary(&wasm, WasmValidationConfig::default()),
         Err(WasmValidationError::InvalidFunctionIndex {
             index: 0,
             import_count: 1
+        })
+    );
+}
+
+#[test]
+fn can_validate_module_cycles_u128_related_imports() {
+    // Instruments imports from `ic0`.
+    let wasm = wat2wasm(
+        r#"(module
+        (import "ic0" "call_cycles_add128" (func $ic0_call_cycles_add128 (param i64 i64)))
+        (import "ic0" "canister_cycles_balance128" (func $ic0_canister_cycles_balance128 (result i64 i64)))
+        (import "ic0" "msg_cycles_available128" (func $ic0_msg_cycles_available128 (result i64 i64)))
+        (import "ic0" "msg_cycles_refunded128" (func $ic0_msg_cycles_refunded128 (result i64 i64)))
+        (import "ic0" "msg_cycles_accept128" (func $ic0_msg_cycles_accept128 (param i64 i64) (result i64 i64)))
+    )"#,
+    )
+        .unwrap();
+
+    assert_eq!(
+        validate_wasm_binary(
+            &wasm,
+            WasmValidationConfig {
+                feature_flags: FeatureFlags {
+                    api_cycles_u128_flag: FeatureStatus::Enabled
+                },
+                ..Default::default()
+            }
+        ),
+        Ok(WasmValidationDetails {
+            reserved_exports: 0,
+            imports_details: WasmImportsDetails::default(),
         })
     );
 }

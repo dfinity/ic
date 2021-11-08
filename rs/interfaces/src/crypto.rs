@@ -14,7 +14,6 @@ mod errors;
 
 mod dkg;
 
-pub use dkg::DkgAlgorithm;
 pub use sign::threshold_sig::ni_dkg::{LoadTranscriptResult, NiDkgAlgorithm};
 
 mod sign;
@@ -31,7 +30,7 @@ pub use sign::ThresholdSigVerifierByPublicKey;
 pub use sign::ThresholdSigner;
 pub use sign::{Signable, SignableMock};
 
-pub use sign::canister_threshold_sign::*;
+pub use sign::canister_threshold_sig::*;
 
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::consensus::dkg as consensus_dkg;
@@ -51,7 +50,6 @@ pub trait Crypto:
     + BasicSigner<consensus_dkg::DealingContent>
     + BasicSigVerifier<consensus_dkg::DealingContent>
     // DKG
-    + DkgAlgorithm
     + NiDkgAlgorithm
     // CertificationContent
     + MultiSigner<CertificationContent>
@@ -102,7 +100,6 @@ impl<T> Crypto for T where
         + BasicSigVerifier<Block>
         + BasicSigner<consensus_dkg::DealingContent>
         + BasicSigVerifier<consensus_dkg::DealingContent>
-        + DkgAlgorithm
         + NiDkgAlgorithm
         + MultiSigner<CertificationContent>
         + MultiSigVerifier<CertificationContent>

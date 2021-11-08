@@ -8,7 +8,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallContextAction, CanisterState, ExecutionState};
+use ic_replicated_state::{CallContextAction, CanisterState};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, mock_time, state::SystemStateBuilder,
     types::ids::subnet_test_id, types::ids::user_test_id, types::messages::IngressBuilder,
@@ -17,7 +17,7 @@ use ic_test_utilities::{
 use ic_types::{
     ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId,
 };
-use ic_wasm_utils::validation::WasmValidationLimits;
+use ic_wasm_utils::validation::WasmValidationConfig;
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::{collections::BTreeMap, sync::Arc};
@@ -61,12 +61,13 @@ impl HypervisorTest {
         );
         let wasm_binary = wabt::wat2wasm(wast).unwrap();
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let execution_state = ExecutionState::new(
-            wasm_binary,
-            tmpdir.path().into(),
-            WasmValidationLimits::default(),
-        )
-        .expect("failed to initialize execution state");
+        let execution_state = hypervisor
+            .create_execution_state(
+                wasm_binary,
+                tmpdir.path().into(),
+                WasmValidationConfig::default(),
+            )
+            .expect("failed to initialize execution state");
 
         let canister = CanisterState {
             system_state: SystemStateBuilder::default()

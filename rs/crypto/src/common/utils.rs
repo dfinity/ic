@@ -1,8 +1,5 @@
 //! Static crypto utility methods.
-use crate::common::utils::dkg::InitialDkgConfig;
-use crate::CryptoComponent;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_csp::api::{CspKeyGenerator, NiDkgCspClient};
 use ic_crypto_internal_csp::keygen::public_key_hash_as_key_id;
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
@@ -10,22 +7,17 @@ use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_interfaces::crypto::DkgAlgorithm;
-use ic_logger::replica_logger::no_op_logger;
+use ic_crypto_utils_basic_sig::conversions as basicsig_conversions;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::dkg::EncryptionPublicKeyWithPop;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
-use ic_types::{NodeId, PrincipalId};
+use ic_types::NodeId;
 use rand_core::OsRng;
 use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::Arc;
 
-pub mod dkg;
 pub mod ni_dkg;
 
 mod temp_crypto;
@@ -36,29 +28,6 @@ pub use temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 
 #[cfg(test)]
 mod tests;
-
-/// Generates initial DKG ephemeral encryption keys for the `dkg_config` and the
-/// `node_id`.
-/// * The secret key is stored in the crypto secret key store at the
-///   `crypto_root`.
-/// * The corresponding public key is returned
-/// * If the crypto root does not exist yet, it is created and the appropriate
-///   permissions are set.
-pub fn generate_initial_dkg_encryption_keys(
-    crypto_root: &Path,
-    dkg_config: &InitialDkgConfig,
-    node_id: NodeId,
-) -> CryptoResult<EncryptionPublicKeyWithPop> {
-    let config = config_with_dir_and_permissions(crypto_root);
-    let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    let crypto_component = CryptoComponent::new_with_fake_node_id(
-        &config,
-        Arc::new(registry_client),
-        node_id,
-        no_op_logger(),
-    );
-    crypto_component.generate_encryption_keys(dkg_config.get(), node_id)
-}
 
 /// Generates (forward-secure) NI-DKG dealing encryption key material given the
 /// `node_id` of the node.
@@ -135,11 +104,9 @@ pub fn get_node_keys_or_generate_if_missing(crypto_root: &Path) -> (NodePublicKe
     }
 }
 
-pub(crate) fn derive_node_id(node_signing_pk: &PublicKeyProto) -> NodeId {
-    let pk_bytes = ed25519::types::PublicKeyBytes::try_from(node_signing_pk)
-        .expect("Corrupted node signing public key");
-    let der_pk = ed25519::public_key_to_der(pk_bytes);
-    NodeId::from(PrincipalId::new_self_authenticating(&der_pk))
+pub fn derive_node_id(node_signing_pk: &PublicKeyProto) -> NodeId {
+    basicsig_conversions::derive_node_id(node_signing_pk)
+        .expect("Corrupted node signing public key")
 }
 
 fn generate_node_signing_keys(crypto_root: &Path) -> PublicKeyProto {

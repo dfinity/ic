@@ -11,8 +11,8 @@ use ic_types::{artifact::ArtifactKind, consensus::*, ReplicaVersion};
 use setup::run_test;
 use std::convert::TryFrom;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_artifact_version() {
+#[test]
+fn test_artifact_version() {
     run_test(|manager| {
         // Positive case
         let cup = make_genesis(ic_types::consensus::dkg::Summary::fake());
@@ -46,8 +46,8 @@ async fn test_artifact_version() {
     });
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_artifact_advert_match() {
+#[test]
+fn test_artifact_advert_match() {
     run_test(|manager| {
         // Positive case: advert matches artifact
         let cup = make_genesis(ic_types::consensus::dkg::Summary::fake());

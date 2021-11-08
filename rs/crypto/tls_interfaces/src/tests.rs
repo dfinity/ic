@@ -245,6 +245,23 @@ mod allowed_clients {
     }
 
     #[test]
+    fn should_contain_any_node_in_all_nodes() {
+        let all_nodes = SomeOrAllNodes::All;
+
+        assert!(all_nodes.contains(node_id(1)));
+        assert!(all_nodes.contains(node_id(7)));
+    }
+
+    #[test]
+    fn should_contain_correct_nodes_in_some_nodes() {
+        let some_nodes = SomeOrAllNodes::Some(btreeset! {node_id(1), node_id(2)});
+
+        assert!(some_nodes.contains(node_id(1)));
+        assert!(some_nodes.contains(node_id(2)));
+        assert!(!some_nodes.contains(node_id(3)));
+    }
+
+    #[test]
     fn should_fail_on_new_if_nodes_and_certs_empty() {
         let allowed_clients =
             AllowedClients::new(SomeOrAllNodes::Some(BTreeSet::new()), HashSet::new());
@@ -261,6 +278,14 @@ mod allowed_clients {
             allowed_clients.unwrap_err(),
             AllowedClientsError::ClientsEmpty {}
         );
+    }
+
+    #[test]
+    fn should_contain_correct_node_in_some_nodes_new_with_single_node() {
+        let nodes = SomeOrAllNodes::new_with_single_node(node_id(1));
+        assert!(matches!(nodes, SomeOrAllNodes::Some (node_set)
+            if node_set.len() == 1 && node_set.contains(&node_id(1))
+        ));
     }
 
     fn node_id(id: u64) -> NodeId {

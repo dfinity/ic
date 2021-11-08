@@ -2,7 +2,7 @@
 
 use crate::crypto::public_key_from_secret_key;
 use crate::types::{Polynomial, PublicCoefficients, PublicKey};
-use group::CurveProjective;
+use bls12_381::G2Projective;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 pub use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes as InternalPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
@@ -11,7 +11,6 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::{
 };
 use ic_types::crypto::{CryptoError, CryptoResult};
 use ic_types::{NodeIndex, NumberOfNodes};
-use pairing::bls12_381::G2;
 use std::convert::TryFrom;
 
 #[cfg(test)]
@@ -87,7 +86,7 @@ impl From<&PublicCoefficients> for PublicKey {
             .coefficients
             .get(0)
             .copied()
-            .unwrap_or_else(|| PublicKey(G2::zero()))
+            .unwrap_or_else(|| PublicKey(G2Projective::identity()))
     }
 }
 
@@ -100,7 +99,7 @@ impl TryFrom<&PublicCoefficientsBytes> for PublicKey {
             .coefficients
             .get(0)
             .map(PublicKey::try_from)
-            .unwrap_or_else(|| Ok(PublicKey(G2::zero())))?)
+            .unwrap_or_else(|| Ok(PublicKey(G2Projective::identity())))?)
     }
 }
 
@@ -115,7 +114,7 @@ pub fn pub_key_bytes_from_pub_coeff_bytes(
         .coefficients
         .get(0)
         .cloned()
-        .unwrap_or_else(|| PublicKeyBytes::from(PublicKey(G2::zero())))
+        .unwrap_or_else(|| PublicKeyBytes::from(PublicKey(G2Projective::identity())))
 }
 
 // The internal PublicCoefficients are a duplicate of InternalPublicCoefficients

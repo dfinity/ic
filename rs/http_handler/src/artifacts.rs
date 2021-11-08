@@ -22,6 +22,7 @@ use std::{
 ///
 /// It returns a 404 response for all heights above the
 /// finalized height or when the height was already purged.
+#[allow(dead_code)]
 pub(crate) fn handle(
     backup_spool_path: &Path,
     subnet_id: SubnetId,

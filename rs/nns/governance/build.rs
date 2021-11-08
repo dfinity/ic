@@ -24,6 +24,7 @@ fn main() {
     };
 
     let mut config = Config::new();
+    config.protoc_arg("--experimental_allow_proto3_optional");
 
     // Use BTreeMap for the proposals map.
     // This is useful because:

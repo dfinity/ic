@@ -158,6 +158,8 @@ message NeuronInfo {
   // When the Neuron was created. A neuron can only vote on proposals
   // submitted after its creation date.
   uint64 created_timestamp_seconds = 7;
+  // Current stake of the neuron, in e8s.
+  uint64 stake_e8s = 8;
 }
 
 // A transfer performed from some account to stake a new neuron.
@@ -415,6 +417,10 @@ enum NnsFunction {
   NNS_FUNCTION_REMOVE_NODES = 18;
   // Uninstall code of a canister.
   NNS_FUNCTION_UNINSTALL_CODE = 19;
+  // Update the node rewards table.
+  NNS_FUNCTION_UPDATE_NODE_REWARDS_TABLE = 20;
+  // Add or remove Data Center records.
+  NNS_FUNCTION_ADD_OR_REMOVE_DATA_CENTERS = 21;
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -516,8 +522,11 @@ message SetDefaultFollowees {
 //
 // Making a proposal implicitly votes yes.
 message Proposal {
+  // Text with the title of the proposal.
+   // Can have a max of 256 bytes.
+  optional string title = 20;
   // Text providing a short description of the proposal, composed
-  // using a maximum of 280 bytes of characters.
+  // using a maximum of 15000 bytes of characters.
   string summary = 1;
 
   // The Web address of additional content required to evaluate the

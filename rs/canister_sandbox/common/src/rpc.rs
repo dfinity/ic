@@ -34,6 +34,7 @@ pub trait PostResult<Value> {
 pub trait GetResult<Value> {
     fn poll(&self, cx: &mut Context<'_>) -> Poll<RPCResult<Value>>;
     fn sync(&self) -> RPCResult<Value>;
+    fn on_completion(&self, f: Box<dyn FnOnce(RPCResult<Value>) + Send + Sync>);
 }
 
 /// Demultiplexes request into specific target RPC function, collect
@@ -108,14 +109,19 @@ impl<Reply: 'static> Call<Reply> {
     /// Turns this call into an async future. This consumes the call
     /// and allows using the RPC as an async call.
     pub fn future(self) -> Pin<Box<dyn std::future::Future<Output = RPCResult<Reply>> + 'static>> {
-        Box::pin(Future {
-            cell: self.cell.clone(),
-        })
+        Box::pin(Future { cell: self.cell })
     }
 
     /// Suspends calling thread and wait on RPC to be completed.
     pub fn sync(self) -> RPCResult<Reply> {
         self.cell.sync()
+    }
+
+    pub fn on_completion<F>(self, f: F)
+    where
+        F: FnOnce(RPCResult<Reply>) + Send + Sync + 'static,
+    {
+        self.cell.on_completion(Box::new(f));
     }
 }
 
@@ -131,6 +137,7 @@ pub struct ReplyBuffer<InputValue, Value> {
 struct ReplyBufferInt<Reply> {
     result: Option<RPCResult<Reply>>,
     waker: Option<std::task::Waker>,
+    f: Option<Box<dyn FnOnce(RPCResult<Reply>) + Send + Sync>>,
 }
 
 impl<InputValue, Value: Send + Sync> ReplyBuffer<InputValue, Value> {
@@ -139,6 +146,7 @@ impl<InputValue, Value: Send + Sync> ReplyBuffer<InputValue, Value> {
             repr: Mutex::new(ReplyBufferInt {
                 result: None,
                 waker: None,
+                f: None,
             }),
             cond: Condvar::new(),
             xform,
@@ -183,6 +191,21 @@ impl<InputValue, Value> GetResult<Value> for ReplyBuffer<InputValue, Value> {
             } else {
                 mut_cell = self.cond.wait(mut_cell).unwrap();
             }
+        }
+    }
+    fn on_completion(&self, f: Box<dyn FnOnce(RPCResult<Value>) + Send + Sync>) {
+        let maybe_call = {
+            let mut mut_repr = self.repr.lock().unwrap();
+            let maybe_result = mut_repr.result.take();
+            if let Some(result) = maybe_result {
+                Some((f, result))
+            } else {
+                mut_repr.f = Some(f);
+                None
+            }
+        };
+        if let Some((f, result)) = maybe_call {
+            f(result);
         }
     }
 }
@@ -260,6 +283,9 @@ impl<Value> GetResult<Value> for ReadyResult<Value> {
         let mut mut_value = self.value.lock().unwrap();
         std::mem::replace(&mut mut_value, Err(Error::ServerError))
     }
+    fn on_completion(&self, f: Box<dyn FnOnce(RPCResult<Value>) + Sync + Send + 'static>) {
+        f(self.sync());
+    }
 }
 
 /// Adapt a result of one kind to another.
@@ -274,7 +300,7 @@ impl<S, T> GetResultAdaptor<S, T> {
     }
 }
 
-impl<S, T> GetResult<T> for GetResultAdaptor<S, T> {
+impl<S: 'static, T: 'static> GetResult<T> for GetResultAdaptor<S, T> {
     fn poll(&self, cx: &mut Context<'_>) -> Poll<RPCResult<T>> {
         match self.inner.poll(cx) {
             Poll::Ready(result) => Poll::Ready(result.map(self.f)),
@@ -283,6 +309,12 @@ impl<S, T> GetResult<T> for GetResultAdaptor<S, T> {
     }
     fn sync(&self) -> RPCResult<T> {
         self.inner.sync().map(self.f)
+    }
+    fn on_completion(&self, f: Box<dyn FnOnce(RPCResult<T>) + Sync + Send + 'static>) {
+        let t = self.f;
+        self.inner.on_completion(Box::new(move |x: RPCResult<S>| {
+            f(x.map(t));
+        }));
     }
 }
 

@@ -19,4 +19,11 @@ message NodeOperatorRecord {
 
   // The principal id of this node operator's provider.
   bytes node_provider_principal_id = 3;
+
+  // The ID of the data center where this Node Operator hosts nodes.
+  string dc_id = 4;
+
+  // A map from node type to the number of nodes for which the associated Node
+  // Provider should be rewarded.
+  map<string, uint32> rewardable_nodes = 5;
 }

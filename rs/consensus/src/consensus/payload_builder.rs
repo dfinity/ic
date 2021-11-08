@@ -6,12 +6,13 @@ use ic_interfaces::{
     ingress_manager::{IngressSelector, IngressSetQuery},
     ingress_pool::IngressPoolSelect,
     messaging::XNetPayloadBuilder,
+    self_validating_payload::SelfValidatingPayloadBuilder,
     validation::ValidationResult,
 };
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::IngressMessageId,
-    batch::{BatchPayload, ValidationContext, XNetPayload},
+    batch::{BatchPayload, SelfValidatingPayload, ValidationContext, XNetPayload},
     consensus::{BlockPayload, Payload},
     crypto::CryptoHashOf,
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
@@ -86,6 +87,7 @@ impl IngressSetQuery for IngressSets {
 pub struct PayloadBuilderImpl {
     ingress_selector: Arc<dyn IngressSelector>,
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
+    self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     metrics: PayloadBuilderMetrics,
     ingress_payload_cache: RwLock<IngressPayloadCache>,
 }
@@ -95,11 +97,13 @@ impl PayloadBuilderImpl {
     pub fn new(
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
+        self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         metrics: MetricsRegistry,
     ) -> Self {
         Self {
             ingress_selector,
             xnet_payload_builder,
+            self_validating_payload_builder,
             metrics: PayloadBuilderMetrics::new(metrics),
             ingress_payload_cache: RwLock::new(BTreeMap::new()),
         }
@@ -119,7 +123,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
             None => context.time,
             Some((_, time, _)) => *time,
         };
-        let (past_ingress, past_xnet) =
+        let (past_ingress, past_xnet, past_self_validating) =
             split_past_payloads(&mut ingress_payload_cache, past_payloads);
         self.metrics
             .past_payloads_length
@@ -140,7 +144,16 @@ impl PayloadBuilder for PayloadBuilderImpl {
             .ingress_payload_cache_size
             .set(ingress_payload_cache.len() as i64);
 
-        BatchPayload { ingress, xnet }
+        // TODO: Use real SELF_VALIDATING payload builder
+        let self_validating = self
+            .self_validating_payload_builder
+            .get_self_validating_payload(context, &past_self_validating, MAX_XNET_PAYLOAD_IN_BYTES);
+
+        BatchPayload {
+            ingress,
+            xnet,
+            self_validating,
+        }
     }
 
     fn validate_payload(
@@ -153,13 +166,13 @@ impl PayloadBuilder for PayloadBuilderImpl {
         if payload.is_summary() {
             return Ok(());
         }
-        let batch_payload = payload.as_ref().as_batch_payload();
+        let batch_payload = &payload.as_ref().as_data().batch;
         let mut ingress_payload_cache = self.ingress_payload_cache.write().unwrap();
         let min_block_time = match past_payloads.last() {
             None => context.time,
             Some((_, time, _)) => *time,
         };
-        let (past_ingress, past_xnet) =
+        let (past_ingress, past_xnet, past_self_validating) =
             split_past_payloads(&mut ingress_payload_cache, past_payloads);
         self.metrics
             .ingress_payload_cache_size
@@ -180,6 +193,13 @@ impl PayloadBuilder for PayloadBuilderImpl {
             &past_xnet,
         )?;
 
+        self.self_validating_payload_builder
+            .validate_self_validating_payload(
+                &batch_payload.self_validating,
+                context,
+                &past_self_validating,
+            )?;
+
         Ok(())
     }
 }
@@ -187,17 +207,22 @@ impl PayloadBuilder for PayloadBuilderImpl {
 /// Split past_payloads into past_ingress and past_xnet payloads. The
 /// past_ingress is actually a list of HashSet of MessageIds taken from the
 /// ingress_payload_cache.
+#[allow(clippy::type_complexity)]
 fn split_past_payloads<'a, 'b>(
     ingress_payload_cache: &'a mut IngressPayloadCache,
     past_payloads: &'b [(Height, Time, Payload)],
-) -> (Vec<Arc<HashSet<IngressMessageId>>>, Vec<&'b XNetPayload>) {
+) -> (
+    Vec<Arc<HashSet<IngressMessageId>>>,
+    Vec<&'b XNetPayload>,
+    Vec<&'b SelfValidatingPayload>,
+) {
     let past_xnet: Vec<_> = past_payloads
         .iter()
         .filter_map(|(_, _, payload)| {
             if payload.is_summary() {
                 None
             } else {
-                Some(&payload.as_ref().as_batch_payload().xnet)
+                Some(&payload.as_ref().as_data().batch.xnet)
             }
         })
         .collect();
@@ -208,11 +233,21 @@ fn split_past_payloads<'a, 'b>(
                 None
             } else {
                 let payload_hash = payload.get_hash();
-                let batch = payload.as_ref().as_batch_payload();
+                let batch = &payload.as_ref().as_data().batch;
                 let ingress = ingress_payload_cache
                     .entry((*height, payload_hash.clone()))
                     .or_insert_with(|| Arc::new(batch.ingress.message_ids().into_iter().collect()));
                 Some(ingress.clone())
+            }
+        })
+        .collect();
+    let past_self_validating: Vec<_> = past_payloads
+        .iter()
+        .filter_map(|(_, _, payload)| {
+            if payload.is_summary() {
+                None
+            } else {
+                Some(&payload.as_ref().as_data().batch.self_validating)
             }
         })
         .collect();
@@ -233,7 +268,7 @@ fn split_past_payloads<'a, 'b>(
             }
         }
     }
-    (past_ingress, past_xnet)
+    (past_ingress, past_xnet, past_self_validating)
 }
 
 #[cfg(test)]
@@ -242,8 +277,9 @@ mod test {
     use ic_test_artifact_pool::ingress_pool::TestIngressPool;
     use ic_test_utilities::types::ids::subnet_test_id;
     use ic_test_utilities::{
-        ingress_selector::FakeIngressSelector, mock_time, types::messages::SignedIngressBuilder,
-        xnet_payload_builder::FakeXNetPayloadBuilder,
+        ingress_selector::FakeIngressSelector, mock_time,
+        self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
+        types::messages::SignedIngressBuilder, xnet_payload_builder::FakeXNetPayloadBuilder,
     };
     use ic_types::{
         consensus::certification::Certification, messages::SignedIngress,
@@ -263,12 +299,19 @@ mod test {
             let ingress_pool = TestIngressPool::new(pool_config);
             let xnet_payload_builder =
                 FakeXNetPayloadBuilder::make(provided_certified_streams.clone());
+            let self_validating_payload_builder = FakeSelfValidatingPayloadBuilder::new();
             let metrics_registry = MetricsRegistry::new();
 
             let ingress_selector = Arc::new(ingress_selector);
             let xnet_payload_builder = Arc::new(xnet_payload_builder);
-            let payload_builder =
-                PayloadBuilderImpl::new(ingress_selector, xnet_payload_builder, metrics_registry);
+            let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
+
+            let payload_builder = PayloadBuilderImpl::new(
+                ingress_selector,
+                xnet_payload_builder,
+                self_validating_payload_builder,
+                metrics_registry,
+            );
 
             let prev_payloads = Vec::new();
             let context = ValidationContext {

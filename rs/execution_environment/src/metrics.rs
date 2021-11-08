@@ -218,9 +218,19 @@ pub fn instructions_histogram<S: Into<String>>(
     buckets.push(NumInstructions::from(10));
     buckets.push(NumInstructions::from(1000));
     // Add buckets for all known instruction limits.
-    add_limits(&mut buckets, SchedulerConfig::application_subnet());
+    let app_subnet_config = SchedulerConfig::application_subnet();
+    add_limits(&mut buckets, app_subnet_config.clone());
     add_limits(&mut buckets, SchedulerConfig::verified_application_subnet());
     add_limits(&mut buckets, SchedulerConfig::system_subnet());
+
+    // Add buckets with higher resolution between [round_limit,
+    // round_limit+message_limit] for app subnets.
+    let round_limit = app_subnet_config.max_instructions_per_round.get();
+    let message_limit = app_subnet_config.max_instructions_per_message.get();
+    for value in (round_limit..(round_limit + message_limit)).step_by(1_000_000_000) {
+        buckets.push(NumInstructions::from(value));
+    }
+
     // Ensure that all buckets are unique.
     buckets.sort_unstable();
     buckets.dedup();
@@ -421,8 +431,8 @@ mod tests {
 
         {
             let outer_scope = MeasurementScope::root(&outer);
-            let milddle_scope = MeasurementScope::nested(&middle, &outer_scope).dont_record_zeros();
-            let _inner_scope = MeasurementScope::nested(&inner, &milddle_scope);
+            let middle_scope = MeasurementScope::nested(&middle, &outer_scope).dont_record_zeros();
+            let _inner_scope = MeasurementScope::nested(&inner, &middle_scope);
         }
 
         // Outer scope should have recorded one zero sample for each metric.
@@ -440,7 +450,7 @@ mod tests {
         assert_eq!(0, middle.messages.get_sample_count());
         assert_eq!(0, middle.messages.get_sample_sum() as u64);
 
-        // Inner scope should have alsp recorded one zero sample for each metric.
+        // Inner scope should have also recorded one zero sample for each metric.
         assert_eq!(1, inner.duration.get_sample_count());
         assert_eq!(1, inner.instructions.get_sample_count());
         assert_eq!(0, inner.instructions.get_sample_sum() as u64);

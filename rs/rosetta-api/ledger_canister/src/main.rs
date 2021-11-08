@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use archive::FailedToArchiveBlocks;
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
 };
 
@@ -92,10 +92,10 @@ fn init(
 
 fn add_payment(
     memo: Memo,
-    transfer: Transfer,
+    operation: Operation,
     created_at_time: Option<TimeStamp>,
 ) -> (BlockHeight, HashOf<EncodedBlock>) {
-    let (height, hash) = ledger_canister::add_payment(memo, transfer, created_at_time);
+    let (height, hash) = ledger_canister::add_payment(memo, operation, created_at_time);
     set_certified_data(&hash.into_bytes());
     (height, hash)
 }
@@ -128,10 +128,7 @@ async fn send(
     let caller_principal_id = caller();
 
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
-        panic!(
-            "Sending from non-self-authenticating principal or non-whitelisted canister is not allowed: {}",
-            caller_principal_id
-        );
+        panic!("Sending from {} is not allowed", caller_principal_id);
     }
 
     let from = AccountIdentifier::new(caller_principal_id, from_subaccount);
@@ -147,18 +144,18 @@ async fn send(
             to, minting_acc,
             "It is illegal to mint to a minting_account"
         );
-        Transfer::Mint { to, amount }
+        Operation::Mint { to, amount }
     } else if to == minting_acc {
         assert_eq!(fee, ICPTs::ZERO, "Fee for burning should be zero");
         if amount < MIN_BURN_AMOUNT {
             panic!("Burns lower than {} are not allowed", MIN_BURN_AMOUNT);
         }
-        Transfer::Burn { from, amount }
+        Operation::Burn { from, amount }
     } else {
         if fee != TRANSACTION_FEE {
             panic!("Transaction fee should be {}", TRANSACTION_FEE);
         }
-        Transfer::Send {
+        Operation::Transfer {
             from,
             to,
             amount,
@@ -196,10 +193,7 @@ pub async fn notify(
     let caller_principal_id = caller();
 
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
-        panic!(
-            "Notifying from non-self-authenticating principal or non-whitelisted canister is not allowed: {}",
-            caller_principal_id
-        );
+        panic!("Notifying from {} is not allowed", caller_principal_id);
     }
 
     let expected_from = AccountIdentifier::new(caller_principal_id, from_subaccount);
@@ -212,7 +206,7 @@ pub async fn notify(
 
     // This transaction provides and on chain record that a notification was
     // attempted
-    let transfer = Transfer::Send {
+    let transfer = Operation::Transfer {
         from: expected_from,
         to: expected_to,
         amount: ICPTs::ZERO,
@@ -243,8 +237,8 @@ pub async fn notify(
 
     let block = raw_block.decode().unwrap();
 
-    let (from, to, amount) = match block.transaction().transfer {
-        Transfer::Send {
+    let (from, to, amount) = match block.transaction().operation {
+        Operation::Transfer {
             from, to, amount, ..
         } => (from, to, amount),
         _ => panic!("Notification failed transfer must be of type send"),
@@ -443,58 +437,47 @@ fn pre_upgrade() {
 /// This really should be an action on the ledger canister, but since we don't
 /// want to hold a mutable lock on the whole ledger while we're archiving, we
 /// split this method up into the parts that require async (this function) and
-/// the parts that require a lock (Ledger::archive_blocks).
+/// the parts that require a lock (Ledger::get_blocks_for_archiving).
 async fn archive_blocks() {
-    let (mut blocks_to_archive, archive) = {
-        let mut state = LEDGER
-            .try_write()
-            .expect("Failed to get a lock on the ledger");
-
-        match state.archive_blocks() {
-            Some((bta, lock)) => (bta, lock),
-            None => return,
+    let ledger_guard = LEDGER.try_read().expect("Failed to get ledger read lock");
+    let archive_arc = ledger_guard.blockchain.archive.clone();
+    let mut archive_guard = match archive_arc.try_write() {
+        Ok(g) => g,
+        Err(_) => {
+            print("Ledger is currently archiving. Skipping archive_blocks()");
+            return;
         }
     };
-    // ^ Drop the write lock on the ledger
+    if archive_guard.is_none() {
+        return; // Archiving not enabled
+    }
+    let archive = archive_guard.as_mut().unwrap();
 
-    while !blocks_to_archive.is_empty() {
-        let chunk = get_chain_prefix(
-            &mut blocks_to_archive,
-            *MAX_MESSAGE_SIZE_BYTES.read().unwrap(),
-        );
-        assert!(!chunk.is_empty());
+    let blocks_to_archive = ledger_guard
+        .get_blocks_for_archiving(archive.trigger_threshold, archive.num_blocks_to_archive);
+    if blocks_to_archive.is_empty() {
+        return;
+    }
 
-        print(format!(
-            "[ledger] archiving a chunk of blocks of size {}",
-            chunk.len(),
-        ));
+    drop(ledger_guard); // Drop the lock on the ledger
 
-        let chunk = VecDeque::from(chunk);
+    let num_blocks = blocks_to_archive.len();
+    print(format!("[ledger] archiving {} blocks", num_blocks,));
 
-        if let Err(FailedToArchiveBlocks(err)) = archive
-            .try_write()
-            .expect("Failed to get write lock on archive")
-            .as_mut()
-            .expect("Archiving is not enabled")
-            .archive_blocks(chunk.clone())
-            .await
-        {
+    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
+    let res = archive
+        .send_blocks_to_archive(blocks_to_archive, max_msg_size)
+        .await;
+
+    let mut ledger = LEDGER.try_write().expect("Failed to get ledger write lock");
+    match res {
+        Ok(num_sent_blocks) => ledger.remove_archived_blocks(num_sent_blocks),
+        Err((num_sent_blocks, FailedToArchiveBlocks(err))) => {
+            ledger.remove_archived_blocks(num_sent_blocks);
             print(format!(
-                "[ledger] Failed to archive {} blocks with error {}",
-                chunk.len(),
-                err
+                "[ledger] Archiving failed. Archived {} out of {} blocks. Error {}",
+                num_sent_blocks, num_blocks, err
             ));
-            // We're in real trouble if we can't acquire this lock
-            let blockchain = &mut LEDGER
-                .try_write()
-                .expect("Failed to get a lock on the ledger")
-                .blockchain;
-
-            // Revert the change to the index of blocks not on this canister that was made
-            // in archive_blocks
-            blockchain.sub_num_archived_blocks(chunk.len() as u64);
-            // Add the blocks back to the local blockchain
-            recover_from_failed_archive(&mut blockchain.blocks, blocks_to_archive, chunk);
             return;
         }
     }

@@ -12,7 +12,7 @@ crc32fast = "1.2.0"
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-protobuf = { path = "../../protobuf" }
 phantom_newtype = { path = "../../phantom_newtype" }
-prost = "0.7.0"
+prost = "0.8.0"
 serde = { version = "1.0.99", features = ["derive", "rc"] }
 strum = "0.18.0"
 strum_macros = "0.18.0"
@@ -24,4 +24,4 @@ proptest-derive = "0.1.0"
 serde_cbor = "0.11.1"
 
 [build-dependencies]
-prost-build = "0.7.0"
+prost-build = "0.8.0"

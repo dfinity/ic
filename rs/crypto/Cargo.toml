@@ -8,8 +8,6 @@ arrayvec = "0.5.1"
 async-trait = "0.1.41"
 base64 = "0.11.0"
 ed25519-dalek = "1.0.1"
-ff = "0.5.0"
-group = "0.2.0"
 hex = "0.4.2"
 ic-config = { path = "../config" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
@@ -23,6 +21,7 @@ ic-crypto-internal-test-vectors = { path = "internal/test_vectors" }
 ic-crypto-internal-types = { path = "internal/crypto_lib/types" }
 ic-crypto-sha = { path = "sha" }
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
+ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -37,12 +36,11 @@ libsecp256k1 = "0.5.0"
 miracl_core = { version = "4.1.0", package = "miracl_core_bls12381" }
 num-integer = "0.1.41"
 openssl = "0.10.29"
-pairing = "0.15.0"
 parking_lot = "0.11.1"
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.7.0"
-prost-types = "0.7.0"
+prost = "0.8.0"
+prost-types = "0.8.0"
 rand = "0.7.3"
 rand_chacha = "0.2.2"
 rand_core = "0.5.1"
@@ -58,13 +56,17 @@ strum_macros = "0.18.0"
 tempfile = "3.1.0"
 tokio = { version = "1.9.0", features = ["full"] }
 tokio-openssl = "0.6.0"
+# We use the `dangerous_configuration` flag for rustls to be able to set custom `ClientCertVerifier` and
+# `ServerCertVerifier` in order to verify node certificates.
+tokio-rustls = { version = "0.22.0", features = ["dangerous_configuration"] }
 zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
 
 [build-dependencies]
-prost-build = "0.7.0"
+prost-build = "0.8.0"
 
 [dev-dependencies]
 criterion = "0.3.4"
+ic-base-types = { path = "../types/base_types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig/rsa_pkcs1" }

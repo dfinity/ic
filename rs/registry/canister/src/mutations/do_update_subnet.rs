@@ -4,7 +4,7 @@ use candid::{CandidType, Deserialize};
 use dfn_core::println;
 
 use ic_base_types::SubnetId;
-use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_protobuf::registry::subnet::v1::{GossipAdvertRelayConfig, SubnetRecord};
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -67,6 +67,7 @@ pub struct UpdateSubnetPayload {
     pub pfn_evaluation_period_ms: Option<u32>,
     pub registry_poll_period_ms: Option<u32>,
     pub retransmission_request_ms: Option<u32>,
+    pub relay_percentage: Option<u32>,
 
     pub set_gossip_config_to_default: bool,
 
@@ -115,6 +116,7 @@ fn is_any_gossip_field_set(payload: &UpdateSubnetPayload) -> bool {
         || payload.pfn_evaluation_period_ms.is_some()
         || payload.registry_poll_period_ms.is_some()
         || payload.retransmission_request_ms.is_some()
+        || payload.relay_percentage.is_some()
 }
 
 // Merges the changes included in the `UpdateSubnetPayload` to the given
@@ -161,6 +163,7 @@ fn merge_subnet_record(
         max_instructions_per_round,
         max_instructions_per_install_code,
         features,
+        relay_percentage,
     } = payload;
 
     maybe_set!(subnet_record, ingress_bytes_per_block_soft_cap);
@@ -186,6 +189,10 @@ fn merge_subnet_record(
     maybe_set!(gossip_config, pfn_evaluation_period_ms);
     maybe_set!(gossip_config, registry_poll_period_ms);
     maybe_set!(gossip_config, retransmission_request_ms);
+    let relay_config = relay_percentage.map(|ratio| GossipAdvertRelayConfig {
+        relay_percentage: ratio,
+    });
+    gossip_config.relay_config = relay_config;
     subnet_record.gossip_config = Some(gossip_config);
 
     maybe_set!(subnet_record, start_as_nns);
@@ -208,7 +215,7 @@ fn merge_subnet_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_protobuf::registry::subnet::v1::GossipConfig;
+    use ic_protobuf::registry::subnet::v1::{GossipAdvertRelayConfig, GossipConfig};
     use ic_registry_subnet_type::SubnetType;
     use ic_types::{PrincipalId, SubnetId};
     use std::str::FromStr;
@@ -235,6 +242,7 @@ mod tests {
                 pfn_evaluation_period_ms: 100,
                 registry_poll_period_ms: 100,
                 retransmission_request_ms: 100,
+                relay_config: None,
             }),
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
@@ -267,6 +275,7 @@ mod tests {
             pfn_evaluation_period_ms: Some(5000),
             registry_poll_period_ms: Some(4000),
             retransmission_request_ms: Some(7000),
+            relay_percentage: Some(50),
             set_gossip_config_to_default: false,
             start_as_nns: Some(true),
             subnet_type: None,
@@ -276,6 +285,7 @@ mod tests {
             max_instructions_per_install_code: Some(300_000_000_000),
             features: Some(SubnetFeatures {
                 ecdsa_signatures: false,
+                canister_sandboxing: false,
             }),
         };
 
@@ -301,6 +311,9 @@ mod tests {
                     pfn_evaluation_period_ms: 5000,
                     registry_poll_period_ms: 4000,
                     retransmission_request_ms: 7000,
+                    relay_config: Some(GossipAdvertRelayConfig {
+                        relay_percentage: 50
+                    }),
                 }),
                 start_as_nns: true,
                 subnet_type: SubnetType::Application.into(),
@@ -311,6 +324,7 @@ mod tests {
                 features: Some(
                     SubnetFeatures {
                         ecdsa_signatures: false,
+                        canister_sandboxing: false,
                     }
                     .into()
                 ),
@@ -340,6 +354,9 @@ mod tests {
                 pfn_evaluation_period_ms: 100,
                 registry_poll_period_ms: 100,
                 retransmission_request_ms: 100,
+                relay_config: Some(GossipAdvertRelayConfig {
+                    relay_percentage: 10,
+                }),
             }),
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
@@ -372,6 +389,7 @@ mod tests {
             pfn_evaluation_period_ms: None,
             registry_poll_period_ms: None,
             retransmission_request_ms: None,
+            relay_percentage: None,
             set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: None,
@@ -404,6 +422,7 @@ mod tests {
                     pfn_evaluation_period_ms: 100,
                     registry_poll_period_ms: 100,
                     retransmission_request_ms: 100,
+                    relay_config: None,
                 }),
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
@@ -465,6 +484,7 @@ mod tests {
             pfn_evaluation_period_ms: None,
             registry_poll_period_ms: None,
             retransmission_request_ms: None,
+            relay_percentage: None,
             set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: Some(SubnetType::Application),
@@ -523,6 +543,7 @@ mod tests {
             pfn_evaluation_period_ms: None,
             registry_poll_period_ms: None,
             retransmission_request_ms: None,
+            relay_percentage: Some(30),
             set_gossip_config_to_default: true,
             start_as_nns: None,
             subnet_type: None,
@@ -555,12 +576,120 @@ mod tests {
                     pfn_evaluation_period_ms: 3000,
                     registry_poll_period_ms: 3000,
                     retransmission_request_ms: 60_000,
+                    relay_config: Some(GossipAdvertRelayConfig {
+                        relay_percentage: 30
+                    }),
                 }),
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 max_instructions_per_message: 5_000_000_000,
                 max_instructions_per_round: 7_000_000_000,
+                max_instructions_per_install_code: 200_000_000_000,
+                features: None,
+            }
+        );
+    }
+
+    #[test]
+    fn update_relay_config() {
+        let subnet_record = SubnetRecord {
+            membership: vec![],
+            ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
+            max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_block_payload_size: 4 * 1024 * 1024,
+            max_ingress_messages_per_block: 1000,
+            unit_delay_millis: 500,
+            initial_notary_delay_millis: 1500,
+            replica_version_id: "version_42".to_string(),
+            dkg_interval_length: 0,
+            dkg_dealings_per_block: 1,
+            gossip_config: Some(GossipConfig {
+                max_artifact_streams_per_peer: 10,
+                max_chunk_wait_ms: 100,
+                max_duplicity: 2,
+                max_chunk_size: 10,
+                receive_check_cache_size: 1024,
+                pfn_evaluation_period_ms: 100,
+                registry_poll_period_ms: 100,
+                retransmission_request_ms: 100,
+                relay_config: Some(GossipAdvertRelayConfig {
+                    relay_percentage: 10,
+                }),
+            }),
+            start_as_nns: false,
+            subnet_type: SubnetType::Application.into(),
+            is_halted: false,
+            max_instructions_per_message: 5_000_000_000,
+            max_instructions_per_round: 7_000_000_000,
+            max_instructions_per_install_code: 200_000_000_000,
+            features: None,
+        };
+
+        let payload = UpdateSubnetPayload {
+            subnet_id: SubnetId::from(
+                PrincipalId::from_str(
+                    "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
+                )
+                .unwrap(),
+            ),
+            ingress_bytes_per_block_soft_cap: None,
+            max_ingress_bytes_per_message: None,
+            max_block_payload_size: None,
+            unit_delay_millis: Some(100),
+            initial_notary_delay_millis: None,
+            dkg_interval_length: Some(2),
+            dkg_dealings_per_block: Some(1),
+            max_artifact_streams_per_peer: Some(0),
+            max_chunk_wait_ms: Some(10),
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: Some(200),
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            relay_percentage: Some(100),
+            set_gossip_config_to_default: false,
+            start_as_nns: None,
+            subnet_type: None,
+            is_halted: None,
+            max_instructions_per_message: None,
+            max_instructions_per_round: Some(8_000_000_000),
+            max_instructions_per_install_code: None,
+            features: None,
+        };
+
+        assert_eq!(
+            merge_subnet_record(subnet_record, payload),
+            SubnetRecord {
+                membership: vec![],
+                ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
+                max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_block_payload_size: 4 * 1024 * 1024,
+                max_ingress_messages_per_block: 1000,
+                unit_delay_millis: 100,
+                initial_notary_delay_millis: 1500,
+                replica_version_id: "version_42".to_string(),
+                dkg_interval_length: 2,
+                dkg_dealings_per_block: 1,
+                gossip_config: Some(GossipConfig {
+                    max_artifact_streams_per_peer: 0,
+                    max_chunk_wait_ms: 10,
+                    max_duplicity: 2,
+                    max_chunk_size: 10,
+                    receive_check_cache_size: 200,
+                    pfn_evaluation_period_ms: 100,
+                    registry_poll_period_ms: 100,
+                    retransmission_request_ms: 100,
+                    relay_config: Some(GossipAdvertRelayConfig {
+                        relay_percentage: 100
+                    }),
+                }),
+                start_as_nns: false,
+                subnet_type: SubnetType::Application.into(),
+                is_halted: false,
+                max_instructions_per_message: 5_000_000_000,
+                max_instructions_per_round: 8_000_000_000,
                 max_instructions_per_install_code: 200_000_000_000,
                 features: None,
             }

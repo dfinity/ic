@@ -73,7 +73,7 @@ impl fmt::Debug for BTENode {
         write!(
             f,
             "tau: {}, a: REDACTED, b: REDACTED, d_t: REDACTED, d_h: REDACTED, e: REDACTED",
-            format!("{:?}", self.tau)
+            format!("{:?}", base64::encode(&self.tau))
         )
     }
 }

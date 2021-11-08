@@ -18,7 +18,7 @@ use crate::{
     crypto::{CryptoHash, CryptoHashOf},
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     messages::{MessageId, SignedRequestBytes},
-    p2p::GossipAdvert,
+    p2p::{GossipAdvert, GossipAdvertSendRequest, GossipAdvertType},
     CryptoHashOfState, Height, Time,
 };
 use derive_more::{AsMut, AsRef, From, TryInto};
@@ -30,7 +30,9 @@ use strum_macros::EnumIter;
 
 pub use crate::{
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, ecdsa::EcdsaMessage,
+        certification::CertificationMessage,
+        dkg::Message as DkgMessage,
+        ecdsa::{EcdsaMessage, EcdsaMessageHash},
         ConsensusMessage, ConsensusMessageAttribute,
     },
     messages::SignedIngress,
@@ -197,6 +199,17 @@ pub trait ArtifactKind: Sized {
     /// Returns the advert of the given message.
     fn message_to_advert(msg: &<Self as ArtifactKind>::Message) -> Advert<Self>;
 
+    /// Returns the advert send request to be sent to P2P.
+    fn message_to_advert_send_request(
+        msg: &<Self as ArtifactKind>::Message,
+        advert_type: GossipAdvertType,
+    ) -> AdvertSendRequest<Self> {
+        AdvertSendRequest {
+            advert: Self::message_to_advert(msg),
+            advert_type,
+        }
+    }
+
     /// Checks if the given advert matches what is computed from the message.
     /// Returns the advert derived from artifact on mismatch.
     fn check_advert(
@@ -284,10 +297,29 @@ where
     }
 }
 
+/// Wrapper to generate the advert send requests
+pub struct AdvertSendRequest<Artifact: ArtifactKind> {
+    pub advert: Advert<Artifact>,
+    pub advert_type: GossipAdvertType,
+}
+
+impl<Artifact: ArtifactKind> From<AdvertSendRequest<Artifact>> for GossipAdvertSendRequest
+where
+    Artifact::Id: Into<ArtifactId>,
+    Artifact::Attribute: Into<ArtifactAttribute>,
+{
+    fn from(send_request: AdvertSendRequest<Artifact>) -> GossipAdvertSendRequest {
+        GossipAdvertSendRequest {
+            advert: send_request.advert.into(),
+            advert_type: send_request.advert_type,
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Consensus artifacts
 
-/// Consensus message identifier carries both an message hash and a height,
+/// Consensus message identifier carries both a message hash and a height,
 /// which is used by the consensus pool to help lookup.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ConsensusMessageId {
@@ -405,7 +437,7 @@ pub struct DkgMessageAttribute {
 // -----------------------------------------------------------------------------
 // ECDSA artifacts
 
-pub type EcdsaMessageId = CryptoHashOf<EcdsaMessage>;
+pub type EcdsaMessageId = EcdsaMessageHash;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaMessageAttribute;

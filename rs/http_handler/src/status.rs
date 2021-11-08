@@ -1,4 +1,4 @@
-//! Module that deals with requests to /api/v1/status
+//! Module that deals with requests to /api/v2/status
 use crate::common;
 use hyper::{Body, Response};
 use ic_config::http_handler::Config;
@@ -11,7 +11,7 @@ use ic_types::{
     ReplicaVersion, SubnetId,
 };
 
-/// Handles a call to /api/v1/status
+/// Handles a call to /api/v2/status
 pub(crate) fn handle(
     log: &ReplicaLogger,
     config: &Config,

@@ -8,14 +8,13 @@ use super::encryption::decrypt;
 use crate::api::ni_dkg_errors;
 use crate::crypto::x_for_index;
 use crate::types as threshold_types;
-use ff::{Field, PrimeField};
 use ic_crypto_internal_bls12381_common::fr_from_bytes;
 use ic_crypto_internal_fs_ni_dkg::forward_secure::SecretKey as ForwardSecureSecretKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20;
 use ic_types::{NodeIndex, NumberOfNodes};
-use pairing::bls12_381::Fr;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
+use std::ops::{AddAssign, MulAssign};
 
 // Code reuse
 use crate::api::ni_dkg_errors::{
@@ -270,14 +269,20 @@ pub fn compute_threshold_signing_key(
                     }
                 })?;
                 let secret_key = FrBytes::from(&fs_plaintext);
-                let secret_key = Fr::from_repr(fr_from_bytes(&secret_key.0)).map_err(|_| {
+                let secret_key = fr_from_bytes(&secret_key.0);
+
+                if secret_key.is_err() {
                     let message = format!(
                         "Dealing #{}: has invalid share for receiver #{}.",
                         dealer_index, receiver_index
                     );
                     let error = InvalidArgumentError { message };
-                    ni_dkg_errors::CspDkgLoadPrivateKeyError::InvalidTranscriptError(error)
-                })?;
+                    return Err(
+                        ni_dkg_errors::CspDkgLoadPrivateKeyError::InvalidTranscriptError(error),
+                    );
+                };
+
+                let secret_key = secret_key.expect("Unwrap of None");
                 Ok((*dealer_index, secret_key))
             })
             .collect();

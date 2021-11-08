@@ -5,6 +5,7 @@ use openssl::x509::X509;
 
 pub mod custom_client;
 pub mod custom_server;
+pub mod registry;
 pub mod x509_certificates;
 
 /// Sets the peer verification cert store for the `SslContext` to a store

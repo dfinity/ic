@@ -9,95 +9,145 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use self::ecdsa_crypto_mock::{EcdsaComplaint, EcdsaDealing, EcdsaOpening, RequestId};
+use self::ecdsa_crypto_mock::RequestId;
+use crate::consensus::{MultiSignature, MultiSignatureShare};
 use crate::crypto::{
     canister_threshold_sig::idkg::{
         IDkgDealing, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptParams, IDkgTranscriptType,
     },
-    CombinedMultiSigOf,
+    canister_threshold_sig::PreSignatureQuadruple,
+    CombinedMultiSigOf, CryptoHashOf, Signed,
 };
+use crate::Height;
+use ic_base_types::NodeId;
 
-type EcdsaSignature = CombinedMultiSigOf<IDkgDealing>;
-
-pub type EcdsaQuadruple = (
-    RandomSkinnyTranscript,
-    MultiplicationTranscript,
-    RandomFatTranscript,
-    MultiplicationTranscript,
-);
+pub type EcdsaSignature = CombinedMultiSigOf<IDkgDealing>;
 
 /// Refers to any EcdsaPayload type
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[allow(clippy::large_enum_variant)]
 pub enum EcdsaPayload {
-    Batch(EcdsaBatchPayload),
+    Data(EcdsaDataPayload),
     Summary(EcdsaSummaryPayload),
 }
 
-struct RandomTranscriptPair {
-    skinny: RandomSkinnyTranscript,
-    fat: RandomFatTranscript,
-}
-
-struct RandomTranscriptParamsPair {
-    skinny: RandomSkinnyTranscriptParams,
-    fat: RandomFatTranscriptParams,
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct RandomTranscriptParamsPair {
+    pub kappa_config: RandomTranscriptParams,
+    pub lambda_config: RandomTranscriptParams,
 }
 
 /// The payload information necessary for ECDSA threshold signatures, that is
-/// published on every consensus round.
-pub struct EcdsaBatchPayload {
+/// published on every consensus round. It represents the current state of
+/// the protocol since the summary block.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EcdsaDataPayload {
     /// Signatures that we agreed upon in this round.
-    signature_agreements: BTreeMap<RequestId, EcdsaSignature>,
-
-    /// `RandomTranscripts` that we agreed upon in this round.
-    random_transcript_agreements: BTreeMap<IDkgTranscriptId, RandomTranscriptPair>,
-
-    /// `MultiplicationTranscripts` that we agreed upon in this round.
-    multiplication_transcript_agreements: BTreeMap<IDkgTranscriptId, MultiplicationTranscript>,
+    pub signature_agreements: BTreeMap<RequestId, EcdsaSignature>,
 
     /// The `RequestIds` for which we are currently generating signatures.
-    ongoing_signatures: OngoingSigningRequests,
+    pub ongoing_signatures: OngoingSigningRequests,
+
+    /// ECDSA transcript quadruples that we can use to create ECDSA signatures.
+    pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadruple>,
+
+    /// Ecdsa Quadruple in creation.
+    pub quadruples_in_creation: BTreeMap<QuadrupleId, QuadrupleInCreation>,
+
+    /// Next TranscriptId that is incremented after creating a new transcript.
+    pub next_transcript_id: IDkgTranscriptId,
+}
+
+impl EcdsaDataPayload {
+    pub fn iter_transcript_configs_in_creation(
+        &self,
+    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParams> + '_> {
+        Box::new(
+            self.quadruples_in_creation
+                .iter()
+                .map(|(_, quadruple)| quadruple.iter_transcript_configs_in_creation())
+                .flatten(),
+        )
+    }
 }
 
 /// The payload information necessary for ECDSA threshold signatures, that is
 /// published on summary blocks.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaSummaryPayload {
     /// Configs to generate random transcripts from. These are taken from
-    /// random_transcripts.
-    random_configs: Vec<RandomTranscriptParamsPair>,
-
-    /// Configs to generate multiplication transcripts from. These are taken
-    /// from random_transcripts.
-    multiplication_configs: Vec<MultiplicationTranscriptParams>,
+    /// random_transcripts. The length of this vector decides how many
+    /// quadruples to produce in the next interval (starting from this
+    /// summary block).
+    pub random_configs: Vec<RandomTranscriptParamsPair>,
 
     /// The `RequestIds` for which we are currently generating signatures.
-    ongoing_signatures: OngoingSigningRequests,
+    pub ongoing_signatures: OngoingSigningRequests,
 
     /// The ECDSA transcript that we're currently using (if we have one).
-    current_ecdsa_transcript: Option<ResharingTranscript>,
+    pub current_ecdsa_transcript: Option<UnmaskedTranscript>,
 
     /// The ECDSA transcript that would become the current transcript on the
     /// next summary (if we have one).
-    next_ecdsa_transcript: Option<ResharingTranscript>,
+    pub next_ecdsa_transcript: Option<UnmaskedTranscript>,
 
     /// ECDSA transcript quadruples that we can use to create ECDSA signatures.
-    available_ecdsa_quadruples: Vec<EcdsaQuadruple>,
-
-    /// Available transcripts of random numbers. We use these to build
-    /// quadruples
-    random_transcripts: Vec<RandomTranscriptPair>,
+    pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadruple>,
 }
 
-pub struct QuadrupleId;
+#[derive(
+    Copy, Clone, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
+)]
+pub struct QuadrupleId(pub usize);
+
+impl QuadrupleId {
+    pub fn increment(self) -> QuadrupleId {
+        QuadrupleId(self.0 + 1)
+    }
+}
+
 pub type OngoingSigningRequests = BTreeMap<RequestId, QuadrupleId>;
 
-/// The ECDSA message that goes into the artifact pool and gossiped with peers
+/// The ECDSA artifact.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum EcdsaMessage {
     EcdsaDealing(EcdsaDealing),
-    EcdsaComplaint(EcdsaComplaint),
-    EcdsaOpening(EcdsaOpening),
-    EcdsaSignature(EcdsaSignature),
+    EcdsaDealingSupport(EcdsaDealingSupport),
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+pub enum EcdsaMessageHash {
+    EcdsaDealing(CryptoHashOf<EcdsaDealing>),
+    EcdsaDealingSupport(CryptoHashOf<EcdsaDealingSupport>),
+}
+
+/// The dealing generated by a dealer
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct EcdsaDealing {
+    /// Height of the finalized block that requested the transcript
+    pub finalized_height: Height,
+
+    /// The node that created the dealing
+    pub dealer_id: NodeId,
+
+    /// The transcript params used to create the dealing
+    pub transcript_params: IDkgTranscriptParams,
+
+    /// The dealing
+    /// TODO: dealers should send the BasicSigned<> dealing
+    pub dealing: IDkgDealing,
+}
+
+/// TODO: EcdsaDealing can be big, consider sending only the signature
+/// as part of the shares
+/// The individual signature share in support of a dealing
+pub type EcdsaDealingSupport = Signed<EcdsaDealing, MultiSignatureShare<EcdsaDealing>>;
+
+/// The multi-signature verified dealing
+pub type EcdsaVerifiedDealing = Signed<EcdsaDealing, MultiSignature<EcdsaDealing>>;
+
+/// The final output of the transcript creation sequence
+pub type EcdsaTranscript = IDkgTranscript;
 
 /// This is a helper trait that indicates, that somethings has a transcript
 /// type. This type can of course be queried.
@@ -111,23 +161,17 @@ impl HasTranscriptType for IDkgTranscript {
     }
 }
 
-impl HasTranscriptType for IDkgTranscriptParams {
-    fn get_type(&self) -> &IDkgTranscriptType {
-        todo!()
-    }
-}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct Unmasked<T>(T);
+pub type UnmaskedTranscript = Unmasked<IDkgTranscript>;
 
-pub struct RandomSkinny<T>(T);
-pub type RandomSkinnyTranscript = RandomSkinny<IDkgTranscript>;
-pub type RandomSkinnyTranscriptParams = RandomSkinny<IDkgTranscriptParams>;
-
-impl<T> RandomSkinny<T>
+impl<T> Unmasked<T>
 where
     T: HasTranscriptType,
 {
     pub fn try_convert(value: T) -> Option<Self> {
         match value.get_type() {
-            IDkgTranscriptType::RandomSkinny => Some(RandomSkinny(value)),
+            IDkgTranscriptType::Unmasked(_) => Some(Unmasked(value)),
             _ => None,
         }
     }
@@ -137,7 +181,7 @@ where
     }
 }
 
-impl<T> Deref for RandomSkinny<T> {
+impl<T> Deref for Unmasked<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -145,23 +189,23 @@ impl<T> Deref for RandomSkinny<T> {
     }
 }
 
-impl<T> DerefMut for RandomSkinny<T> {
+impl<T> DerefMut for Unmasked<T> {
     fn deref_mut(&mut self) -> &mut T {
         &mut self.0
     }
 }
 
-pub struct RandomFat<T>(T);
-pub type RandomFatTranscript = RandomFat<IDkgTranscript>;
-pub type RandomFatTranscriptParams = RandomFat<IDkgTranscriptParams>;
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct Masked<T>(T);
+pub type MaskedTranscript = Masked<IDkgTranscript>;
 
-impl<T> RandomFat<T>
+impl<T> Masked<T>
 where
     T: HasTranscriptType,
 {
     pub fn try_convert(value: T) -> Option<Self> {
         match value.get_type() {
-            IDkgTranscriptType::RandomFat => Some(RandomFat(value)),
+            IDkgTranscriptType::Masked(_) => Some(Masked(value)),
             _ => None,
         }
     }
@@ -171,7 +215,7 @@ where
     }
 }
 
-impl<T> Deref for RandomFat<T> {
+impl<T> Deref for Masked<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -179,92 +223,31 @@ impl<T> Deref for RandomFat<T> {
     }
 }
 
-impl<T> DerefMut for RandomFat<T> {
+impl<T> DerefMut for Masked<T> {
     fn deref_mut(&mut self) -> &mut T {
         &mut self.0
     }
 }
 
-pub struct Resharing<T>(T);
-pub type ResharingTranscript = Resharing<IDkgTranscript>;
-pub type ResharingTranscriptParams = Resharing<IDkgTranscriptParams>;
+pub type ResharingTranscript = Masked<IDkgTranscript>;
+pub type MultiplicationTranscript = Masked<IDkgTranscript>;
 
-impl<T> Resharing<T>
-where
-    T: HasTranscriptType,
-{
-    pub fn try_convert(value: T) -> Option<Self> {
-        match value.get_type() {
-            IDkgTranscriptType::Resharing(_) => Some(Resharing(value)),
-            _ => None,
-        }
-    }
-
-    pub fn into_base_type(self) -> T {
-        self.0
-    }
-}
-
-impl<T> Deref for Resharing<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for Resharing<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-pub struct Multiplication<T>(T);
-pub type MultiplicationTranscript = Multiplication<IDkgTranscript>;
-pub type MultiplicationTranscriptParams = Multiplication<IDkgTranscriptParams>;
-
-impl<T> Multiplication<T>
-where
-    T: HasTranscriptType,
-{
-    pub fn try_convert(value: T) -> Option<Self> {
-        match value.get_type() {
-            IDkgTranscriptType::Multiplication(_, _) => Some(Multiplication(value)),
-            _ => None,
-        }
-    }
-
-    pub fn into_base_type(self) -> T {
-        self.0
-    }
-}
-
-impl<T> Deref for Multiplication<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for Multiplication<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
+pub type RandomTranscriptParams = IDkgTranscriptParams;
+pub type ReshareOfMaskedParams = IDkgTranscriptParams;
+pub type ReshareOfUnmaskedParams = IDkgTranscriptParams;
+pub type MaskedTimesMaskedParams = IDkgTranscriptParams;
+pub type UnmaskedTimesMaskedParams = IDkgTranscriptParams;
 
 #[allow(missing_docs)]
 /// Mock module of the crypto types that are needed by consensus for threshold
 /// ECDSA generation. These types should be replaced by the real Types once they
 /// are available.
-mod ecdsa_crypto_mock {
+pub mod ecdsa_crypto_mock {
     use serde::{Deserialize, Serialize};
 
     // TODO: Where to define this type?
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
     pub struct RequestId;
-
-    // TODO: Find typedefs for these types.
-    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-    pub struct EcdsaDealing;
 
     #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
     pub struct EcdsaComplaint;
@@ -272,3 +255,72 @@ mod ecdsa_crypto_mock {
     #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
     pub struct EcdsaOpening;
 }
+
+// The ECDSA summary.
+pub type Summary = Option<EcdsaSummaryPayload>;
+
+pub type Payload = Option<EcdsaDataPayload>;
+
+/// ECDSA Quadruple in creation.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct QuadrupleInCreation {
+    pub kappa_config: RandomTranscriptParams,
+    pub kappa_masked: Option<MaskedTranscript>,
+
+    pub lambda_config: RandomTranscriptParams,
+    pub lambda_masked: Option<MaskedTranscript>,
+
+    pub unmask_kappa_config: Option<ReshareOfMaskedParams>,
+    pub kappa_unmasked: Option<UnmaskedTranscript>,
+
+    pub key_times_lambda_config: Option<UnmaskedTimesMaskedParams>,
+    pub key_times_lambda: Option<MaskedTranscript>,
+
+    pub kappa_times_lambda_config: Option<UnmaskedTimesMaskedParams>,
+    pub kappa_times_lambda: Option<MaskedTranscript>,
+}
+
+impl QuadrupleInCreation {
+    /// Initialization with the given random param pair.
+    pub fn new(pair: RandomTranscriptParamsPair) -> Self {
+        QuadrupleInCreation {
+            kappa_config: pair.kappa_config,
+            kappa_masked: None,
+            lambda_config: pair.lambda_config,
+            lambda_masked: None,
+            unmask_kappa_config: None,
+            kappa_unmasked: None,
+            key_times_lambda_config: None,
+            key_times_lambda: None,
+            kappa_times_lambda_config: None,
+            kappa_times_lambda: None,
+        }
+    }
+}
+
+impl QuadrupleInCreation {
+    pub fn iter_transcript_configs_in_creation(
+        &self,
+    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParams> + '_> {
+        let mut params = Vec::new();
+        if self.kappa_masked.is_none() {
+            params.push(&self.kappa_config)
+        }
+        if self.lambda_masked.is_none() {
+            params.push(&self.lambda_config)
+        }
+        if let (Some(config), None) = (&self.unmask_kappa_config, &self.kappa_unmasked) {
+            params.push(config)
+        }
+        if let (Some(config), None) = (&self.key_times_lambda_config, &self.key_times_lambda) {
+            params.push(config)
+        }
+        if let (Some(config), None) = (&self.kappa_times_lambda_config, &self.kappa_times_lambda) {
+            params.push(config)
+        }
+        Box::new(params.into_iter())
+    }
+}
+
+// TODO: Implement an appropriate Error type
+type EcdsaPayloadError = String;

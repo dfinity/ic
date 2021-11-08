@@ -6,8 +6,8 @@ use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, ArchiveOptions, Block, BlockArg, BlockHeight, BlockRes,
     EncodedBlock, GetBlocksArgs, GetBlocksRes, ICPTs, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, SendArgs, Subaccount, TimeStamp,
-    TotalSupplyArgs, Transaction, Transfer, MIN_BURN_AMOUNT, TRANSACTION_FEE,
+    LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation, SendArgs, Subaccount,
+    TimeStamp, TotalSupplyArgs, Transaction, MIN_BURN_AMOUNT, TRANSACTION_FEE,
 };
 use on_wire::IntoWire;
 use std::collections::{HashMap, HashSet};
@@ -193,6 +193,10 @@ fn archive_blocks_small_test() {
         simple_send(&ledger, &create_sender(12345), &minting_account, 100, 0).await?;
 
         ledger_assert_num_blocks(&ledger, 1).await;
+        let GetBlocksRes(ledger_blocks) = ledger
+            .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(12u64, 1usize))
+            .await?;
+        assert_eq!(ledger_blocks.unwrap().len(), 1);
 
         // First we get the CanisterId of each archive node that has been
         // created
@@ -305,8 +309,9 @@ fn archive_blocks_large_test() {
         println!("[test] calling send() to trigger archiving");
         simple_send(&ledger, &create_sender(12345), &minting_account, 100, 0).await?;
 
-        // Make sure Ledger is empty after archiving blocks
-        ledger_assert_num_blocks(&ledger, 0).await;
+        // Only the last (simple_send) transaction should be on the ledger after
+        // archiving blocks
+        ledger_assert_num_blocks(&ledger, 1).await;
 
         // First we get the CanisterId of each archive node that has been
         // created
@@ -649,8 +654,8 @@ fn sub_account_test() {
 }
 
 #[test]
-#[should_panic]
-fn non_whitelisted_send_test() {
+#[should_panic(expected = "Sending from 2vxsx-fae is not allowed")]
+fn check_anonymous_cannot_send() {
     local_test_e(|r| async move {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
         let sub_account = |x| Some(Subaccount([x; 32]));
@@ -661,6 +666,7 @@ fn non_whitelisted_send_test() {
             AccountIdentifier::new(us, sub_account(1)),
             ICPTs::from_icpts(10).unwrap(),
         );
+
         let ledger_canister = proj
             .cargo_bin("ledger-canister")
             .install_(
@@ -676,7 +682,7 @@ fn non_whitelisted_send_test() {
             )
             .await?;
 
-        // Send a payment from non-whitelisted canister,should fail
+        // Send a payment from an anonymous user, should fail
         let _: BlockHeight = ledger_canister
             .update_(
                 "send_pb",
@@ -825,18 +831,18 @@ fn transaction_test() {
             .unwrap()
             .transaction()
             .into_owned()
-            .transfer;
+            .operation;
         let send_transaction = blocks
             .get(blocks.len() - 2)
             .unwrap()
             .transaction()
             .into_owned()
-            .transfer;
-        let burn_transaction = blocks.last().unwrap().transaction().into_owned().transfer;
+            .operation;
+        let burn_transaction = blocks.last().unwrap().transaction().into_owned().operation;
 
         assert_eq!(
             mint_transaction,
-            Transfer::Mint {
+            Operation::Mint {
                 to: acc1.get_principal_id().into(),
                 amount: ICPTs::from_e8s(mint_amount)
             }
@@ -844,7 +850,7 @@ fn transaction_test() {
 
         assert_eq!(
             send_transaction,
-            Transfer::Send {
+            Operation::Transfer {
                 from: acc1.get_principal_id().into(),
                 to: acc2.get_principal_id().into(),
                 amount: ICPTs::from_e8s(send_amount),
@@ -854,7 +860,7 @@ fn transaction_test() {
 
         assert_eq!(
             burn_transaction,
-            Transfer::Burn {
+            Operation::Burn {
                 from: acc2.get_principal_id().into(),
                 amount: ICPTs::from_e8s(burn_amount)
             }
@@ -869,7 +875,7 @@ fn transaction_test() {
 // fetch them all from the ledger using repeated calls to block(), then archive
 // all of them, and then fetch the blocks again, this time from the archive,
 // using the same repeated block() calls. The results before and after
-// archiving should be identical. Futhermore, multiple archive nodes should be
+// archiving should be identical. Furthermore, multiple archive nodes should be
 // created during this test.
 #[test]
 fn get_block_test() {
@@ -1317,7 +1323,7 @@ async fn ledger_assert_num_blocks(ledger: &Canister<'_>, num_expected: usize) {
         .query_(
             "iter_blocks_pb",
             protobuf,
-            IterBlocksArgs::new(0usize, num_expected),
+            IterBlocksArgs::new(0usize, 99999usize),
         )
         .await
         .unwrap();

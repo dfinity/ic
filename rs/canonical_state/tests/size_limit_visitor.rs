@@ -4,7 +4,7 @@ use ic_canonical_state::{
     traverse, Control, LabelLike, Visitor,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState};
 use ic_test_utilities::{state::arb_stream, types::ids::subnet_test_id};
 use proptest::prelude::*;
 
@@ -32,9 +32,9 @@ prop_compose! {
 
         let mut state = ReplicatedState::new_rooted_at(subnet_test_id(1), SubnetType::Application, "NOT_USED".into());
         let subnet = subnet_test_id(42);
-        let mut streams = state.take_streams();
-        streams.insert(subnet, stream);
-        state.put_streams(streams);
+        state.modify_streams(|streams| {
+            streams.insert(subnet, stream);
+        });
 
         let size = compute_message_sizes(&state, begin, end);
 

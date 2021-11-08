@@ -16,7 +16,7 @@ ic-registry-transport = { path = "../transport" }
 ic-registry-keys = { path = "../keys" }
 ic-types = { path = "../../types/types" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.7.0"
+prost = "0.8.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.11.1"
 slog = { version = "2.5.2", features = [

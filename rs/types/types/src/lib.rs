@@ -56,6 +56,7 @@
 
 pub mod artifact;
 pub mod batch;
+pub mod canonical_error;
 pub mod chunkable;
 pub mod consensus;
 pub mod crypto;
@@ -243,11 +244,6 @@ impl QueryAllocation {
     /// Returns a 0 `QueryAllocation`.
     pub fn zero() -> QueryAllocation {
         QueryAllocation(0)
-    }
-
-    /// Returns the maximum allowed query allocation per message.
-    pub fn max_per_message() -> QueryAllocation {
-        QueryAllocation(10_000_000_000)
     }
 
     pub fn get(&self) -> u64 {

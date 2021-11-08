@@ -8,7 +8,9 @@ mod tls_stub;
 pub use keygen::{CspKeyGenerator, CspSecretKeyStoreChecker, NodePublicKeyData};
 pub use sign::CspSigner;
 pub use threshold::{
-    threshold_sign_error::CspThresholdSignError, CspSecretKeyInjector,
-    DistributedKeyGenerationCspClient, NiDkgCspClient, ThresholdSignatureCspClient,
+    threshold_sign_error::CspThresholdSignError, DistributedKeyGenerationCspClient, NiDkgCspClient,
+    ThresholdSignatureCspClient,
 };
-pub use tls_stub::{tls_errors, CspTlsClientHandshake, CspTlsServerHandshake};
+pub use tls_stub::{
+    tls_errors, CspTlsClientHandshake, CspTlsHandshakeSignerProvider, CspTlsServerHandshake,
+};

@@ -2,7 +2,6 @@ use criterion::{black_box, BatchSize, BenchmarkId, Criterion};
 use criterion_time::ProcessTime;
 
 use ic_replicated_state::page_map::int_map::IntMap;
-use im::hashmap::HashMap as ImHashMap;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
@@ -15,12 +14,6 @@ fn value(k: u64) -> Value {
 fn bench_intmap(c: &mut Criterion<ProcessTime>) {
     let mut group = c.benchmark_group("Insert");
     for n in [10u64, 100, 1000].iter().cloned() {
-        group.bench_function(BenchmarkId::new("im", n), |b| {
-            b.iter(|| {
-                let m: ImHashMap<_, _> = (0..n).map(|x| (x, value(x))).collect();
-                black_box(m);
-            })
-        });
         group.bench_function(BenchmarkId::new("patricia", n), |b| {
             b.iter(|| {
                 let m: IntMap<_> = (0..n).map(|x| (x, value(x))).collect();
@@ -44,19 +37,10 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
 
     let mut group = c.benchmark_group("Lookup");
     for n in [10u64, 100, 1000].iter().cloned() {
-        let im_map: ImHashMap<u64, Value> = (0..n).map(|x| (x, value(x))).collect();
         let patricia_map: IntMap<Value> = (0..n).map(|x| (x, value(x))).collect();
         let btree_map: Arc<BTreeMap<u64, Value>> =
             Arc::new((0..n).map(|x| (x, value(x))).collect());
         let hash_map: Arc<HashMap<u64, Value>> = Arc::new((0..n).map(|x| (x, value(x))).collect());
-        group.bench_function(BenchmarkId::new("im", n), |b| {
-            b.iter(|| {
-                for i in 0..n {
-                    black_box(im_map.get(&i));
-                    black_box(im_map.get(&(i + n)));
-                }
-            });
-        });
         group.bench_function(BenchmarkId::new("patricia", n), |b| {
             b.iter(|| {
                 for i in 0..n {
@@ -86,9 +70,6 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
 
     let mut group = c.benchmark_group("Union");
     for n in [10u64, 100, 1000].iter().cloned() {
-        let im_lmap: ImHashMap<u64, Value> = (0..n).map(|x| (x, value(x))).collect();
-        let im_rmap: ImHashMap<u64, Value> = (n / 2..n + n / 2).map(|x| (x, value(x))).collect();
-
         let patricia_lmap: IntMap<Value> = (0..n).map(|x| (x, value(x))).collect();
         let patricia_rmap: IntMap<Value> = (n / 2..n + n / 2).map(|x| (x, value(x))).collect();
 
@@ -101,15 +82,6 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
         let hash_rmap: Arc<HashMap<u64, Value>> =
             Arc::new((n / 2..n + n / 2).map(|x| (x, value(x))).collect());
 
-        group.bench_function(BenchmarkId::new("im", n), |b| {
-            b.iter_batched(
-                || (im_lmap.clone(), im_rmap.clone()),
-                |(l, r)| {
-                    black_box(l.union(r));
-                },
-                BatchSize::SmallInput,
-            );
-        });
         group.bench_function(BenchmarkId::new("patricia", n), |b| {
             b.iter_batched(
                 || (patricia_lmap.clone(), patricia_rmap.clone()),
@@ -150,19 +122,11 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
 
     let mut group = c.benchmark_group("Iter");
     for n in [10u64, 100, 1000].iter().cloned() {
-        let im_map: ImHashMap<u64, Value> = (0..n).map(|x| (x, value(x))).collect();
         let patricia_map: IntMap<Value> = (0..n).map(|x| (x, value(x))).collect();
         let btree_map: Arc<BTreeMap<u64, Value>> =
             Arc::new((0..n).map(|x| (x, value(x))).collect());
         let hash_map: Arc<HashMap<u64, Value>> = Arc::new((0..n).map(|x| (x, value(x))).collect());
 
-        group.bench_function(BenchmarkId::new("im", n), |b| {
-            b.iter(|| {
-                for e in im_map.iter() {
-                    black_box(e);
-                }
-            });
-        });
         group.bench_function(BenchmarkId::new("patricia", n), |b| {
             b.iter(|| {
                 for e in patricia_map.iter() {

@@ -20,12 +20,6 @@ pub const LOG_PREFIX: &str = "[GTC] ";
 /// claimed.
 pub const SECONDS_UNTIL_CLAIM_NEURONS_CAN_BE_CALLED: u64 = 3 * 86400; // 3 days
 
-/// The amount of time after the genesis of the IC that any user can call
-/// `forward_all_unclaimed_accounts`. This allows the reclaiming of GTC neurons
-/// that have not been claimed, so that these neurons don't exist in an
-/// unclaimed state indefinitely.
-pub const SECONDS_UNTIL_FORWARD_ALL_UNCLAIMED_ACCOUNTS_CAN_BE_CALLED: u64 = 180 * 86400; // 180 days
-
 /// Return the current UNIX timestamp (in seconds) as a `u64`
 fn now_secs() -> u64 {
     now()
@@ -92,30 +86,6 @@ impl Gtc {
         Ok(())
     }
 
-    /// Forwards the stake of all GTC neurons that have not been claimed (or
-    /// donated) to the Neuron given by
-    /// `self.forward_all_unclaimed_accounts_recipient_neuron_id`.
-    ///
-    /// This method will be allowed to be called by anyone after
-    /// `SECONDS_UNTIL_FORWARD_ALL_UNCLAIMED_ACCOUNTS_CAN_BE_CALLED` has
-    /// elapsed.
-    pub async fn forward_all_unclaimed_accounts(&mut self) -> Result<(), String> {
-        self.assert_forward_all_unclaimed_accounts_can_be_called()?;
-
-        let custodian_neuron_id = self
-            .forward_all_unclaimed_accounts_recipient_neuron_id
-            .clone();
-
-        for (_, account) in self.accounts.iter_mut() {
-            if !account.has_claimed && !account.has_donated && !account.has_forwarded {
-                let _ = account.transfer(custodian_neuron_id.clone()).await;
-                account.has_forwarded = true;
-            }
-        }
-
-        Ok(())
-    }
-
     /// Return a mutable reference to the account associated with `address`,
     /// if one exists
     fn get_account_mut(&mut self, address: &str) -> Result<&mut AccountState, String> {
@@ -136,18 +106,6 @@ impl Gtc {
     fn assert_claim_neurons_can_be_called(&self) -> Result<(), String> {
         if now_secs() - self.genesis_timestamp_seconds < SECONDS_UNTIL_CLAIM_NEURONS_CAN_BE_CALLED {
             Err("claim_neurons cannot be called yet".to_string())
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Return an error if `forward_all_unclaimed_accounts` can't be called,
-    /// else return `Ok`
-    fn assert_forward_all_unclaimed_accounts_can_be_called(&self) -> Result<(), String> {
-        if now_secs() - self.genesis_timestamp_seconds
-            < SECONDS_UNTIL_FORWARD_ALL_UNCLAIMED_ACCOUNTS_CAN_BE_CALLED
-        {
-            Err("forward_all_unclaimed_accounts cannot be called yet".to_string())
         } else {
             Ok(())
         }

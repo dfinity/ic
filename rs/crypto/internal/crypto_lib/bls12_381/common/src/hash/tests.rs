@@ -3,7 +3,6 @@
 use super::super::{fr_to_bytes, g1_to_bytes};
 use super::*;
 use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_to_bytes;
-use pairing::bls12_381::FrRepr;
 use std::collections::HashSet;
 
 /// Verifies that different messages yield different points on G1 when hashed,
@@ -67,7 +66,7 @@ fn test_distinct_hashes_yield_distinct_fr() {
         .map(|number| {
             let mut hash = Sha256::new();
             hash.write(&number.to_be_bytes()[..]);
-            fr_to_bytes(&FrRepr::from(hash_to_fr(hash)))
+            fr_to_bytes(&hash_to_fr(hash))
         })
         .collect();
     assert_eq!(number_of_scalars, scalars.len(), "Collisions found");
@@ -81,7 +80,7 @@ fn test_distinct_hashes_yield_distinct_fr() {
 fn test_hash_to_fr_produces_same_output_for_same_input() {
     let mut hash = Sha256::new();
     hash.write(b"A test input");
-    let fr_bytes = fr_to_bytes(&FrRepr::from(hash_to_fr(hash)));
+    let fr_bytes = fr_to_bytes(&hash_to_fr(hash));
     assert_eq!(
         hex::encode(fr_bytes),
         "630fcb163218d5cd34f3ee5dc68bdbeda20975a54e08b130f3457afc6728d1d5"
@@ -89,7 +88,7 @@ fn test_hash_to_fr_produces_same_output_for_same_input() {
 
     let mut hash = Sha256::new();
     hash.write(b"A second unrelated test input");
-    let fr_bytes = fr_to_bytes(&FrRepr::from(hash_to_fr(hash)));
+    let fr_bytes = fr_to_bytes(&hash_to_fr(hash));
     assert_eq!(
         hex::encode(fr_bytes),
         "699ed6764b14e1ae3ff73686399084f4fbbd51b972f85c49e4ef0954b36921af"

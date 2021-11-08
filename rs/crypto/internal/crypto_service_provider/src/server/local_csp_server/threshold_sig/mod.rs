@@ -1,6 +1,5 @@
 use crate::api::CspThresholdSignError;
 use crate::secret_key_store::SecretKeyStore;
-#[cfg(test)]
 use crate::server::api::CspThresholdSignatureKeygenError;
 use crate::server::api::ThresholdSignatureCspServer;
 use crate::server::local_csp_server::LocalCspServer;
@@ -8,7 +7,6 @@ use crate::server::local_csp_server::LocalCspServer;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::types::{CspSignature, ThresBls12_381_Signature};
 use ic_crypto_internal_threshold_sig_bls12381 as bls12381_clib;
-#[cfg(test)]
 use ic_types::crypto::CryptoError;
 use ic_types::crypto::{AlgorithmId, KeyId};
 #[cfg(test)]
@@ -17,7 +15,7 @@ use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 #[cfg(test)]
 impl From<CryptoError> for CspThresholdSignatureKeygenError {
@@ -29,10 +27,25 @@ impl From<CryptoError> for CspThresholdSignatureKeygenError {
             CryptoError::InvalidArgument { message } => {
                 CspThresholdSignatureKeygenError::InvalidArgument { message }
             }
-
             _ => CspThresholdSignatureKeygenError::InvalidArgument {
                 message: crypto_error.to_string(),
             },
+        }
+    }
+}
+
+impl From<CspThresholdSignatureKeygenError> for CryptoError {
+    fn from(keygen_error: CspThresholdSignatureKeygenError) -> Self {
+        match keygen_error {
+            CspThresholdSignatureKeygenError::UnsupportedAlgorithm { algorithm } => {
+                CryptoError::AlgorithmNotSupported {
+                    algorithm,
+                    reason: "Unsupported".to_string(),
+                }
+            }
+            CspThresholdSignatureKeygenError::InvalidArgument { message } => {
+                CryptoError::InvalidArgument { message }
+            }
         }
     }
 }
@@ -44,7 +57,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> ThresholdSignatureCspServer for Loca
     /// a failure it is possible that some but not all keys are written.
     #[cfg(test)]
     fn threshold_keygen_for_test(
-        &mut self,
+        &self,
         algorithm_id: AlgorithmId,
         threshold: ic_types::NumberOfNodes,
         signatory_eligibilty: &[bool],

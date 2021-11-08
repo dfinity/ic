@@ -4,19 +4,22 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-ff = "0.5.0"
-group = "0.2.0"
 hex = "0.4.2"
 ic-crypto-internal-bls12381-serde-miracl = {path = "../serde/miracl"}
 ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-sha = { path = "../../../../sha" }
 miracl_core = { version = "4.1.0", package = "miracl_core_bls12381" }
-pairing = "0.15.0"
+bls12_381 = { version = "0.5.0", default-features = false, features = ["groups", "pairings", "alloc", "experimental"] }
 rand = "0.7.3"
 rand_chacha = "0.2.2"
 rand_core = "0.5.1"
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["custom"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+getrandom = { version = "0.2" }
+
 [dev-dependencies]
 proptest = "0.9.4"
 proptest-derive = "0.1.0"
-rand_core = "0.5.1"

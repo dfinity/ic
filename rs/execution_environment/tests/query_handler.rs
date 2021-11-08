@@ -25,8 +25,8 @@ fn initial_state(path: &Path, subnet_id: SubnetId) -> ReplicatedState {
     state
 }
 
-#[test]
-fn query_non_existent() {
+#[tokio::test]
+async fn query_non_existent() {
     with_test_replica_logger(|log| {
         let subnet_id = subnet_test_id(1);
         let subnet_type = SubnetType::Application;
@@ -37,7 +37,7 @@ fn query_non_existent() {
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let state_manager = Arc::new(FakeStateManager::new());
 
-        let (_, _, query_handler, _, _) = setup_execution(
+        let (_, _, _, query_handler, _, _) = setup_execution(
             log,
             &metrics_registry,
             subnet_id,

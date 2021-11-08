@@ -17,7 +17,7 @@ use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
-    subnet::v1::{CatchUpPackageContents, GossipConfig, SubnetRecord},
+    subnet::v1::{CatchUpPackageContents, GossipAdvertRelayConfig, GossipConfig, SubnetRecord},
 };
 use ic_registry_keys::make_node_record_key;
 use ic_registry_keys::{
@@ -165,6 +165,11 @@ impl Registry {
                 pfn_evaluation_period_ms: payload.gossip_pfn_evaluation_period_ms,
                 registry_poll_period_ms: payload.gossip_registry_poll_period_ms,
                 retransmission_request_ms: payload.gossip_retransmission_request_ms,
+                relay_config: payload
+                    .relay_percentage
+                    .map(|ratio| GossipAdvertRelayConfig {
+                        relay_percentage: ratio,
+                    }),
             }),
 
             start_as_nns: payload.start_as_nns,
@@ -254,6 +259,7 @@ pub struct CreateSubnetPayload {
     pub gossip_pfn_evaluation_period_ms: u32,
     pub gossip_registry_poll_period_ms: u32,
     pub gossip_retransmission_request_ms: u32,
+    pub relay_percentage: Option<u32>,
 
     pub start_as_nns: bool,
 
@@ -296,6 +302,9 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 pfn_evaluation_period_ms: val.gossip_pfn_evaluation_period_ms,
                 registry_poll_period_ms: val.gossip_registry_poll_period_ms,
                 retransmission_request_ms: val.gossip_retransmission_request_ms,
+                relay_config: val.relay_percentage.map(|ratio| GossipAdvertRelayConfig {
+                    relay_percentage: ratio,
+                }),
             }),
 
             start_as_nns: val.start_as_nns,

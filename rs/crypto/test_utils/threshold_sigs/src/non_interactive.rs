@@ -1,21 +1,24 @@
 use crate::common::crypto_for;
+use ic_config::crypto::CryptoConfig;
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_internal_types::NodeIndex;
-use ic_interfaces::crypto::NiDkgAlgorithm;
+use ic_interfaces::crypto::{NiDkgAlgorithm, Signable, ThresholdSigner};
 use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_registry_keys::make_crypto_node_key;
 use ic_types::consensus::get_faults_tolerated;
 use ic_types::crypto::threshold_sig::ni_dkg::config::{NiDkgConfig, NiDkgConfigData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+    DkgId, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
 };
-use ic_types::crypto::KeyPurpose;
+use ic_types::crypto::{KeyPurpose, ThresholdSigShareOf};
 use ic_types::{Height, NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId};
 use rand::prelude::*;
 use std::cmp;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::convert::TryFrom;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 
 pub fn create_transcript(
@@ -41,11 +44,14 @@ pub fn load_transcript(
         .unwrap_or_else(|error| panic!("failed to load transcript for {:?}: {:?}", node_id, error));
 }
 
+/// Load transcript on each node (if resharing), create all dealings, and build
+/// transcript from those dealings.
 pub fn run_ni_dkg_and_create_single_transcript(
     ni_dkg_config: &NiDkgConfig,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
 ) -> NiDkgTranscript {
-    let dealings = create_dealings(&ni_dkg_config, crypto_components);
+    let dealings =
+        load_resharing_transcript_if_needed_and_create_dealings(&ni_dkg_config, crypto_components);
     let transcript_creator = ni_dkg_config.dealers().get().iter().next().unwrap();
     create_transcript(
         ni_dkg_config,
@@ -53,6 +59,25 @@ pub fn run_ni_dkg_and_create_single_transcript(
         &dealings,
         *transcript_creator,
     )
+}
+
+pub fn load_resharing_transcript_if_needed_and_create_dealings(
+    ni_dkg_config: &NiDkgConfig,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+) -> BTreeMap<NodeId, NiDkgDealing> {
+    ni_dkg_config
+        .dealers()
+        .get()
+        .iter()
+        .map(|node| {
+            let dealing = load_resharing_transcript_and_create_dealing(
+                ni_dkg_config,
+                crypto_components,
+                *node,
+            );
+            (*node, dealing)
+        })
+        .collect()
 }
 
 pub fn create_dealings(
@@ -85,6 +110,18 @@ pub fn create_dealing(
         })
 }
 
+pub fn load_resharing_transcript_and_create_dealing(
+    ni_dkg_config: &NiDkgConfig,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    node_id: NodeId,
+) -> NiDkgDealing {
+    if let Some(resharing_transcript) = ni_dkg_config.resharing_transcript() {
+        load_transcript(&resharing_transcript, crypto_components, node_id);
+    }
+
+    create_dealing(ni_dkg_config, crypto_components, node_id)
+}
+
 pub fn verify_dealing(
     ni_dkg_config: &NiDkgConfig,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
@@ -115,6 +152,23 @@ pub fn retain_only_active_keys(
                 node_id, error
             )
         });
+}
+
+pub fn sign_threshold_for_each<H: Signable>(
+    signers: &[NodeId],
+    msg: &H,
+    dkg_id: NiDkgId,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+) -> BTreeMap<NodeId, ThresholdSigShareOf<H>> {
+    signers
+        .iter()
+        .map(|signer| {
+            let sig_share = crypto_for(*signer, &crypto_components)
+                .sign_threshold(msg, DkgId::NiDkgId(dkg_id))
+                .unwrap_or_else(|_| panic!("signing by node {:?} failed", signer));
+            (*signer, sig_share)
+        })
+        .collect()
 }
 
 pub struct RandomNiDkgConfigBuilder {
@@ -481,6 +535,91 @@ impl NiDkgTestEnvironment {
         }
         self.registry.update_to_latest_version();
         self.cleanup_unused_nodes(ni_dkg_config);
+    }
+
+    /// Serializes this environment to disk.
+    ///
+    /// The resulting directory structure can be loaded back into
+    /// a new `NiDkgTestEnvironment` using the `new_from_dir` function.
+    pub fn save_to_dir(&self, toplevel_path: &Path) {
+        for (node_id, crypto_component) in self.crypto_components.iter() {
+            Self::copy_crypto_root(
+                crypto_component.temp_dir_path(),
+                &toplevel_path.join(node_id.to_string()),
+            );
+        }
+
+        self.registry_data
+            .write_to_file(toplevel_path.join("registry_data.pb"));
+    }
+
+    /// Deserializes a new `NiDkgTestEnvironment` from disk.
+    ///
+    /// Note that this only works if the environment was originally serialized
+    /// using `save_to_dir`.
+    pub fn new_from_dir(toplevel_path: &Path) -> Self {
+        fn node_ids_from_dir_names(toplevel_path: &Path) -> BTreeMap<NodeId, PathBuf> {
+            std::fs::read_dir(toplevel_path)
+                .expect("crypto_root directory doesn't exist")
+                .into_iter()
+                .map(|e| e.unwrap().path())
+                .filter(|e| e.is_dir())
+                .map(|p| {
+                    (
+                        NodeId::from(
+                            PrincipalId::from_str(p.file_name().unwrap().to_str().unwrap())
+                                .expect("directory name is not a node ID"),
+                        ),
+                        p,
+                    )
+                })
+                .collect()
+        }
+
+        let registry_data = Arc::new(ProtoRegistryDataProvider::load_from_file(
+            toplevel_path.join("registry_data.pb"),
+        ));
+        let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+
+        let mut ret = NiDkgTestEnvironment {
+            crypto_components: BTreeMap::new(),
+            registry_data,
+            registry,
+        };
+        for (node_id, crypto_root) in node_ids_from_dir_names(toplevel_path) {
+            let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
+            Self::copy_crypto_root(&crypto_root, temp_dir.path());
+            let registry = Arc::clone(&ret.registry) as Arc<_>;
+            let crypto_component =
+                TempCryptoComponent::new_with(registry, node_id, &config, temp_dir);
+            ret.crypto_components.insert(node_id, crypto_component);
+        }
+
+        ret.registry.update_to_latest_version();
+
+        ret
+    }
+
+    /// Copies the given source directory into a newly-created directory.
+    ///
+    /// Note: The copy is only of files and only one level deep (all that's
+    /// required for a CryptoComponent).
+    fn copy_crypto_root(src: &Path, dest: &Path) {
+        std::fs::create_dir_all(dest).unwrap_or_else(|err| {
+            panic!(
+                "Failed to create crypto root directory {}: {}",
+                dest.display(),
+                err
+            )
+        });
+        for entry in std::fs::read_dir(src).expect("src directory doesn't exist") {
+            let path = entry.expect("failed to get path in src dir").path();
+            if path.is_file() {
+                let filename = path.file_name().expect("failed to get src path");
+                let dest_path = dest.join(filename);
+                std::fs::copy(&path, &dest_path).expect("failed to copy file");
+            }
+        }
     }
 
     /// Determines the config's node IDs that are not in the environment

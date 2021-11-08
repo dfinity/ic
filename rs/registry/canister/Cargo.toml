@@ -15,17 +15,19 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-base-types = { path = "../../types/base_types/" }
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
+ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
 leb128 = "0.2.4"
 on_wire = { path = "../../rust_canisters/on_wire" }
-prost = "0.7.0"
+prost = "0.8.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.11.1"
 url = "2"
@@ -42,6 +44,6 @@ rand_core = "0.5"
 rand_distr = "0.3.0"
 
 [build-dependencies]
-prost-build = "0.7.0"
+prost-build = "0.8.0"
 
 [dev-dependencies]

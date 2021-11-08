@@ -4,6 +4,7 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
+base64 = "0.11.0"
 ic-types = { path = "../../../../types/types" }
 openssl = "0.10.29"
 serde = { version = "1.0.99", features = [ "derive" ] }

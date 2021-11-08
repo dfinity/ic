@@ -14,6 +14,7 @@
 //! 3. reimburse the canister with `cycles_reserved` - `cycles_spent`
 
 use ic_config::subnet_config::CyclesAccountManagerConfig;
+use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_logger::{info, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, SystemState};
@@ -47,26 +48,6 @@ impl std::fmt::Display for CyclesAccountManagerError {
                 write!(f, "Contract violation: {}", msg)
             }
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CanisterOutOfCyclesError {
-    pub canister_id: CanisterId,
-    pub available: Cycles,
-    pub requested: Cycles,
-    pub threshold: Cycles,
-}
-
-impl std::error::Error for CanisterOutOfCyclesError {}
-
-impl std::fmt::Display for CanisterOutOfCyclesError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Canister {} has currently {} available cycles, but {} was requested",
-            self.canister_id, self.available, self.requested
-        )
     }
 }
 
@@ -144,7 +125,7 @@ impl CyclesAccountManager {
         self.config.xnet_byte_transmission_fee * Cycles::from(payload_size.get())
     }
 
-    #[doc(hidden)]
+    /// Returns the freezing threshold for this canister in Cycles.
     pub fn freeze_threshold_cycles(
         &self,
         system_state: &SystemState,
@@ -346,6 +327,8 @@ impl CyclesAccountManager {
                 | Ok(Method::DepositCycles)
                 | Ok(Method::RawRand)
                 | Ok(Method::SignWithECDSA)
+                | Ok(Method::GetMockECDSAPublicKey)
+                | Ok(Method::SignWithMockECDSA)
                 | Err(_) => {
                     return Err(IngressInductionCostError::UnknownSubnetMethod);
                 }
@@ -480,23 +463,33 @@ impl CyclesAccountManager {
     //
     ////////////////////////////////////////////////////////////////////////////
 
-    /// Amount of cycles above the level reserved for storage costs
-    pub fn cycles_balance_above_storage_reserve(
+    /// Checks whether the requested amount of cycles can be withdrawn from the
+    /// canister's balance while respecting the freezing threshold.
+    ///
+    /// Returns a `CanisterOutOfCyclesError` if the requested amount cannot be
+    /// withdrawn.
+    pub fn can_withdraw_cycles(
         &self,
         system_state: &SystemState,
+        requested: Cycles,
         canister_current_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
-    ) -> Cycles {
-        let cycles_storage_reserve = self.freeze_threshold_cycles(
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        let threshold = self.freeze_threshold_cycles(
             system_state,
             canister_current_memory_usage,
             canister_compute_allocation,
         );
 
-        if system_state.cycles_balance > cycles_storage_reserve {
-            system_state.cycles_balance - cycles_storage_reserve
+        if threshold + requested > system_state.cycles_balance {
+            Err(CanisterOutOfCyclesError {
+                canister_id: system_state.canister_id(),
+                available: system_state.cycles_balance,
+                requested,
+                threshold,
+            })
         } else {
-            Cycles::from(0)
+            Ok(())
         }
     }
 
@@ -618,9 +611,9 @@ impl CyclesAccountManager {
     pub fn charge_canister_for_resource_allocation_and_usage(
         &self,
         log: &ReplicaLogger,
-        mut canister: CanisterState,
+        canister: &mut CanisterState,
         duration_between_blocks: Duration,
-    ) -> Result<CanisterState, CanisterState> {
+    ) -> Result<(), CanisterOutOfCyclesError> {
         let bytes_to_charge = match canister.memory_allocation() {
             // The canister has explicitly asked for a memory allocation, so charge
             // based on it accordingly.
@@ -639,7 +632,7 @@ impl CyclesAccountManager {
                 canister.canister_id(),
                 err
             );
-            return Err(canister);
+            return Err(err);
         }
 
         let compute_allocation = canister.compute_allocation();
@@ -654,9 +647,9 @@ impl CyclesAccountManager {
                 canister.canister_id(),
                 err
             );
-            return Err(canister);
+            return Err(err);
         }
-        Ok(canister)
+        Ok(())
     }
 }
 

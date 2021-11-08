@@ -3,13 +3,13 @@ use crate::api::CspThresholdSignError;
 use crate::types::CspPublicCoefficients;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
-use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::FsEncryptionPublicKey;
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes};
 use serde::{Deserialize, Serialize};
@@ -25,7 +25,7 @@ pub enum CspBasicSignatureError {
         algorithm: AlgorithmId,
     },
     WrongSecretKeyType {
-        algorithm_id: AlgorithmId,
+        algorithm: AlgorithmId,
     },
     MalformedSecretKey {
         algorithm: AlgorithmId,
@@ -33,7 +33,7 @@ pub enum CspBasicSignatureError {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum CspSignatureKeygenError {
+pub enum CspBasicSignatureKeygenError {
     UnsupportedAlgorithm { algorithm: AlgorithmId },
 }
 
@@ -46,16 +46,24 @@ pub enum CspMultiSignatureError {
     UnsupportedAlgorithm {
         algorithm: AlgorithmId,
     },
-    WrongSecretKeyType {},
-    MalformedMessageDigest {},
-    MalformedSecretKey {
+    WrongSecretKeyType {
         algorithm: AlgorithmId,
+    },
+    InternalError {
+        internal_error: String,
     },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum CspMultiSignatureKegenError {
-    UnsupportedAlgorithm { algorithm: AlgorithmId },
+pub enum CspMultiSignatureKeygenError {
+    UnsupportedAlgorithm {
+        algorithm: AlgorithmId,
+    },
+    MalformedPublicKey {
+        algorithm: AlgorithmId,
+        key_bytes: Option<Vec<u8>>,
+        internal_error: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -64,10 +72,13 @@ pub enum CspThresholdSignatureKeygenError {
     InvalidArgument { message: String },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct CspNiDkgTranscriptForNode {
-    node_id: NodeId,
-    transcript: CspNiDkgTranscript,
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CspTlsSignError {
+    SecretKeyNotFound { key_id: KeyId },
+    WrongSecretKeyType { algorithm: AlgorithmId },
+    MalformedSecretKey { error: String },
+    // TODO (CRP-1174): Remove this variant once ring is no longer used to sign
+    InvalidRingSignatureLength { length: usize },
 }
 
 /// `CspServer` offers a selection of operations that involve
@@ -84,7 +95,7 @@ pub trait CspServer:
 /// Operations of `CspServer` related to basic signatures
 /// (cf. `CspSigner` and `CspKeyGenerator`).
 pub trait BasicSignatureCspServer {
-    /// Signs the given message using the specified algorithm and key IDs
+    /// Signs the given message using the specified algorithm and key ID.
     ///
     /// # Arguments
     /// * `algorithm_id` specifies the signature algorithm
@@ -93,13 +104,12 @@ pub trait BasicSignatureCspServer {
     /// # Returns
     /// The computed signature.
     /// # Note
-    /// Unlike for multi- and threshold-signatures below, `sign`-method
-    /// of basic signatures takes the full message as an argument
+    /// `sign`-method of basic signatures takes the full message as an argument
     /// (rather than just message digest).
-    /// The reason for this discrepancy is the fact that in Ed25519-signatures
-    /// (that this trait has to support) the computation of the message digest
-    /// uses secret key data as an input, and so cannot be computed outside
-    /// of the CspServer (cf. PureEdDSA in
+    /// The reason for this "inefficiency" is the fact that in
+    /// Ed25519-signatures (that this trait has to support) the computation
+    /// of the message digest uses secret key data as an input, and so
+    /// cannot be computed outside of the CspServer (cf. PureEdDSA in
     /// [RFC 8032](https://tools.ietf.org/html/rfc8032#section-5.1.6))
     fn sign(
         &self,
@@ -117,25 +127,29 @@ pub trait BasicSignatureCspServer {
     fn gen_key_pair(
         &self,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey), CspSignatureKeygenError>;
+    ) -> Result<(KeyId, CspPublicKey), CspBasicSignatureKeygenError>;
 }
 
 /// Operations of `CspServer` related to multi-signatures
 /// (cf. `CspSigner` and `CspKeyGenerator`).
 pub trait MultiSignatureCspServer {
-    /// Signs the given message digest using the specified algorithm and key
-    /// IDs.
+    /// Signs the given message using the specified algorithm and key ID.
     ///
     /// # Arguments
     /// * `algorithm_id` specifies the signature algorithm
-    /// * `msg_digest` is the digest of the message to be signed
+    /// * `message` is the message to be signed
     /// * `key_id` determines the private key to sign with
     /// # Returns
     /// The computed signature.
+    ///
+    /// # Note
+    /// `multi_sign`-method takes the full message as an argument (rather than
+    /// just message digest) to be consistent with
+    /// `BasicSignatureCspServer::sign()`-method.
     fn multi_sign(
         &self,
         algorithm_id: AlgorithmId,
-        msg_digest: &[u8],
+        message: &[u8],
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError>;
 
@@ -148,7 +162,7 @@ pub trait MultiSignatureCspServer {
     fn gen_key_pair_with_pop(
         &self,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey, CspPop), CspMultiSignatureKegenError>;
+    ) -> Result<(KeyId, CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
 }
 
 /// Operations of `CspServer` related to threshold signatures
@@ -185,14 +199,13 @@ pub trait ThresholdSignatureCspServer {
     ///   generate and store keys.
     #[cfg(test)]
     fn threshold_keygen_for_test(
-        &mut self,
+        &self,
         algorithm_id: AlgorithmId,
         threshold: NumberOfNodes,
         signatory_eligibility: &[bool],
     ) -> Result<(CspPublicCoefficients, Vec<Option<KeyId>>), CspThresholdSignatureKeygenError>;
 
-    /// Signs the given message digest using the specified algorithm and key
-    /// IDs.
+    /// Signs the given message using the specified algorithm and key ID.
     ///
     /// # Arguments
     /// * `algorithm_id` specifies the signature algorithm
@@ -200,6 +213,11 @@ pub trait ThresholdSignatureCspServer {
     /// * `key_id` determines the private key to sign with
     /// # Returns
     /// The computed threshold signature.
+    ///
+    /// # Note
+    /// `threshold_sign`-method takes the full message as an argument (rather
+    /// than just message digest) to be consistent with
+    /// `BasicSignatureCspServer::sign()`-method.
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
@@ -218,7 +236,8 @@ pub trait NiDkgCspServer {
     /// # Returns
     /// The public key and the corresponding proof-of-possession.
     fn gen_forward_secure_key_pair(
-        &mut self,
+        &self,
+        node_id: NodeId,
         algorithm_id: AlgorithmId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>;
 
@@ -230,7 +249,7 @@ pub trait NiDkgCspServer {
     /// * `key_id` identifies the forward-secure secret key.
     /// * `epoch` is the epoch to be deleted, together with all smaller epochs.
     fn update_forward_secure_epoch(
-        &mut self,
+        &self,
         algorithm_id: AlgorithmId,
         key_id: KeyId,
         epoch: Epoch,
@@ -250,7 +269,8 @@ pub trait NiDkgCspServer {
     ///   secure keys.
     /// * `receiver_keys` is a map storing a forward-secure public key for each
     ///   receiver, indexed by their corresponding NodeIndex.
-    /// * 'reshared_secret' if `Some`, identifies the secret to be reshared.
+    /// * 'maybe_resharing_secret' if `Some`, identifies the secret to be
+    ///   reshared.
     /// # Returns
     /// A new dealing.
     fn create_dealing(
@@ -259,9 +279,9 @@ pub trait NiDkgCspServer {
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
-        receiver_keys: &BTreeMap<NodeIndex, FsEncryptionPublicKey>,
-        reshared_secret: Option<KeyId>,
-    ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateDealingError>;
+        receiver_keys: &BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        maybe_resharing_secret: Option<KeyId>,
+    ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError>;
 
     /// Computes a threshold signing key and stores it in the secret key store.
     ///
@@ -279,10 +299,10 @@ pub trait NiDkgCspServer {
     /// * `receiver_index` is the index of the current node in the list of
     ///   receivers.
     fn load_threshold_signing_key(
-        &mut self,
+        &self,
         algorithm_id: AlgorithmId,
         epoch: Epoch,
-        csp_transcript_for_node: CspNiDkgTranscriptForNode,
+        csp_transcript: CspNiDkgTranscript,
         fs_key_id: KeyId,
         receiver_index: NodeIndex,
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError>;
@@ -297,14 +317,50 @@ pub trait NiDkgCspServer {
     /// secret key store, that key will be ignored.
     /// # Arguments
     /// * `active_key_ids` identifies threshold keys that should be retained
-    fn retain_threshold_keys_if_present(&mut self, active_key_ids: BTreeSet<KeyId>);
+    fn retain_threshold_keys_if_present(&self, active_key_ids: BTreeSet<KeyId>);
 }
 
-/// Operations of `CspServer` related querying SKS (cf.
+/// Operations of `CspServer` related to querying the secret key store (cf.
 /// `CspSecretKeyStoreChecker`).
 pub trait SecretKeyStoreCspServer {
     /// Checks whether the secret key store contains a key with the given
     /// `key_id`. # Arguments
     /// * `key_id` identifies the key whose presence should be checked.
     fn sks_contains(&self, key_id: &KeyId) -> bool;
+}
+
+/// Operations of `CspServer` related to TLS handshakes.
+pub trait TlsHandshakeCspServer: Send + Sync {
+    /// Generates TLS key material for node with ID `node_id`.
+    ///
+    /// The secret key is stored in the key store and used to create a
+    /// self-signed X.509 public key certificate with
+    /// * a random serial,
+    /// * the common name (CN) of both subject and issuer being the `ToString`
+    ///   form of the given `node_id`,
+    /// * validity starting at the time of calling this method, and
+    /// * validity ending at `not_after`, which must be specified according to
+    ///   section 4.1.2.5 in RFC 5280.
+    ///
+    /// Returns the key ID of the secret key, and the public key certificate.
+    ///
+    /// # Panics
+    /// * if `not_after` is not specified according to RFC 5280 or if
+    /// `not_after` is in the past
+    /// * if a malformed X509 certificate is generated
+    fn gen_tls_key_pair(&self, node: NodeId, not_after: &str) -> (KeyId, TlsPublicKeyCert);
+
+    /// Signs the given message using the specified algorithm and key ID.
+    ///
+    /// # Arguments
+    /// * `message` is the message to be signed
+    /// * `key_id` determines the private key to sign with
+    /// # Returns
+    /// The computed signature to be used during a TLS handshake.
+    ///
+    /// # Note
+    /// The method takes the full message as an argument (rather than
+    /// just message digest) to be consistent with
+    /// `BasicSignatureCspServer::sign()`-method.
+    fn sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError>;
 }

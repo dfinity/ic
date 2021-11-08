@@ -8,7 +8,7 @@ use openssl::ssl::{SslAcceptor, SslVerifyMode};
 
 mod acceptor {
     use super::*;
-    use crate::tls_acceptor;
+    use crate::{tls_acceptor, CreateTlsAcceptorError};
 
     #[test]
     fn should_allow_client_authentication_if_enabled() {
@@ -160,11 +160,21 @@ mod acceptor {
             trusted_client_certs: vec![some_cert],
         }
     }
+
+    #[test]
+    fn create_tls_acceptor_error_should_be_readable() {
+        let test_vectors = vec![
+        (CreateTlsAcceptorError{ description: "decription".to_string(), cert_der: Some(vec![1,2,3,4,5]) , internal_error: Some("Internal error".to_string())}, "CreateTlsAcceptorError{ description: \"decription\", cert_der: Some(\"AQIDBAU=\"), internal_error: Some(\"Internal error\") }"),
+    ];
+        for (value, formatted) in test_vectors {
+            assert_eq!(format!("{:?}", value), *formatted);
+        }
+    }
 }
 
 mod connector {
     use super::*;
-    use crate::tls_connector;
+    use crate::{tls_connector, CreateTlsConnectorError};
     use openssl::pkey::{PKeyRef, Private};
     use openssl::ssl::{ConnectConfiguration, SslVersion};
     use openssl::x509::X509Ref;
@@ -304,5 +314,29 @@ mod connector {
         let (_, trusted_server_cert) = generate_ed25519_cert();
         let (key_pair, client_cert) = generate_ed25519_cert();
         tls_connector(&key_pair, &client_cert, &trusted_server_cert).unwrap()
+    }
+
+    #[test]
+    fn create_tls_connector_error_should_be_readable() {
+        let test_vectors = vec![
+        (CreateTlsConnectorError{ description: "decription".to_string(), client_cert_der: Some(vec![1,2,3,4,5]), server_cert_der: Some(vec![6,7,8,9]) , internal_error: "Internal error".to_string()}, "CreateTlsConnectorError{ description: \"decription\", client_cert_der: Some(\"AQIDBAU=\"), server_cert_der: Some(\"BgcICQ==\"), internal_error: \"Internal error\" }"),
+    ];
+        for (value, formatted) in test_vectors {
+            assert_eq!(format!("{:?}", value), *formatted);
+        }
+    }
+}
+
+mod context {
+    use crate::connection::CreateTlsContextError;
+
+    #[test]
+    fn create_tls_context_error_should_be_readable() {
+        let test_vectors = vec![
+        (CreateTlsContextError{ description: "decription".to_string(), cert_der: Some(vec![1,2,3,4,5]) , internal_error: "Internal error".to_string()}, "CreateTlsContextError{ description: \"decription\", cert_der: Some(\"AQIDBAU=\"), internal_error: \"Internal error\" }"),
+    ];
+        for (value, formatted) in test_vectors {
+            assert_eq!(format!("{:?}", value), *formatted);
+        }
     }
 }

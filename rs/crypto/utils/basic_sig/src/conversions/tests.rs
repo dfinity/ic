@@ -128,4 +128,48 @@ fn should_fail_decoding_non_sk_pem() {
     assert!(result.is_err());
 }
 
+#[test]
+fn should_fail_convert_pubkey_nodeid_bad_bytes() {
+    let bad_bytes = vec![3, 1, 4];
+    let bad_proto_key = PublicKeyProto {
+        version: 1,
+        algorithm: 0,
+        key_value: bad_bytes,
+        proof_data: None,
+    };
+
+    let result = derive_node_id(&bad_proto_key);
+
+    assert!(matches!(
+        result.unwrap_err(),
+        InvalidNodePublicKey::MalformedRawBytes { internal_error: _ }
+    ));
+}
+
+#[test]
+fn should_convert_pubkey_nodeid_known_result() {
+    use std::str::FromStr;
+
+    let proto_key = PublicKeyProto {
+        version: 1,
+        algorithm: 0,
+        key_value: vec![1; 32], // length is all that matters
+        proof_data: None,
+    };
+
+    let result = derive_node_id(&proto_key);
+
+    let nodeid = match result {
+        Ok(nodeid) => nodeid,
+        Err(_) => panic!("conversion failed"),
+    };
+
+    let expected_nodeid = NodeId::from(
+        PrincipalId::from_str("mvlzf-grr7q-nhzpd-geghp-zdgtp-ib3yt-hzgi6-texkf-kk6rz-p2ejr-iae")
+            .expect("we know this converts OK"),
+    );
+
+    assert_eq!(nodeid, expected_nodeid);
+}
+
 // TODO(CRP-695): add more tests

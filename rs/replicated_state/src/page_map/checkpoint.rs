@@ -1,5 +1,6 @@
 use crate::page_map::{FileDescriptor, MemoryRegion, PageIndex, PersistenceError};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
+use ic_sys::{page_bytes_from_ptr, PageBytes};
 use lazy_static::lazy_static;
 use std::fs::{File, OpenOptions};
 use std::ops::Range;
@@ -9,7 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 lazy_static! {
-    static ref ZEROED_PAGE: Vec<u8> = vec![0; *PAGE_SIZE];
+    static ref ZEROED_PAGE: Box<PageBytes> = Box::new([0; PAGE_SIZE]);
 }
 
 /// Checkpoint represents a full snapshot of the heap of a single Wasm
@@ -46,11 +47,11 @@ impl Mapping {
             })?;
 
         let len = metadata.len() as usize;
-        if len % *PAGE_SIZE != 0 {
+        if len % PAGE_SIZE != 0 {
             return Err(PersistenceError::InvalidHeapFile {
                 path: path.display().to_string(),
                 file_size: len,
-                page_size: *PAGE_SIZE,
+                page_size: PAGE_SIZE,
             });
         }
 
@@ -75,13 +76,16 @@ impl Mapping {
         }
     }
 
-    fn get_page(&self, page_index: PageIndex) -> &[u8] {
-        let num_pages = self.mmap.len() / *PAGE_SIZE;
+    fn get_page(&self, page_index: PageIndex) -> &PageBytes {
+        let num_pages = self.mmap.len() / PAGE_SIZE;
         if page_index.get() < num_pages as u64 {
-            let offset = (page_index.get() as usize * *PAGE_SIZE) as isize;
-            unsafe { std::slice::from_raw_parts(self.mmap.addr().offset(offset), *PAGE_SIZE) }
+            let page_start = (page_index.get() as usize * PAGE_SIZE) as isize;
+            // SAFETY: The memory from `page_start` to `page_start + PAGE_SIZE` is mapped
+            // and will remain valid for the lifetime of `self`. The memory is read-only
+            // and does not have any mutable references to it.
+            unsafe { page_bytes_from_ptr(self, self.mmap.addr().offset(page_start)) }
         } else {
-            &ZEROED_PAGE[..]
+            &ZEROED_PAGE
         }
     }
 
@@ -91,7 +95,7 @@ impl Mapping {
         page_index: PageIndex,
         page_range: Range<PageIndex>,
     ) -> MemoryRegion {
-        let num_pages = (self.mmap.len() / *PAGE_SIZE) as u64;
+        let num_pages = (self.mmap.len() / PAGE_SIZE) as u64;
         if page_index.get() >= num_pages {
             MemoryRegion::Zeros(Range {
                 start: PageIndex::new(num_pages),
@@ -111,7 +115,7 @@ impl Mapping {
     }
 
     pub fn num_pages(&self) -> usize {
-        self.mmap.len() / *PAGE_SIZE
+        self.mmap.len() / PAGE_SIZE
     }
 }
 
@@ -130,7 +134,7 @@ impl Checkpoint {
     }
 
     /// Returns the page with the specified `page_number`.
-    pub fn get_page(&self, page_index: PageIndex) -> &[u8] {
+    pub fn get_page(&self, page_index: PageIndex) -> &PageBytes {
         match self.mapping {
             Some(ref mapping) => mapping.get_page(page_index),
             None => &ZEROED_PAGE,

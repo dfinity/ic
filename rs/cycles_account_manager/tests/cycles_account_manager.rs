@@ -1,8 +1,7 @@
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::SubnetConfigs;
-use ic_cycles_account_manager::{
-    CanisterOutOfCyclesError, IngressInductionCost, IngressInductionCostError,
-};
+use ic_cycles_account_manager::{IngressInductionCost, IngressInductionCostError};
+use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SystemState;
 use ic_test_utilities::{
@@ -62,7 +61,11 @@ fn test_can_charge_application_subnets() {
                     let initial_cycles = expected_fee + Cycles::from(100);
                     canister.system_state.cycles_balance += initial_cycles;
                     cycles_account_manager
-                        .charge_canister_for_resource_allocation_and_usage(&log, canister, duration)
+                        .charge_canister_for_resource_allocation_and_usage(
+                            &log,
+                            &mut canister,
+                            duration,
+                        )
                         .unwrap();
                 }
             }
@@ -476,7 +479,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
-                canister,
+                &mut canister,
                 Duration::from_secs(1),
             )
             .unwrap();
@@ -493,7 +496,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
-                canister,
+                &mut canister,
                 Duration::from_secs(1),
             )
             .unwrap_err();
@@ -510,7 +513,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
-                canister,
+                &mut canister,
                 Duration::from_secs(1),
             )
             .unwrap_err();
@@ -576,8 +579,9 @@ fn cycles_withdraw_for_execution() {
     let initial_amount = std::u128::MAX;
     let initial_cycles = Cycles::from(initial_amount);
     let freeze_threshold = NumSeconds::from(10);
+    let canister_id = canister_test_id(1);
     let mut system_state = SystemState::new_running(
-        canister_test_id(1),
+        canister_id,
         canister_test_id(2).get(),
         initial_cycles,
         freeze_threshold,
@@ -598,11 +602,16 @@ fn cycles_withdraw_for_execution() {
         .consume_cycles(&mut system_state, memory_usage, compute_allocation, amount)
         .is_err());
 
-    let exec_cycles_max = cycles_account_manager.cycles_balance_above_storage_reserve(
-        &system_state,
-        memory_usage,
-        compute_allocation,
-    );
+    let exec_cycles_max = system_state.cycles_balance - freeze_threshold_cycles;
+
+    assert!(cycles_account_manager
+        .can_withdraw_cycles(
+            &system_state,
+            exec_cycles_max,
+            memory_usage,
+            compute_allocation,
+        )
+        .is_ok());
     assert!(cycles_account_manager
         .consume_cycles(
             &mut system_state,
@@ -613,12 +622,18 @@ fn cycles_withdraw_for_execution() {
         .is_ok());
     assert_eq!(system_state.cycles_balance, freeze_threshold_cycles);
     assert_eq!(
-        cycles_account_manager.cycles_balance_above_storage_reserve(
+        cycles_account_manager.can_withdraw_cycles(
             &system_state,
+            Cycles::from(10),
             memory_usage,
             compute_allocation
         ),
-        Cycles::from(0)
+        Err(CanisterOutOfCyclesError {
+            canister_id,
+            available: freeze_threshold_cycles,
+            requested: Cycles::from(10),
+            threshold: freeze_threshold_cycles,
+        })
     );
 
     // no more cycles can be withdrawn, the rest is reserved for storage

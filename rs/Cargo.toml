@@ -7,8 +7,9 @@ members = [
   "base/thread",
   "canister_client",
   "cycles_account_manager",
+  "canister_sandbox/backend_lib",
   "canister_sandbox/common",
-  "canister_sandbox/replica_controller",
+  "canister_sandbox/replica_controller2",
   "canonical_state",
   "certified_vars",
   "config",
@@ -30,6 +31,7 @@ members = [
   "crypto/internal/crypto_lib/sha2",
   "crypto/secrets_containers",
   "crypto/internal/crypto_lib/threshold_sig/bls12_381",
+  "crypto/internal/crypto_lib/threshold_sig/tecdsa",
   "crypto/internal/crypto_lib/tls",
   "crypto/internal/crypto_lib/types",
   "crypto/internal/crypto_service_provider",
@@ -58,6 +60,7 @@ members = [
   "monitoring/logger",
   "monitoring/metrics",
   "monitoring/metrics_exporter",
+  "monitoring/pprof",
   "nns/constants",
   "nns/common",
   "nns/handlers/lifeline",
@@ -78,6 +81,7 @@ members = [
   "registry/keys",
   "registry/provisional_whitelist",
   "registry/routing_table",
+  "registry/subnet_features",
   "registry/subnet_type",
   "registry/transport",
   "release",
@@ -132,3 +136,7 @@ opt-level = 3
 version = "0.1.1"
 git = "https://github.com/dfinity/oid-registry.git"
 rev = "79a4482af85b364a137affd5848ef534e88a4176"
+
+[patch.crates-io]
+# TODO (CRP-1204): Remove this once tokio-rustls has been updated.
+webpki = { git = "https://github.com/dfinity-lab/webpki", branch = "v0.21.4-v3-no-extensions" }

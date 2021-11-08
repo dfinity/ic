@@ -265,9 +265,9 @@ impl<S: Default + BalancesStore> Balances<S> {
         }
     }
 
-    pub fn add_payment(&mut self, payment: &Transfer) {
+    pub fn add_payment(&mut self, payment: &Operation) {
         match payment {
-            Transfer::Send {
+            Operation::Transfer {
                 from,
                 to,
                 amount,
@@ -278,11 +278,11 @@ impl<S: Default + BalancesStore> Balances<S> {
                 self.credit(to, *amount);
                 self.icpt_pool += *fee;
             }
-            Transfer::Burn { from, amount, .. } => {
+            Operation::Burn { from, amount, .. } => {
                 self.debit(from, *amount);
                 self.icpt_pool += *amount;
             }
-            Transfer::Mint { to, amount, .. } => {
+            Operation::Mint { to, amount, .. } => {
                 self.credit(to, *amount);
                 self.icpt_pool -= *amount;
             }
@@ -374,7 +374,7 @@ impl LedgerBalances {
 #[derive(
     Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
 )]
-pub enum Transfer {
+pub enum Operation {
     Burn {
         from: AccountIdentifier,
         amount: ICPTs,
@@ -383,7 +383,7 @@ pub enum Transfer {
         to: AccountIdentifier,
         amount: ICPTs,
     },
-    Send {
+    Transfer {
         from: AccountIdentifier,
         to: AccountIdentifier,
         amount: ICPTs,
@@ -391,12 +391,12 @@ pub enum Transfer {
     },
 }
 
-/// A transfer with the metadata the client generated attached to it
+/// An operation with the metadata the client generated attached to it
 #[derive(
     Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
 )]
 pub struct Transaction {
-    pub transfer: Transfer,
+    pub operation: Operation,
     pub memo: Memo,
 
     /// The time this transaction was created.
@@ -412,14 +412,14 @@ impl Transaction {
         memo: Memo,
         created_at_time: TimeStamp,
     ) -> Self {
-        let transfer = Transfer::Send {
+        let operation = Operation::Transfer {
             from,
             to,
             amount,
             fee,
         };
         Transaction {
-            transfer,
+            operation,
             memo,
             created_at_time,
         }
@@ -444,13 +444,13 @@ pub struct Block {
 impl Block {
     pub fn new(
         parent_hash: Option<HashOf<EncodedBlock>>,
-        transfer: Transfer,
+        operation: Operation,
         memo: Memo,
         created_at_time: TimeStamp, // transaction timestamp
         timestamp: TimeStamp,       // block timestamp
     ) -> Result<Self, String> {
         let transaction = Transaction {
-            transfer,
+            operation,
             memo,
             created_at_time,
         };
@@ -561,16 +561,6 @@ impl Blockchain {
         self.num_archived_blocks
     }
 
-    /// This is used when we try to archive a chunk
-    pub fn add_num_archived_blocks(&mut self, to_add: u64) {
-        self.num_archived_blocks += to_add;
-    }
-
-    /// This is used when we fail to archive a chunk
-    pub fn sub_num_archived_blocks(&mut self, to_sub: u64) {
-        self.num_archived_blocks -= to_sub;
-    }
-
     pub fn num_unarchived_blocks(&self) -> u64 {
         self.blocks.len().try_into().unwrap()
     }
@@ -578,17 +568,50 @@ impl Blockchain {
     pub fn chain_length(&self) -> BlockHeight {
         self.num_archived_blocks() + self.num_unarchived_blocks() as BlockHeight
     }
-}
 
-/// Similar to Vec::split_off. Splits the Vec into two at the given index. `vec`
-/// contains elements [at, len), and the returned Vec contains elements [0, at).
-pub fn split_off_front(vec: &mut Vec<EncodedBlock>, at: usize) -> Vec<EncodedBlock> {
-    let len = vec.len();
-    assert!(at <= len, "`at` out of bounds");
+    pub fn remove_archived_blocks(&mut self, len: usize) {
+        // redundant since split_off would panic, but here we can give a more
+        // descriptive message
+        if len > self.blocks.len() {
+            panic!(
+                "Asked to remove more blocks than present. Present: {}, to remove: {}",
+                self.blocks.len(),
+                len
+            );
+        }
+        self.blocks = self.blocks.split_off(len);
+        self.num_archived_blocks += len as u64;
+    }
 
-    let returned = vec[0..at].to_vec();
-    *vec = vec[at..].to_vec();
-    returned
+    pub fn get_blocks_for_archiving(
+        &self,
+        trigger_threshold: usize,
+        num_blocks_to_archive: usize,
+    ) -> VecDeque<EncodedBlock> {
+        // Upon reaching the `trigger_threshold` we will archive
+        // `num_blocks_to_archive`. For example, when set to (2000, 1000)
+        // archiving will trigger when there are 2000 blocks in the ledger and
+        // the 1000 oldest bocks will be archived, leaving the remaining 1000
+        // blocks in place.
+        let num_blocks_before = self.num_unarchived_blocks() as usize;
+
+        if num_blocks_before < trigger_threshold {
+            return VecDeque::new();
+        }
+
+        let blocks_to_archive: VecDeque<EncodedBlock> =
+            VecDeque::from(self.blocks[0..num_blocks_to_archive.min(num_blocks_before)].to_vec());
+
+        print(format!(
+            "get_blocks_for_archiving(): trigger_threshold: {}, num_blocks: {}, blocks before archiving: {}, blocks to archive: {}",
+            trigger_threshold,
+            num_blocks_to_archive,
+            num_blocks_before,
+            blocks_to_archive.len(),
+        ));
+
+        blocks_to_archive
+    }
 }
 
 fn serialize_int_map<S>(im: &IntMap<()>, serializer: S) -> Result<S::Ok, S::Error>
@@ -704,7 +727,7 @@ impl Ledger {
     pub fn add_payment(
         &mut self,
         memo: Memo,
-        payment: Transfer,
+        payment: Operation,
         created_at_time: Option<TimeStamp>,
     ) -> Result<(BlockHeight, HashOf<EncodedBlock>), String> {
         self.add_payment_with_timestamp(memo, payment, created_at_time, dfn_core::api::now().into())
@@ -715,7 +738,7 @@ impl Ledger {
     fn add_payment_with_timestamp(
         &mut self,
         memo: Memo,
-        payment: Transfer,
+        payment: Operation,
         created_at_time: Option<TimeStamp>,
         now: TimeStamp,
     ) -> Result<(BlockHeight, HashOf<EncodedBlock>), String> {
@@ -732,7 +755,7 @@ impl Ledger {
         }
 
         let transaction = Transaction {
-            transfer: payment.clone(),
+            operation: payment.clone(),
             memo,
             created_at_time,
         };
@@ -766,16 +789,16 @@ impl Ledger {
         };
 
         for (balance, account) in to_trim {
-            let transfer = Transfer::Burn {
+            let operation = Operation::Burn {
                 from: account,
                 amount: balance,
             };
-            self.balances.add_payment(&transfer);
+            self.balances.add_payment(&operation);
             self.blockchain
                 .add_block(Block::new_from_transaction(
                     self.blockchain.last_hash,
                     Transaction {
-                        transfer,
+                        operation,
                         memo: Memo::default(),
                         created_at_time: now,
                     },
@@ -815,7 +838,7 @@ impl Ledger {
     /// This adds a pre created block to the ledger. This should only be used
     /// during canister migration or upgrade
     pub fn add_block(&mut self, block: Block) -> Result<BlockHeight, String> {
-        self.balances.add_payment(&block.transaction.transfer);
+        self.balances.add_payment(&block.transaction.operation);
         self.blockchain.add_block(block)
     }
 
@@ -836,7 +859,7 @@ impl Ledger {
         for (to, amount) in initial_values.into_iter() {
             self.add_payment_with_timestamp(
                 Memo::default(),
-                Transfer::Mint { to, amount },
+                Operation::Mint { to, amount },
                 None,
                 timestamp,
             )
@@ -902,70 +925,22 @@ impl Ledger {
         }
     }
 
-    pub fn split_off_blocks_to_archive(&mut self, at: usize) -> VecDeque<EncodedBlock> {
-        if self
-            .blockchain
-            .archive
-            .try_read()
-            .expect("Failed to get lock on archive")
-            .is_none()
-        {
-            VecDeque::new()
-        } else {
-            VecDeque::from(split_off_front(&mut self.blockchain.blocks, at))
-        }
+    pub fn remove_archived_blocks(&mut self, len: usize) {
+        self.blockchain.remove_archived_blocks(len);
     }
 
-    #[allow(clippy::type_complexity)]
-    pub fn archive_blocks(
-        &mut self,
-    ) -> Option<(VecDeque<EncodedBlock>, Arc<RwLock<Option<Archive>>>)> {
-        let (trigger_threshold, num_blocks_to_archive) = match &self.blockchain.archive.try_read() {
-            Ok(l) => match l.as_ref() {
-                Some(a) => (a.trigger_threshold, a.num_blocks_to_archive),
-                None => {
-                    print("[ledger] archive not enabled. skipping archive_blocks()");
-                    return None;
-                }
-            },
-            Err(_) => {
-                print("[ledger] ledger is currently archiving. skipping archive_blocks()");
-                return None;
-            }
-        };
-
-        // Upon reaching the `trigger_threshold` we will archive
-        // `num_blocks_to_archive`. For example, when set to (2000, 1000)
-        // archiving will trigger when there are 2000 blocks in the ledger and
-        // the 1000 oldest bocks will be archived, leaving the remaining 1000
-        // blocks in place.
-        let num_blocks_before = self.blockchain.num_unarchived_blocks();
-
-        if (num_blocks_before as usize) < trigger_threshold {
-            return None;
-        }
-
-        let blocks_to_archive: VecDeque<EncodedBlock> =
-            self.split_off_blocks_to_archive(num_blocks_to_archive);
-
-        let num_blocks_after = self.blockchain.num_unarchived_blocks();
-        print(format!(
-            "[ledger] archive_blocks(): trigger_threshold: {}, num_blocks: {}, blocks before split: {}, blocks to archive: {}, blocks after split: {}",
-            trigger_threshold,
-            num_blocks_to_archive,
-            num_blocks_before,
-            blocks_to_archive.len(),
-            num_blocks_after,
-        ));
-
-        Some((blocks_to_archive, self.blockchain.archive.clone()))
+    pub fn get_blocks_for_archiving(
+        &self,
+        trigger_threshold: usize,
+        num_blocks: usize,
+    ) -> VecDeque<EncodedBlock> {
+        self.blockchain
+            .get_blocks_for_archiving(trigger_threshold, num_blocks)
     }
 
     pub fn can_send(&self, principal_id: &PrincipalId) -> bool {
-        principal_id.is_self_authenticating()
-            || LEDGER
-                .read()
-                .unwrap()
+        !principal_id.is_anonymous()
+            || self
                 .send_whitelist
                 .contains(&CanisterId::new(*principal_id).unwrap())
     }
@@ -987,7 +962,7 @@ lazy_static! {
 
 pub fn add_payment(
     memo: Memo,
-    payment: Transfer,
+    payment: Operation,
     created_at_time: Option<TimeStamp>,
 ) -> (BlockHeight, HashOf<EncodedBlock>) {
     LEDGER
@@ -1049,70 +1024,10 @@ impl LedgerCanisterInitPayload {
     }
 }
 
-/// Pop blocks off the start of the vector `blocks` as long as the
-/// total size of the blocks is less than `max_size`. FIXME: need to
-/// decide what to do if the first block is greater than max_size.
-pub fn get_chain_prefix(
-    blocks: &mut VecDeque<EncodedBlock>,
-    mut max_size: usize,
-) -> Vec<EncodedBlock> {
-    let mut result = vec![];
-    while let Some(last) = blocks.front() {
-        if last.size_bytes() > max_size {
-            break;
-        }
-        max_size -= last.size_bytes();
-        result.push(blocks.pop_front().unwrap());
-    }
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::{Duration, SystemTime};
-
-    #[test]
-    fn test_split_off_front() {
-        fn make_block(timestamp: TimeStamp) -> Block {
-            let transaction = Transaction::new(
-                AccountIdentifier::new(CanisterId::from_u64(1).get(), None),
-                AccountIdentifier::new(CanisterId::from_u64(2).get(), None),
-                ICPTs::new(10000, 50).unwrap(),
-                TRANSACTION_FEE,
-                Memo(456),
-                TimeStamp::new(1, 0),
-            );
-            Block::new_from_transaction(None, transaction, timestamp)
-        }
-        let start_t: std::time::SystemTime = dfn_core::api::now();
-
-        let mut blocks: Vec<EncodedBlock> = vec![];
-        // blocks[0] is the oldest
-        for i in 0..10 {
-            blocks.push(
-                make_block(TimeStamp::from(start_t + std::time::Duration::new(i, 0)))
-                    .encode()
-                    .unwrap(),
-            )
-        }
-        let all_blocks = blocks.clone();
-        println!("[test] blocks: {:?}", blocks);
-
-        // we will split off the first 7 blocks with indices [0..=6]; this
-        // should leave blocks [7..=9] in the vector
-        println!("[test] splitting off first 7 blocks");
-        assert!(blocks.len() == 10);
-        let split = split_off_front(&mut blocks, 7);
-        println!("[test] blocks left after split: {:?}", blocks);
-        assert!(blocks.len() == 3);
-        println!("[test] blocks which have been split off: {:?}", split);
-        assert!(split.len() == 7);
-        // block[9] is the youngest so blocks [7..=9] should be left in the vector
-        assert!(all_blocks[7..=9] == blocks[..]);
-        // block[0] is the oldest so blocks [0..=6] should be split off
-        assert!(all_blocks[0..=6] == split[..]);
-    }
 
     #[test]
     fn balances_overflow() {
@@ -1140,7 +1055,7 @@ mod tests {
             state
                 .add_payment(
                     Memo::default(),
-                    Transfer::Mint {
+                    Operation::Mint {
                         to: PrincipalId::new_user_test_id(i).into(),
                         amount,
                     },
@@ -1181,7 +1096,7 @@ mod tests {
         let mut b = LedgerBalances::new();
         let canister = CanisterId::from_u64(7).get().into();
         let target_canister = CanisterId::from_u64(13).into();
-        b.add_payment(&Transfer::Mint {
+        b.add_payment(&Operation::Mint {
             to: canister,
             amount: ICPTs::from_e8s(1000),
         });
@@ -1189,7 +1104,7 @@ mod tests {
         assert_eq!(b.store.get(&canister), Some(&ICPTs::from_e8s(1000)));
         // make 2 transfers that empty the account
         for _ in 0..2 {
-            b.add_payment(&Transfer::Send {
+            b.add_payment(&Operation::Transfer {
                 from: canister,
                 to: target_canister,
                 amount: ICPTs::from_e8s(400),
@@ -1205,7 +1120,7 @@ mod tests {
         // one account left in the store
         assert_eq!(b.store.len(), 1);
 
-        b.add_payment(&Transfer::Send {
+        b.add_payment(&Operation::Transfer {
             from: target_canister,
             to: canister,
             amount: ICPTs::from_e8s(0),
@@ -1216,7 +1131,7 @@ mod tests {
         // and the fee should have been taken from sender
         assert_eq!(b.store.get(&target_canister), Some(&ICPTs::from_e8s(700)));
 
-        b.add_payment(&Transfer::Mint {
+        b.add_payment(&Operation::Mint {
             to: canister,
             amount: ICPTs::from_e8s(0),
         });
@@ -1224,7 +1139,7 @@ mod tests {
         // No new account should have been created
         assert_eq!(b.store.len(), 1);
 
-        b.add_payment(&Transfer::Burn {
+        b.add_payment(&Operation::Burn {
             from: target_canister,
             amount: ICPTs::from_e8s(700),
         });
@@ -1243,14 +1158,14 @@ mod tests {
         let send_amount = 10000;
         let send_fee = 100;
 
-        b.add_payment(&Transfer::Mint {
+        b.add_payment(&Operation::Mint {
             to: uid0,
             amount: ICPTs::from_e8s(mint_amount),
         });
         assert_eq!(b.icpt_pool.get_e8s(), pool_start_balance - mint_amount);
         assert_eq!(b.account_balance(&uid0).get_e8s(), mint_amount);
 
-        b.add_payment(&Transfer::Send {
+        b.add_payment(&Operation::Transfer {
             from: uid0,
             to: uid1,
             amount: ICPTs::from_e8s(send_amount),
@@ -1356,7 +1271,7 @@ mod tests {
 
         let user1 = PrincipalId::new_user_test_id(1).into();
 
-        let transfer = Transfer::Mint {
+        let transfer = Operation::Mint {
             to: user1,
             amount: ICPTs::from_e8s(1000),
         };
@@ -1399,7 +1314,7 @@ mod tests {
 
         let user1 = PrincipalId::new_user_test_id(1).into();
 
-        let transfer = Transfer::Mint {
+        let transfer = Operation::Mint {
             to: user1,
             amount: ICPTs::from_e8s(1000),
         };
@@ -1436,7 +1351,7 @@ mod tests {
 
         let user1 = PrincipalId::new_user_test_id(1).into();
 
-        let transfer = Transfer::Mint {
+        let transfer = Operation::Mint {
             to: user1,
             amount: ICPTs::from_e8s(1000),
         };
@@ -1567,39 +1482,6 @@ mod tests {
     }
 
     #[test]
-    fn failing_archiving_test() {
-        let mut blocks: Vec<EncodedBlock> =
-            (1..20).map(|n: u8| EncodedBlock(Box::new([n]))).collect();
-
-        let old_blocks = blocks.clone();
-
-        let mut blocks_to_archive = VecDeque::from(split_off_front(&mut blocks, 13));
-
-        let chunk = get_chain_prefix(&mut blocks_to_archive, 3);
-
-        // Failed first time
-        recover_from_failed_archive(&mut blocks, blocks_to_archive, VecDeque::from(chunk));
-
-        assert_eq!(&old_blocks, &blocks, "Recovered to previous state");
-
-        let mut blocks_to_archive = VecDeque::from(split_off_front(&mut blocks, 13));
-
-        let _ = get_chain_prefix(&mut blocks_to_archive, 3);
-        // succeeded first time
-
-        let chunk = get_chain_prefix(&mut blocks_to_archive, 3);
-
-        // Failed second time
-        recover_from_failed_archive(&mut blocks, blocks_to_archive, VecDeque::from(chunk));
-
-        assert_eq!(
-            &old_blocks[3..],
-            &blocks[..],
-            "Recovered state, but first three blocks are still archived"
-        )
-    }
-
-    #[test]
     fn test_purge() {
         let mut ledger = Ledger::default();
         let genesis = SystemTime::now().into();
@@ -1658,6 +1540,27 @@ mod tests {
 
         let res6 = ledger.blocks_notified.get(2);
         assert_eq!(res6, None);
+    }
+
+    /// Verify consistency of transaction hash after renaming transfer to
+    /// operation (see NNS1-765).
+    #[test]
+    fn test_transaction_hash_consistency() {
+        let transaction = Transaction::new(
+            PrincipalId::new_user_test_id(0).into(),
+            PrincipalId::new_user_test_id(1).into(),
+            ICPTs::new(1, 0).unwrap(),
+            TRANSACTION_FEE,
+            Memo(123456),
+            TimeStamp::new(1, 0),
+        );
+        let transaction_hash = transaction.hash();
+        // panic!("Transaction hash: {}",transaction_hash);
+        let hash_string = hex::encode(transaction_hash.inner.get());
+        assert_eq!(
+            hash_string, "f39130181586ea3d166185104114d7697d1e18af4f65209a53627f39b2fa0996",
+            "Transaction hash must be stable."
+        );
     }
 }
 
@@ -1814,35 +1717,4 @@ pub enum CyclesResponse {
     // Silly requirement by the candid derivation
     ToppedUp(()),
     Refunded(String, Option<BlockHeight>),
-}
-
-// Generic for testing
-pub fn recover_from_failed_archive(
-    blocks: &mut Vec<EncodedBlock>,
-    mut blocks_to_archive: VecDeque<EncodedBlock>,
-    chunk: VecDeque<EncodedBlock>,
-) {
-    // re add the blocks on failure. Chunks are processed from the
-    // oldest blocks to the newest so we must prepend a failing chunk
-    // to the front of the VecDeq
-    let chunk_len = chunk.len();
-    for block in chunk.into_iter().rev() {
-        blocks_to_archive.push_front(block);
-    }
-
-    // Similarly, block_to_archive must go back to the the front of the
-    // Vec in the Blockchain
-    let all_blocks: Vec<_> = blocks_to_archive
-        .into_iter()
-        .chain(blocks.drain(..))
-        .collect();
-
-    // TODO: It would be better to change blocks from Vec to VecDeque
-    // to avoid copying
-    *blocks = all_blocks;
-
-    print(format!(
-        "[ledger] Re added {} blocks to the ledger",
-        chunk_len
-    ));
 }

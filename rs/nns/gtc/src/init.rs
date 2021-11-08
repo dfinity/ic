@@ -49,7 +49,6 @@ pub struct GenesisTokenCanisterInitPayloadBuilder {
     pub total_alloc: u32,
     pub genesis_timestamp_seconds: u64,
     pub donate_account_recipient_neuron_id: Option<NeuronId>,
-    pub forward_all_unclaimed_accounts_recipient_neuron_id: Option<NeuronId>,
     pub sr_months_to_release: Option<u8>,
     pub ect_months_to_release: Option<u8>,
     pub rng: Option<StdRng>,
@@ -172,9 +171,6 @@ impl GenesisTokenCanisterInitPayloadBuilder {
             total_alloc: self.total_alloc,
             genesis_timestamp_seconds: self.genesis_timestamp_seconds,
             donate_account_recipient_neuron_id: self.donate_account_recipient_neuron_id.clone(),
-            forward_all_unclaimed_accounts_recipient_neuron_id: self
-                .forward_all_unclaimed_accounts_recipient_neuron_id
-                .clone(),
         }
     }
 }

@@ -133,6 +133,7 @@ mod tests {
     };
     use ic_registry_keys::{make_node_operator_record_key, make_routing_table_record_key};
     use ic_registry_transport::{delete, insert, pb::v1::RegistryMutation};
+    use std::collections::BTreeMap;
 
     /// Shorthand to try a mutation
     fn try_mutate(registry: &mut Registry, mutations: &[RegistryMutation]) {
@@ -147,6 +148,8 @@ mod tests {
             node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             node_allowance: 0,
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
+            dc_id: "".into(),
+            rewardable_nodes: BTreeMap::new(),
         });
         let registry = Registry::new();
         let mutation = vec![insert(key.as_bytes(), &value)];
@@ -170,6 +173,8 @@ mod tests {
             node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             node_allowance: 0,
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
+            dc_id: "".into(),
+            rewardable_nodes: BTreeMap::new(),
         });
 
         let mutations = vec![
@@ -194,6 +199,8 @@ mod tests {
             node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             node_allowance: 0,
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
+            dc_id: "".into(),
+            rewardable_nodes: BTreeMap::new(),
         });
         let mut mutations = vec![insert(key.as_bytes(), &value)];
 

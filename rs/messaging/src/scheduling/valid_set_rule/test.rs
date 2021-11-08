@@ -1,7 +1,7 @@
 use super::*;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::testing::CanisterStateTesting;
+use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
@@ -54,6 +54,8 @@ fn ingress_queue_size(state: &ReplicatedState, canister_id: CanisterId) -> usize
     state
         .canister_state(&canister_id)
         .unwrap()
+        .system_state
+        .queues()
         .ingress_queue_size()
 }
 

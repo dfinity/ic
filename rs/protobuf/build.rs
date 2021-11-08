@@ -199,6 +199,9 @@ fn build_registry_proto() {
         "def/registry/provisional_whitelist/v1/provisional_whitelist.proto",
         "def/registry/subnet/v1/subnet.proto",
         "def/registry/replica_version/v1/replica_version.proto",
+        "def/registry/node_rewards/v1/node_rewards.proto",
+        "def/registry/node_rewards/v2/node_rewards.proto",
+        "def/registry/dc/v1/dc.proto",
     ];
 
     compile_protos(config, &registry_files);
@@ -243,10 +246,22 @@ fn build_types_proto() {
     let mut config = base_config();
     config.out_dir("gen/types");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
-    config.type_attribute(".types.v1.CatchUpPackage", "#[derive(Eq, Hash)]");
-    config.type_attribute(".types.v1.SubnetId", "#[derive(Eq, Hash)]");
-    config.type_attribute(".types.v1.NiDkgId", "#[derive(Eq, Hash)]");
-    config.type_attribute(".types.v1.PrincipalId", "#[derive(Eq, Hash)]");
+    config.type_attribute(
+        ".types.v1.CatchUpPackage",
+        "#[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]",
+    );
+    config.type_attribute(
+        ".types.v1.SubnetId",
+        "#[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]",
+    );
+    config.type_attribute(
+        ".types.v1.NiDkgId",
+        "#[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]",
+    );
+    config.type_attribute(
+        ".types.v1.PrincipalId",
+        "#[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]",
+    );
     let files = [
         "def/types/v1/types.proto",
         "def/types/v1/dkg.proto",

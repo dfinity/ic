@@ -1,12 +1,12 @@
 use ic_config::embedders::{Config, PersistenceType};
-use ic_embedders::{wasmtime_embedder::WasmtimeInstance, InstanceRunResult, WasmtimeEmbedder};
+use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
-use ic_system_api::{ApiType, SystemApiImpl};
+use ic_system_api::{ApiType, SystemApiImpl, SystemStateAccessor};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     mock_time,
@@ -59,6 +59,7 @@ fn test_api_for_update(
     let system_state_accessor =
         ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
     SystemApiImpl::new(
+        system_state_accessor.canister_id(),
         ApiType::update(
             mock_time(),
             payload,
@@ -93,6 +94,10 @@ fn make_module_wat(heap_size: usize) -> String {
         (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
       (import "ic0" "msg_arg_data_size"
         (func $ic0_msg_arg_data_size (result i32)))
+      (import "ic0" "stable_grow"
+        (func $ic0_stable_grow (param $pages i32) (result i32)))
+      (import "ic0" "stable_read"
+        (func $ic0_stable_read (param $dst i32) (param $offset i32) (param $size i32)))
 
       (func $dump_heap
         (call $msg_reply_data_append (i32.const 0) (i32.mul (memory.size) (i32.const 0x10000)))
@@ -121,12 +126,19 @@ fn make_module_wat(heap_size: usize) -> String {
         )
       )
 
-      (memory $memory {})
+      ;; One stable_read() System API call
+      (func $test_stable_read
+        (drop (call $ic0_stable_grow (i32.const 1)))
+        (call $ic0_stable_read (i32.const 0) (i32.const 0) (i32.const 0))
+      )
+
+      (memory $memory {HEAP_SIZE})
       (export "memory" (memory $memory))
       (export "canister_query dump_heap" (func $dump_heap))
       (export "canister_update write_bytes" (func $write_bytes))
+      (export "canister_update test_stable_read" (func $test_stable_read))
     )"#,
-        heap_size
+        HEAP_SIZE = heap_size
     )
 }
 
@@ -148,24 +160,6 @@ fn random_writes(heap_size: usize, num_writes: usize) -> impl Strategy<Value = V
         prop::collection::vec(any::<u8>(), 0..=remain).prop_map(move |bytes| Write { dst, bytes })
     });
     prop::collection::vec(write_strategy, 1..num_writes)
-}
-
-fn write_bytes(inst: &mut WasmtimeInstance, dst: u32, bytes: &[u8]) -> InstanceRunResult {
-    println!(
-        "write_bytes(dst: {}, page: {}, bytes: {:?})",
-        dst,
-        dst / *PAGE_SIZE as u32,
-        bytes
-    );
-    let mut payload = dst.to_le_bytes().to_vec();
-    payload.extend(bytes.iter());
-
-    let mut api = test_api_for_update(no_op_logger(), None, payload, SubnetType::Application);
-    inst.run(
-        &mut api,
-        FuncRef::Method(WasmMethod::Update("write_bytes".to_string())),
-    )
-    .expect("call to write_bytes failed")
 }
 
 fn buf_apply_write(heap: &mut Vec<u8>, write: &Write) {
@@ -220,22 +214,42 @@ mod tests {
             let mut dirty_pages: BTreeSet<u64> = BTreeSet::new();
 
             for write in &writes {
-                let mut instance = embedder.new_instance(
-                    canister_test_id(1),
-                    &embedder_cache,
-                    &[],
-                    NumWasmPages::from(0),
-                    None,
-                    Some(page_map.clone()),
-                    dirty_page_tracking,
-                );
+                let mut payload = write.dst.to_le_bytes().to_vec();
+                payload.extend(write.bytes.iter());
+
+                let api =
+                    test_api_for_update(no_op_logger(), None, payload, SubnetType::Application);
+
+                let mut instance = embedder
+                    .new_instance(
+                        canister_test_id(1),
+                        &embedder_cache,
+                        &[],
+                        NumWasmPages::from(0),
+                        None,
+                        Some(page_map.clone()),
+                        dirty_page_tracking,
+                        api,
+                    )
+                    .map_err(|r| r.0)
+                    .expect("Failed to create instance");
                 instance.set_num_instructions(MAX_NUM_INSTRUCTIONS);
 
                 // Apply the write to the test buffer.
                 buf_apply_write(&mut test_heap, write);
 
                 // Apply the write to the Wasm instance.
-                let result = write_bytes(&mut instance, write.dst, &write.bytes);
+                println!(
+                    "write_bytes(dst: {}, page: {}, bytes: {:?})",
+                    write.dst,
+                    write.dst / PAGE_SIZE as u32,
+                    write.bytes
+                );
+                let result = instance
+                    .run(FuncRef::Method(WasmMethod::Update(
+                        "write_bytes".to_string(),
+                    )))
+                    .expect("call to write_bytes failed");
 
                 // Compare the written regions.
                 let wasm_heap: &[u8] = unsafe {
@@ -252,14 +266,14 @@ mod tests {
 
                     // Verify that wasm heap and test buffer are the same.
                     let i = result.dirty_pages.last().unwrap().get();
-                    let offset = i as usize * *PAGE_SIZE as usize;
+                    let offset = i as usize * PAGE_SIZE as usize;
                     let page1 = unsafe { test_heap.as_ptr().add(offset) };
                     let page2 = unsafe { wasm_heap.as_ptr().add(offset) };
                     let pages_match = unsafe {
                         libc::memcmp(
                             page1 as *const libc::c_void,
                             page2 as *const libc::c_void,
-                            *PAGE_SIZE,
+                            PAGE_SIZE,
                         )
                     };
                     assert!(
@@ -267,14 +281,14 @@ mod tests {
                         "page({}) of test buffer and Wasm heap doesn't match",
                         i
                     );
-                    page_map.update(compute_page_delta(&instance, &result.dirty_pages));
+                    page_map.update(&compute_page_delta(&mut instance, &result.dirty_pages));
                 }
             }
 
             if dirty_page_tracking == DirtyPageTracking::Track {
                 for i in 0..TEST_NUM_PAGES {
                     let wasm_page = page_map.get_page(PageIndex::new(i as u64));
-                    let test_page = &test_heap[i * *PAGE_SIZE..(i + 1) * *PAGE_SIZE];
+                    let test_page = &test_heap[i * PAGE_SIZE..(i + 1) * PAGE_SIZE];
                     assert_eq!(wasm_page[..], test_page[..]);
                 }
 
@@ -287,7 +301,7 @@ mod tests {
                     // page(0) by copying the 4-byte value to addr=0.
                     result.insert(0);
                     // Add the target pages.
-                    result.extend(writes.iter().map(|w| w.dst as u64 / *PAGE_SIZE as u64));
+                    result.extend(writes.iter().map(|w| w.dst as u64 / PAGE_SIZE as u64));
                     result.iter().cloned().collect()
                 };
 
@@ -329,11 +343,13 @@ mod tests {
             payload.extend(random_payload());
 
             // Set maximum number of instructions to some low value to trap
-            let max_num_instructions = NumInstructions::new(100);
+            // Note: system API calls get charged per call, see system_api::charges
+            let max_num_instructions = NumInstructions::new(1000);
 
             // Consumes less than max_num_instructions.
             let instructions_consumed_without_data = get_num_instructions_consumed(
                 log.clone(),
+                "write_bytes",
                 dst.to_le_bytes().to_vec(),
                 max_num_instructions,
                 subnet_type,
@@ -343,9 +359,41 @@ mod tests {
 
             // Exceeds the maximum amount of instructions.
             assert_eq!(
-                get_num_instructions_consumed(log, payload, max_num_instructions, subnet_type,),
-                Err(HypervisorError::OutOfInstructions)
+                get_num_instructions_consumed(
+                    log,
+                    "write_bytes",
+                    payload,
+                    max_num_instructions,
+                    subnet_type,
+                ),
+                Err(HypervisorError::InstructionLimitExceeded)
             )
+        })
+    }
+
+    #[test]
+    fn test_system_api_charges() {
+        with_test_replica_logger(|log| {
+            let subnet_type = SubnetType::Application;
+
+            let max_num_instructions = NumInstructions::new(1000);
+
+            let instructions_consumed_without_data = get_num_instructions_consumed(
+                log,
+                "test_stable_read",
+                vec![],
+                max_num_instructions,
+                subnet_type,
+            )
+            .unwrap();
+            // The `test_stable_read()` snippet consists of 7 instructions: 4 constants,
+            // stable_grow(), stable_read(), drop.
+            // Check that the number of consumed instructions get adjusted for the
+            // `stable_read()` System API call overhead.
+            assert_eq!(
+                instructions_consumed_without_data.get(),
+                7 + ic_embedders::wasmtime_embedder::system_api_charges::STABLE_READ.get() as u64
+            );
         })
     }
 
@@ -364,6 +412,7 @@ mod tests {
 
             let instructions_consumed_without_data = get_num_instructions_consumed(
                 log.clone(),
+                "write_bytes",
                 dst.to_le_bytes().to_vec(),
                 MAX_NUM_INSTRUCTIONS,
                 subnet_type,
@@ -374,6 +423,7 @@ mod tests {
                 // Number of instructions consumed only for copying the payload.
                 let consumed_instructions = get_num_instructions_consumed(
                     log.clone(),
+                    "write_bytes",
                     payload,
                     MAX_NUM_INSTRUCTIONS,
                     subnet_type,
@@ -390,6 +440,7 @@ mod tests {
                 // Number of instructions consumed increased with the size of the data.
                 let consumed_instructions = get_num_instructions_consumed(
                     log,
+                    "write_bytes",
                     double_size_payload,
                     MAX_NUM_INSTRUCTIONS,
                     subnet_type,
@@ -419,6 +470,7 @@ mod tests {
 
             let instructions_consumed_without_data = get_num_instructions_consumed(
                 log.clone(),
+                "write_bytes",
                 dst.to_le_bytes().to_vec(),
                 MAX_NUM_INSTRUCTIONS,
                 subnet_type,
@@ -429,6 +481,7 @@ mod tests {
                 // Number of instructions consumed for copying the payload is zero.
                 let consumed_instructions = get_num_instructions_consumed(
                     log.clone(),
+                    "write_bytes",
                     payload,
                     MAX_NUM_INSTRUCTIONS,
                     subnet_type,
@@ -442,6 +495,7 @@ mod tests {
                 // Number of instructions consumed for copying the payload is zero.
                 let consumed_instructions = get_num_instructions_consumed(
                     log,
+                    "write_bytes",
                     double_size_payload,
                     MAX_NUM_INSTRUCTIONS,
                     subnet_type,
@@ -455,6 +509,7 @@ mod tests {
 
     fn get_num_instructions_consumed(
         log: ReplicaLogger,
+        method: &str,
         payload: Vec<u8>,
         max_num_instructions: NumInstructions,
         subnet_type: SubnetType,
@@ -469,24 +524,25 @@ mod tests {
 
         let embedder = WasmtimeEmbedder::new(config, log.clone());
         let output_instrumentation = instrument(&wasm, &InstructionCostTable::new()).unwrap();
-        let mut inst = embedder.new_instance(
-            canister_test_id(1),
-            &embedder
-                .compile(PersistenceType::Sigsegv, &output_instrumentation.binary)
-                .unwrap(),
-            &[],
-            NumWasmPages::from(0),
-            None,
-            Some(PageMap::default()),
-            DirtyPageTracking::Track,
-        );
+        let api = test_api_for_update(log, None, payload, subnet_type);
+        let mut inst = embedder
+            .new_instance(
+                canister_test_id(1),
+                &embedder
+                    .compile(PersistenceType::Sigsegv, &output_instrumentation.binary)
+                    .unwrap(),
+                &[],
+                NumWasmPages::from(0),
+                None,
+                Some(PageMap::default()),
+                DirtyPageTracking::Track,
+                api,
+            )
+            .map_err(|r| r.0)
+            .expect("Failed to create instance");
         inst.set_num_instructions(max_num_instructions);
 
-        let mut api = test_api_for_update(log, None, payload, subnet_type);
-        inst.run(
-            &mut api,
-            FuncRef::Method(WasmMethod::Update("write_bytes".to_string())),
-        )?;
+        inst.run(FuncRef::Method(WasmMethod::Update(method.into())))?;
 
         // The amount of instructions consumed.
         Ok(max_num_instructions - inst.get_num_instructions())

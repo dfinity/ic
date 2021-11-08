@@ -33,9 +33,9 @@ serde_json = "1.0.40"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 target-lexicon = { version = "0.10.0", default-features = false }
 tempfile = "3.1.0"
-wasmtime = { git = "https://github.com/dfinity-lab/wasmtime", rev = "3b3326ca0bc3059acb27811dd5a7e0be1065a59d", features = ["posix-signals-on-macos"] }
-wasmtime-environ = { git = "https://github.com/dfinity-lab/wasmtime", rev = "3b3326ca0bc3059acb27811dd5a7e0be1065a59d" }
-wasmtime-runtime = { git = "https://github.com/dfinity-lab/wasmtime", rev = "3b3326ca0bc3059acb27811dd5a7e0be1065a59d" }
+wasmtime = { version = "0.29.0", default_features = false, features = ['async', 'parallel-compilation', 'posix-signals-on-macos'] }
+wasmtime-environ = "0.29.0"
+wasmtime-runtime = "0.29.0"
 
 [dev-dependencies]
 ic-registry-routing-table = { path = "../registry/routing_table" }

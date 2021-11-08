@@ -2,7 +2,7 @@
 
 use crate::api::CspThresholdSignError;
 use crate::types::{
-    CspDealing, CspDkgTranscript, CspPop, CspPublicCoefficients, CspResponse, CspSecretKey,
+    CspDealing, CspDkgTranscript, CspPop, CspPublicCoefficients, CspResponse,
     CspSecretKeyConversionError, CspSignature,
 };
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors;
@@ -76,16 +76,6 @@ pub trait ThresholdSignatureCspClient {
         threshold: NumberOfNodes,
         signatory_eligibility: &[bool],
     ) -> CryptoResult<(CspPublicCoefficients, Vec<Option<KeyId>>)>;
-
-    /// Signs with a threshold key
-    // TODO (DFN-1460): remove the threshold_sign_to_be_removed method once the
-    // threshold_sign method below is implemented in the CSP and used in IDKM.
-    fn threshold_sign_to_be_removed(
-        &self,
-        algorithm_id: AlgorithmId,
-        message: &[u8],
-        key_id: KeyId,
-    ) -> Result<CspSignature, CspThresholdSignError>;
 
     /// Signs with a threshold key
     fn threshold_sign(
@@ -650,32 +640,12 @@ pub trait NiDkgCspClient {
         node_id: NodeId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>;
 
-    /// Verifies that a forward secure public key and PoP is valid.
+    /// Updates the epoch of the (forward-secure) DKG dealing decryption key
+    /// (i.e., the secret part of the DKG dealing encryption key) so that it
+    /// cannot be used at epochs that are smaller than the given epoch.
     ///
     /// # Arguments
-    /// * `(public_key, pop)` is a public key and the corresponding proof of
-    ///   possession.
-    /// * `node_id` is the identity of the node that generated the public key.
-    /// # Panics
-    /// This method is not expected to panic.
-    /// # Errors
-    /// This method SHALL return an error if:
-    /// * the public key is not well formed. (`MalformedPublicKeyWithPopError`)
-    /// * the CspPop is not consistent with all other arguments. (`InvalidPop`)
-    fn verify_forward_secure_key(
-        &self,
-        algorithm_id: AlgorithmId,
-        public_key: CspFsEncryptionPublicKey,
-        pop: CspFsEncryptionPop,
-        node_id: NodeId,
-    ) -> Result<(), ni_dkg_errors::CspDkgVerifyFsKeyError>;
-
-    /// Updates the secret key corresponding to public_key so that it cannot be
-    /// used at epochs that are smaller than the given epoch.
-    ///
-    /// # Arguments
-    /// * `public_key` is the public key corresponding to the secret key to be
-    ///   updated.
+    /// * `algorithm_id` selects the algorithm suite to use for the scheme.
     /// * `epoch` is the epoch to be deleted, together with all smaller epochs.
     /// # Panics
     /// This method MUST panic if it is unable to store the updated secret key.
@@ -964,8 +934,6 @@ pub trait NiDkgCspClient {
     /// * `epoch` is a monotonic increasing counter used to select forward
     ///   secure keys.
     /// * `csp_transcript` is a summary of the key generation.
-    /// * `public_key` is the public part of the forward secure key used to
-    ///   decrypt shares.
     /// * `receiver_index` is the index of the current node in the list of
     ///   receivers.
     /// # Panics
@@ -997,19 +965,4 @@ pub trait NiDkgCspClient {
     /// public coefficients.  If this method is requested to retain a key that
     /// is not in the secret key store, that key will be ignored.
     fn retain_threshold_keys_if_present(&self, active_keys: BTreeSet<CspPublicCoefficients>);
-}
-
-// TODO (CRP-309): Remove CspSecretKeyInjector once DKG is fully implemented
-/// Trait for injecting secret keys into the CSP's key store for testing and
-/// stubbing purposes.
-pub trait CspSecretKeyInjector {
-    /// Inserts the given secret key into the secret key store with the given
-    /// key ID. If a key with the given `key_id` exists, it is overwritten.
-    ///
-    /// # Arguments
-    /// * `key_id` is the key ID under which the key is inserted into the store.
-    /// * `secret_key` is a secret key that is inserted into the store.
-    /// # Panics
-    /// This method panics if inserting the key fails.
-    fn insert_secret_key(&mut self, key_id: KeyId, secret_key: CspSecretKey);
 }

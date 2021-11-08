@@ -12,10 +12,7 @@ use ic_test_utilities::{
 };
 use std::sync::{Arc, RwLock};
 
-fn setup_manager(
-    artifact_pool_config: ArtifactPoolConfig,
-    rt_handle: tokio::runtime::Handle,
-) -> Arc<dyn ArtifactManager> {
+fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactManager> {
     let time_source = Arc::new(SysTimeSource::new());
     let metrics_registry = MetricsRegistry::new();
     let replica_logger = no_op_logger();
@@ -40,7 +37,6 @@ fn setup_manager(
         Arc::clone(&time_source) as Arc<_>,
         Arc::clone(&consensus_pool),
         Arc::clone(&ingress_pool),
-        rt_handle,
         replica_logger,
         metrics_registry,
     );
@@ -75,7 +71,7 @@ fn init_artifact_pools(
 /// ingress pool, consensus pool and consensus client (using MockConsensus).
 pub fn run_test<F: Fn(Arc<dyn ArtifactManager>)>(test: F) {
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-        let manager = setup_manager(pool_config, tokio::runtime::Handle::current());
+        let manager = setup_manager(pool_config);
         test(manager)
     })
 }

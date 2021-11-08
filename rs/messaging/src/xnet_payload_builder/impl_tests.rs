@@ -5,6 +5,7 @@ use super::*;
 use assert_matches::assert_matches;
 use ic_interfaces::{certified_stream_store::DecodeStreamError, state_manager::StateReader};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::testing::ReplicatedStateTesting;
 use ic_test_utilities::{
     certified_stream_store::MockCertifiedStreamStore,
     crypto::fake_tls_handshake::FakeTlsHandshake,
@@ -116,7 +117,7 @@ async fn validate_signals() {
             SubnetType::Application,
             "NOT_USED".into(),
         );
-        state.put_streams(btreemap! {
+        state.with_streams(btreemap! {
             SUBNET_1 => generate_stream(&StreamConfig {
                 message_begin: 4,
                 message_end: 7,
@@ -151,7 +152,7 @@ async fn validate_signals_expected_before_messages_begin() {
             SubnetType::Application,
             "NOT_USED".into(),
         );
-        state.put_streams(btreemap! {
+        state.with_streams(btreemap! {
             SUBNET_1 => generate_stream(&StreamConfig {
                 message_begin: 4,
                 message_end: 7,
@@ -211,7 +212,7 @@ async fn validate_slice() {
             SubnetType::Application,
             "NOT_USED".into(),
         );
-        state.put_streams(btreemap! {
+        state.with_streams(btreemap! {
             SUBNET_1 => generate_stream(&StreamConfig {
                 message_begin: MESSAGE_BEGIN.get(),
                 message_end: MESSAGE_END.get(),
@@ -323,7 +324,7 @@ async fn validate_slice_invalid_signature() {
             SubnetType::Application,
             "NOT_USED".into(),
         );
-        state.put_streams(btreemap! {
+        state.with_streams(btreemap! {
             SUBNET_1 => generate_stream(&StreamConfig {
                 message_begin: 3,
                 message_end: 4,
@@ -384,7 +385,7 @@ async fn validate_slice_above_msg_limit() {
             SubnetType::System,
             "NOT_USED".into(),
         );
-        state.put_streams(btreemap! {
+        state.with_streams(btreemap! {
             SUBNET_1 => generate_stream(&StreamConfig {
                 message_begin: MESSAGE_BEGIN,
                 message_end: MESSAGE_END,

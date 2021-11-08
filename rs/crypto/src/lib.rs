@@ -167,7 +167,12 @@ impl LockableThresholdSigDataStore {
     }
 }
 
-impl<R: Rng + CryptoRng + Send + Sync> CryptoComponentFatClient<Csp<R, ProtoSecretKeyStore>> {
+/// Note that `R: 'static` is required so that `CspTlsHandshakeSignerProvider`
+/// can be implemented for [Csp]. See the documentation of the respective `impl`
+/// block for more details on the meaning of `R: 'static`.
+impl<R: Rng + CryptoRng + Send + Sync + Clone + 'static>
+    CryptoComponentFatClient<Csp<R, ProtoSecretKeyStore>>
+{
     /// Creates a crypto component using the given `csprng` and fake `node_id`.
     pub fn new_with_rng_and_fake_node_id(
         csprng: R,

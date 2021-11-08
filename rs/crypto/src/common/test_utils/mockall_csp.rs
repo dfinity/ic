@@ -9,22 +9,22 @@ use ic_crypto_internal_csp::api::tls_errors::{
     CspTlsClientHandshakeError, CspTlsServerHandshakeError,
 };
 use ic_crypto_internal_csp::api::{
-    CspKeyGenerator, CspSecretKeyInjector, CspSecretKeyStoreChecker, CspSigner,
-    CspThresholdSignError, CspTlsClientHandshake, CspTlsServerHandshake,
+    CspKeyGenerator, CspSecretKeyStoreChecker, CspSigner, CspThresholdSignError,
+    CspTlsClientHandshake, CspTlsHandshakeSignerProvider, CspTlsServerHandshake,
     DistributedKeyGenerationCspClient, NiDkgCspClient, NodePublicKeyData,
     ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::tls_stub::cert_chain::CspCertificateChain;
 use ic_crypto_internal_csp::types::{
     CspDealing, CspDkgTranscript, CspPop, CspPublicCoefficients, CspPublicKey, CspResponse,
-    CspSecretKey, CspSignature,
+    CspSignature,
 };
+use ic_crypto_internal_csp::TlsHandshakeCspServer;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateDealingError, CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError,
     CspDkgCreateReshareTranscriptError, CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError,
-    CspDkgUpdateFsEpochError, CspDkgVerifyDealingError, CspDkgVerifyFsKeyError,
-    CspDkgVerifyReshareDealingError,
+    CspDkgUpdateFsEpochError, CspDkgVerifyDealingError, CspDkgVerifyReshareDealingError,
 };
 use ic_crypto_internal_types::sign::threshold_sig::dkg::encryption_public_key::CspEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
@@ -41,6 +41,7 @@ use ic_types::{NodeId, NodeIndex, NumberOfNodes};
 use mockall::predicate::*;
 use mockall::*;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::sync::Arc;
 use tokio::net::TcpStream;
 
 mock! {
@@ -100,12 +101,6 @@ mock! {
     }
 
     pub trait ThresholdSignatureCspClient {
-        fn threshold_sign_to_be_removed(
-            &self,
-            algorithm_id: AlgorithmId,
-            message: &[u8],
-            key_id: KeyId,
-        ) -> Result<CspSignature, CspThresholdSignError>;
 
         fn threshold_sign(
             &self,
@@ -151,15 +146,6 @@ mock! {
         _algorithm_id: AlgorithmId,
         _node_id: NodeId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError>;
-
-    /// Verifies that a forward secure public key and PoP is valid.
-    fn verify_forward_secure_key(
-        &self,
-        _algorithm_id: AlgorithmId,
-        _public_key: CspFsEncryptionPublicKey,
-        _pop: CspFsEncryptionPop,
-        _node_id: NodeId,
-    ) -> Result<(), CspDkgVerifyFsKeyError>;
 
     /// Erases forward secure secret keys at and before a given epoch
     fn update_forward_secure_epoch(
@@ -327,10 +313,6 @@ mock! {
     ) -> Result<CspDkgTranscript, dkg_errors::DkgCreateReshareTranscriptError>;
     }
 
-    pub trait CspSecretKeyInjector {
-        fn insert_secret_key(&mut self, key_id: KeyId, sk: CspSecretKey);
-    }
-
     pub trait CspSecretKeyStoreChecker {
         fn sks_contains(&self, id: &KeyId) -> bool;
         fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> bool;
@@ -366,5 +348,9 @@ mock! {
         fn node_public_keys(&self) -> NodePublicKeys;
         fn node_signing_key_id(&self) -> KeyId;
         fn dkg_dealing_encryption_key_id(&self) -> KeyId;
+    }
+
+    pub trait CspTlsHandshakeSignerProvider: Send + Sync {
+        fn handshake_signer(&self) -> Arc<dyn TlsHandshakeCspServer>;
     }
 }

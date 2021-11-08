@@ -11,48 +11,56 @@ use std::convert::{TryFrom, TryInto};
 fn roundtrip_conversion_stream_header() {
     let header = stream_header();
 
-    assert_eq!(
-        header,
-        types::StreamHeader::from((&header, CURRENT_CERTIFICATION_VERSION))
-            .try_into()
-            .unwrap()
-    );
+    for certification_version in 0..=CURRENT_CERTIFICATION_VERSION {
+        assert_eq!(
+            header,
+            types::StreamHeader::from((&header, certification_version))
+                .try_into()
+                .unwrap()
+        );
+    }
 }
 
 #[test]
 fn roundtrip_conversion_request() {
     let request = request();
 
-    assert_eq!(
-        request,
-        types::RequestOrResponse::from((&request, CURRENT_CERTIFICATION_VERSION))
-            .try_into()
-            .unwrap()
-    );
+    for certification_version in 0..=CURRENT_CERTIFICATION_VERSION {
+        assert_eq!(
+            request,
+            types::RequestOrResponse::from((&request, certification_version))
+                .try_into()
+                .unwrap()
+        );
+    }
 }
 
 #[test]
 fn roundtrip_conversion_response() {
     let response = response();
 
-    assert_eq!(
-        response,
-        types::RequestOrResponse::from((&response, CURRENT_CERTIFICATION_VERSION))
-            .try_into()
-            .unwrap()
-    );
+    for certification_version in 0..=CURRENT_CERTIFICATION_VERSION {
+        assert_eq!(
+            response,
+            types::RequestOrResponse::from((&response, certification_version))
+                .try_into()
+                .unwrap()
+        );
+    }
 }
 
 #[test]
 fn roundtrip_conversion_reject_response() {
     let response = reject_response();
 
-    assert_eq!(
-        response,
-        types::RequestOrResponse::from((&response, CURRENT_CERTIFICATION_VERSION))
-            .try_into()
-            .unwrap()
-    );
+    for certification_version in 0..=CURRENT_CERTIFICATION_VERSION {
+        assert_eq!(
+            response,
+            types::RequestOrResponse::from((&response, certification_version))
+                .try_into()
+                .unwrap()
+        );
+    }
 }
 
 #[test]

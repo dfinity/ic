@@ -7,7 +7,6 @@
 
 use super::*;
 use crate::api::threshold_sign_error::ClibThresholdSignError;
-use ff::PrimeField;
 use ic_crypto_internal_bls12381_common::{
     fr_from_bytes, fr_to_bytes, g1_from_bytes, g1_to_bytes, g2_from_bytes, g2_from_bytes_unchecked,
     g2_to_bytes,
@@ -16,7 +15,6 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::{
     PublicKeyBytes, ThresholdSigPublicKeyBytesConversionError,
 };
 use ic_types::crypto::{AlgorithmId, CryptoError};
-use pairing::bls12_381::{Fr, FrRepr};
 use std::convert::TryFrom;
 
 #[cfg(test)]
@@ -67,21 +65,19 @@ impl TryFrom<&PublicKeyBytes> for PublicKey {
 
 impl From<SecretKey> for SecretKeyBytes {
     fn from(key: SecretKey) -> Self {
-        Self(fr_to_bytes(&FrRepr::from(key)))
+        Self(fr_to_bytes(&key))
     }
 }
 impl From<&SecretKey> for SecretKeyBytes {
     fn from(key: &SecretKey) -> Self {
-        Self(fr_to_bytes(&FrRepr::from(*key)))
+        Self(fr_to_bytes(key))
     }
 }
 impl TryFrom<&SecretKeyBytes> for SecretKey {
     type Error = ClibThresholdSignError;
     fn try_from(bytes: &SecretKeyBytes) -> Result<SecretKey, ClibThresholdSignError> {
-        Fr::from_repr(fr_from_bytes(&bytes.0)).map_err(|_| {
-            ClibThresholdSignError::MalformedSecretKey {
-                algorithm: AlgorithmId::ThresBls12_381,
-            }
+        fr_from_bytes(&bytes.0).map_err(|_| ClibThresholdSignError::MalformedSecretKey {
+            algorithm: AlgorithmId::ThresBls12_381,
         })
     }
 }

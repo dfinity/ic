@@ -1,7 +1,7 @@
 //! BLS12-381 multisignature types.
 #![allow(clippy::unit_arg)] // Arbitrary is a unit arg in: derive(proptest_derive::Arbitrary)
+use bls12_381::{G1Projective, G2Projective, Scalar};
 use ic_crypto_internal_bls12381_common as bls;
-use pairing::bls12_381::{FrRepr, G1, G2};
 use zeroize::Zeroize;
 
 #[cfg(test)]
@@ -11,23 +11,23 @@ pub mod conversions;
 mod generic_traits;
 
 /// A BLS secret key is a field element.
-pub type SecretKey = FrRepr;
+pub type SecretKey = Scalar;
 
 /// A BLS public key is a curve point in the G2 group.
-pub type PublicKey = G2;
+pub type PublicKey = G2Projective;
 
 /// A BLS combined public key is a curve point in the G2 group.
-pub type CombinedPublicKey = G2;
+pub type CombinedPublicKey = G2Projective;
 
 /// A BLS signature is a curve point in the G1 group.
-pub type IndividualSignature = G1;
+pub type IndividualSignature = G1Projective;
 
 /// A BLS Proof of Possession is a curve point in the G1 group (a
 /// domain-separated signature on the public key).
-pub type Pop = G1;
+pub type Pop = G1Projective;
 
 /// A BLS multisignature is a curve point in the G1 group.
-pub type CombinedSignature = G1;
+pub type CombinedSignature = G1Projective;
 
 /// Wrapper for a serialized secret key.
 #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]

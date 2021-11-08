@@ -27,7 +27,7 @@ pub fn test_vec(id: TestVectorId) -> TestVector {
                 seed: b"10000".to_vec(),
                 delegation_pubkey: b"MY PUBLIC KEY".to_vec(),
                 delegation_exp: 1_650_114_196_974_266_000,
-                root_pubkey_der: base64::decode("MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAJN9lndC9PmwG44m08nlPFolGoNYavxz8FS6wa7WDBsR56ZnfsCyYIXNwdOa1MjctQLtFPVK9EDR2CkHWx6fbnLeV+uyOEphXQs+Lzpq9FFlMt5xOipXRXpmtosKfTT4Tg==".to_string()).unwrap(),
+                root_pubkey_der: base64::decode(&"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAJN9lndC9PmwG44m08nlPFolGoNYavxz8FS6wa7WDBsR56ZnfsCyYIXNwdOa1MjctQLtFPVK9EDR2CkHWx6fbnLeV+uyOEphXQs+Lzpq9FFlMt5xOipXRXpmtosKfTT4Tg==".to_string()).unwrap(),
             }
         }
     }

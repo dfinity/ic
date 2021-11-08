@@ -1,6 +1,6 @@
 use ic_wasm_types::BinaryEncodedWasm;
 use ic_wasm_utils::instrumentation::{instrument, InstructionCostTable, InstrumentationOutput};
-use ic_wasm_utils::validation::{validate_wasm_binary, WasmValidationLimits};
+use ic_wasm_utils::validation::{validate_wasm_binary, WasmValidationConfig};
 
 fn usage() {
     println!(
@@ -16,7 +16,7 @@ fn instrument_wasm(filename: &str) -> std::io::Result<()> {
     use std::io::Write;
 
     let contents = std::fs::read(filename).map(BinaryEncodedWasm::new)?;
-    if let Err(err) = validate_wasm_binary(&contents, WasmValidationLimits::default()) {
+    if let Err(err) = validate_wasm_binary(&contents, WasmValidationConfig::default()) {
         eprintln!("Failed to validate wasm file {}: {}", filename, err);
         std::process::exit(1);
     }

@@ -112,6 +112,7 @@ impl IngressHandler for IngressManager {
             let integrity_hash = ic_crypto::crypto_hash(ingress_message.binary()).get();
             MoveToValidated((
                 IngressMessageId::from(ingress_object),
+                artifact.peer_id,
                 size,
                 IngressMessageAttribute::new(ingress_message),
                 integrity_hash,
@@ -204,8 +205,13 @@ mod tests {
                 });
                 let change_set = ingress_manager.on_state_change(&ingress_pool);
                 let size = ingress_message.count_bytes();
-                let expected_change_action =
-                    ChangeAction::MoveToValidated((message_id, size, attribute, integrity_hash));
+                let expected_change_action = ChangeAction::MoveToValidated((
+                    message_id,
+                    node_test_id(0),
+                    size,
+                    attribute,
+                    integrity_hash,
+                ));
                 assert!(change_set.contains(&expected_change_action));
             },
         )
@@ -410,6 +416,7 @@ mod tests {
                 let expected_change_action0 = PurgeBelowExpiry(batch_time);
                 let expected_change_action1 = ChangeAction::MoveToValidated((
                     good_id,
+                    node_test_id(0),
                     good_msg.count_bytes(),
                     attribute,
                     good_msg_integrity_hash,

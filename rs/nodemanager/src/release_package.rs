@@ -8,7 +8,6 @@ use crate::utils;
 use ic_http_utils::file_downloader::check_file_hash;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_logger::{debug, info, warn, ReplicaLogger};
-use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_registry_common::local_store::LocalStoreImpl;
 use ic_types::consensus::catchup::CUPWithOriginalProtobuf;
@@ -110,7 +109,9 @@ impl ReleasePackage {
         &self,
     ) -> NodeManagerResult<(ReplicaVersion, Option<(SubnetId, ThresholdSigPublicKey)>)> {
         let latest_registry_version = self.registry.get_latest_version();
-        let (latest_subnet_id, subnet_record) = self.get_subnet_record(latest_registry_version)?;
+        let (latest_subnet_id, subnet_record) = self
+            .registry
+            .get_own_subnet_record(latest_registry_version)?;
 
         // 0. Special case for when we are doing boostrap disaster recovery for
         // nns and replacing the local registry store. Because we replace the
@@ -138,19 +139,27 @@ impl ReleasePackage {
                 registry_store_uri.uri,
                 registry_store_uri.hash,
             );
+
             let downloader = FileDownloader::new(Some(self.logger.clone()));
             let local_store_location = tempfile::tempdir()
                 .expect("temporary location for local store download could not be created")
                 .into_path();
             std::fs::create_dir_all(&local_store_location).expect("Directory should be created");
-            downloader
+
+            if let Err(e) = downloader
                 .download_and_extract_tar_gz(
                     &registry_store_uri.uri,
                     &local_store_location,
                     Some(registry_store_uri.hash),
                 )
                 .await
-                .expect("Download of registry cache should succeed");
+            {
+                warn!(
+                    self.logger,
+                    "Download of registry store for nns disaster recovery failed {}", e,
+                );
+                return Err(NodeManagerError::FileDownloadError(e));
+            }
 
             if let Err(e) = self.stop_replica() {
                 // Even though we fail to stop the replica, we should still
@@ -477,20 +486,6 @@ impl ReleasePackage {
         })
     }
 
-    /// Return the subnet that this node belongs to at the given
-    /// Registry version
-    fn get_subnet_record(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> NodeManagerResult<(SubnetId, SubnetRecord)> {
-        let new_subnet_id = self.registry.get_subnet_id(registry_version)?;
-        let new_subnet_record = self
-            .registry
-            .get_subnet_record(new_subnet_id, registry_version)?;
-
-        Ok((new_subnet_id, new_subnet_record))
-    }
-
     /// Symlink "$replica_binary_dir/current" to the current release package
     ///
     /// On reboot, start-up scripts will use this symlink to start the most
@@ -543,7 +538,7 @@ impl ReleasePackage {
     }
 
     async fn check_for_upgrade_once(&mut self) {
-        debug!(self.logger, "Checking for release package");
+        info!(self.logger, "Checking for release package");
         match self.check_for_upgrade().await {
             Ok((new_version, new_subnet)) => {
                 self.replica_version = Some(new_version);

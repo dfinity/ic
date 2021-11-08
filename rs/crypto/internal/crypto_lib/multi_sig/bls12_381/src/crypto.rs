@@ -5,11 +5,11 @@ use crate::types::{
     CombinedPublicKey, CombinedSignature, IndividualSignature, Pop, PublicKey, PublicKeyBytes,
     SecretKey,
 };
-use group::CurveProjective;
+
+use bls12_381::{Bls12, G1Projective, G2Affine, G2Projective};
 use ic_crypto_internal_bls12381_common as bls;
 use ic_crypto_internal_bls12381_common::random_bls12_381_scalar;
 use ic_crypto_sha::{Context, DomainSeparationContext};
-use pairing::bls12_381::{Bls12, FrRepr, G1, G2};
 use pairing::Engine;
 use rand::{CryptoRng, Rng};
 
@@ -27,11 +27,11 @@ const DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP: &[u8; 43] =
 /// multi-signature public keys.
 pub const DOMAIN_MULTI_SIG_BLS12_381_POP: &str = "ic-multi-sig-bls12381-pop";
 
-pub fn hash_message_to_g1(msg: &[u8]) -> G1 {
+pub fn hash_message_to_g1(msg: &[u8]) -> G1Projective {
     bls::hash_to_g1(&DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG_WITH_POP[..], msg)
 }
 
-pub fn hash_public_key_to_g1(public_key: &[u8]) -> G1 {
+pub fn hash_public_key_to_g1(public_key: &[u8]) -> G1Projective {
     bls::hash_to_g1(
         &DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP[..],
         &public_key,
@@ -60,13 +60,13 @@ pub fn keypair_from_seed(seed: [u64; 4]) -> (SecretKey, PublicKey) {
 pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKey, PublicKey) {
     // random_bls12_381_scalar uses rejection sampling to ensure a uniform
     // distribution.
-    let secret_key: FrRepr = FrRepr::from(random_bls12_381_scalar(rng));
-    let public_key: G2 = bls::scalar_multiply(G2::one(), secret_key);
+    let secret_key = random_bls12_381_scalar(rng);
+    let public_key = G2Projective::generator() * secret_key;
     (secret_key, public_key)
 }
 
-pub fn sign_point(point: G1, secret_key: SecretKey) -> IndividualSignature {
-    bls::scalar_multiply(point, secret_key)
+pub fn sign_point(point: G1Projective, secret_key: SecretKey) -> IndividualSignature {
+    point * secret_key
 }
 pub fn sign_message(message: &[u8], secret_key: SecretKey) -> IndividualSignature {
     sign_point(hash_message_to_g1(message), secret_key)
@@ -85,14 +85,15 @@ pub fn create_pop(public_key: PublicKey, secret_key: SecretKey) -> Pop {
 }
 
 pub fn combine_signatures(signatures: &[IndividualSignature]) -> CombinedSignature {
-    bls::sum(signatures)
+    bls::sum_g1(signatures)
 }
 pub fn combine_public_keys(public_keys: &[PublicKey]) -> CombinedPublicKey {
-    bls::sum(public_keys)
+    bls::sum_g2(public_keys)
 }
 
-pub fn verify_point(hash: G1, signature: G1, public_key: PublicKey) -> bool {
-    Bls12::pairing(signature, G2::one()) == Bls12::pairing(hash, public_key)
+pub fn verify_point(hash: G1Projective, signature: G1Projective, public_key: PublicKey) -> bool {
+    Bls12::pairing(&signature.into(), &G2Affine::generator())
+        == Bls12::pairing(&hash.into(), &public_key.into())
 }
 pub fn verify_individual_message_signature(
     message: &[u8],

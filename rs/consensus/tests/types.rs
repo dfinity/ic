@@ -21,7 +21,14 @@ fn ensure_equality_of_signed_bytes_of_catch_up_package_wrappers() {
 
     let filepath = Builder::new().tempfile().unwrap().path().to_path_buf();
     write_protobuf_using_tmp_file(&filepath, &protobuf).unwrap();
-    pb::CatchUpPackage::read_from_file(&filepath)
+
+    let read_from_file = pb::CatchUpPackage::read_from_file(&filepath)
         .map_err(|e| panic!("Failed to read CUP {}", e))
         .unwrap();
+
+    // Ensure that the value we get after transforming into protobuf, writing to
+    // a file, reading from that file back into a protobuf and then into a
+    // normal cup is the same as the original value we started with.
+    assert_eq!(read_from_file, protobuf);
+    assert_eq!(cup, CatchUpPackage::try_from(&read_from_file).unwrap())
 }

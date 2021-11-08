@@ -15,10 +15,9 @@ use std::sync::Arc;
 ///     // This is particular useful for servers that want to implement some
 ///     // type of flow control.
 ///     use std::sync::Arc;
-///      
+///
 ///     async fn example() {
-///         let gauge = Arc::new(
-///             prometheus::IntGauge::new("name","help").unwrap());
+///         let gauge = prometheus::IntGauge::new("name", "help").unwrap();
 ///         let sem =
 ///             ic_base_thread::ObservableCountingSemaphore::new(2, gauge);
 ///         let mut jhs = Vec::new();
@@ -37,14 +36,11 @@ use std::sync::Arc;
 /// ```
 pub struct ObservableCountingSemaphore<P: Atomic> {
     semaphore: Arc<tokio::sync::Semaphore>,
-    // We require an Arc here because in our codebase the Prometheus metrics are
-    // not statically initialized. Hence, to avoid craziness with lifetimes,
-    // especially in concurrent code, we prefer to use an Arc.
-    gauge: Arc<GenericGauge<P>>,
+    gauge: GenericGauge<P>,
 }
 
 impl<P: Atomic> ObservableCountingSemaphore<P> {
-    pub fn new(permits: usize, gauge: Arc<GenericGauge<P>>) -> Self {
+    pub fn new(permits: usize, gauge: GenericGauge<P>) -> Self {
         let semaphore = Arc::new(tokio::sync::Semaphore::new(permits));
         Self { semaphore, gauge }
     }
@@ -73,7 +69,7 @@ impl<P: Atomic> ObservableCountingSemaphore<P> {
             .expect("Acquiring a permit on closed semaphore. This can't happen.");
         self.gauge.inc();
         SemaphorePermit {
-            gauge: Arc::clone(&self.gauge),
+            gauge: self.gauge.clone(),
             _permit: permit,
         }
     }
@@ -81,7 +77,7 @@ impl<P: Atomic> ObservableCountingSemaphore<P> {
 
 /// The semaphore permit type returned from the `ObservableCountingSemaphore`.
 pub struct SemaphorePermit<P: Atomic> {
-    gauge: Arc<GenericGauge<P>>,
+    gauge: GenericGauge<P>,
     _permit: tokio::sync::OwnedSemaphorePermit,
 }
 
@@ -97,14 +93,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_concurrent_flow_control() {
-        let gauge = Arc::new(prometheus::IntGauge::new("name", "help").unwrap());
-        let sem = ObservableCountingSemaphore::new(2, Arc::clone(&gauge));
+        let gauge = prometheus::IntGauge::new("name", "help").unwrap();
+        let sem = ObservableCountingSemaphore::new(2, gauge.clone());
         assert_eq!(gauge.get(), 0);
         let mut jhs = Vec::new();
         for _i in 1..10 {
             let permit = sem.acquire().await;
             jhs.push(tokio::task::spawn({
-                let gauge = Arc::clone(&gauge);
+                let gauge = gauge.clone();
                 async move {
                     assert!(gauge.get() > 0);
                     assert!(gauge.get() <= 2);
@@ -121,8 +117,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_sequencial_operations() {
-        let gauge = Arc::new(prometheus::IntGauge::new("name", "help").unwrap());
-        let sem = Arc::new(ObservableCountingSemaphore::new(3, Arc::clone(&gauge)));
+        let gauge = prometheus::IntGauge::new("name", "help").unwrap();
+        let sem = Arc::new(ObservableCountingSemaphore::new(3, gauge.clone()));
         assert_eq!(gauge.get(), 0);
         {
             let _permit1 = sem.acquire().await;

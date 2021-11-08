@@ -7,7 +7,7 @@ edition = "2018"
 askama = "0.10.5"
 futures-util = "0.3.13"
 hex = "0.4.2"
-http = "0.2.3"
+http = "0.2.5"
 flate2 = "1.0.20"
 futures = "0.3.13"
 hyper = { version = "0.14.5", features = ["full"] }
@@ -19,6 +19,7 @@ ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
+ic-pprof = { path = "../monitoring/pprof" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
@@ -26,9 +27,8 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-validator = { path = "../validator" }
-leaky-bucket = "0.11.0"
 prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.7.0"
+prost = "0.8.0"
 rand = "0.8.3"
 reqwest = { version = "0.11.1", features = [ "native-tls", "blocking" ] }
 serde = "1.0.99"
@@ -37,6 +37,9 @@ slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "rel
 tar = "0.4.30"
 tempfile = "3.1.0"
 tokio = { version = "1.9.0", features = [ "full" ] }
+tower =  { version = "0.4.8", features = ["load-shed", "limit"] }
+tower-util = "0.3.1"
+url = "2.1.1"
 
 [dev-dependencies]
 bytes = "1.0.1"

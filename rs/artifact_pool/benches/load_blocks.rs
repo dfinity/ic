@@ -12,6 +12,7 @@ use ic_test_utilities::{
     types::ids::{node_test_id, subnet_test_id},
     types::messages::SignedIngressBuilder,
 };
+use ic_types::batch::SelfValidatingPayload;
 use ic_types::{
     batch::{BatchPayload, IngressPayload, XNetPayload},
     consensus::{dkg, Block, BlockProposal, HasHeight, Payload, Rank},
@@ -53,10 +54,11 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
             .method_payload(vec![0; 128 * 1024])
             .build()]);
         let xnet = XNetPayload::default();
+        let self_validating = SelfValidatingPayload::default();
         block.payload = Payload::new(
             ic_crypto::crypto_hash,
             (
-                BatchPayload::new(ingress, xnet),
+                BatchPayload::new(ingress, xnet, self_validating),
                 dkg::Dealings::new_empty(parent.payload.as_ref().dkg_interval_start_height()),
             )
                 .into(),
@@ -82,7 +84,7 @@ fn sum_ingress_counts(pool: &dyn ConsensusPool) -> usize {
         .get_all()
         .map(|proposal| {
             let block: Block = proposal.into();
-            let batch = block.payload.as_ref().as_batch_payload();
+            let batch = &block.payload.as_ref().as_data().batch;
             batch.ingress.message_count()
         })
         .sum::<usize>()

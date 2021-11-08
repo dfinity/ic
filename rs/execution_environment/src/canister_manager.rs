@@ -13,16 +13,16 @@ use ic_ic00_types::{
     SetControllerArgs, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, IngressHistoryWriter, MessageAcceptanceError,
+    CanisterOutOfCyclesError, ExecutionParameters, HypervisorError, IngressHistoryWriter,
 };
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::{
-    CallOrigin, CanisterState, CanisterStatus, ExecutionState, ReplicatedState, SchedulerState,
-    SystemState,
+    CallOrigin, CanisterState, CanisterStatus, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_types::{
+    canonical_error::{not_found_error, permission_denied_error, CanonicalError},
     ingress::IngressStatus,
     messages::{
         CanisterInstallMode, Payload, RejectContext, Response as CanisterResponse,
@@ -33,7 +33,7 @@ use ic_types::{
     MemoryAllocation, NumBytes, NumInstructions, PrincipalId, SubnetId, Time, UserId,
 };
 use ic_utils::ic_features::cow_state_feature;
-use ic_wasm_utils::validation::WasmValidationLimits;
+use ic_wasm_utils::validation::WasmValidationConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::{collections::BTreeSet, convert::TryFrom, mem, str::FromStr, sync::Arc};
@@ -71,11 +71,10 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) max_cycles_per_canister: Option<Cycles>,
     pub(crate) default_provisional_cycles_balance: Cycles,
     pub(crate) default_freeze_threshold: NumSeconds,
-    pub(crate) max_globals: usize,
-    pub(crate) max_functions: usize,
     pub(crate) compute_capacity: u64,
     pub(crate) own_subnet_id: SubnetId,
     pub(crate) max_controllers: usize,
+    pub(crate) wasm_validation_config: WasmValidationConfig,
 }
 
 impl CanisterMgrConfig {
@@ -85,22 +84,20 @@ impl CanisterMgrConfig {
         max_cycles_per_canister: Option<Cycles>,
         default_provisional_cycles_balance: Cycles,
         default_freeze_threshold: NumSeconds,
-        max_globals: usize,
-        max_functions: usize,
         own_subnet_id: SubnetId,
         max_controllers: usize,
         num_cores: usize,
+        wasm_validation_config: WasmValidationConfig,
     ) -> Self {
         Self {
             subnet_memory_capacity,
             max_cycles_per_canister,
             default_provisional_cycles_balance,
             default_freeze_threshold,
-            max_globals,
-            max_functions,
             own_subnet_id,
             max_controllers,
             compute_capacity: 100 * num_cores as u64,
+            wasm_validation_config,
         }
     }
 }
@@ -140,24 +137,29 @@ impl CanisterManager {
         sender: UserId,
         method_name: &str,
         payload: &[u8],
-    ) -> Result<(), MessageAcceptanceError> {
+    ) -> Result<(), CanonicalError> {
         fn is_sender_controller(
             canister_id: CanisterId,
             sender: UserId,
             state: Arc<ReplicatedState>,
-        ) -> Result<(), MessageAcceptanceError> {
+        ) -> Result<(), CanonicalError> {
             match state.canister_state(&canister_id) {
                 Some(canister) => {
                     if !canister.controllers().contains(&sender.get()) {
-                        Err(MessageAcceptanceError::CanisterRejected)
+                        Err(permission_denied_error(
+                            "Requested canister rejected the message",
+                        ))
                     } else {
                         Ok(())
                     }
                 }
-                None => Err(MessageAcceptanceError::CanisterNotFound),
+                None => Err(not_found_error("Requested canister does not exist")),
             }
         }
 
+        let rejected_canister_err = Err(permission_denied_error(
+            "Requested canister rejected the message",
+        ));
         // The message is targeted towards the management canister. The
         // actual type of the method will determine if the message should be
         // accepted or not.
@@ -168,9 +170,11 @@ impl CanisterManager {
             | Ok(Ic00Method::CreateCanister)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)
+            | Ok(Ic00Method::GetMockECDSAPublicKey)
+            | Ok(Ic00Method::SignWithMockECDSA)
             // "DepositCycles" can be called by anyone however as ingress message
             // cannot carry cycles, it does not make sense to allow them from users.
-            | Ok(Ic00Method::DepositCycles) => Err(MessageAcceptanceError::CanisterRejected),
+            | Ok(Ic00Method::DepositCycles) => rejected_canister_err,
 
             // These methods are only valid if they are sent by the controller
             // of the canister. We assume that the canister always wants to
@@ -180,31 +184,31 @@ impl CanisterManager {
             | Ok(Ic00Method::UninstallCode)
             | Ok(Ic00Method::StopCanister)
             | Ok(Ic00Method::DeleteCanister) => match Decode!(&payload, CanisterIdRecord) {
-                Err(_) => Err(MessageAcceptanceError::CanisterRejected),
+                Err(_) => rejected_canister_err,
                 Ok(args) => is_sender_controller(args.get_canister_id(), sender, state),
             },
             Ok(Ic00Method::UpdateSettings) => match Decode!(&payload, UpdateSettingsArgs) {
-                Err(_) => Err(MessageAcceptanceError::CanisterRejected),
+                Err(_) => rejected_canister_err,
                 Ok(args) => is_sender_controller(args.get_canister_id(), sender, state),
             },
             Ok(Ic00Method::InstallCode) => match Decode!(&payload, InstallCodeArgs) {
-                Err(_) => Err(MessageAcceptanceError::CanisterRejected),
+                Err(_) => rejected_canister_err,
                 Ok(args) => is_sender_controller(args.get_canister_id(), sender, state),
             },
             Ok(Ic00Method::SetController) => match Decode!(&payload, SetControllerArgs) {
-                Err(_) => Err(MessageAcceptanceError::CanisterRejected),
+                Err(_) => rejected_canister_err,
                 Ok(args) => is_sender_controller(args.get_canister_id(), sender, state),
             },
 
             // Nobody pays for `raw_rand`, so this cannot be used via ingress messages
-            Ok(Ic00Method::RawRand) => Err(MessageAcceptanceError::CanisterRejected),
+            Ok(Ic00Method::RawRand) => rejected_canister_err,
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
             | Ok(Ic00Method::ProvisionalTopUpCanister) => {
                 if provisional_whitelist.contains(sender.get_ref()) {
                     Ok(())
                 } else {
-                    Err(MessageAcceptanceError::CanisterRejected)
+                    rejected_canister_err
                 }
             }
         }
@@ -470,12 +474,7 @@ impl CanisterManager {
         ) {
             return (
                 execution_parameters.instruction_limit,
-                Err(CanisterManagerError::CanisterOutOfCycles {
-                    canister_id: err.canister_id,
-                    available: err.available,
-                    required: err.requested,
-                    threshold: err.threshold,
-                }),
+                Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
             );
         }
 
@@ -563,7 +562,12 @@ impl CanisterManager {
         }
 
         let rejects = uninstall_canister(&self.log, canister, &path, time);
-        crate::util::process_responses(rejects, state, Arc::clone(&self.ingress_history_writer));
+        crate::util::process_responses(
+            rejects,
+            state,
+            Arc::clone(&self.ingress_history_writer),
+            self.log.clone(),
+        );
         Ok(())
     }
 
@@ -698,7 +702,7 @@ impl CanisterManager {
             canister
                 .execution_state
                 .as_ref()
-                .map(|es| es.wasm_binary.hash_sha256().to_vec()),
+                .map(|es| es.wasm_binary.binary.hash_sha256().to_vec()),
             *controller,
             controllers,
             canister.memory_usage(),
@@ -767,11 +771,13 @@ impl CanisterManager {
 
         // Once a canister is stopped, it stops accepting new messages, so this should
         // never happen.
-        assert!(
-            !canister_to_delete.has_input(),
-            "Trying to delete canister {} while having messages in its input queue.",
-            canister_to_delete.canister_id()
-        );
+        if canister_to_delete.has_input() {
+            fatal!(
+                self.log,
+                "[EXC-BUG] Trying to delete canister {} while having messages in its input queue.",
+                canister_to_delete.canister_id()
+            );
+        }
 
         // This scenario should be impossible because:
         //
@@ -786,11 +792,13 @@ impl CanisterManager {
         // previous round (2), had its output queued emptied in a previous round (3),
         // and the output queue is still empty because it didn't accept any new
         // messages (1).
-        assert!(
-            !canister_to_delete.has_output(),
-            "Trying to delete canister {} while having messages in its output queue.",
-            canister_to_delete.canister_id()
-        );
+        if canister_to_delete.has_output() {
+            fatal!(
+                self.log,
+                "[EXC-BUG] Trying to delete canister {} while having messages in its output queue.",
+                canister_to_delete.canister_id()
+            );
+        }
 
         // When a canister is deleted:
         // - its state is permanently deleted, and
@@ -834,13 +842,10 @@ impl CanisterManager {
     ) {
         let canister_id = context.canister_id;
         let layout = canister_layout(&canister_layout_path, &canister_id);
-        let execution_state = match ExecutionState::new(
+        let execution_state = match self.hypervisor.create_execution_state(
             context.wasm_module,
             layout.raw_path(),
-            WasmValidationLimits {
-                max_globals: self.config.max_globals,
-                max_functions: self.config.max_functions,
-            },
+            self.config.wasm_validation_config.clone(),
         ) {
             Ok(execution_state) => Some(execution_state),
             Err(err) => {
@@ -971,13 +976,10 @@ impl CanisterManager {
 
         // Replace the execution state of the canister with a new execution state.
         let layout = canister_layout(&canister_layout_path, &canister_id);
-        new_canister.execution_state = match ExecutionState::new(
+        new_canister.execution_state = match self.hypervisor.create_execution_state(
             context.wasm_module,
             layout.raw_path(),
-            WasmValidationLimits {
-                max_globals: self.config.max_globals,
-                max_functions: self.config.max_functions,
-            },
+            self.config.wasm_validation_config.clone(),
         ) {
             Err(err) => return (instructions_limit, Err((canister_id, err).into())),
             Ok(execution_state) => Some(execution_state),
@@ -1305,7 +1307,7 @@ impl CanisterManager {
         canister
             .execution_state
             .as_ref()
-            .map(|execution_state| execution_state.wasm_binary.hash_sha256())
+            .map(|execution_state| execution_state.wasm_binary.binary.hash_sha256())
     }
 }
 #[doc(hidden)] // pub for usage in tests
@@ -1350,12 +1352,7 @@ pub(crate) enum CanisterManagerError {
         sent: Cycles,
         required: Cycles,
     },
-    CanisterOutOfCycles {
-        canister_id: CanisterId,
-        available: Cycles,
-        required: Cycles,
-        threshold: Cycles,
-    },
+    InstallCodeNotEnoughCycles(CanisterOutOfCyclesError),
     SubnetOutOfCanisterIds {
         allowed: u128,
     },
@@ -1474,13 +1471,10 @@ impl From<CanisterManagerError> for UserError {
                         "Cannot create canister. Sender should be on the same subnet or on the NNS subnet.".to_string(),
                 )
             }
-            CanisterOutOfCycles { canister_id, available, required, threshold } => {
+            InstallCodeNotEnoughCycles(err) => {
                 Self::new(
                 ErrorCode::CanisterOutOfCycles,
-                    format!(
-                        "Could not install canister {} as {} cycles are required. Canister has {} cycles with a freeze threshold of {} cycles.",
-                        canister_id, required, available, threshold
-                    ),
+                    format!("Canister installation failed with `{}`", err),
                 )
             }
             SubnetOutOfCanisterIds{ allowed } => {

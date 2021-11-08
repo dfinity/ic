@@ -224,7 +224,7 @@ pub const SAMPLE_CONFIG: &str = r#"
         //
         // The default for this value is `false` and thus matches the previously expected behavior in
         // production use cases.
-        block_on_overflow: false,
+        block_on_overflow: true,
     },
     // ===================================
     // Configuration of the logging setup for the nodemanager.
@@ -264,7 +264,7 @@ pub const SAMPLE_CONFIG: &str = r#"
         //
         // The default for this value is `false` and thus matches the previously expected behavior in
         // production use cases.
-        block_on_overflow: false,
+        block_on_overflow: true,
     },
     // =================================
     // Configuration of Message Routing.

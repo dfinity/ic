@@ -1,21 +1,27 @@
-use crate::types::{
-    arbitrary,
-    ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-    messages::SignedIngressBuilder,
+use crate::{
+    mock_time,
+    types::{
+        arbitrary,
+        ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+        messages::SignedIngressBuilder,
+    },
 };
 use ic_base_types::NumSeconds;
 use ic_cow_state::CowMemoryManagerImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::QUEUE_INDEX_NONE, metadata_state::Stream, page_map, CallContext, CallOrigin,
-    CanisterState, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, NumWasmPages64,
-    PageMap, ReplicatedState, SchedulerState, SystemState,
+    canister_state::{execution_state::WasmBinary, QUEUE_INDEX_NONE},
+    metadata_state::Stream,
+    page_map,
+    testing::SystemStateTesting,
+    CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
+    NumWasmPages, NumWasmPages64, PageMap, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_types::{
-    messages::{Ingress, RequestOrResponse},
+    messages::{Ingress, Request, RequestOrResponse},
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation,
-    NumBytes, PrincipalId, SubnetId,
+    NumBytes, PrincipalId, SubnetId, Time,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 use proptest::prelude::*;
@@ -31,6 +37,7 @@ pub struct ReplicatedStateBuilder {
     canisters: Vec<CanisterState>,
     subnet_type: SubnetType,
     subnet_id: SubnetId,
+    batch_time: Time,
 }
 
 impl ReplicatedStateBuilder {
@@ -53,6 +60,11 @@ impl ReplicatedStateBuilder {
         self
     }
 
+    pub fn with_time(mut self, time: Time) -> Self {
+        self.batch_time = time;
+        self
+    }
+
     pub fn build(self) -> ReplicatedState {
         let mut state =
             ReplicatedState::new_rooted_at(self.subnet_id, self.subnet_type, "Initial".into());
@@ -60,6 +72,8 @@ impl ReplicatedStateBuilder {
         for canister in self.canisters {
             state.put_canister_state(canister);
         }
+
+        state.metadata.batch_time = self.batch_time;
 
         state
     }
@@ -71,6 +85,7 @@ impl Default for ReplicatedStateBuilder {
             canisters: Vec::new(),
             subnet_type: SubnetType::Application,
             subnet_id: subnet_test_id(1),
+            batch_time: mock_time(),
         }
     }
 }
@@ -156,6 +171,11 @@ impl CanisterStateBuilder {
         self
     }
 
+    pub fn with_canister_request(mut self, request: Request) -> Self {
+        self.inputs.push(RequestOrResponse::Request(request));
+        self
+    }
+
     pub fn build(self) -> CanisterState {
         let mut system_state = match self.status {
             CanisterStatusType::Running => SystemState::new_running(
@@ -190,7 +210,7 @@ impl CanisterStateBuilder {
 
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {
-            system_state.queues.push_ingress(ingress)
+            system_state.queues_mut().push_ingress(ingress)
         }
 
         // Set call contexts. Because there is no way pass in a `CallContext`
@@ -216,13 +236,16 @@ impl CanisterStateBuilder {
 
         // Add inputs to the input queue.
         for input in self.inputs {
-            system_state.push_input(QUEUE_INDEX_NONE, input).unwrap();
+            system_state
+                .queues_mut()
+                .push_input(QUEUE_INDEX_NONE, input)
+                .unwrap();
         }
 
         let execution_state = match self.wasm {
             Some(wasm_binary) => {
                 let mut ee = initial_execution_state(None);
-                ee.wasm_binary = BinaryEncodedWasm::new(wasm_binary);
+                ee.wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(wasm_binary));
                 Some(ee)
             }
             None => None,
@@ -303,6 +326,11 @@ impl SystemStateBuilder {
         self
     }
 
+    pub fn freeze_threshold(mut self, threshold: NumSeconds) -> Self {
+        self.system_state.freeze_threshold = threshold;
+        self
+    }
+
     pub fn build(self) -> SystemState {
         self.system_state
     }
@@ -351,12 +379,11 @@ pub fn initial_execution_state(p: Option<std::path::PathBuf>) -> ExecutionState 
     ExecutionState {
         canister_root: "NOT_USED".into(),
         session_nonce: None,
-        wasm_binary: BinaryEncodedWasm::new(vec![]),
+        wasm_binary: WasmBinary::new(BinaryEncodedWasm::new(vec![])),
         page_map: PageMap::default(),
         exported_globals: vec![],
         heap_size: NumWasmPages::from(0),
         exports: ExportedFunctions::new(BTreeSet::new()),
-        embedder_cache: None,
         last_executed_round: ExecutionRound::from(0),
         cow_mem_mgr: Arc::new(cow_mem_mgr),
         mapped_state: None,
@@ -575,7 +602,7 @@ prop_compose! {
         (allocation, round) in arb_compute_allocation_and_last_round(last_round_max)
     ) -> CanisterState {
         let mut execution_state = initial_execution_state(None);
-        execution_state.wasm_binary = BinaryEncodedWasm::new(wabt::wat2wasm(r#"(module)"#).unwrap());
+        execution_state.wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(wabt::wat2wasm(r#"(module)"#).unwrap()));
         let scheduler_state = SchedulerState::default();
         let system_state = SystemState::new_running(
             canister_test_id(0),

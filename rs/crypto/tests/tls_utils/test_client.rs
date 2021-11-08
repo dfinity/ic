@@ -19,17 +19,17 @@ pub struct ClientBuilder {
 }
 
 impl ClientBuilder {
-    pub fn expect_msg_from_server(mut self, msg: &str) -> ClientBuilder {
+    pub fn expect_msg_from_server(mut self, msg: &str) -> Self {
         self.msg_expected_from_server = Some(msg.to_string());
         self
     }
 
-    pub fn expect_error_when_reading_stream_contains(mut self, msg: &str) -> ClientBuilder {
+    pub fn expect_error_when_reading_stream_contains(mut self, msg: &str) -> Self {
         self.expected_error_substring_when_reading_stream = Some(msg.to_string());
         self
     }
 
-    pub fn with_message_for_server(mut self, msg: &str) -> ClientBuilder {
+    pub fn with_message_for_server(mut self, msg: &str) -> Self {
         self.msg_for_server = Some(msg.to_string());
         self
     }
@@ -77,7 +77,7 @@ impl Client {
 
         let tls_stream = self
             .crypto
-            .perform_tls_client_handshake(tcp_stream, self.server_node_id, REG_V1)
+            .perform_tls_client_handshake_with_rustls(tcp_stream, self.server_node_id, REG_V1)
             .await?;
         let (mut tls_read_half, tls_write_half) = tls_stream.split();
 

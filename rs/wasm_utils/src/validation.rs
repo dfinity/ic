@@ -8,6 +8,9 @@ use parity_wasm::elements::{
     Instruction::{self},
     Internal, Module, Section, Type, ValueType,
 };
+
+use ic_config::embedders::{FeatureFlags, FeatureStatus};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 /// Symbols that are reserved and cannot be exported by canisters.
@@ -26,6 +29,12 @@ struct FunctionSignature {
     pub return_type: Vec<ValueType>,
 }
 
+#[derive(Default, Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct WasmValidationConfig {
+    pub limits: WasmValidationLimits,
+    pub feature_flags: FeatureFlags,
+}
+
 /// Controls how many globals and functions are allowed in a Wasm module on the
 /// Internet Computer.
 //
@@ -33,6 +42,7 @@ struct FunctionSignature {
 // to `validate_wasm_binary` to make it easier and safer to use as a caller
 // without worrying about mixing the two up (since they're both of type
 // `usize`).
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct WasmValidationLimits {
     /// Maximum number of globals allowed in a module.
     pub max_globals: usize,
@@ -60,8 +70,10 @@ const API_VERSION_IC0: &str = "ic0";
 // user tries to import a function that doesn't exist in any of the expected
 // modules vs the case where the function exists but is imported from the wrong
 // module.
-fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>> {
-    let valid_system_apis = vec![
+fn get_valid_system_apis(
+    feature_flags: &FeatureFlags,
+) -> HashMap<String, HashMap<String, FunctionSignature>> {
+    let mut valid_system_apis = vec![
         (
             // Public methods
             "msg_caller_size",
@@ -537,6 +549,63 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
         ),
     ];
 
+    let experimental_apis = match feature_flags.api_cycles_u128_flag {
+        FeatureStatus::Disabled => vec![],
+        FeatureStatus::Enabled => vec![
+            (
+                "call_cycles_add128",
+                vec![(
+                    API_VERSION_IC0,
+                    FunctionSignature {
+                        param_types: vec![ValueType::I64, ValueType::I64],
+                        return_type: vec![],
+                    },
+                )],
+            ),
+            (
+                "canister_cycles_balance128",
+                vec![(
+                    API_VERSION_IC0,
+                    FunctionSignature {
+                        param_types: vec![],
+                        return_type: vec![ValueType::I64, ValueType::I64],
+                    },
+                )],
+            ),
+            (
+                "msg_cycles_available128",
+                vec![(
+                    API_VERSION_IC0,
+                    FunctionSignature {
+                        param_types: vec![],
+                        return_type: vec![ValueType::I64, ValueType::I64],
+                    },
+                )],
+            ),
+            (
+                "msg_cycles_refunded128",
+                vec![(
+                    API_VERSION_IC0,
+                    FunctionSignature {
+                        param_types: vec![],
+                        return_type: vec![ValueType::I64, ValueType::I64],
+                    },
+                )],
+            ),
+            (
+                "msg_cycles_accept128",
+                vec![(
+                    API_VERSION_IC0,
+                    FunctionSignature {
+                        param_types: vec![ValueType::I64, ValueType::I64],
+                        return_type: vec![ValueType::I64, ValueType::I64],
+                    },
+                )],
+            ),
+        ],
+    };
+    valid_system_apis.extend(experimental_apis);
+
     valid_system_apis
         .into_iter()
         .map(|(func_name, signatures)| {
@@ -663,11 +732,14 @@ fn set_imports_details(import_details: &mut WasmImportsDetails, import_module: &
 //
 // Returns information about what IC0 methods are imported via
 // `WasmImportsDetails`.
-fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmValidationError> {
+fn validate_import_section(
+    module: &Module,
+    feature_flags: &FeatureFlags,
+) -> Result<WasmImportsDetails, WasmValidationError> {
     let mut imports_details = WasmImportsDetails::default();
 
     if let Some(section) = module.import_section() {
-        let valid_system_apis = get_valid_system_apis();
+        let valid_system_apis = get_valid_system_apis(feature_flags);
         for entry in section.entries() {
             let import_module = entry.module();
             let field = entry.field();
@@ -914,16 +986,16 @@ pub struct WasmValidationDetails {
 /// Additionally, it ensures that the wasm binary can actually compile.
 pub fn validate_wasm_binary(
     wasm: &BinaryEncodedWasm,
-    config: WasmValidationLimits,
+    config: WasmValidationConfig,
 ) -> Result<WasmValidationDetails, WasmValidationError> {
     can_compile(&wasm)?;
     let module = parity_wasm::deserialize_buffer::<Module>(wasm.as_slice())
         .map_err(|err| WasmValidationError::ParityDeserializeError(into_parity_wasm_error(err)))?;
-    let imports_details = validate_import_section(&module)?;
+    let imports_details = validate_import_section(&module, &config.feature_flags)?;
     let reserved_exports = validate_export_section(&module)?;
     validate_data_section(&module)?;
-    validate_global_section(&module, config.max_globals)?;
-    validate_function_section(&module, config.max_functions)?;
+    validate_global_section(&module, config.limits.max_globals)?;
+    validate_function_section(&module, config.limits.max_functions)?;
     Ok(WasmValidationDetails {
         reserved_exports,
         imports_details,

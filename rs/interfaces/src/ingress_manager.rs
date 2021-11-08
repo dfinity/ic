@@ -1,6 +1,6 @@
 //! The ingress manager public interface.
 use crate::{
-    execution_environment::IngressHistoryError,
+    execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
     ingress_pool::{ChangeSet, IngressPool, IngressPoolSelect},
     state_manager::StateManagerError,
     validation::{ValidationError, ValidationResult},
@@ -11,7 +11,7 @@ use ic_types::{
     crypto::CryptoError,
     messages::MessageId,
     time::{Time, UNIX_EPOCH},
-    CanisterId, Cycles,
+    CanisterId,
 };
 use std::collections::HashSet;
 
@@ -54,7 +54,7 @@ pub enum IngressPermanentError {
     IngressPayloadTooBig(usize, usize),
     IngressPayloadTooManyMessages(usize, usize),
     DuplicatedIngressMessage(MessageId),
-    InsufficientCycles(CanisterId, Cycles, Cycles),
+    InsufficientCycles(CanisterOutOfCyclesError),
     CanisterNotFound(CanisterId),
     InvalidManagementMessage,
 }

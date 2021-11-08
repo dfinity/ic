@@ -1,0 +1,27 @@
+[package]
+name = "ic-canister-sandbox-backend-lib"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-canister-sandbox-common  = { path = "../common" }
+ic-config = { path = "../../config" }
+ic-embedders = { path = "../../embedders" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-types = { path = "../../types/types" }
+ic-replicated-state = { path = "../../replicated_state"}
+ic-interfaces = { path = "../../interfaces" }
+ic-wasm-utils = { path = "../../wasm_utils" }
+ic-wasm-types = { path = "../../types/wasm_types" }
+ic-utils = { path = "../../utils"}
+ic-sys = { path = "../../sys"}
+ic-system-api = { path = "../../system_api" }
+threadpool = "1.8.1"
+memory_tracker = { path = "../../memory_tracker" }
+
+[dev-dependencies]
+ic-registry-routing-table = { path = "../../registry/routing_table" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-test-utilities = { path = "../../test_utilities" }
+mockall = "0.7.2"
+wabt = "0.10.0"

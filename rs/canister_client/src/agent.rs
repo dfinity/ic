@@ -214,7 +214,7 @@ pub fn get_backoff_policy() -> backoff::ExponentialBackoff {
 #[derive(Clone)]
 pub struct Agent {
     /// Url of the replica to target. This should NOT contain a URL path like
-    /// "/api/v1/submit".
+    /// "/api/v2/canister/_/call".
     pub url: Url,
 
     // How long to wait and poll for ingress requests? This is independent from the expiry time
@@ -251,7 +251,7 @@ impl Agent {
     /// Creates an agent.
     ///
     /// `url`: Url of the replica to target. This should NOT contain a URL path
-    /// like "/api/v1/submit". It should contain a port, if needed.
+    /// like "/api/v2/canister/_/call". It should contain a port, if needed.
     ///
     /// The `sender` identifies the sender on whose behalf the requests are
     /// sent. If the requests are authenticated, the corresponding `pub_key` and
@@ -480,7 +480,7 @@ impl Agent {
             .map_err(|source| format!("decoding to HttpStatusResponse failed: {}", source))
     }
 
-    /// Requests the root key of this node by querying /api/v1/status
+    /// Requests the root key of this node by querying /api/v2/status
     pub async fn root_key(&self) -> Result<Option<Blob>, String> {
         let response = self.get_status().await?;
         Ok(response.root_key)

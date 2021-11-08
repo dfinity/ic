@@ -1,0 +1,27 @@
+syntax = "proto3";
+package registry.dc.v1;
+
+// Identifies a Data Center where IC nodes reside
+message DataCenterRecord {
+  string id = 1;
+  string region = 2;
+  string owner = 3;
+  Gps gps = 4;
+}
+
+// GPS coordinates in Decimal Degrees format. Latitude can range from -90 to 90,
+// and Longitude can range from -180 to 180.
+// For example:
+// latitude = 37.774929
+// longitude = -122.419416
+message Gps {
+  float latitude = 1;
+  float longitude = 2;
+}
+
+// The proposal payload used to add or remove data centers to/from the Registry
+message AddOrRemoveDataCentersProposalPayload {
+  repeated DataCenterRecord data_centers_to_add = 1;
+  // The IDs of data centers to remove
+  repeated string data_centers_to_remove = 2;
+}

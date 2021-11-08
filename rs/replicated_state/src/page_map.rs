@@ -1,145 +1,80 @@
 mod checkpoint;
 pub mod int_map;
+mod page_allocator;
 
 use checkpoint::Checkpoint;
-pub use ic_sys::PAGE_SIZE;
+use ic_sys::PageBytes;
+pub use ic_sys::{PageIndex, PAGE_SIZE};
+pub use page_allocator::allocated_pages_count;
 // NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
 // operation. This allows us to simplify canister state management: we can
 // simply have a copy of the whole PageMap in every canister snapshot.
 use int_map::IntMap;
-use phantom_newtype::Id;
+use page_allocator::{Page, PageAllocator};
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::fs::{File, OpenOptions};
 use std::ops::Range;
 use std::os::unix::io::RawFd;
 use std::path::Path;
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
-
-static ALLOCATED_PAGES: PageCounter = PageCounter::new();
-
-struct PageCounter(AtomicUsize);
-
-impl PageCounter {
-    const fn new() -> Self {
-        Self(AtomicUsize::new(0))
-    }
-    fn inc(&self) {
-        self.0.fetch_add(1, Ordering::Relaxed);
-    }
-    fn dec(&self) {
-        self.0.fetch_sub(1, Ordering::Relaxed);
-    }
-    fn get(&self) -> usize {
-        self.0.load(Ordering::Relaxed)
-    }
-}
-
-pub struct PageIndexTag;
-/// 0-based index of the _host_ virtual memory page (i.e. not Wasm
-/// memory page).
-pub type PageIndex = Id<PageIndexTag, u64>;
-
-#[derive(PartialEq, Eq, Clone, Debug)]
-struct Page(Box<[u8]>);
-
-impl Page {
-    fn new(contents: &[u8]) -> Self {
-        ALLOCATED_PAGES.inc();
-        Self(contents.to_vec().into_boxed_slice())
-    }
-}
-
-impl Drop for Page {
-    fn drop(&mut self) {
-        ALLOCATED_PAGES.dec();
-    }
-}
-
-/// Tracked page is ref-counted immutable memory page.
-#[derive(Clone, Debug)]
-pub struct TrackedPage(Arc<Page>);
-
-impl TrackedPage {
-    /// Returns the contents of the page. The length of the slice is
-    /// always equal to the page size.
-    ///
-    /// Use `page.contents().as_ptr()` to get a pointer to the
-    /// beginning of the page.
-    pub fn contents(&self) -> &[u8] {
-        &*(self.0).0
-    }
-}
-
-impl TryFrom<&[u8]> for TrackedPage {
-    type Error = PersistenceError;
-    fn try_from(contents: &[u8]) -> Result<TrackedPage, PersistenceError> {
-        if contents.len() != *PAGE_SIZE {
-            Err(PersistenceError::BadPageSize {
-                expected: *PAGE_SIZE,
-                actual: contents.len(),
-            })
-        } else {
-            Ok(Self(Arc::new(Page::new(contents))))
-        }
-    }
-}
 
 /// `PageDelta` represents a changeset of the module heap.
 #[derive(Clone, Default, Debug)]
-pub struct PageDelta(IntMap<TrackedPage>);
+struct PageDelta(IntMap<Page>);
 
 impl PageDelta {
-    /// Returns true if the delta doesn't contain any pages.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
     /// Returns the number of pages in the delta.
-    pub fn len(&self) -> usize {
+    #[cfg(test)]
+    fn len(&self) -> usize {
         self.0.len()
     }
 
     /// Gets content of the page at the specified index.
-    pub fn get_page(&self, page_index: PageIndex) -> Option<&[u8]> {
-        self.0.get(page_index.get()).map(|p| p.contents())
+    ///
+    /// The given `page_allocator` must be the same as the one used for
+    /// allocating pages in this `PageDelta`. It serves as a witness that
+    /// the contents of the page is still valid.
+    fn get_page<'a>(
+        &'a self,
+        page_index: PageIndex,
+        page_allocator: &'a PageAllocator,
+    ) -> Option<&'a PageBytes> {
+        self.0
+            .get(page_index.get())
+            .map(|p| p.contents(page_allocator))
     }
 
     /// Gets an inclusive range of pages that contains the given page.
-    pub fn bounds(&self, page_index: PageIndex) -> (Option<PageIndex>, Option<PageIndex>) {
+    fn bounds(&self, page_index: PageIndex) -> (Option<PageIndex>, Option<PageIndex>) {
         let (lower, upper) = self.0.bounds(page_index.get());
         (lower.map(PageIndex::new), upper.map(PageIndex::new))
     }
 
     /// Modifies this delta in-place by applying all the entries in `rhs` to it.
-    pub fn update(&mut self, rhs: PageDelta) {
+    fn update(&mut self, rhs: PageDelta) {
         self.0 = rhs.0.union(std::mem::take(&mut self.0));
     }
 
-    /// Unions two page deltas into a single delta.
-    /// If both deltas contain a page with the same number, the page contained
-    /// in `self` wins, i.e.
-    /// `extend([(N, X)], [(N, Y), (M, Z)]) = [(N, X), (M, Z)]`
-    pub fn extend(self, rhs: PageDelta) -> Self {
-        Self(self.0.union(rhs.0))
-    }
-
     /// Enumerates all the pages in this delta.
-    pub fn iter(&self) -> impl Iterator<Item = (PageIndex, &'_ TrackedPage)> {
+    fn iter(&self) -> impl Iterator<Item = (PageIndex, &'_ Page)> {
         self.0.iter().map(|(idx, page)| (PageIndex::new(idx), page))
     }
 
     /// Applies this delta to the specified file.
-    ///
     /// Precondition: `file` is seekable and writeable.
-    fn apply_to_file(&self, file: &mut File, path: &Path) -> Result<(), PersistenceError> {
+    ///
+    /// The given `page_allocator` must be the same as the one used for
+    /// allocating pages in this `PageDelta`. It serves as a witness that
+    /// the contents of the page is still valid.
+    fn apply_to_file(
+        &self,
+        file: &mut File,
+        path: &Path,
+        page_allocator: &PageAllocator,
+    ) -> Result<(), PersistenceError> {
         use std::io::{Seek, SeekFrom};
 
         for (index, page) in self.iter() {
-            let offset = index.get() * *PAGE_SIZE as u64;
+            let offset = index.get() * PAGE_SIZE as u64;
             file.seek(SeekFrom::Start(offset as u64)).map_err(|err| {
                 PersistenceError::FileSystemError {
                     path: path.display().to_string(),
@@ -147,7 +82,7 @@ impl PageDelta {
                     internal_error: err.to_string(),
                 }
             })?;
-            let mut contents = page.contents();
+            let mut contents = page.contents(page_allocator) as &[u8];
             std::io::copy(&mut contents, file).map_err(|err| {
                 PersistenceError::FileSystemError {
                     path: path.display().to_string(),
@@ -160,7 +95,11 @@ impl PageDelta {
     }
 
     /// Persists this delta to the specified destination.
-    pub fn persist(&self, dst: &Path) -> Result<(), PersistenceError> {
+    ///
+    /// The given `page_allocator` must be the same as the one used for
+    /// allocating pages in this `PageDelta`. It serves as a witness that
+    /// the contents of the page is still valid.
+    fn persist(&self, dst: &Path, page_allocator: &PageAllocator) -> Result<(), PersistenceError> {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -170,12 +109,20 @@ impl PageDelta {
                 context: "Failed to open file".to_string(),
                 internal_error: err.to_string(),
             })?;
-        self.apply_to_file(&mut file, dst)?;
+        self.apply_to_file(&mut file, dst, page_allocator)?;
         Ok(())
     }
 
     /// Persists this delta to the specified destination and flushes it.
-    pub fn persist_and_sync(&self, dst: &Path) -> Result<(), PersistenceError> {
+    ///
+    /// The given `page_allocator` must be the same as the one used for
+    /// allocating pages in this `PageDelta`. It serves as a witness that
+    /// the contents of the page is still valid.
+    fn persist_and_sync(
+        &self,
+        dst: &Path,
+        page_allocator: &PageAllocator,
+    ) -> Result<(), PersistenceError> {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -185,7 +132,7 @@ impl PageDelta {
                 context: "Failed to open file".to_string(),
                 internal_error: err.to_string(),
             })?;
-        self.apply_to_file(&mut file, dst)?;
+        self.apply_to_file(&mut file, dst, page_allocator)?;
         file.sync_all()
             .map_err(|err| PersistenceError::FileSystemError {
                 path: dst.display().to_string(),
@@ -194,36 +141,6 @@ impl PageDelta {
             })?;
         Ok(())
     }
-}
-
-impl From<&[(PageIndex, &[u8])]> for PageDelta {
-    fn from(pages: &[(PageIndex, &[u8])]) -> Self {
-        let dirty_pages: Vec<_> = pages.iter().map(|x| x.1).collect();
-        let tracked_pages = allocate_pages(dirty_pages.as_slice());
-
-        Self(
-            pages
-                .iter()
-                .cloned()
-                .zip(tracked_pages.into_iter())
-                .map(|((num, _), tracked_page)| (num.get(), tracked_page))
-                .collect(),
-        )
-    }
-}
-
-/// Makes tracked copies of the provided _pages_.  The pages will be
-/// automatically deallocated when they go out of scope.
-pub fn allocate_pages(pages: &[&[u8]]) -> Vec<TrackedPage> {
-    pages
-        .iter()
-        .map(|page_slice| TrackedPage::try_from(*page_slice).unwrap())
-        .collect()
-}
-
-/// Returns the total number of tracked pages allocated at the moment.
-pub fn allocated_pages_count() -> usize {
-    ALLOCATED_PAGES.get()
 }
 
 /// Errors that can happen when one saves or loads a PageMap.
@@ -306,7 +223,7 @@ pub struct FileDescriptor {
 pub enum MemoryRegion<'a> {
     Zeros(Range<PageIndex>),
     BackedByFile(Range<PageIndex>, FileDescriptor),
-    BackedByPage(&'a [u8]),
+    BackedByPage(&'a PageBytes),
 }
 
 /// PageMap is a data structure that represents an image of a canister virtual
@@ -340,11 +257,16 @@ pub struct PageMap {
     ///
     /// Invariant: round_delta ⊆ page_delta
     round_delta: PageDelta,
+
+    /// The allocator for PageDelta pages.
+    page_allocator: PageAllocator,
 }
 
 impl PageMap {
     /// Creates a new page map that always returns zeroed pages.
     pub fn new() -> Self {
+        // Ensure that the hardcoded constant matches the OS page size.
+        assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
         Default::default()
     }
 
@@ -357,41 +279,36 @@ impl PageMap {
             checkpoint,
             page_delta: Default::default(),
             round_delta: Default::default(),
+            page_allocator: Default::default(),
         })
     }
 
-    /// Modifies this page map by appending the given delta to it.
-    pub fn update(&mut self, delta: PageDelta) {
-        // Delta is a persistent data structure and is cheap to clone.
-        self.page_delta.update(delta.clone());
-        self.round_delta.update(delta)
-    }
-
-    /// Returns true if this page map has pages stored only in memory.
-    pub fn has_deltas(&self) -> bool {
-        !self.page_delta.is_empty()
+    /// Modifies this page map by adding the given dirty pages to it.
+    pub fn update(&mut self, pages: &[(PageIndex, &PageBytes)]) {
+        let page_delta = self.allocate(pages);
+        self.apply(page_delta);
     }
 
     /// Persists the heap delta contained in this page map to the specified
     /// destination.
     pub fn persist_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.page_delta.persist(dst)
+        self.page_delta.persist(dst, &self.page_allocator)
     }
 
     /// Persists the heap delta contained in this page map to the specified
     /// destination and fsync the file to disk.
     pub fn persist_and_sync_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.page_delta.persist_and_sync(dst)
+        self.page_delta.persist_and_sync(dst, &self.page_allocator)
     }
 
-    /// Extracts the delta accumulated since the beginning of the execution
-    /// round.
-    pub fn take_round_delta(&mut self) -> PageDelta {
-        std::mem::take(&mut self.round_delta)
+    /// Persists the round delta contained in this page map to the specified
+    /// destination.
+    pub fn persist_round_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
+        self.round_delta.persist(dst, &self.page_allocator)
     }
 
     /// Returns the iterator over host pages managed by this `PageMap`.
-    pub fn host_pages_iter(&self) -> impl Iterator<Item = (PageIndex, &[u8])> + '_ {
+    pub fn host_pages_iter(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> + '_ {
         (0..self.num_host_pages()).map(move |i| {
             let idx = PageIndex::from(i as u64);
             (idx, self.get_page(idx))
@@ -399,8 +316,8 @@ impl PageMap {
     }
 
     /// Returns the page with the specified `page_index`.
-    pub fn get_page(&self, page_index: PageIndex) -> &[u8] {
-        match self.page_delta.get_page(page_index) {
+    pub fn get_page(&self, page_index: PageIndex) -> &PageBytes {
+        match self.page_delta.get_page(page_index, &self.page_allocator) {
             Some(page) => page,
             None => self.checkpoint.get_page(page_index),
         }
@@ -409,7 +326,7 @@ impl PageMap {
     /// Returns the largest contiguous range of pages that contains the given
     /// page such that all pages share the same backing store.
     pub fn get_memory_region(&self, page_index: PageIndex) -> MemoryRegion {
-        match self.page_delta.get_page(page_index) {
+        match self.page_delta.get_page(page_index, &self.page_allocator) {
             Some(page) => MemoryRegion::BackedByPage(page),
             None => {
                 let (start, end) = self.page_delta.bounds(page_index);
@@ -445,8 +362,13 @@ impl PageMap {
     }
 
     /// Removes the page delta from this page map.
-    pub fn strip_delta(&mut self) -> PageDelta {
-        std::mem::take(&mut self.page_delta)
+    pub fn strip_delta(&mut self) {
+        std::mem::take(&mut self.page_delta);
+    }
+
+    /// Removes the round delta from this page map.
+    pub fn strip_round_delta(&mut self) {
+        std::mem::take(&mut self.round_delta);
     }
 
     /// Returns the length of the modified prefix in host pages.
@@ -466,6 +388,34 @@ impl PageMap {
                 .max()
                 .unwrap_or(pages_in_checkpoint),
         )
+    }
+
+    // Modifies this page map by applying the given page delta to it.
+    fn apply(&mut self, delta: PageDelta) {
+        // Delta is a persistent data structure and is cheap to clone.
+        self.page_delta.update(delta.clone());
+        self.round_delta.update(delta)
+    }
+
+    // Allocates the given dirty pages and returns them as a page delta.
+    fn allocate(&mut self, pages: &[(PageIndex, &PageBytes)]) -> PageDelta {
+        let dirty_pages: Vec<_> = pages.iter().map(|x| x.1).collect();
+        let tracked_pages = self.page_allocator.allocate(dirty_pages.as_slice());
+
+        PageDelta(
+            pages
+                .iter()
+                .cloned()
+                .zip(tracked_pages.into_iter())
+                .map(|((num, _), tracked_page)| (num.get(), tracked_page))
+                .collect(),
+        )
+    }
+
+    // Copies the page with the given index. This is used by `Buffer`.
+    fn copy_page(&mut self, page: PageIndex) -> Page {
+        let contents = self.get_page(page);
+        self.page_allocator.allocate(&[contents]).pop().unwrap()
     }
 }
 
@@ -487,7 +437,7 @@ pub struct Buffer {
     /// affect determinism because the state machine has no way of observing the
     /// order of the keys in this map (or even inside of PageDelta for that
     /// matter).
-    dirty_pages: HashMap<PageIndex, TrackedPage>,
+    dirty_pages: HashMap<PageIndex, Page>,
 }
 
 impl Buffer {
@@ -502,7 +452,7 @@ impl Buffer {
     /// Reads the contents of this buffer at the specified offset into the
     /// specified destination buffer.
     pub fn read(&self, mut dst: &mut [u8], mut offset: usize) {
-        let page_size = *PAGE_SIZE;
+        let page_size = PAGE_SIZE;
 
         while !dst.is_empty() {
             let page = PageIndex::new((offset / page_size) as u64);
@@ -510,7 +460,7 @@ impl Buffer {
             let page_len = dst.len().min(page_size - offset_into_page);
 
             let page_contents = match self.dirty_pages.get(&page) {
-                Some(p) => p.contents(),
+                Some(p) => p.contents(&self.page_map.page_allocator),
                 None => self.page_map.get_page(page),
             };
             dst[0..page_len]
@@ -527,7 +477,7 @@ impl Buffer {
     pub fn write(&mut self, mut src: &[u8], mut offset: usize) {
         use std::collections::hash_map::Entry;
 
-        let page_size = *PAGE_SIZE;
+        let page_size = PAGE_SIZE;
 
         while !src.is_empty() {
             let page = PageIndex::new((offset / page_size) as u64);
@@ -536,16 +486,19 @@ impl Buffer {
 
             match self.dirty_pages.entry(page) {
                 Entry::Occupied(mut dirty_page) => {
-                    Arc::make_mut(&mut dirty_page.get_mut().0).0
-                        [offset_into_page..offset_into_page + page_len]
-                        .copy_from_slice(&src[0..page_len]);
+                    dirty_page.get_mut().copy_from_slice(
+                        offset_into_page,
+                        &src[0..page_len],
+                        &self.page_map.page_allocator,
+                    );
                 }
                 Entry::Vacant(page_slot) => {
-                    let new_page = page_slot
-                        .insert(TrackedPage::try_from(self.page_map.get_page(page)).unwrap());
-
-                    Arc::make_mut(&mut new_page.0).0[offset_into_page..offset_into_page + page_len]
-                        .copy_from_slice(&src[0..page_len]);
+                    let new_page = page_slot.insert(self.page_map.copy_page(page));
+                    new_page.copy_from_slice(
+                        offset_into_page,
+                        &src[0..page_len],
+                        &self.page_map.page_allocator,
+                    );
                 }
             }
 
@@ -563,7 +516,7 @@ impl Buffer {
             .into_iter()
             .map(|(n, p)| (n.get(), p))
             .collect();
-        self.page_map.update(PageDelta(delta));
+        self.page_map.apply(PageDelta(delta));
         self.page_map
     }
 }

@@ -1,6 +1,7 @@
 pub(crate) mod chunkable;
 
 use super::StateManagerImpl;
+use crate::EXTRA_CHECKPOINTS_TO_KEEP;
 use ic_crypto::crypto_hash;
 use ic_interfaces::{
     artifact_manager::{ArtifactAcceptance, ArtifactClient, ArtifactProcessor, ProcessingResult},
@@ -11,10 +12,11 @@ use ic_interfaces::{
 use ic_logger::{info, warn};
 use ic_types::{
     artifact::{
-        Advert, ArtifactKind, ArtifactTag, Priority, StateSyncArtifactId, StateSyncAttribute,
-        StateSyncFilter, StateSyncMessage,
+        Advert, AdvertSendRequest, ArtifactKind, ArtifactTag, Priority, StateSyncArtifactId,
+        StateSyncAttribute, StateSyncFilter, StateSyncMessage,
     },
     chunkable::Chunkable,
+    p2p::GossipAdvertType,
     Height, NodeId,
 };
 
@@ -162,6 +164,8 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
 
         let latest_height = self.latest_state_height();
         let fetch_state = self.states.read().fetch_state.clone();
+        let state_sync_refs = self.state_sync_refs.clone();
+        let log = self.log.clone();
 
         Some(Box::new(move |_artifact_id, attr| {
             use std::cmp::Ordering;
@@ -170,10 +174,52 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
                 return Priority::Drop;
             }
 
-            if let Some((max_sync_height, hash)) = &fetch_state {
-                return match attr.height.cmp(max_sync_height) {
+            if let Some((max_sync_height, hash, cup_interval_length)) = &fetch_state {
+                if let Some(recorded_root_hash) = state_sync_refs.get(&attr.height) {
+                    // If this advert@h is for an ongoing state sync, we check if the hash is the
+                    // same as the hash that consensus gave us.
+                    if recorded_root_hash != attr.root_hash {
+                        warn!(
+                            log,
+                            "Received an advert for state @{} with a hash that does not match the hash of the state we are fetching: expected {:?}, got {:?}",
+                            attr.height,
+                            recorded_root_hash,
+                            attr.root_hash
+                        );
+                        return Priority::Drop;
+                    }
+
+                    // To keep the active state sync for longer time, we wait for another
+                    // `EXTRA_CHECKPOINTS_TO_KEEP` CUPs. Then a CUP beyond that can drop the
+                    // active state sync.
+                    //
+                    // Note: CUP interval length may change, and we can't predict future intervals.
+                    // The condition below is only a heuristic.
+                    if *max_sync_height
+                        > attr.height
+                            + cup_interval_length.increment() * EXTRA_CHECKPOINTS_TO_KEEP as u64
+                    {
+                        return Priority::Drop;
+                    } else {
+                        return Priority::Fetch;
+                    };
+                }
+
+                return match attr.height.cmp(&max_sync_height) {
                     Ordering::Less => Priority::Drop,
-                    Ordering::Equal if *hash != attr.root_hash => Priority::Drop,
+                    // Drop the advert if the hashes do not match.
+                    Ordering::Equal if *hash != attr.root_hash => {
+                        warn!(
+                            log,
+                            "Received an advert for state {} with a hash that does not match the hash passed to fetch_state: expected {:?}, got {:?}",
+                            attr.height,
+                            *hash,
+                            attr.root_hash
+                        );
+                        Priority::Drop
+                    }
+                    // Do not fetch it for now if we're already fetching another state.
+                    Ordering::Equal if !state_sync_refs.is_empty() => Priority::Stash,
                     Ordering::Equal => Priority::Fetch,
                     Ordering::Greater => Priority::Stash,
                 };
@@ -211,14 +257,22 @@ impl ArtifactProcessor<StateSyncArtifact> for StateManagerImpl {
         &self,
         _time_source: &dyn TimeSource,
         _artifacts: Vec<UnvalidatedArtifact<StateSyncMessage>>,
-    ) -> (Vec<Advert<StateSyncArtifact>>, ProcessingResult) {
+    ) -> (Vec<AdvertSendRequest<StateSyncArtifact>>, ProcessingResult) {
         let filter = StateSyncFilter {
             height: self.states.read().last_advertised,
         };
         let artifacts = self.get_all_validated_by_filter(&filter);
+        let artifacts: Vec<AdvertSendRequest<StateSyncArtifact>> = artifacts
+            .iter()
+            .cloned()
+            .map(|advert| AdvertSendRequest {
+                advert,
+                advert_type: GossipAdvertType::Produced,
+            })
+            .collect();
 
         if let Some(artifact) = artifacts.last() {
-            self.states.write().last_advertised = artifact.attribute.height;
+            self.states.write().last_advertised = artifact.advert.attribute.height;
         }
 
         (artifacts, ProcessingResult::StateUnchanged)

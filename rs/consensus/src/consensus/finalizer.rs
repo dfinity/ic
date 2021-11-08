@@ -89,6 +89,7 @@ impl Finalizer {
             );
             *self.prev_finalized_height.borrow_mut() = finalized_height;
         }
+
         // Try to deliver finalized batches to messaging
         let _ = deliver_batches(
             &*self.message_routing,
@@ -98,15 +99,17 @@ impl Finalizer {
             self.replica_config.subnet_id,
             ReplicaVersion::default(),
             &self.log,
-            &|result,
-              batch_height,
-              ingress_count,
-              ingress_bytes,
-              xnet_bytes,
-              ingress_ids,
-              block_hash,
-              block_height,
-              block_context_certified_height| {
+            false,
+            None,
+            Some(&|result,
+                   batch_height,
+                   ingress_count,
+                   ingress_bytes,
+                   xnet_bytes,
+                   ingress_ids,
+                   block_hash,
+                   block_height,
+                   block_context_certified_height| {
                 self.process_batch_delivery_result(
                     result,
                     batch_height,
@@ -118,8 +121,7 @@ impl Finalizer {
                     block_height,
                     block_context_certified_height,
                 )
-            },
-            false,
+            }),
         );
 
         // Try to finalize rounds from finalized_height + 1 up to (and including)
@@ -650,6 +652,7 @@ mod tests {
             &state_manager,
             Height::from(1),
             &transcripts_for_new_subnets,
+            ic_test_utilities::mock_time(),
             &no_op_logger(),
         );
         assert_eq!(result.len(), 1);

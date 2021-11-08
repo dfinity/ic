@@ -3,7 +3,7 @@ use ic_types::consensus::certification::CertificationMessage;
 use ic_types::consensus::dkg as consensus_dkg;
 use ic_types::consensus::{
     certification::{Certification, CertificationContent, CertificationShare},
-    ecdsa::EcdsaMessage,
+    ecdsa::{EcdsaDealing, EcdsaMessage, EcdsaTranscript},
     BasicSignature, Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
     CatchUpShareContent, ConsensusMessage, FinalizationContent, HashedBlock, MultiSignature,
     MultiSignatureShare, NotarizationContent, RandomBeaconContent, RandomTapeContent,
@@ -63,6 +63,10 @@ const DOMAIN_STATE_SYNC_MESSAGE: &str = "state_sync_message_domain";
 const DOMAIN_CONSENSUS_MESSAGE: &str = "consensus_message_domain";
 const DOMAIN_CERTIFICATION_MESSAGE: &str = "certification_message_domain";
 const DOMAIN_ECDSA_MESSAGE: &str = "ecdsa_message_domain";
+const DOMAIN_ECDSA_DEALING: &str = "ecdsa_dealing_domain";
+const DOMAIN_ECDSA_DEALING_SUPPORT: &str = "ecdsa_dealing_support_domain";
+const DOMAIN_ECDSA_VERIFIED_DEALING: &str = "ecdsa_verified_dealing_domain";
+const DOMAIN_ECDSA_TRANSCRIPT: &str = "ecdsa_transcript_domain";
 
 /// A cryptographically hashable type.
 pub trait CryptoHashable: CryptoHashDomain + Hash {}
@@ -140,7 +144,12 @@ mod private {
     impl CryptoHashDomainSeal for StateSyncMessage {}
     impl CryptoHashDomainSeal for ConsensusMessage {}
     impl CryptoHashDomainSeal for CertificationMessage {}
+
     impl CryptoHashDomainSeal for EcdsaMessage {}
+    impl CryptoHashDomainSeal for EcdsaDealing {}
+    impl CryptoHashDomainSeal for Signed<EcdsaDealing, MultiSignatureShare<EcdsaDealing>> {}
+    impl CryptoHashDomainSeal for Signed<EcdsaDealing, MultiSignature<EcdsaDealing>> {}
+    impl CryptoHashDomainSeal for EcdsaTranscript {}
 
     impl CryptoHashDomainSeal for CryptoHashableTestDummy {}
 }
@@ -336,6 +345,30 @@ impl CryptoHashDomain for CertificationMessage {
 impl CryptoHashDomain for EcdsaMessage {
     fn domain(&self) -> String {
         DOMAIN_ECDSA_MESSAGE.to_string()
+    }
+}
+
+impl CryptoHashDomain for EcdsaDealing {
+    fn domain(&self) -> String {
+        DOMAIN_ECDSA_DEALING.to_string()
+    }
+}
+
+impl CryptoHashDomain for Signed<EcdsaDealing, MultiSignatureShare<EcdsaDealing>> {
+    fn domain(&self) -> String {
+        DOMAIN_ECDSA_DEALING_SUPPORT.to_string()
+    }
+}
+
+impl CryptoHashDomain for Signed<EcdsaDealing, MultiSignature<EcdsaDealing>> {
+    fn domain(&self) -> String {
+        DOMAIN_ECDSA_VERIFIED_DEALING.to_string()
+    }
+}
+
+impl CryptoHashDomain for EcdsaTranscript {
+    fn domain(&self) -> String {
+        DOMAIN_ECDSA_TRANSCRIPT.to_string()
     }
 }
 

@@ -1,7 +1,7 @@
 //! Defines consensus payload types.
 use crate::{
     batch::BatchPayload,
-    consensus::{dkg, hashed::Hashed, thunk::Thunk},
+    consensus::{dkg, ecdsa, hashed::Hashed, thunk::Thunk},
     crypto::CryptoHashOf,
     *,
 };
@@ -15,12 +15,14 @@ use std::sync::Arc;
 pub struct DataPayload {
     pub batch: BatchPayload,
     pub dealings: dkg::Dealings,
+    pub ecdsa: ecdsa::Payload,
 }
 
 /// The payload of a summary block.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SummaryPayload {
     pub dkg: dkg::Summary,
+    pub ecdsa: ecdsa::Summary,
 }
 
 /// Block payload is either summary or a data payload).
@@ -64,37 +66,20 @@ impl BlockPayload {
         }
     }
 
-    /// Returns a reference to DKG dealings. Panics if called on a summary
+    /// Returns a reference to DKG data. Panics if called on a summary
     /// payload.
-    pub fn as_dealings(&self) -> &dkg::Dealings {
+    pub fn as_data(&self) -> &DataPayload {
         match self {
-            BlockPayload::Data(data) => &data.dealings,
-            _ => panic!("No DKG dealings available on a summary block."),
+            BlockPayload::Data(data) => &data,
+            _ => panic!("No data payload available on a summary block."),
         }
     }
 
-    /// Returns DKG dealings. Panics if called on a summary payload.
-    pub fn into_dealings(self) -> dkg::Dealings {
+    /// Returns DKG data. Panics if called on a summary payload.
+    pub fn into_data(self) -> DataPayload {
         match self {
-            BlockPayload::Data(data) => data.dealings,
-            _ => panic!("No DKG dealings available on a summary block."),
-        }
-    }
-
-    /// Return a reference to batch payload. Panics if called on a summary
-    /// payload.
-    pub fn as_batch_payload(&self) -> &BatchPayload {
-        match self {
-            BlockPayload::Data(data) => &data.batch,
-            _ => panic!("No batch payload available on a summary block."),
-        }
-    }
-
-    /// Return the batch payload. Panics if called on a summary payload.
-    pub fn into_batch_payload(self) -> BatchPayload {
-        match self {
-            BlockPayload::Data(data) => data.batch,
-            _ => panic!("No batch payload available on a summary block."),
+            BlockPayload::Data(data) => data,
+            _ => panic!("No data payload available on a summary block."),
         }
     }
 
@@ -219,14 +204,20 @@ impl From<Payload> for BlockPayload {
 }
 
 impl From<dkg::Summary> for BlockPayload {
-    fn from(summary: dkg::Summary) -> BlockPayload {
-        BlockPayload::Summary(SummaryPayload { dkg: summary })
+    fn from(dkg: dkg::Summary) -> BlockPayload {
+        let ecdsa = ecdsa::Summary::default();
+        BlockPayload::Summary(SummaryPayload { dkg, ecdsa })
     }
 }
 
 impl From<(BatchPayload, dkg::Dealings)> for BlockPayload {
     fn from((batch, dealings): (BatchPayload, dkg::Dealings)) -> BlockPayload {
-        BlockPayload::Data(DataPayload { batch, dealings })
+        let ecdsa = ecdsa::Payload::default();
+        BlockPayload::Data(DataPayload {
+            batch,
+            dealings,
+            ecdsa,
+        })
     }
 }
 
@@ -237,6 +228,7 @@ impl From<dkg::Payload> for BlockPayload {
             dkg::Payload::Dealings(dealings) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dealings,
+                ecdsa: ecdsa::Payload::default(),
             }),
         }
     }

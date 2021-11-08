@@ -1,9 +1,8 @@
 //! Basic Signature operations provided by the CSP server.
 use crate::keygen::public_key_hash_as_key_id;
 use crate::secret_key_store::SecretKeyStore;
-use crate::secret_key_store::SecretKeyStoreError;
 use crate::server::api::{
-    BasicSignatureCspServer, CspBasicSignatureError, CspSignatureKeygenError,
+    BasicSignatureCspServer, CspBasicSignatureError, CspBasicSignatureKeygenError,
 };
 use crate::server::local_csp_server::LocalCspServer;
 use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
@@ -40,7 +39,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> BasicSignatureCspServer for LocalCsp
                     Ok(CspSignature::Ed25519(sig_bytes))
                 }
                 _ => Err(CspBasicSignatureError::WrongSecretKeyType {
-                    algorithm_id: secret_key.algorithm_id(),
+                    algorithm: secret_key.algorithm_id(),
                 }),
             },
             _ => Err(CspBasicSignatureError::UnsupportedAlgorithm {
@@ -52,7 +51,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> BasicSignatureCspServer for LocalCsp
     fn gen_key_pair(
         &self,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey), CspSignatureKeygenError> {
+    ) -> Result<(KeyId, CspPublicKey), CspBasicSignatureKeygenError> {
         let (sk, pk) = match algorithm_id {
             AlgorithmId::Ed25519 => {
                 let (sk_bytes, pk_bytes) = ed25519::keypair_from_rng(&mut *self.rng_write_lock());
@@ -60,17 +59,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> BasicSignatureCspServer for LocalCsp
                 let pk = CspPublicKey::Ed25519(pk_bytes);
                 Ok((sk, pk))
             }
-            _ => Err(CspSignatureKeygenError::UnsupportedAlgorithm {
+            _ => Err(CspBasicSignatureKeygenError::UnsupportedAlgorithm {
                 algorithm: algorithm_id,
             }),
         }?;
         let sk_id = public_key_hash_as_key_id(&pk);
-        match &self.sks_write_lock().insert(sk_id, sk, None) {
-            Ok(()) => {}
-            Err(SecretKeyStoreError::DuplicateKeyId(key_id)) => {
-                panic!("A key with ID {} has already been inserted", key_id);
-            }
-        };
+        self.store_secret_key_or_panic(sk, sk_id);
         Ok((sk_id, pk))
     }
 }

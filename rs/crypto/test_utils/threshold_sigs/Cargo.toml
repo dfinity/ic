@@ -4,6 +4,7 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
+ic-config = { path = "../../../config" }
 ic-crypto = { path = "../.." }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-interfaces = { path = "../../../interfaces" }

@@ -36,7 +36,7 @@ impl Eq for PublicKeyBytes {}
 // Note: This is needed because Rust doesn't support const generics yet.
 impl fmt::Debug for IndividualSignatureBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", &self.0[..])
+        write!(f, "{:?}", base64::encode(&self.0[..]))
     }
 }
 impl PartialEq for IndividualSignatureBytes {
@@ -62,7 +62,7 @@ impl Eq for PopBytes {}
 // Note: This is needed because Rust doesn't support const generics yet.
 impl fmt::Debug for CombinedSignatureBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", &self.0[..])
+        write!(f, "{:?}", base64::encode(&self.0[..]))
     }
 }
 impl PartialEq for CombinedSignatureBytes {

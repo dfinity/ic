@@ -33,6 +33,15 @@ impl TlsHandshake for FakeTlsHandshake {
         unimplemented!()
     }
 
+    async fn perform_tls_server_handshake_with_rustls(
+        &self,
+        _tcp_stream: TcpStream,
+        _allowed_clients: AllowedClients,
+        _registry_version: RegistryVersion,
+    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
+        unimplemented!()
+    }
+
     async fn perform_tls_server_handshake_temp_with_optional_client_auth(
         &self,
         _tcp_stream: TcpStream,
@@ -51,6 +60,15 @@ impl TlsHandshake for FakeTlsHandshake {
     }
 
     async fn perform_tls_client_handshake(
+        &self,
+        _tcp_stream: TcpStream,
+        _server: NodeId,
+        _registry_version: RegistryVersion,
+    ) -> Result<TlsStream, TlsClientHandshakeError> {
+        unimplemented!()
+    }
+
+    async fn perform_tls_client_handshake_with_rustls(
         &self,
         _tcp_stream: TcpStream,
         _server: NodeId,

@@ -21,6 +21,7 @@ use registry_canister::{
 };
 
 use assert_matches::assert_matches;
+use maplit::btreemap;
 
 #[test]
 fn test_non_governance_users_cannot_update_node_operator_config() {
@@ -60,6 +61,8 @@ fn test_non_governance_users_cannot_update_node_operator_config() {
         let payload = UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
             node_allowance: Some(10),
+            dc_id: None,
+            rewardable_nodes: btreemap! {},
         };
 
         // The anonymous end-user tries to update a node operator, bypassing
@@ -128,9 +131,13 @@ fn test_accepted_proposal_mutates_the_registry() {
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
 
+        let rewardable_nodes = btreemap! { "default".to_string() => 10 };
+
         let payload = UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
             node_allowance: Some(10),
+            dc_id: Some("AN1".into()),
+            rewardable_nodes: rewardable_nodes.clone(),
         };
 
         assert!(
@@ -150,6 +157,8 @@ fn test_accepted_proposal_mutates_the_registry() {
             NodeOperatorRecord {
                 node_operator_principal_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
                 node_allowance: 10,
+                dc_id: "AN1".into(),
+                rewardable_nodes,
                 ..Default::default()
             },
         );

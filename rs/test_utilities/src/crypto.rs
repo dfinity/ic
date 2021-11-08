@@ -3,16 +3,16 @@ pub mod fake_tls_handshake;
 
 pub use ic_crypto_test_utils::files as temp_dir;
 
-use crate::types::ids::{node_test_id, subnet_test_id};
+use crate::types::ids::node_test_id;
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript,
 };
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier, DkgAlgorithm,
-    KeyManager, LoadTranscriptResult, NiDkgAlgorithm, ThresholdSigVerifier,
-    ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier, KeyManager,
+    LoadTranscriptResult, NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
+    ThresholdSigner,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner, Signable};
 use ic_interfaces::registry::RegistryClient;
@@ -20,9 +20,6 @@ use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::dkg::{
-    Config, Dealing, EncryptionPublicKeyWithPop, Response, Transcript, TranscriptBytes,
-};
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
@@ -37,7 +34,7 @@ use ic_types::crypto::{
     IndividualMultiSigOf, ThresholdSigShare, ThresholdSigShareOf, UserPublicKey,
 };
 use ic_types::*;
-use ic_types::{IDkgId, NodeId, RegistryVersion};
+use ic_types::{NodeId, RegistryVersion};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
@@ -126,17 +123,6 @@ pub fn empty_ni_csp_dkg_transcript() -> CspNiDkgTranscript {
 pub fn empty_ni_dkg_dealing() -> NiDkgDealing {
     NiDkgDealing {
         internal_dealing: empty_ni_dkg_csp_dealing(),
-    }
-}
-
-pub fn empty_dkg_transcript() -> crypto::dkg::Transcript {
-    crypto::dkg::Transcript {
-        dkg_id: IDkgId {
-            instance_id: Height::from(0),
-            subnet_id: subnet_test_id(0),
-        },
-        committee: vec![],
-        transcript_bytes: TranscriptBytes(Default::default()),
     }
 }
 
@@ -362,83 +348,6 @@ impl NiDkgAlgorithm for CryptoReturningOk {
             .write()
             .unwrap()
             .push(transcripts.iter().map(|t| t.dkg_id).collect());
-        Ok(())
-    }
-}
-
-impl DkgAlgorithm for CryptoReturningOk {
-    fn generate_encryption_keys(
-        &self,
-        _dkg_config: &Config,
-        _node_id: NodeId,
-    ) -> CryptoResult<EncryptionPublicKeyWithPop> {
-        Ok(EncryptionPublicKeyWithPop::default())
-    }
-
-    fn verify_encryption_public_key(
-        &self,
-        _dkg_config: &Config,
-        _sender: NodeId,
-        _key: &EncryptionPublicKeyWithPop,
-    ) -> CryptoResult<()> {
-        Ok(())
-    }
-
-    fn create_dealing(
-        &self,
-        _config: &Config,
-        _verified_keys: &BTreeMap<NodeId, EncryptionPublicKeyWithPop>,
-        _node_id: NodeId,
-    ) -> CryptoResult<Dealing> {
-        Ok(Dealing(Default::default()))
-    }
-
-    fn verify_dealing(
-        &self,
-        _config: &Config,
-        _verified_keys: &BTreeMap<NodeId, EncryptionPublicKeyWithPop>,
-        _dealer: NodeId,
-        _dealing: &Dealing,
-    ) -> CryptoResult<()> {
-        Ok(())
-    }
-
-    fn create_response(
-        &self,
-        _config: &Config,
-        _verified_keys: &BTreeMap<NodeId, EncryptionPublicKeyWithPop>,
-        _verified_dealings: &BTreeMap<NodeId, Dealing>,
-        _node_id: NodeId,
-    ) -> CryptoResult<Response> {
-        Ok(Response(Default::default()))
-    }
-
-    fn verify_response(
-        &self,
-        _config: &Config,
-        _verified_keys: &BTreeMap<NodeId, EncryptionPublicKeyWithPop>,
-        _verified_dealings: &BTreeMap<NodeId, Dealing>,
-        _receiver: NodeId,
-        _response: &Response,
-    ) -> CryptoResult<()> {
-        Ok(())
-    }
-
-    fn create_transcript(
-        &self,
-        config: &Config,
-        _verified_keys: &BTreeMap<NodeId, EncryptionPublicKeyWithPop>,
-        _verified_dealings: &BTreeMap<NodeId, Dealing>,
-        _verified_responses: &BTreeMap<NodeId, Response>,
-    ) -> CryptoResult<Transcript> {
-        Ok(Transcript {
-            dkg_id: config.dkg_id,
-            committee: config.receivers.iter().cloned().map(Some).collect(),
-            transcript_bytes: TranscriptBytes(Default::default()),
-        })
-    }
-
-    fn load_transcript(&self, _transcript: &Transcript, _receiver: NodeId) -> CryptoResult<()> {
         Ok(())
     }
 }

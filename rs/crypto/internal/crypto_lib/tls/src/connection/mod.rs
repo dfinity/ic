@@ -8,6 +8,8 @@ use openssl::{
     x509::X509,
 };
 
+use std::fmt;
+
 pub use acceptor::{tls_acceptor, ClientAuthentication, CreateTlsAcceptorError};
 pub use connector::{tls_connector, CreateTlsConnectorError};
 
@@ -93,11 +95,21 @@ mod acceptor {
     }
 
     /// A TLS acceptor couldn't be created.
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, PartialEq, Eq)]
     pub struct CreateTlsAcceptorError {
         pub description: String,
         pub cert_der: Option<Vec<u8>>,
         pub internal_error: Option<String>,
+    }
+
+    impl fmt::Debug for CreateTlsAcceptorError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(
+            f,
+            "CreateTlsAcceptorError{{ description: \"{}\", cert_der: {:?}, internal_error: {:?} }}",
+            self.description, self.cert_der.as_ref().map(|der| base64::encode(&der)), self.internal_error
+        )
+        }
     }
 
     impl From<CreateTlsContextError> for CreateTlsAcceptorError {
@@ -157,7 +169,7 @@ mod connector {
     }
 
     /// A TLS connector couldn't be created.
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, PartialEq, Eq)]
     pub struct CreateTlsConnectorError {
         pub description: String,
         pub client_cert_der: Option<Vec<u8>>,
@@ -189,6 +201,16 @@ mod connector {
                 server_cert_der: None,
                 internal_error: error.internal_error,
             }
+        }
+    }
+
+    impl fmt::Debug for CreateTlsConnectorError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(
+            f,
+            "CreateTlsConnectorError{{ description: \"{}\", client_cert_der: {:?}, server_cert_der: {:?}, internal_error: \"{}\" }}",
+            self.description, self.client_cert_der.as_ref().map(|der| base64::encode(&der)), self.server_cert_der.as_ref().map(|der| base64::encode(&der)), self.internal_error
+        )
         }
     }
 }
@@ -309,11 +331,21 @@ mod context {
         Ok(cert_store_builder.build())
     }
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, PartialEq, Eq)]
     pub struct CreateTlsContextError {
         pub description: String,
         pub cert_der: Option<Vec<u8>>,
         pub internal_error: String,
+    }
+
+    impl fmt::Debug for CreateTlsContextError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(
+            f,
+            "CreateTlsContextError{{ description: \"{}\", cert_der: {:?}, internal_error: {:?} }}",
+            self.description, self.cert_der.as_ref().map(|der| base64::encode(&der)), self.internal_error
+        )
+        }
     }
 
     impl CreateTlsContextError {

@@ -156,21 +156,6 @@ async fn donate_account_(hex_pubkey: String) -> Result<(), String> {
     gtc_mut().donate_account(&caller(), hex_pubkey).await
 }
 
-/// Transfer the funds of all unclaimed accounts to the Neuron given by the
-/// GTC's `forward_all_unclaimed_accounts_recipient_neuron_id`.
-///
-/// This method may be called by anyone 6 months after the IC Genesis.
-#[export_name = "canister_update forward_all_unclaimed_accounts"]
-fn forward_all_unclaimed_accounts() {
-    println!("{}forward_all_unclaimed_accounts", LOG_PREFIX);
-    over_async(candid_one, forward_all_unclaimed_accounts_)
-}
-
-#[candid_method(update, rename = "forward_all_unclaimed_accounts")]
-async fn forward_all_unclaimed_accounts_(_: ()) -> Result<(), String> {
-    gtc_mut().forward_all_unclaimed_accounts().await
-}
-
 // When run on native this prints the candid service definition of this
 // canister, from the methods annotated with `candid_method` above.
 //

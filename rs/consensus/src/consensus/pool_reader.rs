@@ -175,8 +175,8 @@ impl<'a> PoolReader<'a> {
                     .into_inner(),
             ),
             Ordering::Greater if h > self.get_finalized_height() => None,
-            // If `h` is below or equal to the finalized height, we fetch notarized blocks at
-            // this height.
+            // If `h` is below or equal to the finalized height, we fetch
+            // notarized blocks at this height.
             Ordering::Greater => {
                 let mut iterator = self.get_notarized_blocks(h);
                 match (iterator.next(), iterator.next()) {
@@ -184,7 +184,13 @@ impl<'a> PoolReader<'a> {
                         "No notarized blocks at height {:?} found, which is below the finalization tip",
                         h
                     ),
-                    // If we have exactly one notarized block, return it.
+                    // If we have exactly one notarized block, return it. This
+                    // always works, because we know that we have validated
+                    // blocks up to the finalized height, which means that the
+                    // finalized chain up to the current finalized height is in
+                    // the pool. Since there is only one block at this height,
+                    // we know that this block must be a part of that finalized
+                    // chain.
                     (Some(block), None) => Some(block),
                     // If we have multiple notarized blocks, create a finalization height range,
                     // starting from `h`, then get the next finalization above `h`, and walk the chain
@@ -474,7 +480,8 @@ impl<'a> PoolReader<'a> {
             .take_while(|block| !block.payload.is_summary())
             .flat_map(|block| {
                 BlockPayload::from(block.payload)
-                    .into_dealings()
+                    .into_data()
+                    .dealings
                     .messages
                     .into_iter()
             })

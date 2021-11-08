@@ -187,6 +187,7 @@ type NeuronInfo = record {
   recent_ballots : vec BallotInfo;
   created_timestamp_seconds : nat64;
   state : int32;
+  stake_e8s : nat64;
   retrieved_at_timestamp_seconds : nat64;
   voting_power : nat64;
   age_seconds : nat64;
@@ -209,7 +210,12 @@ type Operation = variant {
   IncreaseDissolveDelay : IncreaseDissolveDelay;
   SetDissolveTimestamp : SetDissolveTimestamp;
 };
-type Proposal = record { url : text; action : opt Action; summary : text };
+type Proposal = record {
+  url : text;
+  title : opt text;
+  action : opt Action;
+  summary : text;
+};
 type ProposalData = record {
   id : opt NeuronId;
   failure_reason : opt GovernanceError;
@@ -284,8 +290,14 @@ service : (Governance) -> {
       ClaimOrRefreshNeuronFromAccountResponse,
     );
   get_full_neuron : (nat64) -> (Result_2) query;
+  get_full_neuron_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
+      Result_2,
+    ) query;
   get_neuron_ids : () -> (vec nat64) query;
   get_neuron_info : (nat64) -> (Result_3) query;
+  get_neuron_info_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
+      Result_3,
+    ) query;
   get_pending_proposals : () -> (vec ProposalInfo) query;
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;

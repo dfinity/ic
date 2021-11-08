@@ -4,7 +4,6 @@ use crate::{
     api, crypto as multi_crypto, test_utils as multi_test_utils, types as multi_types,
     types::arbitrary,
 };
-use group::CurveProjective;
 use ic_crypto_internal_bls12381_common as bls;
 use ic_crypto_internal_test_vectors::unhex::hex_to_48_bytes;
 
@@ -44,8 +43,8 @@ mod basic_functionality {
     use ic_crypto_internal_bls12381_common::g1_to_bytes;
     use proptest::prelude::*;
     use proptest::std_facade::HashSet;
-    use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
+    use rand_core::SeedableRng;
 
     // Slow tests
     proptest! {
@@ -117,7 +116,7 @@ mod advanced_functionality {
     fn zero_signatures_yields_signature_zero() {
         assert_eq!(
             multi_crypto::combine_signatures(&[]),
-            multi_types::CombinedSignature::zero()
+            multi_types::CombinedSignature::identity()
         );
     }
 
@@ -150,9 +149,7 @@ mod advanced_functionality {
         let mut public_key_bytes = PublicKeyBytes::from(public_key);
         public_key_bytes.0[G2::FLAG_BYTE_OFFSET] &= !G2::COMPRESSED_FLAG;
         match api::verify_pop(pop_bytes, public_key_bytes) {
-            Err(e) => assert!(e
-                .to_string()
-                .contains("encoding has unexpected compression mode")),
+            Err(e) => assert!(e.to_string().contains("Point decoding failed")),
             Ok(_) => panic!("error should have been thrown"),
         }
     }
@@ -171,9 +168,7 @@ mod advanced_functionality {
         }
         public_key_bytes.0[G2::FLAG_BYTE_OFFSET] |= G2::COMPRESSED_FLAG;
         match api::verify_pop(pop_bytes, public_key_bytes) {
-            Err(e) => assert!(e
-                .to_string()
-                .contains("coordinate(s) do not lie on the curve")),
+            Err(e) => assert!(e.to_string().contains("Point decoding failed")),
             Ok(_) => panic!("error should have been thrown"),
         }
     }
@@ -192,7 +187,7 @@ mod advanced_functionality {
         public_key_bytes.0[G2::FLAG_BYTE_OFFSET] |= G2::COMPRESSED_FLAG;
         public_key_bytes.0[5] = 3;
         match api::verify_pop(pop_bytes, public_key_bytes) {
-            Err(e) => assert!(e.to_string().contains("not part of an r-order subgroup")),
+            Err(e) => assert!(e.to_string().contains("Point decoding failed")),
             Ok(_) => panic!("error should have been thrown"),
         }
     }

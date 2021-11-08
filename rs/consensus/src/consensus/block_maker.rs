@@ -375,7 +375,7 @@ impl BlockMaker {
         let batch = if block.payload.is_summary() {
             &empty_batch
         } else {
-            block.payload.as_ref().as_batch_payload()
+            &block.payload.as_ref().as_data().batch
         };
 
         for message_id in batch.ingress.message_ids() {
@@ -392,19 +392,19 @@ impl BlockMaker {
     // time ago. If the parent's context references higher version which is already
     // available localy, we use that version.
     fn get_stable_registry_version(&self, parent: &Block) -> Option<RegistryVersion> {
-        for v in (1..=self.registry_client.get_latest_version().get()).rev() {
+        let parents_version = parent.context.registry_version;
+        let latest_version = self.registry_client.get_latest_version();
+        // Check if there is a stable version that we can bump up to.
+        for v in (parents_version.get()..=latest_version.get()).rev() {
             let version = RegistryVersion::from(v);
             let version_timestamp = self.registry_client.get_version_timestamp(version)?;
             if version_timestamp + self.stable_registry_version_age <= current_time() {
-                let stable_version = std::cmp::max(
-                    version,
-                    std::cmp::min(
-                        parent.context.registry_version,
-                        self.registry_client.get_latest_version(),
-                    ),
-                );
-                return Some(stable_version);
+                return Some(version);
             }
+        }
+        // If parent's version is locally available, return that.
+        if parents_version <= latest_version {
+            return Some(parents_version);
         }
         None
     }
@@ -833,7 +833,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(Some(CryptoHashOfState::from(CryptoHash(Vec::new())))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
             let certified_height = Height::from(1);
             state_manager
                 .get_mut()

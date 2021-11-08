@@ -36,6 +36,7 @@ use ic_test_utilities::{
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     registry::{setup_registry, SubnetRecordBuilder},
+    self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state::ReplicatedStateBuilder,
     state_manager::MockStateManager,
     types::ids::{canister_test_id, node_test_id, subnet_test_id},
@@ -44,7 +45,7 @@ use ic_test_utilities::{
     FastForwardTimeSource,
 };
 use ic_types::{
-    batch::{BatchPayload, IngressPayload, ValidationContext, XNetPayload},
+    batch::{BatchPayload, IngressPayload, SelfValidatingPayload, ValidationContext, XNetPayload},
     consensus::certification::*,
     consensus::*,
     crypto::Signed,
@@ -141,6 +142,7 @@ where
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
             ingress_manager,
             Arc::new(FakeXNetPayloadBuilder::new()),
+            Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             metrics_registry,
         ));
 
@@ -238,10 +240,11 @@ fn add_past_blocks(
         block.rank = Rank(i as u64);
         let ingress = prepare_ingress_payload(now, message_count, i as u8);
         let xnet = XNetPayload::default();
+        let self_validating = SelfValidatingPayload::default();
         block.payload = Payload::new(
             ic_crypto::crypto_hash,
             (
-                BatchPayload::new(ingress, xnet),
+                BatchPayload::new(ingress, xnet, self_validating),
                 dkg::Dealings::new_empty(block.payload.as_ref().dkg_interval_start_height()),
             )
                 .into(),
@@ -301,10 +304,11 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
                 let seed = CERTIFIED_HEIGHT + PAST_PAYLOAD_HEIGHT + 10;
                 let ingress = prepare_ingress_payload(now, message_count, seed as u8);
                 let xnet = XNetPayload::default();
+                let self_validating = SelfValidatingPayload::default();
                 let payload = Payload::new(
                     ic_crypto::crypto_hash,
                     (
-                        BatchPayload::new(ingress, xnet),
+                        BatchPayload::new(ingress, xnet, self_validating),
                         dkg::Dealings::new_empty(tip.payload.as_ref().dkg_interval_start_height()),
                     )
                         .into(),

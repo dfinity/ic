@@ -4,8 +4,9 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces::{
     certified_stream_store::{CertifiedStreamStore, DecodeStreamError, EncodeStreamError},
     state_manager::{
-        CertificationMask, CertificationScope, Labeled, StateManager, StateManagerError,
-        StateManagerResult, StateReader, CERT_ANY, CERT_CERTIFIED, CERT_UNCERTIFIED,
+        CertificationMask, CertificationScope, Labeled, PermanentStateHashError::*, StateHashError,
+        StateManager, StateManagerError, StateManagerResult, StateReader,
+        TransientStateHashError::*, CERT_ANY, CERT_CERTIFIED, CERT_UNCERTIFIED,
     },
 };
 use ic_registry_subnet_type::SubnetType;
@@ -47,9 +48,9 @@ mock! {
 
         fn take_tip_at(&self, h: Height) -> StateManagerResult<ReplicatedState>;
 
-        fn get_state_hash_at(&self, height: Height) -> StateManagerResult<Option<CryptoHashOfState>>;
+        fn get_state_hash_at(&self, height: Height) -> Result<CryptoHashOfState, StateHashError>;
 
-        fn fetch_state(&self, height: Height, root_hash: CryptoHashOfState);
+        fn fetch_state(&self, height: Height, root_hash: CryptoHashOfState, cup_interval_length: Height);
 
         fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)>;
 
@@ -178,9 +179,9 @@ impl StateManager for FakeStateManager {
         Ok(tip)
     }
 
-    fn get_state_hash_at(&self, height: Height) -> StateManagerResult<Option<CryptoHashOfState>> {
+    fn get_state_hash_at(&self, height: Height) -> Result<CryptoHashOfState, StateHashError> {
         if self.latest_state_height() < height {
-            return Err(StateManagerError::StateNotCommittedYet(height));
+            return Err(StateHashError::Transient(StateNotCommittedYet(height)));
         }
 
         let states = self.states.read().unwrap();
@@ -189,16 +190,21 @@ impl StateManager for FakeStateManager {
             .iter()
             .find_map(|snap| {
                 if snap.height == height {
-                    Some(Some(snap.root_hash.clone()))
+                    Some(snap.root_hash.clone())
                 } else {
                     None
                 }
             })
-            .ok_or(StateManagerError::StateRemoved(height))
+            .ok_or(StateHashError::Permanent(StateRemoved(height)))
     }
 
-    fn fetch_state(&self, height: Height, root_hash: CryptoHashOfState) {
-        if let Ok(Some(hash)) = self.get_state_hash_at(height) {
+    fn fetch_state(
+        &self,
+        height: Height,
+        root_hash: CryptoHashOfState,
+        _cup_interval_length: Height,
+    ) {
+        if let Ok(hash) = self.get_state_hash_at(height) {
             assert_eq!(hash, root_hash);
         }
         let mut states = self.states.write().unwrap();
@@ -376,7 +382,7 @@ impl CertifiedStreamStore for FakeStateManager {
         let state = self.get_latest_state();
         let stream = state
             .get_ref()
-            .get_stream(remote_subnet)
+            .get_stream(&remote_subnet)
             .ok_or(EncodeStreamError::NoStreamForSubnet(remote_subnet))?;
 
         let begin_index = msg_begin.unwrap_or_else(|| stream.messages_begin());
@@ -465,12 +471,20 @@ impl StateManager for RefMockStateManager {
         self.mock.read().unwrap().take_tip_at(h)
     }
 
-    fn get_state_hash_at(&self, height: Height) -> StateManagerResult<Option<CryptoHashOfState>> {
+    fn get_state_hash_at(&self, height: Height) -> Result<CryptoHashOfState, StateHashError> {
         self.mock.read().unwrap().get_state_hash_at(height)
     }
 
-    fn fetch_state(&self, height: Height, root_hash: CryptoHashOfState) {
-        self.mock.read().unwrap().fetch_state(height, root_hash)
+    fn fetch_state(
+        &self,
+        height: Height,
+        root_hash: CryptoHashOfState,
+        cup_interval_length: Height,
+    ) {
+        self.mock
+            .read()
+            .unwrap()
+            .fetch_state(height, root_hash, cup_interval_length)
     }
 
     fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {

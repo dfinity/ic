@@ -5,24 +5,20 @@ use super::types::{
     Polynomial, PublicCoefficients, SecretKey, Signature,
 };
 use crate::api::dkg_errors::InvalidArgumentError;
-use ic_crypto_internal_bls12381_common::{hash_to_g1, scalar_multiply};
+use ic_crypto_internal_bls12381_common::hash_to_g1;
 
 use crate::types::PublicKey;
-use ff::{Field, PrimeField};
-use group::CurveProjective;
+use bls12_381::{Bls12, G1Projective, G2Affine, G2Projective, Scalar};
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::{
     crypto::{AlgorithmId, CryptoError, CryptoResult},
     NodeIndex, NumberOfNodes, Randomness,
 };
-use pairing::bls12_381::{G1, G2};
-use pairing::{
-    bls12_381::{Bls12, Fr, FrRepr},
-    Engine,
-};
+use pairing::Engine;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use std::convert::TryFrom;
+use std::ops::AddAssign;
 
 /// Domain separator for Hash-to-G1 to be used for signature generation as
 /// as specified in the Basic ciphersuite in https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-4.2.1
@@ -30,7 +26,7 @@ const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG: &[u8; 43] =
     b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
 
 /// Hashes `msg` to a point in `G1`.
-pub fn hash_message_to_g1(msg: &[u8]) -> G1 {
+pub fn hash_message_to_g1(msg: &[u8]) -> G1Projective {
     hash_to_g1(&DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG[..], msg)
 }
 
@@ -39,7 +35,7 @@ pub mod tests;
 
 /// Computes the public equivalent of a secret key.
 pub fn public_key_from_secret_key(secret_key: &SecretKey) -> PublicKey {
-    PublicKey(scalar_multiply(G2::one(), *secret_key))
+    PublicKey(G2Affine::generator() * secret_key)
 }
 
 /// Yields the polynomial-evaluation point `x` given the `index` of the
@@ -47,13 +43,11 @@ pub fn public_key_from_secret_key(secret_key: &SecretKey) -> PublicKey {
 ///
 /// The polynomial `f(x)` is computed at a value `x` for every share of a
 /// threshold key. Shares are ordered and numbered `0...N`.
-pub fn x_for_index(index: NodeIndex) -> Fr {
+pub fn x_for_index(index: NodeIndex) -> Scalar {
     // It is important that this is never zero and that values are unique.
     let value: [u64; 4] = [index as u64, 0, 0, 0];
-    // Note: from_repr will blow up if the value is greater than the modulus.
-    // By the construction in the previous line of code that can never happen.
-    let mut ans = Fr::from_repr(FrRepr(value)).expect("Fr::from_repr rejected small input");
-    ans.add_assign(&Fr::one());
+    let mut ans = Scalar::from_raw(value);
+    ans += Scalar::one();
     ans
 }
 
@@ -238,9 +232,7 @@ pub fn combined_public_key(public_coefficients: &PublicCoefficients) -> PublicKe
 /// it is better to hash the data separately and provide the digest to
 ///   sign_hash(digest: [u8: 32], secret_key: &SecretKey) // unimplemented.
 pub fn sign_message(message: &[u8], secret_key: &SecretKey) -> Signature {
-    let mut signature = hash_message_to_g1(message);
-    signature.mul_assign(*secret_key);
-    signature
+    hash_message_to_g1(message) * secret_key
 }
 
 /// Combines signature shares (i.e. evaluates the signature at `x=0`).
@@ -268,14 +260,14 @@ pub fn combine_signatures(
         });
     }
     if signatures.is_empty() {
-        return Ok(Signature::zero());
+        return Ok(Signature::identity());
     }
-    let signatures: Vec<(Fr, Signature)> = signatures
+    let signatures: Vec<(Scalar, Signature)> = signatures
         .iter()
         .zip(0_u32..)
         .filter_map(|(signature, index)| signature.map(|signature| (x_for_index(index), signature)))
         .collect();
-    Ok(PublicCoefficients::interpolate(&signatures).expect("Duplicate indices"))
+    Ok(PublicCoefficients::interpolate_g1(&signatures).expect("Duplicate indices"))
 }
 
 /// Verifies an individual signature against the provided public key.
@@ -321,7 +313,9 @@ pub fn verify_combined_sig(
 // exponentiation.
 fn verify(message: &[u8], signature: Signature, public_key: PublicKey) -> Result<(), ()> {
     let point = hash_message_to_g1(message);
-    if Bls12::pairing(signature, G2::one()) == Bls12::pairing(point, public_key.0) {
+    if Bls12::pairing(&signature.into(), &G2Affine::generator())
+        == Bls12::pairing(&point.into(), &public_key.0.into())
+    {
         Ok(())
     } else {
         Err(())
@@ -344,13 +338,9 @@ pub fn secret_key_is_consistent(
     let x = x_for_index(index);
     let mut y = public_coefficients.evaluate_at(&x);
     // According to the secret share:
-    let neg_secret = {
-        let mut s = secret;
-        s.negate();
-        s
-    };
-    let neg_pub = scalar_multiply(G2::one(), neg_secret);
+    let neg_secret = secret.neg();
+    let neg_pub = G2Projective::generator() * neg_secret;
     // Compare:
     y.add_assign(&neg_pub);
-    y.is_zero()
+    bool::from(y.is_identity())
 }

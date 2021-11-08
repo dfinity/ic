@@ -59,27 +59,29 @@ pub fn hash_state(state: &ReplicatedState) -> HashTree {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::metadata_state::Stream;
-    use ic_replicated_state::{
-        page_map::{PageDelta, PageIndex, PAGE_SIZE},
-        ExecutionState, ExportedFunctions, Global, NumWasmPages, PageMap, ReplicatedState,
-    };
-    use ic_test_utilities::types::ids::{
-        canister_test_id, message_test_id, subnet_test_id, user_test_id,
-    };
-    use ic_types::{
-        xnet::{StreamIndex, StreamIndexedQueue},
-        Cycles, ExecutionRound,
-    };
-
     use hex::FromHex;
     use ic_base_types::NumSeconds;
     use ic_cow_state::CowMemoryManagerImpl;
     use ic_crypto_tree_hash::Digest;
-    use ic_test_utilities::{state::new_canister_state, types::messages::ResponseBuilder};
-    use ic_types::ingress::IngressStatus;
-    use ic_types::messages::RequestOrResponse;
+    use ic_registry_subnet_type::SubnetType;
+    use ic_replicated_state::{
+        canister_state::execution_state::WasmBinary,
+        metadata_state::Stream,
+        page_map::{PageIndex, PAGE_SIZE},
+        testing::ReplicatedStateTesting,
+        ExecutionState, ExportedFunctions, Global, NumWasmPages, PageMap, ReplicatedState,
+    };
+    use ic_test_utilities::{
+        state::new_canister_state,
+        types::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+        types::messages::ResponseBuilder,
+    };
+    use ic_types::{
+        ingress::IngressStatus,
+        messages::RequestOrResponse,
+        xnet::{StreamIndex, StreamIndexedQueue},
+        Cycles, ExecutionRound,
+    };
     use ic_wasm_types::BinaryEncodedWasm;
     use std::collections::BTreeSet;
     use std::sync::Arc;
@@ -96,15 +98,15 @@ mod tests {
 
         let hash_of_empty_state = hash_state(&state);
 
-        let mut streams = state.take_streams();
-        streams.insert(
-            subnet_test_id(5),
-            Stream::new(
-                StreamIndexedQueue::with_begin(StreamIndex::new(4)),
-                StreamIndex::new(10),
-            ),
-        );
-        state.put_streams(streams);
+        state.modify_streams(|streams| {
+            streams.insert(
+                subnet_test_id(5),
+                Stream::new(
+                    StreamIndexedQueue::with_begin(StreamIndex::new(4)),
+                    StreamIndex::new(10),
+                ),
+            );
+        });
 
         let hash_of_state_with_streams = hash_state(&state);
 
@@ -131,9 +133,9 @@ mod tests {
             StreamIndex::new(10),
         );
 
-        let mut streams = state.take_streams();
-        streams.insert(subnet_test_id(5), stream);
-        state.put_streams(streams);
+        state.modify_streams(|streams| {
+            streams.insert(subnet_test_id(5), stream);
+        });
 
         let hash_of_state_one = hash_state(&state);
 
@@ -141,9 +143,9 @@ mod tests {
             StreamIndexedQueue::with_begin(StreamIndex::from(14)),
             StreamIndex::new(11),
         );
-        let mut streams = state.take_streams();
-        streams.insert(subnet_test_id(6), stream);
-        state.put_streams(streams);
+        state.modify_streams(|streams| {
+            streams.insert(subnet_test_id(6), stream);
+        });
 
         let hash_of_state_two = hash_state(&state);
 
@@ -172,11 +174,9 @@ mod tests {
                 NumSeconds::from(100_000),
             );
             let mut page_map = PageMap::default();
-            page_map.update(PageDelta::from(
-                &[(PageIndex::from(1), &vec![0u8; *PAGE_SIZE][..])][..],
-            ));
+            page_map.update(&[(PageIndex::from(1), &[0u8; PAGE_SIZE])]);
             let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-            let wasm_binary = BinaryEncodedWasm::new(vec![]);
+            let wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(vec![]));
             let execution_state = ExecutionState {
                 canister_root: "NOT_USED".into(),
                 session_nonce: None,
@@ -185,7 +185,6 @@ mod tests {
                 exported_globals: vec![Global::I32(1)],
                 heap_size: NumWasmPages::from(2),
                 exports: ExportedFunctions::new(BTreeSet::new()),
-                embedder_cache: None,
                 last_executed_round: ExecutionRound::from(0),
                 cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(tmpdir.path().into())),
                 mapped_state: None,
@@ -203,9 +202,9 @@ mod tests {
                 stream.push(RequestOrResponse::Response(ResponseBuilder::new().build()));
             }
 
-            let mut streams = state.take_streams();
-            streams.insert(subnet_test_id(5), stream);
-            state.put_streams(streams);
+            state.modify_streams(|streams| {
+                streams.insert(subnet_test_id(5), stream);
+            });
 
             for i in 1..6 {
                 state.set_ingress_status(message_test_id(i), IngressStatus::Unknown);

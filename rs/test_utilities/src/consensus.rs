@@ -4,6 +4,7 @@ use mockall::predicate::*;
 use mockall::*;
 
 use crate::crypto::empty_ni_dkg_transcripts_with_committee;
+use ic_base_types::RegistryVersion;
 use ic_consensus_message::{make_genesis, ConsensusMessageHashable};
 use ic_interfaces::{
     consensus::*,
@@ -85,6 +86,8 @@ mock! {
         fn summary_block(&self) -> Block;
 
         fn cup_with_protobuf(&self) -> CUPWithOriginalProtobuf;
+
+        fn get_subnet_membership_version(&self) -> RegistryVersion;
     }
 }
 

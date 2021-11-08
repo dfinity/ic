@@ -3,16 +3,17 @@ use ic_consensus::certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::setup_execution;
-use ic_interfaces::execution_environment::IngressMessageFilter;
-use ic_interfaces::registry::LocalStoreCertifiedTimeReader;
 use ic_interfaces::{
-    certified_stream_store::CertifiedStreamStore, consensus_pool::ConsensusPoolCache,
-    execution_environment::QueryHandler, p2p::IngressEventHandler, p2p::P2PRunner,
-    registry::RegistryClient,
+    certified_stream_store::CertifiedStreamStore,
+    consensus_pool::ConsensusPoolCache,
+    execution_environment::{IngressFilterService, QueryExecutionService, QueryHandler},
+    p2p::IngressIngestionService,
+    p2p::P2PRunner,
+    registry::{LocalStoreCertifiedTimeReader, RegistryClient},
+    self_validating_payload::NoOpSelfValidatingPayloadBuilder,
 };
 use ic_logger::ReplicaLogger;
-use ic_messaging::{MessageRoutingImpl, XNetPayloadBuilderImpl};
-use ic_messaging::{XNetEndpoint, XNetEndpointConfig};
+use ic_messaging::{MessageRoutingImpl, XNetEndpoint, XNetEndpointConfig, XNetPayloadBuilderImpl};
 use ic_registry_subnet_type::SubnetType;
 use ic_replica_setup_ic_network::{create_networking_stack, P2PStateSyncClient};
 use ic_replicated_state::ReplicatedState;
@@ -39,10 +40,11 @@ pub fn construct_ic_stack(
     Arc<CryptoComponent>,
     Arc<StateManagerImpl>,
     Arc<dyn QueryHandler<State = ReplicatedState>>,
+    QueryExecutionService,
     Box<dyn P2PRunner>,
-    Arc<dyn IngressEventHandler>,
+    IngressIngestionService,
     Arc<dyn ConsensusPoolCache>,
-    Box<dyn IngressMessageFilter<State = ReplicatedState>>,
+    IngressFilterService,
     XNetEndpoint,
 )> {
     let cycles_account_manager = Arc::new(CyclesAccountManager::new(
@@ -63,11 +65,12 @@ pub fn construct_ic_stack(
         config.malicious_behaviour.malicious_flags.clone(),
     ));
     let (
-        ingress_message_filter,
+        ingress_filter,
         ingress_history_writer,
-        http_query_handler,
-        scheduler,
         ingress_history_reader,
+        sync_query_handler,
+        async_query_handler,
+        scheduler,
     ) = setup_execution(
         replica_logger.clone(),
         &metrics_registry,
@@ -136,6 +139,9 @@ pub fn construct_ic_stack(
     );
     let xnet_payload_builder = Arc::new(xnet_payload_builder);
 
+    let self_validating_payload_builder = NoOpSelfValidatingPayloadBuilder {};
+    let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
+
     let mut artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool);
     match subnet_type {
         SubnetType::System => {}
@@ -166,6 +172,7 @@ pub fn construct_ic_stack(
         Arc::clone(&state_manager) as Arc<_>,
         P2PStateSyncClient::Client(Arc::clone(&state_manager) as Arc<_>),
         xnet_payload_builder as Arc<_>,
+        self_validating_payload_builder as Arc<_>,
         message_router as Arc<_>,
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,
@@ -184,11 +191,12 @@ pub fn construct_ic_stack(
     Ok((
         crypto,
         state_manager,
-        Arc::clone(&http_query_handler) as Arc<_>,
+        sync_query_handler,
+        async_query_handler,
         p2p_runner,
         p2p_event_handler,
         consensus_pool_cache,
-        ingress_message_filter,
+        ingress_filter,
         xnet_endpoint,
     ))
 }

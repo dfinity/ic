@@ -1,14 +1,14 @@
+use crate::wasmtime_embedder::host_memory::MemoryPageSize;
+
 use memory_tracker::{AccessKind, SigsegvMemoryTracker};
 use std::convert::TryFrom;
+use std::sync::{atomic::Ordering, Arc, Mutex};
 
 /// Helper function to create a memory tracking SIGSEGV handler function.
-pub fn sigsegv_memory_tracker_handler(
-    sigsegv_memory_tracker: std::rc::Rc<SigsegvMemoryTracker>,
-    current_heap_size: impl Fn() -> usize,
-    default_handler: impl Fn() -> bool,
-    handler_succeeded: impl Fn() -> bool,
-    handler_failed: impl Fn() -> bool,
-) -> impl Fn(i32, *const libc::siginfo_t, *const libc::c_void) -> bool {
+pub(crate) fn sigsegv_memory_tracker_handler(
+    sigsegv_memory_tracker: Arc<Mutex<SigsegvMemoryTracker>>,
+    current_page_size: MemoryPageSize,
+) -> impl Fn(i32, *const libc::siginfo_t, *const libc::c_void) -> bool + Send + Sync {
     move |signum: i32, siginfo_ptr: *const libc::siginfo_t, ucontext_ptr: *const libc::c_void| {
         use nix::sys::signal::Signal;
 
@@ -43,16 +43,6 @@ pub fn sigsegv_memory_tracker_handler(
             signal, _si_signo, _si_errno, _si_code, si_addr
         );
 
-        let check_if_expanded = || unsafe {
-            let heap_size = current_heap_size();
-            let heap_start = sigsegv_memory_tracker.area().addr() as *mut libc::c_void;
-            if (heap_start <= si_addr) && (si_addr < { heap_start.add(heap_size) }) {
-                Some(heap_size)
-            } else {
-                None
-            }
-        };
-
         let expected_signal =
             // Mac OS raises SIGBUS instead of SIGSEGV
             if cfg!(target_os = "macos") {
@@ -62,20 +52,31 @@ pub fn sigsegv_memory_tracker_handler(
             };
 
         if signal != expected_signal {
-            return default_handler();
+            #[cfg(feature = "sigsegv_handler_debug")]
+            eprintln!("> instance signal handler: calling default signal handler");
+            return false;
         }
+
+        let sigsegv_memory_tracker = sigsegv_memory_tracker.lock().unwrap();
+
+        let check_if_expanded = || unsafe {
+            let page_count = current_page_size.load(Ordering::SeqCst);
+            let heap_size = (page_count * wasmtime_environ::WASM_PAGE_SIZE) as usize;
+            let heap_start = sigsegv_memory_tracker.area().addr() as *mut libc::c_void;
+            if (heap_start <= si_addr) && (si_addr < { heap_start.add(heap_size) }) {
+                Some(heap_size)
+            } else {
+                None
+            }
+        };
+
         // We handle SIGSEGV from the Wasm module heap ourselves.
         if sigsegv_memory_tracker.area().is_within(si_addr) {
             #[cfg(feature = "sigsegv_handler_debug")]
             eprintln!("> instance signal handler: calling memory tracker signal handler");
             // Returns true if the signal has been handled by our handler which indicates
             // that the instance should continue.
-            let handled = sigsegv_memory_tracker.handle_sigsegv(access_kind, si_addr);
-            if handled {
-                handler_succeeded()
-            } else {
-                handler_failed()
-            }
+            sigsegv_memory_tracker.handle_sigsegv(access_kind, si_addr)
         // The heap has expanded. Update tracked memory area.
         } else if let Some(heap_size) = check_if_expanded() {
             let delta = heap_size - sigsegv_memory_tracker.area().size();
@@ -85,9 +86,11 @@ pub fn sigsegv_memory_tracker_handler(
                 delta
             );
             sigsegv_memory_tracker.expand(delta);
-            handler_succeeded()
+            true
         } else {
-            default_handler()
+            #[cfg(feature = "sigsegv_handler_debug")]
+            eprintln!("> instance signal handler: calling default signal handler");
+            false
         }
     }
 }

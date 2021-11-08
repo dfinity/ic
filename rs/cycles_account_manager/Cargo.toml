@@ -6,6 +6,7 @@ edition = "2018"
 [dependencies]
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
+ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }

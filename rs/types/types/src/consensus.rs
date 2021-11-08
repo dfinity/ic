@@ -1220,16 +1220,23 @@ pub fn get_faults_tolerated(n: usize) -> usize {
 impl From<&Block> for pb::Block {
     fn from(block: &Block) -> Self {
         let payload: &BlockPayload = block.payload.as_ref();
-        let (dkg_payload, xnet_payload, ingress_payload) = if payload.is_summary() {
-            (pb::DkgPayload::from(&payload.as_summary().dkg), None, None)
-        } else {
-            let batch = payload.as_batch_payload();
-            (
-                pb::DkgPayload::from(payload.as_dealings()),
-                Some(pb::XNetPayload::from(&batch.xnet)),
-                Some(pb::IngressPayload::from(&batch.ingress)),
-            )
-        };
+        let (dkg_payload, xnet_payload, ingress_payload, self_validating_payload) =
+            if payload.is_summary() {
+                (
+                    pb::DkgPayload::from(&payload.as_summary().dkg),
+                    None,
+                    None,
+                    None,
+                )
+            } else {
+                let batch = &payload.as_data().batch;
+                (
+                    pb::DkgPayload::from(&payload.as_data().dealings),
+                    Some(pb::XNetPayload::from(&batch.xnet)),
+                    Some(pb::IngressPayload::from(&batch.ingress)),
+                    Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
+                )
+            };
         Self {
             version: block.version.to_string(),
             parent: block.parent.clone().get().0,
@@ -1241,6 +1248,7 @@ impl From<&Block> for pb::Block {
             time: block.context.time.as_nanos_since_unix_epoch(),
             xnet_payload,
             ingress_payload,
+            self_validating_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
     }
@@ -1265,6 +1273,11 @@ impl TryFrom<pb::Block> for Block {
                 .map(crate::batch::XNetPayload::try_from)
                 .transpose()?
                 .unwrap_or_default(),
+            block
+                .self_validating_payload
+                .map(crate::batch::SelfValidatingPayload::try_from)
+                .transpose()?
+                .unwrap_or_default(),
         );
         let payload = match dkg_payload {
             dkg::Payload::Summary(summary) => {
@@ -1272,7 +1285,10 @@ impl TryFrom<pb::Block> for Block {
                     batch.is_empty(),
                     "Error: Summary block has non-empty batch payload."
                 );
-                BlockPayload::Summary(SummaryPayload { dkg: summary })
+                BlockPayload::Summary(SummaryPayload {
+                    dkg: summary,
+                    ecdsa: ecdsa::Summary::default(),
+                })
             }
             dkg::Payload::Dealings(dealings) => (batch, dealings).into(),
         };

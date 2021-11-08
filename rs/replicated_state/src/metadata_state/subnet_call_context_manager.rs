@@ -6,7 +6,7 @@ use ic_protobuf::{
 use ic_types::{
     crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
     messages::{CallbackId, Request},
-    node_id_into_protobuf, node_id_try_from_protobuf, NodeId, RegistryVersion,
+    node_id_into_protobuf, node_id_try_from_protobuf, NodeId, RegistryVersion, Time,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -18,6 +18,7 @@ pub struct SubnetCallContextManager {
     next_callback_id: u64,
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
+    pub sign_with_mock_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
 }
 
 impl SubnetCallContextManager {
@@ -28,11 +29,15 @@ impl SubnetCallContextManager {
         self.setup_initial_dkg_contexts.insert(callback_id, context);
     }
 
-    pub fn push_sign_with_ecdsa_request(&mut self, context: SignWithEcdsaContext) {
+    pub fn push_sign_with_ecdsa_request(&mut self, context: SignWithEcdsaContext, is_mock: bool) {
         let callback_id = CallbackId::new(self.next_callback_id);
         self.next_callback_id += 1;
-
-        self.sign_with_ecdsa_contexts.insert(callback_id, context);
+        match is_mock {
+            true => self
+                .sign_with_mock_ecdsa_contexts
+                .insert(callback_id, context),
+            false => self.sign_with_ecdsa_contexts.insert(callback_id, context),
+        };
     }
 
     pub fn retrieve_request(
@@ -63,6 +68,19 @@ impl SubnetCallContextManager {
                         context.request
                     })
             })
+            .or_else(|| {
+                self.sign_with_mock_ecdsa_contexts
+                    .remove(&callback_id)
+                    .map(|context| {
+                        info!(
+                    logger,
+                    "Received the response for SignWithMockECDSA request with id {:?} from {:?}",
+                    context.pseudo_random_id,
+                    context.request.sender
+                );
+                        context.request
+                    })
+            })
     }
 }
 
@@ -84,6 +102,16 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                 .collect(),
             sign_with_ecdsa_contexts: item
                 .sign_with_ecdsa_contexts
+                .iter()
+                .map(
+                    |(callback_id, context)| pb_metadata::SignWithEcdsaContextTree {
+                        callback_id: callback_id.get(),
+                        context: Some(context.into()),
+                    },
+                )
+                .collect(),
+            sign_with_mock_ecdsa_contexts: item
+                .sign_with_mock_ecdsa_contexts
                 .iter()
                 .map(
                     |(callback_id, context)| pb_metadata::SignWithEcdsaContextTree {
@@ -120,10 +148,17 @@ impl TryFrom<pb_metadata::SubnetCallContextManager> for SubnetCallContextManager
                 try_from_option_field(entry.context, "SystemMetadata::SignWithEcdsaContext")?;
             sign_with_ecdsa_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
+        let mut sign_with_mock_ecdsa_contexts = BTreeMap::<CallbackId, SignWithEcdsaContext>::new();
+        for entry in item.sign_with_mock_ecdsa_contexts {
+            let context: SignWithEcdsaContext =
+                try_from_option_field(entry.context, "SystemMetadata::SignWithMockEcdsaContext")?;
+            sign_with_mock_ecdsa_contexts.insert(CallbackId::new(entry.callback_id), context);
+        }
         Ok(Self {
             next_callback_id: item.next_callback_id,
             setup_initial_dkg_contexts,
             sign_with_ecdsa_contexts,
+            sign_with_mock_ecdsa_contexts,
         })
     }
 }
@@ -173,15 +208,20 @@ impl TryFrom<pb_metadata::SetupInitialDkgContext> for SetupInitialDkgContext {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignWithEcdsaContext {
     pub request: Request,
-    pub message: Vec<u8>,
+    pub message_hash: Vec<u8>,
+    pub derivation_path: Vec<u8>,
     pub pseudo_random_id: [u8; 32],
+    pub batch_time: Time,
 }
 
 impl From<&SignWithEcdsaContext> for pb_metadata::SignWithEcdsaContext {
     fn from(context: &SignWithEcdsaContext) -> Self {
         pb_metadata::SignWithEcdsaContext {
             request: Some((&context.request).into()),
+            message_hash: context.message_hash.to_vec(),
+            derivation_path: context.derivation_path.to_vec(),
             pseudo_random_id: context.pseudo_random_id.to_vec(),
+            batch_time: context.batch_time.as_nanos_since_unix_epoch(),
         }
     }
 }
@@ -192,7 +232,8 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
         let request: Request =
             try_from_option_field(context.request, "SignWithEcdsaContext::request")?;
         Ok(SignWithEcdsaContext {
-            message: request.method_payload.clone(),
+            message_hash: context.message_hash,
+            derivation_path: context.derivation_path,
             request,
             pseudo_random_id: {
                 if context.pseudo_random_id.len() != 32 {
@@ -204,6 +245,7 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
                 id.copy_from_slice(&context.pseudo_random_id);
                 id
             },
+            batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
         })
     }
 }

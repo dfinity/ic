@@ -1,9 +1,11 @@
 #![allow(clippy::unwrap_used)]
+
 use ic_crypto_tls::generate_tls_keys;
 use openssl::asn1::Asn1Time;
 use openssl::bn::BigNum;
 use openssl::nid::Nid;
 use openssl::x509::{X509NameEntries, X509VerifyResult, X509};
+use std::collections::BTreeSet;
 
 const NOT_AFTER: &str = "20701231235959Z";
 
@@ -43,19 +45,13 @@ fn should_set_cert_issuer_cn_to_subject_cn() {
 
 #[test]
 fn should_set_different_serial_numbers_for_multiple_certs() {
-    let (cert_1, _sk_1) = generate_tls_keys("some common name 1", NOT_AFTER);
-    let (cert_2, _sk_2) = generate_tls_keys("some common name 2", NOT_AFTER);
-    let (cert_3, _sk_3) = generate_tls_keys("some common name 3", NOT_AFTER);
-
-    let x509_cert_1 = cert_1.as_x509();
-    let x509_cert_2 = cert_2.as_x509();
-    let x509_cert_3 = cert_3.as_x509();
-    let serial_1 = serial_number(&x509_cert_1);
-    let serial_2 = serial_number(&x509_cert_2);
-    let serial_3 = serial_number(&x509_cert_3);
-    assert_ne!(serial_1, serial_2);
-    assert_ne!(serial_2, serial_3);
-    assert_ne!(serial_1, serial_3);
+    const SAMPLE_SIZE: usize = 20;
+    let mut serial_samples = BTreeSet::new();
+    for _i in 0..SAMPLE_SIZE {
+        let (cert, _sk) = generate_tls_keys("some common name 1", NOT_AFTER);
+        serial_samples.insert(serial_number(&cert.as_x509()));
+    }
+    assert_eq!(serial_samples.len(), SAMPLE_SIZE);
 }
 
 #[test]

@@ -241,7 +241,7 @@ impl MutableIngressPool for IngressPoolImpl {
     fn apply_changeset(&mut self, change_set: ChangeSet) {
         for change_action in change_set {
             match change_action {
-                ChangeAction::MoveToValidated((message_id, _, _, _)) => {
+                ChangeAction::MoveToValidated((message_id, _, _, _, _)) => {
                     // remove it from unvalidated pool and remove it from peer_index, move it
                     // to the validated pool
                     match self.remove_unvalidated(&message_id) {
@@ -578,6 +578,7 @@ mod tests {
                 let changeset = vec![
                     ChangeAction::MoveToValidated((
                         message_id0.clone(),
+                        node_test_id(0),
                         0,
                         attribute_0,
                         msg_0_integrity_hash,
@@ -636,6 +637,7 @@ mod tests {
                     });
                     changeset.push(ChangeAction::MoveToValidated((
                         message_id,
+                        node_test_id(peer_id),
                         0,
                         attribute,
                         integrity_hash,

@@ -24,7 +24,7 @@ fn cow_state_heap_basic() {
     cow_state_feature::enable(cow_state_feature::cow_state);
 
     // Lets create bunch of random bytes
-    let random_bytes: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+    let random_bytes: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
 
     let test_dir = tempdir().expect("Unable to create temp directory");
     let cow_mem_mgr = CowMemoryManagerImpl::open_readwrite(test_dir.path().into());
@@ -33,9 +33,9 @@ fn cow_state_heap_basic() {
     // then verify that modifications persists
     let mapped_state = cow_mem_mgr.get_map();
     let base = mapped_state.get_heap_base();
-    reset_mem_protection(base, *PAGE_SIZE, PROT_READ | PROT_WRITE);
+    reset_mem_protection(base, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
-    unsafe { std::ptr::copy_nonoverlapping(random_bytes.as_ptr(), base, *PAGE_SIZE) };
+    unsafe { std::ptr::copy_nonoverlapping(random_bytes.as_ptr(), base, PAGE_SIZE) };
     mapped_state.soft_commit(&[0]);
 
     cow_mem_mgr.checkpoint();
@@ -45,9 +45,9 @@ fn cow_state_heap_basic() {
 
     let mapped_state = cow_mem_mgr.get_map();
     let base = mapped_state.get_heap_base();
-    reset_mem_protection(base, *PAGE_SIZE, PROT_READ | PROT_WRITE);
+    reset_mem_protection(base, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
-    let read_bytes = unsafe { std::slice::from_raw_parts(base, *PAGE_SIZE).to_vec() };
+    let read_bytes = unsafe { std::slice::from_raw_parts(base, PAGE_SIZE).to_vec() };
 
     // Assert everything persisted correctly
     assert_eq!(read_bytes, random_bytes);
@@ -55,7 +55,7 @@ fn cow_state_heap_basic() {
     // Test2: Overwrite the modifications but do not soft commit
     // the modifications. Make sure nothing gets persisted
     unsafe {
-        ptr::write_bytes(base, 0xff, *PAGE_SIZE);
+        ptr::write_bytes(base, 0xff, PAGE_SIZE);
     }
 
     // Intentionally drop the mappings to force unmaps
@@ -63,15 +63,15 @@ fn cow_state_heap_basic() {
 
     let mapped_state = cow_mem_mgr.get_map();
     let base = mapped_state.get_heap_base();
-    reset_mem_protection(base, *PAGE_SIZE, PROT_READ | PROT_WRITE);
+    reset_mem_protection(base, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
-    let read_bytes = unsafe { std::slice::from_raw_parts(base, *PAGE_SIZE).to_vec() };
+    let read_bytes = unsafe { std::slice::from_raw_parts(base, PAGE_SIZE).to_vec() };
 
     // Assert nothing peristed
     assert_eq!(read_bytes, random_bytes);
 
     // Test3 Update the heap directly and make sure it survives
-    let random_bytes2: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+    let random_bytes2: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
     mapped_state.update_heap_page(1, &random_bytes2);
     mapped_state.soft_commit(&[1]);
 
@@ -81,10 +81,10 @@ fn cow_state_heap_basic() {
     drop(mapped_state);
 
     let mapped_state = cow_mem_mgr.get_map();
-    let base = unsafe { mapped_state.get_heap_base().add(*PAGE_SIZE) };
-    reset_mem_protection(base, *PAGE_SIZE, PROT_READ | PROT_WRITE);
+    let base = unsafe { mapped_state.get_heap_base().add(PAGE_SIZE) };
+    reset_mem_protection(base, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
-    let read_bytes = unsafe { std::slice::from_raw_parts(base as *const u8, *PAGE_SIZE).to_vec() };
+    let read_bytes = unsafe { std::slice::from_raw_parts(base as *const u8, PAGE_SIZE).to_vec() };
 
     // Assert everything persisted correctly
     assert_eq!(read_bytes, random_bytes2);
@@ -92,8 +92,8 @@ fn cow_state_heap_basic() {
     drop(mapped_state);
 
     // Test 3.5 update heap unaligned and make sure it works
-    let offset_to_write_at = 10 * *PAGE_SIZE + 3593;
-    let random_bytes35: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+    let offset_to_write_at = 10 * PAGE_SIZE + 3593;
+    let random_bytes35: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
 
     let mapped_state = cow_mem_mgr.get_map();
     let pages_to_commit = mapped_state.copy_to_heap(offset_to_write_at as u64, &random_bytes35);
@@ -106,9 +106,9 @@ fn cow_state_heap_basic() {
     let mapped_state = cow_mem_mgr.get_map();
     mapped_state.make_heap_accessible();
     let base = unsafe { mapped_state.get_heap_base().add(offset_to_write_at) };
-    // reset_mem_protection(base, *PAGE_SIZE, PROT_READ | PROT_WRITE);
+    // reset_mem_protection(base, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
-    let read_bytes = unsafe { std::slice::from_raw_parts(base as *const u8, *PAGE_SIZE).to_vec() };
+    let read_bytes = unsafe { std::slice::from_raw_parts(base as *const u8, PAGE_SIZE).to_vec() };
 
     // Assert everything persisted correctly
     assert_eq!(read_bytes, random_bytes35);
@@ -124,17 +124,17 @@ fn cow_state_heap_basic() {
     let mapped_state = cow_mem_mgr.get_map_for_snapshot(42).unwrap();
 
     let base = mapped_state.get_heap_base();
-    reset_mem_protection(base, *PAGE_SIZE, PROT_READ | PROT_WRITE);
+    reset_mem_protection(base, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
-    let read_bytes = unsafe { std::slice::from_raw_parts(base, *PAGE_SIZE).to_vec() };
+    let read_bytes = unsafe { std::slice::from_raw_parts(base, PAGE_SIZE).to_vec() };
 
     // Assert everything persisted correctly in the first page
     assert_eq!(read_bytes, random_bytes);
 
-    let base = unsafe { mapped_state.get_heap_base().add(*PAGE_SIZE) };
-    reset_mem_protection(base, *PAGE_SIZE, PROT_READ | PROT_WRITE);
+    let base = unsafe { mapped_state.get_heap_base().add(PAGE_SIZE) };
+    reset_mem_protection(base, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
-    let read_bytes = unsafe { std::slice::from_raw_parts(base as *const u8, *PAGE_SIZE).to_vec() };
+    let read_bytes = unsafe { std::slice::from_raw_parts(base as *const u8, PAGE_SIZE).to_vec() };
 
     // Assert everything persisted correctly
     assert_eq!(read_bytes, random_bytes2);
@@ -145,7 +145,7 @@ fn cow_state_globals_basic() {
     cow_state_feature::enable(cow_state_feature::cow_state);
 
     // Lets create bunch of random bytes
-    let random_bytes: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+    let random_bytes: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
 
     let test_dir = tempdir().expect("Unable to create temp directory");
     let cow_mem_mgr = CowMemoryManagerImpl::open_readwrite(test_dir.path().into());
@@ -179,7 +179,7 @@ fn cow_state_clear_basic() {
     cow_state_feature::enable(cow_state_feature::cow_state);
 
     // Lets create bunch of random bytes
-    let random_bytes2: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+    let random_bytes2: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
 
     let test_dir = tempdir().expect("Unable to create temp directory");
     let cow_mem_mgr = CowMemoryManagerImpl::open_readwrite(test_dir.path().into());
@@ -192,10 +192,10 @@ fn cow_state_clear_basic() {
     drop(mapped_state);
 
     let mapped_state = cow_mem_mgr.get_map();
-    let base = unsafe { mapped_state.get_heap_base().add(*PAGE_SIZE) };
-    reset_mem_protection(base, *PAGE_SIZE, PROT_READ | PROT_WRITE);
+    let base = unsafe { mapped_state.get_heap_base().add(PAGE_SIZE) };
+    reset_mem_protection(base, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
-    let read_bytes = unsafe { std::slice::from_raw_parts(base as *const u8, *PAGE_SIZE).to_vec() };
+    let read_bytes = unsafe { std::slice::from_raw_parts(base as *const u8, PAGE_SIZE).to_vec() };
 
     // Assert everything persisted correctly
     assert_eq!(read_bytes, random_bytes2);
@@ -206,10 +206,10 @@ fn cow_state_clear_basic() {
     drop(mapped_state);
 
     let mapped_state = cow_mem_mgr.get_map();
-    let base = unsafe { mapped_state.get_heap_base().add(*PAGE_SIZE) };
-    reset_mem_protection(base, *PAGE_SIZE, PROT_READ | PROT_WRITE);
+    let base = unsafe { mapped_state.get_heap_base().add(PAGE_SIZE) };
+    reset_mem_protection(base, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
-    let read_bytes = unsafe { std::slice::from_raw_parts(base as *const u8, *PAGE_SIZE).to_vec() };
+    let read_bytes = unsafe { std::slice::from_raw_parts(base as *const u8, PAGE_SIZE).to_vec() };
 
     // Assert nothing persisted correctly
     assert_ne!(read_bytes, random_bytes2);
@@ -238,7 +238,7 @@ fn cow_state_heap_ro_basic() {
     cow_state_feature::enable(cow_state_feature::cow_state);
 
     // Lets create bunch of random bytes
-    let random_bytes: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+    let random_bytes: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
 
     let test_dir = tempdir().expect("Unable to create temp directory");
     let cow_mem_mgr = CowMemoryManagerImpl::open_readwrite(test_dir.path().into());
@@ -247,8 +247,8 @@ fn cow_state_heap_ro_basic() {
     // then verify that modifications persists
     let mapped_state = cow_mem_mgr.get_map();
     let base = mapped_state.get_heap_base();
-    reset_mem_protection(base, *PAGE_SIZE, PROT_READ | PROT_WRITE);
-    unsafe { std::ptr::copy_nonoverlapping(random_bytes.as_ptr(), base, *PAGE_SIZE) };
+    reset_mem_protection(base, PAGE_SIZE, PROT_READ | PROT_WRITE);
+    unsafe { std::ptr::copy_nonoverlapping(random_bytes.as_ptr(), base, PAGE_SIZE) };
     mapped_state.soft_commit(&[0]);
     cow_mem_mgr.create_snapshot(42);
 
@@ -265,15 +265,15 @@ fn cow_state_heap_ro_basic() {
     let mapped_state = cow_mem_mgr.get_map_for_snapshot(42).unwrap();
 
     let base = mapped_state.get_heap_base();
-    reset_mem_protection(base, *PAGE_SIZE, PROT_READ | PROT_WRITE);
+    reset_mem_protection(base, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
-    let read_bytes = unsafe { std::slice::from_raw_parts(base, *PAGE_SIZE).to_vec() };
+    let read_bytes = unsafe { std::slice::from_raw_parts(base, PAGE_SIZE).to_vec() };
 
     // Assert everything persisted correctly in the first page
     assert_eq!(read_bytes, random_bytes);
 
     // Make sure modifying the memory does not panic
-    unsafe { std::ptr::copy_nonoverlapping(random_bytes.as_ptr(), base, *PAGE_SIZE) };
+    unsafe { std::ptr::copy_nonoverlapping(random_bytes.as_ptr(), base, PAGE_SIZE) };
 }
 
 #[test]
@@ -296,7 +296,7 @@ fn cow_state_multi_thread() {
         let reader_mgr3 = cow_mem_mgr.clone();
         let writer = thread::spawn(move || {
             for _ in 1..nr_iterations {
-                let random_bytes: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+                let random_bytes: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
                 let mapped_state = writer_mgr.get_map();
                 let pages = mapped_state.copy_to_heap(0, &random_bytes);
                 mapped_state.soft_commit(&pages);

@@ -1,12 +1,13 @@
 //! Hashing to BLS12-381 primitives
 
 use crate::serde::pairing::g1_from_bytes;
+use bls12_381::{G1Projective, Scalar};
 use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_to_bytes;
 use ic_crypto_sha::Sha256;
 use miracl_core::bls12381::ecp::ECP;
-use pairing::bls12_381::{Fr, G1};
 use rand_chacha::ChaChaRng;
-use rand_core::{RngCore, SeedableRng};
+use rand_core::RngCore;
+use rand_core::SeedableRng;
 
 #[cfg(test)]
 mod tests;
@@ -22,7 +23,7 @@ mod tests;
 /// * `msg` is the message to be hashed to an elliptic curve point on BLS12_381.
 /// # Returns
 /// The G1 point as a zkgroup/pairing object
-pub fn hash_to_g1(domain: &[u8], msg: &[u8]) -> G1 {
+pub fn hash_to_g1(domain: &[u8], msg: &[u8]) -> G1Projective {
     let hash = hash_to_miracl_g1(domain, msg);
     g1_from_bytes(&miracl_g1_to_bytes(&hash).0)
         .expect("unreachable: conversion error from Miracl G1 to pairing::G1")
@@ -97,9 +98,7 @@ pub fn hash_to_miracl_g1(dst: &[u8], msg: &[u8]) -> MiraclG1 {
     p
 }
 
-pub fn random_bls12_381_scalar<R: RngCore>(rng: &mut R) -> Fr {
-    use ff::{Field, PrimeField};
-
+pub fn random_bls12_381_scalar<R: RngCore>(rng: &mut R) -> Scalar {
     loop {
         let mut repr = [0u64; 4];
         for r in repr.iter_mut() {
@@ -115,12 +114,19 @@ pub fn random_bls12_381_scalar<R: RngCore>(rng: &mut R) -> Fr {
         */
         repr[3] &= 0xffffffffffffffff >> 1;
 
-        let fr = Fr::from_repr(pairing::bls12_381::FrRepr(repr));
+        let mut repr8 = [0u8; 32];
+        repr8[..8].copy_from_slice(&repr[0].to_le_bytes());
+        repr8[8..16].copy_from_slice(&repr[1].to_le_bytes());
+        repr8[16..24].copy_from_slice(&repr[2].to_le_bytes());
+        repr8[24..].copy_from_slice(&repr[3].to_le_bytes());
 
-        if fr.is_err() {
+        let scalar = Scalar::from_bytes(&repr8);
+
+        if bool::from(scalar.is_none()) {
             continue; // out of range
         }
-        let mut fr = fr.expect("Generated Fr out of range");
+
+        let mut scalar = scalar.unwrap();
 
         /*
         The purpose of this function is to maintain bit-compatability with old
@@ -142,11 +148,10 @@ pub fn random_bls12_381_scalar<R: RngCore>(rng: &mut R) -> Fr {
             0x1bbe869330009d57,
         ];
 
-        let montgomery_fixup = Fr::from_repr(pairing::bls12_381::FrRepr(montgomery_fixup))
-            .expect("Montgomery fixup value out of range");
-        fr.mul_assign(&montgomery_fixup);
+        let montgomery_fixup = Scalar::from_raw(montgomery_fixup);
+        scalar *= montgomery_fixup;
 
-        return fr;
+        return scalar;
     }
 }
 
@@ -156,7 +161,7 @@ pub fn random_bls12_381_scalar<R: RngCore>(rng: &mut R) -> Fr {
 /// * `hash` a Sha256 hash which is finalized and consumed.
 /// # Returns
 /// A field element
-pub fn hash_to_fr(hash: Sha256) -> Fr {
+pub fn hash_to_fr(hash: Sha256) -> Scalar {
     let hash = hash.finish();
     let mut rng = ChaChaRng::from_seed(hash);
     random_bls12_381_scalar(&mut rng)

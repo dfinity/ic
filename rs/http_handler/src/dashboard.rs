@@ -1,6 +1,7 @@
 //! Module that serves the human-readable replica dashboard, which provide
 //! information about the state of the replica.
 
+use crate::common::CONTENT_TYPE_HTML;
 use askama::Template;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
@@ -45,7 +46,7 @@ pub(crate) fn handle(
             *response.status_mut() = StatusCode::OK;
             response.headers_mut().insert(
                 header::CONTENT_TYPE,
-                header::HeaderValue::from_static("text/html"),
+                header::HeaderValue::from_static(CONTENT_TYPE_HTML),
             );
             response
         }

@@ -22,8 +22,8 @@ chrono = "0.4.19"
 futures = "0.3.6"
 hyper = "0.14.5"
 hyper-tls = "0.5.0"
-prost = "0.7.0"
-prost-types = "0.7.0"
+prost = "0.8.0"
+prost-types = "0.8.0"
 rand = "0.7.3"
 reqwest = { version = "0.11.1", features = [ "native-tls" ] }
 serde = { version = "1.0", features = ["derive"] }
@@ -40,4 +40,4 @@ ic-crypto = { path = "../../crypto" }
 leb128 = "0.2.4"
 
 [build-dependencies]
-prost-build = "0.7.0"
+prost-build = "0.8.0"

@@ -36,4 +36,4 @@ USER 1000
 # Ensure that nix-shell is available in the docker container.
 RUN /usr/bin/nix-install
 
-ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+ENTRYPOINT ["/tini", "--", "/entrypoint.sh"]

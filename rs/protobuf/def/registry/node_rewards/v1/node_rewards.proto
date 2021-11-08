@@ -1,0 +1,37 @@
+// DEPRECATED: use v2 instead
+syntax = "proto3";
+package registry.node_rewards.v1;
+
+// Some nodes will have different properties (e.g. upgraded storage capacity)
+// that require a unique reward rate.
+enum NodeRewardType {
+  // This field is treated as the default reward type
+  NODE_REWARD_TYPE_UNSPECIFIED = 0;
+  NODE_REWARD_TYPE_SMALL = 1;
+  NODE_REWARD_TYPE_STORAGE_UPGRADE = 2;
+}
+
+// The reward rate for a specific node type
+message NodeRewardRate {
+  // The number of 10,000ths of IMF SDR (currency code XDR) to be rewarded per
+  // node per month.
+  uint64 xdr_permyriad_per_node_per_month = 1;
+  NodeRewardType node_reward_type = 2;
+}
+
+// The reward rates for a set of node types
+message NodeRewardRates {
+  repeated NodeRewardRate rates = 1;
+}
+
+// Contains the node reward rates for each region where IC nodes are operated
+message NodeRewardsTable {
+  // Maps regions to the node reward rates in that region
+  map<string, NodeRewardRates> table = 1;
+}
+
+// The payload of a proposal to update the node rewards table
+message UpdateNodeRewardsTableProposalPayload {
+  // Maps regions to the node reward rates in that region
+  map<string, NodeRewardRates> new_entries = 1;
+}

@@ -144,6 +144,16 @@ message GossipConfig {
   uint32 registry_poll_period_ms = 7;
   // period for sending a retransmission request    
   uint32 retransmission_request_ms = 8;
+  // config for advert relay optimization.
+  // If this field is not specified, the feature is turned off.
+  GossipAdvertRelayConfig relay_config = 9;
+}
+
+// Per subnet config for advert relay optimization.
+message GossipAdvertRelayConfig {
+  // The subset of peers to broadcast relays to, specified in percentage.
+  // 0 < relay_percentage <= 100
+  uint32 relay_percentage = 1;
 }
 
 // Represents the type of subnet. Subnets of different type might exhibit different
@@ -166,4 +176,7 @@ enum SubnetType {
 
 message SubnetFeatures {
     bool ecdsa_signatures = 1;
+    // This feature flag controls whether canister execution happens
+    // in sandboxed process or not. It is disabled by default.
+    bool canister_sandboxing = 2;
 }

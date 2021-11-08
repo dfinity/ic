@@ -16,7 +16,7 @@ use ic_test_utilities::{
     types::messages::SignedIngressBuilder,
 };
 use ic_types::{
-    batch::{Batch, BatchPayload, IngressPayload, XNetPayload},
+    batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     ic00,
     ic00::Payload,
     ingress::{IngressStatus, WasmResult},
@@ -116,6 +116,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             xnet: XNetPayload {
                 stream_slices: Default::default(),
             },
+            self_validating: SelfValidatingPayload::default(),
         },
         randomness: Randomness::from([0; 32]),
         registry_version: RegistryVersion::from(1),
@@ -194,7 +195,7 @@ fn criterion_calls(criterion: &mut Criterion) {
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
 
-    let (_, ingress_history_writer, _, scheduler, ingress_hist_reader) = setup_execution(
+    let (_, ingress_history_writer, ingress_hist_reader, _, _, scheduler) = setup_execution(
         bench_replica.log.clone(),
         &bench_replica.metrics_registry,
         bench_replica.replica_config.subnet_id,

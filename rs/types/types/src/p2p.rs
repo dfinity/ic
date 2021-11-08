@@ -23,6 +23,26 @@ pub struct GossipAdvert {
     pub integrity_hash: CryptoHash,
 }
 
+/// Request from artifact manager to send adverts for newly added validated
+/// artifacts
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct GossipAdvertSendRequest {
+    /// The advert to be sent
+    pub advert: GossipAdvert,
+
+    /// The source of the artifact
+    pub advert_type: GossipAdvertType,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum GossipAdvertType {
+    /// The artifact was produced by this peer
+    Produced,
+
+    /// Artifact was downloaded from another peer and being relayed
+    Relayed,
+}
+
 // TODO(P2P-380): Move all the constants in a more reasonable shared location in
 // the code.
 
@@ -73,6 +93,7 @@ pub fn build_default_gossip_config() -> GossipConfig {
         pfn_evaluation_period_ms: PFN_EVALUATION_PERIOD_MS,
         registry_poll_period_ms: REGISTRY_POLL_PERIOD_MS,
         retransmission_request_ms: RETRANSMISSION_REQUEST_MS,
+        relay_config: None,
     }
 }
 

@@ -1,4 +1,4 @@
-use super::{allocate_pages, checkpoint::Checkpoint, Buffer, PageDelta, PageIndex, PageMap};
+use super::{checkpoint::Checkpoint, Buffer, PageIndex, PageMap};
 use ic_sys::PAGE_SIZE;
 use std::fs::OpenOptions;
 
@@ -11,70 +11,76 @@ fn can_debug_display_a_page_map() {
 #[test]
 fn can_create_an_empty_checkpoint() {
     let checkpoint = Checkpoint::empty();
-    let empty_page = vec![0; *PAGE_SIZE];
-    let first_page = checkpoint.get_page(PageIndex::from(1));
+    let empty_page = vec![0; PAGE_SIZE];
+    let first_page = checkpoint.get_page(PageIndex::new(1));
     assert_eq!(&empty_page[..], first_page);
 }
 
 #[test]
 fn empty_page_map_returns_zeroed_pages() {
     let page_map = PageMap::new();
-    let page = page_map.get_page(PageIndex::from(1));
-    assert_eq!(page.len(), *PAGE_SIZE);
+    let page = page_map.get_page(PageIndex::new(1));
+    assert_eq!(page.len(), PAGE_SIZE);
     assert!(page.iter().all(|b| *b == 0));
 }
 
 #[test]
 fn can_update_a_page_map() {
     let mut page_map = PageMap::new();
-    let ones = vec![1u8; *PAGE_SIZE];
-    let twos = vec![2u8; *PAGE_SIZE];
+    let ones = [1u8; PAGE_SIZE];
+    let twos = [2u8; PAGE_SIZE];
 
-    let delta = PageDelta::from(
-        &[
-            (PageIndex::from(1), &ones[..]),
-            (PageIndex::from(2), &twos[..]),
-        ][..],
-    );
+    let delta = [(PageIndex::new(1), &ones), (PageIndex::new(2), &twos)];
 
-    page_map.update(delta);
+    page_map.update(&delta);
 
     for (num, contents) in &[(1, 1), (2, 2), (3, 0)] {
         assert!(page_map
-            .get_page(PageIndex::from(*num))
+            .get_page(PageIndex::new(*num))
             .iter()
             .all(|b| *b == *contents));
     }
 }
 
 #[test]
-fn can_allocate_pages() {
-    let page = vec![5; *PAGE_SIZE];
-    let tracked_pages = allocate_pages(&[&page[..]]);
-    assert_eq!(tracked_pages.len(), 1);
-    assert_eq!(tracked_pages[0].contents(), page.as_slice());
+fn can_copy_page() {
+    let mut page_map = PageMap::new();
+    let page = [5; PAGE_SIZE];
+    let page_index = PageIndex::new(5);
+    let pages = &[(page_index, &page)];
+    page_map.update(pages);
+    let copy = page_map.copy_page(page_index);
+    assert_eq!(copy.contents(&page_map.page_allocator), &page);
 }
 
 #[test]
 fn can_make_page_deltas() {
-    let page = vec![5u8; *PAGE_SIZE];
-    let page_delta = PageDelta::from(&[(PageIndex::from(5), &page[..])][..]);
+    let mut page_map = PageMap::new();
+    let page = [5u8; PAGE_SIZE];
+    let pages = &[(PageIndex::new(5), &page)];
+    let page_delta = page_map.allocate(pages);
     assert_eq!(page_delta.len(), 1);
-    assert_eq!(page_delta.get_page(PageIndex::from(5)).unwrap(), &page[..])
+    assert_eq!(
+        page_delta
+            .get_page(PageIndex::new(5), &page_map.page_allocator)
+            .unwrap(),
+        &page
+    )
 }
 
 #[test]
-fn left_delta_wins_in_extend() {
-    let page_1 = vec![1u8; *PAGE_SIZE];
-    let page_2 = vec![2u8; *PAGE_SIZE];
+fn new_delta_wins_on_update() {
+    let mut page_map = PageMap::new();
+    let page_1 = [1u8; PAGE_SIZE];
+    let page_2 = [2u8; PAGE_SIZE];
 
-    let delta_1 = PageDelta::from(&[(PageIndex::from(1), &page_1[..])][..]);
-    let delta_2 = PageDelta::from(&[(PageIndex::from(1), &page_2[..])][..]);
+    let pages_1 = &[(PageIndex::new(1), &page_1)];
+    let pages_2 = &[(PageIndex::new(1), &page_2)];
 
-    let union_12 = delta_1.extend(delta_2);
+    page_map.update(pages_1);
+    page_map.update(pages_2);
 
-    assert_eq!(union_12.len(), 1);
-    assert_eq!(union_12.get_page(PageIndex::from(1)).unwrap(), &page_1[..]);
+    assert_eq!(page_map.get_page(PageIndex::new(1)), &page_2);
 }
 
 #[test]
@@ -85,18 +91,13 @@ fn persisted_map_is_equivalent_to_the_original() {
         .unwrap();
     let heap_file = tmp.path().join("heap");
 
-    let page_1 = vec![1u8; *PAGE_SIZE];
-    let page_3 = vec![3u8; *PAGE_SIZE];
+    let page_1 = [1u8; PAGE_SIZE];
+    let page_3 = [3u8; PAGE_SIZE];
 
-    let delta = PageDelta::from(
-        &[
-            (PageIndex::from(1), &page_1[..]),
-            (PageIndex::from(3), &page_3[..]),
-        ][..],
-    );
+    let pages = &[(PageIndex::new(1), &page_1), (PageIndex::new(3), &page_3)];
 
     let mut original_map = PageMap::default();
-    original_map.update(delta);
+    original_map.update(pages);
 
     original_map.persist_delta(&heap_file).unwrap();
     let persisted_map = PageMap::open(&heap_file).unwrap();
@@ -133,7 +134,7 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
         .create(true)
         .open(&heap_file)
         .unwrap()
-        .write_all(&vec![1; *PAGE_SIZE / 2])
+        .write_all(&vec![1; PAGE_SIZE / 2])
         .unwrap();
 
     match PageMap::open(&heap_file) {
@@ -148,21 +149,16 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
 
 #[test]
 fn can_use_buffer_to_modify_page_map() {
-    let page_1 = vec![1u8; *PAGE_SIZE];
-    let page_3 = vec![3u8; *PAGE_SIZE];
-    let delta = PageDelta::from(
-        &[
-            (PageIndex::from(1), &page_1[..]),
-            (PageIndex::from(3), &page_3[..]),
-        ][..],
-    );
+    let page_1 = [1u8; PAGE_SIZE];
+    let page_3 = [3u8; PAGE_SIZE];
+    let pages = &[(PageIndex::new(1), &page_1), (PageIndex::new(3), &page_3)];
     let mut page_map = PageMap::default();
-    page_map.update(delta);
+    page_map.update(pages);
 
-    let n = 4 * *PAGE_SIZE;
+    let n = 4 * PAGE_SIZE;
     let mut vec_buf = vec![0u8; n];
-    vec_buf[*PAGE_SIZE..2 * *PAGE_SIZE].copy_from_slice(&page_1);
-    vec_buf[3 * *PAGE_SIZE..4 * *PAGE_SIZE].copy_from_slice(&page_3);
+    vec_buf[PAGE_SIZE..2 * PAGE_SIZE].copy_from_slice(&page_1);
+    vec_buf[3 * PAGE_SIZE..4 * PAGE_SIZE].copy_from_slice(&page_3);
 
     let mut buf = Buffer::new(page_map);
 

@@ -10,15 +10,16 @@ use ic_types::{NodeId, RegistryVersion};
 use openssl::hash::MessageDigest;
 use openssl::x509::X509;
 use serde::{Deserialize, Deserializer, Serialize};
+use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::io;
+use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
-use tokio_openssl::SslStream;
 
 #[cfg(test)]
 mod tests;
@@ -104,6 +105,18 @@ impl Eq for TlsPublicKeyCert {}
 impl Hash for TlsPublicKeyCert {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.hash_cached.hash(state)
+    }
+}
+
+impl PartialOrd for TlsPublicKeyCert {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.hash_cached.partial_cmp(&other.hash_cached)
+    }
+}
+
+impl Ord for TlsPublicKeyCert {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.hash_cached.cmp(&other.hash_cached)
     }
 }
 
@@ -254,21 +267,38 @@ impl From<PeerNotAllowedError> for TlsClientHandshakeError {
 }
 
 /// A stream over a secure connection protected by TLS.
-pub struct TlsStream {
-    ssl_stream: SslStream<TcpStream>,
+pub enum TlsStream {
+    OpenSsl(tokio_openssl::SslStream<TcpStream>),
+    // The Box exists to address the `large_enum_variant` Clippy lint
+    Rustls(Box<tokio_rustls::TlsStream<TcpStream>>),
 }
 
 impl TlsStream {
-    pub fn new(ssl_stream: SslStream<TcpStream>) -> Self {
-        Self { ssl_stream }
+    pub fn new(openssl_stream: tokio_openssl::SslStream<TcpStream>) -> Self {
+        Self::OpenSsl(openssl_stream)
+    }
+
+    pub fn new_rustls(rustls_stream: tokio_rustls::TlsStream<TcpStream>) -> Self {
+        Self::Rustls(Box::new(rustls_stream))
     }
 
     /// Use this method to split a `TlsStream`, as it returns `TlsReadHalf`
     /// and `TlsWriteHalf` that are guaranteed to be protected by TLS by the
     /// type system.
     pub fn split(self) -> (TlsReadHalf, TlsWriteHalf) {
-        let (read_half, write_half) = tokio::io::split(self.ssl_stream);
-        (TlsReadHalf::new(read_half), TlsWriteHalf::new(write_half))
+        match self {
+            TlsStream::OpenSsl(stream) => {
+                let (read_half, write_half) = tokio::io::split(stream);
+                (TlsReadHalf::new(read_half), TlsWriteHalf::new(write_half))
+            }
+            TlsStream::Rustls(stream) => {
+                let (read_half, write_half) = tokio::io::split(*stream);
+                (
+                    TlsReadHalf::new_rustls(read_half),
+                    TlsWriteHalf::new_rustls(write_half),
+                )
+            }
+        }
     }
 }
 
@@ -278,7 +308,10 @@ impl AsyncRead for TlsStream {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<tokio::io::Result<()>> {
-        Pin::new(&mut self.ssl_stream).poll_read(cx, buf)
+        match self.deref_mut() {
+            TlsStream::OpenSsl(stream) => Pin::new(stream).poll_read(cx, buf),
+            TlsStream::Rustls(stream) => Pin::new(stream).poll_read(cx, buf),
+        }
     }
 }
 
@@ -288,29 +321,43 @@ impl AsyncWrite for TlsStream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.ssl_stream).poll_write(cx, buf)
+        match self.deref_mut() {
+            TlsStream::OpenSsl(stream) => Pin::new(stream).poll_write(cx, buf),
+            TlsStream::Rustls(stream) => Pin::new(stream).poll_write(cx, buf),
+        }
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.ssl_stream).poll_flush(cx)
+        match self.deref_mut() {
+            TlsStream::OpenSsl(stream) => Pin::new(stream).poll_flush(cx),
+            TlsStream::Rustls(stream) => Pin::new(stream).poll_flush(cx),
+        }
     }
 
     fn poll_shutdown(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.ssl_stream).poll_shutdown(cx)
+        match self.deref_mut() {
+            TlsStream::OpenSsl(stream) => Pin::new(stream).poll_shutdown(cx),
+            TlsStream::Rustls(stream) => Pin::new(stream).poll_shutdown(cx),
+        }
     }
 }
 
 /// The read half of a stream over a secure connection protected by TLS.
-pub struct TlsReadHalf {
-    read_half: ReadHalf<SslStream<TcpStream>>,
+pub enum TlsReadHalf {
+    OpenSsl(ReadHalf<tokio_openssl::SslStream<TcpStream>>),
+    Rustls(ReadHalf<tokio_rustls::TlsStream<TcpStream>>),
 }
 
 impl TlsReadHalf {
-    pub fn new(read_half: ReadHalf<SslStream<TcpStream>>) -> Self {
-        Self { read_half }
+    pub fn new(read_half: ReadHalf<tokio_openssl::SslStream<TcpStream>>) -> Self {
+        Self::OpenSsl(read_half)
+    }
+
+    pub fn new_rustls(read_half: ReadHalf<tokio_rustls::TlsStream<TcpStream>>) -> Self {
+        Self::Rustls(read_half)
     }
 }
 
@@ -320,18 +367,26 @@ impl AsyncRead for TlsReadHalf {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<tokio::io::Result<()>> {
-        Pin::new(&mut self.read_half).poll_read(cx, buf)
+        match self.deref_mut() {
+            Self::OpenSsl(stream) => Pin::new(stream).poll_read(cx, buf),
+            Self::Rustls(stream) => Pin::new(stream).poll_read(cx, buf),
+        }
     }
 }
 
 /// The write half of a stream over a secure connection protected by TLS.
-pub struct TlsWriteHalf {
-    write_half: WriteHalf<SslStream<TcpStream>>,
+pub enum TlsWriteHalf {
+    OpenSsl(WriteHalf<tokio_openssl::SslStream<TcpStream>>),
+    Rustls(WriteHalf<tokio_rustls::TlsStream<TcpStream>>),
 }
 
 impl TlsWriteHalf {
-    pub fn new(write_half: WriteHalf<SslStream<TcpStream>>) -> Self {
-        Self { write_half }
+    pub fn new(write_half: WriteHalf<tokio_openssl::SslStream<TcpStream>>) -> Self {
+        Self::OpenSsl(write_half)
+    }
+
+    pub fn new_rustls(write_half: WriteHalf<tokio_rustls::TlsStream<TcpStream>>) -> Self {
+        Self::Rustls(write_half)
     }
 }
 
@@ -341,18 +396,27 @@ impl AsyncWrite for TlsWriteHalf {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.write_half).poll_write(cx, buf)
+        match self.deref_mut() {
+            Self::OpenSsl(stream) => Pin::new(stream).poll_write(cx, buf),
+            Self::Rustls(stream) => Pin::new(stream).poll_write(cx, buf),
+        }
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.write_half).poll_flush(cx)
+        match self.deref_mut() {
+            Self::OpenSsl(stream) => Pin::new(stream).poll_flush(cx),
+            Self::Rustls(stream) => Pin::new(stream).poll_flush(cx),
+        }
     }
 
     fn poll_shutdown(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.write_half).poll_shutdown(cx)
+        match self.deref_mut() {
+            Self::OpenSsl(stream) => Pin::new(stream).poll_shutdown(cx),
+            Self::Rustls(stream) => Pin::new(stream).poll_shutdown(cx),
+        }
     }
 }
 
@@ -425,6 +489,15 @@ pub trait TlsHandshake {
     ///   found or is malformed in the server's secret key store. Note that this
     ///   is an error in the setup of the node and registry.
     async fn perform_tls_server_handshake(
+        &self,
+        tcp_stream: TcpStream,
+        allowed_clients: AllowedClients,
+        registry_version: RegistryVersion,
+    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError>;
+
+    /// This method will eventually replace `perform_tls_server_handshake`.
+    /// Please refer to the docs of that method.
+    async fn perform_tls_server_handshake_with_rustls(
         &self,
         tcp_stream: TcpStream,
         allowed_clients: AllowedClients,
@@ -606,6 +679,15 @@ pub trait TlsHandshake {
         server: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<TlsStream, TlsClientHandshakeError>;
+
+    /// This method will eventually replace `perform_tls_client_handshake`.
+    /// Please refer to the docs of that method.
+    async fn perform_tls_client_handshake_with_rustls(
+        &self,
+        tcp_stream: TcpStream,
+        server: NodeId,
+        registry_version: RegistryVersion,
+    ) -> Result<TlsStream, TlsClientHandshakeError>;
 }
 
 #[derive(Clone, Debug)]
@@ -670,6 +752,21 @@ pub enum AllowedClientsError {
 pub enum SomeOrAllNodes {
     Some(BTreeSet<NodeId>),
     All,
+}
+
+impl SomeOrAllNodes {
+    pub fn new_with_single_node(node_id: NodeId) -> Self {
+        let mut nodes = BTreeSet::new();
+        nodes.insert(node_id);
+        Self::Some(nodes)
+    }
+
+    pub fn contains(&self, node_id: NodeId) -> bool {
+        match self {
+            SomeOrAllNodes::Some(node_ids) => node_ids.contains(&node_id),
+            SomeOrAllNodes::All => true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

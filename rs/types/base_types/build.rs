@@ -5,6 +5,7 @@ fn main() {
     let proto_file = "proto/ic_base_types/pb/v1/types.proto";
 
     let mut config = Config::new();
+    config.protoc_arg("--experimental_allow_proto3_optional");
 
     config.out_dir("gen");
     config.type_attribute(

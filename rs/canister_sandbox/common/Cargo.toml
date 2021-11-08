@@ -23,6 +23,7 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-api = { path = "../../system_api" }
 ic-types = { path = "../../types/types" }
+ic-sys = { path = "../../sys" }
 serde = { version = "1.0.99", features = ["derive", "rc"] }
 nix = "0.20.0"
 libc = "0.2.91"

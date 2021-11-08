@@ -133,7 +133,7 @@ fn should_set_not_before_to_now() {
 #[test]
 #[should_panic(expected = "'not after' date must not be in the past")]
 fn should_panic_if_not_after_date_is_in_the_past() {
-    let date_in_the_past = Asn1Time::from_str_x509("20000102030405Z").unwrap();
+    let date_in_the_past = Asn1Time::from_str_x509("20211004235959Z").unwrap();
     let _panic = generate_tls_key_pair("common name", SERIAL, &date_in_the_past);
 }
 

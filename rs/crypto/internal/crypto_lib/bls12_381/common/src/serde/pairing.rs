@@ -1,8 +1,6 @@
 //! Serialisation and deserialisation of the pairing library BLS12-381 types.
 
-use ff::PrimeFieldRepr;
-use group::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
-use pairing::bls12_381::{FrRepr, G1Affine, G2Affine, G1, G2};
+use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
 
 pub const FR_SIZE: usize = 32;
 pub const G1_SIZE: usize = 48;
@@ -15,6 +13,16 @@ mod test_vectors_g2;
 #[cfg(test)]
 mod tests;
 
+#[derive(Copy, Clone, Debug)]
+pub enum GroupDecodingError {
+    InvalidPoint,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum ScalarDecodingError {
+    InvalidScalar,
+}
+
 /// Decode BLS12-381 G1 point from bytes
 ///
 /// # Arguments
@@ -23,12 +31,15 @@ mod tests;
 /// * `GroupDecodingError` if the input is invalid
 /// # Returns
 /// The decoded point
-pub fn g1_from_bytes(bytes: &[u8; G1_SIZE]) -> Result<G1, GroupDecodingError> {
-    let mut compressed: <G1Affine as CurveAffine>::Compressed = EncodedPoint::empty();
-    compressed.as_mut().copy_from_slice(bytes);
-    compressed
-        .into_affine()
-        .map(|affine| affine.into_projective())
+
+pub fn g1_from_bytes(bytes: &[u8; G1_SIZE]) -> Result<G1Projective, GroupDecodingError> {
+    let g1a = G1Affine::from_compressed(bytes);
+
+    if bool::from(g1a.is_some()) {
+        Ok(G1Projective::from(g1a.unwrap()))
+    } else {
+        Err(GroupDecodingError::InvalidPoint)
+    }
 }
 
 /// Encode BLS12-381 G1 point to bytes
@@ -37,10 +48,9 @@ pub fn g1_from_bytes(bytes: &[u8; G1_SIZE]) -> Result<G1, GroupDecodingError> {
 /// * `g1` a point
 /// # Returns
 /// The encoded point in compressed form
-pub fn g1_to_bytes(g1: &G1) -> [u8; G1_SIZE] {
-    let mut bytes = [0u8; G1_SIZE];
-    bytes.copy_from_slice(g1.into_affine().into_compressed().as_ref());
-    bytes
+pub fn g1_to_bytes(g1: &G1Projective) -> [u8; G1_SIZE] {
+    let g1a = G1Affine::from(g1);
+    g1a.to_compressed()
 }
 
 /// Decode BLS12-381 G2 point from bytes
@@ -51,12 +61,13 @@ pub fn g1_to_bytes(g1: &G1) -> [u8; G1_SIZE] {
 /// * `GroupDecodingError` if the input is invalid
 /// # Returns
 /// The decoded point
-pub fn g2_from_bytes(bytes: &[u8; G2_SIZE]) -> Result<G2, GroupDecodingError> {
-    let mut compressed: <G2Affine as CurveAffine>::Compressed = EncodedPoint::empty();
-    compressed.as_mut().copy_from_slice(bytes);
-    compressed
-        .into_affine()
-        .map(|affine| affine.into_projective())
+pub fn g2_from_bytes(bytes: &[u8; G2_SIZE]) -> Result<G2Projective, GroupDecodingError> {
+    let g2a = G2Affine::from_compressed(bytes);
+    if bool::from(g2a.is_some()) {
+        Ok(G2Projective::from(g2a.unwrap()))
+    } else {
+        Err(GroupDecodingError::InvalidPoint)
+    }
 }
 
 /// Decode BLS12-381 G2 point from bytes, without guaranteeing that the encoding
@@ -72,12 +83,14 @@ pub fn g2_from_bytes(bytes: &[u8; G2_SIZE]) -> Result<G2, GroupDecodingError> {
 /// * `GroupDecodingError` if the input is invalid
 /// # Returns
 /// The decoded point
-pub fn g2_from_bytes_unchecked(bytes: &[u8; G2_SIZE]) -> Result<G2, GroupDecodingError> {
-    let mut compressed: <G2Affine as CurveAffine>::Compressed = EncodedPoint::empty();
-    compressed.as_mut().copy_from_slice(bytes);
-    compressed
-        .into_affine_unchecked()
-        .map(|affine| affine.into_projective())
+
+pub fn g2_from_bytes_unchecked(bytes: &[u8; G2_SIZE]) -> Result<G2Projective, GroupDecodingError> {
+    let g2a = G2Affine::from_compressed_unchecked(bytes);
+    if bool::from(g2a.is_some()) {
+        Ok(G2Projective::from(g2a.unwrap()))
+    } else {
+        Err(GroupDecodingError::InvalidPoint)
+    }
 }
 
 /// Encode BLS12-381 G2 point to bytes
@@ -86,10 +99,9 @@ pub fn g2_from_bytes_unchecked(bytes: &[u8; G2_SIZE]) -> Result<G2, GroupDecodin
 /// * `g2` a point
 /// # Returns
 /// The encoded point in compressed form
-pub fn g2_to_bytes(g2: &G2) -> [u8; G2_SIZE] {
-    let mut bytes = [0u8; G2_SIZE];
-    bytes.copy_from_slice(g2.into_affine().into_compressed().as_ref());
-    bytes
+pub fn g2_to_bytes(g2: &G2Projective) -> [u8; G2_SIZE] {
+    let g2a = G2Affine::from(g2);
+    g2a.to_compressed()
 }
 
 /// Encode BLS12-381 field element to bytes
@@ -98,23 +110,50 @@ pub fn g2_to_bytes(g2: &G2) -> [u8; G2_SIZE] {
 /// * `fr` a field element
 /// # Returns
 /// The encoded element
-pub fn fr_to_bytes(fr: &FrRepr) -> [u8; FR_SIZE] {
-    let mut ans = [0u8; FR_SIZE];
-    fr.write_be(&mut ans[0..])
-        .expect("Insufficient output space");
-    ans
+pub fn fr_to_bytes(fr: &Scalar) -> [u8; FR_SIZE] {
+    let bytes = fr.to_bytes();
+    let mut rev_bytes = [0u8; FR_SIZE];
+    for i in 0..FR_SIZE {
+        rev_bytes[i] = bytes[FR_SIZE - i - 1];
+    }
+    rev_bytes
 }
 
 /// Decode BLS12-381 field element from bytes
 ///
 /// # Arguments
 /// * `bytes`: encoding of a field element
+/// # Errors
+/// * `ScalarDecodingError` if the input is invalid (out of range)
 /// # Returns
 /// The decoded field element
-pub fn fr_from_bytes(bytes: &[u8; FR_SIZE]) -> FrRepr {
-    let mut ans = FrRepr([0; 4]);
-    let mut reader = &bytes[..];
-    ans.read_be(&mut reader)
-        .expect("Insufficient input material");
-    ans
+pub fn fr_from_bytes(bytes: &[u8; FR_SIZE]) -> Result<Scalar, ScalarDecodingError> {
+    let mut le_bytes = [0u8; 32];
+
+    for i in 0..FR_SIZE {
+        le_bytes[i] = bytes[FR_SIZE - i - 1];
+    }
+    let s = Scalar::from_bytes(&le_bytes);
+
+    if bool::from(s.is_none()) {
+        return Err(ScalarDecodingError::InvalidScalar);
+    }
+
+    Ok(s.unwrap())
+}
+
+/// Decode BLS12-381 field element from bytes (accepting out of range elements)
+///
+/// # Arguments
+/// * `bytes`: encoding of a field element
+/// # Returns
+/// The decoded field element
+pub fn fr_from_bytes_unchecked(bytes: &[u8; FR_SIZE]) -> Scalar {
+    let mut le_bytes = [0u8; 64];
+
+    for i in 0..FR_SIZE {
+        le_bytes[i] = bytes[FR_SIZE - i - 1];
+    }
+    // le_bytes[32..64] left as zero
+    Scalar::from_bytes_wide(&le_bytes)
 }

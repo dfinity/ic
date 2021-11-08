@@ -14,7 +14,7 @@ use ic_replicated_state::PageMap;
 use ic_sys::PAGE_SIZE;
 
 lazy_static! {
-    static ref ZEROED_PAGE: Vec<u8> = vec![0; *PAGE_SIZE];
+    static ref ZEROED_PAGE: Vec<u8> = vec![0; PAGE_SIZE];
 }
 
 struct BenchData {
@@ -32,7 +32,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
     let ptr: *mut c_void = unsafe {
         mmap(
             ptr::null_mut(),
-            *PAGE_SIZE,
+            PAGE_SIZE,
             ProtFlags::PROT_NONE,
             MapFlags::MAP_ANON | MapFlags::MAP_PRIVATE,
             0,
@@ -51,7 +51,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
                     tracker: SigsegvMemoryTracker::new(
                         PersistenceType::Sigsegv,
                         ptr,
-                        *PAGE_SIZE,
+                        PAGE_SIZE,
                         no_op_logger(),
                         DirtyPageTracking::Track,
                         Some(page_map.clone()),
@@ -81,7 +81,7 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
     let ptr: *mut c_void = unsafe {
         mmap(
             ptr::null_mut(),
-            *PAGE_SIZE,
+            PAGE_SIZE,
             ProtFlags::PROT_NONE,
             MapFlags::MAP_ANON | MapFlags::MAP_PRIVATE,
             0,
@@ -100,7 +100,7 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
                     tracker: SigsegvMemoryTracker::new(
                         PersistenceType::Sigsegv,
                         ptr,
-                        *PAGE_SIZE,
+                        PAGE_SIZE,
                         no_op_logger(),
                         DirtyPageTracking::Track,
                         Some(page_map.clone()),

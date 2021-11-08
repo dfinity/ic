@@ -52,9 +52,12 @@ mod tests {
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        canister_state::{ExecutionState, ExportedFunctions, Global, NumWasmPages},
+        canister_state::{
+            execution_state::WasmBinary, ExecutionState, ExportedFunctions, Global, NumWasmPages,
+        },
         metadata_state::SubnetTopology,
         page_map::PageMap,
+        testing::ReplicatedStateTesting,
     };
     use ic_test_utilities::{
         mock_time,
@@ -229,8 +232,8 @@ mod tests {
             NumSeconds::from(100_000),
         );
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let wasm_binary = BinaryEncodedWasm::new(vec![]);
-        let wasm_binary_hash = wasm_binary.hash_sha256();
+        let wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(vec![]));
+        let wasm_binary_hash = wasm_binary.binary.hash_sha256();
         let execution_state = ExecutionState {
             canister_root: "NOT_USED".into(),
             session_nonce: None,
@@ -239,7 +242,6 @@ mod tests {
             exported_globals: vec![Global::I32(1)],
             heap_size: NumWasmPages::from(2),
             exports: ExportedFunctions::new(BTreeSet::new()),
-            embedder_cache: None,
             last_executed_round: ExecutionRound::from(0),
             cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(tmpdir.path().into())),
             mapped_state: None,

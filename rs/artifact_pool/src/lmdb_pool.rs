@@ -1090,7 +1090,12 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
             self.log.clone(),
         )
         .next()
-        .expect("There should always be a CUP in the pool.")
+        .unwrap_or_else(|| {
+            panic!(
+                "This should be impossible since we found a max height at {:?}",
+                h
+            )
+        })
     }
 
     /// Number of artifacts in the DB.

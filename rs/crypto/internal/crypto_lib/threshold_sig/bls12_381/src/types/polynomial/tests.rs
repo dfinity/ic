@@ -4,7 +4,6 @@ use super::*;
 mod basic_functionality {
     use super::*;
     use ic_crypto_internal_bls12381_common::fr_to_bytes;
-    use pairing::bls12_381::FrRepr;
     use proptest::prelude::*;
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
@@ -16,15 +15,15 @@ mod basic_functionality {
         let poly = Polynomial::random(3, &mut rng);
 
         assert_eq!(
-            hex::encode(fr_to_bytes(&FrRepr::from(poly.coefficients[0]))),
+            hex::encode(fr_to_bytes(&poly.coefficients[0])),
             "1610358dd042ebf85b72e7529e97e899f22e8a28c34874baf245ed8b2b86e779"
         );
         assert_eq!(
-            hex::encode(fr_to_bytes(&FrRepr::from(poly.coefficients[1]))),
+            hex::encode(fr_to_bytes(&poly.coefficients[1])),
             "4427ceb3e6bed8feb9f0d6f1a82838f3b499b63027b9368793ee5e5b494e889e"
         );
         assert_eq!(
-            hex::encode(fr_to_bytes(&FrRepr::from(poly.coefficients[2]))),
+            hex::encode(fr_to_bytes(&poly.coefficients[2])),
             "5201bc3088e41597c91cfbaf54e2e563b557599884262081520cb6a877fdce27"
         );
     }
@@ -51,7 +50,7 @@ mod basic_functionality {
             shareholders in proptest::collection::vec(arbitrary::fr(), 1..300)
         ) {
             poly.coefficients[0] = secret;
-            let shares: Vec<(Fr,Fr)> = shareholders.iter().map(|x| (*x, poly.evaluate_at(x))).collect();
+            let shares: Vec<(Scalar,Scalar)> = shareholders.iter().map(|x| (*x, poly.evaluate_at(x))).collect();
             if shares.len() >= poly.coefficients.len() {
                 assert_eq!(Polynomial::interpolate(&shares[0..poly.coefficients.len()]).coefficients[0], secret);
             } else {

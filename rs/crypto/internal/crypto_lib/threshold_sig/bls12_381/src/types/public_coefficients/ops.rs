@@ -1,9 +1,7 @@
 //! Standard Rust operations on PublicCoefficients
 
 use super::*;
-use group::CurveProjective;
-use pairing::bls12_381::Fr;
-use pairing::bls12_381::G2;
+use bls12_381::{G2Projective, Scalar};
 use std::borrow::Borrow;
 use std::iter::Sum;
 use std::ops;
@@ -23,7 +21,8 @@ impl<B: Borrow<PublicCoefficients>> ops::AddAssign<B> for PublicCoefficients {
         let len = self.coefficients.len();
         let rhs_len = rhs.borrow().coefficients.len();
         if rhs_len > len {
-            self.coefficients.resize(rhs_len, PublicKey(G2::zero()));
+            self.coefficients
+                .resize(rhs_len, PublicKey(G2Projective::identity()));
         }
         for (self_c, rhs_c) in self.coefficients.iter_mut().zip(&rhs.borrow().coefficients) {
             self_c.0.add_assign(&rhs_c.0);
@@ -42,8 +41,8 @@ impl<B: Borrow<PublicCoefficients>> ops::Add<B> for PublicCoefficients {
 }
 
 #[allow(clippy::suspicious_op_assign_impl)]
-impl ops::MulAssign<Fr> for PublicCoefficients {
-    fn mul_assign(&mut self, rhs: Fr) {
+impl ops::MulAssign<Scalar> for PublicCoefficients {
+    fn mul_assign(&mut self, rhs: Scalar) {
         for self_c in self.coefficients.iter_mut() {
             self_c.0.mul_assign(rhs);
         }
@@ -51,10 +50,10 @@ impl ops::MulAssign<Fr> for PublicCoefficients {
     }
 }
 
-impl ops::Mul<Fr> for PublicCoefficients {
+impl ops::Mul<Scalar> for PublicCoefficients {
     type Output = Self;
 
-    fn mul(mut self, rhs: Fr) -> Self {
+    fn mul(mut self, rhs: Scalar) -> Self {
         self *= rhs;
         self
     }

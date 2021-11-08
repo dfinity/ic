@@ -15,8 +15,9 @@ mod clib {
     pub use crate::api::keygen as threshold_keygen;
     pub use crate::types::SecretKeyBytes as ThresholdSecretKeyBytes;
 }
-use super::conversions::trusted_secret_key_into_miracl;
+use super::conversions::{public_key_into_miracl, trusted_secret_key_into_miracl};
 use super::*;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPop;
 use internal_types::Epoch;
 
 /// The Fs NiDKG library is compatible with the internal_types
@@ -445,4 +446,26 @@ fn zk_proofs_should_not_verify_with_wrong_epoch() {
             }
         ))
     );
+}
+
+// TODO(IDX-1866)
+#[allow(clippy::result_unit_err)]
+/// Verifies that a public key is a point on the curve and that the proof of
+/// possession holds.
+///
+/// # Errors
+/// * `Err(())` if
+///   - Any of the components of `public_key` is not a correct group element.
+///   - The proof of possession doesn't verify.
+fn verify_forward_secure_key(
+    public_key: &FsEncryptionPublicKey,
+    pop: &FsEncryptionPop,
+    associated_data: &[u8],
+) -> Result<(), ()> {
+    let crypto_public_key_with_pop = public_key_into_miracl((public_key, pop))?;
+    if crypto_public_key_with_pop.verify(associated_data) {
+        Ok(())
+    } else {
+        Err(())
+    }
 }

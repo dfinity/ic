@@ -73,7 +73,7 @@ use ic_types::{
     artifact::{Artifact, ArtifactId},
     chunkable::{ArtifactErrorCode, ChunkId},
     crypto::CryptoHash,
-    p2p::GossipAdvert,
+    p2p::{GossipAdvert, GossipAdvertSendRequest, GossipAdvertType},
     transport::{FlowTag, TransportClientType, TransportPayload},
     NodeId, SubnetId,
 };
@@ -94,8 +94,8 @@ use crate::{
 };
 
 extern crate lru;
-use ic_protobuf::registry::subnet::v1::GossipConfig;
-use ic_registry_client::helper::subnet::{SubnetRegistry, SubnetTransportRegistry};
+use ic_protobuf::registry::subnet::v1::{GossipAdvertRelayConfig, GossipConfig};
+use ic_registry_client::helper::subnet::SubnetTransportRegistry;
 use lru::LruCache;
 
 use std::{
@@ -107,19 +107,21 @@ use std::{
 
 use ic_interfaces::artifact_manager::OnArtifactError::ArtifactPoolError;
 use ic_interfaces::artifact_pool::ArtifactPoolError::ArtifactReplicaVersionError;
+use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_logger::replica_logger::ReplicaLogger;
 use ic_logger::{info, trace, warn};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::{transport::TransportErrorCode, RegistryVersion};
-use std::collections::BTreeSet;
+use rand::{seq::SliceRandom, thread_rng};
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::ops::DerefMut;
 
 /// The download manager maintains data structures on adverts and download state
 /// per peer.
 pub(crate) trait DownloadManager {
-    /// The method sends adverts to all peers.
-    fn send_advert_to_peers(&self, gossip_advert: GossipAdvert);
+    /// The method sends adverts to peers.
+    fn send_advert_to_peers(&self, advert_request: GossipAdvertSendRequest);
 
     /// The method reacts to an advert received from the peer with the given
     /// node ID.
@@ -174,6 +176,9 @@ pub(crate) trait DownloadManager {
 pub(crate) trait PeerManager {
     /// The method returns the current list of peers.
     fn get_current_peer_ids(&self) -> Vec<NodeId>;
+
+    /// The method returns a randomized subset of the current list of peers.
+    fn get_advert_relay_peer_ids(&self) -> Vec<NodeId>;
 
     /// The method sets the list of peers to the given list.
     fn set_current_peer_ids(&self, new_peers: Vec<NodeId>);
@@ -258,6 +263,8 @@ pub(crate) struct PeerManagerImpl {
     log: ReplicaLogger,
     /// The dictionary containing all peer contexts.
     current_peers: Arc<Mutex<PeerContextDictionary>>,
+    /// Advert relay config.
+    relay_config: Option<GossipAdvertRelayConfig>,
     /// The underlying *Transport*.
     transport: Arc<dyn Transport>,
     /// The transport client type.
@@ -269,11 +276,13 @@ pub(crate) struct DownloadManagerImpl {
     /// The node ID of the peer.
     node_id: NodeId,
     /// The subnet ID.
-    subnet_id: RwLock<Option<SubnetId>>,
+    subnet_id: SubnetId,
     /// The registry client.
     registry_client: Arc<dyn RegistryClient>,
     /// The artifact manager.
     artifact_manager: Arc<dyn ArtifactManager>,
+    /// The consensus pool cache.
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     /// The download prioritizer.
     prioritizer: Arc<dyn DownloadPrioritizer>,
     /// The peer manager.
@@ -308,10 +317,21 @@ pub(crate) struct DownloadManagerImpl {
 
 /// `DownloadManagerImpl` implements the `DownloadManager` trait.
 impl DownloadManager for DownloadManagerImpl {
-    /// The method sends adverts to all peers.
-    fn send_advert_to_peers(&self, gossip_advert: GossipAdvert) {
-        let current_peers = self.peer_manager.get_current_peer_ids();
-        self.send_advert_to_peer_list(gossip_advert, current_peers);
+    /// The method sends adverts to peers.
+    fn send_advert_to_peers(&self, advert_request: GossipAdvertSendRequest) {
+        let current_peers = match advert_request.advert_type {
+            GossipAdvertType::Produced => {
+                // We are the artifact source, gossip to all peers.
+                self.peer_manager.get_current_peer_ids()
+            }
+            GossipAdvertType::Relayed => {
+                // Relay case: gossip to a smaller subset (subject to config).
+                let peers = self.peer_manager.get_advert_relay_peer_ids();
+                self.metrics.adverts_relayed.inc_by(peers.len() as u64);
+                peers
+            }
+        };
+        self.send_advert_to_peer_list(advert_request.advert, current_peers);
     }
 
     /// The method downloads chunks for adverts with the highest priority from
@@ -837,6 +857,7 @@ impl DownloadManagerImpl {
     pub fn new(
         node_id: NodeId,
         subnet_id: SubnetId,
+        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         registry_client: Arc<dyn RegistryClient>,
         artifact_manager: Arc<dyn ArtifactManager>,
         transport: Arc<dyn Transport>,
@@ -850,13 +871,14 @@ impl DownloadManagerImpl {
             crate::event_handler::fetch_gossip_config(registry_client.clone(), subnet_id);
 
         let current_peers = Arc::new(Mutex::new(PeerContextDictionary::default()));
-        let peer_manager = Arc::new(PeerManagerImpl {
+        let peer_manager = Arc::new(PeerManagerImpl::new(
             node_id,
-            log: log.clone(),
-            transport: transport.clone(),
+            log.clone(),
+            current_peers.clone(),
+            gossip_config.relay_config.clone(),
+            transport.clone(),
             transport_client_type,
-            current_peers: current_peers.clone(),
-        });
+        ));
 
         let prioritizer = Arc::new(DownloadPrioritizerImpl::new(
             artifact_manager.as_ref(),
@@ -865,9 +887,10 @@ impl DownloadManagerImpl {
 
         let download_manager = DownloadManagerImpl {
             node_id,
-            subnet_id: RwLock::new(Some(subnet_id)),
+            subnet_id,
             registry_client,
             artifact_manager,
+            consensus_pool_cache,
             prioritizer,
             peer_manager,
             current_peers,
@@ -935,69 +958,68 @@ impl DownloadManagerImpl {
 
     // Update the peer manager state based on the latest registry value.
     pub fn refresh_registry(&self, event_handler: &Arc<dyn P2PEventHandlerControl>) {
-        let registry_version = self.registry_client.get_latest_version();
+        let latest_registry_version = self.registry_client.get_latest_version();
         self.metrics
             .registry_version_used
-            .set(registry_version.get() as i64);
-        let subnet_id = *self.subnet_id.read().unwrap();
-        let node_records: Vec<(NodeId, NodeRecord)> = match subnet_id {
-            Some(subnet) => self
-                .registry_client
-                .get_subnet_transport_infos(subnet, registry_version)
-                .unwrap_or(None)
-                .unwrap_or_else(Vec::new),
-            None => Vec::new(),
-        };
-        let registry_nodes: BTreeSet<NodeId> =
-            node_records.iter().map(|node_id| node_id.0).collect();
-        node_records.into_iter().for_each(|(node_id, node_record)| {
+            .set(latest_registry_version.get() as i64);
+
+        let subnet_nodes = self.merge_subnet_membership(latest_registry_version);
+        let self_not_in_subnet = !subnet_nodes.contains_key(&self.node_id);
+
+        // If a peer is not in the nodes within this subnet, remove.
+        // If self is not in the subnet, remove all peers.
+        for peer in self.peer_manager.get_current_peer_ids().into_iter() {
+            if !subnet_nodes.contains_key(&peer) || self_not_in_subnet {
+                self.remove_node(peer, latest_registry_version);
+                self.metrics.nodes_removed.inc();
+            }
+        }
+        // If self is not subnet, exit early to avoid adding nodes to peer_manager.
+        if self_not_in_subnet {
+            return;
+        }
+        // Add in nodes to peer manager.
+        for (node_id, node_record) in subnet_nodes.iter() {
             if self
                 .peer_manager
-                .add_peer(node_id, &node_record, registry_version, event_handler)
+                .add_peer(
+                    *node_id,
+                    node_record,
+                    latest_registry_version,
+                    event_handler,
+                )
                 .is_ok()
             {
                 self.receive_check_caches.write().unwrap().insert(
-                    node_id,
+                    *node_id,
                     ReceiveCheckCache::new(self.gossip_config.receive_check_cache_size as usize),
                 );
-            }
-        });
-        // If this node is removed from current subnet, update subnet_id to reflect new
-        // state.
-        if !registry_nodes.contains(&self.node_id) {
-            // Write call to update subnet_id.
-            self.update_subnet_id(registry_version);
-        }
-        for peer in self.peer_manager.get_current_peer_ids().into_iter() {
-            // If a peer is not in registry, remove peer. If this node is not in registry,
-            // remove all peers.
-            if !registry_nodes.contains(&peer) || !registry_nodes.contains(&self.node_id) {
-                self.remove_node(peer, registry_version);
-                self.metrics.nodes_removed.inc();
             }
         }
     }
 
-    fn update_subnet_id(&self, version: RegistryVersion) {
-        if let Some((subnet_id, _)) = self
-            .registry_client
-            .get_listed_subnet_for_node_id(self.node_id, version)
-            .unwrap_or_else(|e| {
-                trace!(
-                    self.log,
-                    "Failed to read subnet for node {:?}: {:?}",
-                    self.node_id,
-                    e
-                );
-                // If subnet read fails, mark as run. This will be retried next refresh_registry
-                // call.
-                None
-            })
-        {
-            *self.subnet_id.write().unwrap() = Some(subnet_id);
-        } else {
-            *self.subnet_id.write().unwrap() = None;
+    // Merge node records from subnet_membership_version (provided by consensus)
+    // to latest_registry_version. This returns the current subnet membership set.
+    fn merge_subnet_membership(
+        &self,
+        latest_registry_version: RegistryVersion,
+    ) -> BTreeMap<NodeId, NodeRecord> {
+        let subnet_membership_version = self.consensus_pool_cache.get_subnet_membership_version();
+        let mut subnet_nodes = BTreeMap::new();
+        // Iterate from subnet_membership_version to latest_registry_version + 1 (since
+        // end is non-inclusive).
+        for version in subnet_membership_version.get()..=latest_registry_version.get() {
+            let version = RegistryVersion::from(version);
+            let node_records = self
+                .registry_client
+                .get_subnet_transport_infos(self.subnet_id, version)
+                .unwrap_or(None)
+                .unwrap_or_else(Vec::new);
+            for node in node_records {
+                subnet_nodes.insert(node.0, node.1);
+            }
         }
+        subnet_nodes
     }
 
     /// This method removes the given node from peer manager and clears adverts.
@@ -1389,6 +1411,36 @@ impl DownloadManagerImpl {
     }
 }
 
+impl PeerManagerImpl {
+    fn new(
+        node_id: NodeId,
+        log: ReplicaLogger,
+        current_peers: Arc<Mutex<PeerContextDictionary>>,
+        relay_config: Option<GossipAdvertRelayConfig>,
+        transport: Arc<dyn Transport>,
+        transport_client_type: TransportClientType,
+    ) -> Self {
+        warn!(
+            log,
+            "PeerManagerImpl::new(): relay_config = {:?}", relay_config
+        );
+        if let Some(config) = &relay_config {
+            if let Err(e) = validate_advert_relay_config(&config) {
+                panic!("Invalid advert relay config: {:?}", e);
+            }
+        }
+
+        Self {
+            node_id,
+            log,
+            current_peers,
+            relay_config,
+            transport,
+            transport_client_type,
+        }
+    }
+}
+
 /// `PeerManagerImpl` implements the `PeerManager` trait.
 impl PeerManager for PeerManagerImpl {
     /// The method returns the current list of peers.
@@ -1399,6 +1451,26 @@ impl PeerManager for PeerManagerImpl {
             .iter()
             .map(|(k, _v)| k.to_owned())
             .collect()
+    }
+
+    /// The method returns a randomized subset of the current list of peers.
+    fn get_advert_relay_peer_ids(&self) -> Vec<NodeId> {
+        let peers = self.get_current_peer_ids();
+        match &self.relay_config {
+            Some(config) => {
+                let multiplier = (config.relay_percentage as f64) / 100.0_f64;
+                let subset_size = (peers.len() as f64 * multiplier).ceil() as usize;
+                let mut rng = thread_rng();
+                peers
+                    .choose_multiple(&mut rng, subset_size)
+                    .cloned()
+                    .collect()
+            }
+            None => {
+                // Feature disabled, send to all peers.
+                peers
+            }
+        }
     }
 
     /// The method sets the list of peers to the given list.
@@ -1493,6 +1565,17 @@ impl PeerManager for PeerManagerImpl {
     }
 }
 
+fn validate_advert_relay_config(relay_config: &GossipAdvertRelayConfig) -> Result<(), String> {
+    if relay_config.relay_percentage == 0 || relay_config.relay_percentage > 100 {
+        return Err(format!(
+            "Invalid relay percentage: {}",
+            relay_config.relay_percentage
+        ));
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -1507,8 +1590,10 @@ pub mod tests {
     use ic_test_utilities::port_allocation::allocate_ports;
     use ic_test_utilities::registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities::{
+        consensus::MockConsensusCache,
         p2p::*,
         thread_transport::*,
+        transport::MockTransport,
         types::ids::{node_id_to_u64, node_test_id, subnet_test_id},
     };
     use ic_types::artifact::{DkgMessage, DkgMessageAttribute};
@@ -1686,6 +1771,7 @@ pub mod tests {
         num_replicas: u32,
         logger: &LoggerImpl,
         registry_client: Arc<dyn RegistryClient>,
+        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     ) -> DownloadManagerImpl {
         let log: ReplicaLogger = logger.root.clone().into();
         let artifact_manager = TestArtifactManager {
@@ -1718,6 +1804,7 @@ pub mod tests {
         DownloadManagerImpl::new(
             node_test_id(0),
             subnet_test_id(0),
+            consensus_pool_cache,
             registry_client,
             artifact_manager,
             tp,
@@ -1739,7 +1826,18 @@ pub mod tests {
         let registry_client = Arc::new(RegistryClientImpl::new(data_provider, None));
         registry_client.fetch_and_start_polling().unwrap();
 
-        new_test_download_manager_with_registry(num_replicas, logger, registry_client)
+        let mut mock_consensus_cache = MockConsensusCache::new();
+        mock_consensus_cache
+            .expect_get_subnet_membership_version()
+            .returning(move || RegistryVersion::from(1));
+        let consensus_pool_cache = Arc::new(mock_consensus_cache);
+
+        new_test_download_manager_with_registry(
+            num_replicas,
+            logger,
+            registry_client,
+            consensus_pool_cache,
+        )
     }
 
     /// The function adds the given number of adverts to the download manager.
@@ -1803,10 +1901,20 @@ pub mod tests {
         let registry_client = Arc::new(FakeRegistryClient::new(registry_data_provider));
         registry_client.update_to_latest_version();
 
+        // Create consensus cache which returns CUP with version 1, the registry version
+        // which contains the subnet record with all replicas.
+        let mut mock_consensus_cache = MockConsensusCache::new();
+        let consensus_registry_client = registry_client.clone();
+        mock_consensus_cache
+            .expect_get_subnet_membership_version()
+            .returning(move || consensus_registry_client.get_latest_version());
+        let consensus_pool_cache = Arc::new(mock_consensus_cache);
+
         let download_manager = new_test_download_manager_with_registry(
             num_replicas,
             &logger,
             Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&consensus_pool_cache) as Arc<_>,
         );
         // Add new subnet record with one less replica and at version 2.
         let node_nums: Vec<u64> = (0..((node_port_allocation.len() - 1) as u64)).collect();
@@ -2355,6 +2463,7 @@ pub mod tests {
                 node_id: node_test_id(0),
                 log: p2p_test_setup_logger().root.clone().into(),
                 current_peers,
+                relay_config: None,
                 transport,
                 transport_client_type,
             };
@@ -2405,6 +2514,7 @@ pub mod tests {
                 node_id: node_test_id(0),
                 log: p2p_test_setup_logger().root.clone().into(),
                 current_peers,
+                relay_config: None,
                 transport,
                 transport_client_type,
             };
@@ -2434,5 +2544,161 @@ pub mod tests {
             }
             std::mem::drop(current_peers);
         }
+    }
+
+    #[test]
+    fn test_advert_relay_config_validation() {
+        assert!(validate_advert_relay_config(&GossipAdvertRelayConfig {
+            relay_percentage: 10,
+        })
+        .is_ok());
+        assert!(validate_advert_relay_config(&GossipAdvertRelayConfig {
+            relay_percentage: 100,
+        })
+        .is_ok());
+
+        assert_eq!(
+            validate_advert_relay_config(&GossipAdvertRelayConfig {
+                relay_percentage: 0,
+            })
+            .err()
+            .unwrap(),
+            "Invalid relay percentage: 0"
+        );
+        assert_eq!(
+            validate_advert_relay_config(&GossipAdvertRelayConfig {
+                relay_percentage: 110,
+            })
+            .err()
+            .unwrap(),
+            "Invalid relay percentage: 110"
+        );
+    }
+
+    #[test]
+    fn test_advert_relay_feature_disabled() {
+        let mut current_peers = PeerContextDictionary::default();
+        for id in 1..11 {
+            let node_id = node_test_id(id);
+            current_peers.insert(node_id, node_id.into());
+        }
+
+        let current_peers = Arc::new(Mutex::new(current_peers));
+        let peer_manager = PeerManagerImpl::new(
+            node_test_id(0),
+            p2p_test_setup_logger().root.clone().into(),
+            current_peers.clone(),
+            None,
+            Arc::new(MockTransport::new()),
+            TransportClientType::P2P,
+        );
+
+        // Verify all the nodes are returned as is
+        let ret = peer_manager.get_advert_relay_peer_ids();
+        assert_eq!(ret.len(), 10);
+        {
+            let current_peers = current_peers.lock().unwrap();
+            let expected: Vec<_> = current_peers.keys().cloned().collect();
+            for i in 0..ret.len() {
+                assert_eq!(ret[i], expected[i]);
+            }
+        }
+    }
+
+    #[test]
+    fn test_advert_relay_feature_10pc() {
+        let mut current_peers = PeerContextDictionary::default();
+        for id in 1..29 {
+            let node_id = node_test_id(id);
+            current_peers.insert(node_id, node_id.into());
+        }
+
+        let current_peers = Arc::new(Mutex::new(current_peers));
+        let peer_manager = PeerManagerImpl::new(
+            node_test_id(0),
+            p2p_test_setup_logger().root.clone().into(),
+            current_peers.clone(),
+            Some(GossipAdvertRelayConfig {
+                relay_percentage: 10,
+            }),
+            Arc::new(MockTransport::new()),
+            TransportClientType::P2P,
+        );
+
+        // Verify 10% of 28 = 3 (rounded up) nodes are returned.
+        let ret = peer_manager.get_advert_relay_peer_ids();
+        assert_eq!(ret.len(), 3);
+        {
+            let current_peers = current_peers.lock().unwrap();
+            let mut unique_peers = HashSet::new();
+            for entry in &ret {
+                assert!(unique_peers.insert(entry));
+                assert!(current_peers.contains_key(entry));
+            }
+        }
+    }
+
+    #[test]
+    fn test_advert_relay_feature_100pc() {
+        let mut current_peers = PeerContextDictionary::default();
+        for id in 1..29 {
+            let node_id = node_test_id(id);
+            current_peers.insert(node_id, node_id.into());
+        }
+
+        let current_peers = Arc::new(Mutex::new(current_peers));
+        let peer_manager = PeerManagerImpl::new(
+            node_test_id(0),
+            p2p_test_setup_logger().root.clone().into(),
+            current_peers.clone(),
+            Some(GossipAdvertRelayConfig {
+                relay_percentage: 100,
+            }),
+            Arc::new(MockTransport::new()),
+            TransportClientType::P2P,
+        );
+
+        // Verify all 28 nodes are returned.
+        let ret = peer_manager.get_advert_relay_peer_ids();
+        assert_eq!(ret.len(), 28);
+        {
+            let current_peers = current_peers.lock().unwrap();
+            let mut unique_peers = HashSet::new();
+            for entry in &ret {
+                assert!(unique_peers.insert(entry));
+                assert!(current_peers.contains_key(entry));
+            }
+        }
+    }
+
+    #[test]
+    fn test_advert_relay_no_peers() {
+        let peer_manager = PeerManagerImpl::new(
+            node_test_id(0),
+            p2p_test_setup_logger().root.clone().into(),
+            Arc::new(Mutex::new(PeerContextDictionary::default())),
+            Some(GossipAdvertRelayConfig {
+                relay_percentage: 10,
+            }),
+            Arc::new(MockTransport::new()),
+            TransportClientType::P2P,
+        );
+        let ret = peer_manager.get_advert_relay_peer_ids();
+        assert!(ret.is_empty());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_advert_relay_invalid_config() {
+        let _peer_manager = PeerManagerImpl::new(
+            node_test_id(0),
+            p2p_test_setup_logger().root.clone().into(),
+            Arc::new(Mutex::new(PeerContextDictionary::default())),
+            Some(GossipAdvertRelayConfig {
+                relay_percentage: 120,
+            }),
+            Arc::new(MockTransport::new()),
+            TransportClientType::P2P,
+        );
     }
 }

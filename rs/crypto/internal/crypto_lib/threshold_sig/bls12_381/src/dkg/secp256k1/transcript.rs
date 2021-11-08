@@ -19,12 +19,12 @@ use crate::{
         SecretKeyBytes as ThresholdSecretKeyBytes,
     },
 };
-use ff::Field;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_types::{crypto::AlgorithmId, IDkgId, NodeIndex, NumberOfNodes};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::iter::Sum;
+use std::ops::{AddAssign, MulAssign, SubAssign};
 
 #[cfg(test)]
 mod test_resharing;

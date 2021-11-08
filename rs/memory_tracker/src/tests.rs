@@ -2,13 +2,13 @@ use std::{io::Write, ops::Range};
 
 use ic_config::embedders::PersistenceType;
 use ic_logger::replica_logger::no_op_logger;
-use ic_replicated_state::{PageDelta, PageIndex, PageMap};
-use ic_sys::PAGE_SIZE;
+use ic_replicated_state::{PageIndex, PageMap};
+use ic_sys::{PageBytes, PAGE_SIZE};
 use libc::c_void;
 use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 
 use crate::{
-    AccessKind, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker, ENABLE_NEW_SIGNAL_HANDLER,
+    new_signal_handler_available, AccessKind, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker,
     MAX_PAGES_TO_COPY, MAX_PAGES_TO_MAP,
 };
 
@@ -21,27 +21,26 @@ fn with_setup<F>(
 ) where
     F: FnOnce(SigsegvMemoryTracker, PageMap),
 {
-    assert_eq!(4096, *PAGE_SIZE);
     let tmpfile = tempfile::Builder::new().prefix("test").tempfile().unwrap();
     for page in 0..checkpoint_pages {
         tmpfile
             .as_file()
-            .write_all(&[(page % 256) as u8; 4096])
+            .write_all(&[(page % 256) as u8; PAGE_SIZE])
             .unwrap();
     }
     tmpfile.as_file().sync_all().unwrap();
     let mut page_map = PageMap::open(tmpfile.path()).unwrap();
-    let pages: Vec<(PageIndex, [u8; 4096])> = page_delta
+    let pages: Vec<(PageIndex, PageBytes)> = page_delta
         .into_iter()
-        .map(|i| (i, [i.get() as u8; 4096]))
+        .map(|i| (i, [i.get() as u8; PAGE_SIZE]))
         .collect();
-    let pages: Vec<(PageIndex, &[u8])> = pages.iter().map(|(i, a)| (*i, a as &[u8])).collect();
-    page_map.update(PageDelta::from(pages.as_slice()));
+    let pages: Vec<(PageIndex, &PageBytes)> = pages.iter().map(|(i, a)| (*i, a)).collect();
+    page_map.update(&pages);
 
     let memory = unsafe {
         mmap(
             std::ptr::null_mut(),
-            memory_pages * *PAGE_SIZE,
+            memory_pages * PAGE_SIZE,
             ProtFlags::PROT_NONE,
             MapFlags::MAP_PRIVATE | MapFlags::MAP_ANON,
             -1,
@@ -53,7 +52,7 @@ fn with_setup<F>(
     let tracker = SigsegvMemoryTracker::new(
         PersistenceType::Sigsegv,
         memory,
-        memory_pages * *PAGE_SIZE,
+        memory_pages * PAGE_SIZE,
         no_op_logger(),
         dirty_page_tracking,
         Some(page_map.clone()),
@@ -64,7 +63,7 @@ fn with_setup<F>(
 
 fn sigsegv(tracker: &SigsegvMemoryTracker, page_index: PageIndex, access_kind: AccessKind) {
     let memory = tracker.memory_area.addr as *mut u8;
-    let page_addr = unsafe { memory.add(page_index.get() as usize * *PAGE_SIZE) };
+    let page_addr = unsafe { memory.add(page_index.get() as usize * PAGE_SIZE) };
     tracker.handle_sigsegv(Some(access_kind), page_addr as *mut c_void);
 }
 
@@ -78,7 +77,7 @@ fn prefetch_for_read_checkpoint() {
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(5), AccessKind::Read);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 // The checkpoint range is [0..25). Starting from 5 there are only 20 pages.
                 assert_eq!(tracker.num_accessed_pages(), MAX_PAGES_TO_MAP.min(20));
             } else {
@@ -99,7 +98,7 @@ fn prefetch_for_read_zeros() {
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(80), AccessKind::Read);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 // The zero range is [75..100). Starting from 80, there are only 20 pages.
                 assert_eq!(tracker.num_accessed_pages(), MAX_PAGES_TO_MAP.min(20));
             } else {
@@ -160,7 +159,7 @@ fn prefetch_for_read_page_delta_contiguous() {
             sigsegv(&tracker, PageIndex::new(50), AccessKind::Read);
             assert_eq!(tracker.num_accessed_pages(), 1);
             sigsegv(&tracker, PageIndex::new(51), AccessKind::Read);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 // One page was accessed immediately before the faulting page, so one additional
                 // page should be prefetched.
                 let prefetched_at_51 = MAX_PAGES_TO_COPY.min(2);
@@ -193,7 +192,7 @@ fn prefetch_for_write_checkpoint_ignore_dirty() {
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(5), AccessKind::Write);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 // The checkpoint range is [0..25). Starting from 5 there are only 20 pages.
                 assert_eq!(tracker.num_accessed_pages(), MAX_PAGES_TO_MAP.min(20));
             } else {
@@ -214,7 +213,7 @@ fn prefetch_for_write_zeros_ignore_dirty() {
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(80), AccessKind::Write);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 // The zero range is [75..100). Starting from 80, there are only 20 pages.
                 assert_eq!(tracker.num_accessed_pages(), MAX_PAGES_TO_MAP.min(20));
             } else {
@@ -275,7 +274,7 @@ fn prefetch_for_write_page_delta_contiguous_ignore_dirty() {
             sigsegv(&tracker, PageIndex::new(50), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
             sigsegv(&tracker, PageIndex::new(51), AccessKind::Write);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 // One page was accessed immediately before the faulting page, so one additional
                 // page should be prefetched.
                 let prefetched_at_51 = MAX_PAGES_TO_COPY.min(2);
@@ -309,7 +308,7 @@ fn prefetch_for_write_checkpoint() {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(5), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
                 assert_eq!(tracker.take_dirty_pages().len(), 1);
             } else {
@@ -332,7 +331,7 @@ fn prefetch_for_write_zeros() {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(80), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
                 assert_eq!(tracker.take_dirty_pages().len(), 1);
             } else {
@@ -355,7 +354,7 @@ fn prefetch_for_write_page_delta_single_page() {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(50), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
                 assert_eq!(tracker.take_dirty_pages().len(), 1);
             } else {
@@ -380,7 +379,7 @@ fn prefetch_for_write_page_delta_different_pages() {
             assert_eq!(tracker.num_accessed_pages(), 1);
             sigsegv(&tracker, PageIndex::new(52), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 2);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
                 assert_eq!(tracker.take_dirty_pages().len(), 2);
             } else {
@@ -404,7 +403,7 @@ fn prefetch_for_write_page_delta_contiguous() {
             sigsegv(&tracker, PageIndex::new(50), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
             sigsegv(&tracker, PageIndex::new(51), AccessKind::Write);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 let prefetched_at_51 = std::cmp::min(2, MAX_PAGES_TO_COPY);
                 assert_eq!(tracker.num_accessed_pages(), 1 + prefetched_at_51);
                 sigsegv(
@@ -456,7 +455,7 @@ fn prefetch_for_write_after_read_stop_at_dirty() {
             sigsegv(&tracker, PageIndex::new(52), AccessKind::Write);
             // Page 53 should be prefetched now.
             sigsegv(&tracker, PageIndex::new(54), AccessKind::Write);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 // Only page 53 is speculatively dirty, other pages are dirty.
                 assert_eq!(
                     tracker.take_speculatively_dirty_pages().len(),
@@ -496,7 +495,7 @@ fn prefetch_for_write_after_read_stop_at_unaccessed() {
             sigsegv(&tracker, PageIndex::new(51), AccessKind::Write);
             // The following should prefetch only 55 because it is the last accessed page.
             sigsegv(&tracker, PageIndex::new(54), AccessKind::Write);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 assert_eq!(
                     tracker.take_speculatively_dirty_pages().len(),
                     MAX_PAGES_TO_COPY.min(2) - 1
@@ -530,7 +529,7 @@ fn prefetch_for_write_with_other_dirty_pages() {
             assert_eq!(tracker.num_accessed_pages(), 3);
             // This should prefetch only 54, and not 55.
             sigsegv(&tracker, PageIndex::new(53), AccessKind::Write);
-            if ENABLE_NEW_SIGNAL_HANDLER {
+            if new_signal_handler_available() {
                 assert_eq!(tracker.num_accessed_pages(), 3 + MAX_PAGES_TO_COPY.min(2));
                 // Only page 55 is speculatively dirty, other pages are dirty.
                 assert_eq!(

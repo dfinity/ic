@@ -1,12 +1,15 @@
 use crate::message_routing::LatencyMetrics;
 use ic_logger::{error, trace, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use ic_replicated_state::{canister_state::QUEUE_INDEX_NONE, ReplicatedState};
+use ic_replicated_state::{
+    canister_state::QUEUE_INDEX_NONE, replicated_state::ReplicatedStateMessageRouting,
+    ReplicatedState,
+};
 use ic_types::{
     messages::{Payload, RejectContext, Request, RequestOrResponse, Response},
     user_error::RejectCode,
     xnet::QueueId,
-    CanisterId, CountBytes, QueueIndex, SubnetId,
+    CountBytes, QueueIndex, SubnetId,
 };
 #[cfg(test)]
 use mockall::automock;
@@ -21,6 +24,8 @@ struct StreamBuilderMetrics {
     pub stream_messages: IntGaugeVec,
     /// Stream byte size, by destination subnet.
     pub stream_bytes: IntGaugeVec,
+    /// Stream begin, by destination subnet.
+    pub stream_begin: IntGaugeVec,
     /// Routed XNet messages, by type and status.
     pub routed_messages: IntCounterVec,
     /// Successfully routed XNet messages' total payload size.
@@ -29,6 +34,7 @@ struct StreamBuilderMetrics {
 
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
+const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 
@@ -53,6 +59,11 @@ impl StreamBuilderMetrics {
             "Stream byte size including header, by destination subnet.",
             &[LABEL_REMOTE],
         );
+        let stream_begin = metrics_registry.int_gauge_vec(
+            METRIC_STREAM_BEGIN,
+            "Stream begin, by destination subnet",
+            &[LABEL_REMOTE],
+        );
         let routed_messages = metrics_registry.int_counter_vec(
             METRIC_ROUTED_MESSAGES,
             "Routed XNet messages, by type and status.",
@@ -64,7 +75,6 @@ impl StreamBuilderMetrics {
             // 10 B - 5 MB
             decimal_buckets(1, 6),
         );
-
         // Initialize all `routed_messages` counters with zero, so they are all exported
         // from process start (`IntCounterVec` is really a map).
         for (msg_type, status) in &[
@@ -85,6 +95,7 @@ impl StreamBuilderMetrics {
         Self {
             stream_messages,
             stream_bytes,
+            stream_begin,
             routed_messages,
             routed_payload_sizes,
         }
@@ -180,17 +191,8 @@ impl StreamBuilder for StreamBuilderImpl {
 
         // Extract all of the outgoing messages from the output queues into a
         // collection.
-        let mut msg_set: Vec<(QueueId, QueueIndex, RequestOrResponse)> = state
-            .canisters_iter_mut()
-            .flat_map(|canister| canister.output_into_iter())
-            .collect();
-
-        for subnet_msg in state
-            .subnet_queues
-            .output_into_iter(CanisterId::from(self.subnet_id))
-        {
-            msg_set.push(subnet_msg);
-        }
+        let msg_set: Vec<(QueueId, QueueIndex, RequestOrResponse)> =
+            state.output_into_iter().collect();
 
         // Place all messages into the appropriate stream or generate reject Responses
         // when unable to (canister not found).
@@ -209,7 +211,7 @@ impl StreamBuilder for StreamBuilderImpl {
                     // Insert the message into the stream.
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                     self.observe_payload_size(&msg);
-                    streams.entry(dst_net_id).or_default().push(msg);
+                    streams.push(dst_net_id, msg);
                 }
 
                 // Destination subnet not found.
@@ -247,9 +249,10 @@ impl StreamBuilder for StreamBuilderImpl {
                     subnet.to_string(),
                     stream.messages().len(),
                     stream.count_bytes(),
+                    stream.messages_begin(),
                 )
             })
-            .for_each(|(subnet, len, size_bytes)| {
+            .for_each(|(subnet, len, size_bytes, begin)| {
                 self.metrics
                     .stream_messages
                     .with_label_values(&[&subnet])
@@ -258,12 +261,16 @@ impl StreamBuilder for StreamBuilderImpl {
                     .stream_bytes
                     .with_label_values(&[&subnet])
                     .set(size_bytes as i64);
+                self.metrics
+                    .stream_begin
+                    .with_label_values(&[&subnet])
+                    .set(begin.get() as i64);
             });
 
         {
             // Record the enqueuing time of any messages newly enqueued into `streams`.
             let mut time_in_stream_metrics = self.time_in_stream_metrics.lock().unwrap();
-            for (subnet_id, stream) in &streams {
+            for (subnet_id, stream) in streams.iter() {
                 if *subnet_id == self.subnet_id {
                     continue;
                 }

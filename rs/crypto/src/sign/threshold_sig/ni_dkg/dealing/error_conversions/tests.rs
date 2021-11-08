@@ -36,19 +36,22 @@ mod create_dealing_error_conversions {
         }
 
         #[test]
-        #[should_panic(
-            expected = "NI-DKG create_dealing error - ReshareKeyNotInSecretKeyStoreError: KeyNotFoundError { internal_error: \"some error\", key_id: KeyId(0x0000000000000000000000000000000000000000000000000000000000000000) }"
-        )]
-        fn should_panic_on_reshare_key_not_in_secret_key_store_error() {
+        fn should_return_error_on_reshare_key_not_in_secret_key_store_error() {
             let key_not_found_error = KeyNotFoundError {
                 internal_error: "some error".to_string(),
                 key_id: KeyId::from([0; 32]),
             };
             let csp_error = CspDkgCreateReshareDealingError::ReshareKeyNotInSecretKeyStoreError(
-                key_not_found_error,
+                key_not_found_error.clone(),
             );
 
-            let _panic = DkgCreateDealingError::from(csp_error);
+            let result = DkgCreateDealingError::from(csp_error);
+
+            assert!(matches!(
+                result,
+                DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore(error)
+                if error == key_not_found_error
+            ));
         }
 
         #[test]
@@ -111,92 +114,6 @@ mod create_dealing_error_conversions {
                     internal_error: "some error".to_string(),
                 },
             );
-
-            let _panic = DkgCreateDealingError::from(csp_error);
-        }
-    }
-
-    mod csp_load_private_key {
-        use super::*;
-        use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgLoadPrivateKeyError;
-        use ic_types::crypto::error::MalformedDataError;
-
-        #[test]
-        fn should_return_error_on_malformed_transcript_error() {
-            let malformed_data_error = MalformedDataError {
-                algorithm: AlgorithmId::Placeholder,
-                internal_error: "some error".to_string(),
-                data: None,
-            };
-            let csp_error =
-                CspDkgLoadPrivateKeyError::MalformedTranscriptError(malformed_data_error);
-
-            let result = DkgCreateDealingError::from(csp_error);
-
-            assert_eq!(
-                result,
-                DkgCreateDealingError::InvalidTranscript(InvalidArgumentError {
-                    message: "Malformed Placeholder data: 0xNone. Internal error: some error"
-                        .to_string()
-                })
-            );
-        }
-
-        #[test]
-        fn should_return_error_on_invalid_transcript_error() {
-            let invalid_arg_error = InvalidArgumentError {
-                message: "some error".to_string(),
-            };
-            let csp_error =
-                CspDkgLoadPrivateKeyError::InvalidTranscriptError(invalid_arg_error.clone());
-
-            let result = DkgCreateDealingError::from(csp_error);
-
-            assert_eq!(
-                result,
-                DkgCreateDealingError::InvalidTranscript(invalid_arg_error)
-            );
-        }
-
-        #[test]
-        fn should_return_error_on_key_not_found_error() {
-            let key_not_found_error = KeyNotFoundError {
-                internal_error: "some error".to_string(),
-                key_id: KeyId::from([0; 32]),
-            };
-            let csp_error =
-                CspDkgLoadPrivateKeyError::KeyNotFoundError(key_not_found_error.clone());
-
-            let result = DkgCreateDealingError::from(csp_error);
-
-            assert_eq!(
-                result,
-                DkgCreateDealingError::FsDecryptionKeyNotInSecretKeyStore(key_not_found_error)
-            );
-        }
-
-        #[test]
-        #[should_panic(
-            expected = "NI-DKG create_dealing error on loading private key - UnsupportedAlgorithmId: The algorithm id Placeholder is unsupported."
-        )]
-        fn should_panic_on_unsupported_algorithm_id_error() {
-            let csp_error =
-                CspDkgLoadPrivateKeyError::UnsupportedAlgorithmId(AlgorithmId::Placeholder);
-
-            let _panic = DkgCreateDealingError::from(csp_error);
-        }
-
-        #[test]
-        #[should_panic(
-            expected = "NI-DKG create_dealing error on loading private key - MalformedSecretKeyError: MalformedSecretKeyError { algorithm: Placeholder, internal_error: \"some error\" }"
-        )]
-        fn should_panic_on_malformed_secret_key_error() {
-            let malformed_secret_key_error = MalformedSecretKeyError {
-                algorithm: AlgorithmId::Placeholder,
-                internal_error: "some error".to_string(),
-            };
-            let csp_error =
-                CspDkgLoadPrivateKeyError::MalformedSecretKeyError(malformed_secret_key_error);
 
             let _panic = DkgCreateDealingError::from(csp_error);
         }

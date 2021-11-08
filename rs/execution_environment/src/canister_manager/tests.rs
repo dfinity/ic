@@ -20,10 +20,9 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::testing::CanisterStateTesting;
 use ic_replicated_state::{
-    page_map, CallContextManager, CallOrigin, CanisterStatus, NumWasmPages64, PageMap,
-    ReplicatedState,
+    page_map, testing::CanisterQueuesTesting, CallContextManager, CallOrigin, CanisterStatus,
+    NumWasmPages64, PageMap, ReplicatedState,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -50,6 +49,7 @@ use ic_types::{
     MemoryAllocation, NumBytes, NumInstructions, QueryAllocation, SubnetId,
 };
 use ic_wasm_types::WasmValidationError;
+use ic_wasm_utils::validation::{WasmValidationConfig, WasmValidationLimits};
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use std::{collections::BTreeSet, convert::TryFrom, path::Path, sync::Arc};
@@ -132,16 +132,22 @@ impl Default for CanisterManagerBuilder {
 }
 
 fn canister_manager_config(subnet_id: SubnetId) -> CanisterMgrConfig {
+    let wasm_validation_config = WasmValidationConfig {
+        limits: WasmValidationLimits {
+            max_globals: MAX_GLOBALS,
+            max_functions: MAX_FUNCTIONS,
+        },
+        ..Default::default()
+    };
     CanisterMgrConfig::new(
         MEMORY_CAPACITY,
         Some(CYCLES_LIMIT_PER_CANISTER),
         DEFAULT_PROVISIONAL_BALANCE,
         NumSeconds::from(100_000),
-        MAX_GLOBALS,
-        MAX_FUNCTIONS,
         subnet_id,
         MAX_CONTROLLERS,
         1,
+        wasm_validation_config,
     )
 }
 
@@ -721,7 +727,10 @@ fn install_code_preserves_messages() {
         let canister = state
             .canister_state(&canister_test_id(0))
             .expect("Failed to find the canister");
-        assert_eq!(canister.ingress_queue_size() as u64, num_messages);
+        assert_eq!(
+            canister.system_state.queues().ingress_queue_size() as u64,
+            num_messages
+        );
     });
 }
 
@@ -2280,7 +2289,10 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
             EXECUTION_PARAMETERS.clone(),
         );
         assert_eq!(res.0, MAX_NUM_INSTRUCTIONS);
-        assert_matches!(res.1, Err(CanisterManagerError::CanisterOutOfCycles { .. }));
+        assert_matches!(
+            res.1,
+            Err(CanisterManagerError::InstallCodeNotEnoughCycles(_))
+        );
     });
 }
 
@@ -2591,7 +2603,7 @@ fn install_code_respects_instruction_limit() {
         result,
         Err(CanisterManagerError::Hypervisor(
             _,
-            HypervisorError::OutOfInstructions
+            HypervisorError::InstructionLimitExceeded
         ))
     );
     assert_eq!(instructions_left, NumInstructions::from(0));

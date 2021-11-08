@@ -1,4 +1,5 @@
 use crate::protocol::structs;
+use ic_replicated_state::{Global, NumWasmPages};
 use serde::{Deserialize, Serialize};
 
 /// This defines the RPC service methods offered by the sandbox process
@@ -75,12 +76,15 @@ pub enum StateBranch {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OpenStateRequest {
     pub state_id: String,
-    /// Path to directory holding state information.
-    pub state_path: String,
-    /// Point to the particular state to open. State can belong to the
-    /// tip set of states, which are non-checkpointed states, or to a
-    /// particular tagged read-only past state.
-    pub branch: StateBranch,
+
+    /// Global variables for execution state.
+    pub globals: Vec<Global>,
+
+    /// Wasm memory of this state.
+    pub wasm_memory: Vec<structs::IndexedPage>,
+
+    /// Size of memory.
+    pub memory_size: NumWasmPages,
 }
 
 /// Ack to the controller that state was opened or failed to open. A

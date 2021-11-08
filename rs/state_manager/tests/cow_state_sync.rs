@@ -33,7 +33,7 @@ fn get_page_nr(partition_nr: u64, offset_pages: u64) -> u64 {
 }
 
 fn get_page_off(pg_nr: u64) -> usize {
-    pg_nr as usize * *PAGE_SIZE
+    pg_nr as usize * PAGE_SIZE
 }
 
 #[test]
@@ -136,9 +136,9 @@ fn cow_state_can_do_simple_state_sync_transfer() {
         let p2_o100 = get_page_nr(2, 100);
         let p3_o100 = get_page_nr(3, 100);
 
-        let random_bytes: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
-        let random_bytes1: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
-        let random_bytes2: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+        let random_bytes: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+        let random_bytes1: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+        let random_bytes2: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
 
         // ====================================================================
         // Test 1: state_sync can sync cow state to an empty state manager
@@ -204,12 +204,12 @@ fn cow_state_can_do_simple_state_sync_transfer() {
         let base = mapped_state.get_heap_base();
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
@@ -221,12 +221,12 @@ fn cow_state_can_do_simple_state_sync_transfer() {
         let base = mapped_state.get_heap_base();
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
@@ -234,6 +234,9 @@ fn cow_state_can_do_simple_state_sync_transfer() {
         // put the tip back
         dst_state_manager.commit_and_certify(tip_state, height(2), CertificationScope::Full);
         // End Test 1
+
+        let (_height, tip_state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(tip_state, height(2), CertificationScope::Full);
 
         // ====================================================================
         // Test 2: Without modifying source, perform another state sync. dst state
@@ -291,12 +294,12 @@ fn cow_state_can_do_simple_state_sync_transfer() {
         let base = mapped_state.get_heap_base();
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
@@ -308,18 +311,20 @@ fn cow_state_can_do_simple_state_sync_transfer() {
         let base = mapped_state.get_heap_base();
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
         recovered_state.put_canister_state(canister_state);
         dst_state_manager.commit_and_certify(tip_state, height(4), CertificationScope::Full);
         // End Test2
+        let (_height, tip_state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(tip_state, height(4), CertificationScope::Full);
 
         // ====================================================================
         // Test 3 Modify only the first chunk, create one more chunk that looks like
@@ -417,27 +422,27 @@ fn cow_state_can_do_simple_state_sync_transfer() {
         let base = mapped_state.get_heap_base();
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes1);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o205)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o205)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes2);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p2_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p2_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p3_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p3_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
@@ -448,27 +453,27 @@ fn cow_state_can_do_simple_state_sync_transfer() {
         let base = mapped_state.get_heap_base();
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), PAGE_SIZE).to_vec()
         };
         assert_ne!(read_bytes, random_bytes1);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o205)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o205)), PAGE_SIZE).to_vec()
         };
         assert_ne!(read_bytes, random_bytes2);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), PAGE_SIZE).to_vec()
         };
         assert_ne!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p2_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p2_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p3_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p3_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
@@ -479,27 +484,27 @@ fn cow_state_can_do_simple_state_sync_transfer() {
         let base = mapped_state.get_heap_base();
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes1);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o205)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o205)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes2);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p2_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p2_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p3_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p3_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
@@ -508,27 +513,27 @@ fn cow_state_can_do_simple_state_sync_transfer() {
         let base = mapped_state.get_heap_base();
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o200)), PAGE_SIZE).to_vec()
         };
         assert_ne!(read_bytes, random_bytes1);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p0_o205)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p0_o205)), PAGE_SIZE).to_vec()
         };
         assert_ne!(read_bytes, random_bytes2);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p1_o100)), PAGE_SIZE).to_vec()
         };
         assert_ne!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p2_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p2_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
 
         let read_bytes = unsafe {
-            std::slice::from_raw_parts(base.add(get_page_off(p3_o100)), *PAGE_SIZE).to_vec()
+            std::slice::from_raw_parts(base.add(get_page_off(p3_o100)), PAGE_SIZE).to_vec()
         };
         assert_eq!(read_bytes, random_bytes);
         // End Test 3
@@ -580,9 +585,9 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
         let p0_o14 = get_page_nr(0, 14);
         let p1_o4 = get_page_nr(1, 4);
 
-        let random_bytes: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
-        let random_bytes1: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
-        let random_bytes2: Vec<u8> = (0..*PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+        let random_bytes: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+        let random_bytes1: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
+        let random_bytes2: Vec<u8> = (0..PAGE_SIZE).map(|_| rand::random::<u8>()).collect();
 
         // ====================================================================
         // Test 1: state_sync can sync cow stable memory to an empty state manager
@@ -657,7 +662,7 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
             NumWasmPages64::new(10)
         );
 
-        let mut read_bytes = vec![0; *PAGE_SIZE];
+        let mut read_bytes = vec![0; PAGE_SIZE];
 
         buf.read(&mut read_bytes[..], get_page_off(p0_o0));
         assert_eq!(read_bytes, random_bytes);
@@ -695,6 +700,8 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
         dst_state_manager.commit_and_certify(tip_state, height(2), CertificationScope::Full);
         // End Test 1
 
+        let (_height, tip_state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(tip_state, height(2), CertificationScope::Full);
         // ====================================================================
         // Test 2: Without modifying source, perform another state sync. dst state
         // manager should recreate state by doing local file copy
@@ -799,6 +806,9 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
         recovered_state.put_canister_state(canister_state);
         dst_state_manager.commit_and_certify(tip_state, height(4), CertificationScope::Full);
         // End Test2
+
+        let (_height, tip_state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(tip_state, height(4), CertificationScope::Full);
 
         // ====================================================================
         // Test 3 Grow stable memory modify only the first chunk,

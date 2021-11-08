@@ -4,8 +4,8 @@
 // the warnings (the code is defined in another module).
 #![allow(clippy::unit_arg)]
 
+use bls12_381::{G1Projective, G2Projective, Scalar};
 use ic_crypto_internal_bls12381_common as bls;
-use pairing::bls12_381::{Fr, G1, G2};
 use zeroize::Zeroize;
 
 // A polynomial is a vector of (usually secret) field elements
@@ -23,7 +23,7 @@ pub mod arbitrary;
 mod conversions;
 mod generic_traits;
 
-pub(super) type Signature = G1;
+pub(super) type Signature = G1Projective;
 
 pub(super) type IndividualSignature = Signature;
 
@@ -45,7 +45,7 @@ impl CombinedSignatureBytes {
     pub const SIZE: usize = bls::G1_SIZE;
 }
 
-pub(super) type SecretKey = Fr;
+pub(super) type SecretKey = Scalar;
 
 /// A serialized BLS secret key.
 #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
@@ -61,7 +61,7 @@ impl SecretKeyBytes {
 /// Doing this (instead of a type) allows for From conversions in
 /// this crate.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct PublicKey(pub G2);
+pub struct PublicKey(pub G2Projective);
 
 /// Interpolation failed because of duplicate x-coordinates.
 #[derive(Copy, Clone, Debug)]

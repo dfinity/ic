@@ -66,7 +66,7 @@ mod sign_ed25519 {
 
         let result = csp.sign(Ed25519, b"msg", KeyId::from(KEY_ID));
 
-        assert!(result.unwrap_err().is_malformed_secret_key());
+        assert!(result.unwrap_err().is_invalid_argument());
     }
 }
 
@@ -326,7 +326,7 @@ mod verify_ed25519 {
     }
 }
 
-fn csprng() -> impl CryptoRng + Rng {
+fn csprng() -> impl CryptoRng + Rng + Clone {
     ChaCha20Rng::seed_from_u64(42)
 }
 

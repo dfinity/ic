@@ -21,7 +21,6 @@ fn invalid_size_conversion_should_work() {
 /// Verifies that the size of PublicCoefficients is measured correctly
 #[test]
 fn public_coefficients_size_should_be_correct() {
-    let mut rng = ChaChaRng::from_seed([1u8; 32]);
     let mut public_keys = Vec::new();
     for size in 0_u32..10 {
         let public_coefficients = PublicCoefficients {
@@ -31,7 +30,7 @@ fn public_coefficients_size_should_be_correct() {
             NumberOfNodes::try_from(&public_coefficients).expect("Invalid size"),
             NumberOfNodes::from(size)
         );
-        public_keys.push(G2::random(&mut rng));
+        public_keys.push(G2Projective::generator());
     }
 }
 
@@ -67,11 +66,11 @@ fn public_coefficients_from_polynomial_should_be_correct() {
 
 #[test]
 fn public_key_for_public_coefficients_should_be_correct() {
-    let mut test_vectors: Vec<(PublicCoefficients, G2)> = vec![(
+    let mut test_vectors: Vec<(PublicCoefficients, G2Projective)> = vec![(
         PublicCoefficients {
             coefficients: Vec::new(),
         },
-        G2::zero(),
+        G2Projective::identity(),
     )];
     let mut rng = ChaChaRng::from_seed([1u8; 32]);
     for _ in 0..3 {
@@ -92,7 +91,7 @@ fn public_key_for_empty_public_coefficients_should_be_zero() {
         coefficients: Vec::new(),
     };
     let public_key = PublicKey::from(&public_coefficients);
-    assert_eq!(G2::zero(), public_key.0);
+    assert_eq!(G2Projective::identity(), public_key.0);
 }
 
 /// Verifies that the public key for non-empty public coefficients is the first
@@ -132,7 +131,7 @@ fn public_key_from_empty_public_coefficients_bytes_should_be_zero() {
     };
     assert_eq!(
         PublicKey::try_from(&public_coefficients_bytes),
-        Ok(PublicKey(G2::zero()))
+        Ok(PublicKey(G2Projective::identity()))
     );
 }
 

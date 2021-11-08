@@ -10,7 +10,10 @@ use std::sync::Arc;
 
 const NODE_ID: u64 = 42;
 
-pub fn crypto_component_with<S: SecretKeyStore>(
+/// Note that `S: 'static` is required so that `CspTlsHandshakeSignerProvider`
+/// can be implemented for [Csp]. See the documentation of the respective `impl`
+/// block for more details on the meaning of `S: 'static`.
+pub fn crypto_component_with<S: SecretKeyStore + 'static>(
     registry_client: Arc<dyn RegistryClient>,
     secret_key_store: S,
 ) -> CryptoComponentFatClient<impl CryptoServiceProvider> {

@@ -15,7 +15,7 @@ pub(crate) enum ApiReqType {
 }
 
 impl ApiReqType {
-    pub(crate) fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &'static str {
         use ApiReqType::*;
         match self {
             ReadState => "read_state",
@@ -33,7 +33,7 @@ pub(crate) enum AppLayer {
 }
 
 impl AppLayer {
-    pub(crate) fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &'static str {
         use AppLayer::*;
         match self {
             Http => "http",
@@ -57,6 +57,8 @@ pub(crate) enum RequestType {
     RedirectToDashboard,
     /// A direct request for the dashboard
     Dashboard,
+    /// A CPU profile request
+    Pprof(PprofPage),
     /// A request for the latest Catch-Up Package (CUP)
     CatchUpPackage,
     /// A request for backup artifacts of the given height
@@ -64,7 +66,7 @@ pub(crate) enum RequestType {
 }
 
 impl RequestType {
-    pub(crate) fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &'static str {
         use RequestType::*;
         match self {
             Status => "status",
@@ -73,10 +75,21 @@ impl RequestType {
             Options => "options",
             RedirectToDashboard => "redirect_to_dashboard",
             Dashboard => "dashboard",
+            Pprof(_) => "pprof",
             CatchUpPackage => "catch-up-package",
             Artifacts(_) => "artifacts",
         }
     }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum PprofPage {
+    /// `pprof` root page.
+    Home,
+    /// CPU profile in pprof proto format.
+    Profile,
+    /// CPU profile as flamegraph.
+    Flamegraph,
 }
 
 pub(crate) enum ConnectionError {
@@ -90,7 +103,7 @@ pub(crate) enum ConnectionError {
 }
 
 impl ConnectionError {
-    pub(crate) fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &'static str {
         use ConnectionError::*;
         match self {
             TlsHandshake => "tls_handshake",
@@ -100,19 +113,6 @@ impl ConnectionError {
             ClientAuthentication => "client_authentication",
             Peek => "peek",
             PeekTimeout => "peek_timeout",
-        }
-    }
-}
-
-pub(crate) enum InternalError {
-    ConcurrentTaskExecution,
-}
-
-impl InternalError {
-    pub(crate) fn as_str(&self) -> &str {
-        use InternalError::*;
-        match self {
-            ConcurrentTaskExecution => "concurrent_task_execution",
         }
     }
 }

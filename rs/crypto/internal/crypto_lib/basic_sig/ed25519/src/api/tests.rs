@@ -163,6 +163,52 @@ mod sign {
     }
 }
 
+mod wycheproof {
+    use crate::api::SecretArray;
+    use crate::types::{PublicKeyBytes, SecretKeyBytes, SignatureBytes};
+    use crate::{sign, verify};
+    use std::convert::TryInto;
+
+    #[test]
+    fn should_pass_wycheproof_test_vectors() {
+        let test_set = wycheproof::eddsa::TestSet::load(wycheproof::eddsa::TestName::Ed25519)
+            .expect("Unable to load tests");
+
+        for test_group in test_set.test_groups {
+            let pk = PublicKeyBytes(test_group.key.pk.try_into().expect("Unexpected key size"));
+
+            let sk_bytes: [u8; 32] = test_group.key.sk.try_into().expect("Unexpected key size");
+            let sk = SecretKeyBytes(SecretArray::new_and_dont_zeroize_argument(&sk_bytes));
+
+            for test in test_group.tests {
+                /*
+                The wycheproof tests include some invalid length signatures, but these cannot
+                be represented in SignatureBytes so we simply skip those tests.
+                */
+                if test.sig.len() != 64 {
+                    continue;
+                }
+                let test_sig =
+                    SignatureBytes(test.sig.try_into().expect("Unexpected signature size"));
+
+                let gen_sig = sign(&test.msg, &sk).expect("Generating signature failed");
+
+                if test.result == wycheproof::TestResult::Valid {
+                    // If test is valid verify that our generated signature matches (Ed25519 should
+                    // be deterministic) and that the signature verifies
+                    assert!(verify(&test_sig, &test.msg, &pk).is_ok());
+                    assert_eq!(test_sig, gen_sig);
+                } else {
+                    // Otherwise check that the test signature fails but our generated signature
+                    // is accepted
+                    assert!(verify(&gen_sig, &test.msg, &pk).is_ok());
+                    assert!(verify(&test_sig, &test.msg, &pk).is_err());
+                }
+            }
+        }
+    }
+}
+
 mod verify {
     use crate::types::{PublicKeyBytes, SecretKeyBytes, SignatureBytes};
     use crate::{public_key_from_der, public_key_to_der, sign, verify};

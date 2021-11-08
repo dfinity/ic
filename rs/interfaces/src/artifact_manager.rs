@@ -117,7 +117,6 @@ pub trait ArtifactClient<Artifact: artifact::ArtifactKind>: Send + Sync {
     }
 
     /// Return the remaining quota that this peer is allowed to consume.
-    /// Return `None` if the quota is not specified.
     fn get_remaining_quota(&self, _peer_id: NodeId) -> usize {
         usize::max_value()
     }
@@ -168,7 +167,7 @@ pub trait ArtifactProcessor<Artifact: artifact::ArtifactKind>: Send {
         &self,
         time_source: &dyn TimeSource,
         new_artifacts: Vec<UnvalidatedArtifact<Artifact::Message>>,
-    ) -> (Vec<artifact::Advert<Artifact>>, ProcessingResult);
+    ) -> (Vec<artifact::AdvertSendRequest<Artifact>>, ProcessingResult);
 }
 
 /// The Artifact Manager stores artifacts to be used by this and other nodes in

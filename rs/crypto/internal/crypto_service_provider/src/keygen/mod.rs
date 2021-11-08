@@ -4,8 +4,6 @@ use crate::api::{CspKeyGenerator, CspSecretKeyStoreChecker};
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
 use crate::types::{CspPop, CspPublicKey, CspSecretKey};
 use crate::Csp;
-use ic_crypto_internal_basic_sig_ed25519 as ed25519;
-use ic_crypto_internal_multi_sig_bls12381 as multi_sig;
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
 use ic_crypto_sha::{Context, DomainSeparationContext};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
@@ -17,6 +15,9 @@ use std::convert::TryFrom;
 
 const KEY_ID_DOMAIN: &str = "ic-key-id";
 
+use crate::server::api::{
+    BasicSignatureCspServer, MultiSignatureCspServer, SecretKeyStoreCspServer,
+};
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_sha::Sha256;
 pub use tls_keygen::tls_cert_hash_as_key_id;
@@ -26,33 +27,19 @@ mod tests;
 
 impl<R: Rng + CryptoRng, S: SecretKeyStore> CspKeyGenerator for Csp<R, S> {
     fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<(KeyId, CspPublicKey), CryptoError> {
-        let (sk, pk) = self.generate_keypair_without_pop(alg_id)?;
-        let sk_id = public_key_hash_as_key_id(&pk);
-        self.store_secret_key_or_panic(sk, sk_id);
-        Ok((sk_id, pk))
+        match alg_id {
+            AlgorithmId::MultiBls12_381 => {
+                let (key_id, csp_pk, _pop) = self.csp_server.gen_key_pair_with_pop(alg_id)?;
+                Ok((key_id, csp_pk))
+            }
+            _ => Ok(self.csp_server.gen_key_pair(alg_id)?),
+        }
     }
     fn gen_key_pair_with_pop(
         &self,
         algorithm_id: AlgorithmId,
     ) -> Result<(KeyId, CspPublicKey, CspPop), CryptoError> {
-        match algorithm_id {
-            AlgorithmId::MultiBls12_381 => {
-                let (sk_bytes, pk_bytes) = multi_sig::keypair_from_rng(&mut *self.rng_write_lock());
-                let sk = CspSecretKey::MultiBls12_381(sk_bytes);
-                let pk = CspPublicKey::MultiBls12_381(pk_bytes);
-                let proof_of_possession =
-                    CspPop::MultiBls12_381(multi_sig::create_pop(pk_bytes, sk_bytes)?);
-                let sk_id = public_key_hash_as_key_id(&pk);
-                self.store_secret_key_or_panic(sk, sk_id);
-                Ok((sk_id, pk, proof_of_possession))
-            }
-            _ => Err(CryptoError::InvalidArgument {
-                message: format!(
-                    "Cannot generate key pair for unsupported algorithm: {:?}",
-                    algorithm_id
-                ),
-            }),
-        }
+        Ok(self.csp_server.gen_key_pair_with_pop(algorithm_id)?)
     }
 
     fn gen_tls_key_pair(&mut self, node: NodeId, not_after: &str) -> TlsPublicKeyCert {
@@ -70,45 +57,18 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> CspKeyGenerator for Csp<R, S> {
 }
 
 impl<R: Rng + CryptoRng, S: SecretKeyStore> CspSecretKeyStoreChecker for Csp<R, S> {
-    fn sks_contains(&self, id: &KeyId) -> bool {
-        self.sks_read_lock().contains(id)
+    fn sks_contains(&self, key_id: &KeyId) -> bool {
+        self.csp_server.sks_contains(key_id)
     }
 
     fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> bool {
         // we calculate the key_id first to minimize locking time:
         let key_id = tls_cert_hash_as_key_id(&cert);
-        self.sks_read_lock().contains(&key_id)
+        self.sks_contains(&key_id)
     }
 }
 
 impl<R: Rng + CryptoRng, S: SecretKeyStore> Csp<R, S> {
-    fn generate_keypair_without_pop(
-        &self,
-        alg_id: AlgorithmId,
-    ) -> Result<(CspSecretKey, CspPublicKey), CryptoError> {
-        match alg_id {
-            AlgorithmId::Ed25519 => {
-                let (sk_bytes, pk_bytes) = ed25519::keypair_from_rng(&mut *self.rng_write_lock());
-                let sk = CspSecretKey::Ed25519(sk_bytes);
-                let pk = CspPublicKey::Ed25519(pk_bytes);
-                Ok((sk, pk))
-            }
-            AlgorithmId::MultiBls12_381 => {
-                let (secret_key_bytes, public_key_bytes) =
-                    multi_sig::keypair_from_rng(&mut *self.rng_write_lock());
-                let secret_key = CspSecretKey::MultiBls12_381(secret_key_bytes);
-                let public_key = CspPublicKey::MultiBls12_381(public_key_bytes);
-                Ok((secret_key, public_key))
-            }
-            _ => Err(CryptoError::InvalidArgument {
-                message: format!(
-                    "Cannot generate key pair for unsupported algorithm: {:?}",
-                    alg_id
-                ),
-            }),
-        }
-    }
-
     fn store_secret_key_or_panic(&self, csp_secret_key: CspSecretKey, key_id: KeyId) {
         match &self.sks_write_lock().insert(key_id, csp_secret_key, None) {
             Ok(()) => {}

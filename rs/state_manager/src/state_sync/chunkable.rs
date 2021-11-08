@@ -1,6 +1,6 @@
 use crate::{
     manifest::{filter_out_zero_chunks, DiffScript},
-    CheckpointRef, StateManagerMetrics,
+    CheckpointRef, StateManagerMetrics, StateSyncRefs,
 };
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
 use ic_logger::{debug, fatal, info, trace, warn, ReplicaLogger};
@@ -40,6 +40,11 @@ enum DownloadState {
 
 /// An implementation of Chunkable trait that represents a (on-disk) state under
 /// construction.
+///
+/// P2P decides when to start or abort a fetch based on the output of the state
+/// sync priority function.  When priority function returns "Fetch", P2P calls
+/// StateManager to construct an IncompleteState corresponding to the state
+/// artifact advert.
 pub struct IncompleteState {
     log: ReplicaLogger,
     root: PathBuf,
@@ -51,6 +56,7 @@ pub struct IncompleteState {
     metrics: StateManagerMetrics,
     started_at: Instant,
     own_subnet_type: SubnetType,
+    state_sync_refs: StateSyncRefs,
 }
 
 impl Drop for IncompleteState {
@@ -67,6 +73,19 @@ impl Drop for IncompleteState {
                 );
             }
         }
+        if self.state_sync_refs.remove(&self.height).is_none() {
+            warn!(
+                self.log,
+                "State sync refs does not contain incomplete state @{}.", self.height,
+            );
+        }
+        let description = match self.state {
+            DownloadState::Blank => "aborted before receiving any chunks",
+            DownloadState::Loading { .. } => "aborted before receiving all the chunks",
+            DownloadState::Complete(_) => "completed successfully",
+        };
+
+        info!(self.log, "State sync @{} {}", self.height, description);
     }
 }
 
@@ -93,6 +112,7 @@ pub(crate) fn get_state_sync_chunk(
 }
 
 impl IncompleteState {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         log: ReplicaLogger,
         height: Height,
@@ -101,7 +121,16 @@ impl IncompleteState {
         manifest_with_checkpoint_ref: Option<(Manifest, CheckpointRef)>,
         metrics: StateManagerMetrics,
         own_subnet_type: SubnetType,
+        state_sync_refs: StateSyncRefs,
     ) -> Self {
+        if state_sync_refs.insert(height, root_hash.clone()).is_some() {
+            // Currently, we don't handle two concurrent fetches of the same state
+            // correctly. This case indicates a non-deterministic bug either in StateManager
+            // or P2P. We'd rather detect this early and crash, the replica
+            // should be able to recover after a restart.
+            fatal!(log, "There is already a live state sync @{}.", height);
+        }
+
         Self {
             log,
             root: state_layout
@@ -115,6 +144,7 @@ impl IncompleteState {
             metrics,
             started_at: Instant::now(),
             own_subnet_type,
+            state_sync_refs,
         }
     }
 
@@ -186,13 +216,13 @@ impl IncompleteState {
                 let src_heap_base = src_mapped_state.get_heap_base();
                 let size_bytes = manifest_old.file_table[*old_index].size_bytes as usize;
                 let data: &[u8] = unsafe { std::slice::from_raw_parts(src_heap_base, size_bytes) };
-                assert_eq!(data.len() % *PAGE_SIZE, 0);
+                assert_eq!(data.len() % PAGE_SIZE, 0);
 
                 let dst_cow_mgr =
                     CowMemoryManagerImpl::open_readwrite_statesync(dst_cow_base_dir.to_path_buf());
                 let dst_mapped_state = dst_cow_mgr.get_map();
 
-                let nr_pages = data.len() / *PAGE_SIZE;
+                let nr_pages = data.len() / PAGE_SIZE;
                 let pages_to_copy: Vec<u64> = (0..nr_pages).map(|page| page as u64).collect();
                 dst_mapped_state.copy_to_heap(0, &data);
                 dst_mapped_state.soft_commit(&pages_to_copy);
@@ -358,10 +388,10 @@ impl IncompleteState {
                     let dst_chunk = &manifest_new.chunk_table[*dst_chunk_index];
                     let src_chunk = &manifest_old.chunk_table[*src_chunk_index];
 
-                    assert_eq!(src_chunk.size_bytes % *PAGE_SIZE as u32, 0);
+                    assert_eq!(src_chunk.size_bytes % PAGE_SIZE as u32, 0);
 
-                    let dst_base_page = dst_chunk.offset / *PAGE_SIZE as u64;
-                    let nr_pages = src_chunk.size_bytes / *PAGE_SIZE as u32;
+                    let dst_base_page = dst_chunk.offset / PAGE_SIZE as u64;
+                    let nr_pages = src_chunk.size_bytes / PAGE_SIZE as u32;
 
                     let pages_to_copy: Vec<u64> = (0..nr_pages)
                         .map(|page| page as u64 + dst_base_page)
@@ -466,16 +496,16 @@ impl IncompleteState {
                 CowMemoryManagerImpl::open_readwrite_statesync(cow_base_dir.to_path_buf());
             let mapped_state = cow_mgr.get_map();
 
-            assert_eq!(chunk.size_bytes % *PAGE_SIZE as u32, 0);
+            assert_eq!(chunk.size_bytes % PAGE_SIZE as u32, 0);
 
-            let base_page = chunk.offset / *PAGE_SIZE as u64;
-            let nr_pages = chunk.size_bytes / *PAGE_SIZE as u32;
+            let base_page = chunk.offset / PAGE_SIZE as u64;
+            let nr_pages = chunk.size_bytes / PAGE_SIZE as u32;
 
             let pages_to_copy: Vec<u64> =
                 (0..nr_pages).map(|page| page as u64 + base_page).collect();
 
             for pi in &pages_to_copy {
-                let offset = (*pi - base_page) as usize * *PAGE_SIZE;
+                let offset = (*pi - base_page) as usize * PAGE_SIZE;
                 mapped_state.update_heap_page(*pi, &bytes[offset..]);
             }
 

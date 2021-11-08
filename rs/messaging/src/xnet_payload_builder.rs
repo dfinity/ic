@@ -36,7 +36,7 @@ use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_registry_client::helper::{node::NodeRegistry, subnet::SubnetListRegistry};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, ReplicatedState};
 use ic_types::{
     batch::{ValidationContext, XNetPayload},
     registry::{connection_endpoint::ConnectionEndpoint, RegistryClientError},

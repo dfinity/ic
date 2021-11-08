@@ -8,7 +8,9 @@ use ic_crypto_tree_hash::{
     flatmap, FlatMap, Label, LabeledTree, MixedHashTree, WitnessGenerator, WitnessGeneratorImpl,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{metadata_state::Stream, ReplicatedState};
+use ic_replicated_state::{
+    metadata_state::Stream, testing::ReplicatedStateTesting, ReplicatedState,
+};
 use ic_state_manager::{stream_encoding::encode_stream_slice, tree_hash::hash_state};
 use ic_test_utilities::{
     mock_time,

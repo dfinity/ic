@@ -33,14 +33,7 @@ impl QueryAllocationsUsed {
             None => QueryAllocation::zero(),
             Some(allocation) => *allocation,
         };
-        let allocation_available = QueryAllocation::default() - allocation_used;
-
-        // Should not return the entire allocation for execution. This is
-        // because if the message execution traps, then the Hypervisor deducts
-        // the entire supplied allocation. This prevents the canister
-        // from handling additional queries till the next purge interval. Hence,
-        // set a smaller bound on how much cycles a single query can consume.
-        std::cmp::min(allocation_available, QueryAllocation::max_per_message())
+        QueryAllocation::default() - allocation_used
     }
 
     /// Updates the query allocation of the canister after execution.

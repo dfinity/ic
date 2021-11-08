@@ -17,13 +17,15 @@ SHA1ICBUILDNIX=$("$REPO_ROOT/gitlab-ci/src/docker_image_check/docker_sha.py" Doc
 # The trusted builders must have the gitlab registry tags on the image. Please
 # do not change this code with speaking with Ali Piccioni or Sasa Tomic.
 
+cd "$REPO_ROOT/gitlab-ci/docker"
+
 # Build the container image
 DOCKER_BUILDKIT=1 docker build \
     --tag ic-build:"$VERSION" \
     --tag dfinity/ic-build:"$VERSION" \
     --tag dfinity/ic-build:latest \
     --tag registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$VERSION"-"$SHA1ICBUILD" \
-    -f gitlab-ci/docker/Dockerfile .
+    -f Dockerfile .
 
 # Build the container image with support for nix
 DOCKER_BUILDKIT=1 docker build \
@@ -31,4 +33,6 @@ DOCKER_BUILDKIT=1 docker build \
     --tag dfinity/ic-build-nix:"$VERSION" \
     --tag dfinity/ic-build-nix:latest \
     --tag registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:"$VERSION"-"$SHA1ICBUILDNIX" \
-    -f gitlab-ci/docker/Dockerfile.withnix .
+    -f Dockerfile.withnix .
+
+cd -

@@ -1,91 +1,87 @@
 //! Module that deals with requests to /api/v2/canister/.../call
 
-use crate::{common, metrics::HttpHandlerMetrics, types::*};
+use crate::{common, IngressFilterService};
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces::crypto::IngressSigVerifier;
-use ic_interfaces::execution_environment::IngressMessageFilter;
-use ic_interfaces::execution_environment::{HypervisorError, MessageAcceptanceError};
-use ic_interfaces::p2p::IngressEventHandler;
-use ic_interfaces::registry::RegistryClient;
-use ic_interfaces::state_manager::StateReader;
+use ic_interfaces::{p2p::IngressIngestionService, registry::RegistryClient};
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
 use ic_registry_client::helper::{
-    provisional_whitelist::ProvisionalWhitelistRegistry, subnet::SubnetRegistry,
+    provisional_whitelist::ProvisionalWhitelistRegistry,
+    subnet::{IngressMessageSettings, SubnetRegistry},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_replicated_state::ReplicatedState;
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{HttpHandlerError, SignedIngress, SignedRequestBytes},
     time::current_time,
-    CountBytes, SubnetId,
+    CountBytes, RegistryVersion, SubnetId,
 };
 use ic_validator::validate_request;
 use std::convert::TryInto;
 use std::sync::Arc;
+use tokio::sync::Mutex;
+use tower::{Service, ServiceExt};
 
-fn into_http_status_code(
-    acceptance_error: MessageAcceptanceError,
-    metrics: &HttpHandlerMetrics,
-) -> (StatusCode, String) {
-    match acceptance_error {
-        MessageAcceptanceError::CanisterNotFound => (
-            StatusCode::NOT_FOUND,
-            "Requested canister does not exist".to_string(),
-        ),
-        MessageAcceptanceError::CanisterHasNoWasmModule => (
-            StatusCode::NOT_FOUND,
-            "Requested canister has no wasm module".to_string(),
-        ),
-        MessageAcceptanceError::CanisterRejected => {
-            metrics.observe_forbidden_request(&RequestType::Submit, "CanisterRejected");
-            (
-                StatusCode::FORBIDDEN,
-                "Requested canister rejected the message".to_string(),
-            )
-        }
-        MessageAcceptanceError::CanisterOutOfCycles => {
-            metrics.observe_forbidden_request(&RequestType::Submit, "CanisterOutOfCycles");
-            (
-                StatusCode::FORBIDDEN,
-                "Requested canister doesn't have enough cycles".to_string(),
-            )
-        }
-        MessageAcceptanceError::CanisterExecutionFailed(err) => match err {
-            HypervisorError::MethodNotFound(_) => (
-                StatusCode::NOT_FOUND,
-                "Attempt to execute non-existent method on the canister".to_string(),
-            ),
-            HypervisorError::CalledTrap(_) => {
-                metrics.observe_forbidden_request(&RequestType::Submit, "CalledTrap");
-                (
-                    StatusCode::FORBIDDEN,
-                    "Requested canister rejected the message".to_string(),
-                )
-            }
-            _ => (
+fn get_registry_data(
+    log: &ReplicaLogger,
+    subnet_id: SubnetId,
+    registry_version: RegistryVersion,
+    registry_client: Arc<dyn RegistryClient>,
+) -> Result<(IngressMessageSettings, ProvisionalWhitelist), Response<Body>> {
+    let settings = match registry_client.get_ingress_message_settings(subnet_id, registry_version) {
+        Ok(Some(settings)) => settings,
+        Ok(None) => {
+            let err_msg = format!(
+                "No subnet record found for registry_version={:?} and subnet_id={:?}",
+                registry_version, subnet_id
+            );
+            warn!(log, "{}", err_msg);
+            return Err(common::make_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Requested canister failed to process the message acceptance request".to_string(),
-            ),
-        },
-    }
+                &err_msg,
+            ));
+        }
+        Err(err) => {
+            let err_msg = format!(
+                "max_ingress_bytes_per_message not found for registry_version={:?} and subnet_id={:?}. {:?}",
+                registry_version, subnet_id, err
+            );
+            error!(log, "{}", err_msg);
+            return Err(common::make_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &err_msg,
+            ));
+        }
+    };
+
+    let provisional_whitelist = match registry_client.get_provisional_whitelist(registry_version) {
+        Ok(Some(list)) => list,
+        Ok(None) => {
+            error!(log, "At registry version {}, get_provisional_whitelist() returned Ok(None). Using empty list.",
+                       registry_version);
+            ProvisionalWhitelist::new_empty()
+        }
+        Err(err) => {
+            error!(log, "At registry version {}, get_provisional_whitelist() failed with {}.  Using empty list.",
+                       registry_version, err);
+            ProvisionalWhitelist::new_empty()
+        }
+    };
+    Ok((settings, provisional_whitelist))
 }
 
 /// Handles a call to /api/v2/canister/../call
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle(
-    metrics: Arc<HttpHandlerMetrics>,
     log: ReplicaLogger,
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
-    ingress_sender: Arc<dyn IngressEventHandler>,
+    ingress_sender: Arc<Mutex<IngressIngestionService>>,
+    ingress_filter: Arc<Mutex<IngressFilterService>>,
     malicious_flags: MaliciousFlags,
-    ingress_message_filter: Arc<dyn IngressMessageFilter<State = ReplicatedState>>,
     body: Vec<u8>,
-) -> (Response<Body>, ApiReqType) {
-    use ApiReqType::*;
+) -> Response<Body> {
     // Actual parsing.
     let msg: SignedIngress = match SignedRequestBytes::from(body).try_into() {
         Ok(msg) => msg,
@@ -94,60 +90,33 @@ pub(crate) async fn handle(
                 HttpHandlerError::InvalidEncoding(_) => StatusCode::UNPROCESSABLE_ENTITY,
                 _ => StatusCode::BAD_REQUEST,
             };
-            return (
-                common::make_response(
-                    error_code,
-                    format!("Could not parse body as submit message: {}", e).as_str(),
-                ),
-                Unknown,
+            return common::make_response(
+                error_code,
+                format!("Could not parse body as submit message: {}", e).as_str(),
             );
         }
     };
-    metrics.observe_unreliable_request_acceptance_duration(
-        RequestType::Submit,
-        Call,
-        msg.expiry_time(),
-    );
-
     let message_id = msg.id();
     let registry_version = registry_client.get_latest_version();
-
-    match registry_client.get_ingress_message_settings(subnet_id, registry_version) {
-        Ok(Some(settings)) => {
-            if msg.count_bytes() > settings.max_ingress_bytes_per_message {
-                return (
-                    common::make_response(
-                        StatusCode::PAYLOAD_TOO_LARGE,
-                        format!("Request {} is too large. Message bytes {} is bigger than the max allowed {}.",
-                            message_id, msg.count_bytes(), settings.max_ingress_bytes_per_message).as_str(),
-                    ),
-                    Call,
-                );
+    let (ingress_registry_settings, provisional_whitelist) =
+        match get_registry_data(&log, subnet_id, registry_version, registry_client) {
+            Ok(v) => v,
+            Err(err) => {
+                return err;
             }
-        }
-        Ok(None) => {
-            let err_msg = format!(
-                "No subnet record found for the latest registry version and subnet_id={:?}",
-                subnet_id
-            );
-            warn!(log, "{}", err_msg);
-            return (
-                common::make_response(StatusCode::PRECONDITION_FAILED, &err_msg),
-                Call,
-            );
-        }
-        Err(err) => {
-            let err_msg = format!(
-                "Couldn't retrieve max_ingress_bytes_per_message from the registry: {:?}",
-                err
-            );
-            error!(log, "{}", err_msg);
-            return (
-                common::make_response(StatusCode::INTERNAL_SERVER_ERROR, &err_msg),
-                Call,
-            );
-        }
-    };
+        };
+    if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
+        return common::make_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!(
+                "Request {} is too large. Message bytes {} is bigger than the max allowed {}.",
+                message_id,
+                msg.count_bytes(),
+                ingress_registry_settings.max_ingress_bytes_per_message
+            )
+            .as_str(),
+        );
+    }
 
     if let Err(err) = validate_request(
         msg.as_ref(),
@@ -156,55 +125,38 @@ pub(crate) async fn handle(
         registry_version,
         &malicious_flags,
     ) {
-        let response = common::make_response_on_validation_error(message_id, err, &log);
-        metrics.observe_forbidden_request(&RequestType::Submit, "SubmitReqAuthFailed");
-        return (response, Call);
+        return common::make_response_on_validation_error(message_id, err, &log);
     }
 
-    {
-        let provisional_whitelist = match registry_client
-            .get_provisional_whitelist(registry_version)
-        {
-            Ok(Some(list)) => list,
-            Ok(None) => {
-                error!(log, "At registry version {}, get_provisional_whitelist() returned Ok(None).  Using empty list",
-                           registry_version);
-                ProvisionalWhitelist::new_empty()
-            }
-            Err(err) => {
-                error!(log, "At registry version {}, get_provisional_whitelist() failed with {}.  Using empty list",
-                           registry_version, err);
-                ProvisionalWhitelist::new_empty()
-            }
-        };
-        let state = state_reader.get_latest_state().take();
-        if let Err(err) = ingress_message_filter.should_accept_ingress_message(
-            state,
-            &provisional_whitelist,
-            msg.content(),
-        ) {
-            let (status_code, error_msg) = into_http_status_code(err, metrics.as_ref());
-            return (common::make_response(status_code, &error_msg), Call);
-        }
-    }
+    let ingress_filter_callback = ingress_filter
+        .lock()
+        .await
+        .ready()
+        .await
+        .expect("The service must always be able to process requests")
+        .call((provisional_whitelist, msg.content().clone()));
 
+    if let Err(canonical_error) = ingress_filter_callback.await {
+        return common::make_response(
+            StatusCode::from(canonical_error.code),
+            canonical_error.message.as_str(),
+        );
+    }
     let ingress_log_entry = msg.log_entry();
-    // TODO: remove the spawn blocking once the ingress sender API allows
-    // non-blocking op.
-    match tokio::task::spawn_blocking(move || ingress_sender.on_ingress_message(msg)).await {
-        Err(err) => {
-            metrics.observe_internal_error(
-                &RequestType::Submit,
-                InternalError::ConcurrentTaskExecution,
-            );
-            error!(log, "route_to_handlers failed with: {}", err);
-            (common::empty_response(), ApiReqType::Unknown)
-        }
-        Ok(Err(_e)) => (
-            common::make_response(StatusCode::SERVICE_UNAVAILABLE, "Service Unavailable!"),
-            Call,
+    let ingress_sender_callback = ingress_sender
+        .lock()
+        .await
+        .ready()
+        .await
+        .expect("The service must always be able to process requests")
+        .call(msg);
+
+    match ingress_sender_callback.await {
+        Err(canonical_error) => common::make_response(
+            StatusCode::from(canonical_error.code),
+            canonical_error.message.as_str(),
         ),
-        Ok(Ok(_)) => {
+        Ok(_) => {
             // We're pretty much done, just need to send the message to ingress and
             // make_response to the client
             info_sample!(
@@ -213,7 +165,7 @@ pub(crate) async fn handle(
                 "ingress_message_submit";
                 ingress_message => ingress_log_entry
             );
-            (common::make_response(StatusCode::ACCEPTED, ""), Call)
+            common::make_response(StatusCode::ACCEPTED, "")
         }
     }
 }

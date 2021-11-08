@@ -17,6 +17,7 @@ use tokio_openssl::SslStream;
 
 pub mod cert_chain;
 mod client_handshake;
+mod handshake_signer;
 mod server_handshake;
 
 #[cfg(test)]

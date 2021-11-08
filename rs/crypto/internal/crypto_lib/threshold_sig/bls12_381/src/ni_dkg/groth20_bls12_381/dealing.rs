@@ -11,9 +11,9 @@ use crate::{
     crypto::{keygen, keygen_with_secret},
 };
 use ic_crypto_internal_bls12381_common::fr_to_bytes;
+use ic_crypto_internal_bls12381_serde_miracl::FrBytes;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
-use pairing::bls12_381::FrRepr;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -22,7 +22,6 @@ use crate::types::{SecretKey as ThresholdSecretKey, SecretKeyBytes as ThresholdS
 
 // "New style" internal types, used for the NiDKG:
 use super::ALGORITHM_ID;
-use ic_crypto_internal_types::curves::bls12_381::Fr as FrBytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     Dealing, FsEncryptionPlaintext, FsEncryptionPublicKey, PublicCoefficientsBytes,
 };
@@ -122,7 +121,6 @@ pub fn create_dealing(
                 let share = share
                     .clone()
                     .expect("The keys should be contiguous but we have a missing entry.");
-                let share = FrRepr::from(share);
                 let share = FrBytes(fr_to_bytes(&share));
                 let share = FsEncryptionPlaintext::from(&share);
                 (

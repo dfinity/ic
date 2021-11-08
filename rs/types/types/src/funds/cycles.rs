@@ -50,6 +50,10 @@ impl Cycles {
         self.0 = 0;
         Cycles(amount)
     }
+
+    pub fn is_zero(&self) -> bool {
+        self.0 == 0
+    }
 }
 
 impl From<u128> for Cycles {

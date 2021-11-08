@@ -9,10 +9,9 @@ use ic_registry_client::helper::crypto::CryptoRegistry;
 use ic_types::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgTag, NiDkgTranscript};
 use ic_types::crypto::{CombinedThresholdSigOf, ThresholdSigShareOf};
-use ic_types::{IDkgId, NodeIndex, SubnetId};
+use ic_types::{NodeIndex, SubnetId};
 use std::cmp;
 
-mod dkg;
 mod ni_dkg;
 mod store;
 

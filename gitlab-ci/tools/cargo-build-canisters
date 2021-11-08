@@ -24,6 +24,7 @@ wasm_canister_build_list=(
     nns-ui-canister
     xnet-test-canister
     statesync-test-canister
+    memory-test-canister
 )
 declare -A wasm_canister_copy_list=(
     ["cow_safety.wasm"]="rs/tests/src"

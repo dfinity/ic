@@ -35,6 +35,8 @@ pub fn resolve_destination(
         Ok(Ic00Method::CreateCanister)
         | Ok(Ic00Method::RawRand)
         | Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
+        | Ok(Ic00Method::GetMockECDSAPublicKey)
+        | Ok(Ic00Method::SignWithMockECDSA)
         | Ok(Ic00Method::SignWithECDSA) => Ok(own_subnet),
         // This message needs to be routed to the NNS subnet.  We assume that
         // this message can only be sent by canisters on the NNS subnet hence

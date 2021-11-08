@@ -126,6 +126,7 @@ pub enum AlgorithmId {
     EcdsaSecp256k1 = 12,
     IcCanisterSignature = 13,
     RsaSha256 = 14,
+    ThresholdEcdsaSecp256k1 = 15,
 }
 
 impl From<CspThresholdSigPublicKey> for AlgorithmId {
@@ -172,19 +173,9 @@ impl From<i32> for AlgorithmId {
             11 => AlgorithmId::EcdsaP256,
             12 => AlgorithmId::EcdsaSecp256k1,
             13 => AlgorithmId::IcCanisterSignature,
+            14 => AlgorithmId::RsaSha256,
+            15 => AlgorithmId::ThresholdEcdsaSecp256k1,
             _ => AlgorithmId::Placeholder,
-        }
-    }
-}
-
-impl From<KeyPurpose> for AlgorithmId {
-    fn from(key_purpose: KeyPurpose) -> Self {
-        match key_purpose {
-            KeyPurpose::QueryResponseSigning => AlgorithmId::Ed25519,
-            KeyPurpose::NodeSigning => AlgorithmId::Ed25519,
-            KeyPurpose::DkgDealingEncryption => AlgorithmId::StaticDhSecp256k1,
-            KeyPurpose::CommitteeSigning => AlgorithmId::MultiBls12_381,
-            KeyPurpose::Placeholder => AlgorithmId::Placeholder,
         }
     }
 }
@@ -365,6 +356,10 @@ impl CryptoError {
 
     pub fn is_dkg_transcript_not_found(&self) -> bool {
         matches!(self, CryptoError::DkgTranscriptNotFound { .. })
+    }
+
+    pub fn is_invalid_argument(&self) -> bool {
+        matches!(self, CryptoError::InvalidArgument { .. })
     }
 }
 

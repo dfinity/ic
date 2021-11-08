@@ -1,12 +1,14 @@
-use crate::CheckpointError;
+use crate::{CheckpointError, CheckpointMetrics};
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    canister_state::execution_state::WasmBinary, SchedulerState, SystemState,
+};
+use ic_replicated_state::{
     page_map::PageMap, CanisterMetrics, CanisterState, ExecutionState, ReplicatedState,
 };
-use ic_replicated_state::{SchedulerState, SystemState};
 use ic_state_layout::{
-    CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadPolicy, ReadWritePolicy,
+    CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadPolicy, ReadWritePolicy, RwPolicy,
     StateLayout,
 };
 use ic_types::Height;
@@ -26,20 +28,52 @@ pub fn make_checkpoint(
     state: &ReplicatedState,
     height: Height,
     layout: &StateLayout,
+    metrics: &CheckpointMetrics,
 ) -> Result<ReplicatedState, CheckpointError> {
     let tip = layout.tip().map_err(CheckpointError::from)?;
 
+    {
+        let _timer = metrics
+            .step_duration
+            .with_label_values(&["serialize_to_tip"])
+            .start_timer();
+        serialize_to_tip(&state, &tip)?;
+    }
+
+    let cp = {
+        let _timer = metrics
+            .step_duration
+            .with_label_values(&["tip_to_checkpoint"])
+            .start_timer();
+        layout.tip_to_checkpoint(tip, height)?
+    };
+
+    let state = {
+        let _timer = metrics
+            .step_duration
+            .with_label_values(&["load"])
+            .start_timer();
+        load_checkpoint(&cp, state.metadata.own_subnet_type)?
+    };
+
+    Ok(state)
+}
+
+fn serialize_to_tip(
+    state: &ReplicatedState,
+    tip: &CheckpointLayout<RwPolicy>,
+) -> Result<(), CheckpointError> {
     tip.system_metadata()
         .serialize(state.system_metadata().into())?;
 
     tip.subnet_queues()
-        .serialize((&state.subnet_queues).into())?;
+        .serialize((state.subnet_queues()).into())?;
 
     for canister_state in state.canisters_iter() {
         let canister_layout = tip.canister(&canister_state.canister_id())?;
         canister_layout
             .queues()
-            .serialize((&canister_state.system_state.queues).into())?;
+            .serialize(canister_state.system_state.queues().into())?;
 
         canister_state
             .system_state
@@ -50,7 +84,7 @@ pub fn make_checkpoint(
             Some(execution_state) => {
                 canister_layout
                     .wasm()
-                    .serialize(&execution_state.wasm_binary)?;
+                    .serialize(&execution_state.wasm_binary.binary)?;
                 execution_state
                     .page_map
                     .persist_and_sync_delta(&canister_layout.vmemory_0())?;
@@ -97,15 +131,12 @@ pub fn make_checkpoint(
                     .canister_metrics
                     .consumed_cycles_since_replica_started,
                 stable_memory_size: canister_state.system_state.stable_memory_size,
+                heap_delta_debit: canister_state.scheduler_state.heap_delta_debit,
             }
             .into(),
         )?;
     }
-
-    let cp = layout.tip_to_checkpoint(tip, height)?;
-    let state = load_checkpoint(&cp, state.metadata.own_subnet_type)?;
-
-    Ok(state)
+    Ok(())
 }
 
 /// loads the node state heighted with `height` using the specified
@@ -149,7 +180,7 @@ pub fn load_checkpoint<P: ReadPolicy>(
         let execution_state = match canister_state_bits.execution_state_bits {
             Some(execution_state_bits) => {
                 let page_map = PageMap::open(&canister_layout.vmemory_0())?;
-                let wasm_binary = canister_layout.wasm().deserialize()?;
+                let wasm_binary = WasmBinary::new(canister_layout.wasm().deserialize()?);
                 let canister_root = canister_layout.raw_path();
                 Some(ExecutionState {
                     canister_root: canister_root.clone(),
@@ -160,7 +191,6 @@ pub fn load_checkpoint<P: ReadPolicy>(
                     heap_size: execution_state_bits.heap_size,
                     exports: execution_state_bits.exports,
                     last_executed_round: execution_state_bits.last_executed_round,
-                    embedder_cache: None,
                     cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readonly(
                         canister_layout.raw_path(),
                     )),
@@ -190,19 +220,19 @@ pub fn load_checkpoint<P: ReadPolicy>(
             consumed_cycles_since_replica_started: canister_state_bits
                 .consumed_cycles_since_replica_started,
         };
-        let system_state = SystemState {
-            canister_id: *canister_id,
-            controllers: canister_state_bits.controllers,
+        let system_state = SystemState::new_from_checkpoint(
+            canister_state_bits.controllers,
+            *canister_id,
             queues,
-            stable_memory,
             stable_memory_size,
-            memory_allocation: canister_state_bits.memory_allocation,
-            freeze_threshold: canister_state_bits.freeze_threshold,
-            status: canister_state_bits.status,
-            certified_data: canister_state_bits.certified_data,
+            stable_memory,
+            canister_state_bits.memory_allocation,
+            canister_state_bits.freeze_threshold,
+            canister_state_bits.status,
+            canister_state_bits.certified_data,
             canister_metrics,
-            cycles_balance: canister_state_bits.cycles_balance,
-        };
+            canister_state_bits.cycles_balance,
+        );
 
         canister_states.insert(
             system_state.canister_id(),
@@ -213,19 +243,20 @@ pub fn load_checkpoint<P: ReadPolicy>(
                     last_full_execution_round: canister_state_bits.last_full_execution_round,
                     compute_allocation: canister_state_bits.compute_allocation,
                     accumulated_priority: canister_state_bits.accumulated_priority,
+                    heap_delta_debit: canister_state_bits.heap_delta_debit,
                 },
             },
         );
     }
 
-    let state = ReplicatedState {
+    let state = ReplicatedState::new_from_checkpoint(
         canister_states,
         metadata,
         subnet_queues,
         // Consensus queue needs to be empty at the end of every round.
-        consensus_queue: Vec::new(),
-        root: checkpoint_layout.raw_path().into(),
-    };
+        Vec::new(),
+        checkpoint_layout.raw_path().into(),
+    );
 
     Ok(state)
 }
@@ -310,8 +341,9 @@ mod tests {
     use ic_base_types::NumSeconds;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        page_map, CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions,
-        NumWasmPages, NumWasmPages64, PageDelta, PageIndex,
+        canister_state::execution_state::WasmBinary, page_map, testing::ReplicatedStateTesting,
+        CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages,
+        NumWasmPages64, PageIndex,
     };
     use ic_sys::PAGE_SIZE;
     use ic_test_utilities::{
@@ -330,6 +362,11 @@ mod tests {
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
+    fn checkpoint_metrics() -> CheckpointMetrics {
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        CheckpointMetrics::new(&metrics_registry)
+    }
+
     fn empty_wasm() -> BinaryEncodedWasm {
         BinaryEncodedWasm::new(vec![
             0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d,
@@ -338,8 +375,8 @@ mod tests {
     }
 
     fn one_page_of(byte: u8) -> PageMap {
-        let contents = vec![byte; *PAGE_SIZE];
-        let delta = PageDelta::from(&[(PageIndex::from(0), &contents[..])][..]);
+        let contents = [byte; PAGE_SIZE];
+        let delta = &[(PageIndex::from(0), &contents)];
         let mut page_map = PageMap::new();
         page_map.update(delta);
         page_map
@@ -356,7 +393,7 @@ mod tests {
         height: Height,
         layout: &StateLayout,
     ) -> ReplicatedState {
-        make_checkpoint(state, height, &layout)
+        make_checkpoint(state, height, &layout, &checkpoint_metrics())
             .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
     }
 
@@ -446,7 +483,7 @@ mod tests {
             // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
             let expected_scratchpad_dir = root.join("tmp").join("scratchpad_000000000000002a");
 
-            match make_checkpoint(&state, HEIGHT, &layout) {
+            match make_checkpoint(&state, HEIGHT, &layout, &checkpoint_metrics()) {
                 Err(_) => assert!(
                     !expected_scratchpad_dir.exists(),
                     "Expected incomplete scratchpad to be deleted"
@@ -481,12 +518,11 @@ mod tests {
             let execution_state = ExecutionState {
                 canister_root: root.clone(),
                 session_nonce: None,
-                wasm_binary: wasm.clone(),
+                wasm_binary: WasmBinary::new(wasm.clone()),
                 page_map: page_map.clone(),
                 exported_globals: vec![],
                 heap_size: NumWasmPages::from(0),
                 exports: ExportedFunctions::new(BTreeSet::new()),
-                embedder_cache: None,
                 last_executed_round: ExecutionRound::from(0),
                 cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(
                     can_layout.unwrap().raw_path(),
@@ -518,6 +554,7 @@ mod tests {
                     .as_ref()
                     .unwrap()
                     .wasm_binary
+                    .binary
                     .as_slice(),
                 wasm.as_slice()
             );
@@ -610,7 +647,7 @@ mod tests {
                 NumSeconds::from(100_000),
             ));
 
-            let result = make_checkpoint(&state, HEIGHT, &layout);
+            let result = make_checkpoint(&state, HEIGHT, &layout, &checkpoint_metrics());
 
             assert!(
                 result.is_err()
@@ -779,7 +816,7 @@ mod tests {
 
             // Add an ingress message to the subnet queues to later verify
             // it gets recovered.
-            state.subnet_queues.push_ingress(
+            state.subnet_queues_mut().push_ingress(
                 IngressBuilder::new()
                     .receiver(subnet_id_as_canister_id)
                     .build(),
@@ -791,7 +828,10 @@ mod tests {
             let recovered_state =
                 load_checkpoint(&layout.checkpoint(HEIGHT).unwrap(), own_subnet_type).unwrap();
 
-            assert_eq!(original_state.subnet_queues, recovered_state.subnet_queues,);
+            assert_eq!(
+                original_state.subnet_queues(),
+                recovered_state.subnet_queues()
+            );
         });
     }
 }

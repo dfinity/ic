@@ -263,7 +263,7 @@ pub fn test_group_set_registry(
             p2p_flow_endpoints: flow_end_points,
             http: Some(ConnectionEndpoint {
                 ip_addr: "127.0.0.1".to_string(),
-                port: 8080,
+                port: node_num as u32, /* NOTE: this port is not used in any test */
                 protocol: Protocol::Http1 as i32,
             }),
             prometheus_metrics_http: Some(ConnectionEndpoint {

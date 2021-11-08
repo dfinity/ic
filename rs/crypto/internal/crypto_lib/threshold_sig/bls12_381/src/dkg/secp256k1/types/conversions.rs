@@ -2,12 +2,10 @@ use super::*;
 use crate::api::dkg_errors::{
     MalformedDataError, MalformedPopError, MalformedPublicKeyError, MalformedSecretKeyError,
 };
-use ff::PrimeField;
 use ic_crypto_internal_bls12381_common::{fr_from_bytes, fr_to_bytes};
 use ic_types::crypto::AlgorithmId;
 use ic_types::Randomness;
 use libsecp256k1::curve::{Affine, Field, Jacobian, Scalar};
-use pairing::bls12_381::FrRepr;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use serialisation::{TAG_PUBKEY_EVEN, TAG_PUBKEY_INFINITE, TAG_PUBKEY_ODD};
@@ -227,7 +225,7 @@ impl TryFrom<EphemeralPopBytes> for EphemeralPop {
 
 impl From<&EncryptedShare> for EncryptedShareBytes {
     fn from(key: &EncryptedShare) -> Self {
-        Self(fr_to_bytes(&FrRepr::from(*key)))
+        Self(fr_to_bytes(key))
     }
 }
 impl From<EncryptedShare> for EncryptedShareBytes {
@@ -238,7 +236,7 @@ impl From<EncryptedShare> for EncryptedShareBytes {
 impl TryFrom<&EncryptedShareBytes> for EncryptedShare {
     type Error = MalformedDataError;
     fn try_from(bytes: &EncryptedShareBytes) -> Result<EncryptedShare, Self::Error> {
-        Fr::from_repr(fr_from_bytes(&bytes.0)).map_err(|_| MalformedDataError {
+        fr_from_bytes(&bytes.0).map_err(|_| MalformedDataError {
             algorithm: AlgorithmId::Secp256k1,
             internal_error: "Malformed encrypted share".to_string(),
             data: Some(bytes.0.to_vec()),

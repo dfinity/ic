@@ -1,7 +1,15 @@
 pub mod subnet_call_context_manager;
+#[cfg(test)]
+mod tests;
 
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
-
+use ic_base_types::CanisterId;
+use ic_protobuf::{
+    proxy::{try_from_option_field, ProxyDecodeError},
+    state::{
+        ingress::v1 as pb_ingress, queues::v1 as pb_queues, system_metadata::v1 as pb_metadata,
+    },
+};
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -17,21 +25,14 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
+    convert::{From, TryFrom, TryInto},
     mem::size_of,
     sync::Arc,
-};
-
-pub type Streams = BTreeMap<SubnetId, Stream>;
-use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    state::{
-        ingress::v1 as pb_ingress, queues::v1 as pb_queues, system_metadata::v1 as pb_metadata,
-    },
-};
-use std::{
-    convert::{From, TryFrom, TryInto},
     time::Duration,
 };
+
+/// `BTreeMap` of streams by destination `SubnetId`.
+pub type StreamMap = BTreeMap<SubnetId, Stream>;
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
 /// history queries.
@@ -42,7 +43,7 @@ pub struct SystemMetadata {
     pub ingress_history: IngressHistoryState,
 
     /// CrossNet stream state indexed by the _destination_ subnet id.
-    pub streams: Arc<Streams>,
+    pub(crate) streams: Arc<Streams>,
 
     /// A counter used for generating new canister ids.
     /// Used for canister creation.
@@ -309,7 +310,10 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
                 item.ingress_history,
                 "SystemMetadata::ingress_history",
             )?,
-            streams: Arc::new(streams),
+            streams: Arc::new(Streams {
+                responses_size_bytes: Streams::calculate_stats(&streams),
+                streams,
+            }),
             network_topology: try_from_option_field(
                 item.network_topology,
                 "SystemMetadata::network_topology",
@@ -365,6 +369,11 @@ impl SystemMetadata {
         } else {
             self.batch_time - time_of_previous_batch
         }
+    }
+
+    /// Returns a reference to the streams.
+    pub fn streams(&self) -> &Streams {
+        &self.streams
     }
 }
 
@@ -539,6 +548,187 @@ impl From<Stream> for StreamSlice {
     }
 }
 
+/// Wrapper around a private `StreamMap` plus stats.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Streams {
+    /// Map of streams by destination `SubnetId`.
+    streams: StreamMap,
+
+    /// Map of response sizes in bytes by respondent `CanisterId`.
+    responses_size_bytes: BTreeMap<CanisterId, usize>,
+}
+
+impl Streams {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Returns a reference to the wrapped `StreamMap`.
+    pub fn streams(&self) -> &StreamMap {
+        &self.streams
+    }
+
+    /// Returns a reference to the stream for the given destination subnet.
+    pub fn get(&self, destination: &SubnetId) -> Option<&Stream> {
+        self.streams.get(destination)
+    }
+
+    /// Returns an iterator over all `(&SubnetId, &Stream)` pairs.
+    pub fn iter(&self) -> impl Iterator<Item = (&SubnetId, &Stream)> {
+        self.streams.iter()
+    }
+
+    /// Returns an iterator over all `&SubnetId` keys.
+    pub fn keys(&self) -> impl Iterator<Item = &SubnetId> {
+        self.streams.keys()
+    }
+
+    /// Pushes the given message onto the stream for the given destination
+    /// subnet.
+    pub fn push(&mut self, destination: SubnetId, msg: RequestOrResponse) {
+        if let RequestOrResponse::Response(response) = &msg {
+            *self
+                .responses_size_bytes
+                .entry(response.respondent)
+                .or_default() += msg.count_bytes();
+        }
+        self.streams.entry(destination).or_default().push(msg);
+        debug_assert_eq!(
+            Streams::calculate_stats(&self.streams),
+            self.responses_size_bytes
+        );
+    }
+
+    /// Returns a mutable reference to the stream for the given destination
+    /// subnet.
+    pub fn get_mut(&mut self, destination: &SubnetId) -> Option<StreamHandle> {
+        // Can't (easily) validate stats when `StreamHandle` gets dropped, but we should
+        // at least do it before.
+        debug_assert_eq!(
+            Streams::calculate_stats(&self.streams),
+            self.responses_size_bytes
+        );
+
+        match self.streams.get_mut(destination) {
+            Some(stream) => Some(StreamHandle::new(stream, &mut self.responses_size_bytes)),
+            None => None,
+        }
+    }
+
+    /// Returns a mutable reference to the stream for the given destination
+    /// subnet, inserting it if it doesn't already exist.
+    pub fn get_mut_or_insert(&mut self, destination: SubnetId) -> StreamHandle {
+        // Can't (easily) validate stats when `StreamHandle` gets dropped, but we should
+        // at least do it before.
+        debug_assert_eq!(
+            Streams::calculate_stats(&self.streams),
+            self.responses_size_bytes
+        );
+
+        StreamHandle::new(
+            self.streams.entry(destination).or_default(),
+            &mut self.responses_size_bytes,
+        )
+    }
+
+    /// Returns the response sizes by responder canister stat.
+    pub fn responses_size_bytes(&self) -> &BTreeMap<CanisterId, usize> {
+        &self.responses_size_bytes
+    }
+
+    /// Computes the `responses_size_bytes` map from scratch. Used when
+    /// deserializing and in asserts.
+    ///
+    /// Time complexity: O(num_messages).
+    pub fn calculate_stats(streams: &StreamMap) -> BTreeMap<CanisterId, usize> {
+        let mut responses_size_bytes: BTreeMap<CanisterId, usize> = BTreeMap::new();
+        for (_, stream) in streams.iter() {
+            for (_, msg) in stream.messages().iter() {
+                if let RequestOrResponse::Response(response) = msg {
+                    *responses_size_bytes.entry(response.respondent).or_default() +=
+                        msg.count_bytes();
+                }
+            }
+        }
+        responses_size_bytes
+    }
+}
+
+/// A mutable reference to a stream owned by a `Streams` struct; bundled with
+/// the `Streams`' stats, to be updated on stream mutations.
+pub struct StreamHandle<'a> {
+    stream: &'a mut Stream,
+
+    #[allow(unused)]
+    responses_size_bytes: &'a mut BTreeMap<CanisterId, usize>,
+}
+
+impl<'a> StreamHandle<'a> {
+    pub fn new(
+        stream: &'a mut Stream,
+        responses_size_bytes: &'a mut BTreeMap<CanisterId, usize>,
+    ) -> Self {
+        Self {
+            stream,
+            responses_size_bytes,
+        }
+    }
+
+    /// Returns the stream's begin index.
+    pub fn messages_begin(&self) -> StreamIndex {
+        self.stream.messages_begin()
+    }
+
+    /// Returns the stream's end index.
+    pub fn messages_end(&self) -> StreamIndex {
+        self.stream.messages_end()
+    }
+
+    /// Returns the index just beyond the last sent signal.
+    pub fn signals_end(&self) -> StreamIndex {
+        self.stream.signals_end
+    }
+
+    /// Appends the given message to the tail of the stream.
+    pub fn push(&mut self, message: RequestOrResponse) {
+        if let RequestOrResponse::Response(response) = &message {
+            *self
+                .responses_size_bytes
+                .entry(response.respondent)
+                .or_default() += message.count_bytes();
+        }
+        self.stream.push(message);
+    }
+
+    /// Increments the index of the last sent signal.
+    pub fn increment_signals_end(&mut self) {
+        self.stream.increment_signals_end();
+    }
+
+    /// Garbage collects messages before `new_begin`.
+    pub fn discard_before(&mut self, new_begin: StreamIndex) {
+        // Update stats for each discarded message.
+        for (index, msg) in self.stream.messages().iter() {
+            if index >= new_begin {
+                break;
+            }
+            if let RequestOrResponse::Response(response) = &msg {
+                let canister_responses_size_bytes = self
+                    .responses_size_bytes
+                    .get_mut(&response.respondent)
+                    .expect("No `responses_size_bytes` entry for discarded response");
+                *canister_responses_size_bytes -= msg.count_bytes();
+                // Drop zero counts.
+                if *canister_responses_size_bytes == 0 {
+                    self.responses_size_bytes.remove(&response.respondent);
+                }
+            }
+        }
+
+        self.stream.discard_before(new_begin);
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// State associated with the history of statuses of ingress messages as they
 /// traversed through the system.
@@ -667,88 +857,23 @@ impl IngressHistoryState {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ic_test_utilities::{
-        mock_time,
-        types::ids::{canister_test_id, message_test_id, user_test_id},
-    };
-    use ic_types::ingress::{WasmResult, MAX_INGRESS_TTL};
+pub(crate) mod testing {
+    use super::{StreamMap, Streams};
 
-    #[test]
-    fn can_prune_old_ingress_history_entries() {
-        let mut ingress_history = IngressHistoryState::new();
-
-        let message_id1 = MessageId::from([1_u8; 32]);
-        let message_id2 = MessageId::from([2_u8; 32]);
-        let message_id3 = MessageId::from([3_u8; 32]);
-
-        let time = mock_time();
-        ingress_history.insert(
-            message_id1.clone(),
-            IngressStatus::Completed {
-                receiver: canister_test_id(1).get(),
-                user_id: user_test_id(1),
-                result: WasmResult::Reply(vec![]),
-                time: mock_time(),
-            },
-            time,
-        );
-        ingress_history.insert(
-            message_id2.clone(),
-            IngressStatus::Completed {
-                receiver: canister_test_id(2).get(),
-                user_id: user_test_id(2),
-                result: WasmResult::Reply(vec![]),
-                time: mock_time(),
-            },
-            time,
-        );
-        ingress_history.insert(
-            message_id3.clone(),
-            IngressStatus::Completed {
-                receiver: canister_test_id(1).get(),
-                user_id: user_test_id(1),
-                result: WasmResult::Reply(vec![]),
-                time: mock_time(),
-            },
-            time + MAX_INGRESS_TTL / 2,
-        );
-
-        // Pretend that the time has advanced
-        let time = time + MAX_INGRESS_TTL + std::time::Duration::from_secs(10);
-
-        ingress_history.prune(time);
-        assert!(ingress_history.get(&message_id1).is_none());
-        assert!(ingress_history.get(&message_id2).is_none());
-        assert!(ingress_history.get(&message_id3).is_some());
+    /// Testing only: Exposes `Streams` internals for use in other modules'
+    /// tests.
+    pub trait StreamsTesting {
+        /// Testing only: Modifies `SystemMetadata::streams` by applying the
+        /// provided function.
+        fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F);
     }
 
-    #[test]
-    fn entries_sorted_lexicographically() {
-        let mut ingress_history = IngressHistoryState::new();
-        let time = mock_time();
+    impl StreamsTesting for Streams {
+        fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
+            f(&mut self.streams);
 
-        for i in (0..10u64).rev() {
-            ingress_history.insert(
-                message_test_id(i),
-                IngressStatus::Received {
-                    receiver: canister_test_id(1).get(),
-                    user_id: user_test_id(1),
-                    time,
-                },
-                time,
-            );
+            // Recompute stats from scratch.
+            self.responses_size_bytes = Streams::calculate_stats(&self.streams);
         }
-        let mut expected: Vec<_> = (0..10u64).map(message_test_id).collect();
-        expected.sort();
-
-        let actual: Vec<_> = ingress_history
-            .statuses()
-            .map(|(id, _)| id.clone())
-            .collect();
-
-        assert_eq!(actual, expected);
     }
 }

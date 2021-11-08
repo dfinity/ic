@@ -64,6 +64,9 @@ message SetupInitialDkgContextTree {
 message SignWithEcdsaContext {
     state.queues.v1.Request request = 1;
     bytes pseudo_random_id = 2;
+    bytes message_hash = 3;
+    bytes derivation_path = 4;
+    uint64 batch_time = 5;
 }
 
 message SignWithEcdsaContextTree {
@@ -77,6 +80,7 @@ message SubnetCallContextManager {
     repeated SubnetCallContextTree contexts = 2;
     repeated SetupInitialDkgContextTree setup_initial_dkg_contexts = 3;
     repeated SignWithEcdsaContextTree sign_with_ecdsa_contexts = 4;
+    repeated SignWithEcdsaContextTree sign_with_mock_ecdsa_contexts = 5;
 }
 
 message SystemMetadata {

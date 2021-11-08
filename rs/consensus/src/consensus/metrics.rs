@@ -315,3 +315,63 @@ impl PurgerMetrics {
         }
     }
 }
+
+#[derive(Clone)]
+pub struct EcdsaClientMetrics {
+    pub on_state_change_duration: HistogramVec,
+}
+
+impl EcdsaClientMetrics {
+    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+        Self {
+            on_state_change_duration: metrics_registry.histogram_vec(
+                "ecdsa_on_state_change_duration_seconds",
+                "The time it took to execute ECDSA on_state_change(), in seconds",
+                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
+                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
+                decimal_buckets(-4, 2),
+                &["sub_component"],
+            ),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct EcdsaPreSignerMetrics {
+    pub on_state_change_duration: HistogramVec,
+    pub pre_sign_metrics: IntCounterVec,
+    pub pre_sign_errors: IntCounterVec,
+}
+
+impl EcdsaPreSignerMetrics {
+    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+        Self {
+            on_state_change_duration: metrics_registry.histogram_vec(
+                "ecdsa_pre_signer_on_state_change_duration_seconds",
+                "The time it took to execute ECDSA on_state_change(), in seconds",
+                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
+                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
+                decimal_buckets(-4, 2),
+                &["sub_component"],
+            ),
+            pre_sign_metrics: metrics_registry.int_counter_vec(
+                "ecdsa_pre_signer_metrics",
+                "Pre-signing related metrics",
+                &["type"],
+            ),
+            pre_sign_errors: metrics_registry.int_counter_vec(
+                "ecdsa_pre_signer_errors",
+                "Pre-signing related errors",
+                &["type"],
+            ),
+        }
+    }
+}
+
+pub fn timed_call<F, R>(label: &str, call_fn: F, metric: &HistogramVec) -> R
+where
+    F: FnOnce() -> R,
+{
+    let _timer = metric.with_label_values(&[label]).start_timer();
+    (call_fn)()
+}

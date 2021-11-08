@@ -1,7 +1,4 @@
-use crate::{
-    embedders::{PersistenceType, MAX_FUNCTIONS, MAX_GLOBALS},
-    subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE,
-};
+use crate::{embedders::PersistenceType, subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE};
 use ic_base_types::NumSeconds;
 use ic_types::{
     Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
@@ -29,10 +26,13 @@ const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(300 * GB);
 /// size can grow above this limit but no new execution will be done if the the
 /// current size is above this limit.
 ///
-/// The gen 1 machines in production will have 3TiB disks. As this is a soft
-/// limit, we do not want to set it too high. The remainder of the storage can
-/// be used for storing other copies of the canister states.
-pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(1024 * GB);
+/// Currently heap delta pages are stored in memory and not backed by a file.
+/// The gen 1 machines in production have 500GiB of RAM available to replica.
+/// Set the upper limit to 200GiB to reserve memory for other components and
+/// potential fragmentation. This limit should be larger than the maximum
+/// canister memory size to guarantee that a message that overwrites the whole
+/// memory can succeed.
+pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(200 * GB);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
@@ -64,12 +64,6 @@ pub struct Config {
     /// The default number of seconds after which a canister will freeze.
     pub default_freeze_threshold: NumSeconds,
 
-    /// Maximum number of globals allowed in a Wasm module.
-    pub max_globals: usize,
-
-    /// Maximum number of functions allowed in a Wasm module.
-    pub max_functions: usize,
-
     /// Maximum number of controllers a canister can have.
     pub max_controllers: usize,
 }
@@ -91,8 +85,6 @@ impl Default for Config {
             default_provisional_cycles_balance: Cycles::new(100_000_000_000_000),
             // The default freeze threshold is 30 days.
             default_freeze_threshold: NumSeconds::from(30 * 24 * 60 * 60),
-            max_globals: MAX_GLOBALS,
-            max_functions: MAX_FUNCTIONS,
             // Maximum number of controllers allowed in a request (specified in the public
             // Spec).
             max_controllers: 10,

@@ -46,6 +46,25 @@
 //! (export "canister counter_set" (func 2))
 //! (export "canister counter_get" (func 3))
 //! ```
+//! An additional function is also inserted to handle updates to the instruction
+//! counter for bulk memory instructions whose cost can only be determined at
+//! runtime:
+//!
+//! ```wasm
+//! (func (;5;) (type 4) (param i32) (result i32)
+//!   global.get 0
+//!   i64.const 0
+//!   i64.lt_s
+//!   if  ;; label = @1
+//!     call 0
+//!   end
+//!   global.get 0
+//!   local.get 0
+//!   i64.extend_i32_u
+//!   i64.sub
+//!   global.set 0
+//!   local.get 0)
+//! ```
 //!
 //! The function `canister counter_set` should be called before the execution of
 //! the instrumented code. After the execution, the counter can be read using
@@ -78,17 +97,22 @@
 //! end
 //! ```
 //!
+//! Before every bulk memory operation, a call is made to the function which
+//! will decrement the instruction counter by the "size" argument of the bulk
+//! memory instruction.
+//!
 //! Note that we omit checking for the counter overflow at the non-reentrant
 //! blocks to optimize for performance. The maximal overflow in that case is
 //! bound by the length of the longest execution path consisting of
 //! non-reentrant basic blocks.
 
 use crate::errors::into_parity_wasm_error;
+use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
 use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 use parity_wasm::builder;
 use parity_wasm::elements::{
-    BlockType, ExportEntry, FuncBody, FunctionType, GlobalEntry, GlobalType, InitExpr, Instruction,
-    Instructions, Internal, Local, Module, Section, Type, ValueType,
+    BlockType, BulkInstruction, ExportEntry, FuncBody, FunctionType, GlobalEntry, GlobalType,
+    InitExpr, Instruction, Instructions, Internal, Local, Module, Section, Type, ValueType,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -270,7 +294,7 @@ impl Segments {
     // Takes chunks extracted from data, and creates pages out of them, by mapping
     // them to the corresponding page, leaving uninitialized parts filled with
     // zeros.
-    pub fn as_pages(&self, page_size: usize) -> Vec<(usize, Vec<u8>)> {
+    pub fn as_pages(&self) -> Vec<(PageIndex, Box<PageBytes>)> {
         self.0
             .iter()
             // We go over all chunks and split them into multiple chunks if they cross page
@@ -278,17 +302,17 @@ impl Segments {
             .flat_map(|(offset, bytes)| {
                 // First, we determine the size of the first chunk, which is equal to the chunk
                 // itself, if it does not cross the page boundary.
-                let first_chunk_size = std::cmp::min(bytes.len(), page_size - (offset % page_size));
+                let first_chunk_size = std::cmp::min(bytes.len(), PAGE_SIZE - (offset % PAGE_SIZE));
                 let mut split_chunks = vec![(*offset, bytes[..first_chunk_size].to_vec())];
                 // If the chunk crosses the page boundary, split the rest of it into
                 // page-sized chunks and compute the correct offset for them.
                 split_chunks.extend_from_slice(
                     bytes[first_chunk_size..]
-                        .chunks(page_size)
+                        .chunks(PAGE_SIZE)
                         .enumerate()
                         .map(move |(chunk_num, chunk)| {
                             (
-                                offset + first_chunk_size + page_size * chunk_num,
+                                offset + first_chunk_size + PAGE_SIZE * chunk_num,
                                 chunk.to_vec(),
                             )
                         })
@@ -301,9 +325,11 @@ impl Segments {
             // them into a map page_num -> page. Whenever we map a chunk into its page,
             // we simply copy its bytes to the right place inside the page.
             .fold(HashMap::new(), |mut acc, (offset, bytes)| {
-                let page_num = offset / page_size;
-                let list = acc.entry(page_num).or_insert_with(|| vec![0; page_size]);
-                let local_offset = offset % page_size;
+                let page_num = offset / PAGE_SIZE;
+                let list = acc
+                    .entry(PageIndex::new(page_num as u64))
+                    .or_insert_with(|| Box::new([0; PAGE_SIZE]));
+                let local_offset = offset % PAGE_SIZE;
                 list[local_offset..local_offset + (bytes.len() as usize)].copy_from_slice(&bytes);
                 acc
             })
@@ -349,6 +375,7 @@ pub fn instrument(
     let instructions_counter_ix = num_globals;
     let set_counter_fn = num_functions;
     let get_counter_fn = num_functions + 1;
+    let decr_instruction_counter_fn = num_functions + 2;
     let start_fn_ix = module.start_section();
     if start_fn_ix.is_some() {
         module.clear_start_section();
@@ -364,6 +391,7 @@ pub fn instrument(
                     instruction_cost_table,
                     instructions_counter_ix,
                     out_of_instructions_fn,
+                    decr_instruction_counter_fn,
                 );
             }
         }
@@ -435,6 +463,39 @@ pub fn instrument(
         Internal::Function(get_counter_fn),
     ));
 
+    // push function to decrement the instruction counter
+    mbuilder.push_function(
+        builder::function()
+            .with_signature(
+                builder::signature()
+                    .with_param(ValueType::I32) // amount to decrement by
+                    .with_result(ValueType::I32) // argument is returned so stack remains unchanged
+                    .build_sig(),
+            )
+            .body()
+            .with_instructions(Instructions::new(vec![
+                // Call out_of_instructions if count is already negative.
+                Instruction::GetGlobal(instructions_counter_ix),
+                Instruction::GetLocal(0),
+                Instruction::I64ExtendUI32,
+                Instruction::I64LtS,
+                Instruction::If(BlockType::NoResult),
+                Instruction::Call(out_of_instructions_fn),
+                Instruction::End,
+                // Subtract the parameter amount from the instruction counter
+                Instruction::GetGlobal(instructions_counter_ix),
+                Instruction::GetLocal(0),
+                Instruction::I64ExtendUI32,
+                Instruction::I64Sub,
+                Instruction::SetGlobal(instructions_counter_ix),
+                // Return the original param so this function doesn't alter the stack
+                Instruction::GetLocal(0),
+                Instruction::End,
+            ]))
+            .build()
+            .build(),
+    );
+
     // globals must be exported to be accessible to hypervisor or persisted
     mbuilder.push_export(ExportEntry::new(
         "canister counter_instructions".to_string(),
@@ -492,7 +553,8 @@ pub fn instrument(
     })
 }
 
-// Represents a hint about the context of each basic code block in Wasm.
+// Represents a hint about the context of each static cost injection point in
+// wasm.
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum Scope {
     ReentrantBlockStart,
@@ -500,58 +562,98 @@ enum Scope {
     BlockEnd,
 }
 
-// Represents a instructions metering injection point.
-#[derive(Copy, Clone, Debug)]
-struct InjectionPoint {
-    scope: Scope,
-    position: usize,
-    cost: u64,
+// Describes how to calculate the instruction cost at this injection point.
+// `StaticCost` injection points contain information about the cost of the
+// following basic block. `DynamicCost` injection points assume there is an i32
+// on the stack which should be decremented from the instruction counter.
+#[derive(Copy, Clone, Debug, PartialEq)]
+enum InjectionPointCostDetail {
+    StaticCost { scope: Scope, cost: u64 },
+    DynamicCost,
 }
 
-impl InjectionPoint {
-    fn new(position: usize, scope: Scope) -> Self {
-        InjectionPoint {
-            scope,
-            position,
-            cost: 0,
+impl InjectionPointCostDetail {
+    /// If the cost is statically known, increment it by the given amount.
+    /// Otherwise do nothing.
+    fn increment_cost(&mut self, additonal_cost: u64) {
+        match self {
+            Self::StaticCost { scope: _, cost } => *cost += additonal_cost,
+            Self::DynamicCost => {}
         }
     }
 }
 
-// This function iterates over the injection points, and inserts two different
+// Represents a instructions metering injection point.
+#[derive(Copy, Clone, Debug)]
+struct InjectionPoint {
+    cost_detail: InjectionPointCostDetail,
+    position: usize,
+}
+
+impl InjectionPoint {
+    fn new_static_cost(position: usize, scope: Scope) -> Self {
+        InjectionPoint {
+            cost_detail: InjectionPointCostDetail::StaticCost { scope, cost: 0 },
+            position,
+        }
+    }
+
+    fn new_dynamic_cost(position: usize) -> Self {
+        InjectionPoint {
+            cost_detail: InjectionPointCostDetail::DynamicCost,
+            position,
+        }
+    }
+}
+
+// This function iterates over the injection points, and inserts three different
 // pieces of Wasm code:
 // - we insert a simple instructions counter decrementation in a beginning of
 //   every non-reentrant block
 // - we insert a counter decrementation and an overflow check at the beginning
 //   of every reentrant block (a loop or a function call).
+// - we insert a function call before each dynamic cost instruction which
+//   performs an overflow check and then decrements the counter by the value at
+//   the top of the stack.
 fn inject_metering(
     code: &mut Instructions,
     instruction_cost_table: &InstructionCostTable,
     instructions_counter_ix: u32,
     out_of_instructions_fn: u32,
+    decr_instruction_counter_fn: u32,
 ) {
     let points = injections(code.elements(), instruction_cost_table);
-    let points = points.iter().filter(|point| point.cost > 0);
+    let points = points.iter().filter(|point| match point.cost_detail {
+        InjectionPointCostDetail::StaticCost { scope: _, cost } => cost > 0,
+        InjectionPointCostDetail::DynamicCost => true,
+    });
     let orig_elems = code.elements();
     let mut elems: Vec<Instruction> = Vec::new();
     let mut last_injection_position = 0;
     for point in points {
         elems.extend_from_slice(&orig_elems[last_injection_position..point.position]);
-        elems.extend_from_slice(&[
-            Instruction::GetGlobal(instructions_counter_ix),
-            Instruction::I64Const(point.cost as i64),
-            Instruction::I64Sub,
-            Instruction::SetGlobal(instructions_counter_ix),
-        ]);
-        if point.scope == Scope::ReentrantBlockStart {
-            elems.extend_from_slice(&[
-                Instruction::GetGlobal(instructions_counter_ix),
-                Instruction::I64Const(0),
-                Instruction::I64LtS,
-                Instruction::If(BlockType::NoResult),
-                Instruction::Call(out_of_instructions_fn),
-                Instruction::End,
-            ]);
+        match point.cost_detail {
+            InjectionPointCostDetail::StaticCost { scope, cost } => {
+                elems.extend_from_slice(&[
+                    Instruction::GetGlobal(instructions_counter_ix),
+                    Instruction::I64Const(cost as i64),
+                    Instruction::I64Sub,
+                    Instruction::SetGlobal(instructions_counter_ix),
+                ]);
+                if scope == Scope::ReentrantBlockStart {
+                    elems.extend_from_slice(&[
+                        Instruction::GetGlobal(instructions_counter_ix),
+                        Instruction::I64Const(0),
+                        Instruction::I64LtS,
+                        Instruction::If(BlockType::NoResult),
+                        Instruction::Call(out_of_instructions_fn),
+                        Instruction::End,
+                    ]);
+                }
+            }
+            InjectionPointCostDetail::DynamicCost => {
+                elems.extend_from_slice(&[Instruction::Call(decr_instruction_counter_fn)]);
+            }
         }
         last_injection_position = point.position;
     }
@@ -607,8 +709,9 @@ fn inject_update_available_memory(func_body: &mut FuncBody, func_type: &Function
 
 // This function scans through the Wasm code and creates an injection point
 // at the beginning of every basic block (straight-line sequence of instructions
-// with no branches). An injection point contains a "hint" about the context
-// of every basic block, specifically if it's re-entrant or not.
+// with no branches) and before each bulk memory instruction. An injection point
+// contains a "hint" about the context of every basic block, specifically if
+// it's re-entrant or not.
 fn injections(
     code: &[Instruction],
     instruction_cost_table: &InstructionCostTable,
@@ -616,24 +719,26 @@ fn injections(
     let mut res = Vec::new();
     let mut stack = Vec::new();
     use Instruction::*;
-    let mut curr = InjectionPoint::new(0, Scope::ReentrantBlockStart);
+    // The function itself is a re-entrant code block.
+    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart);
     for (position, i) in code.iter().enumerate() {
-        curr.cost += instruction_cost_table.cost(i);
+        curr.cost_detail
+            .increment_cost(instruction_cost_table.cost(i));
         match i {
             // Start of a re-entrant code block.
             Loop(_) => {
                 stack.push(curr);
-                curr = InjectionPoint::new(position + 1, Scope::ReentrantBlockStart);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::ReentrantBlockStart);
             }
             // Start of a non re-entrant code block.
             If(_) | Block(_) => {
                 stack.push(curr);
-                curr = InjectionPoint::new(position + 1, Scope::NonReentrantBlockStart);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::NonReentrantBlockStart);
             }
             // End of a code block but still more code left.
             Else | Br(_) | BrIf(_) | BrTable(_) => {
                 res.push(curr);
-                curr = InjectionPoint::new(position + 1, Scope::BlockEnd);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd);
             }
             // `End` signals the end of a code block. If there's nothing more on the stack, we've
             // gone through all the code.
@@ -643,6 +748,15 @@ fn injections(
                     Some(val) => val,
                     None => break,
                 };
+            }
+            // Bulk memory instructions require injected metering __before__ the instruction
+            // executes so that size arguments can be read from the stack at runtime.
+            Bulk(BulkInstruction::MemoryFill)
+            | Bulk(BulkInstruction::MemoryCopy)
+            | Bulk(BulkInstruction::MemoryInit(_))
+            | Bulk(BulkInstruction::TableCopy)
+            | Bulk(BulkInstruction::TableInit(_)) => {
+                res.push(InjectionPoint::new_dynamic_cost(position));
             }
             // Nothing special to be done for other instructions.
             _ => (),

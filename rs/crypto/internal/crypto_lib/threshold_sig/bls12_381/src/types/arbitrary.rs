@@ -4,10 +4,9 @@
 
 use super::*;
 use crate::crypto;
-use ff::PrimeField;
+use ic_crypto_internal_bls12381_common::fr_from_bytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::NumberOfNodes;
-use pairing::bls12_381::FrRepr;
 use proptest::prelude::*;
 
 //mod tests;
@@ -17,8 +16,8 @@ use proptest::prelude::*;
 // These are for generating data types
 #[cfg(test)]
 pub fn secret_key() -> impl Strategy<Value = SecretKey> {
-    any::<[u64; 4]>()
-        .prop_map(|seed| Fr::from_repr(FrRepr(seed)))
+    any::<[u8; 32]>()
+        .prop_map(|seed| fr_from_bytes(&seed))
         .prop_filter("Key must be valid".to_owned(), |secret_key| {
             secret_key.is_ok()
         })
@@ -30,8 +29,8 @@ pub fn public_key() -> impl Strategy<Value = PublicKey> {
 }
 #[cfg(test)]
 pub fn individual_signature() -> impl Strategy<Value = IndividualSignature> {
-    any::<([u64; 4], [u8; 9])>()
-        .prop_map(|(seed, message)| (Fr::from_repr(FrRepr(seed)), message))
+    any::<([u8; 32], [u8; 9])>()
+        .prop_map(|(seed, message)| (fr_from_bytes(&seed), message))
         .prop_filter("Key must be valid".to_owned(), |(key, _message)| {
             key.is_ok()
         })

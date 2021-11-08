@@ -12,7 +12,7 @@ use ic_messaging::certified_slice_pool::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::Stream;
+use ic_replicated_state::{testing::ReplicatedStateTesting, Stream};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
     consensus::fake::{Fake, FakeVerifier},
@@ -85,9 +85,9 @@ impl StateManagerFixture {
     pub fn with_stream(mut self, destination_subnet: SubnetId, stream: Stream) -> Self {
         let (mut height, mut state) = self.state_manager.take_tip();
 
-        let mut streams = state.take_streams();
-        streams.insert(destination_subnet, stream);
-        state.put_streams(streams);
+        state.modify_streams(|streams| {
+            streams.insert(destination_subnet, stream);
+        });
 
         height.inc_assign();
         self.state_manager

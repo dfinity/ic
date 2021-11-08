@@ -60,7 +60,7 @@ use crate::{
     P2PError, P2PErrorCode, P2PResult,
 };
 use ic_artifact_manager::artifact::IngressArtifact;
-use ic_interfaces::artifact_manager::{ArtifactManager, OnArtifactError};
+use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_interfaces::registry::RegistryClient;
 use ic_interfaces::transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger, warn};
@@ -71,16 +71,18 @@ use ic_protobuf::p2p::v1::gossip_message::Body;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeError::*};
 use ic_types::{
     artifact::{Artifact, ArtifactFilter, ArtifactId, ArtifactKind},
+    canonical_error::{unavailable_error, CanonicalError},
     chunkable::{ArtifactChunk, ArtifactChunkData, ChunkId},
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
-    p2p::GossipAdvert,
+    p2p::{GossipAdvert, GossipAdvertSendRequest},
     transport::{FlowTag, TransportError, TransportNotification, TransportStateChange},
     NodeId, SubnetId,
 };
 
 use bincode::{deserialize, serialize};
+use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 
@@ -119,10 +121,10 @@ pub trait Gossip {
         &self,
         ingress: Self::Ingress,
         peer_id: Self::NodeId,
-    ) -> Result<(), OnArtifactError<Artifact>>;
+    ) -> Result<(), CanonicalError>;
 
     /// The method broadcasts the given advert to other peers.
-    fn broadcast_advert(&self, advert: GossipAdvert);
+    fn broadcast_advert(&self, advert_request: GossipAdvertSendRequest);
 
     /// The method reacts to a retransmission request from another peer.
     fn on_retransmission_request(
@@ -230,6 +232,7 @@ impl GossipImpl {
     pub fn new(
         node_id: NodeId,
         subnet_id: SubnetId,
+        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         registry_client: Arc<dyn RegistryClient>,
         artifact_manager: Arc<dyn ArtifactManager>,
         transport: Arc<dyn Transport>,
@@ -242,6 +245,7 @@ impl GossipImpl {
         let download_manager = DownloadManagerImpl::new(
             node_id,
             subnet_id,
+            consensus_pool_cache,
             registry_client.clone(),
             artifact_manager.clone(),
             transport.clone(),
@@ -418,7 +422,7 @@ impl Gossip for GossipImpl {
         &self,
         ingress: Self::Ingress,
         peer_id: Self::NodeId,
-    ) -> Result<(), OnArtifactError<Artifact>> {
+    ) -> Result<(), CanonicalError> {
         let advert = IngressArtifact::message_to_advert(&ingress);
         self.artifact_manager
             .on_artifact(
@@ -428,13 +432,13 @@ impl Gossip for GossipImpl {
             )
             .map_err(|e| {
                 info!(self.log, "Artifact not inserted {:?}", e);
-                e
+                unavailable_error("Service Unavailable!")
             })
     }
 
     /// The method broadcasts the given advert to other peers.
-    fn broadcast_advert(&self, advert: GossipAdvert) {
-        self.download_manager.send_advert_to_peers(advert);
+    fn broadcast_advert(&self, advert_request: GossipAdvertSendRequest) {
+        self.download_manager.send_advert_to_peers(advert_request);
     }
 
     /// The method reacts to a retransmission request from another
