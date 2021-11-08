@@ -255,7 +255,7 @@ mod nidkg_benches_test_vectors {
                     std::fs::remove_dir_all(&self.paths.toplevel())
                         .expect("failed to remove old test vectors directory");
                 }
-                self.establish(&test_cases);
+                self.establish(test_cases);
             }
         }
 
@@ -263,7 +263,7 @@ mod nidkg_benches_test_vectors {
             &self,
             test_case: &TestCase,
         ) -> (PathBuf, NiDkgConfig, NodeId) {
-            let testvec_dir = self.paths.create_initial_dealing(&test_case);
+            let testvec_dir = self.paths.create_initial_dealing(test_case);
             let config = read_data(&testvec_dir.join("config.cbor"));
             let creator_node_id = read_data(&testvec_dir.join("creator_node_id.cbor"));
 
@@ -278,7 +278,7 @@ mod nidkg_benches_test_vectors {
             &self,
             test_case: &TestCase,
         ) -> (PathBuf, NiDkgConfig, NodeId) {
-            let testvec_dir = self.paths.create_reshare_dealing(&test_case);
+            let testvec_dir = self.paths.create_reshare_dealing(test_case);
             let config = read_data(&testvec_dir.join("config.cbor"));
             let creator_node_id = read_data(&testvec_dir.join("creator_node_id.cbor"));
 
@@ -293,7 +293,7 @@ mod nidkg_benches_test_vectors {
             &self,
             test_case: &TestCase,
         ) -> (PathBuf, NiDkgConfig, NiDkgDealing, NodeId, NodeId) {
-            let testvec_dir = self.paths.verify_dealing(&test_case);
+            let testvec_dir = self.paths.verify_dealing(test_case);
             let config = read_data(&testvec_dir.join("config.cbor"));
             let dealing = read_data(&testvec_dir.join("dealing.cbor"));
             let creator_node_id = read_data(&testvec_dir.join("creator_node_id.cbor"));
@@ -332,13 +332,13 @@ mod nidkg_benches_test_vectors {
                     .collect()
             }
 
-            let testvec_dir = self.paths.create_transcript(&test_case);
-            let dealings_testvec_dir = self.paths.create_transcript_dealings(&test_case);
+            let testvec_dir = self.paths.create_transcript(test_case);
+            let dealings_testvec_dir = self.paths.create_transcript_dealings(test_case);
             let config = read_data(&testvec_dir.join("config.cbor"));
             let dealings = node_ids_from_dir_names(&dealings_testvec_dir)
                 .iter()
                 .map(|(node_id, dealing_file)| {
-                    let dealing = read_data(&dealing_file);
+                    let dealing = read_data(dealing_file);
                     (*node_id, dealing)
                 })
                 .collect();
@@ -356,7 +356,7 @@ mod nidkg_benches_test_vectors {
             &self,
             test_case: &TestCase,
         ) -> (PathBuf, NiDkgTranscript, NodeId) {
-            let testvec_dir = self.paths.load_transcript(&test_case);
+            let testvec_dir = self.paths.load_transcript(test_case);
             let transcript = read_data(&testvec_dir.join("transcript.cbor"));
             let loader_node_id = read_data(&testvec_dir.join("loader_node_id.cbor"));
 
@@ -371,7 +371,7 @@ mod nidkg_benches_test_vectors {
             &self,
             test_case: &TestCase,
         ) -> (PathBuf, HashSet<NiDkgTranscript>, NodeId) {
-            let testvec_dir = self.paths.retain_keys(&test_case);
+            let testvec_dir = self.paths.retain_keys(test_case);
             let transcript1 = read_data(&testvec_dir.join("transcript1.cbor"));
             let transcript2 = read_data(&testvec_dir.join("transcript2.cbor"));
             let mut retained_transcripts = HashSet::new();
@@ -401,8 +401,8 @@ mod nidkg_benches_test_vectors {
                 let (mut env, config, creator_node_id) =
                     prepare_create_initial_dealing_test_vectors(test_case);
 
-                let testvec_dir = self.paths.create_initial_dealing(&test_case);
-                let env_testvec_dir = self.paths.create_initial_dealing_env(&test_case);
+                let testvec_dir = self.paths.create_initial_dealing(test_case);
+                let env_testvec_dir = self.paths.create_initial_dealing_env(test_case);
                 create_dir(&testvec_dir);
                 create_dir(&env_testvec_dir);
 
@@ -419,9 +419,9 @@ mod nidkg_benches_test_vectors {
                 let (mut env, config, creator_node_id) =
                     prepare_create_reshare_dealing_test_vectors(test_case);
 
-                let testvec_dir = self.paths.create_reshare_dealing(&test_case);
+                let testvec_dir = self.paths.create_reshare_dealing(test_case);
                 create_dir(&testvec_dir);
-                let env_testvec_dir = self.paths.create_reshare_dealing_env(&test_case);
+                let env_testvec_dir = self.paths.create_reshare_dealing_env(test_case);
                 create_dir(&env_testvec_dir);
 
                 retain_only(&mut env, &creator_node_id);
@@ -437,9 +437,9 @@ mod nidkg_benches_test_vectors {
                 let (mut env, config, dealing, creator_node_id, verifier_node_id) =
                     prepare_verify_dealing_test_vectors(test_case);
 
-                let testvec_dir = self.paths.verify_dealing(&test_case);
+                let testvec_dir = self.paths.verify_dealing(test_case);
                 create_dir(&testvec_dir);
-                let env_testvec_dir = self.paths.verify_dealing_env(&test_case);
+                let env_testvec_dir = self.paths.verify_dealing_env(test_case);
                 create_dir(&env_testvec_dir);
 
                 retain_only(&mut env, &verifier_node_id);
@@ -460,10 +460,10 @@ mod nidkg_benches_test_vectors {
                 let (mut env, config, dealings, creator_node_id) =
                     prepare_create_transcript_test_vectors(test_case);
 
-                let testvec_dir = self.paths.create_transcript(&test_case);
-                let dealings_testvec_dir = self.paths.create_transcript_dealings(&test_case);
+                let testvec_dir = self.paths.create_transcript(test_case);
+                let dealings_testvec_dir = self.paths.create_transcript_dealings(test_case);
                 create_dir(&dealings_testvec_dir);
-                let env_testvec_dir = self.paths.create_transcript_env(&test_case);
+                let env_testvec_dir = self.paths.create_transcript_env(test_case);
                 create_dir(&env_testvec_dir);
 
                 retain_only(&mut env, &creator_node_id);
@@ -487,9 +487,9 @@ mod nidkg_benches_test_vectors {
                 let (mut env, transcript, loader_node_id) =
                     prepare_load_transcript_test_vectors(test_case);
 
-                let testvec_dir = self.paths.load_transcript(&test_case);
+                let testvec_dir = self.paths.load_transcript(test_case);
                 create_dir(&testvec_dir);
-                let env_testvec_dir = self.paths.load_transcript_env(&test_case);
+                let env_testvec_dir = self.paths.load_transcript_env(test_case);
                 create_dir(&env_testvec_dir);
 
                 retain_only(&mut env, &loader_node_id);
@@ -505,9 +505,9 @@ mod nidkg_benches_test_vectors {
                 let (mut env, transcript1, transcript2, retainer_node_id) =
                     prepare_retain_keys_test_vectors(test_case);
 
-                let testvec_dir = self.paths.retain_keys(&test_case);
+                let testvec_dir = self.paths.retain_keys(test_case);
                 create_dir(&testvec_dir);
-                let env_testvec_dir = self.paths.retain_keys_env(&test_case);
+                let env_testvec_dir = self.paths.retain_keys_env(test_case);
                 create_dir(&env_testvec_dir);
 
                 retain_only(&mut env, &retainer_node_id);

@@ -21,12 +21,12 @@ async fn n_node_gossip_with_failstop() {
         std::println!("Node id: {}", p2p_test_context.node_id);
         // Every ith node fails where i = INVERSE_RATIO_FAILSTOP_NODES.
         if (p2p_test_context.node_num + 1) % INVERSE_RATIO_FAILSTOP_NODES == 0 {
-            println!("Stopping node {:?}", p2p_test_context.node_id.clone().get());
+            println!("Stopping node {:?}", p2p_test_context.node_id.get());
             return;
         }
         p2p_test_context.p2p.run();
-        println!("Runnning node {:?}", p2p_test_context.node_id.clone().get());
+        println!("Runnning node {:?}", p2p_test_context.node_id.get());
 
-        framework::replica_run_till_height(&p2p_test_context, MAX_HEIGHT)
+        framework::replica_run_till_height(p2p_test_context, MAX_HEIGHT)
     });
 }

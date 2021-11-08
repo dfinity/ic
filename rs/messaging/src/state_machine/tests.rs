@@ -19,6 +19,8 @@ use ic_types::{Height, PrincipalId, SubnetId};
 use mockall::{mock, predicate::*, Sequence};
 use std::collections::{BTreeMap, BTreeSet};
 
+const MAX_NUMBER_OF_CANISTERS: u64 = 0;
+
 mock! {
     pub Scheduler {}
     trait Scheduler {
@@ -27,9 +29,9 @@ mock! {
             &self,
             state: ic_replicated_state::ReplicatedState,
             randomness: ic_types::Randomness,
-            time_of_previous_batch: ic_types::Time,
             current_round: ExecutionRound,
             provisional_whitelist: ProvisionalWhitelist,
+            max_number_of_canisters: u64,
         ) -> ReplicatedState;
     }
 }
@@ -56,6 +58,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
 
     let round = ExecutionRound::from(initial_height.get() + 1);
     let provisional_whitelist = ProvisionalWhitelist::Set(BTreeSet::new());
+    let max_number_of_canisters = 0;
 
     let mut seq = Sequence::new();
 
@@ -75,9 +78,9 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(
             always(),
             eq(provided_batch.randomness),
-            always(),
             eq(round),
             eq(provisional_whitelist),
+            eq(max_number_of_canisters),
         )
         .returning(|state, _, _, _, _| state);
 
@@ -147,6 +150,7 @@ fn state_machine_populates_network_topology() {
             provided_batch,
             ProvisionalWhitelist::Set(BTreeSet::new()),
             Default::default(),
+            MAX_NUMBER_OF_CANISTERS,
         );
 
         assert_eq!(state.metadata.network_topology, fixture.network_topology);
@@ -173,6 +177,7 @@ fn test_delivered_batch(provided_batch: Batch) {
             provided_batch,
             ProvisionalWhitelist::Set(BTreeSet::new()),
             Default::default(),
+            MAX_NUMBER_OF_CANISTERS,
         );
     });
 }

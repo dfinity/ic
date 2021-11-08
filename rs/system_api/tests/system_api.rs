@@ -1,15 +1,13 @@
 use ic_base_types::NumSeconds;
-use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, ExecutionParameters, HypervisorError, HypervisorResult,
     SubnetAvailableMemory, SystemApi, TrapCode,
 };
 use ic_logger::replica_logger::no_op_logger;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::ENFORCE_MESSAGE_MEMORY_USAGE, testing::CanisterQueuesTesting, CallOrigin,
-    NumWasmPages64, SystemState,
+    Memory, NumWasmPages64, PageMap, SystemState,
 };
 use ic_system_api::{
     ApiType, NonReplicatedQueryKind, SystemApiImpl, SystemStateAccessor, SystemStateAccessorDirect,
@@ -19,49 +17,22 @@ use ic_test_utilities::{
     mock_time,
     state::SystemStateBuilder,
     types::{
-        ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
+        ids::{call_context_test_id, canister_test_id, user_test_id},
         messages::RequestBuilder,
     },
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES},
     user_error::RejectCode,
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId,
+    ComputeAllocation, CountBytes, Cycles, NumBytes, NumInstructions,
 };
-use maplit::btreemap;
 use std::convert::TryInto;
-use std::{collections::BTreeMap, convert::From, sync::Arc};
+use std::{convert::From, sync::Arc};
+
+mod common;
+use common::*;
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 40);
-const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
-const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
-
-fn execution_parameters() -> ExecutionParameters {
-    ExecutionParameters {
-        instruction_limit: NumInstructions::new(5_000_000_000),
-        canister_memory_limit: NumBytes::new(4 << 30),
-        subnet_available_memory: SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX)),
-        compute_allocation: ComputeAllocation::default(),
-    }
-}
-
-fn setup() -> (
-    SubnetId,
-    SubnetType,
-    Arc<RoutingTable>,
-    Arc<BTreeMap<SubnetId, SubnetType>>,
-) {
-    let subnet_id = subnet_test_id(1);
-    let subnet_type = SubnetType::Application;
-    let routing_table = Arc::new(RoutingTable::new(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-    }));
-    let subnet_records = Arc::new(btreemap! {
-        subnet_id => subnet_type,
-    });
-
-    (subnet_id, subnet_type, routing_table, subnet_records)
-}
 
 fn get_system_state_for_reject() -> SystemState {
     let mut system_state = SystemStateBuilder::new().build();
@@ -128,21 +99,6 @@ fn get_new_running_system_state(
     )
 }
 
-fn get_update_api_type() -> ApiType {
-    let (subnet_id, subnet_type, routing_table, subnet_records) = setup();
-    ApiType::update(
-        mock_time(),
-        vec![],
-        Cycles::from(0),
-        user_test_id(1).get(),
-        CallContextId::from(1),
-        subnet_id,
-        subnet_type,
-        routing_table,
-        subnet_records,
-    )
-}
-
 fn get_reply_api_type(incoming_cycles: Cycles) -> ApiType {
     let (subnet_id, subnet_type, routing_table, subnet_records) = setup();
     ApiType::reply_callback(
@@ -168,31 +124,6 @@ fn get_heartbeat_api_type() -> ApiType {
         routing_table,
         subnet_records,
     )
-}
-
-fn get_system_api_with_max_cycles_per_canister(
-    api_type: ApiType,
-    system_state: SystemState,
-    cycles_account_manager: CyclesAccountManager,
-) -> SystemApiImpl<SystemStateAccessorDirect> {
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
-    SystemApiImpl::new(
-        system_state_accessor.canister_id(),
-        api_type,
-        system_state_accessor,
-        CANISTER_CURRENT_MEMORY_USAGE,
-        execution_parameters(),
-        no_op_logger(),
-    )
-}
-
-fn get_system_api(
-    api_type: ApiType,
-    system_state: SystemState,
-    cycles_account_manager: CyclesAccountManager,
-) -> SystemApiImpl<SystemStateAccessorDirect> {
-    get_system_api_with_max_cycles_per_canister(api_type, system_state, cycles_account_manager)
 }
 
 #[test]
@@ -630,8 +561,11 @@ fn test_reject_api_support_on_nns() {
         .with_subnet_type(SubnetType::System)
         .build();
     let system_state = get_system_state_for_reject();
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
+    let system_state_accessor = SystemStateAccessorDirect::new(
+        system_state,
+        Arc::new(cycles_account_manager),
+        &Memory::default(),
+    );
     let mut api = get_test_api_for_reject(
         RejectContext {
             code: RejectCode::CanisterReject,
@@ -692,8 +626,11 @@ fn test_reject_api_support_on_nns() {
 fn test_reject_api_support_non_nns() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let system_state = get_system_state_for_reject();
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
+    let system_state_accessor = SystemStateAccessorDirect::new(
+        system_state,
+        Arc::new(cycles_account_manager),
+        &Memory::default(),
+    );
     let mut api = get_test_api_for_reject(
         RejectContext {
             code: RejectCode::CanisterReject,
@@ -1363,7 +1300,10 @@ fn certified_data_set() {
 
     let system_state_accessor = api.release_system_state_accessor();
     assert_eq!(
-        system_state_accessor.release_system_state().certified_data,
+        system_state_accessor
+            .release_system_state()
+            .0
+            .certified_data,
         vec![10; 32]
     )
 }
@@ -1526,11 +1466,7 @@ fn msg_cycles_accept_max_cycles_per_canister_none_on_application_subnet() {
 
     cycles_account_manager.add_cycles(&mut system_state, CYCLES_LIMIT_PER_CANISTER);
 
-    let mut api = get_system_api_with_max_cycles_per_canister(
-        get_update_api_type(),
-        system_state,
-        cycles_account_manager,
-    );
+    let mut api = get_system_api(get_update_api_type(), system_state, cycles_account_manager);
 
     assert_eq!(api.ic0_msg_cycles_accept(cycles), Ok(cycles));
     let balance = api.ic0_canister_cycle_balance().unwrap();
@@ -1595,7 +1531,7 @@ fn call_perform_not_enough_cycles_resets_state() {
         .unwrap();
     api.ic0_call_cycles_add128(Cycles::from(100)).unwrap();
     assert_eq!(api.ic0_call_perform().unwrap(), 2);
-    let system_state = api.release_system_state_accessor().release_system_state();
+    let system_state = api.release_system_state_accessor().release_system_state().0;
     let call_context_manager = system_state.call_context_manager().unwrap();
     assert_eq!(call_context_manager.call_contexts().len(), 1);
     assert_eq!(call_context_manager.callbacks().len(), 0);
@@ -1605,13 +1541,15 @@ fn call_perform_not_enough_cycles_resets_state() {
 #[test]
 fn stable_grow_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
-    let wasm_page_size_bytes = NumBytes::from(wasm_page_size);
-    let subnet_available_memory_bytes = NumBytes::from(2 * wasm_page_size);
+    let subnet_available_memory_bytes = 2 * wasm_page_size;
     let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
+    let system_state_accessor = SystemStateAccessorDirect::new(
+        system_state,
+        Arc::new(cycles_account_manager),
+        &Memory::default(),
+    );
     let mut api = SystemApiImpl::new(
         system_state_accessor.canister_id(),
         get_update_api_type(),
@@ -1625,23 +1563,25 @@ fn stable_grow_updates_subnet_available_memory() {
     );
 
     assert_eq!(api.ic0_stable_grow(1).unwrap(), 0);
-    assert_eq!(subnet_available_memory.clone().get(), wasm_page_size_bytes);
+    assert_eq!(subnet_available_memory.get(), wasm_page_size);
 
     assert_eq!(api.ic0_stable_grow(10).unwrap(), -1);
-    assert_eq!(subnet_available_memory.get(), wasm_page_size_bytes);
+    assert_eq!(subnet_available_memory.get(), wasm_page_size);
 }
 
 #[test]
 fn stable_grow_returns_allocated_memory_on_error() {
     // Subnet with stable memory size above what can be represented on 32 bits.
     let wasm_page_size = 64 << 10;
-    let subnet_available_memory_bytes = NumBytes::from(2 * wasm_page_size);
+    let subnet_available_memory_bytes = 2 * wasm_page_size;
     let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes);
-    let mut system_state = SystemStateBuilder::default().build();
-    system_state.stable_memory_size = NumWasmPages64::new(1 << 32);
+    let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
+    let system_state_accessor = SystemStateAccessorDirect::new(
+        system_state,
+        Arc::new(cycles_account_manager),
+        &Memory::new(PageMap::default(), NumWasmPages64::new(1 << 32)),
+    );
     let mut api = SystemApiImpl::new(
         system_state_accessor.canister_id(),
         get_update_api_type(),
@@ -1673,13 +1613,15 @@ fn stable_grow_returns_allocated_memory_on_error() {
 #[test]
 fn update_available_memory_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
-    let wasm_page_size_bytes = NumBytes::from(wasm_page_size);
-    let subnet_available_memory_bytes = NumBytes::from(2 * wasm_page_size);
+    let subnet_available_memory_bytes = 2 * wasm_page_size;
     let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
+    let system_state_accessor = SystemStateAccessorDirect::new(
+        system_state,
+        Arc::new(cycles_account_manager),
+        &Memory::default(),
+    );
     let mut api = SystemApiImpl::new(
         system_state_accessor.canister_id(),
         get_update_api_type(),
@@ -1693,21 +1635,24 @@ fn update_available_memory_updates_subnet_available_memory() {
     );
 
     api.update_available_memory(0, 1).unwrap();
-    assert_eq!(subnet_available_memory.clone().get(), wasm_page_size_bytes);
+    assert_eq!(subnet_available_memory.get(), wasm_page_size);
 
     api.update_available_memory(0, 10).unwrap_err();
-    assert_eq!(subnet_available_memory.get(), wasm_page_size_bytes);
+    assert_eq!(subnet_available_memory.get(), wasm_page_size);
 }
 
 #[test]
 fn push_output_request_respects_memory_limits() {
-    let subnet_available_memory_bytes = NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64 + 13);
+    let subnet_available_memory_bytes = MAX_RESPONSE_COUNT_BYTES as i64 + 13;
     let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes);
     let system_state = SystemStateBuilder::default().build();
     let own_canister_id = system_state.canister_id;
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
+    let system_state_accessor = SystemStateAccessorDirect::new(
+        system_state,
+        Arc::new(cycles_account_manager),
+        &Memory::default(),
+    );
     let mut api = SystemApiImpl::new(
         system_state_accessor.canister_id(),
         get_update_api_type(),
@@ -1727,7 +1672,7 @@ fn push_output_request_respects_memory_limits() {
     assert_eq!(0, api.push_output_request(req.clone()).unwrap());
     if ENFORCE_MESSAGE_MEMORY_USAGE {
         // With message memory usage enabled, `MAX_RESPONSE_COUNT_BYTES` are consumed.
-        assert_eq!(13, subnet_available_memory.clone().get().get());
+        assert_eq!(13, subnet_available_memory.get());
         assert_eq!(
             CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
             api.get_current_memory_usage()
@@ -1739,7 +1684,7 @@ fn push_output_request_respects_memory_limits() {
             api.push_output_request(req).unwrap()
         );
         // Without altering memory usage.
-        assert_eq!(13, subnet_available_memory.get().get());
+        assert_eq!(13, subnet_available_memory.get());
         assert_eq!(
             CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
             api.get_current_memory_usage()
@@ -1747,10 +1692,7 @@ fn push_output_request_respects_memory_limits() {
     } else {
         // With message memory usage disabled, any number of pushes will succeed, as the
         // memory usage is not affected.
-        assert_eq!(
-            MAX_RESPONSE_COUNT_BYTES as u64 + 13,
-            subnet_available_memory.get().get()
-        );
+        assert_eq!(subnet_available_memory_bytes, subnet_available_memory.get());
         assert_eq!(
             CANISTER_CURRENT_MEMORY_USAGE,
             api.get_current_memory_usage()
@@ -1758,6 +1700,87 @@ fn push_output_request_respects_memory_limits() {
     }
 
     // Ensure that exactly one output request was pushed.
-    let system_state = api.release_system_state_accessor().release_system_state();
+    let system_state = api.release_system_state_accessor().release_system_state().0;
+    assert_eq!(1, system_state.queues().output_queues_len());
+}
+
+#[test]
+fn push_output_request_oversized_request_memory_limits() {
+    let subnet_available_memory_bytes = 3 * MAX_RESPONSE_COUNT_BYTES as i64;
+    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes);
+    let system_state = SystemStateBuilder::default().build();
+    let own_canister_id = system_state.canister_id;
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let system_state_accessor = SystemStateAccessorDirect::new(
+        system_state,
+        Arc::new(cycles_account_manager),
+        &Memory::default(),
+    );
+    let mut api = SystemApiImpl::new(
+        system_state_accessor.canister_id(),
+        get_update_api_type(),
+        system_state_accessor,
+        CANISTER_CURRENT_MEMORY_USAGE,
+        ExecutionParameters {
+            subnet_available_memory: subnet_available_memory.clone(),
+            ..execution_parameters()
+        },
+        no_op_logger(),
+    );
+
+    // Oversized payload larger than available memory.
+    let req = RequestBuilder::default()
+        .sender(own_canister_id)
+        .method_payload(vec![13; 4 * MAX_RESPONSE_COUNT_BYTES])
+        .build();
+
+    if ENFORCE_MESSAGE_MEMORY_USAGE {
+        // With message memory usage enabled, not enough memory to push the request.
+        assert_eq!(
+            RejectCode::SysTransient as i32,
+            api.push_output_request(req).unwrap()
+        );
+        // Memory usage unchanged.
+        assert_eq!(
+            3 * MAX_RESPONSE_COUNT_BYTES as i64,
+            subnet_available_memory.get()
+        );
+        assert_eq!(
+            CANISTER_CURRENT_MEMORY_USAGE,
+            api.get_current_memory_usage()
+        );
+
+        // Slightly smaller, still oversized request.
+        let req = RequestBuilder::default()
+            .sender(own_canister_id)
+            .method_payload(vec![13; 2 * MAX_RESPONSE_COUNT_BYTES])
+            .build();
+        let req_size_bytes = req.count_bytes();
+        assert!(req_size_bytes > MAX_RESPONSE_COUNT_BYTES);
+
+        // Pushing succeeds.
+        assert_eq!(0, api.push_output_request(req).unwrap());
+        // `req_size_bytes` are consumed.
+        assert_eq!(
+            (3 * MAX_RESPONSE_COUNT_BYTES - req_size_bytes) as i64,
+            subnet_available_memory.get()
+        );
+        assert_eq!(
+            CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(req_size_bytes as u64),
+            api.get_current_memory_usage()
+        );
+    } else {
+        // With message memory usage disabled, push always succeeds.
+        assert_eq!(0, api.push_output_request(req).unwrap());
+        // And memory usage is not affected.
+        assert_eq!(subnet_available_memory_bytes, subnet_available_memory.get());
+        assert_eq!(
+            CANISTER_CURRENT_MEMORY_USAGE,
+            api.get_current_memory_usage()
+        );
+    }
+
+    // Ensure that exactly one output request was pushed.
+    let system_state = api.release_system_state_accessor().release_system_state().0;
     assert_eq!(1, system_state.queues().output_queues_len());
 }

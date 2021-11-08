@@ -7,33 +7,37 @@ use crate::{CryptoComponent, CryptoComponentFatClient};
 use async_trait::async_trait;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
+use ic_crypto_internal_csp::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider, Csp};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, Peer, TlsClientHandshakeError, TlsHandshake,
+    AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake,
     TlsServerHandshakeError, TlsStream,
 };
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, CanisterSigVerifier, IDkgTranscriptGenerator,
-    MultiSigVerifier, Signable, ThresholdEcdsaSignature, ThresholdSigVerifier,
-    ThresholdSigVerifierByPublicKey,
+    BasicSigVerifier, BasicSigVerifierByPublicKey, CanisterSigVerifier, IDkgProtocol,
+    MultiSigVerifier, Signable, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
 };
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::canister_threshold_sig::error::{
-    CombineSignatureError, EcdsaPublicKeyError, IDkgComplaintVerificationError, IDkgDealingError,
-    IDkgDealingVerificationError, IDkgOpeningVerificationError, IDkgTranscriptCreationError,
-    IDkgTranscriptLoadError, IDkgTranscriptOpeningError, IDkgTranscriptVerificationError,
-    ThresholdSignatureGenerationError, ThresholdSignatureVerificationError,
+    IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
+    IDkgLoadTranscriptWithOpeningsError, IDkgOpenTranscriptError, IDkgVerifyComplaintError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
+    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
+    ThresholdEcdsaGetPublicKeyError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
-    IDkgTranscriptParams, VerifiedIDkgDealing,
+    IDkgComplaint, IDkgDealing, IDkgMultiSignedDealing, IDkgOpening, IDkgTranscript,
+    IDkgTranscriptParams,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPublicKey, ThresholdSignatureInputs, ThresholdSignatureMsg,
+    EcdsaPublicKey, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+    ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
 use ic_types::crypto::{
@@ -55,7 +59,8 @@ mod tests;
 
 /// A crypto component set up in a temporary directory. The directory is
 /// automatically deleted when this component goes out of scope.
-pub type TempCryptoComponent = TempCryptoComponentGeneric<Csp<OsRng, ProtoSecretKeyStore>>;
+pub type TempCryptoComponent =
+    TempCryptoComponentGeneric<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>>;
 
 /// This struct combines the following two items:
 /// * a crypto component whose state lives in a temporary directory
@@ -267,9 +272,16 @@ impl NodeKeysToGenerate {
             ..Self::none()
         }
     }
+
+    pub fn only_committee_signing_key() -> Self {
+        NodeKeysToGenerate {
+            generate_committee_signing_keys: true,
+            ..Self::none()
+        }
+    }
 }
 
-impl TempCryptoComponentGeneric<Csp<ChaChaRng, ProtoSecretKeyStore>> {
+impl TempCryptoComponentGeneric<Csp<ChaChaRng, ProtoSecretKeyStore, VolatileSecretKeyStore>> {
     pub fn new_from_seed(
         seed: Randomness,
         registry_client: Arc<dyn RegistryClient>,
@@ -325,11 +337,11 @@ impl<C: CryptoServiceProvider, T: Signable> CanisterSigVerifier<T>
     }
 }
 
-impl<C: CryptoServiceProvider> IDkgTranscriptGenerator for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
     fn create_dealing(
         &self,
         params: &IDkgTranscriptParams,
-    ) -> Result<IDkgDealing, IDkgDealingError> {
+    ) -> Result<IDkgDealing, IDkgCreateDealingError> {
         self.crypto_component.create_dealing(params)
     }
 
@@ -337,7 +349,7 @@ impl<C: CryptoServiceProvider> IDkgTranscriptGenerator for TempCryptoComponentGe
         &self,
         params: &IDkgTranscriptParams,
         dealing: &IDkgDealing,
-    ) -> Result<(), IDkgDealingVerificationError> {
+    ) -> Result<(), IDkgVerifyDealingPublicError> {
         self.crypto_component.verify_dealing_public(params, dealing)
     }
 
@@ -345,7 +357,7 @@ impl<C: CryptoServiceProvider> IDkgTranscriptGenerator for TempCryptoComponentGe
         &self,
         params: &IDkgTranscriptParams,
         dealing: &IDkgDealing,
-    ) -> Result<(), IDkgDealingVerificationError> {
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
         self.crypto_component
             .verify_dealing_private(params, dealing)
     }
@@ -353,107 +365,113 @@ impl<C: CryptoServiceProvider> IDkgTranscriptGenerator for TempCryptoComponentGe
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        dealings: &BTreeMap<NodeId, VerifiedIDkgDealing>,
-    ) -> Result<IDkgTranscript, IDkgTranscriptCreationError> {
+        dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
         self.crypto_component.create_transcript(params, dealings)
     }
 
     fn verify_transcript(
         &self,
+        params: &IDkgTranscriptParams,
         transcript: &IDkgTranscript,
-    ) -> Result<(), IDkgTranscriptVerificationError> {
-        self.crypto_component.verify_transcript(transcript)
+    ) -> Result<(), IDkgVerifyTranscriptError> {
+        self.crypto_component.verify_transcript(params, transcript)
     }
 
     fn load_transcript(
         &self,
         transcript: &IDkgTranscript,
-    ) -> Result<Vec<IDkgComplaint>, IDkgTranscriptLoadError> {
+    ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
         self.crypto_component.load_transcript(transcript)
     }
 
     fn verify_complaint(
         &self,
-        transcript_id: IDkgTranscriptId,
+        transcript: &IDkgTranscript,
         complainer: NodeId,
         complaint: &IDkgComplaint,
-    ) -> Result<(), IDkgComplaintVerificationError> {
+    ) -> Result<(), IDkgVerifyComplaintError> {
         self.crypto_component
-            .verify_complaint(transcript_id, complainer, complaint)
+            .verify_complaint(transcript, complainer, complaint)
     }
 
     fn open_transcript(
         &self,
-        transcript_id: IDkgTranscriptId,
+        transcript: &IDkgTranscript,
         complaint: &IDkgComplaint,
-    ) -> Result<IDkgOpening, IDkgTranscriptOpeningError> {
-        self.crypto_component
-            .open_transcript(transcript_id, complaint)
+    ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
+        self.crypto_component.open_transcript(transcript, complaint)
     }
 
     fn verify_opening(
         &self,
-        transcript_id: IDkgTranscriptId,
+        transcript: &IDkgTranscript,
         opener: NodeId,
         opening: &IDkgOpening,
         complaint: &IDkgComplaint,
-    ) -> Result<(), IDkgOpeningVerificationError> {
+    ) -> Result<(), IDkgVerifyOpeningError> {
         self.crypto_component
-            .verify_opening(transcript_id, opener, opening, complaint)
+            .verify_opening(transcript, opener, opening, complaint)
     }
 
     fn load_transcript_with_openings(
         &self,
         transcript: IDkgTranscript,
-        opening: BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
-    ) -> Result<(), IDkgTranscriptLoadError> {
+        openings: BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
+    ) -> Result<(), IDkgLoadTranscriptWithOpeningsError> {
         self.crypto_component
-            .load_transcript_with_openings(transcript, opening)
+            .load_transcript_with_openings(transcript, openings)
     }
 
-    fn retain_active_transcripts(&self, active_transcripts: &[IDkgTranscriptId]) {
+    fn retain_active_transcripts(&self, active_transcripts: &[IDkgTranscript]) {
         self.crypto_component
             .retain_active_transcripts(active_transcripts)
     }
 }
 
-impl<C: CryptoServiceProvider> ThresholdEcdsaSignature for TempCryptoComponentGeneric<C> {
-    fn sign_threshold(
+impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for TempCryptoComponentGeneric<C> {
+    fn sign_share(
         &self,
-        inputs: &ThresholdSignatureInputs,
-    ) -> Result<ThresholdSignatureMsg, ThresholdSignatureGenerationError> {
-        self.crypto_component.sign_threshold(inputs)
+        inputs: &ThresholdEcdsaSigInputs,
+    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
+        self.crypto_component.sign_share(inputs)
     }
+}
 
-    fn validate_threshold_sig_share(
+impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for TempCryptoComponentGeneric<C> {
+    fn verify_sig_share(
         &self,
         signer: NodeId,
-        inputs: &ThresholdSignatureInputs,
-        output: &ThresholdSignatureMsg,
-    ) -> Result<(), ThresholdSignatureVerificationError> {
+        inputs: &ThresholdEcdsaSigInputs,
+        share: &ThresholdEcdsaSigShare,
+    ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
         self.crypto_component
-            .validate_threshold_sig_share(signer, inputs, output)
+            .verify_sig_share(signer, inputs, share)
     }
 
-    fn combine_threshold_sig_shares(
+    fn combine_sig_shares(
         &self,
-        inputs: &ThresholdSignatureInputs,
-        outputs: &[ThresholdSignatureMsg],
-    ) -> Result<Vec<u8>, CombineSignatureError> {
-        ThresholdEcdsaSignature::combine_threshold_sig_shares(
-            &self.crypto_component,
-            inputs,
-            outputs,
-        )
+        inputs: &ThresholdEcdsaSigInputs,
+        shares: &[ThresholdEcdsaSigShare],
+    ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
+        self.crypto_component.combine_sig_shares(inputs, shares)
     }
 
-    fn get_ecdsa_public_key(
+    fn verify_combined_sig(
+        &self,
+        inputs: &ThresholdEcdsaSigInputs,
+        signature: &ThresholdEcdsaCombinedSignature,
+    ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
+        self.crypto_component.verify_combined_sig(inputs, signature)
+    }
+
+    fn get_public_key(
         &self,
         canister_id: PrincipalId,
         key_transcript: IDkgTranscript,
-    ) -> Result<EcdsaPublicKey, EcdsaPublicKeyError> {
+    ) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError> {
         self.crypto_component
-            .get_ecdsa_public_key(canister_id, key_transcript)
+            .get_public_key(canister_id, key_transcript)
     }
 }
 
@@ -478,21 +496,6 @@ impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponen
     ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
         self.crypto_component
             .perform_tls_server_handshake_with_rustls(tcp_stream, allowed_clients, registry_version)
-            .await
-    }
-
-    async fn perform_tls_server_handshake_temp_with_optional_client_auth(
-        &self,
-        tcp_stream: TcpStream,
-        allowed_authenticating_clients: AllowedClients,
-        registry_version: RegistryVersion,
-    ) -> Result<(TlsStream, Peer), TlsServerHandshakeError> {
-        self.crypto_component
-            .perform_tls_server_handshake_temp_with_optional_client_auth(
-                tcp_stream,
-                allowed_authenticating_clients,
-                registry_version,
-            )
             .await
     }
 
@@ -602,7 +605,8 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
         shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
         dkg_id: DkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>> {
-        ThresholdSigVerifier::combine_threshold_sig_shares(&self.crypto_component, shares, dkg_id)
+        self.crypto_component
+            .combine_threshold_sig_shares(shares, dkg_id)
     }
 
     fn verify_threshold_sig_combined(

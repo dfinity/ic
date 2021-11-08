@@ -92,13 +92,13 @@ pub fn deliver_batches(
                         block.context.certified_height,
                         summary.dkg.transcripts_for_new_subnets(),
                         block.context.time,
-                        &log,
+                        log,
                     );
                 }
                 // When we are not deliverying CUP block, we must check replica_version
                 else {
                     match pool.registry_version(h).and_then(|registry_version| {
-                        lookup_replica_version(registry_client, subnet_id, &log, registry_version)
+                        lookup_replica_version(registry_client, subnet_id, log, registry_version)
                     }) {
                         Some(replica_version) if replica_version != current_replica_version => {
                             debug!(

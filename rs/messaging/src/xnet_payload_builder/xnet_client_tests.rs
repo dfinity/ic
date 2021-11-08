@@ -46,10 +46,10 @@ where
 fn make_xnet_client(metrics: &MetricsRegistry, log: ReplicaLogger) -> XNetClientImpl {
     let registry = get_empty_registry_for_test();
     XNetClientImpl::new(
-        &metrics,
+        metrics,
         tokio::runtime::Handle::current(),
         Arc::new(FakeTlsHandshake::new()) as Arc<_>,
-        Arc::new(ProximityMap::new(LOCAL_NODE, registry, &metrics, log)),
+        Arc::new(ProximityMap::new(LOCAL_NODE, registry, metrics, log)),
     )
 }
 
@@ -221,7 +221,7 @@ async fn query_request_timeout() {
     });
 
     let result =
-        with_test_replica_logger(|log| do_async_query(make_xnet_client(&metrics, log), url));
+        with_test_replica_logger(|log| do_async_query(make_xnet_client(metrics, log), url));
 
     // Only let the server proceed after we've timed out.
     barrier.wait();
@@ -271,10 +271,10 @@ async fn query_request_failed() {
     let sa = getsockname(socket).expect("getsockname() failed");
 
     // URL to query a server that would be running on the allocated port.
-    let url = format!("http://{}", sa.to_str()).parse::<Uri>().unwrap();
+    let url = format!("http://{}", sa.to_string()).parse::<Uri>().unwrap();
 
     let result =
-        with_test_replica_logger(|log| do_async_query(make_xnet_client(&metrics, log), url));
+        with_test_replica_logger(|log| do_async_query(make_xnet_client(metrics, log), url));
 
     match result {
         Err(XNetClientError::RequestFailed(_)) => (),

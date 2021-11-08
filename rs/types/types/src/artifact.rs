@@ -18,7 +18,7 @@ use crate::{
     crypto::{CryptoHash, CryptoHashOf},
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     messages::{MessageId, SignedRequestBytes},
-    p2p::{GossipAdvert, GossipAdvertSendRequest, GossipAdvertType},
+    p2p::GossipAdvert,
     CryptoHashOfState, Height, Time,
 };
 use derive_more::{AsMut, AsRef, From, TryInto};
@@ -202,11 +202,11 @@ pub trait ArtifactKind: Sized {
     /// Returns the advert send request to be sent to P2P.
     fn message_to_advert_send_request(
         msg: &<Self as ArtifactKind>::Message,
-        advert_type: GossipAdvertType,
+        advert_class: AdvertClass,
     ) -> AdvertSendRequest<Self> {
         AdvertSendRequest {
             advert: Self::message_to_advert(msg),
-            advert_type,
+            advert_class,
         }
     }
 
@@ -297,23 +297,46 @@ where
     }
 }
 
+/// The type of advert gossip for a particular artifact,
+/// as determined by the client
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AdvertClass {
+    /// The client considers the artifact to be critical and
+    /// requests all peers be notified. This is the default
+    /// class of service provided by the networking layer,
+    /// if the optimizations are not enabled.
+    Critical,
+
+    /// The client does not need all the peers to be notified
+    /// for the artifact. Instead, it lets the networking
+    /// layer decide the advert distribution volume and recipient
+    /// set, based on performance vs reliability trade offs.
+    /// Please note this is only advisory. Network layer may
+    /// decide to fall back to Critical class, depending on
+    /// its configuration.
+    BestEffort,
+
+    /// The client does not need peers to be notified for this
+    /// artifact type. Please note this is only advisory.
+    /// Network layer may decide to fall back to  Critical class,
+    /// depending on its configuration.
+    None,
+}
+
+impl AdvertClass {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Critical => "critical",
+            Self::BestEffort => "best_effort",
+            Self::None => "none",
+        }
+    }
+}
+
 /// Wrapper to generate the advert send requests
 pub struct AdvertSendRequest<Artifact: ArtifactKind> {
     pub advert: Advert<Artifact>,
-    pub advert_type: GossipAdvertType,
-}
-
-impl<Artifact: ArtifactKind> From<AdvertSendRequest<Artifact>> for GossipAdvertSendRequest
-where
-    Artifact::Id: Into<ArtifactId>,
-    Artifact::Attribute: Into<ArtifactAttribute>,
-{
-    fn from(send_request: AdvertSendRequest<Artifact>) -> GossipAdvertSendRequest {
-        GossipAdvertSendRequest {
-            advert: send_request.advert.into(),
-            advert_type: send_request.advert_type,
-        }
-    }
+    pub advert_class: AdvertClass,
 }
 
 // -----------------------------------------------------------------------------

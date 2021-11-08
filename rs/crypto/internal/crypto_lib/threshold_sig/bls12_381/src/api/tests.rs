@@ -27,7 +27,7 @@ mod util {
         group_size: NumberOfNodes,
     ) -> CryptoResult<(PublicCoefficientsBytes, Vec<SecretKeyBytes>)> {
         let selection = &vec![true; group_size.get() as usize];
-        tsig::keygen(seed, threshold, &selection).map(|(public_coefficients, selected_keys)| {
+        tsig::keygen(seed, threshold, selection).map(|(public_coefficients, selected_keys)| {
             let all_keys: Vec<SecretKeyBytes> = selected_keys
                 .into_iter()
                 .map(|key_maybe| key_maybe.unwrap())

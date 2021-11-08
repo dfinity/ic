@@ -45,7 +45,7 @@ impl Wycheproof {
     {
         let mut result = true;
         for group in &self.testGroups {
-            result &= tester(&group, &self.notes);
+            result &= tester(group, &self.notes);
         }
         result
     }
@@ -104,7 +104,7 @@ impl TestCase {
             println!(
                 "    flag {} = {}",
                 f,
-                notes.get(f).map_or("unknown flag", |x| &x)
+                notes.get(f).map_or("unknown flag", |x| x)
             );
         }
     }
@@ -155,7 +155,7 @@ fn run_tests_k1(group: &TestGroup, notes: &HashMap<String, String>) -> bool {
     };
     let mut result = true;
     for test in &group.tests {
-        let case_result = run_test_k1(&test, &pk, notes);
+        let case_result = run_test_k1(test, &pk, notes);
         result &= case_result;
     }
     result
@@ -194,7 +194,7 @@ fn run_test_k1(
                 }
                 Ok(sig_bytes) => {
                     let msg_hash = sha256(&msg);
-                    let verified = ecdsa_secp256k1::api::verify(&sig_bytes, &msg_hash, &pk).is_ok();
+                    let verified = ecdsa_secp256k1::api::verify(&sig_bytes, &msg_hash, pk).is_ok();
                     let pass = match test.result {
                         TestResult::acceptable => true,
                         TestResult::valid => verified,
@@ -237,7 +237,7 @@ fn run_tests_r1(group: &TestGroup, notes: &HashMap<String, String>) -> bool {
     };
     let mut result = true;
     for test in &group.tests {
-        let case_result = run_test_r1(&test, &pk, notes);
+        let case_result = run_test_r1(test, &pk, notes);
         result &= case_result;
     }
     result
@@ -276,7 +276,7 @@ fn run_test_r1(
                 }
                 Ok(sig_bytes) => {
                     let msg_hash = sha256(&msg);
-                    let verified = ecdsa_secp256r1::api::verify(&sig_bytes, &msg_hash, &pk).is_ok();
+                    let verified = ecdsa_secp256r1::api::verify(&sig_bytes, &msg_hash, pk).is_ok();
                     let pass = match test.result {
                         TestResult::acceptable => true,
                         TestResult::valid => verified,

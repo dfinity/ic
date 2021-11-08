@@ -285,11 +285,11 @@ fn shares_to_vector<H: Signable>(
     shares: BTreeMap<NodeId, ThresholdSigShareOf<H>>,
     dkg_id: DkgId,
 ) -> CryptoResult<Vec<Option<CspSignature>>> {
-    let max_node_index = maximum_node_index(&transcript_data, &shares, dkg_id)?;
+    let max_node_index = maximum_node_index(transcript_data, &shares, dkg_id)?;
     let array_size = <usize>::try_from(max_node_index).expect("usize overflow") + 1;
     let mut signatures = vec![None; array_size];
     for (node_id, share) in shares {
-        let index = index_for_node_id(&transcript_data, node_id, dkg_id)?;
+        let index = index_for_node_id(transcript_data, node_id, dkg_id)?;
         let usize_index = <usize>::try_from(index).expect("usize overflow");
         let csp_sig = CspSignature::try_from(&share)?;
         *signatures.get_mut(usize_index).unwrap() = Some(csp_sig);

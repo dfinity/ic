@@ -24,8 +24,8 @@
 
 use crate::crypto::hash::{
     DOMAIN_BLOCK, DOMAIN_CATCH_UP_CONTENT, DOMAIN_CERTIFICATION_CONTENT, DOMAIN_DEALING_CONTENT,
-    DOMAIN_FINALIZATION_CONTENT, DOMAIN_NOTARIZATION_CONTENT, DOMAIN_RANDOM_BEACON_CONTENT,
-    DOMAIN_RANDOM_TAPE_CONTENT,
+    DOMAIN_ECDSA_DEALING, DOMAIN_FINALIZATION_CONTENT, DOMAIN_NOTARIZATION_CONTENT,
+    DOMAIN_RANDOM_BEACON_CONTENT, DOMAIN_RANDOM_TAPE_CONTENT,
 };
 use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CryptoResult, IndividualMultiSigOf,
@@ -34,9 +34,9 @@ use ic_types::crypto::{
 use ic_types::messages::{Delegation, MessageId, WebAuthnEnvelope};
 use ic_types::{
     consensus::{
-        certification::CertificationContent, dkg::DealingContent, Block, CatchUpContent,
-        CatchUpContentProtobufBytes, FinalizationContent, NotarizationContent, RandomBeaconContent,
-        RandomTapeContent,
+        certification::CertificationContent, dkg::DealingContent, ecdsa::EcdsaDealing, Block,
+        CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent, NotarizationContent,
+        RandomBeaconContent, RandomTapeContent,
     },
     NodeId, RegistryVersion,
 };
@@ -90,6 +90,7 @@ mod private {
     impl SignatureDomainSeal for DealingContent {}
     impl SignatureDomainSeal for NotarizationContent {}
     impl SignatureDomainSeal for FinalizationContent {}
+    impl SignatureDomainSeal for EcdsaDealing {}
     impl SignatureDomainSeal for WebAuthnEnvelope {}
     impl SignatureDomainSeal for Delegation {}
     impl SignatureDomainSeal for MessageId {}
@@ -122,6 +123,12 @@ impl SignatureDomain for NotarizationContent {
 impl SignatureDomain for FinalizationContent {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(DOMAIN_FINALIZATION_CONTENT)
+    }
+}
+
+impl SignatureDomain for EcdsaDealing {
+    fn domain(&self) -> Vec<u8> {
+        domain_with_prepended_length(DOMAIN_ECDSA_DEALING)
     }
 }
 

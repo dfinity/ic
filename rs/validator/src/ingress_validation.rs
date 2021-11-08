@@ -33,7 +33,7 @@ pub fn validate_request<C: HttpRequestContent + HasCanisterId>(
     }
 
     get_authorized_canisters(
-        &request,
+        request,
         ingress_signature_verifier,
         current_time,
         registry_version,
@@ -269,7 +269,7 @@ fn validate_signature(
         | KeyBytesContentType::EcdsaP256PublicKeyDer
         | KeyBytesContentType::EcdsaSecp256k1PublicKeyDer => {
             let basic_sig = BasicSigOf::from(BasicSig(signature.signature.clone()));
-            validate_signature_plain(validator, &message_id, &basic_sig, &pk)
+            validate_signature_plain(validator, message_id, &basic_sig, &pk)
                 .map_err(InvalidSignature)?;
             Ok(targets)
         }
@@ -299,7 +299,7 @@ fn validate_signature_plain(
     pubkey: &UserPublicKey,
 ) -> Result<(), AuthenticationError> {
     validator
-        .verify_basic_sig_by_public_key(&signature, &message_id, &pubkey)
+        .verify_basic_sig_by_public_key(signature, message_id, pubkey)
         .map_err(InvalidBasicSignature)
 }
 
@@ -321,14 +321,9 @@ fn validate_delegations(
         let delegation = sd.delegation();
         let signature = sd.signature();
 
-        let new_targets = validate_delegation(
-            validator,
-            &signature,
-            &delegation,
-            &pubkey,
-            registry_version,
-        )
-        .map_err(InvalidDelegation)?;
+        let new_targets =
+            validate_delegation(validator, signature, delegation, &pubkey, registry_version)
+                .map_err(InvalidDelegation)?;
         // Restrict the canister targets to the ones specified in the delegation.
         targets = targets.intersect(new_targets);
         pubkey = delegation.pubkey().to_vec();

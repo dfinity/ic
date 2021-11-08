@@ -106,6 +106,10 @@ pub trait ThresholdSignatureCspClient {
     ///
     /// Note: This is an expensive operation.  It is worth keeping the result if
     /// it is likely to be reused.
+    ///
+    /// # Security Notice
+    /// The `public_coefficients` are assumed to be trusted
+    /// (e.g. obtained from the ThresholdSigDataStore)
     fn threshold_individual_public_key(
         &self,
         algorithm_id: AlgorithmId,

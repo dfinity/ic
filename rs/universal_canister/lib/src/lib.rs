@@ -16,7 +16,7 @@ use hex_literal::hex;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal_canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("bd111e8c24349802b1af970e64d5c9357f5e011cb68442e2ccc4c8b5e8047def");
+    hex!("f20ac98a760e68650fd84ed73ccf9387ff8f8868da079b46c1325ca25b9c1864");
 
 /// Operands used in encoding UC payloads.
 enum Ops {
@@ -57,6 +57,7 @@ enum Ops {
     StableGrow64 = 47,
     StableRead64 = 48,
     StableWrite64 = 49,
+    Int64ToBlob = 50,
 }
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
@@ -114,6 +115,12 @@ impl PayloadBuilder {
         self.reply()
     }
 
+    pub fn reply_int64(mut self) -> Self {
+        self = self.int64_to_blob();
+        self = self.reply_data_append();
+        self.reply()
+    }
+
     pub fn reply_data_append(mut self) -> Self {
         self.0.push(Ops::ReplyDataAppend as u8);
         self
@@ -126,6 +133,11 @@ impl PayloadBuilder {
 
     pub fn int_to_blob(mut self) -> Self {
         self.0.push(Ops::IntToBlob as u8);
+        self
+    }
+
+    pub fn int64_to_blob(mut self) -> Self {
+        self.0.push(Ops::Int64ToBlob as u8);
         self
     }
 
@@ -453,7 +465,7 @@ impl From<Vec<u8>> for PayloadBuilder {
 
 impl AsRef<[u8]> for PayloadBuilder {
     fn as_ref(&self) -> &[u8] {
-        &self.0.as_slice()
+        self.0.as_slice()
     }
 }
 

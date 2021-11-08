@@ -3,14 +3,11 @@ use ic_metrics::{
     buckets::{add_bucket, decimal_buckets},
     MetricsRegistry,
 };
-use ic_types::time::{current_time_and_expiry_time, Time};
 use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge};
-use std::time::Duration;
 use tokio::time::Instant;
 
 pub const LABEL_DETAIL: &str = "detail";
 pub const LABEL_PROTOCOL: &str = "protocol";
-pub const LABEL_REASON: &str = "reason";
 pub const LABEL_REQUEST_TYPE: &str = "request_type";
 pub const LABEL_STATUS: &str = "status";
 pub const LABEL_TYPE: &str = "type";
@@ -32,9 +29,6 @@ pub(crate) struct HttpHandlerMetrics {
     pub(crate) connections: IntGauge,
     pub(crate) connections_total: IntCounter,
     connection_setup_duration: HistogramVec,
-    forbidden_requests: IntCounterVec,
-    unreliable_request_acceptance_duration: HistogramVec,
-    pub(crate) api_v1_requests: IntCounterVec,
 }
 
 // There is a mismatch between the labels and the public spec.
@@ -76,11 +70,6 @@ impl HttpHandlerMetrics {
                 "Count of received requests, by protocol (HTTP/HTTPS) and version.",
                 &[LABEL_PROTOCOL, LABEL_VERSION],
             ),
-            forbidden_requests: metrics_registry.int_counter_vec(
-                "replica_http_forbidden_requests_total",
-                "The number of HTTP or HTTPS requests that were rejected with 403 code",
-                &[LABEL_TYPE, LABEL_REASON],
-            ),
             connections: metrics_registry.int_gauge(
                 "replica_http_live_tcp_connections",
                 "Number of open tcp connections."
@@ -95,27 +84,7 @@ impl HttpHandlerMetrics {
                 decimal_buckets(-3, 1),
                 &[LABEL_STATUS, LABEL_DETAIL],
             ),
-            unreliable_request_acceptance_duration: metrics_registry.histogram_vec(
-                "replica_http_unreliable_request_acceptance_duration_seconds",
-                "User request latencies upon parsing the request body, in seconds. The metric
-                assumes expiration time is set by 'current_time_and_expiry_time'. In production this
-                assumption is incorrect. However, this metric is useful for production test.",
-                decimal_buckets(-3, 1),
-                &[LABEL_TYPE, LABEL_REQUEST_TYPE],
-            ),
-            // This is temp counter for NET-738
-            api_v1_requests: metrics_registry.int_counter_vec(
-                "replica_http_api_v1_requests",
-                "Counting the requests hitting legacy endpoints.",
-                &[LABEL_TYPE],
-            ),
         }
-    }
-
-    pub(crate) fn observe_forbidden_request(&self, request_type: &RequestType, reason: &str) {
-        self.forbidden_requests
-            .with_label_values(&[request_type.as_str(), reason])
-            .inc();
     }
 
     /// Records the duration of a failed connection setup, by error.
@@ -131,22 +100,5 @@ impl HttpHandlerMetrics {
         self.connection_setup_duration
             .with_label_values(&[STATUS_SUCCESS, app_layer.as_str()])
             .observe(start_time.elapsed().as_secs_f64());
-    }
-
-    pub(crate) fn observe_unreliable_request_acceptance_duration(
-        &self,
-        request_type: RequestType,
-        api_req_type: ApiReqType,
-        msg_expiry_time: Time,
-    ) {
-        let current_expiry_time = current_time_and_expiry_time().1;
-        let expiry_delta = if current_expiry_time <= msg_expiry_time {
-            Duration::from_secs(0)
-        } else {
-            current_expiry_time - msg_expiry_time
-        };
-        self.unreliable_request_acceptance_duration
-            .with_label_values(&[request_type.as_str(), api_req_type.as_str()])
-            .observe(expiry_delta.as_secs_f64());
     }
 }

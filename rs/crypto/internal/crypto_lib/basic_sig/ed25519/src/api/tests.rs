@@ -342,7 +342,7 @@ mod verify_public_key {
             PublicKeyBytes(point_not_on_curve)
         };
 
-        assert_eq!(verify_public_key(&pubkey_not_on_curve), false);
+        assert!(!verify_public_key(&pubkey_not_on_curve));
     }
 
     #[test]
@@ -356,7 +356,7 @@ mod verify_public_key {
             pubkey_with_order_8
         };
 
-        assert_eq!(verify_public_key(&pubkey_with_small_order), false);
+        assert!(!verify_public_key(&pubkey_with_small_order));
     }
 
     #[test]
@@ -366,10 +366,10 @@ mod verify_public_key {
             let point_of_prime_order = CompressedEdwardsY(pk_bytes.0).decompress().unwrap();
             let point_of_order_8 = CompressedEdwardsY([0; 32]).decompress().unwrap();
             let point_of_composite_order = point_of_prime_order + point_of_order_8;
-            assert_eq!(point_of_composite_order.is_torsion_free(), false);
+            assert!(!point_of_composite_order.is_torsion_free());
             point_of_composite_order
         };
         let pubkey_with_composite_order = PublicKeyBytes(point_with_composite_order.compress().0);
-        assert_eq!(verify_public_key(&pubkey_with_composite_order), false);
+        assert!(!verify_public_key(&pubkey_with_composite_order));
     }
 }

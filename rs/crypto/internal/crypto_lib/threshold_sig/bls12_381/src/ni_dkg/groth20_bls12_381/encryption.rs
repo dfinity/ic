@@ -258,17 +258,17 @@ pub fn decrypt(
             node_index,
         });
     }
-    if epoch < epoch_from_miracl_secret_key(&secret_key) {
+    if epoch < epoch_from_miracl_secret_key(secret_key) {
         return Err(DecryptError::EpochTooOld {
             ciphertext_epoch: epoch,
-            secret_key_epoch: epoch_from_miracl_secret_key(&secret_key),
+            secret_key_epoch: epoch_from_miracl_secret_key(secret_key),
         });
     }
     let ciphertext =
         ciphertext_into_miracl(ciphertext).map_err(DecryptError::MalformedCiphertext)?;
     let tau = Tau::from(epoch);
     let decrypt_maybe =
-        crypto::dec_chunks(&secret_key, index, &ciphertext, &tau.0[..], associated_data);
+        crypto::dec_chunks(secret_key, index, &ciphertext, &tau.0[..], associated_data);
 
     decrypt_maybe
         .map(|decrypt| plaintext_to_bytes(&decrypt))
@@ -401,7 +401,7 @@ pub fn verify_zk_proofs(
         .collect();
     let public_keys = public_keys?;
 
-    let ciphertext = ciphertext_into_miracl(&ciphertexts).map_err(|error| {
+    let ciphertext = ciphertext_into_miracl(ciphertexts).map_err(|error| {
         CspDkgVerifyDealingError::MalformedDealingError(InvalidArgumentError {
             message: error.to_string(),
         })
@@ -415,7 +415,7 @@ pub fn verify_zk_proofs(
             })
         })?;
 
-    let chunking_proof = chunking_proof_into_miracl(&chunking_proof).map_err(|_| {
+    let chunking_proof = chunking_proof_into_miracl(chunking_proof).map_err(|_| {
         CspDkgVerifyDealingError::MalformedDealingError(InvalidArgumentError {
             message: "Could not parse proof of correct encryption".to_string(),
         })
@@ -508,7 +508,7 @@ mod util {
         let curve_order = miracl::BIG::new_ints(&miracl::rom::CURVE_ORDER);
         data.iter().fold(miracl::BIG::new(), |mut acc, term| {
             acc.shl(16);
-            let mut reduced_term = miracl::BIG::new_big(&term);
+            let mut reduced_term = miracl::BIG::new_big(term);
             reduced_term.rmod(&curve_order);
             acc.add(&reduced_term);
             acc.rmod(&curve_order); // Needed to avoid getting a buffer overflow.

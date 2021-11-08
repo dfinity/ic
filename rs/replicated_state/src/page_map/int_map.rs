@@ -490,7 +490,7 @@ impl<'a, T> std::iter::Iterator for IntMapIter<'a, T> {
         // Find the most-left subtree, pushing all the right nodes onto the
         // stack.
         while let Tree::Branch { left, right, .. } = p {
-            self.0.push(&right);
+            self.0.push(right);
             p = left;
         }
         match p {

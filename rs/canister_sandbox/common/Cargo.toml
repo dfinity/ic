@@ -17,6 +17,7 @@ path = "src/test_sandbox.rs"
 
 [dependencies]
 bytes = "1.0.1"
+serde-big-array = "0.3.2"
 serde_cbor = "0.11.1"
 ic-interfaces = { path = "../../interfaces" }
 ic-replicated-state = { path = "../../replicated_state" }
@@ -25,5 +26,5 @@ ic-system-api = { path = "../../system_api" }
 ic-types = { path = "../../types/types" }
 ic-sys = { path = "../../sys" }
 serde = { version = "1.0.99", features = ["derive", "rc"] }
-nix = "0.20.0"
+nix = "0.23.0"
 libc = "0.2.91"

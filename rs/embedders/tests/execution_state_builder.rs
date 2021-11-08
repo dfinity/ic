@@ -4,7 +4,6 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::ExportedFunctions;
 use ic_types::methods::WasmMethod;
-use ic_wasm_utils::validation::WasmValidationConfig;
 use std::collections::BTreeSet;
 
 #[test]
@@ -15,7 +14,7 @@ fn broken_wasm_results_in_compilation_error() {
     assert_compile_error(wasm_embedder.create_execution_state(
         binary,
         std::path::PathBuf::from(r"/NOT_USED"),
-        WasmValidationConfig::default(),
+        &EmbeddersConfig::default(),
     ));
 }
 
@@ -40,7 +39,7 @@ fn can_extract_exported_functions() {
             )
             .unwrap(),
             tmpdir.path().into(),
-            WasmValidationConfig::default(),
+            &EmbeddersConfig::default(),
         )
         .unwrap();
     let mut expected_exports = BTreeSet::new();

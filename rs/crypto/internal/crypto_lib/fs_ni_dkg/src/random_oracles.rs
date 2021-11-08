@@ -40,7 +40,7 @@ pub trait UniqueHash {
 impl UniqueHash for String {
     fn unique_hash(&self) -> [u8; 32] {
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_STRING);
-        hasher.write(&self.as_bytes());
+        hasher.write(self.as_bytes());
         hasher.finish()
     }
 }
@@ -64,7 +64,7 @@ impl UniqueHash for usize {
 impl UniqueHash for Vec<u8> {
     fn unique_hash(&self) -> [u8; 32] {
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_BYTE_ARRAY);
-        hasher.write(&self);
+        hasher.write(self);
         hasher.finish()
     }
 }
@@ -243,7 +243,7 @@ pub fn random_oracle_to_scalar(domain: &str, data: &dyn UniqueHash) -> BIG {
 /// A distinct `domain` should be used for each purpose of the random oracle.
 pub fn random_oracle_to_miracl_g1(domain: &str, data: &dyn UniqueHash) -> MiraclG1 {
     hash_to_miracl_g1(
-        &DomainSeparationContext::new(domain).as_bytes(),
+        DomainSeparationContext::new(domain).as_bytes(),
         &data.unique_hash(),
     )
 }

@@ -19,15 +19,6 @@ pub struct ScopedMmap {
 unsafe impl Sync for ScopedMmap {}
 unsafe impl Send for ScopedMmap {}
 
-fn nix_to_io_err(err: nix::Error) -> io::Error {
-    match &err {
-        nix::Error::Sys(errno) => io::Error::from_raw_os_error(*errno as i32),
-        nix::Error::InvalidPath => io::Error::new(io::ErrorKind::InvalidData, err),
-        nix::Error::InvalidUtf8 => io::Error::new(io::ErrorKind::InvalidData, err),
-        nix::Error::UnsupportedOperation => io::Error::new(io::ErrorKind::Other, err),
-    }
-}
-
 impl ScopedMmap {
     /// Creates a new mapping from a file descriptor and length.
     pub fn from_readonly_file<FD: AsRawFd>(fd: &FD, len: usize) -> io::Result<Self> {
@@ -51,8 +42,7 @@ impl ScopedMmap {
                 fd.as_raw_fd(),
                 /* offset = */ 0,
             )
-        }
-        .map_err(nix_to_io_err)?;
+        }?;
         Ok(Self { addr, len })
     }
 

@@ -151,7 +151,7 @@ pub mod groth20_bls12_381 {
 
         #[inline]
         pub fn as_bytes(&self) -> &[u8; Self::SIZE] {
-            &self.0.as_bytes()
+            self.0.as_bytes()
         }
     }
 

@@ -52,8 +52,8 @@ pub fn update_path(cid: CanisterId) -> String {
     format!("api/v2/canister/{}/call", cid)
 }
 
-const NODE_STATUS_PATH: &str = &"api/v2/status";
-const CATCH_UP_PACKAGE_PATH: &str = &"/_/catch_up_package";
+const NODE_STATUS_PATH: &str = "api/v2/status";
+const CATCH_UP_PACKAGE_PATH: &str = "/_/catch_up_package";
 
 /// A version of Keypair with a clone instance.
 /// Originally this was done with a reference, but I'm avoiding them in async
@@ -593,7 +593,7 @@ mod tests {
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities::types::ids::node_test_id;
     use ic_types::malicious_flags::MaliciousFlags;
-    use ic_types::messages::{HttpCanisterUpdate, HttpRequest, HttpUserQuery, ReadContent};
+    use ic_types::messages::{HttpCanisterUpdate, HttpRequest, HttpUserQuery, UserQuery};
     use ic_types::time::current_time;
     use ic_types::{PrincipalId, RegistryVersion, UserId};
     use ic_validator::get_authorized_canisters;
@@ -788,7 +788,7 @@ mod tests {
         assert_eq!(read.content, content_copy);
 
         // The signature matches
-        let read_request = HttpRequest::<ReadContent>::try_from(read).unwrap();
+        let read_request = HttpRequest::<UserQuery>::try_from(read).unwrap();
         let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
         assert_ok!(get_authorized_canisters(
             &read_request,
@@ -841,7 +841,7 @@ mod tests {
         assert_eq!(read.content, content_copy);
 
         // The signature matches
-        let read_request = HttpRequest::<ReadContent>::try_from(read).unwrap();
+        let read_request = HttpRequest::<UserQuery>::try_from(read).unwrap();
         let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
         assert_ok!(get_authorized_canisters(
             &read_request,

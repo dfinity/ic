@@ -1,12 +1,13 @@
 use std::{collections::HashMap, time::Duration};
 
 use crate::{
-    common::{get_cors_headers, make_response, CONTENT_TYPE_HTML, CONTENT_TYPE_PROTOBUF},
+    common::{get_cors_headers, CONTENT_TYPE_HTML, CONTENT_TYPE_PROTOBUF},
     types::PprofPage,
 };
 use http::{header, request::Parts};
 use hyper::{self, Body, Response, StatusCode};
 use ic_pprof::{flamegraph, profile, Error};
+use ic_types::canonical_error::{internal_error, invalid_argument_error, CanonicalError};
 
 pub const CONTENT_TYPE_SVG: &str = "image/svg+xml";
 /// Default CPU profile duration.
@@ -40,7 +41,9 @@ Types of profiles available:
 
 /// Returns the `/_/pprof` root page, listing the available profiles.
 fn home() -> Response<Body> {
-    let mut response = make_response(StatusCode::OK, PPROF_HOME_HTML);
+    let mut response = Response::new(Body::from(PPROF_HOME_HTML));
+    *response.status_mut() = StatusCode::OK;
+    *response.headers_mut() = get_cors_headers();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         header::HeaderValue::from_static(CONTENT_TYPE_HTML),
@@ -49,9 +52,12 @@ fn home() -> Response<Body> {
 }
 
 /// Handles a call to `/_/pprof[/<profile>]`.
-pub(crate) async fn handle(page: PprofPage, parts: Parts) -> Response<Body> {
+pub(crate) async fn handle(
+    page: PprofPage,
+    parts: Parts,
+) -> Result<Response<Body>, CanonicalError> {
     match page {
-        PprofPage::Home => home(),
+        PprofPage::Home => Ok(home()),
         PprofPage::Profile => cpu_profile(Format::Pprof, parts).await,
         PprofPage::Flamegraph => cpu_profile(Format::Flamegraph, parts).await,
     }
@@ -72,7 +78,7 @@ enum Format {
 /// `frequency` and its accuracy are limited (on Linux) by the resolution of
 /// the software clock, which is 250Hz by default. See
 /// [`man 7 time`](https://linux.die.net/man/7/time) for details.
-async fn cpu_profile(format: Format, parts: Parts) -> Response<Body> {
+async fn cpu_profile(format: Format, parts: Parts) -> Result<Response<Body>, CanonicalError> {
     let query_pairs: HashMap<_, _> = match parts.uri.query() {
         Some(query) => url::form_urlencoded::parse(query.as_bytes()).collect(),
         None => Default::default(),
@@ -82,7 +88,7 @@ async fn cpu_profile(format: Format, parts: Parts) -> Response<Body> {
         Some(val) => match val.parse() {
             Ok(val) => val,
             Err(err) => {
-                return make_response(StatusCode::BAD_REQUEST, &err.to_string());
+                return Err(invalid_argument_error(&err.to_string()));
             }
         },
         None => DEFAULT_DURATION_SECONDS,
@@ -93,7 +99,7 @@ async fn cpu_profile(format: Format, parts: Parts) -> Response<Body> {
         Some(val) => match val.parse() {
             Ok(val) => val,
             Err(err) => {
-                return make_response(StatusCode::BAD_REQUEST, &err.to_string());
+                return Err(invalid_argument_error(&err.to_string()));
             }
         },
         None => DEFAULT_FREQUENCY,
@@ -108,10 +114,13 @@ async fn cpu_profile(format: Format, parts: Parts) -> Response<Body> {
 }
 
 /// Converts an `ic_pprof::profile()` output into an HTTP response.
-fn into_response(result: Result<Vec<u8>, Error>, content_type: &'static str) -> Response<Body> {
+fn into_response(
+    result: Result<Vec<u8>, Error>,
+    content_type: &'static str,
+) -> Result<Response<Body>, CanonicalError> {
     match result {
-        Ok(body) => ok_response(body, content_type),
-        Err(err) => make_response(StatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+        Ok(body) => Ok(ok_response(body, content_type)),
+        Err(err) => Err(internal_error(&err.to_string())),
     }
 }
 

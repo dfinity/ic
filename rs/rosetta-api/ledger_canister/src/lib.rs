@@ -821,7 +821,7 @@ impl Ledger {
                 // Stop at a sufficiently recent block.
                 break;
             }
-            let removed = self.transactions_by_hash.remove(&transaction_hash);
+            let removed = self.transactions_by_hash.remove(transaction_hash);
             assert!(removed.is_some());
 
             // After 24 hours we don't need to store notification state because it isn't
@@ -939,10 +939,18 @@ impl Ledger {
     }
 
     pub fn can_send(&self, principal_id: &PrincipalId) -> bool {
-        !principal_id.is_anonymous()
-            || self
+        principal_id.is_self_authenticating()
+            || LEDGER
+                .read()
+                .unwrap()
                 .send_whitelist
                 .contains(&CanisterId::new(*principal_id).unwrap())
+    }
+
+    /// Check if it's allowed to notify this canister
+    /// Currently we reuse whitelist for that
+    pub fn can_be_notified(&self, canister_id: &CanisterId) -> bool {
+        LEDGER.read().unwrap().send_whitelist.contains(canister_id)
     }
 
     pub fn transactions_by_hash_len(&self) -> usize {

@@ -175,7 +175,7 @@ fn verify_node_cert(
     ensure_exactly_one_presented_cert(presented_certs)?;
     let presented_cert = cert_from_der(presented_certs[0].0.clone())?;
     let presented_cert_node_id = node_id_from_subject_cn(&presented_cert)?;
-    ensure_node_id_in_allowed_nodes(presented_cert_node_id, &allowed_nodes)?;
+    ensure_node_id_in_allowed_nodes(presented_cert_node_id, allowed_nodes)?;
     let node_cert_from_registry =
         node_cert_from_registry(presented_cert_node_id, registry_client, registry_version)?;
     ensure_certificates_equal(
@@ -205,7 +205,7 @@ fn cert_from_der(cert_der: Vec<u8>) -> Result<TlsPublicKeyCert, TLSError> {
 }
 
 fn node_id_from_subject_cn(cert: &TlsPublicKeyCert) -> Result<NodeId, TLSError> {
-    node_id_from_cert_subject_common_name(&cert).map_err(|e| {
+    node_id_from_cert_subject_common_name(cert).map_err(|e| {
         TLSError::General(format!(
             "The presented certificate subject CN could not be parsed as node ID: {:?}",
             e

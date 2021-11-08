@@ -12,7 +12,7 @@ use ic_types::crypto::CryptoHashOf;
 /// EcdsaObject represents the objects that go into the EcdsaObjectPool
 /// (i.e) the inner message variants in EdsaMessage like EcdsaDealing,
 /// EcdsaDealingSupport, etc.
-pub(crate) trait EcdsaObject: CryptoHashable + Clone + Sized {
+pub trait EcdsaObject: CryptoHashable + Clone + Sized {
     /// Returns crypto hash of the object used as key.
     fn key(&self) -> CryptoHashOf<Self> {
         crypto_hash(self)

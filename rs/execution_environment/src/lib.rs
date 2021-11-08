@@ -47,8 +47,8 @@ use tower::{
     ServiceBuilder, ServiceExt,
 };
 
-const QUERY_EXECUTION_THREADS: usize = 1;
-const QUERY_EXECUTION_MAX_BUFFERED_QUERIES: usize = 1000;
+const QUERY_EXECUTION_THREADS: usize = 2;
+const QUERY_EXECUTION_MAX_BUFFERED_QUERIES: usize = 2000;
 
 /// When executing a wasm method of query type, this enum indicates if we are
 /// running in an replicated or non-replicated context. This information is
@@ -110,7 +110,7 @@ pub fn setup_execution(
     let hypervisor = Arc::new(Hypervisor::new(
         config.clone(),
         1,
-        &metrics_registry,
+        metrics_registry,
         own_subnet_id,
         own_subnet_type,
         logger.clone(),
@@ -119,7 +119,7 @@ pub fn setup_execution(
 
     let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
         logger.clone(),
-        &metrics_registry,
+        metrics_registry,
     ));
     let ingress_history_reader = Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
 
@@ -127,7 +127,7 @@ pub fn setup_execution(
         logger.clone(),
         Arc::clone(&hypervisor),
         Arc::clone(&ingress_history_writer) as Arc<_>,
-        &metrics_registry,
+        metrics_registry,
         own_subnet_id,
         scheduler_config.scheduler_cores,
         config.clone(),
@@ -139,7 +139,7 @@ pub fn setup_execution(
         own_subnet_id,
         own_subnet_type,
         config,
-        &metrics_registry,
+        metrics_registry,
         scheduler_config.max_instructions_per_message,
     ));
     let threadpool = threadpool::Builder::new()
@@ -187,8 +187,8 @@ pub fn setup_execution(
         own_subnet_id,
         Arc::clone(&ingress_history_writer) as Arc<_>,
         Arc::clone(&exec_env) as Arc<_>,
-        Arc::clone(&&cycles_account_manager),
-        &metrics_registry,
+        Arc::clone(&cycles_account_manager),
+        metrics_registry,
         logger,
     ));
 

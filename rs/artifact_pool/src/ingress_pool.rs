@@ -443,7 +443,7 @@ mod tests {
                         timestamp: mock_time(),
                     },
                 );
-                assert_eq!(ingress_pool.contains(&message_id), true);
+                assert!(ingress_pool.contains(&message_id));
             })
         })
     }
@@ -474,10 +474,7 @@ mod tests {
 
                 // Ingress message not in the pool
                 let ingress_msg = SignedIngressBuilder::new().nonce(3).build();
-                assert_eq!(
-                    ingress_pool.contains(&IngressMessageId::from(&ingress_msg)),
-                    false
-                );
+                assert!(!ingress_pool.contains(&IngressMessageId::from(&ingress_msg)));
             })
         })
     }
@@ -527,10 +524,9 @@ mod tests {
                 assert_eq!(msgs_in_range[0..=0], filtered_msgs[0..]);
 
                 // empty
-                let filtered_msgs: Vec<_> = ingress_pool
-                    .get_all_validated_by_filter(range_min..=mock_time())
-                    .collect();
-                assert!(filtered_msgs.is_empty());
+                let filtered_msgs =
+                    ingress_pool.get_all_validated_by_filter(range_min..=mock_time());
+                assert!(filtered_msgs.count() == 0);
             })
         })
     }

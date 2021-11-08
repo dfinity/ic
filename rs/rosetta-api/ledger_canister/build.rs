@@ -16,7 +16,11 @@ fn main() {
 
     config.type_attribute(
         "ic_ledger.pb.v1.AccountIdentifier",
-        "#[derive(candid::CandidType, candid::Deserialize)]",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
     );
 
     config.type_attribute(

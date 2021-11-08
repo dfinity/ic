@@ -249,7 +249,7 @@ fn ingress_queue_constructor_test() {
     let mut queue = IngressQueue::default();
     assert_eq!(queue.size(), 0);
     assert_eq!(queue.pop(), None);
-    assert_eq!(queue.is_empty(), true);
+    assert!(queue.is_empty());
 }
 
 fn msg_from_number(num: u64) -> Ingress {

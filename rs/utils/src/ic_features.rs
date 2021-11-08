@@ -9,10 +9,3 @@ features! {
     }
 
 }
-
-features! {
-    // Sandboxed Execution
-    pub mod sandboxed_execution_feature {
-        const sandboxed_execution = 0b0000_0001
-    }
-}

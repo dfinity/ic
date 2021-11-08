@@ -416,7 +416,7 @@ impl<K: Eq + Hash + Clone, V> Deref for PinnedCacheEntry<K, V> {
     fn deref(&self) -> &Self::Target {
         // This is safe by class invariant and does not affect any
         // data structure invariants.
-        unsafe { &(*self.entry).value.as_ref().unwrap() }
+        unsafe { (*self.entry).value.as_ref().unwrap() }
     }
 }
 
@@ -441,8 +441,7 @@ impl<K: Eq + Hash + Clone, V> Drop for PinnedCacheEntry<K, V> {
 /// Simple elastic LRU cache.
 ///
 /// The cache stores elements of type "V", keyed by keys of type "K".
-/// Factory and deleter functions are registered with the cache on
-/// instantiation.
+/// A deleter function is registered with the cache on instantiation.
 ///
 /// There is a single "get" method that obtains the element associated
 /// with the given key. It returns a "pin" object that ensures the
@@ -454,43 +453,33 @@ pub struct Cache<K: Eq + Hash + Clone, V> {
     alive_cond: Condvar,
     // Maximum size of the cache.
     limit: usize,
-    // Creator and deleter functions to manage values held in cache.
-    // "factory" is called the first time a value is requested.
-    // "deleter" is called when a value is evicted from cache due to
-    // size constraints. They are always called symmetrically on the
-    // same key.
-    // "factory" is not called twice on the same key unless the object
-    // has intermittently been evicted from cache (and hence "deleter"
-    // called in between).
-    factory: Box<dyn Fn(&K) -> V + Send + Sync + 'static>,
+    // Deleter functions to manage values held in cache.
+    // It is called when a value is evicted from cache due to
+    // size constraints. For any given key it is called exactly once.
     deleter: Box<dyn Fn(&K, V) + Send + Sync + 'static>,
 }
 
 impl<K: Eq + Hash + Clone, V> Cache<K, V> {
-    /// Create new cache. Requested objects are created using the
-    /// given factory function. When objects are deleted, they are
-    /// passed to the given deleter function.
-    /// Factory and deleter are always called "symmetrically" on an
-    /// object: For each key, a call to "factory" is always followed
-    /// (eventually) by a call to the deleter. Factory is not called
-    /// twice on the same key unless there is a call to deleter
-    /// in between.
-    pub fn new<F, D>(factory: F, deleter: D, limit: usize) -> Arc<Self>
+    /// Create new cache. When objects are deleted, they are
+    /// passed to the given deleter function. The factory function
+    /// to create objects is passed in to the "get" method (to support
+    /// the use case when specific data is optionally required on
+    /// construction), user must ensure that factory + deleter
+    /// cooperate semantically.
+    pub fn new<D>(deleter: D, limit: usize) -> Arc<Self>
     where
-        F: Fn(&K) -> V + Send + Sync + 'static,
         D: Fn(&K, V) + Send + Sync + 'static,
     {
         Arc::new(Self {
             repr: Mutex::new(CacheRepr::new(limit)),
             alive_cond: Condvar::new(),
             limit,
-            factory: Box::new(factory),
             deleter: Box::new(deleter),
         })
     }
 
-    // Looks up the cache entry correspending to the given key.
-    // Returns an entry with pin_count increased by one.
+    // Looks up the cache entry correspending to the given key (creating
+    // it if necessary). Returns an entry with pin_count increased by one.
     //
     // Pre-conditions:
     // - all invariants
@@ -505,7 +494,10 @@ impl<K: Eq + Hash + Clone, V> Cache<K, V> {
     // and internally calling other unsafe functions. All operations
     // are unconditionally safe, dependent on integrity on data
     // structures.
-    unsafe fn internal_get(&self, key: &K) -> *mut CacheEntry<K, V> {
+    unsafe fn internal_get<F>(&self, key: &K, factory: F) -> *mut CacheEntry<K, V>
+    where
+        F: FnOnce(&K) -> V,
+    {
         let (entry, need_construct, evict_list) = {
             let mut repr = self.repr.lock().unwrap();
             let bucket = &mut repr.bucket(key);
@@ -565,7 +557,7 @@ impl<K: Eq + Hash + Clone, V> Cache<K, V> {
         self.dispose(evict_list);
 
         if need_construct {
-            let value = Some((self.factory)(key));
+            let value = Some(factory(key));
             let guard = self.repr.lock().unwrap();
             (*entry).value = value;
             self.alive_cond.notify_all();
@@ -700,15 +692,20 @@ impl<K: Eq + Hash + Clone, V> Cache<K, V> {
         }
     }
 
-    /// Looks up an element in the cache. Returns a "pin" handle to
-    /// the requested element.
+    /// Looks up an element in the cache. If and only if the element does
+    /// not exist yet, the given factory function will be called to create
+    /// it.
     ///
+    /// Returns a "pin" handle to the requested element.
     /// The pin handle can simply be dereferenced in order to obtain
     /// access to the data.
     ///
     /// The element will not be evicted from cache while pinned.
-    pub fn get(self: &Arc<Self>, key: &K) -> PinnedCacheEntry<K, V> {
-        let entry = unsafe { self.internal_get(key) };
+    pub fn get<F>(self: &Arc<Self>, key: &K, factory: F) -> PinnedCacheEntry<K, V>
+    where
+        F: FnOnce(&K) -> V,
+    {
+        let entry = unsafe { self.internal_get(key, factory) };
         PinnedCacheEntry {
             entry,
             cache: Arc::clone(self),
@@ -751,11 +748,11 @@ mod tests {
         let deleted = Arc::new(Mutex::new(HashSet::<String>::new()));
         let copy_of_created = Arc::clone(&created);
         let copy_of_deleted = Arc::clone(&deleted);
+        let factory = move |key: &String| {
+            (*copy_of_created.lock().unwrap()) += 1;
+            key.clone()
+        };
         let cache = TestCache::new(
-            move |key| {
-                (*copy_of_created.lock().unwrap()) += 1;
-                key.clone()
-            },
             move |key, _| {
                 copy_of_deleted.lock().unwrap().insert(key.to_string());
             },
@@ -763,9 +760,9 @@ mod tests {
         );
 
         // Request 3 entries from cache of size two.
-        let foo_pin = cache.get(&"foo".to_string());
-        let bar_pin = cache.get(&"bar".to_string());
-        let baz_pin = cache.get(&"baz".to_string());
+        let foo_pin = cache.get(&"foo".to_string(), factory.clone());
+        let bar_pin = cache.get(&"bar".to_string(), factory.clone());
+        let baz_pin = cache.get(&"baz".to_string(), factory.clone());
 
         // All 3 entries are alive and accessible.
         assert_eq!("foo", *foo_pin);
@@ -791,12 +788,12 @@ mod tests {
 
         // Accessing one entry again will reuse it without creating it
         // again.
-        let foo_pin = cache.get(&"foo".to_string());
+        let foo_pin = cache.get(&"foo".to_string(), factory.clone());
         assert_eq!(3, *created.lock().unwrap());
         drop(foo_pin);
 
         // Creating another entry will evict oldest.
-        let bla = cache.get(&"bla".to_string());
+        let bla = cache.get(&"bla".to_string(), factory.clone());
         assert_eq!(4, *created.lock().unwrap());
         assert_eq!(2, deleted.lock().unwrap().len());
         assert!(deleted.lock().unwrap().contains(&"baz".to_string()));
@@ -813,11 +810,12 @@ mod tests {
     // in every location (front, middle, back).
     #[test]
     fn lru_list_integrity() {
-        let cache = TestCache::new(|key| key.clone(), |_, _| {}, 3);
+        let factory = |key: &String| key.clone();
+        let cache = TestCache::new(|_, _| {}, 3);
 
-        let foo_pin = cache.get(&"foo".to_string());
-        let bar_pin = cache.get(&"bar".to_string());
-        let baz_pin = cache.get(&"baz".to_string());
+        let foo_pin = cache.get(&"foo".to_string(), factory);
+        let bar_pin = cache.get(&"bar".to_string(), factory);
+        let baz_pin = cache.get(&"baz".to_string(), factory);
 
         drop(foo_pin);
         drop(bar_pin);
@@ -826,19 +824,19 @@ mod tests {
         // Order on LRU list now: baz, bar, foo
 
         // Take first element in LRU. Then put it back again.
-        let baz_pin = cache.get(&"baz".to_string());
+        let baz_pin = cache.get(&"baz".to_string(), factory);
         drop(baz_pin);
 
         // Order on LRU list now: baz, bar, foo
 
         // Take middle element in LRU. Then put it back again.
-        let bar_pin = cache.get(&"bar".to_string());
+        let bar_pin = cache.get(&"bar".to_string(), factory);
         drop(bar_pin);
 
         // Order on LRU list now: bar, baz, foo
 
         // Take last element in LRU. Then put it back again.
-        let foo_pin = cache.get(&"foo".to_string());
+        let foo_pin = cache.get(&"foo".to_string(), factory);
         drop(foo_pin);
     }
 
@@ -888,15 +886,8 @@ mod tests {
         let factory_guard = Arc::new(FactoryGuard::new());
         let created = Arc::new(Mutex::new(0_u64));
         let deleted = Arc::new(Mutex::new(HashSet::<String>::new()));
-        let copy_of_factory_guard = Arc::clone(&factory_guard);
-        let copy_of_created = Arc::clone(&created);
         let copy_of_deleted = Arc::clone(&deleted);
         let cache = TestCache::new(
-            move |key| {
-                (*copy_of_created.lock().unwrap()) += 1;
-                copy_of_factory_guard.start_construction(key);
-                key.clone()
-            },
             move |key, _| {
                 copy_of_deleted.lock().unwrap().insert(key.to_string());
             },
@@ -907,8 +898,15 @@ mod tests {
         // It will block because the "factory_guard" object does not
         // have "foo" in it allowed set yet.
         let copy_of_cache = Arc::clone(&cache);
+        let copy_of_factory_guard = Arc::clone(&factory_guard);
+        let copy_of_created = Arc::clone(&created);
         let t1 = std::thread::spawn(move || {
-            let pin = copy_of_cache.get(&"foo".to_string());
+            let factory = move |key: &String| {
+                (*copy_of_created.lock().unwrap()) += 1;
+                copy_of_factory_guard.start_construction(key);
+                key.clone()
+            };
+            let pin = copy_of_cache.get(&"foo".to_string(), factory);
             assert_eq!("foo", *pin);
         });
 
@@ -916,8 +914,15 @@ mod tests {
         // Will be stuck same as first thread, but crucially the object
         // will only be created once (verified later).
         let copy_of_cache = Arc::clone(&cache);
+        let copy_of_factory_guard = Arc::clone(&factory_guard);
+        let copy_of_created = Arc::clone(&created);
         let t2 = std::thread::spawn(move || {
-            let pin = copy_of_cache.get(&"foo".to_string());
+            let factory = move |key: &String| {
+                (*copy_of_created.lock().unwrap()) += 1;
+                copy_of_factory_guard.start_construction(key);
+                key.clone()
+            };
+            let pin = copy_of_cache.get(&"foo".to_string(), factory);
             assert_eq!("foo", *pin);
         });
 
@@ -925,7 +930,14 @@ mod tests {
         // needs to be able to service other requests. Instruct factory
         // that it can construct "bar" now without blocking.
         factory_guard.allow_construction("bar".to_string());
-        let pin = cache.get(&"bar".to_string());
+        let copy_of_factory_guard = Arc::clone(&factory_guard);
+        let copy_of_created = Arc::clone(&created);
+        let factory = move |key: &String| {
+            (*copy_of_created.lock().unwrap()) += 1;
+            copy_of_factory_guard.start_construction(key);
+            key.clone()
+        };
+        let pin = cache.get(&"bar".to_string(), factory.clone());
         assert_eq!("bar", *pin);
         drop(pin);
 

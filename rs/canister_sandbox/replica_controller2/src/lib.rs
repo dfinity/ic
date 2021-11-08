@@ -4,3 +4,4 @@ pub mod elastic_cache;
 pub mod launch_as_process;
 pub mod launch_as_thread;
 pub mod sandboxed_execution_controller;
+pub mod unique_id;

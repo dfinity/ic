@@ -5,21 +5,25 @@
 /// As much as possible the naming of structs in this module should match the
 /// naming used in the [Interface
 /// Specification](https://sdk.dfinity.org/docs/interface-spec/index.html)
-mod artifacts;
 mod catch_up_package;
 mod common;
 mod dashboard;
 mod metrics;
 mod pprof;
-mod read;
+mod query;
+mod read_state;
 mod status;
 mod submit;
 mod types;
 
 use crate::{
+    catch_up_package::CatchUpPackageService,
+    dashboard::DashboardService,
     metrics::{
         LABEL_REQUEST_TYPE, LABEL_STATUS, LABEL_TYPE, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS,
     },
+    read_state::ReadStateService,
+    status::StatusService,
     types::*,
 };
 use futures_util::stream::StreamExt;
@@ -27,7 +31,7 @@ use http::request::Parts;
 use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
 use ic_base_thread::ObservableCountingSemaphore;
 use ic_config::http_handler::Config;
-use ic_crypto_tls_interfaces::{AllowedClients, SomeOrAllNodes, TlsHandshake};
+use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_crypto_tree_hash::Path;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
@@ -42,7 +46,10 @@ use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{NodeTopology, ReplicatedState};
 use ic_types::{
-    canonical_error::{invalid_argument_error, out_of_range_error, unknown_error, CanonicalError},
+    canonical_error::{
+        internal_error, invalid_argument_error, out_of_range_error, resource_exhausted_error,
+        unknown_error, CanonicalError,
+    },
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, CertificateDelegation, HttpReadContent, HttpReadState, HttpReadStateResponse,
@@ -53,7 +60,6 @@ use ic_types::{
 };
 use metrics::HttpHandlerMetrics;
 use rand::Rng;
-use std::collections::HashSet;
 use std::io::{Error, ErrorKind, Write};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -65,7 +71,11 @@ use tokio::{
     sync::Mutex,
     time::{timeout, Instant},
 };
-use tower::{load_shed::error::Overloaded, service_fn, BoxError, ServiceBuilder, ServiceExt};
+use tower::{
+    limit::ConcurrencyLimit,
+    load_shed::{error::Overloaded, LoadShed},
+    service_fn, BoxError, Service, ServiceBuilder, ServiceExt,
+};
 use tower_util::BoxService;
 
 // Constants defining the limits of the HttpHandler.
@@ -123,13 +133,11 @@ const UNKNOWN_LABEL: &str = "unknown";
 
 /// The struct that handles incoming HTTP requests for the IC replica.
 /// This is collection of thread-safe data members.
+#[derive(Clone)]
 struct HttpHandler {
     log: ReplicaLogger,
-    config: Config,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
-    subnet_type: SubnetType,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
@@ -137,11 +145,13 @@ struct HttpHandler {
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_sender: Arc<Mutex<IngressIngestionService>>,
     query_handler: Arc<Mutex<QueryExecutionService>>,
+    read_state_service: LoadShed<ConcurrencyLimit<ReadStateService>>,
+    status_service: LoadShed<ConcurrencyLimit<StatusService>>,
+    dashboard_service: LoadShed<ConcurrencyLimit<DashboardService>>,
+    catch_up_package_service: LoadShed<ConcurrencyLimit<CatchUpPackageService>>,
     #[allow(dead_code)]
     backup_spool_path: Option<PathBuf>,
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     malicious_flags: MaliciousFlags,
-
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
 }
@@ -188,6 +198,13 @@ fn start_server_initialization(
             }
         }
     });
+}
+
+fn make_response(status_code: StatusCode, body: &str) -> Response<Body> {
+    let mut resp = Response::new(Body::from(body.to_string()));
+    *resp.status_mut() = status_code;
+    *resp.headers_mut() = common::get_cors_headers();
+    resp
 }
 
 fn create_port_file(path: PathBuf, port: u16) {
@@ -255,10 +272,12 @@ pub async fn start_server(
 ) -> Result<(), Error> {
     let metrics = Arc::new(HttpHandlerMetrics::new(&metrics_registry));
 
-    let http_handler = Arc::new(HttpHandler::new(
+    let listen_addr = config.listen_addr;
+    let port_file_path = config.port_file_path.clone();
+
+    let http_handler = HttpHandler::new(
         config,
         registry_client,
-        tls_handshake,
         subnet_id,
         subnet_type,
         nns_subnet_id,
@@ -271,11 +290,10 @@ pub async fn start_server(
         consensus_pool_cache,
         backup_spool_path,
         malicious_flags,
-    ));
+    );
 
     info!(log, "Starting HTTP server...");
 
-    let listen_addr = http_handler.config.listen_addr;
     // TODO(OR4-60): temporarily listen on [::] so that we accept both IPv4 and
     // IPv6 connections. This requires net.ipv6.bindv6only = 0. Revert this once
     // we have rolled out IPv6 in prometheus and ic_p8s_service_discovery.
@@ -288,7 +306,6 @@ pub async fn start_server(
     // If addr == 0, then a random port will be assigned. In this case it
     // is useful to report the randomly assigned port by writing it to a file.
     let local_addr = tcp_listener.local_addr()?;
-    let port_file_path = http_handler.config.port_file_path.clone();
     if let Some(path) = port_file_path {
         create_port_file(path, local_addr.port());
     }
@@ -307,7 +324,8 @@ pub async fn start_server(
 
     loop {
         let log = log.clone();
-        let http_handler = Arc::clone(&http_handler);
+        let http_handler = http_handler.clone();
+        let tls_handshake = Arc::clone(&tls_handshake);
         let metrics = Arc::clone(&metrics);
         let request_permit = outstanding_connections.acquire().await;
         match tcp_listener.accept().await {
@@ -319,56 +337,62 @@ pub async fn start_server(
                     // Do a move of the permit so it gets dropped at the end of the scope.
                     let _request_permit_deleter = request_permit;
                     let mut b = [0_u8; 1];
-                    match timeout(
+                    let serve_https = match timeout(
                         Duration::from_secs(MAX_TCP_PEEK_TIMEOUT_SECS),
                         tcp_stream.peek(&mut b),
                     )
                     .await
                     {
-                        Ok(tcp_stream_peek_result) => match tcp_stream_peek_result {
-                            Ok(_) => {
-                                if b[0] == 22 {
-                                    serve_secure_connection(
-                                        metrics,
-                                        http_handler,
-                                        tcp_stream,
-                                        connection_start_time,
-                                        log,
-                                    )
-                                    .await;
-                                } else {
-                                    // Either peeking failed or the first byte is not 22, then
-                                    // fallback to HTTP.
-                                    serve_unsecure_connection(
-                                        metrics,
-                                        http_handler,
-                                        tcp_stream,
-                                        connection_start_time,
-                                        log,
-                                    )
-                                    .await;
-                                }
-                            }
-                            Err(err) => {
-                                warn!(log, "Connection error (can't peek) {}", err);
-                                metrics.observe_connection_error(
-                                    ConnectionError::Peek,
-                                    connection_start_time,
-                                );
-                            }
-                        },
+                        // The peek operation didn't timeout, and the peek oparation didn't return
+                        // an error.
+                        Ok(Ok(_)) => b[0] == 22,
+                        Ok(Err(err)) => {
+                            warn!(log, "Connection error (can't peek). {}", err);
+                            metrics.observe_connection_error(
+                                ConnectionError::Peek,
+                                connection_start_time,
+                            );
+                            false
+                        }
                         Err(err) => {
+                            warn!(
+                                log,
+                                "Connection error (tcp peeking timeout after {}s). {}",
+                                MAX_TCP_PEEK_TIMEOUT_SECS,
+                                err
+                            );
+
                             metrics.observe_connection_error(
                                 ConnectionError::PeekTimeout,
                                 connection_start_time,
                             );
-                            warn!(
-                                log,
-                                "Connection error (tcp peeking timeout after {}s) {}",
-                                MAX_TCP_PEEK_TIMEOUT_SECS,
-                                err
-                            );
+                            false
                         }
+                    };
+                    if serve_https {
+                        serve_secure_connection(
+                            tls_handshake,
+                            tcp_stream,
+                            metrics,
+                            http_handler,
+                            connection_start_time,
+                            log,
+                        )
+                        .await;
+                    } else {
+                        // If either
+                        //      1. peeking timed out
+                        //      2. peeking failed
+                        //      3. first byte is not 22
+                        // then fallback to HTTP.
+                        serve_unsecure_connection(
+                            metrics,
+                            http_handler,
+                            tcp_stream,
+                            connection_start_time,
+                            log,
+                        )
+                        .await;
                     }
                 });
             }
@@ -387,7 +411,6 @@ impl HttpHandler {
     fn new(
         config: Config,
         registry_client: Arc<dyn RegistryClient>,
-        tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
         subnet_id: SubnetId,
         subnet_type: SubnetType,
         nns_subnet_id: SubnetId,
@@ -401,38 +424,59 @@ impl HttpHandler {
         backup_spool_path: Option<PathBuf>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
-        Self {
-            config,
-            registry_client,
-            tls_handshake,
-            subnet_id,
-            subnet_type,
+        let health_status = Arc::new(RwLock::new(ReplicaHealthStatus::Starting));
+        let delegation_from_nns = Arc::new(RwLock::new(None));
+        let status_service = StatusService::new(
+            log.clone(),
+            config.clone(),
             nns_subnet_id,
+            Arc::clone(&state_reader),
+            Arc::clone(&health_status),
+        );
+        let dashboard_service =
+            DashboardService::new(config, subnet_type, Arc::clone(&state_reader));
+        let catch_up_package_service = CatchUpPackageService::new(consensus_pool_cache);
+        let read_state_service = ReadStateService::new(
+            log.clone(),
+            Arc::clone(&health_status),
+            Arc::clone(&delegation_from_nns),
+            Arc::clone(&state_reader),
+            Arc::clone(&validator),
+            Arc::clone(&registry_client),
+            malicious_flags.clone(),
+        );
+        Self {
             log,
+            subnet_id,
+            nns_subnet_id,
+            registry_client,
+            state_reader,
+            validator,
             ingress_filter,
             ingress_sender,
             query_handler,
-            state_reader,
-            validator,
-            consensus_pool_cache,
+            read_state_service,
+            status_service,
+            dashboard_service,
+            catch_up_package_service,
             backup_spool_path,
-            delegation_from_nns: Arc::new(RwLock::new(None)),
-            health_status: Arc::new(RwLock::new(ReplicaHealthStatus::Starting)),
             malicious_flags,
+            delegation_from_nns,
+            health_status,
         }
     }
 }
 
 fn create_main_service(
     metrics: Arc<HttpHandlerMetrics>,
-    http_handler: Arc<HttpHandler>,
+    http_handler: HttpHandler,
     app_layer: AppLayer,
 ) -> BoxService<Request<Body>, Response<Body>, CanonicalError> {
     let metrics_for_map_request = Arc::clone(&metrics);
     let metrics_for_map_result = Arc::clone(&metrics);
     let route_service = service_fn(move |(request, timer)| {
         let route_metrics = Arc::clone(&metrics);
-        let route_http_handler = Arc::clone(&http_handler);
+        let route_http_handler = http_handler.clone();
         async move {
             Ok::<_, BoxError>(
                 route(route_metrics, route_http_handler, app_layer, request, timer).await,
@@ -471,7 +515,7 @@ fn create_main_service(
                 Ok(response) => Ok(response),
                 Err(err) => {
                     // We may get an error only when the load shedding kicks in.
-                    let mut response = common::make_response(
+                    let mut response = make_response(
                         StatusCode::SERVICE_UNAVAILABLE,
                         "Service unavailable. Too many buffered requests",
                     );
@@ -481,7 +525,7 @@ fn create_main_service(
                         [UNKNOWN_LABEL, UNKNOWN_LABEL, UNKNOWN_LABEL],
                     );
                     if !err.is::<Overloaded>() {
-                        response = common::make_response(
+                        response = make_response(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Unexpected internal error.",
                         );
@@ -499,17 +543,13 @@ fn create_main_service(
 
 async fn serve_unsecure_connection(
     metrics: Arc<HttpHandlerMetrics>,
-    http_handler: Arc<HttpHandler>,
+    http_handler: HttpHandler,
     tcp_stream: TcpStream,
     connection_start_time: Instant,
     log: ReplicaLogger,
 ) {
     let http = Http::new();
-    let service = create_main_service(
-        Arc::clone(&metrics),
-        Arc::clone(&http_handler),
-        AppLayer::Http,
-    );
+    let service = create_main_service(Arc::clone(&metrics), http_handler, AppLayer::Http);
     if let Err(err) = http.serve_connection(tcp_stream, service).await {
         metrics.observe_connection_error(
             ConnectionError::ServingHttpConnection,
@@ -525,48 +565,26 @@ async fn serve_unsecure_connection(
 }
 
 async fn serve_secure_connection(
-    metrics: Arc<HttpHandlerMetrics>,
-    http_handler: Arc<HttpHandler>,
+    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     tcp_stream: TcpStream,
+    metrics: Arc<HttpHandlerMetrics>,
+    http_handler: HttpHandler,
     connection_start_time: Instant,
     log: ReplicaLogger,
 ) {
-    let http = Http::new();
-    let service = create_main_service(
-        Arc::clone(&metrics),
-        Arc::clone(&http_handler),
-        AppLayer::Https,
-    );
-    let mut clients_certs = HashSet::new();
-    let mut clients_certs_exist = false;
-    if let Some(http_handler_clients_x509_cert) = http_handler.config.clients_x509_cert.clone() {
-        clients_certs.insert(http_handler_clients_x509_cert);
-        clients_certs_exist = true;
-    }
-    let allowed_clients =
-        AllowedClients::new(SomeOrAllNodes::All, clients_certs).expect("invalid allowed clients");
     let registry_version = http_handler.registry_client.get_latest_version();
-    match http_handler
-        .tls_handshake
-        .perform_tls_server_handshake_temp_with_optional_client_auth(
-            tcp_stream,
-            allowed_clients,
-            registry_version,
-        )
+    let http = Http::new();
+    let service = create_main_service(Arc::clone(&metrics), http_handler, AppLayer::Https);
+    match tls_handshake
+        .perform_tls_server_handshake_without_client_auth(tcp_stream, registry_version)
         .await
     {
         Err(err) => {
             metrics.observe_connection_error(ConnectionError::TlsHandshake, connection_start_time);
             warn!(log, "Connection error (TLS handshake): {}", err);
         }
-        Ok((tls_stream, peer)) => {
-            if clients_certs_exist && peer == ic_crypto_tls_interfaces::Peer::Unauthenticated {
-                metrics.observe_connection_error(
-                    ConnectionError::ClientAuthentication,
-                    connection_start_time,
-                );
-                warn!(log, "Connection error (unauthenticated client).");
-            } else if let Err(err) = http.serve_connection(tls_stream, service).await {
+        Ok(tls_stream) => {
+            if let Err(err) = http.serve_connection(tls_stream, service).await {
                 metrics.observe_connection_error(
                     ConnectionError::ServingHttpsConnection,
                     connection_start_time,
@@ -579,12 +597,12 @@ async fn serve_secure_connection(
                 metrics.observe_connection_setup(AppLayer::Https, connection_start_time)
             }
         }
-    };
+    }
 }
 
 async fn route(
     metrics: Arc<HttpHandlerMetrics>,
-    http_handler: Arc<HttpHandler>,
+    http_handler: HttpHandler,
     app_layer: AppLayer,
     request: Request<Body>,
     mut request_timer: HistogramVecTimer<'_, REQUESTS_NUM_LABELS>,
@@ -594,7 +612,7 @@ async fn route(
         .protocol_version_total
         .with_label_values(&[app_layer.as_str(), &format!("{:?}", parts.version)])
         .inc();
-    let result = match validate_http_request_head(&parts, metrics.as_ref()) {
+    let result = match validate_http_request_head(&parts) {
         Ok(request_type) => {
             request_timer.set_label(LABEL_TYPE, request_type.as_str());
             let parse_body_result = match request_type {
@@ -604,14 +622,8 @@ async fn route(
             match parse_body_result {
                 Ok(parsed_body) => {
                     let body_size = parsed_body.len();
-                    let (response, api_req_type) = route_to_handlers(
-                        Arc::clone(&metrics),
-                        http_handler,
-                        parsed_body,
-                        request_type,
-                        parts,
-                    )
-                    .await;
+                    let (response, api_req_type) =
+                        route_to_handlers(http_handler, parsed_body, request_type, parts).await;
 
                     let status = response.status();
                     // This is a workaround for `StatusCode::as_str()` not returning a `&'static
@@ -621,7 +633,7 @@ async fn route(
                     request_timer.set_label(LABEL_STATUS, status.as_str());
                     metrics
                         .requests_body_size_bytes
-                        .with_label_values(&request_timer.label_values())
+                        .with_label_values(request_timer.label_values())
                         .observe(body_size as f64);
 
                     Ok(response)
@@ -632,36 +644,57 @@ async fn route(
         Err(err) => Err(err),
     };
     result.unwrap_or_else(|canonical_error| {
-        common::make_response(
+        make_response(
             StatusCode::from(canonical_error.code),
             canonical_error.message.as_str(),
         )
     })
 }
 
+fn map_box_error_to_canonical_error(err: BoxError) -> CanonicalError {
+    if err.is::<CanonicalError>() {
+        return *err
+            .downcast::<CanonicalError>()
+            .expect("Downcasting must succeed.");
+    }
+    if err.is::<Overloaded>() {
+        return resource_exhausted_error("The service is overloaded.");
+    }
+    internal_error(&format!("Could not convert {:?} to CanonicalError", err))
+}
+
 async fn route_to_handlers(
-    metrics: Arc<HttpHandlerMetrics>,
-    http_handler: Arc<HttpHandler>,
+    mut http_handler: HttpHandler,
     parsed_body: Vec<u8>,
     request_type: RequestType,
     parts: Parts,
 ) -> (Response<Body>, ApiReqType) {
-    match request_type {
-        RequestType::Read => {
-            read::handle(
+    let (result, api_req_type) = match request_type {
+        RequestType::Query => (
+            query::handle(
                 &http_handler.log,
                 Arc::clone(&http_handler.health_status),
                 Arc::clone(&http_handler.delegation_from_nns),
                 Arc::clone(&http_handler.query_handler),
-                Arc::clone(&http_handler.state_reader),
                 Arc::clone(&http_handler.validator),
                 Arc::clone(&http_handler.registry_client),
                 parsed_body,
-                Arc::clone(&metrics),
                 http_handler.malicious_flags.clone(),
             )
-            .await
-        }
+            .await,
+            ApiReqType::Query,
+        ),
+        RequestType::ReadState => (
+            http_handler
+                .read_state_service
+                .ready()
+                .await
+                .expect("The service must always be able to process requests")
+                .call(parsed_body)
+                .await
+                .map_err(|err| map_box_error_to_canonical_error(err)),
+            ApiReqType::ReadState,
+        ),
         RequestType::Submit => (
             submit::handle(
                 http_handler.log.clone(),
@@ -677,50 +710,49 @@ async fn route_to_handlers(
             ApiReqType::Call,
         ),
         RequestType::Status => (
-            status::handle(
-                &http_handler.log,
-                &http_handler.config,
-                http_handler.nns_subnet_id,
-                http_handler.state_reader.as_ref(),
-                http_handler.health_status.read().unwrap().clone(),
-            ),
+            http_handler
+                .status_service
+                .ready()
+                .await
+                .expect("The service must always be able to process requests")
+                .call(())
+                .await
+                .map_err(|err| map_box_error_to_canonical_error(err)),
             ApiReqType::Unknown,
         ),
         RequestType::Dashboard => (
-            dashboard::handle(
-                &http_handler.config,
-                http_handler.state_reader.as_ref(),
-                http_handler.subnet_type,
-            ),
+            http_handler
+                .dashboard_service
+                .ready()
+                .await
+                .expect("The service must always be able to process requests")
+                .call(())
+                .await
+                .map_err(|err| map_box_error_to_canonical_error(err)),
             ApiReqType::Unknown,
         ),
         RequestType::CatchUpPackage => (
-            catch_up_package::handle(http_handler.consensus_pool_cache.as_ref(), parsed_body),
+            http_handler
+                .catch_up_package_service
+                .ready()
+                .await
+                .expect("The service must always be able to process requests")
+                .call(parsed_body)
+                .await
+                .map_err(|err| map_box_error_to_canonical_error(err)),
             ApiReqType::Unknown,
         ),
-        RequestType::RedirectToDashboard => (redirect_to_dashboard(), ApiReqType::Unknown),
+        RequestType::RedirectToDashboard => (Ok(redirect_to_dashboard()), ApiReqType::Unknown),
         RequestType::Options => (
-            common::make_response(StatusCode::NO_CONTENT, ""),
+            Ok(make_response(StatusCode::NO_CONTENT, "")),
             ApiReqType::Unknown,
         ),
         RequestType::Pprof(page) => (pprof::handle(page, parts).await, ApiReqType::Unknown),
-        RequestType::Artifacts(_height) => (
-            // TODO (CON-575): once we are ready to use an unprotected or authenticated endpoint,
-            // re-enable this handler.
-            common::make_response(StatusCode::NOT_FOUND, ""),
-            // match &http_handler.backup_spool_path {
-            //     Some(path) => artifacts::handle(
-            //         path,
-            //         http_handler.subnet_id,
-            //         http_handler.consensus_pool_cache.as_ref(),
-            //         height,
-            //         http_handler.log.clone(),
-            //     ),
-            //     None => common::make_response(StatusCode::NOT_FOUND, ""),
-            // },
-            ApiReqType::Unknown,
-        ),
-    }
+    };
+    (
+        result.unwrap_or_else(|err| make_response(StatusCode::from(err.code), &err.message)),
+        api_req_type,
+    )
 }
 
 // Fetches a delegation from the NNS subnet to allow this subnet to issue
@@ -895,13 +927,13 @@ async fn parse_body(
                 Some(chunk) => match chunk {
                     Err(err) => {
                         return Err(unknown_error(
-                            &format!("Unexpected error while reading request: {}", err).as_str(),
+                            format!("Unexpected error while reading request: {}", err).as_str(),
                         ));
                     }
                     Ok(bytes) => {
                         if parsed_body.len() + bytes.len() > max_request_body_size_bytes {
                             return Err(out_of_range_error(
-                                &format!(
+                                format!(
                                     "The request body is bigger than {} bytes.",
                                     max_request_body_size_bytes
                                 )
@@ -931,10 +963,7 @@ async fn parse_body(
 //  * Is there a "content-type: application/cbor" header?
 //  * Is the path correct?
 //  In case validatation fails we return a response as part of Err().
-fn validate_http_request_head(
-    parts: &http::request::Parts,
-    metrics: &HttpHandlerMetrics,
-) -> Result<RequestType, CanonicalError> {
+fn validate_http_request_head(parts: &http::request::Parts) -> Result<RequestType, CanonicalError> {
     use http::method::Method;
     match parts.method {
         Method::POST => {
@@ -959,26 +988,14 @@ fn validate_http_request_head(
             // Check the path
             let path = parts.uri.path();
             match *path.split('/').collect::<Vec<&str>>().as_slice() {
-                ["", "api", "v1", "submit"] => {
-                    metrics.api_v1_requests.with_label_values(&["submit"]).inc();
-                    Ok(RequestType::Submit)
-                }
-                ["", "api", "v1", "read"] => {
-                    metrics.api_v1_requests.with_label_values(&["read"]).inc();
-                    Ok(RequestType::Read)
-                }
                 ["", "api", "v2", "canister", _, "call"] => Ok(RequestType::Submit),
-                ["", "api", "v2", "canister", _, "query"] => Ok(RequestType::Read),
-                ["", "api", "v2", "canister", _, "read_state"] => Ok(RequestType::Read),
+                ["", "api", "v2", "canister", _, "query"] => Ok(RequestType::Query),
+                ["", "api", "v2", "canister", _, "read_state"] => Ok(RequestType::ReadState),
                 ["", "_", "catch_up_package"] => Ok(RequestType::CatchUpPackage),
                 _ => Err(invalid_argument_error("URI path is not supported.")),
             }
         }
         Method::GET => match parts.uri.path() {
-            "/api/v1/status" => {
-                metrics.api_v1_requests.with_label_values(&["status"]).inc();
-                Ok(RequestType::Status)
-            }
             "/api/v2/status" => Ok(RequestType::Status),
 
             "/" | "/_/" => Ok(RequestType::RedirectToDashboard),
@@ -987,14 +1004,7 @@ fn validate_http_request_head(
             "/_/pprof" => Ok(RequestType::Pprof(PprofPage::Home)),
             "/_/pprof/profile" => Ok(RequestType::Pprof(PprofPage::Profile)),
             "/_/pprof/flamegraph" => Ok(RequestType::Pprof(PprofPage::Flamegraph)),
-
-            other => match other.split('/').collect::<Vec<&str>>().as_slice() {
-                ["", "_", "artifacts", height] => match height.parse::<u64>() {
-                    Ok(val) => Ok(RequestType::Artifacts(val)),
-                    Err(_) => Err(invalid_argument_error("Couldn't parse height as integer.")),
-                },
-                _ => Err(invalid_argument_error("")),
-            },
+            _ => Err(invalid_argument_error("Unsupported method")),
         },
         Method::OPTIONS => Ok(RequestType::Options),
         _ => Err(invalid_argument_error("Unsupported method")),

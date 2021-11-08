@@ -11,13 +11,12 @@ use ic_interfaces::time_source::TimeSource;
 use ic_replica_setup_ic_network::{
     TestArtifact, TestArtifactAttribute, TestArtifactId, TestArtifactMessage,
 };
-use ic_types::artifact::{Advert, AdvertSendRequest, ArtifactId, Priority};
+use ic_types::artifact::{Advert, AdvertClass, AdvertSendRequest, ArtifactId, Priority};
 use ic_types::chunkable::Chunkable;
 use ic_types::crypto::CryptoHash;
 use ic_types::filetree_sync::{
     FileTreeSyncArtifact, FileTreeSyncChunksTracker, UnderConstructionState,
 };
-use ic_types::p2p::GossipAdvertType;
 use ic_types::NodeId;
 use std::collections::HashMap;
 use std::error::Error;
@@ -58,7 +57,7 @@ impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
                     id: artifact.id.clone(),
                     integrity_hash: CryptoHash(artifact_id.clone().into_bytes()),
                 },
-                advert_type: GossipAdvertType::Produced,
+                advert_class: AdvertClass::Critical,
             })
             .collect::<Vec<_>>();
         let changed = if !adverts.is_empty() {
@@ -79,7 +78,7 @@ impl ArtifactClient<TestArtifact> for ArtifactChunkingTestImpl {
     ) -> Result<ArtifactAcceptance<FileTreeSyncArtifact>, ArtifactPoolError> {
         println!(
             "Node-{} Receive complete for artifact {:?} from last node {}",
-            self.node_id.clone().get(),
+            self.node_id.get(),
             artifact,
             peer_id
         );

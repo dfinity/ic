@@ -30,7 +30,7 @@ pub(crate) fn check_endpoint_invariants(
     strict: bool,
 ) -> Result<(), InvariantCheckError> {
     let mut valid_endpoints = BTreeSet::<(IpAddr, u16)>::new();
-    for (node_id, node_record) in get_node_records_from_snapshot(&snapshot) {
+    for (node_id, node_record) in get_node_records_from_snapshot(snapshot) {
         let mut node_endpoints = BTreeSet::<(IpAddr, u16)>::new();
         let mut endpoints_to_check = Vec::<ConnectionEndpoint>::new();
 

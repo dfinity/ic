@@ -18,7 +18,6 @@ use ic_test_utilities::{
 };
 use maplit::btreemap;
 use mockall::predicate::eq;
-use std::collections::BTreeMap;
 
 #[tokio::test]
 async fn build_payload_no_subnets() {
@@ -153,7 +152,7 @@ async fn validate_valid_payload() {
         assert_eq!(
             NumBytes::from(payload.stream_slices.len() as u64),
             xnet_payload_builder
-                .validate_xnet_payload(payload, &fixture.validation_context, &past_payloads)
+                .validate_xnet_payload(payload, &fixture.validation_context, past_payloads)
                 .unwrap()
         );
     });
@@ -170,7 +169,7 @@ async fn validate_valid_payload_against_state_only() {
         assert_eq!(
             NumBytes::from(payload.stream_slices.len() as u64),
             xnet_payload_builder
-                .validate_xnet_payload(&payload, &fixture.validation_context, &[])
+                .validate_xnet_payload(payload, &fixture.validation_context, &[])
                 .unwrap()
         );
     });
@@ -290,7 +289,7 @@ async fn validate_missing_messages_against_state_only() {
         // Validate the second `XNetPayload` against `state` only.
         assert_matches!(
             xnet_payload_builder.validate_xnet_payload(
-                &fixture.payloads.get(1).unwrap(),
+                fixture.payloads.get(1).unwrap(),
                 &fixture.validation_context,
                 &[],
             ),
@@ -390,8 +389,6 @@ pub(crate) struct PayloadBuilderTestFixture {
     pub metrics: MetricsRegistry,
 
     pub payloads: Vec<XNetPayload>,
-    pub expected_indices: BTreeMap<SubnetId, ExpectedIndices>,
-    pub subnet_urls: Vec<String>,
 }
 
 impl PayloadBuilderTestFixture {
@@ -402,8 +399,7 @@ impl PayloadBuilderTestFixture {
         let tls_handshake = Arc::new(FakeTlsHandshake::new());
 
         let (payloads, expected_indices) = get_xnet_state_for_testing(&*state_manager);
-        let (registry, subnet_urls) =
-            get_registry_and_urls_for_test(subnet_count, expected_indices.clone());
+        let (registry, _) = get_registry_and_urls_for_test(subnet_count, expected_indices);
 
         PayloadBuilderTestFixture {
             state_manager,
@@ -413,8 +409,6 @@ impl PayloadBuilderTestFixture {
             metrics: MetricsRegistry::new(),
 
             payloads,
-            expected_indices,
-            subnet_urls,
         }
     }
 

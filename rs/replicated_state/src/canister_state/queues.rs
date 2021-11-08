@@ -6,11 +6,11 @@ use crate::StateError;
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
-    state::queues::v1 as pb_queues,
+    state::queues::{v1 as pb_queues, v1::canister_queues::NextInputQueue},
     types::v1 as pb_types,
 };
 use ic_types::{
-    messages::{Ingress, Request, RequestOrResponse, Response},
+    messages::{Ingress, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
     xnet::{QueueId, SessionId},
     CanisterId, CountBytes, QueueIndex,
 };
@@ -39,7 +39,7 @@ pub const QUEUE_INDEX_NONE: QueueIndex = QueueIndex::new(std::u64::MAX);
 /// Encapsulates the `InductionPool` component described in the spec. The reason
 /// for bundling together the induction pool and output queues is to reliably
 /// implement backpressure via queue reservations for response messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CanisterQueues {
     /// Queue of ingress (user) messages.
     ingress_queue: IngressQueue,
@@ -59,41 +59,12 @@ pub struct CanisterQueues {
 
     /// Running memory usage stats, across input and output queues.
     memory_usage_stats: MemoryUsageStats,
+
+    /// Round-robin across ingress and cross-net input queues for pop_input().
+    next_input_queue: NextInputQueue,
 }
 
 impl CanisterQueues {
-    /// Inducts messages from the output queue to `self` into the input queue
-    /// from `self` until the output queue is consumed or pushing the message
-    /// into the input queue fails (presumably because the queue is full).
-    pub(crate) fn induct_messages_to_self(&mut self, own_canister_id: CanisterId) {
-        loop {
-            let msg = {
-                let output_queue = match self.output_queues.get(&own_canister_id) {
-                    None => return,
-                    Some(queue) => queue,
-                };
-                match output_queue.peek() {
-                    Some((_, msg)) => msg,
-                    None => return,
-                }
-            };
-
-            match self.push_input(QUEUE_INDEX_NONE, (*msg).clone()) {
-                Err(_) => return,
-                Ok(()) => {
-                    let msg = self
-                        .output_queues
-                        .get_mut(&own_canister_id)
-                        .expect("Output queue existed above so should not fail.")
-                        .pop()
-                        .expect("Message peeked above so pop should not fail.")
-                        .1;
-                    self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
-                }
-            }
-        }
-    }
-
     /// Pushes an ingress message into the induction pool.
     pub fn push_ingress(&mut self, msg: Ingress) {
         self.ingress_queue.push(msg)
@@ -246,18 +217,23 @@ impl CanisterQueues {
             .any(|(_, queue)| queue.num_messages() > 0)
     }
 
-    /// Extracts the next inter-canister or ingress message (in that order).
-    /// If no inter-canister messages are available in the induction pool, we
-    /// pop the next ingress message.
+    /// Extracts the next inter-canister or ingress message (round-robin).
     pub fn pop_input(&mut self) -> Option<CanisterInputMessage> {
-        // Return the next inter-canister message if one exists.
-        if let Some(msg) = self.pop_canister_input() {
-            return Some(match msg {
+        self.next_input_queue = match self.next_input_queue {
+            NextInputQueue::Unspecified | NextInputQueue::InterCanister => NextInputQueue::Ingress,
+            NextInputQueue::Ingress => NextInputQueue::InterCanister,
+        };
+        if self.next_input_queue == NextInputQueue::Ingress && !self.input_schedule.is_empty()
+            || self.next_input_queue == NextInputQueue::InterCanister
+                && self.ingress_queue.is_empty()
+        {
+            self.pop_canister_input().map(|msg| match msg {
                 RequestOrResponse::Request(msg) => CanisterInputMessage::Request(msg),
                 RequestOrResponse::Response(msg) => CanisterInputMessage::Response(msg),
-            });
+            })
+        } else {
+            self.pop_ingress().map(CanisterInputMessage::Ingress)
         }
-        self.pop_ingress().map(CanisterInputMessage::Ingress)
     }
 
     /// Pushes a `Request` type message into the relevant output queue. Also
@@ -277,11 +253,13 @@ impl CanisterQueues {
             return Err((e, msg));
         }
 
+        let mu_stats_delta = MemoryUsageStats::request_stats_delta(QueueOp::Push, &msg);
+
         output_queue
             .push_request(msg)
             .expect("cannot fail due to checks above");
 
-        self.memory_usage_stats.reserved_slots += 1;
+        self.memory_usage_stats += mu_stats_delta;
         debug_assert!(self.stats_ok());
 
         Ok(())
@@ -338,6 +316,36 @@ impl CanisterQueues {
             })
     }
 
+    /// Returns a reference to the message at the head of the respective output
+    /// queue, if any.
+    pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<Arc<RequestOrResponse>> {
+        Some(self.output_queues.get(canister_id)?.peek()?.1)
+    }
+
+    /// Tries to induct a message from the output queue to `own_canister_id`
+    /// into the input queue from `own_canister_id`. Returns a clone of the
+    /// inducted message on success, `None` if there is no message in the
+    /// output queue or the input queue is full.
+    pub(super) fn induct_message_to_self(
+        &mut self,
+        own_canister_id: CanisterId,
+    ) -> Option<RequestOrResponse> {
+        let (_, msg) = self.output_queues.get(&own_canister_id)?.peek()?;
+
+        self.push_input(QUEUE_INDEX_NONE, (*msg).clone()).ok()?;
+
+        let msg = self
+            .output_queues
+            .get_mut(&own_canister_id)
+            .expect("Output queue existed above so should not fail.")
+            .pop()
+            .expect("Message peeked above so pop should not fail.")
+            .1;
+        self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
+
+        Some(msg)
+    }
+
     /// Returns the number of enqueued ingress messages.
     pub fn ingress_queue_message_count(&self) -> usize {
         self.ingress_queue.size()
@@ -359,6 +367,11 @@ impl CanisterQueues {
         self.input_queues_stats.size_bytes
     }
 
+    /// Returns the memory usage of this `CanisterQueues`.
+    pub fn memory_usage(&self) -> usize {
+        self.memory_usage_stats.memory_usage()
+    }
+
     /// Returns the total byte size of canister responses across input and
     /// output queues.
     pub fn responses_size_bytes(&self) -> usize {
@@ -368,6 +381,20 @@ impl CanisterQueues {
     /// Returns the total reserved slots across input and output queues.
     pub fn reserved_slots(&self) -> usize {
         self.memory_usage_stats.reserved_slots as usize
+    }
+
+    /// Sets the (transient) size in bytes of responses routed from
+    /// `output_queues` into streams and not yet garbage collected.
+    pub(super) fn set_stream_responses_size_bytes(&mut self, size_bytes: usize) {
+        self.memory_usage_stats
+            .transient_stream_responses_size_bytes = size_bytes;
+    }
+
+    /// Returns the byte size of responses already routed to streams as set by
+    /// the last call to `set_stream_responses_size_bytes()`.
+    pub fn stream_responses_size_bytes(&self) -> usize {
+        self.memory_usage_stats
+            .transient_stream_responses_size_bytes
     }
 
     /// Returns an existing a matching pair of input and output queues from/to
@@ -427,22 +454,30 @@ impl CanisterQueues {
         input_queues: &BTreeMap<CanisterId, InputQueue>,
         output_queues: &BTreeMap<CanisterId, OutputQueue>,
     ) -> MemoryUsageStats {
+        // Actual byte size for responses, 0 for requests.
+        let response_size_bytes = |msg: &RequestOrResponse| match *msg {
+            RequestOrResponse::Request(_) => 0,
+            RequestOrResponse::Response(_) => msg.count_bytes(),
+        };
+        // `max(0, msg.count_bytes() - MAX_RESPONSE_COUNT_BYTES)` for requests, 0 for
+        // responses.
+        let request_overhead_bytes = |msg: &RequestOrResponse| match *msg {
+            RequestOrResponse::Request(_) => {
+                msg.count_bytes().saturating_sub(MAX_RESPONSE_COUNT_BYTES)
+            }
+            RequestOrResponse::Response(_) => 0,
+        };
+
         let mut stats = MemoryUsageStats::default();
         for q in input_queues.values() {
-            // Actual byte size for responses, 0 for requests.
-            stats.responses_size_bytes += q.calculate_stat_sum(|msg| match *msg {
-                RequestOrResponse::Request(_) => 0,
-                RequestOrResponse::Response(_) => msg.count_bytes(),
-            });
+            stats.responses_size_bytes += q.calculate_stat_sum(response_size_bytes);
             stats.reserved_slots += q.reserved_slots() as i64;
+            stats.oversized_requests_extra_bytes += q.calculate_stat_sum(request_overhead_bytes)
         }
         for q in output_queues.values() {
-            // Actual byte size for responses, 0 for requests.
-            stats.responses_size_bytes += q.calculate_stat_sum(|msg| match *msg {
-                RequestOrResponse::Request(_) => 0,
-                RequestOrResponse::Response(_) => msg.count_bytes(),
-            });
+            stats.responses_size_bytes += q.calculate_stat_sum(response_size_bytes);
             stats.reserved_slots += q.reserved_slots() as i64;
+            stats.oversized_requests_extra_bytes += q.calculate_stat_sum(request_overhead_bytes)
         }
         stats
     }
@@ -473,6 +508,7 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
                     queue: Some(output_queue.into()),
                 })
                 .collect(),
+            next_input_queue: item.next_input_queue as i32,
         }
     }
 }
@@ -525,6 +561,8 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
             input_schedule.push_back(c);
         }
 
+        let next_input_queue = NextInputQueue::from_i32(item.next_input_queue).unwrap_or_default();
+
         Ok(Self {
             ingress_queue: IngressQueue::try_from(item.ingress_queue)?,
             input_schedule,
@@ -532,6 +570,7 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
             output_queues,
             input_queues_stats,
             memory_usage_stats,
+            next_input_queue,
         })
     }
 }
@@ -542,7 +581,7 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
 /// method would become quite cumbersome with an extra `QueueType` argument and
 /// a `QueueOp` that only applied to memory usage stats; and would result in
 /// adding lots of zeros in lots of places.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct InputQueuesStats {
     /// Count of messages in input queues.
     message_count: usize,
@@ -588,7 +627,7 @@ impl SubAssign<InputQueuesStats> for InputQueuesStats {
 /// method would become quite cumbersome with an extra `QueueType` argument and
 /// a `QueueOp` that only applied to memory usage stats; and would result in
 /// adding lots of zeros in lots of places.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, Eq)]
 struct MemoryUsageStats {
     /// Sum total of the byte size of every response across input and output
     /// queues.
@@ -599,24 +638,44 @@ struct MemoryUsageStats {
     /// (across queues and streams) and is used for computing message memory
     /// allocation (as `MAX_RESPONSE_COUNT_BYTES` per request).
     ///
-    /// `i64` because we need to be able to add negative amounts and it's less
-    /// verbose this way.
+    /// `i64` because we need to be able to add negative amounts (e.g. pushing a
+    /// response consumes a reservation) and it's less verbose this way.
     reserved_slots: i64,
+
+    /// Sum total of bytes above `MAX_RESPONSE_COUNT_BYTES` per oversized
+    /// request. Execution allows intra-subnet requests larger than
+    /// `MAX_RESPONSE_COUNT_BYTES`.
+    oversized_requests_extra_bytes: usize,
+
+    /// Transient: size in bytes of responses routed from `output_queues` into
+    /// streams and not yet garbage collected.
+    ///
+    /// This is populated by `ReplicatedState::put_streams()`, called by MR
+    /// after every streams mutation (induction, routing, GC).
+    transient_stream_responses_size_bytes: usize,
 }
 
 impl MemoryUsageStats {
+    /// Returns the memory usage in bytes computed from the stats.
+    pub fn memory_usage(&self) -> usize {
+        self.responses_size_bytes
+            + self.reserved_slots as usize * MAX_RESPONSE_COUNT_BYTES
+            + self.oversized_requests_extra_bytes
+            + self.transient_stream_responses_size_bytes
+    }
+
     /// Calculates the change in stats caused by pushing (+) or popping (-) the
     /// given message.
     fn stats_delta(op: QueueOp, msg: &RequestOrResponse) -> MemoryUsageStats {
         match msg {
-            RequestOrResponse::Request(_) => Self::request_stats_delta(op),
+            RequestOrResponse::Request(req) => Self::request_stats_delta(op, req),
             RequestOrResponse::Response(rep) => Self::response_stats_delta(op, rep),
         }
     }
 
     /// Calculates the change in stats caused by pushing (+) or popping (-) a
     /// request.
-    fn request_stats_delta(op: QueueOp) -> MemoryUsageStats {
+    fn request_stats_delta(op: QueueOp, req: &Request) -> MemoryUsageStats {
         MemoryUsageStats {
             // No change in responses byte size (as this is a request).
             responses_size_bytes: 0,
@@ -625,6 +684,10 @@ impl MemoryUsageStats {
                 QueueOp::Push => 1,
                 QueueOp::Pop => 0,
             },
+            oversized_requests_extra_bytes: req
+                .count_bytes()
+                .saturating_sub(MAX_RESPONSE_COUNT_BYTES),
+            transient_stream_responses_size_bytes: 0,
         }
     }
 
@@ -639,6 +702,9 @@ impl MemoryUsageStats {
                 QueueOp::Push => -1,
                 QueueOp::Pop => 0,
             },
+            // No change in requests overhead (as this is a response).
+            oversized_requests_extra_bytes: 0,
+            transient_stream_responses_size_bytes: 0,
         }
     }
 }
@@ -647,6 +713,7 @@ impl AddAssign<MemoryUsageStats> for MemoryUsageStats {
     fn add_assign(&mut self, rhs: MemoryUsageStats) {
         self.responses_size_bytes += rhs.responses_size_bytes;
         self.reserved_slots += rhs.reserved_slots;
+        self.oversized_requests_extra_bytes += rhs.oversized_requests_extra_bytes;
         debug_assert!(self.reserved_slots >= 0);
     }
 }
@@ -655,8 +722,47 @@ impl SubAssign<MemoryUsageStats> for MemoryUsageStats {
     fn sub_assign(&mut self, rhs: MemoryUsageStats) {
         self.responses_size_bytes -= rhs.responses_size_bytes;
         self.reserved_slots -= rhs.reserved_slots;
+        self.oversized_requests_extra_bytes -= rhs.oversized_requests_extra_bytes;
         debug_assert!(self.reserved_slots >= 0);
     }
+}
+
+// Custom `PartialEq`, ignoring `transient_stream_responses_size_bytes`.
+impl PartialEq for MemoryUsageStats {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.responses_size_bytes == rhs.responses_size_bytes
+            && self.reserved_slots == rhs.reserved_slots
+            && self.oversized_requests_extra_bytes == rhs.oversized_requests_extra_bytes
+    }
+}
+
+/// Checks whether `available_memory` is sufficient to allow pushing `msg` onto
+/// an input or output queue.
+///
+/// Returns:
+///  * `Ok(())` if `msg` is a `Response`, as responses always return memory.
+///  * `Ok(())` if `msg` is a `Request` and `available_memory` is sufficient.
+///  * `Err(required_memory)` if `msg` is a `Request` and `required_memory >
+///    available_memory`.
+pub fn can_push(msg: &RequestOrResponse, available_memory: i64) -> Result<(), usize> {
+    match msg {
+        RequestOrResponse::Request(req) => {
+            let required = memory_required_to_push_request(req);
+            if required as i64 <= available_memory {
+                Ok(())
+            } else {
+                Err(required)
+            }
+        }
+        RequestOrResponse::Response(_) => Ok(()),
+    }
+}
+
+/// Returns the memory required to push `req` onto an input or output queue.
+/// This is the maximum of `MAX_RESPONSE_COUNT_BYTES` (to be reserved for a
+/// response) and `req.count_bytes()` (if larger).
+pub fn memory_required_to_push_request(req: &Request) -> usize {
+    req.count_bytes().max(MAX_RESPONSE_COUNT_BYTES)
 }
 
 enum QueueOp {

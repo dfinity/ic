@@ -115,7 +115,7 @@ fn compute_message_sizes(state: &ReplicatedState, begin: u64, end: u64) -> usize
     // Traverse the stream once to collect its messages' total byte size.
     let pattern = make_slice_pattern(begin, end);
     let visitor = SubtreeVisitor::new(&pattern, MessageSpyVisitor::default());
-    let (size, tbegin, tend) = traverse(&state, visitor);
+    let (size, tbegin, tend) = traverse(state, visitor);
 
     // Sanity check MessageSpyVisitor.
     if let (Some(tbegin), Some(tend)) = (tbegin, tend) {

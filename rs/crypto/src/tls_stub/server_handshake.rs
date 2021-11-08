@@ -52,7 +52,7 @@ pub async fn perform_tls_server_handshake_temp_with_optional_client_auth<
         .map_err(|e| map_cert_from_registry_error(e, CertFromRegistryOwner::Myself))?;
     let trusted_node_certs = tls_certs_from_registry(
         registry_client,
-        &allowed_authenticating_clients.nodes(),
+        allowed_authenticating_clients.nodes(),
         registry_version,
     )
     .map_err(|e| map_cert_from_registry_error(e, CertFromRegistryOwner::Client))?;
@@ -184,7 +184,7 @@ fn check_cert_and_get_authenticated_client_node_id(
     client_cert_from_handshake: &TlsPublicKeyCert,
 ) -> Result<NodeId, TlsServerHandshakeError> {
     let client_node_id_from_handshake_cert =
-        node_id_from_cert_subject_common_name(&client_cert_from_handshake)?;
+        node_id_from_cert_subject_common_name(client_cert_from_handshake)?;
     let trusted_client_cert_from_registry =
         cert_for_node_id(client_node_id_from_handshake_cert, trusted_node_certs)?;
     if client_cert_from_handshake != trusted_client_cert_from_registry {

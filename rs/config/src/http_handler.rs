@@ -1,4 +1,3 @@
-use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::{convert::TryFrom, net::SocketAddr};
@@ -86,9 +85,6 @@ pub struct ExternalConfig {
     //       major security risk for the IC, but developers should not be
     //       tempted to get the IC's root key from this insecure location.
     pub show_root_key_in_status: bool,
-    // Clients X509 certificate used for establishing TLS protocol. The field
-    // is base64 encoded DER certificate.
-    pub clients_x509_cert: Option<String>,
 }
 
 impl Default for ExternalConfig {
@@ -98,7 +94,6 @@ impl Default for ExternalConfig {
             allow_ipv6_my_users_have_no_privacy: None,
             port: None,
             show_root_key_in_status: true,
-            clients_x509_cert: None,
         }
     }
 }
@@ -115,8 +110,6 @@ pub struct Config {
     pub port_file_path: Option<PathBuf>,
     /// True if the replica public key is returned from the `/status` endpoint
     pub show_root_key_in_status: bool,
-    /// The digital certificate used by TLS.
-    pub clients_x509_cert: Option<TlsPublicKeyCert>,
 }
 
 impl Default for Config {
@@ -128,7 +121,6 @@ impl Default for Config {
             ),
             port_file_path: None,
             show_root_key_in_status: true,
-            clients_x509_cert: None,
         }
     }
 }
@@ -163,14 +155,6 @@ impl TryFrom<ExternalConfig> for Config {
         }?;
 
         config.show_root_key_in_status = ec.show_root_key_in_status;
-        if let Some(base64_clients_x509_cert) = ec.clients_x509_cert {
-            let base64_decoded_clients_x509_cert = base64::decode(&base64_clients_x509_cert)
-                .map_err(|_err| "Could not decode x509 cert from base64 encoding.")?;
-            config.clients_x509_cert = Some(
-                TlsPublicKeyCert::new_from_der(base64_decoded_clients_x509_cert)
-                    .map_err(|_err| "Could not decode x509 cert from DER encoding")?,
-            );
-        }
         Ok(config)
     }
 }

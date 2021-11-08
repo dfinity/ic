@@ -17,8 +17,20 @@ import "ic_ledger/pb/v1/types.proto";
 // Note: The NodeOperatorRecord is defined in:
 // rs/protobuf/def/registry/node_operator/v1/node_operator.proto.
 message NodeProvider {
-    // The ID of the node provider.
+  // The ID of the node provider.
   ic_base_types.pb.v1.PrincipalId id = 1;
+
+  // The account where rewards earned from providing nodes will be sent.
+  ic_ledger.pb.v1.AccountIdentifier reward_account = 2;
+}
+
+// Used to update node provider records
+//
+// There is no need to specify a node provider Principal ID here, as Governance
+// uses the Principal ID of the caller as the Node Provider Principal ID.
+message UpdateNodeProvider {
+  // The account where rewards earned from providing nodes will be sent.
+  ic_ledger.pb.v1.AccountIdentifier reward_account = 1;
 }
 
 // Proposal types are organized into topics. Neurons can automatically
@@ -160,6 +172,8 @@ message NeuronInfo {
   uint64 created_timestamp_seconds = 7;
   // Current stake of the neuron, in e8s.
   uint64 stake_e8s = 8;
+  // Timestamp when this neuron joined the community fund.
+  optional uint64 joined_community_fund_timestamp_seconds = 9;
 }
 
 // A transfer performed from some account to stake a new neuron.
@@ -306,6 +320,12 @@ message Neuron {
   // Whether this neuron is "Not for profit", making it dissolvable
   // by voting.
   bool not_for_profit = 16;
+
+  // If set, this neuron participates with all of its stake in the
+  // Internet Computer's community fund. Setting this value is an
+  // irreversible decision that can only be made by the neuron's
+  // controller.
+  optional uint64 joined_community_fund_timestamp_seconds = 17;
 }
 
 // The types of votes the Neuron can issue.
@@ -619,11 +639,6 @@ message ManageNeuron {
   message IncreaseDissolveDelay {
     uint32 additional_dissolve_delay_seconds = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
-  // An (idempotent) alternative to IncreaseDissolveDelay where the dissolve delay
-  // is passed as an absolute timestamp in seconds since the unix epoch.
-  message SetDissolveTimestamp {
-    uint64 dissolve_timestamp_seconds = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-  }
   message StartDissolving {}
   message StopDissolving {}
   // Add a new hot key that can be used to manage the neuron. This
@@ -639,6 +654,14 @@ message ManageNeuron {
   message RemoveHotKey {
     ic_base_types.pb.v1.PrincipalId hot_key_to_remove = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
+  // An (idempotent) alternative to IncreaseDissolveDelay where the dissolve delay
+  // is passed as an absolute timestamp in seconds since the unix epoch.
+  message SetDissolveTimestamp {
+    uint64 dissolve_timestamp_seconds = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  }
+  // Join the Internet Computer's community fund with this neuron's
+  // entire stake. Caution: this operation is not reversible.
+  message JoinCommunityFund {}
   // Commands that only configure a given neuron, but do not interact
   // with the outside world. They all require the caller to be the
   // controller of the neuron.
@@ -650,6 +673,7 @@ message ManageNeuron {
       AddHotKey add_hot_key = 4;
       RemoveHotKey remove_hot_key = 5;
       SetDissolveTimestamp set_dissolve_timestamp = 6;
+      JoinCommunityFund join_community_fund = 7;
     }
   }
   // Disburse this neuron's stake: transfer the staked ICP to the
@@ -890,6 +914,9 @@ message GovernanceError {
      ERROR_TYPE_INVALID_PRINCIPAL = 15;
      // The proposal's parameters violate size restrictions.
      ERROR_TYPE_INVALID_PROPOSAL = 16;
+     // The neuron attempted to join the community fund while already
+     // a member.
+     ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND = 17;
   }
 
   ErrorType error_type = 1;
@@ -1273,6 +1300,7 @@ message Governance {
     uint64 total_staked_e8s = 13;
     uint64 neurons_with_less_than_6_months_dissolve_delay_count = 14;
     uint64 neurons_with_less_than_6_months_dissolve_delay_e8s = 15;
+    uint64 community_fund_total_staked_e8s = 16;
   }
 
   GovernanceCachedMetrics metrics = 15;

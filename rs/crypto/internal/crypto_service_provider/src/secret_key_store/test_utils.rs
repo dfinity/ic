@@ -41,7 +41,8 @@ impl TempSecretKeyStore {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let tempdir = mk_temp_dir_with_permissions(0o700);
-        let store = ProtoSecretKeyStore::open(tempdir.path(), None);
+        let temp_file = "temp_sks_data.pb";
+        let store = ProtoSecretKeyStore::open(tempdir.path(), temp_file, None);
         TempSecretKeyStore { store, tempdir }
     }
 }
@@ -126,7 +127,7 @@ pub fn should_remove_existing_key<T: SecretKeyStore>(seed1: u64, seed2: u64, mut
 pub fn should_not_remove_nonexisting_key<T: SecretKeyStore>(seed1: u64, mut key_store: T) {
     let non_existing_key_id: KeyId = make_key_id(seed1);
 
-    assert_eq!(key_store.remove(&non_existing_key_id), false);
+    assert!(!key_store.remove(&non_existing_key_id));
 }
 
 pub fn deleting_twice_should_return_false<T: SecretKeyStore>(
@@ -139,9 +140,9 @@ pub fn deleting_twice_should_return_false<T: SecretKeyStore>(
 
     assert!(key_store.insert(key_id_1, key_1, None).is_ok());
 
-    assert_eq!(key_store.remove(&key_id_1), true);
-    assert_eq!(key_store.contains(&key_id_1), false);
-    assert_eq!(key_store.remove(&key_id_1), false);
+    assert!(key_store.remove(&key_id_1));
+    assert!(!key_store.contains(&key_id_1));
+    assert!(!key_store.remove(&key_id_1));
 }
 
 pub fn no_overwrites<T: SecretKeyStore>(seed1: u64, seed2: u64, seed3: u64, mut key_store: T) {
@@ -198,29 +199,24 @@ pub fn should_retain_expected_keys<T: SecretKeyStore>(mut key_store: T) {
         selected_scope,
     );
 
-    assert_eq!(
+    assert!(
         key_store.contains(&key_with_id_to_retain.0),
-        true,
         "Expected to retain key by ID"
     );
-    assert_eq!(
+    assert!(
         key_store.contains(&key_with_value_to_retain.0),
-        true,
         "Expected to retain key by value"
     );
-    assert_eq!(
-        key_store.contains(&key_to_remove.0),
-        false,
+    assert!(
+        !key_store.contains(&key_to_remove.0),
         "Expected to remove unselected key"
     );
-    assert_eq!(
+    assert!(
         key_store.contains(&key_with_different_scope.0),
-        true,
         "Expected to keep key in different scope"
     );
-    assert_eq!(
+    assert!(
         key_store.contains(&key_with_no_scope.0),
-        true,
         "Expected to keep key with no scope"
     );
 }

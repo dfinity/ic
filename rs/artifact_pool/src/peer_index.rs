@@ -57,7 +57,7 @@ impl PeerIndex {
     }
 
     pub(crate) fn get_remaining_quota(&self, peer_id: &NodeId) -> usize {
-        match self.peer_map.get(&peer_id) {
+        match self.peer_map.get(peer_id) {
             Some(bucket) => {
                 let quota_used = bucket.get_quota_used();
                 if self.max_quota_per_peer > quota_used {

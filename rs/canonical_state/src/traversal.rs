@@ -58,6 +58,7 @@ mod tests {
         metadata_state::SubnetTopology,
         page_map::PageMap,
         testing::ReplicatedStateTesting,
+        Memory,
     };
     use ic_test_utilities::{
         mock_time,
@@ -234,13 +235,17 @@ mod tests {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         let wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(vec![]));
         let wasm_binary_hash = wasm_binary.binary.hash_sha256();
+        let wasm_memory = Memory {
+            page_map: PageMap::default(),
+            size: NumWasmPages::from(2),
+        };
         let execution_state = ExecutionState {
             canister_root: "NOT_USED".into(),
             session_nonce: None,
             wasm_binary,
-            page_map: PageMap::default(),
+            wasm_memory,
+            stable_memory: Memory::default(),
             exported_globals: vec![Global::I32(1)],
-            heap_size: NumWasmPages::from(2),
             exports: ExportedFunctions::new(BTreeSet::new()),
             last_executed_round: ExecutionRound::from(0),
             cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(tmpdir.path().into())),

@@ -84,7 +84,7 @@ impl BlockMaker {
     ) -> Option<BlockProposal> {
         trace!(self.log, "on_state_change");
         let my_node_id = self.replica_config.node_id;
-        let (beacon, parent) = get_dependencies(&pool)?;
+        let (beacon, parent) = get_dependencies(pool)?;
         let height = beacon.content.height.increment();
         match self
             .membership
@@ -251,7 +251,7 @@ impl BlockMaker {
             self.replica_config.subnet_id,
             &*self.registry_client,
             &*self.crypto,
-            &pool,
+            pool,
             Arc::clone(&self.dkg_pool),
             &parent,
             &*self.state_manager,
@@ -428,7 +428,7 @@ impl BlockMaker {
         let number_of_proposals = 5;
 
         let my_node_id = self.replica_config.node_id;
-        let (beacon, parent) = match get_dependencies(&pool) {
+        let (beacon, parent) = match get_dependencies(pool) {
             Some((b, p)) => (b, p),
             None => {
                 return Vec::new();

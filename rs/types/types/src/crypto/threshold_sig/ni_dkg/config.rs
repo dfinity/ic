@@ -256,13 +256,13 @@ impl NiDkgConfig {
     ) -> Result<(), NiDkgConfigValidationError> {
         if !dealers
             .get()
-            .is_subset(&resharing_transcript.committee.get())
+            .is_subset(resharing_transcript.committee.get())
         {
             let dealers = dealers.get();
             let committee = &resharing_transcript.committee;
             return Err(NiDkgConfigValidationError::DealersNotInResharingCommittee {
-                dealers_missing: dealers.difference(&committee.get()).cloned().collect(),
-                dealers_existing: dealers.intersection(&committee.get()).cloned().collect(),
+                dealers_missing: dealers.difference(committee.get()).cloned().collect(),
+                dealers_existing: dealers.intersection(committee.get()).cloned().collect(),
                 resharing_committee: committee.get().clone(),
             });
         }

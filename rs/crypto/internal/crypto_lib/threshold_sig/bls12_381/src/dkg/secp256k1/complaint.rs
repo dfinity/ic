@@ -107,7 +107,7 @@ pub(super) fn complain_maybe<R: Rng + CryptoRng>(
         .digest();
         let spec_s: EphemeralSecretKey = {
             let mut ans = spec_c.clone();
-            ans *= &receiver_secret_key; // spec: my_dh_secret
+            ans *= receiver_secret_key; // spec: my_dh_secret
             ans += &spec_r;
             ans
         };

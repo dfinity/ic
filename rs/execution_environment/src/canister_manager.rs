@@ -18,7 +18,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::{
-    CallOrigin, CanisterState, CanisterStatus, ReplicatedState, SchedulerState, SystemState,
+    CallOrigin, CanisterState, CanisterStatus, Memory, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_types::{
@@ -33,10 +33,9 @@ use ic_types::{
     MemoryAllocation, NumBytes, NumInstructions, PrincipalId, SubnetId, Time, UserId,
 };
 use ic_utils::ic_features::cow_state_feature;
-use ic_wasm_utils::validation::WasmValidationConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::{collections::BTreeSet, convert::TryFrom, mem, str::FromStr, sync::Arc};
+use std::{collections::BTreeSet, convert::TryFrom, str::FromStr, sync::Arc};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct InstallCodeResult {
@@ -60,11 +59,6 @@ pub(crate) enum StopCanisterResult {
     RequestAccepted,
 }
 
-/// Returns true if the canister is empty, false otherwise.
-fn canister_is_empty(canister: &CanisterState) -> bool {
-    canister.execution_state.is_none() && canister.system_state.stable_memory_size.get() == 0
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) struct CanisterMgrConfig {
     pub(crate) subnet_memory_capacity: NumBytes,
@@ -74,7 +68,6 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) compute_capacity: u64,
     pub(crate) own_subnet_id: SubnetId,
     pub(crate) max_controllers: usize,
-    pub(crate) wasm_validation_config: WasmValidationConfig,
 }
 
 impl CanisterMgrConfig {
@@ -87,7 +80,6 @@ impl CanisterMgrConfig {
         own_subnet_id: SubnetId,
         max_controllers: usize,
         num_cores: usize,
-        wasm_validation_config: WasmValidationConfig,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -97,7 +89,6 @@ impl CanisterMgrConfig {
             own_subnet_id,
             max_controllers,
             compute_capacity: 100 * num_cores as u64,
-            wasm_validation_config,
         }
     }
 }
@@ -183,19 +174,19 @@ impl CanisterManager {
             | Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::UninstallCode)
             | Ok(Ic00Method::StopCanister)
-            | Ok(Ic00Method::DeleteCanister) => match Decode!(&payload, CanisterIdRecord) {
+            | Ok(Ic00Method::DeleteCanister) => match Decode!(payload, CanisterIdRecord) {
                 Err(_) => rejected_canister_err,
                 Ok(args) => is_sender_controller(args.get_canister_id(), sender, state),
             },
-            Ok(Ic00Method::UpdateSettings) => match Decode!(&payload, UpdateSettingsArgs) {
+            Ok(Ic00Method::UpdateSettings) => match Decode!(payload, UpdateSettingsArgs) {
                 Err(_) => rejected_canister_err,
                 Ok(args) => is_sender_controller(args.get_canister_id(), sender, state),
             },
-            Ok(Ic00Method::InstallCode) => match Decode!(&payload, InstallCodeArgs) {
+            Ok(Ic00Method::InstallCode) => match Decode!(payload, InstallCodeArgs) {
                 Err(_) => rejected_canister_err,
                 Ok(args) => is_sender_controller(args.get_canister_id(), sender, state),
             },
-            Ok(Ic00Method::SetController) => match Decode!(&payload, SetControllerArgs) {
+            Ok(Ic00Method::SetController) => match Decode!(payload, SetControllerArgs) {
                 Err(_) => rejected_canister_err,
                 Ok(args) => is_sender_controller(args.get_canister_id(), sender, state),
             },
@@ -306,15 +297,15 @@ impl CanisterManager {
         total_subnet_memory_taken: NumBytes,
     ) -> Result<(), CanisterManagerError> {
         // Verify controller.
-        self.validate_controller(&canister, &sender)?;
+        self.validate_controller(canister, &sender)?;
         self.validate_compute_allocation(
             total_subnet_compute_allocation_used,
-            &canister,
+            canister,
             settings.compute_allocation(),
         )?;
         self.validate_memory_allocation(
             total_subnet_memory_taken,
-            &canister,
+            canister,
             settings.memory_allocation(),
         )?;
 
@@ -334,6 +325,7 @@ impl CanisterManager {
         sender_subnet_id: SubnetId,
         cycles: Cycles,
         settings: CanisterSettings,
+        max_number_of_canisters: u64,
         state: &mut ReplicatedState,
     ) -> (Result<CanisterId, CanisterManagerError>, Cycles) {
         // Creating a canister is possible only in the following cases:
@@ -372,6 +364,7 @@ impl CanisterManager {
                     cycles,
                     self.cycles_account_manager.canister_creation_fee(),
                     validate_settings,
+                    max_number_of_canisters,
                     state,
                 ) {
                     Ok(canister_id) => canister_id,
@@ -431,22 +424,22 @@ impl CanisterManager {
         };
         if let Err(err) = self.validate_compute_allocation(
             compute_allocation_used,
-            &old_canister,
+            old_canister,
             context.compute_allocation,
         ) {
             return (execution_parameters.instruction_limit, Err(err));
         }
         if let Err(err) =
-            self.validate_memory_allocation(memory_taken, &old_canister, context.memory_allocation)
+            self.validate_memory_allocation(memory_taken, old_canister, context.memory_allocation)
         {
             return (execution_parameters.instruction_limit, Err(err));
         }
-        if let Err(err) = self.validate_controller(&old_canister, &context.sender) {
+        if let Err(err) = self.validate_controller(old_canister, &context.sender) {
             return (execution_parameters.instruction_limit, Err(err));
         }
         match context.mode {
             CanisterInstallMode::Install => {
-                if !canister_is_empty(old_canister) {
+                if old_canister.execution_state.is_some() {
                     return (
                         execution_parameters.instruction_limit,
                         Err(CanisterManagerError::CanisterNonEmpty(context.canister_id)),
@@ -556,7 +549,7 @@ impl CanisterManager {
         // canister. The governance canister can forcefully
         // uninstall the code of any canister.
         if sender != GOVERNANCE_CANISTER_ID.get() {
-            if let Err(err) = self.validate_controller(&canister, &sender) {
+            if let Err(err) = self.validate_controller(canister, &sender) {
                 return Err(err);
             }
         }
@@ -655,10 +648,10 @@ impl CanisterManager {
         sender: PrincipalId,
         canister: &mut CanisterState,
     ) -> Result<Vec<StopCanisterContext>, CanisterManagerError> {
-        self.validate_controller(&canister, &sender)?;
+        self.validate_controller(canister, &sender)?;
 
         let stop_contexts = match &mut canister.system_state.status {
-            CanisterStatus::Stopping { stop_contexts, .. } => mem::replace(stop_contexts, vec![]),
+            CanisterStatus::Stopping { stop_contexts, .. } => std::mem::take(stop_contexts),
             CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
                 Vec::new() // No stop contexts to return.
             }
@@ -688,7 +681,7 @@ impl CanisterManager {
         sender: PrincipalId,
         canister: &mut CanisterState,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
-        self.validate_controller(&canister, &sender)?;
+        self.validate_controller(canister, &sender)?;
 
         let controller = canister.system_state.controller();
         let controllers = canister
@@ -744,7 +737,7 @@ impl CanisterManager {
     /// can delete it. The controller must be a canister and the canister
     /// cannot be its own controller.
     ///
-    /// Any remaining cycles in the canister are transferred to its controller.
+    /// Any remaining cycles in the canister are discarded.
     ///
     /// #Errors
     /// CanisterManagerError::DeleteCanisterSelf is the canister attempts to
@@ -765,9 +758,9 @@ impl CanisterManager {
         let canister_to_delete = self.validate_canister_exists(state, canister_id_to_delete)?;
 
         // Validate the request is from the controller.
-        self.validate_controller(&canister_to_delete, &sender)?;
+        self.validate_controller(canister_to_delete, &sender)?;
 
-        self.validate_canister_is_stopped(&canister_to_delete)?;
+        self.validate_canister_is_stopped(canister_to_delete)?;
 
         // Once a canister is stopped, it stops accepting new messages, so this should
         // never happen.
@@ -842,10 +835,13 @@ impl CanisterManager {
     ) {
         let canister_id = context.canister_id;
         let layout = canister_layout(&canister_layout_path, &canister_id);
+
+        let system_state = old_canister.system_state.clone();
         let execution_state = match self.hypervisor.create_execution_state(
             context.wasm_module,
             layout.raw_path(),
-            self.config.wasm_validation_config.clone(),
+            system_state.clone(),
+            old_canister.memory_usage(),
         ) {
             Ok(execution_state) => Some(execution_state),
             Err(err) => {
@@ -856,22 +852,8 @@ impl CanisterManager {
             }
         };
 
-        let mut system_state = old_canister.system_state.clone();
-        // According to spec, we must clear stable memory on install and reinstall.
-        system_state.clear_stable_memory();
         let scheduler_state = old_canister.scheduler_state.clone();
-        let new_canister = CanisterState::new(system_state, execution_state, scheduler_state);
-
-        let (mut new_canister, result) = self.hypervisor.execute_empty(new_canister);
-        match result {
-            Ok(()) => (),
-            Err(err) => {
-                return (
-                    execution_parameters.instruction_limit,
-                    Err((canister_id, err).into()),
-                )
-            }
-        }
+        let mut new_canister = CanisterState::new(system_state, execution_state, scheduler_state);
 
         // Update allocations.  This must happen after we have created the new
         // execution state so that we fairly account for the memory requirements
@@ -909,6 +891,13 @@ impl CanisterManager {
         let (new_canister, instruction_limit, result) = self
             .hypervisor
             .execute_canister_start(new_canister, execution_parameters.clone());
+        info!(
+            self.log,
+            "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
+            canister_id,
+            execution_parameters.instruction_limit - instruction_limit,
+            instruction_limit
+        );
         match result {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
@@ -924,7 +913,14 @@ impl CanisterManager {
             context.sender,
             context.arg.as_slice(),
             time,
-            execution_parameters,
+            execution_parameters.clone(),
+        );
+        info!(
+            self.log,
+            "Executing (canister_init) on canister {} consumed {} instructions.  {} instructions are left.",
+            canister_id,
+            execution_parameters.instruction_limit - instruction_limit,
+            instruction_limit
         );
         match result {
             Ok(heap_delta) => {
@@ -957,6 +953,13 @@ impl CanisterManager {
                 time,
                 execution_parameters.clone(),
             );
+        info!(
+            self.log,
+            "Executing (canister_pre_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
+            canister_id,
+            execution_parameters.instruction_limit - instructions_limit,
+            instructions_limit
+        );
         match res {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
@@ -974,22 +977,25 @@ impl CanisterManager {
                 .upgrade();
         }
 
-        // Replace the execution state of the canister with a new execution state.
+        // Replace the execution state of the canister with a new execution state, but
+        // persist the stable memory (if it exists).
         let layout = canister_layout(&canister_layout_path, &canister_id);
         new_canister.execution_state = match self.hypervisor.create_execution_state(
             context.wasm_module,
             layout.raw_path(),
-            self.config.wasm_validation_config.clone(),
+            new_canister.system_state.clone(),
+            new_canister.memory_usage(),
         ) {
             Err(err) => return (instructions_limit, Err((canister_id, err).into())),
-            Ok(execution_state) => Some(execution_state),
+            Ok(mut execution_state) => {
+                let stable_memory = match new_canister.execution_state {
+                    Some(es) => es.stable_memory,
+                    None => Memory::default(),
+                };
+                execution_state.stable_memory = stable_memory;
+                Some(execution_state)
+            }
         };
-
-        let (mut new_canister, result) = self.hypervisor.execute_empty(new_canister);
-        match result {
-            Ok(()) => (),
-            Err(err) => return (instructions_limit, Err((canister_id, err).into())),
-        }
 
         // Update allocations.  This must happen after we have created the new
         // execution state so that we fairly account for the memory requirements
@@ -1025,6 +1031,13 @@ impl CanisterManager {
         let (new_canister, instructions_limit, result) = self
             .hypervisor
             .execute_canister_start(new_canister, execution_parameters.clone());
+        info!(
+            self.log,
+            "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
+            canister_id,
+            execution_parameters.instruction_limit - instructions_limit,
+            instructions_limit
+        );
         match result {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
@@ -1039,8 +1052,15 @@ impl CanisterManager {
                 context.sender,
                 context.arg.as_slice(),
                 time,
-                execution_parameters,
+                execution_parameters.clone(),
             );
+        info!(
+            self.log,
+            "Executing (canister_post_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
+            canister_id,
+            execution_parameters.instruction_limit - instructions_limit,
+            instructions_limit
+        );
         match result {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
@@ -1065,6 +1085,7 @@ impl CanisterManager {
         settings: CanisterSettings,
         state: &mut ReplicatedState,
         provisional_whitelist: &ProvisionalWhitelist,
+        max_number_of_canisters: u64,
     ) -> Result<CanisterId, CanisterManagerError> {
         if !provisional_whitelist.contains(&sender) {
             return Err(CanisterManagerError::SenderNotInWhitelist(sender));
@@ -1088,6 +1109,7 @@ impl CanisterManager {
                 cycles,
                 Cycles::new(0),
                 validated_settings,
+                max_number_of_canisters,
                 state,
             ),
         }
@@ -1099,10 +1121,18 @@ impl CanisterManager {
         cycles: Cycles,
         creation_fee: Cycles,
         settings: ValidatedCanisterSettings,
+        max_number_of_canisters: u64,
         state: &mut ReplicatedState,
     ) -> Result<CanisterId, CanisterManagerError> {
+        if max_number_of_canisters > 0 && state.num_canisters() as u64 >= max_number_of_canisters {
+            return Err(CanisterManagerError::MaxNumberOfCanistersReached {
+                subnet_id: self.config.own_subnet_id,
+                max_number_of_canisters,
+            });
+        }
+
         let new_canister_id = self.generate_new_canister_id(state)?;
-        self.validate_canister_id_available(&state, &new_canister_id)?;
+        self.validate_canister_id_available(state, &new_canister_id)?;
 
         // Take the fee out of the cycles that are going to be added as the canister's
         // initial balance.
@@ -1360,6 +1390,10 @@ pub(crate) enum CanisterManagerError {
     InvalidSettings {
         message: String,
     },
+    MaxNumberOfCanistersReached {
+        subnet_id: SubnetId,
+        max_number_of_canisters: u64,
+    },
 }
 
 impl From<CanisterManagerError> for UserError {
@@ -1491,6 +1525,12 @@ impl From<CanisterManagerError> for UserError {
                           format!("Could not validate the settings: {} ", message),
                 )
             }
+            MaxNumberOfCanistersReached { subnet_id, max_number_of_canisters } => {
+                Self::new(
+                    ErrorCode::MaxNumberOfCanistersReached,
+                    format!("Subnet {} has reached the allowed canister limit of {} canisters. Retry creating the canister.", subnet_id, max_number_of_canisters),
+                )
+            }
         }
     }
 }
@@ -1517,7 +1557,7 @@ pub(crate) fn truncate_canister_heap(
     let heap_file = layout.vmemory_0();
     if let Err(err) = nix::unistd::truncate(&heap_file, 0) {
         // It's OK if the file doesn't exist, everything else is a fatal error.
-        if err.as_errno() != Some(nix::errno::Errno::ENOENT) {
+        if err != nix::errno::Errno::ENOENT {
             fatal!(
                 log,
                 "failed to truncate heap of canister {} stored at {}: {}",
@@ -1538,7 +1578,7 @@ pub(crate) fn truncate_canister_stable_memory(
     let stable_memory_file = layout.stable_memory_blob();
     if let Err(err) = nix::unistd::truncate(&stable_memory_file, 0) {
         // It's OK if the file doesn't exist, everything else is a fatal error.
-        if err.as_errno() != Some(nix::errno::Errno::ENOENT) {
+        if err != nix::errno::Errno::ENOENT {
             fatal!(
                 log,
                 "failed to truncate stable memory of canister {} stored at {}: {}",
@@ -1565,14 +1605,11 @@ pub fn uninstall_canister(
     // Drop the canister's execution state.
     canister.execution_state = None;
 
-    // Drop its stable memory
-    canister.system_state.clear_stable_memory();
-
     // Drop its certified data.
     canister.system_state.certified_data = Vec::new();
 
-    truncate_canister_heap(&log, state_path, canister.canister_id());
-    truncate_canister_stable_memory(&log, state_path, canister.canister_id());
+    truncate_canister_heap(log, state_path, canister.canister_id());
+    truncate_canister_stable_memory(log, state_path, canister.canister_id());
 
     let mut rejects = Vec::new();
     let canister_id = canister.canister_id();

@@ -7,7 +7,7 @@ use dfn_core::{
     api::{arg_data, data_certificate, reply, set_certified_data},
     over, over_async, over_may_reject, stable,
 };
-use ic_crypto_tree_hash::{LabeledTree, WitnessGenerator, WitnessGeneratorImpl};
+use ic_certified_map::{AsHashTree, HashTree};
 use ic_nns_common::{
     access_control::check_caller_is_root, pb::v1::CanisterAuthzInfo, types::MethodAuthzChange,
 };
@@ -27,6 +27,7 @@ use ic_registry_transport::{
     serialize_get_value_response,
 };
 use registry_canister::{
+    certification::{current_version_tree, hash_tree_to_proto},
     common::LOG_PREFIX,
     init::RegistryCanisterInitPayload,
     mutations::{
@@ -44,7 +45,7 @@ use registry_canister::{
     },
     pb::v1::RegistryCanisterStableStorage,
     proto_on_wire::protobuf,
-    registry::Registry,
+    registry::{EncodedVersion, Registry},
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -54,7 +55,6 @@ use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPaylo
 fn main() {}
 
 static mut REGISTRY: Option<Registry> = None;
-static mut WITNESS_GENERATOR: Option<WitnessGeneratorImpl> = None;
 
 const MAX_VERSIONS_PER_QUERY: usize = 1000;
 
@@ -69,23 +69,6 @@ fn registry_mut() -> &'static mut Registry {
         } else {
             REGISTRY = Some(Registry::new());
             registry_mut()
-        }
-    }
-}
-
-fn witness_generator() -> &'static WitnessGeneratorImpl {
-    witness_generator_mut()
-}
-
-fn witness_generator_mut() -> &'static mut WitnessGeneratorImpl {
-    unsafe {
-        if let Some(g) = &mut WITNESS_GENERATOR {
-            g
-        } else {
-            WITNESS_GENERATOR = Some(registry_canister::certification::rebuild_tree(
-                registry_mut(),
-            ));
-            witness_generator_mut()
         }
     }
 }
@@ -230,27 +213,31 @@ fn get_changes_since() {
 }
 
 #[export_name = "canister_query get_certified_changes_since"]
-fn get_changes_since_certified() {
-    over(protobuf, |req: RegistryGetChangesSinceRequest| {
-        use registry_canister::certification::{build_deltas_tree, num_leaf, singleton};
+fn get_certified_changes_since() {
+    over(
+        protobuf,
+        |req: RegistryGetChangesSinceRequest| -> CertifiedResponse {
+            use ic_certified_map::{fork, labeled, labeled_hash};
 
-        let since_version = req.version;
-        let registry = registry();
-        let latest_version = registry.latest_version();
-        let deltas = registry
-            .changelog()
-            .iter()
-            .skip_while(|(v, _)| *v <= since_version)
-            .take(MAX_VERSIONS_PER_QUERY);
+            let latest_version = registry().latest_version();
+            let from_version = EncodedVersion::from(req.version.saturating_add(1));
+            let to_version =
+                EncodedVersion::from(req.version.saturating_add(MAX_VERSIONS_PER_QUERY as u64));
+            let delta_tree = registry()
+                .changelog()
+                .value_range(from_version.as_ref(), to_version.as_ref());
 
-        let data_tree = if latest_version <= since_version {
-            singleton("current_version", num_leaf(latest_version))
-        } else {
-            build_deltas_tree(latest_version, deltas)
-        };
-
-        certified_response(&data_tree)
-    })
+            let hash_tree = fork(
+                current_version_tree(latest_version),
+                if req.version < latest_version {
+                    labeled(b"delta", delta_tree)
+                } else {
+                    HashTree::Pruned(labeled_hash(b"delta", &registry().changelog().root_hash()))
+                },
+            );
+            certified_response(hash_tree)
+        },
+    )
 }
 
 #[export_name = "canister_query get_value"]
@@ -305,13 +292,15 @@ fn get_latest_version() {
 }
 
 #[export_name = "canister_query get_certified_latest_version"]
-fn get_latest_version_certified() {
-    use registry_canister::certification::{num_leaf, singleton};
-
-    over(protobuf, |_: Vec<u8>| {
+fn get_certified_latest_version() {
+    over(protobuf, |_: Vec<u8>| -> CertifiedResponse {
+        use ic_certified_map::{fork, labeled_hash};
         let latest_version = registry().latest_version();
-        let data_tree = singleton("current_version", num_leaf(latest_version));
-        certified_response(&data_tree)
+        let hash_tree = fork(
+            current_version_tree(latest_version),
+            HashTree::Pruned(labeled_hash(b"delta", &registry().changelog().root_hash())),
+        );
+        certified_response(hash_tree)
     });
 }
 
@@ -521,7 +510,7 @@ fn set_firewall_config() {
 fn update_node_rewards_table() {
     check_caller_is_governance_and_log("update_node_rewards_table");
     over(
-        protobuf,
+        candid_one,
         |payload: UpdateNodeRewardsTableProposalPayload| {
             registry_mut().do_update_node_rewards_table(payload);
             recertify_registry();
@@ -533,7 +522,7 @@ fn update_node_rewards_table() {
 fn add_or_remove_data_centers() {
     check_caller_is_governance_and_log("add_or_remove_data_centers");
     over(
-        protobuf,
+        candid_one,
         |payload: AddOrRemoveDataCentersProposalPayload| {
             registry_mut().do_add_or_remove_data_centers(payload);
             recertify_registry();
@@ -542,18 +531,18 @@ fn add_or_remove_data_centers() {
 }
 
 fn recertify_registry() {
-    let witness_generator = witness_generator_mut();
-    *witness_generator = registry_canister::certification::rebuild_tree(&*registry());
-    set_certified_data(&witness_generator.hash_tree().digest().0[..]);
+    use ic_certified_map::{fork_hash, labeled_hash};
+
+    let root_hash = fork_hash(
+        &current_version_tree(registry().latest_version()).reconstruct(),
+        &labeled_hash(b"delta", &registry().changelog().root_hash()),
+    );
+    set_certified_data(&root_hash);
 }
 
-fn certified_response(data_tree: &LabeledTree<Vec<u8>>) -> CertifiedResponse {
-    let hash_tree = witness_generator()
-        .mixed_hash_tree(&data_tree)
-        .expect("failed to produce a hash tree");
-
+fn certified_response(tree: HashTree<'_>) -> CertifiedResponse {
     CertifiedResponse {
-        hash_tree: Some(hash_tree.into()),
+        hash_tree: Some(hash_tree_to_proto(tree)),
         certificate: data_certificate().unwrap(),
     }
 }

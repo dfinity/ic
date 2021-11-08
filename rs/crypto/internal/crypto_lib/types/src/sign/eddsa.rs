@@ -37,7 +37,7 @@ pub mod ed25519 {
                 })
             } else {
                 let mut buffer = [0u8; Self::SIZE];
-                buffer.copy_from_slice(&bytes);
+                buffer.copy_from_slice(bytes);
                 Ok(Self(buffer))
             }
         }
@@ -72,7 +72,7 @@ pub mod ed25519 {
                 })
             } else {
                 let mut buffer = [0u8; Self::SIZE];
-                buffer.copy_from_slice(&bytes);
+                buffer.copy_from_slice(bytes);
                 Ok(Self(buffer))
             }
         }

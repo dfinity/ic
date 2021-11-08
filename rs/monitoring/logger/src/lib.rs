@@ -29,11 +29,11 @@ pub struct LoggerImpl {
 impl LoggerImpl {
     pub fn new(config: &LoggerConfig, thread_name: String) -> Self {
         match config.target.clone() {
-            LogTarget::Stdout => Self::new_internal(std::io::stdout(), &config, thread_name),
-            LogTarget::Stderr => Self::new_internal(std::io::stderr(), &config, thread_name),
+            LogTarget::Stdout => Self::new_internal(std::io::stdout(), config, thread_name),
+            LogTarget::Stderr => Self::new_internal(std::io::stderr(), config, thread_name),
             LogTarget::File(f) => Self::new_internal(
                 std::fs::File::create(f).expect("Couldn't open/create log file"),
-                &config,
+                config,
                 thread_name,
             ),
         }

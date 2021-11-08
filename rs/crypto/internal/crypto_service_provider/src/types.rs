@@ -180,7 +180,7 @@ impl CspPublicKey {
             CspPublicKey::EcdsaP256(pk_bytes) => &pk_bytes.0,
             CspPublicKey::Ed25519(pk_bytes) => &pk_bytes.0,
             CspPublicKey::MultiBls12_381(pk_bytes) => &pk_bytes.0,
-            CspPublicKey::RsaSha256(pk_bytes) => &pk_bytes.as_der(),
+            CspPublicKey::RsaSha256(pk_bytes) => pk_bytes.as_der(),
         }
     }
 }

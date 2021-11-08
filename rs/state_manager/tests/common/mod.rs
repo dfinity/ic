@@ -23,7 +23,7 @@ use ic_types::{
     artifact::{Artifact, StateSyncMessage},
     chunkable::{
         ArtifactErrorCode::{ChunkVerificationFailed, ChunksMoreNeeded},
-        Chunkable, ChunkableArtifact,
+        ChunkId, Chunkable, ChunkableArtifact,
     },
     consensus::{
         certification::{Certification, CertificationContent},
@@ -34,7 +34,7 @@ use ic_types::{
     CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
 };
 use ic_wasm_types::BinaryEncodedWasm;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 use tempfile::Builder;
 
 pub fn empty_wasm() -> BinaryEncodedWasm {
@@ -115,7 +115,7 @@ pub fn encode_decode_stream_test<
     should_pass_verification: bool,
     f: F,
 ) {
-    state_manager_test_with_verifier_result(should_pass_verification, |state_manager| {
+    state_manager_test_with_verifier_result(should_pass_verification, |_metrics, state_manager| {
         let (_height, mut state) = state_manager.take_tip();
 
         let destination_subnet = destination_subnet.unwrap_or_else(|| subnet_test_id(42));
@@ -170,7 +170,7 @@ pub fn encode_partial_slice_test(
     msg_limit: usize,
     byte_limit: usize,
 ) {
-    state_manager_test(|state_manager| {
+    state_manager_test(|_metrics, state_manager| {
         let (_height, mut state) = state_manager.take_tip();
 
         let destination_subnet = subnet_test_id(42);
@@ -335,6 +335,46 @@ pub fn insert_dummy_canister(state: &mut ReplicatedState, canister_id: CanisterI
 }
 
 pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable>) -> StateSyncMessage {
+    pipe_partial_state_sync(&src, &mut *dst, &Default::default())
+        .expect("State sync not completed.")
+}
+
+/// Pipe the manifest (chunk 0) from src to dest and return the StateSyncMessage
+/// if the state sync completes
+pub fn pipe_manifest(src: &StateSyncMessage, dst: &mut dyn Chunkable) -> Option<StateSyncMessage> {
+    let ids: Vec<_> = dst.chunks_to_download().collect();
+
+    // Only the manifest should be requested
+    assert_eq!(ids, vec! {ChunkId::new(0)});
+
+    let id = ids[0];
+
+    let chunk = Box::new(src.clone())
+        .get_chunk(id)
+        .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
+
+    match dst.add_chunk(chunk) {
+        Ok(Artifact::StateSync(msg)) => {
+            assert!(
+                dst.is_complete(),
+                "add_chunk returned OK but the artifact is not complete"
+            );
+            Some(msg)
+        }
+        Ok(artifact) => {
+            panic!("Unexpected artifact type: {:?}", artifact);
+        }
+        Err(ChunksMoreNeeded) => None,
+        Err(ChunkVerificationFailed) => panic!("Encountered invalid chunk {}", id),
+    }
+}
+
+/// Pipe chunks from src to dst, but omit any chunks in omit
+pub fn pipe_partial_state_sync(
+    src: &StateSyncMessage,
+    dst: &mut dyn Chunkable,
+    omit: &HashSet<ChunkId>,
+) -> Option<StateSyncMessage> {
     while !dst.is_complete() {
         let ids: Vec<_> = dst.chunks_to_download().collect();
 
@@ -342,7 +382,12 @@ pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable>) -> St
             !ids.is_empty(),
             "Can't have incomplete artifact that needs no chunks"
         );
+        let mut omitted_chunks = false;
         for id in ids {
+            if omit.contains(&id) {
+                omitted_chunks = true;
+                continue;
+            }
             let chunk = Box::new(src.clone())
                 .get_chunk(id)
                 .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
@@ -353,7 +398,7 @@ pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable>) -> St
                         dst.is_complete(),
                         "add_chunk returned OK but the artifact is not complete"
                     );
-                    return msg;
+                    return Some(msg);
                 }
                 Ok(artifact) => {
                     panic!("Unexpected artifact type: {:?}", artifact);
@@ -362,11 +407,14 @@ pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable>) -> St
                 Err(ChunkVerificationFailed) => panic!("Encountered invalid chunk {}", id),
             }
         }
+        if omitted_chunks {
+            return None;
+        }
     }
     unreachable!()
 }
 
-pub fn state_manager_test_with_verifier_result<F: FnOnce(StateManagerImpl)>(
+pub fn state_manager_test_with_verifier_result<F: FnOnce(&MetricsRegistry, StateManagerImpl)>(
     should_pass_verification: bool,
     f: F,
 ) {
@@ -381,19 +429,22 @@ pub fn state_manager_test_with_verifier_result<F: FnOnce(StateManagerImpl)>(
     };
 
     with_test_replica_logger(|log| {
-        f(StateManagerImpl::new(
-            verifier,
-            own_subnet,
-            SubnetType::Application,
-            log,
+        f(
             &metrics_registry,
-            &config,
-            ic_types::malicious_flags::MaliciousFlags::default(),
-        ));
+            StateManagerImpl::new(
+                verifier,
+                own_subnet,
+                SubnetType::Application,
+                log,
+                &metrics_registry,
+                &config,
+                ic_types::malicious_flags::MaliciousFlags::default(),
+            ),
+        );
     })
 }
 
-pub fn state_manager_test<F: FnOnce(StateManagerImpl)>(f: F) {
+pub fn state_manager_test<F: FnOnce(&MetricsRegistry, StateManagerImpl)>(f: F) {
     state_manager_test_with_verifier_result(true, f)
 }
 

@@ -18,19 +18,35 @@ fn main() {
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
     config.type_attribute(
         "ic_nns_common.pb.v1.CanisterId",
-        "#[derive(candid::CandidType, candid::Deserialize, Eq)]",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize, Eq)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
+        ]
+        .join(" "),
     );
     config.type_attribute(
         "ic_nns_common.pb.v1.NeuronId",
-        "#[derive(candid::CandidType, candid::Deserialize, Eq, std::hash::Hash)]",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize, Eq, std::hash::Hash)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
+        ]
+        .join(" "),
     );
     config.type_attribute(
         "ic_nns_common.pb.v1.PrincipalId",
-        "#[derive(candid::CandidType, candid::Deserialize, Eq, PartialOrd, Ord, std::hash::Hash)]",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize, Eq, PartialOrd, Ord, std::hash::Hash)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
+        ]
+        .join(" "),
     );
     config.type_attribute(
         "ic_nns_common.pb.v1.ProposalId",
-        "#[derive(candid::CandidType, candid::Deserialize, Eq, Copy)]",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize, Eq, Copy)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
+        ]
+        .join(" "),
     );
     config.type_attribute(
         "ic_nns_common.pb.v1.MethodAuthzInfo",

@@ -316,7 +316,7 @@ fn islarger_fp(fp: &mut FP) -> Ordering {
 fn neg_fp(fp: &FP) -> FP {
     let mut minus_fp = FP::new();
     minus_fp.zero();
-    minus_fp.sub(&fp);
+    minus_fp.sub(fp);
     minus_fp
 }
 fn cmp_fp(left: &FP, right: &FP) -> Ordering {
@@ -352,7 +352,7 @@ fn cmp_fp2(left: &mut FP2, right: &mut FP2) -> Ordering {
 fn neg_fp2(fp2: &FP2) -> FP2 {
     let mut minus_fp2 = FP2::new();
     minus_fp2.zero();
-    minus_fp2.sub(&fp2);
+    minus_fp2.sub(fp2);
     minus_fp2
 }
 

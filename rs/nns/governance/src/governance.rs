@@ -24,10 +24,9 @@ use crate::pb::v1::{
     ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
     ManageNeuronResponse, NetworkEconomics, Neuron, NeuronInfo, NeuronState, NnsFunction,
     NodeProvider, Proposal, ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus,
-    RewardEvent, RewardNodeProvider, Tally, Topic, Vote,
+    RewardEvent, RewardNodeProvider, Tally, Topic, UpdateNodeProvider, Vote,
 };
 use candid::Decode;
-use cycles_minting_canister::IcpXdrConversionRate;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
@@ -38,13 +37,13 @@ use ic_nns_constants::{
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ledger_canister::{AccountIdentifier, Subaccount, TRANSACTION_FEE};
-use prost::Message;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
 use async_trait::async_trait;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use registry_canister::mutations::do_update_icp_xdr_conversion_rate::UpdateIcpXdrConversionRatePayload;
 
 use crate::pb::v1::governance::GovernanceCachedMetrics;
 use crate::pb::v1::manage_neuron_response::MergeMaturityResponse;
@@ -402,7 +401,7 @@ impl NnsFunction {
             }
             NnsFunction::UpdateConfigOfSubnet => (REGISTRY_CANISTER_ID, "update_subnet"),
             NnsFunction::IcpXdrConversionRate => {
-                (CYCLES_MINTING_CANISTER_ID, "set_icp_xdr_conversion_rate")
+                (REGISTRY_CANISTER_ID, "update_icp_xdr_conversion_rate")
             }
             NnsFunction::ClearProvisionalWhitelist => {
                 (REGISTRY_CANISTER_ID, "clear_provisional_whitelist")
@@ -667,6 +666,18 @@ impl Neuron {
         }
     }
 
+    /// Join the Internet Computer's community fund. If this neuron is
+    /// already a member of the community fund, an error is returned.
+    fn join_community_fund(&mut self, now_seconds: u64) -> Result<(), GovernanceError> {
+        if self.joined_community_fund_timestamp_seconds.unwrap_or(0) == 0 {
+            self.joined_community_fund_timestamp_seconds = Some(now_seconds);
+            Ok(())
+        } else {
+            // Already joined...
+            Err(GovernanceError::new(ErrorType::AlreadyJoinedCommunityFund))
+        }
+    }
+
     /// If this neuron is not dissolving, start dissolving it.
     ///
     /// If the neuron is dissolving or dissolved, an error is returned.
@@ -868,6 +879,9 @@ impl Neuron {
                 ))?;
                 self.remove_hot_key(hot_key)
             }
+            manage_neuron::configure::Operation::JoinCommunityFund(_) => {
+                self.join_community_fund(now_seconds)
+            }
         }
     }
 
@@ -882,6 +896,7 @@ impl Neuron {
             voting_power: self.voting_power(now_seconds),
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.stake_e8s(),
+            joined_community_fund_timestamp_seconds: self.joined_community_fund_timestamp_seconds,
         }
     }
 
@@ -1237,7 +1252,7 @@ impl GovernanceProto {
     pub fn build_topic_followee_index(&self) -> BTreeMap<Topic, BTreeMap<u64, BTreeSet<u64>>> {
         let mut topic_followee_index = BTreeMap::new();
         for neuron in self.neurons.values() {
-            GovernanceProto::add_neuron_to_topic_followee_index(&mut topic_followee_index, &neuron);
+            GovernanceProto::add_neuron_to_topic_followee_index(&mut topic_followee_index, neuron);
         }
         topic_followee_index
     }
@@ -1392,7 +1407,11 @@ impl GovernanceProto {
         };
 
         for (_, neuron) in self.neurons.iter() {
-            metrics.total_staked_e8s += neuron.cached_neuron_stake_e8s;
+            metrics.total_staked_e8s += neuron.stake_e8s();
+
+            if neuron.joined_community_fund_timestamp_seconds.unwrap_or(0) > 0 {
+                metrics.community_fund_total_staked_e8s += neuron.stake_e8s();
+            }
 
             if neuron.cached_neuron_stake_e8s < TRANSACTION_FEE.get_e8s() {
                 metrics.garbage_collectable_neurons_count += 1;
@@ -1920,7 +1939,7 @@ impl Governance {
             if let Some(followers) = self
                 .topic_followee_index
                 .get(&Topic::NeuronManagement)
-                .and_then(|m| m.get(&followee))
+                .and_then(|m| m.get(followee))
             {
                 managed.extend(followers)
             }
@@ -2432,6 +2451,11 @@ impl Governance {
             transfer: None,
             maturity_e8s_equivalent: 0,
             not_for_profit: parent_neuron.not_for_profit,
+            // We allow splitting of a neuron that has joined the
+            // community fund: both resulting neurons remain members
+            // of the fund with the same "join date".
+            joined_community_fund_timestamp_seconds: parent_neuron
+                .joined_community_fund_timestamp_seconds,
         };
 
         // Add the child neuron to the set of neurons undergoing ledger updates.
@@ -2598,6 +2622,10 @@ impl Governance {
             transfer: None,
             maturity_e8s_equivalent: 0,
             not_for_profit: false,
+            // We allow spawning of maturity from a neuron that has
+            // joined the community fund: the spawned neuron is not
+            // considered part of the community fund.
+            joined_community_fund_timestamp_seconds: None,
         };
 
         self.add_neuron(child_nid.id, child_neuron.clone())?;
@@ -2742,7 +2770,7 @@ impl Governance {
 
         // Adjust the maturity, stake and age of the neuron
         let neuron = self
-            .get_neuron_mut(&nid)
+            .get_neuron_mut(nid)
             .expect("Expected the neuron to exist");
 
         neuron.maturity_e8s_equivalent = neuron
@@ -2899,7 +2927,7 @@ impl Governance {
             let mut state = Sha256::new();
             state.write(&[0x0c]);
             state.write(b"neuron-split");
-            state.write(&child_controller.as_slice());
+            state.write(child_controller.as_slice());
             state.write(&disburse_to_neuron.nonce.to_be_bytes());
             state.finish()
         });
@@ -2955,6 +2983,7 @@ impl Governance {
             transfer: None,
             maturity_e8s_equivalent: 0,
             not_for_profit: false,
+            joined_community_fund_timestamp_seconds: None,
         };
 
         self.add_neuron(child_nid.id, child_neuron.clone())?;
@@ -3237,7 +3266,7 @@ impl Governance {
         ) -> HashMap<u64, Ballot> {
             let mut ballots = HashMap::new();
             for n in except_from.iter() {
-                if let Some(v) = all_ballots.get(&n) {
+                if let Some(v) = all_ballots.get(n) {
                     ballots.insert(*n, v.clone());
                 }
             }
@@ -3274,7 +3303,7 @@ impl Governance {
         if let Some(ref managed_id) = info.proposal.as_ref().and_then(|x| x.managed_neuron()) {
             // mgr_ids: &Vec<NeuronId>
             if let Some(mgr_ids) = self
-                .find_neuron(&managed_id)
+                .find_neuron(managed_id)
                 .ok()
                 .and_then(|x| x.neuron_managers())
             {
@@ -3578,6 +3607,7 @@ impl Governance {
                     maturity_e8s_equivalent: 0,
                     not_for_profit: false,
                     transfer: None,
+                    joined_community_fund_timestamp_seconds: None,
                 };
                 self.add_neuron(nid.id, neuron)
             }
@@ -3693,7 +3723,7 @@ impl Governance {
                 match mgmt.get_neuron_id_or_subaccount() {
                     Ok(Some(ref managed_neuron_id)) => {
                         if let Some(controller) = self
-                            .find_neuron(&managed_neuron_id)
+                            .find_neuron(managed_neuron_id)
                             .ok()
                             .and_then(|x| x.controller.as_ref())
                             .copied()
@@ -3988,12 +4018,7 @@ impl Governance {
                     "Managed neuron does not specify any followees on the 'manage neuron' topic.",
                 )
             })?;
-        if followees
-            .followees
-            .iter()
-            .find(|x| x.id == proposer_id.id)
-            .is_none()
-        {
+        if !followees.followees.iter().any(|x| x.id == proposer_id.id) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Proposer not among the followees of neuron.",
@@ -4175,7 +4200,7 @@ impl Governance {
                     PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX,
                     update.payload.len())
             } else if update.nns_function == NnsFunction::IcpXdrConversionRate as i32 {
-                match Decode!(&update.payload, IcpXdrConversionRate) {
+                match Decode!(&update.payload, UpdateIcpXdrConversionRatePayload) {
                     Ok(payload) => {
                         if payload.xdr_permyriad_per_icp
                             < self
@@ -4197,7 +4222,7 @@ impl Governance {
                         }
                     }
                     Err(e) => format!(
-                        "The payload could not be decoded into a IcpXdrConversionRate: {}",
+                        "The payload could not be decoded into a UpdateIcpXdrConversionRatePayload: {}",
                         e
                     ),
                 }
@@ -4226,7 +4251,7 @@ impl Governance {
                     ),
                 }
             } else if update.nns_function == NnsFunction::AddOrRemoveDataCenters as i32 {
-                match AddOrRemoveDataCentersProposalPayload::decode(update.payload.as_slice()) {
+                match Decode!(&update.payload, AddOrRemoveDataCentersProposalPayload) {
                     Ok(payload) => match payload.validate() {
                         Ok(_) => {
                             return Ok(());
@@ -4275,7 +4300,7 @@ impl Governance {
         let now_seconds = self.env.now();
 
         // Validate proposal
-        self.validate_proposal(&proposal)?;
+        self.validate_proposal(proposal)?;
 
         if let Some(proposal::Action::ManageNeuron(m)) = &proposal.action {
             assert_eq!(topic, Topic::NeuronManagement);
@@ -4283,7 +4308,7 @@ impl Governance {
                 proposer_id,
                 caller,
                 now_seconds,
-                &m,
+                m,
                 &proposal.summary,
                 &proposal.url,
             );
@@ -4438,7 +4463,7 @@ impl Governance {
         Governance::cast_vote_and_cascade_follow(
             &proposal_id,
             &mut info.ballots,
-            &proposer_id,
+            proposer_id,
             Vote::Yes,
             topic,
             &self.topic_followee_index,
@@ -4524,7 +4549,7 @@ impl Governance {
             // new set now.
             induction_votes.clear();
             for f in all_followers.iter() {
-                if let Some(ref f_neuron) = neurons.get(f) {
+                if let Some(f_neuron) = neurons.get(f) {
                     let f_vote = f_neuron.would_follow_ballots(topic, ballots);
                     if f_vote != Vote::Unspecified {
                         // f_vote is yes or no, i.e., f_neuron's
@@ -4625,7 +4650,7 @@ impl Governance {
                 // Actually update the ballot, including following.
                 proposal_id,
                 &mut proposal.ballots,
-                &neuron_id,
+                neuron_id,
                 vote,
                 topic,
                 &self.topic_followee_index,
@@ -4754,7 +4779,7 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         if let Some(neuron) = self.proto.neurons.get_mut(&id.id) {
             let now_seconds = self.env.now();
-            neuron.configure(caller, now_seconds, &c)?;
+            neuron.configure(caller, now_seconds, c)?;
             match c
                 .operation
                 .as_ref()
@@ -4952,6 +4977,7 @@ impl Governance {
             neuron_fees_e8s: 0,
             not_for_profit: false,
             recent_ballots: vec![],
+            joined_community_fund_timestamp_seconds: None,
         };
 
         // This also verifies that there are not too many neurons already.
@@ -5091,7 +5117,7 @@ impl Governance {
 
         match &mgmt.command {
             Some(manage_neuron::Command::Configure(c)) => self
-                .configure_neuron(&id, &caller, c)
+                .configure_neuron(&id, caller, c)
                 .map(|_| ManageNeuronResponse::configure_response()),
             Some(manage_neuron::Command::Disburse(d)) => self
                 .disburse_neuron(&id, caller, d)
@@ -5177,9 +5203,9 @@ impl Governance {
             if props.len() > max_proposals {
                 for prop_id in props.iter().take(props.len() - max_proposals) {
                     // Check that this proposal can be purged.
-                    if let Some(prop) = self.proto.proposals.get(&prop_id) {
+                    if let Some(prop) = self.proto.proposals.get(prop_id) {
                         if prop.can_be_purged(now_seconds, voting_period_seconds) {
-                            self.proto.proposals.remove(&prop_id);
+                            self.proto.proposals.remove(prop_id);
                         }
                     }
                 }
@@ -5394,6 +5420,36 @@ impl Governance {
             )),
         }
     }
+
+    /// Update the metadata for the given Node Provider
+    pub fn update_node_provider(
+        &mut self,
+        node_provider_id: &PrincipalId,
+        update: UpdateNodeProvider,
+    ) -> Result<(), GovernanceError> {
+        let node_provider = self
+            .proto
+            .node_providers
+            .iter_mut()
+            .find(|np| np.id.as_ref() == Some(node_provider_id))
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    format!("Node Provider {} is not known by the NNS", node_provider_id),
+                )
+            })?;
+
+        if let Some(new_reward_account) = update.reward_account {
+            node_provider.reward_account = Some(new_reward_account);
+        } else {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "reward_account not specified",
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 /// Computes the subaccount to which neuron staking transfers are made. This
@@ -5405,7 +5461,7 @@ fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) -> Sub
         let mut state = Sha256::new();
         state.write(&[0x0c]);
         state.write(b"neuron-stake");
-        state.write(&controller.as_slice());
+        state.write(controller.as_slice());
         state.write(&nonce.to_be_bytes());
         state.finish()
     })

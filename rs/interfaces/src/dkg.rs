@@ -55,6 +55,7 @@ pub trait MutableDkgPool: DkgPool {
 pub enum ChangeAction {
     AddToValidated(dkg::Message),
     MoveToValidated(dkg::Message),
+    RemoveFromUnvalidated(dkg::Message),
     HandleInvalid(CryptoHashOf<dkg::Message>, String),
     Purge(Height),
 }

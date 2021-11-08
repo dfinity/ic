@@ -38,9 +38,9 @@ async fn install_invalid_wasm(
     mode: CanisterInstallMode,
     stop_before_installing: bool,
 ) {
-    let root = set_up_root_canister(&runtime, RootCanisterInitPayloadBuilder::new().build()).await;
+    let root = set_up_root_canister(runtime, RootCanisterInitPayloadBuilder::new().build()).await;
     // Install the universal canister in place of the proposals canister
-    let fake_proposal_canister = set_up_universal_canister(&runtime).await;
+    let fake_proposal_canister = set_up_universal_canister(runtime).await;
     // Since it takes the id reserved for the governance canister, it can
     // impersonate it
     assert_eq!(
@@ -49,7 +49,7 @@ async fn install_invalid_wasm(
     );
 
     // Create some NNS canister to be owned by the root
-    let universal = set_up_universal_canister(&runtime).await;
+    let universal = set_up_universal_canister(runtime).await;
     universal
         .set_controller(root.canister_id().get())
         .await

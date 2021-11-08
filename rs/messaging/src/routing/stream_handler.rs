@@ -1,4 +1,6 @@
 use crate::message_routing::LatencyMetrics;
+use ic_base_types::NumBytes;
+use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_logger::{debug, trace, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::{
@@ -117,6 +119,10 @@ pub(crate) trait StreamHandler: Send {
 
 pub(crate) struct StreamHandlerImpl {
     subnet_id: SubnetId,
+
+    max_canister_memory_size: NumBytes,
+    subnet_memory_capacity: NumBytes,
+
     metrics: StreamHandlerMetrics,
     /// Per-destination-subnet histogram of wall time spent by messages in the
     /// stream before they are garbage collected.
@@ -130,12 +136,15 @@ pub(crate) struct StreamHandlerImpl {
 impl StreamHandlerImpl {
     pub(crate) fn new(
         subnet_id: SubnetId,
+        hypervisor_config: HypervisorConfig,
         metrics_registry: &MetricsRegistry,
         time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             subnet_id,
+            max_canister_memory_size: hypervisor_config.max_canister_memory_size,
+            subnet_memory_capacity: hypervisor_config.subnet_memory_capacity,
             metrics: StreamHandlerMetrics::new(metrics_registry),
             time_in_stream_metrics,
             time_in_backlog_metrics: RefCell::new(LatencyMetrics::new_time_in_backlog(
@@ -212,10 +221,12 @@ impl StreamHandlerImpl {
         stream_slices.insert(self.subnet_id, loopback_stream_slice);
         state = self.induct_stream_slices(state, stream_slices);
 
+        let mut streams = state.take_streams();
         // We know for sure that the loopback stream exists, so it is safe to unwrap.
-        let loopback_stream = state.mut_streams().get_mut(&self.subnet_id).unwrap();
+        let loopback_stream = streams.get_mut(&self.subnet_id).unwrap();
         // Garbage collect all initial messages.
         self.discard_messages_before(loopback_stream, loopback_stream_messages_end);
+        state.put_streams(streams);
 
         state
     }
@@ -228,7 +239,7 @@ impl StreamHandlerImpl {
         mut state: ReplicatedState,
         stream_slices: &BTreeMap<SubnetId, StreamSlice>,
     ) -> ReplicatedState {
-        let streams = state.mut_streams();
+        let mut streams = state.take_streams();
         for (remote_subnet, stream_slice) in stream_slices {
             match streams.get_mut(remote_subnet) {
                 Some(stream) => {
@@ -259,6 +270,7 @@ impl StreamHandlerImpl {
                 .with_label_values(&[&remote_subnet.to_string()])
                 .set(backlog.get() as i64);
         }
+        state.put_streams(streams);
         state
     }
 
@@ -322,6 +334,8 @@ impl StreamHandlerImpl {
         mut state: ReplicatedState,
         stream_slices: BTreeMap<SubnetId, StreamSlice>,
     ) -> ReplicatedState {
+        let mut subnet_available_memory =
+            self.subnet_memory_capacity.get() as i64 - state.total_memory_taken().get() as i64;
         let mut streams = state.take_streams();
 
         for (remote_subnet_id, mut stream_slice) in stream_slices {
@@ -330,7 +344,14 @@ impl StreamHandlerImpl {
             let mut stream = streams.get_mut_or_insert(remote_subnet_id);
 
             while let Some((stream_index, msg)) = stream_slice.pop_message() {
-                self.induct_message(msg, remote_subnet_id, stream_index, &mut state, &mut stream);
+                self.induct_message(
+                    msg,
+                    remote_subnet_id,
+                    stream_index,
+                    &mut state,
+                    &mut stream,
+                    &mut subnet_available_memory,
+                );
             }
         }
 
@@ -345,9 +366,11 @@ impl StreamHandlerImpl {
     ///
     ///  * enqueuing the message into the corresponding input queue;
     ///  * a reject response enqueued into the reverse stream: if enqueuing of a
-    ///    request failed (queue full, canister not found);
+    ///    request failed (queue full, canister not found, out of memory);
     ///  * no other action: if the sender canister and source subnet do not
     ///    match; or enqueuing of a response failed.
+    ///
+    /// Updates `subnet_available_memory` to reflect any change in memory usage.
     fn induct_message(
         &self,
         msg: RequestOrResponse,
@@ -355,6 +378,7 @@ impl StreamHandlerImpl {
         stream_index: StreamIndex,
         state: &mut ReplicatedState,
         stream: &mut StreamHandle,
+        subnet_available_memory: &mut i64,
     ) {
         let payload_size = match &msg {
             RequestOrResponse::Request(req) => req.payload_size_bytes().get(),
@@ -374,7 +398,12 @@ impl StreamHandlerImpl {
             Some(host_subnet) => {
                 if host_subnet == remote_subnet_id {
                     // Sender is hosted by `remote_subnet_id`, proceed with induction.
-                    match state.push_input(QUEUE_INDEX_NONE, msg) {
+                    match state.push_input(
+                        QUEUE_INDEX_NONE,
+                        msg,
+                        self.max_canister_memory_size,
+                        subnet_available_memory,
+                    ) {
                         // Message successfully inducted, all done.
                         Ok(()) => {
                             self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);
@@ -507,5 +536,6 @@ fn reject_code_for_state_error(err: &StateError) -> RejectCode {
         StateError::CanisterStopping(_) => RejectCode::CanisterReject,
         StateError::UnknownSubnetMethod(_) => RejectCode::CanisterReject,
         StateError::InvalidSubnetPayload => RejectCode::CanisterReject,
+        StateError::OutOfMemory { .. } => RejectCode::SysTransient,
     }
 }

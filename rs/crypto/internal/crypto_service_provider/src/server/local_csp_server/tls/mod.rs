@@ -16,8 +16,8 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore> TlsHandshakeCspServer
-    for LocalCspServer<R, S>
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> TlsHandshakeCspServer
+    for LocalCspServer<R, S, C>
 {
     fn gen_tls_key_pair(&self, node: NodeId, not_after: &str) -> (KeyId, TlsPublicKeyCert) {
         let serial = self.rng_write_lock().gen::<[u8; 19]>();
@@ -52,13 +52,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore> TlsHandshakeCspServer
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> LocalCspServer<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspServer<R, S, C> {
     pub(super) fn store_tls_secret_key(
         &self,
         cert: &TlsPublicKeyCert,
         secret_key: TlsEd25519SecretKeyDerBytes,
     ) -> KeyId {
-        let key_id = tls_cert_hash_as_key_id(&cert);
+        let key_id = tls_cert_hash_as_key_id(cert);
         self.store_secret_key_or_panic(CspSecretKey::TlsEd25519(secret_key), key_id);
         key_id
     }

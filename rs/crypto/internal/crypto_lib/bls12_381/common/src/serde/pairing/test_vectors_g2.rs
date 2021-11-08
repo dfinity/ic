@@ -17,7 +17,7 @@ fn g2_serde_should_be_correct(hex_test_vector: &str, value: G2Projective, test_n
     );
     let bytes = hex::decode(hex_test_vector).expect("Invalid test vector hex encoding");
     let bytes = &g2_bytes_from_vec(&bytes);
-    let parsed = g2_from_bytes(&bytes).expect("Failed to parse test vector");
+    let parsed = g2_from_bytes(bytes).expect("Failed to parse test vector");
     assert_eq!(
         parsed, value,
         "Parsed value does not match for {}",

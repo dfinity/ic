@@ -148,7 +148,7 @@ impl TryFrom<Url> for ConnectionEndpoint {
     type Error = ConnectionEndpointTryFromError;
 
     fn try_from(url: Url) -> Result<Self, Self::Error> {
-        let protocol = match url.scheme().as_ref() {
+        let protocol = match url.scheme() {
             "http" => Ok(pbProtocol::Http1),
             "https" => Ok(pbProtocol::Http1Tls13),
             // Using 'org.dfinity' as the protocol domain as per https://tools.ietf.org/html/rfc7595#section-3.8.
@@ -280,11 +280,11 @@ impl FromStr for ConnectionEndpoint {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Try parsing as a URL first, and if that fails, fall back to parsing
         // as a SocketAddr
-        match Url::parse(&s) {
+        match Url::parse(s) {
             Ok(url) => {
                 // URL was syntactically correct but may be an unsupported
                 // protocol
-                match url.scheme().as_ref() {
+                match url.scheme() {
                     "http" => Ok(pbProtocol::Http1),
                     "https" => Ok(pbProtocol::Http1Tls13),
                     "org.dfinity.p2p1" => Ok(pbProtocol::P2p1Tls13),
@@ -360,7 +360,7 @@ pub enum ConnectionEndpointTryFromError {
 
 impl From<&ConnectionEndpoint> for pbConnectionEndpoint {
     fn from(ce: &ConnectionEndpoint) -> Self {
-        let protocol = match ce.url.scheme().as_ref() {
+        let protocol = match ce.url.scheme() {
             "http" => pbProtocol::Http1,
             "https" => pbProtocol::Http1Tls13,
             "org.dfinity.p2p1" => pbProtocol::P2p1Tls13,

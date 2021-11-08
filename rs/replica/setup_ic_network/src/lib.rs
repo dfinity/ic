@@ -365,7 +365,7 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry,
             processors::BoxOrArcClient::ArcClient(client_on_state_change),
-            move |advert| c_event_handler.broadcast_advert(advert.into()),
+            move |req| c_event_handler.broadcast_advert(req.advert.into(), req.advert_class),
         );
         artifact_manager_maker.add_arc_client(client, addr);
         return Ok((
@@ -380,7 +380,7 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry.clone(),
             processors::BoxOrArcClient::ArcClient(Arc::clone(&state_sync_client) as Arc<_>),
-            move |advert| event_handler.broadcast_advert(advert.into()),
+            move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
         );
         artifact_manager_maker.add_arc_client(state_sync_client, addr);
     }
@@ -419,7 +419,7 @@ fn setup_artifact_manager(
         // Create the consensus client.
         let event_handler = event_handler.clone();
         let (consensus_client, actor) = processors::ConsensusProcessor::build(
-            move |advert| event_handler.broadcast_advert(advert.into()),
+            move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
             || {
                 ic_consensus::consensus::setup(
                     consensus_replica_config.clone(),
@@ -455,7 +455,7 @@ fn setup_artifact_manager(
         // Create the ingress client.
         let event_handler = event_handler.clone();
         let (ingress_client, actor) = processors::IngressProcessor::build(
-            move |advert| event_handler.broadcast_advert(advert.into()),
+            move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&ingress_pool),
             ingress_manager,
@@ -471,7 +471,7 @@ fn setup_artifact_manager(
         // Create the certification client.
         let event_handler = event_handler.clone();
         let (certification_client, actor) = processors::CertificationProcessor::build(
-            move |advert| event_handler.broadcast_advert(advert.into()),
+            move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
             || {
                 certification::setup(
                     consensus_replica_config.clone(),
@@ -494,7 +494,7 @@ fn setup_artifact_manager(
     {
         let event_handler = event_handler;
         let (dkg_client, actor) = processors::DkgProcessor::build(
-            move |advert| event_handler.broadcast_advert(advert.into()),
+            move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
             || {
                 (
                     dkg::DkgImpl::new(

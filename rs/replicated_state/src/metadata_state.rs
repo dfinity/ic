@@ -7,7 +7,9 @@ use ic_base_types::CanisterId;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
-        ingress::v1 as pb_ingress, queues::v1 as pb_queues, system_metadata::v1 as pb_metadata,
+        ingress::v1 as pb_ingress,
+        queues::v1 as pb_queues,
+        system_metadata::v1::{self as pb_metadata, TimeOfLastAllocationCharge},
     },
 };
 use ic_registry_routing_table::RoutingTable;
@@ -42,8 +44,8 @@ pub struct SystemMetadata {
     /// system.
     pub ingress_history: IngressHistoryState,
 
-    /// CrossNet stream state indexed by the _destination_ subnet id.
-    pub(crate) streams: Arc<Streams>,
+    /// XNet stream state indexed by the _destination_ subnet id.
+    pub(super) streams: Arc<Streams>,
 
     /// A counter used for generating new canister ids.
     /// Used for canister creation.
@@ -105,6 +107,14 @@ pub struct SystemMetadata {
     /// always be <= this field + (the maximum delta capacity of the subnet /
     /// 2).
     pub heap_delta_estimate: NumBytes,
+
+    /// The last time when canisters were charged for compute and storage
+    /// allocation.
+    ///
+    /// Charging for compute and storage is done periodically, so this is
+    /// needed to calculate how much time should be charged for when charging
+    /// does occur.
+    pub time_of_last_allocation_charge: Time,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -276,6 +286,11 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
             certification_version: item.certification_version,
             heap_delta_estimate: item.heap_delta_estimate.get(),
             own_subnet_features: Some(item.own_subnet_features.into()),
+            time_of_last_allocation_charge_nanos: Some(TimeOfLastAllocationCharge {
+                time_of_last_allocation_charge_nanos: item
+                    .time_of_last_allocation_charge
+                    .as_nanos_since_unix_epoch(),
+            }),
         }
     }
 }
@@ -326,6 +341,12 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             },
 
             heap_delta_estimate: NumBytes::from(item.heap_delta_estimate),
+            time_of_last_allocation_charge: match item.time_of_last_allocation_charge_nanos {
+                Some(last_charge) => Time::from_nanos_since_unix_epoch(
+                    last_charge.time_of_last_allocation_charge_nanos,
+                ),
+                None => Time::from_nanos_since_unix_epoch(item.batch_time_nanos),
+            },
         })
     }
 }
@@ -349,6 +370,7 @@ impl SystemMetadata {
             state_sync_version: 0,
             certification_version: 0,
             heap_delta_estimate: NumBytes::from(0),
+            time_of_last_allocation_charge: UNIX_EPOCH,
         }
     }
 

@@ -10,14 +10,13 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CallContextAction, CanisterState};
 use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, mock_time, state::SystemStateBuilder,
-    types::ids::subnet_test_id, types::ids::user_test_id, types::messages::IngressBuilder,
-    with_test_replica_logger,
+    cycles_account_manager::CyclesAccountManagerBuilder, execution_state::ExecutionStateBuilder,
+    mock_time, state::SystemStateBuilder, types::ids::subnet_test_id, types::ids::user_test_id,
+    types::messages::IngressBuilder, with_test_replica_logger,
 };
 use ic_types::{
     ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId,
 };
-use ic_wasm_utils::validation::WasmValidationConfig;
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::{collections::BTreeMap, sync::Arc};
@@ -25,8 +24,8 @@ use std::{collections::BTreeMap, sync::Arc};
 fn execution_parameters() -> ExecutionParameters {
     ExecutionParameters {
         instruction_limit: NumInstructions::new(1_000_000_000),
-        canister_memory_limit: NumBytes::new(std::u64::MAX),
-        subnet_available_memory: SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX)),
+        canister_memory_limit: NumBytes::new(u64::MAX / 2),
+        subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2),
         compute_allocation: ComputeAllocation::default(),
     }
 }
@@ -61,13 +60,7 @@ impl HypervisorTest {
         );
         let wasm_binary = wabt::wat2wasm(wast).unwrap();
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let execution_state = hypervisor
-            .create_execution_state(
-                wasm_binary,
-                tmpdir.path().into(),
-                WasmValidationConfig::default(),
-            )
-            .expect("failed to initialize execution state");
+        let execution_state = ExecutionStateBuilder::new(wasm_binary, tmpdir.path().into()).build();
 
         let canister = CanisterState {
             system_state: SystemStateBuilder::default()

@@ -63,7 +63,7 @@ impl TryFrom<&Vec<u8>> for PublicKeyBytes {
             });
         }
         let mut buffer = [0u8; PublicKeyBytes::SIZE];
-        buffer.copy_from_slice(&key);
+        buffer.copy_from_slice(key);
         Ok(PublicKeyBytes(buffer))
     }
 }
@@ -110,7 +110,7 @@ impl TryFrom<&Vec<u8>> for SignatureBytes {
             });
         }
         let mut buffer = [0u8; SignatureBytes::SIZE];
-        buffer.copy_from_slice(&signature_bytes);
+        buffer.copy_from_slice(signature_bytes);
         Ok(SignatureBytes(buffer))
     }
 }

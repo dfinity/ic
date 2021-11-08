@@ -82,4 +82,10 @@ message CanisterQueues {
     repeated QueueEntry input_queues = 3;
     repeated types.v1.CanisterId input_schedule = 4;
     repeated QueueEntry output_queues = 5;
+    enum NextInputQueue {
+        NEXT_INPUT_QUEUE_UNSPECIFIED = 0;
+        NEXT_INPUT_QUEUE_INTER_CANISTER = 1;
+        NEXT_INPUT_QUEUE_INGRESS = 2;
+    }
+    NextInputQueue next_input_queue = 6;
 }

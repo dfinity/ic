@@ -114,6 +114,24 @@ pub fn individual_public_key(
     Ok(PublicKeyBytes::from(public_key))
 }
 
+/// Derives the public key of one signatory from the `public_coefficients`.
+///
+/// Equivalent to `individual_public_key`,
+/// but uses an "unchecked" deserialization for improved efficiency.
+///
+/// # Security Notice
+/// This skips an important security check, and so should
+/// only be used when`public_coefficients` were obtained
+/// from a trusted source.
+pub fn individual_public_key_from_trusted_bytes(
+    public_coefficients: &PublicCoefficientsBytes,
+    index: NodeIndex,
+) -> CryptoResult<PublicKeyBytes> {
+    let public_coefficients = PublicCoefficients::from_trusted_bytes(public_coefficients)?;
+    let public_key: PublicKey = crypto::individual_public_key(&public_coefficients, index);
+    Ok(PublicKeyBytes::from(public_key))
+}
+
 /// Extracts the combined public key from the PublicCoefficients.
 ///
 /// The combined public key is used to verify combined threshold signatures.

@@ -84,7 +84,7 @@ fn cow_state_can_handle_upgrade() {
         let mut canister_state = state.take_canister_state(&canister_id).unwrap();
         let mut es = canister_state.execution_state.clone().unwrap();
 
-        es.page_map.update(pd);
+        es.wasm_memory.page_map.update(pd);
 
         canister_state.execution_state = Some(es);
 
@@ -185,24 +185,24 @@ fn cow_state_can_handle_upgrade() {
         let mut es = canister_state.execution_state.clone().unwrap();
         assert!(!es.cow_mem_mgr.is_valid());
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o10));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o10));
         assert_eq!(read_bytes, &random_bytes);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o20));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o20));
         assert_eq!(read_bytes, &random_bytes1);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o257));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o257));
         assert_eq!(read_bytes, &random_bytes2);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o200));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o200));
         assert_eq!(read_bytes, &random_bytes3);
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o205));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o205));
         assert_eq!(read_bytes, &random_bytes4);
-        let read_bytes = es.page_map.get_page(PageIndex::new(p1_o100));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p1_o100));
         assert_eq!(read_bytes, &random_bytes5);
-        let read_bytes = es.page_map.get_page(PageIndex::new(p2_o100));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p2_o100));
         assert_eq!(read_bytes, &random_bytes1);
-        let read_bytes = es.page_map.get_page(PageIndex::new(p3_o100));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p3_o100));
         assert_eq!(read_bytes, &random_bytes2);
 
         // add/overwrite few more pages
@@ -221,7 +221,7 @@ fn cow_state_can_handle_upgrade() {
             (PageIndex::new(p3_o257), &random_bytes8),
         ];
 
-        es.page_map.update(pd);
+        es.wasm_memory.page_map.update(pd);
 
         canister_state.execution_state = Some(es);
 
@@ -274,13 +274,13 @@ fn cow_state_can_handle_upgrade() {
         let es = canister_state.execution_state.unwrap();
         assert!(!es.cow_mem_mgr.is_valid());
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o10));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o10));
         assert_eq!(read_bytes, &random_bytes);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o20));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o20));
         assert_eq!(read_bytes, &random_bytes1);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o257));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o257));
         assert_eq!(read_bytes, &random_bytes2);
 
         // ============== now state_sync 2 make sure it comes back as cow correctly
@@ -378,37 +378,37 @@ fn cow_state_can_handle_upgrade() {
         let es = canister_state.execution_state.unwrap();
         assert!(!es.cow_mem_mgr.is_valid());
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o10));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o10));
         assert_eq!(read_bytes, &random_bytes);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o20));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o20));
         assert_eq!(read_bytes, &random_bytes1);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o50));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o50));
         assert_eq!(read_bytes, &random_bytes6);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o60));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o60));
         assert_eq!(read_bytes, &random_bytes7);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o257));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o257));
         assert_eq!(read_bytes, &random_bytes8);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p3_o257));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p3_o257));
         assert_eq!(read_bytes, &random_bytes8);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o200));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o200));
         assert_eq!(read_bytes, &random_bytes3);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p0_o205));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p0_o205));
         assert_eq!(read_bytes, &random_bytes4);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p1_o100));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p1_o100));
         assert_eq!(read_bytes, &random_bytes5);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p2_o100));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p2_o100));
         assert_eq!(read_bytes, &random_bytes1);
 
-        let read_bytes = es.page_map.get_page(PageIndex::new(p3_o100));
+        let read_bytes = es.wasm_memory.page_map.get_page(PageIndex::new(p3_o100));
         assert_eq!(read_bytes, &random_bytes2);
     })
 }

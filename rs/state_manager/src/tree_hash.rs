@@ -69,7 +69,7 @@ mod tests {
         metadata_state::Stream,
         page_map::{PageIndex, PAGE_SIZE},
         testing::ReplicatedStateTesting,
-        ExecutionState, ExportedFunctions, Global, NumWasmPages, PageMap, ReplicatedState,
+        ExecutionState, ExportedFunctions, Global, Memory, NumWasmPages, PageMap, ReplicatedState,
     };
     use ic_test_utilities::{
         state::new_canister_state,
@@ -173,17 +173,19 @@ mod tests {
                 INITIAL_CYCLES,
                 NumSeconds::from(100_000),
             );
-            let mut page_map = PageMap::default();
-            page_map.update(&[(PageIndex::from(1), &[0u8; PAGE_SIZE])]);
+            let mut wasm_memory = Memory::new(PageMap::default(), NumWasmPages::from(2));
+            wasm_memory
+                .page_map
+                .update(&[(PageIndex::from(1), &[0u8; PAGE_SIZE])]);
             let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
             let wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(vec![]));
             let execution_state = ExecutionState {
                 canister_root: "NOT_USED".into(),
                 session_nonce: None,
                 wasm_binary,
-                page_map,
+                wasm_memory,
+                stable_memory: Memory::default(),
                 exported_globals: vec![Global::I32(1)],
-                heap_size: NumWasmPages::from(2),
                 exports: ExportedFunctions::new(BTreeSet::new()),
                 last_executed_round: ExecutionRound::from(0),
                 cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(tmpdir.path().into())),

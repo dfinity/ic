@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 
 /// Error indicating that parsing XNetAuthority failed.
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
 pub enum XNetAuthParseError {
     InvalidNodeId { input: String, reason: String },

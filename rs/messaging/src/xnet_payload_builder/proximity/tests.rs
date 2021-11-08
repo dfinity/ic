@@ -62,7 +62,7 @@ async fn pick_node_no_roundtrip_times() {
         assert_pick_node(REMOTE_NODE_3_OPERATOR_2, &mut proximity_map, 2, 3, 3);
 
         assert_eq!(MetricVec::new(), fetch_gauge_vec(&metrics, METRIC_RTT_EMA));
-        assert_eq!(Some(0), fetch_int_counter(&&metrics, METRIC_UNKNOWN_DCOP));
+        assert_eq!(Some(0), fetch_int_counter(&metrics, METRIC_UNKNOWN_DCOP));
     });
 }
 
@@ -93,7 +93,7 @@ async fn pick_node_some_roundtrip_times() {
             metric_vec(&[(&[(LABEL_FROM, OPERATOR_1), (LABEL_TO, OPERATOR_1)], 0.125)]),
             fetch_gauge_vec(&metrics, METRIC_RTT_EMA)
         );
-        assert_eq!(Some(0), fetch_int_counter(&&metrics, METRIC_UNKNOWN_DCOP));
+        assert_eq!(Some(0), fetch_int_counter(&metrics, METRIC_UNKNOWN_DCOP));
     });
 }
 
@@ -127,7 +127,7 @@ async fn pick_node_all_roundtrip_times() {
             ]),
             fetch_gauge_vec(&metrics, METRIC_RTT_EMA)
         );
-        assert_eq!(Some(0), fetch_int_counter(&&metrics, METRIC_UNKNOWN_DCOP));
+        assert_eq!(Some(0), fetch_int_counter(&metrics, METRIC_UNKNOWN_DCOP));
     });
 }
 
@@ -184,6 +184,6 @@ async fn pick_node_extreme_roundtrip_times() {
             ]),
             fetch_gauge_vec(&metrics, METRIC_RTT_EMA)
         );
-        assert_eq!(Some(0), fetch_int_counter(&&metrics, METRIC_UNKNOWN_DCOP));
+        assert_eq!(Some(0), fetch_int_counter(&metrics, METRIC_UNKNOWN_DCOP));
     });
 }

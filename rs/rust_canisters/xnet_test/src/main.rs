@@ -249,10 +249,7 @@ fn handle_request() {
     let (req, _) =
         candid::Decode!(&api::arg_data()[..], Request, Vec<u8>).expect("failed to decode request");
     let caller = api::caller();
-    let in_seq_no = STATE.with(|s| {
-        s.borrow_mut()
-            .set_in_seq_no(caller.clone().into_vec(), req.seq_no)
-    });
+    let in_seq_no = STATE.with(|s| s.borrow_mut().set_in_seq_no(caller.into_vec(), req.seq_no));
 
     if req.seq_no <= in_seq_no {
         METRICS.with(|m| m.borrow_mut().seq_errors += 1);

@@ -193,7 +193,7 @@ impl TestConsensusPool {
     }
 
     pub fn make_next_block_from_parent(&self, parent: &Block) -> BlockProposal {
-        let mut block = Block::from_parent(&parent);
+        let mut block = Block::from_parent(parent);
         block.context.registry_version = self.registry_client.get_latest_version();
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
         block.payload = Payload::new(ic_crypto::crypto_hash, dkg_payload.into());
@@ -560,7 +560,7 @@ impl TestConsensusPool {
     }
 
     pub fn finalize_block(&mut self, block: &Block) {
-        let content = FinalizationContent::new(block.height(), ic_crypto::crypto_hash(&block));
+        let content = FinalizationContent::new(block.height(), ic_crypto::crypto_hash(block));
         self.insert_validated(Finalization::fake(content))
     }
 

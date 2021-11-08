@@ -51,6 +51,7 @@ pub struct ConsensusMetrics {
     pub on_state_change_invocations: IntCounterVec,
     pub on_state_change_change_set_size: HistogramVec,
     pub time_since_last_invoked: GaugeVec,
+    pub starvation_counter: IntCounterVec,
 }
 
 impl ConsensusMetrics {
@@ -79,6 +80,11 @@ impl ConsensusMetrics {
             time_since_last_invoked: metrics_registry.gauge_vec(
                 "consensus_time_since_last_invoked",
                 "The time between two invocations of the component",
+                &["sub_component"],
+            ),
+            starvation_counter: metrics_registry.int_counter_vec(
+                "consensus_starvation_counter",
+                "Counts the number of starvations that happened.",
                 &["sub_component"],
             ),
         }
@@ -365,6 +371,14 @@ impl EcdsaPreSignerMetrics {
                 &["type"],
             ),
         }
+    }
+
+    pub fn pre_sign_metrics_inc(&self, label: &str) {
+        self.pre_sign_metrics.with_label_values(&[label]).inc();
+    }
+
+    pub fn pre_sign_errors_inc(&self, label: &str) {
+        self.pre_sign_errors.with_label_values(&[label]).inc();
     }
 }
 

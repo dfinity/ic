@@ -174,7 +174,7 @@ impl std::fmt::Display for ProxyDecodeError {
                 "Entry {:?} repeats multiple times. Previous: {}, current: {}",
                 key, v1, v2
             ),
-            Self::Other(msg) => f.write_str(&msg),
+            Self::Other(msg) => f.write_str(msg),
         }
     }
 }

@@ -27,7 +27,7 @@ mod creation {
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
         let verified_dealings = NiDkgDealings::new(verified_dealings.clone())?;
         ensure_sufficiently_many_dealings(config, &verified_dealings)?;
-        ensure_dealing_node_ids_in_dealers(&config.dealers(), &verified_dealings);
+        ensure_dealing_node_ids_in_dealers(config.dealers(), &verified_dealings);
         let csp_transcript = create_csp_transcript(ni_dkg_csp_client, config, &verified_dealings)?;
         Ok(NiDkgTranscript {
             dkg_id: config.dkg_id(),
@@ -95,13 +95,13 @@ mod creation {
         if let Some(resharing_transcript) = &config.resharing_transcript() {
             ensure_sufficiently_many_dealings_for_resharing(
                 verified_dealings,
-                &resharing_transcript,
+                resharing_transcript,
             )?;
             return convert_dealings_and_call_create_resharing_transcript(
                 ni_dkg_csp_client,
                 config,
                 verified_dealings,
-                &resharing_transcript,
+                resharing_transcript,
             );
         }
         convert_dealings_and_call_create_transcript(ni_dkg_csp_client, config, verified_dealings)
@@ -269,7 +269,7 @@ mod loading {
             let load_private_key_result = csp_load_threshold_signing_key(
                 ni_dkg_csp_client,
                 transcript,
-                &csp_transcript,
+                csp_transcript,
                 self_index_in_committee,
             );
 

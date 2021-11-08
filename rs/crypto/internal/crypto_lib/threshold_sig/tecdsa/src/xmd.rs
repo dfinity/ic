@@ -2,13 +2,15 @@ use ic_crypto_sha::Sha256;
 
 // Section 5.4.1 of https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-12.html
 // Produces a uniformly random byte string of a given length using SHA-256
-// from a message and DST.
+// from a message and domain separator.
 // The desired length `len` must not exceed 255*32 = 8160 bytes.
-pub fn expand_message_xmd(msg: &[u8], dst: &[u8], len: usize) -> Vec<u8> {
+pub fn expand_message_xmd(msg: &[u8], domain_separator: &[u8], len: usize) -> Vec<u8> {
     let ell = (len - 1) / 32 + 1;
     assert!(ell <= 255, "L must not exceed 255");
-    let mut out = Vec::with_capacity(ell);
-    let mut go = |dst| {
+
+    let xmd = |dst| {
+        let mut out = Vec::with_capacity(ell * 32);
+
         let mut state = Sha256::new();
         state.write(&[0; 64]);
         state.write(msg);
@@ -26,7 +28,7 @@ pub fn expand_message_xmd(msg: &[u8], dst: &[u8], len: usize) -> Vec<u8> {
         out.extend_from_slice(&state.finish());
 
         for i in 2..=ell {
-            let mut tmp = vec![0; 32];
+            let mut tmp = [0u8; 32];
             for j in 0..32 {
                 tmp[j] = b_0[j] ^ out[out.len() - 32 + j];
             }
@@ -37,15 +39,17 @@ pub fn expand_message_xmd(msg: &[u8], dst: &[u8], len: usize) -> Vec<u8> {
             state.write(&[dst.len() as u8]);
             out.extend_from_slice(&state.finish());
         }
+
+        out
     };
 
-    if dst.len() >= 256 {
+    let mut out = if domain_separator.len() >= 256 {
         let mut state = Sha256::new();
         state.write(b"H2C-OVERSIZE-DST-");
-        state.write(&dst);
-        go(&state.finish());
+        state.write(domain_separator);
+        xmd(&state.finish())
     } else {
-        go(dst);
+        xmd(domain_separator)
     };
 
     out.truncate(len);

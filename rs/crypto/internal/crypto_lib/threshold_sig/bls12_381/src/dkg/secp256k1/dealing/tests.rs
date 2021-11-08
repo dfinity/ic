@@ -127,7 +127,7 @@ prop_compose! {
         let dealer_secret_key: EphemeralSecretKey = dealer_secret_key_bytes.try_into().expect("Failed to generate dealer secret key bytes");
         let all_receiver_keys: Vec<(EphemeralPublicKeyBytes, EphemeralPopBytes)> = receiver_secret_keys.iter().enumerate().map(|(index, secret_key_bytes)|{
             let sender = format!("Node Number {}", index);
-            create_ephemeral_public_key(&mut rng, dkg_id, secret_key_bytes, &sender.as_bytes()).expect("Failed to generate test receiver public keys")
+            create_ephemeral_public_key(&mut rng, dkg_id, secret_key_bytes, sender.as_bytes()).expect("Failed to generate test receiver public keys")
         }).collect();
         let receiver_keys = {
             let seed = Randomness::from(rng.gen::<[u8;32]>());
@@ -213,7 +213,7 @@ proptest! {
         let dealer_secret_key: EphemeralSecretKey = dealer_secret_key_bytes.try_into().expect("Failed to generate dealer secret key bytes");
         let all_receiver_keys: Vec<(EphemeralPublicKeyBytes, EphemeralPopBytes)> = receiver_secret_keys.iter().enumerate().map(|(index, secret_key_bytes)|{
             let sender = format!("Node Number {}", index);
-            create_ephemeral_public_key(&mut rng, dkg_id, secret_key_bytes, &sender.as_bytes()).expect("Failed to generate test receiver public keys")
+            create_ephemeral_public_key(&mut rng, dkg_id, secret_key_bytes, sender.as_bytes()).expect("Failed to generate test receiver public keys")
         }).collect();
         let receiver_keys_used_by_dealer = {
             let seed = Randomness::from(rng.gen::<[u8;32]>());

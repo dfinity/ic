@@ -33,7 +33,7 @@ use ic_nns_common::{
     types::{MethodAuthzChange, NeuronId, ProposalId},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_governance::pb::v1::RewardEvent;
+use ic_nns_governance::pb::v1::{RewardEvent, UpdateNodeProvider};
 use ic_nns_governance::stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter};
 use ic_nns_governance::{
     governance::{Environment, Governance, Ledger},
@@ -722,6 +722,17 @@ fn list_neurons_pb() {
     over(protobuf, list_neurons_)
 }
 
+#[export_name = "canister_update update_node_provider"]
+fn update_node_provider() {
+    println!("{}update_node_provider", LOG_PREFIX);
+    over(candid_one, update_node_provider_)
+}
+
+#[candid_method(query, rename = "update_node_provider")]
+fn update_node_provider_(req: UpdateNodeProvider) -> Result<(), GovernanceError> {
+    governance_mut().update_node_provider(&caller(), req)
+}
+
 /// Encodes
 fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     let governance = governance();
@@ -873,6 +884,12 @@ fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::
             "governance_neurons_with_less_than_6_months_dissolve_delay_e8s",
             metrics.neurons_with_less_than_6_months_dissolve_delay_e8s as f64,
             "Total e8s held in neurons that have a dissolve delay less than 6 months.",
+        )?;
+
+        w.encode_gauge(
+            "governance_community_fund_total_staked_e8s",
+            metrics.community_fund_total_staked_e8s as f64,
+            "The amount of Neurons' stake committed to the Internet Computer's community fund",
         )?;
     }
 

@@ -47,16 +47,14 @@ impl CspCertificateChain {
 
     /// Returns the root of the chain.
     pub fn root(&self) -> &TlsPublicKeyCert {
-        &self
-            .chain
+        self.chain
             .get(Self::root_index())
             .expect("invariant violated: chain is empty")
     }
 
     /// Returns the leaf of the chain.
     pub fn leaf(&self) -> &TlsPublicKeyCert {
-        &self
-            .chain
+        self.chain
             .get(self.leaf_index())
             .expect("invariant violated: chain is empty")
     }

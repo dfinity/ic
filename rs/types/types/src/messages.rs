@@ -13,7 +13,7 @@ pub use self::http::{
     HttpCanisterUpdate, HttpQueryResponse, HttpQueryResponseReply, HttpReadContent, HttpReadState,
     HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent, HttpRequestEnvelope,
     HttpResponseStatus, HttpStatusResponse, HttpSubmitContent, HttpUserQuery, RawHttpRequestVal,
-    ReadContent, ReplicaHealthStatus, SignedDelegation,
+    ReplicaHealthStatus, SignedDelegation,
 };
 use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
 pub use blob::Blob;

@@ -33,19 +33,19 @@ impl fmt::Display for Error {
             }
             Error::KeyNotPresent(key) => fmt.write_fmt(format_args!(
                 "Key not present: {}",
-                std::str::from_utf8(&key).expect("key is not a str")
+                std::str::from_utf8(key).expect("key is not a str")
             ))?,
             Error::KeyAlreadyPresent(key) => fmt.write_fmt(format_args!(
                 "Key already present: {}",
-                std::str::from_utf8(&key).expect("key is not a str")
+                std::str::from_utf8(key).expect("key is not a str")
             ))?,
             Error::VersionNotLatest(key) => fmt.write_fmt(format_args!(
                 "Specified version was not the last version of the key: {}",
-                std::str::from_utf8(&key).expect("key is not a str")
+                std::str::from_utf8(key).expect("key is not a str")
             ))?,
             Error::VersionBeyondLatest(key) => fmt.write_fmt(format_args!(
                 "Specified version for key {} is beyond the latest registry version",
-                std::str::from_utf8(&key).expect("key is not a str")
+                std::str::from_utf8(key).expect("key is not a str")
             ))?,
             Error::RegistryUnreachable(error) => fmt.write_fmt(format_args!(
                 "Can't reach the registry canister: {}",

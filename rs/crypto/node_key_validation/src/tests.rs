@@ -76,7 +76,7 @@ fn should_fail_if_node_signing_key_verification_fails() {
         let node_id_for_corrupted_node_signing_key = {
             let corrupted_key = &keys.node_signing_pk.as_ref().unwrap().key_value;
             let mut buf = [0; BasicSigEd25519PublicKeyBytes::SIZE];
-            buf.copy_from_slice(&corrupted_key);
+            buf.copy_from_slice(corrupted_key);
             derive_node_id(BasicSigEd25519PublicKeyBytes(buf))
         };
         (keys, node_id_for_corrupted_node_signing_key)
@@ -688,7 +688,7 @@ fn invalidate_valid_ed25519_pubkey(
     let point_of_prime_order = CompressedEdwardsY(valid_pubkey.0).decompress().unwrap();
     let point_of_order_8 = CompressedEdwardsY([0; 32]).decompress().unwrap();
     let point_of_composite_order = point_of_prime_order + point_of_order_8;
-    assert_eq!(point_of_composite_order.is_torsion_free(), false);
+    assert!(!point_of_composite_order.is_torsion_free());
     BasicSigEd25519PublicKeyBytes(point_of_composite_order.compress().0)
 }
 

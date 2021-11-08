@@ -144,7 +144,7 @@ mod tls {
         let x509_cert = cert.as_x509();
         let public_key = x509_cert.public_key().unwrap();
         assert_eq!(x509_cert.verify(&public_key).ok(), Some(true));
-        assert_eq!(x509_cert.issued(&x509_cert), X509VerifyResult::OK);
+        assert_eq!(x509_cert.issued(x509_cert), X509VerifyResult::OK);
     }
 
     #[test]
@@ -165,8 +165,8 @@ mod tls {
         let cert = generate_tls_keys(&temp_dir.into_path(), node_test_id(NODE_ID));
 
         let x509_cert = cert.as_x509();
-        let issuer_cn = issuer_cn(&x509_cert);
-        let subject_cn = subject_cn(&x509_cert);
+        let issuer_cn = issuer_cn(x509_cert);
+        let subject_cn = subject_cn(x509_cert);
         let expected_cn = node_test_id(NODE_ID).get().to_string();
         assert_eq!(expected_cn.as_bytes(), issuer_cn.data().as_slice());
         assert_eq!(expected_cn.as_bytes(), subject_cn.data().as_slice());

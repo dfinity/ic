@@ -7,9 +7,7 @@ use crate::{
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
-use ic_config::{
-    embedders::Config as EmbeddersConfig, execution_environment::Config as ExecutionConfig,
-};
+use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_ic00_types::{
     CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgs,
@@ -45,7 +43,6 @@ use ic_types::{
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, InstallCodeContext, NumBytes,
     NumInstructions, SubnetId, Time, UserId,
 };
-use ic_wasm_utils::validation::{WasmValidationConfig, WasmValidationLimits};
 #[cfg(test)]
 use mockall::automock;
 use rand::RngCore;
@@ -78,6 +75,7 @@ pub trait ExecutionEnvironment: Sync + Send {
         rng: &mut (dyn RngCore + 'static),
         provisional_whitelist: &ProvisionalWhitelist,
         subnet_available_memory: SubnetAvailableMemory,
+        max_number_of_canisters: u64,
     ) -> (ReplicatedState, NumInstructions);
 
     /// Executes a message sent to a canister.
@@ -110,7 +108,11 @@ pub trait ExecutionEnvironment: Sync + Send {
 
     /// Look up the current amount of memory available on the subnet.
     /// EXC-185 will make this method obsolete.
-    fn subnet_available_memory(&self, state: &ReplicatedState) -> NumBytes;
+    fn subnet_available_memory(&self, state: &ReplicatedState) -> i64;
+
+    /// Returns the maximum amount of memory that can be utilized by a single
+    /// canister.
+    fn max_canister_memory_size(&self) -> NumBytes;
 
     /// Builds execution parameters for the given canister with the given
     /// instruction limit and available subnet memory counter.
@@ -136,12 +138,8 @@ pub struct ExecutionEnvironmentImpl {
 }
 
 impl ExecutionEnvironment for ExecutionEnvironmentImpl {
-    fn subnet_available_memory(&self, state: &ReplicatedState) -> NumBytes {
-        let mut total_memory_usage = NumBytes::from(0);
-        for canister in state.canister_states.values() {
-            total_memory_usage += canister.memory_usage();
-        }
-        self.config.subnet_memory_capacity - total_memory_usage
+    fn subnet_available_memory(&self, state: &ReplicatedState) -> i64 {
+        self.config.subnet_memory_capacity.get() as i64 - state.total_memory_taken().get() as i64
     }
 
     #[allow(clippy::cognitive_complexity)]
@@ -153,6 +151,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         rng: &mut (dyn RngCore + 'static),
         provisional_whitelist: &ProvisionalWhitelist,
         subnet_available_memory: SubnetAvailableMemory,
+        max_number_of_canisters: u64,
     ) -> (ReplicatedState, NumInstructions) {
         let timer = Timer::start(); // Start logging execution time.
 
@@ -206,7 +205,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                 let result = match CanisterSettings::try_from(settings) {
                                     Err(err) => (Some((Err(err.into()), cycles)), instructions_limit),
                                     Ok(settings) =>
-                                        (Some(self.create_canister(*msg.sender(), cycles, settings, &mut state)), instructions_limit)
+                                        (Some(self.create_canister(*msg.sender(), cycles, settings, max_number_of_canisters, &mut state)), instructions_limit)
                                 };
                                 info!(
                                     self.log,
@@ -582,6 +581,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                     settings,
                                     &mut state,
                                     provisional_whitelist,
+                                    max_number_of_canisters,
                                 )
                                 .map(|canister_id| CanisterIdRecord::from(canister_id).encode())
                                 .map_err(|err| err.into()),
@@ -817,6 +817,10 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         (canister, num_instructions_left, result)
     }
 
+    fn max_canister_memory_size(&self) -> NumBytes {
+        self.config.max_canister_memory_size
+    }
+
     fn execution_parameters(
         &self,
         canister: &CanisterState,
@@ -844,15 +848,6 @@ impl ExecutionEnvironmentImpl {
         config: ExecutionConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
-        // TODO(EXC-501): Read embedder config values from the replica configuration
-        let embedder_config = EmbeddersConfig::new();
-        let wasm_validation_config = WasmValidationConfig {
-            limits: WasmValidationLimits {
-                max_globals: embedder_config.max_globals,
-                max_functions: embedder_config.max_functions,
-            },
-            feature_flags: embedder_config.feature_flags,
-        };
         let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
             config.subnet_memory_capacity,
             config.max_cycles_per_canister,
@@ -861,7 +856,6 @@ impl ExecutionEnvironmentImpl {
             own_subnet_id,
             config.max_controllers,
             num_cores,
-            wasm_validation_config,
         );
         let canister_manager = CanisterManager::new(
             Arc::clone(&hypervisor),
@@ -887,6 +881,7 @@ impl ExecutionEnvironmentImpl {
         sender: PrincipalId,
         cycles: Cycles,
         settings: CanisterSettings,
+        max_number_of_canisters: u64,
         state: &mut ReplicatedState,
     ) -> (Result<Vec<u8>, UserError>, Cycles) {
         match state.find_subnet_id(sender) {
@@ -896,6 +891,7 @@ impl ExecutionEnvironmentImpl {
                     sender_subnet_id,
                     cycles,
                     settings,
+                    max_number_of_canisters,
                     state,
                 );
                 (
@@ -1350,7 +1346,7 @@ impl ExecutionEnvironmentImpl {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
         let subnet_available_memory =
-            SubnetAvailableMemory::new(self.config.subnet_memory_capacity);
+            SubnetAvailableMemory::new(self.config.subnet_memory_capacity.get() as i64);
         let execution_parameters =
             self.execution_parameters(&canister, cycles, subnet_available_memory);
         let (mut canister, cycles, result) = self.hypervisor.execute_query(
@@ -1424,7 +1420,7 @@ impl ExecutionEnvironmentImpl {
         let method_name = ingress.method_name().to_string();
         let payload = ingress.arg();
 
-        if is_subnet_message(&ingress, self.own_subnet_id) {
+        if is_subnet_message(ingress, self.own_subnet_id) {
             self.canister_manager.should_accept_ingress_message(
                 state,
                 provisional_whitelist,
@@ -1438,9 +1434,9 @@ impl ExecutionEnvironmentImpl {
                     // Letting the canister grow arbitrarily when executing the
                     // query is fine as we do not persist state modifications.
                     let subnet_available_memory =
-                        SubnetAvailableMemory::new(self.config.subnet_memory_capacity);
+                        SubnetAvailableMemory::new(self.config.subnet_memory_capacity.get() as i64);
                     let execution_parameters = self.execution_parameters(
-                        &canister,
+                        canister,
                         self.config.max_instructions_for_message_acceptance_calls,
                         subnet_available_memory,
                     );
@@ -1580,7 +1576,7 @@ impl ExecutionEnvironmentImpl {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
         let subnet_available_memory =
-            SubnetAvailableMemory::new(self.config.subnet_memory_capacity);
+            SubnetAvailableMemory::new(self.config.subnet_memory_capacity.get() as i64);
         let execution_parameters =
             self.execution_parameters(&canister, cycles, subnet_available_memory);
         let (canister, cycles, result) = self.hypervisor.execute_query(

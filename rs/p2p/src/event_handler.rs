@@ -68,8 +68,10 @@
 //!      PeerFlowQueueMap: A single flow being addressed by 1 thread.
 //! ```
 use crate::{
+    advert_utils::AdvertRequestBuilder,
     gossip_protocol::{
-        Gossip, GossipChunk, GossipChunkRequest, GossipMessage, GossipRetransmissionRequest,
+        Gossip, GossipAdvertSendRequest, GossipChunk, GossipChunkRequest, GossipMessage,
+        GossipRetransmissionRequest,
     },
     metrics::EventHandlerMetrics,
     P2PErrorCode, P2PResult,
@@ -93,9 +95,10 @@ use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_types::transport::{TransportError, TransportErrorCode, TransportFlowInfo};
 use ic_types::{
+    artifact::AdvertClass,
     canonical_error::{unavailable_error, CanonicalError},
     messages::SignedIngress,
-    p2p::{GossipAdvert, GossipAdvertSendRequest},
+    p2p::GossipAdvert,
     transport::{FlowId, TransportNotification, TransportPayload, TransportStateChange},
     NodeId, SubnetId,
 };
@@ -348,9 +351,9 @@ impl<T: Send + 'static> PeerFlowQueueMap<T> {
     /// The method adds the node with the given node ID.
     fn add_node(&self, node_id: NodeId, buffer: usize) {
         let mut send_map = self.send_map.write().unwrap();
-        if !send_map.contains_key(&node_id) {
+        if let std::collections::btree_map::Entry::Vacant(e) = send_map.entry(node_id) {
             let (send, recv) = channel(max(1, buffer));
-            send_map.insert(node_id, send);
+            e.insert(send);
 
             self.management_command_sender
                 .send(ManagementCommands::AddPeer(node_id, recv))
@@ -488,6 +491,8 @@ pub struct P2PEventHandlerImpl {
     channel_config: ChannelConfig,
     /// The peer flows.
     peer_flows: PeerFlows,
+    /// For advert send requests from artifact manager.
+    advert_builder: AdvertRequestBuilder,
 }
 
 /// This constant specifies the expected maximum number of peers.
@@ -545,8 +550,13 @@ impl P2PEventHandlerImpl {
     ) -> Self {
         let handler = P2PEventHandlerImpl {
             node_id,
-            log,
+            log: log.clone(),
             metrics: EventHandlerMetrics::new(metrics_registry),
+            advert_builder: AdvertRequestBuilder::new(
+                gossip_config.advert_config.clone(),
+                metrics_registry,
+                log,
+            ),
             channel_config: ChannelConfig::from(gossip_config),
             peer_flows: PeerFlows::new(rt_handle),
         };
@@ -804,13 +814,19 @@ impl Service<SignedIngress> for IngressEventHandler {
 /// This trait is used as the interface between Artifact Manager and P2P.
 pub trait AdvertSubscriber {
     /// The method broadcasts the given advert.
-    fn broadcast_advert(&self, advert_request: GossipAdvertSendRequest);
+    fn broadcast_advert(&self, advert: GossipAdvert, advert_class: AdvertClass);
 }
 
 /// `P2PEventHandlerImpl` implements the `AdvertSubscriber` trait.
 impl AdvertSubscriber for P2PEventHandlerImpl {
     /// The method broadcasts the given advert.
-    fn broadcast_advert(&self, advert_request: GossipAdvertSendRequest) {
+    fn broadcast_advert(&self, advert: GossipAdvert, advert_class: AdvertClass) {
+        // Translate the advert request to internal format
+        let advert_request = match self.advert_builder.build(advert, advert_class) {
+            Some(request) => request,
+            None => return,
+        };
+
         let sender = {
             let send_map = self.peer_flows.send_advert.send_map.read().unwrap();
             // channel for self.node_id is populated in the constructor
@@ -836,7 +852,7 @@ pub mod tests {
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{p2p::p2p_test_setup_logger, types::ids::node_test_id};
-    use ic_types::p2p::GossipAdvertType;
+    use ic_types::artifact::AdvertClass;
     use ic_types::transport::{FlowTag, TransportClientType};
     use tokio::time::{sleep, Duration};
 
@@ -1006,10 +1022,7 @@ pub mod tests {
     async fn broadcast_advert(count: usize, handler: &P2PEventHandlerImpl) {
         for i in 0..count {
             let message = make_gossip_advert(i as u64);
-            handler.broadcast_advert(GossipAdvertSendRequest {
-                advert: message,
-                advert_type: GossipAdvertType::Produced,
-            });
+            handler.broadcast_advert(message, AdvertClass::Critical);
         }
     }
 

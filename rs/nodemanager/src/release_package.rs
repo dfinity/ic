@@ -366,7 +366,7 @@ impl ReleasePackage {
             // Download base OS upgrade
             let download_path = self
                 .release_package_provider
-                .make_version_dir(&new_replica_version)?
+                .make_version_dir(new_replica_version)?
                 .join("base-os.tar.gz");
             info!(self.logger, "Upgrading from {:?}", download_path);
             let _ = self
@@ -422,7 +422,7 @@ impl ReleasePackage {
                 .await?;
 
             // Release package has been downloaded, set symlink to mark as current
-            self.set_current_symlink(&new_replica_version)?;
+            self.set_current_symlink(new_replica_version)?;
 
             // Ensure there is a replica binary available before starting a new Node Manager
             let replica_binary = match &self.force_replica_binary {

@@ -143,7 +143,7 @@ pub fn prove_sharing(
         .iter()
         .rev()
         .fold(ecp_inf(), |mut acc, point| {
-            acc.add(&point);
+            acc.add(point);
             acc.mul(&x)
         });
 
@@ -170,7 +170,7 @@ pub fn prove_sharing(
         .iter()
         .rev()
         .fold(big_zero(), |mut acc, scalar| {
-            acc = field_add(&acc, &scalar);
+            acc = field_add(&acc, scalar);
             field_mul(&acc, &x)
         });
 
@@ -247,7 +247,7 @@ pub fn verify_sharing(
             .iter()
             .rev()
             .fold(ecp_inf(), |mut acc, point| {
-                acc.add(&point);
+                acc.add(point);
                 acc.mul(&x)
             });
     lhs = lhs.mul(&x_challenge);
@@ -258,7 +258,7 @@ pub fn verify_sharing(
         .iter()
         .rev()
         .fold(ecp_inf(), |mut acc, point| {
-            acc.add(&point);
+            acc.add(point);
             acc.mul(&x)
         });
     rhs = rhs.mul2(&nizk.z_r, &instance.g1_gen, &nizk.z_alpha);

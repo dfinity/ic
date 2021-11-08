@@ -22,7 +22,9 @@ pub mod ni_dkg;
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> ThresholdSignatureCspClient for Csp<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdSignatureCspClient
+    for Csp<R, S, C>
+{
     /// See the trait for documentation.
     ///
     /// Warning: The secret key store has no transactions, so in the event of
@@ -95,8 +97,10 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> ThresholdSignatureCspClient for Csp<
             AlgorithmId::ThresBls12_381 => {
                 let clib_public_coefficients_bytes =
                     PublicCoefficientsBytes::from(public_coefficients);
-                let public_key_bytes =
-                    clib::api::individual_public_key(&clib_public_coefficients_bytes, node_index)?;
+                let public_key_bytes = clib::api::individual_public_key_from_trusted_bytes(
+                    &clib_public_coefficients_bytes,
+                    node_index,
+                )?;
                 Ok(CspThresholdSigPublicKey::ThresBls12_381(public_key_bytes))
             }
             _ => Err(CryptoError::InvalidArgument {

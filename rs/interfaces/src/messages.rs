@@ -39,8 +39,8 @@ pub enum RequestOrIngress {
 impl RequestOrIngress {
     pub fn sender(&self) -> &PrincipalId {
         match self {
-            RequestOrIngress::Request(msg) => &msg.sender.as_ref(),
-            RequestOrIngress::Ingress(msg) => &msg.source.as_ref(),
+            RequestOrIngress::Request(msg) => msg.sender.as_ref(),
+            RequestOrIngress::Ingress(msg) => msg.source.as_ref(),
         }
     }
 

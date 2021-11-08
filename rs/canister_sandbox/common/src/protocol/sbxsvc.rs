@@ -136,10 +136,17 @@ pub struct OpenExecutionReply {
 pub struct CloseExecutionRequest {
     /// Id of execution previously created (see OpenExecution)
     pub exec_id: String,
-
-    /// Whether to apply the changes made during this call to the
-    /// underlying state.
-    pub commit_state: bool,
+    /* There used to be a "commit" field in this message. The
+     * intent is that the "post-exec" state on the sandbox
+     * process is immediately formed after execution has finished,
+     * preferably using the data that is still held in the
+     * process.
+     * With the change to have _only_ the replica process perform
+     * writes, this does not work that way and there is no sense
+     * in replica telling sandbox whether to commit.
+     * This comment is only left to explain design intent, and
+     * where to possibly to put a "post-exec commit" command in
+     * case we later want to introduce such optimization again. */
 }
 
 /// Ack `CloseExecutionRequest`.

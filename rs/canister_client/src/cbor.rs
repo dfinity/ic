@@ -59,7 +59,7 @@ pub fn parse_read_state_response(
     let response = serde_cbor::value::from_value::<HttpReadStateResponse>(message)
         .map_err(|source| format!("decoding to HttpReadStateResponse failed: {}", source))?;
 
-    let certificate: Certificate = serde_cbor::from_slice(&response.certificate.as_slice())
+    let certificate: Certificate = serde_cbor::from_slice(response.certificate.as_slice())
         .map_err(|source| format!("decoding Certificate failed: {}", source))?;
 
     // Parse the tree.

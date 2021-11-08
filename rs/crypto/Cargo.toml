@@ -39,8 +39,8 @@ openssl = "0.10.29"
 parking_lot = "0.11.1"
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.8.0"
-prost-types = "0.8.0"
+prost = "0.9.0"
+prost-types = "0.9.0"
 rand = "0.7.3"
 rand_chacha = "0.2.2"
 rand_core = "0.5.1"
@@ -62,7 +62,7 @@ tokio-rustls = { version = "0.22.0", features = ["dangerous_configuration"] }
 zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
 
 [build-dependencies]
-prost-build = "0.8.0"
+prost-build = "0.9.0"
 
 [dev-dependencies]
 criterion = "0.3.4"
@@ -72,6 +72,7 @@ ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "internal/crypto_lib/bas
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig/rsa_pkcs1" }
 ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
 ic-crypto-test-utils = { path = "test_utils" }
+ic-crypto-test-utils-multi-sigs = { path = "test_utils/multi_sigs" }
 ic-crypto-test-utils-threshold-sigs = { path = "test_utils/threshold_sigs" }
 ic-test-utilities = { path = "../test_utilities" }
 json5 = "0.2.7"
@@ -95,4 +96,8 @@ harness = false
 
 [[bench]]
 name = "ni_dkg"
+harness = false
+
+[[bench]]
+name = "multi_sig"
 harness = false

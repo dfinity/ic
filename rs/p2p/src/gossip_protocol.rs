@@ -76,13 +76,14 @@ use ic_types::{
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
-    p2p::{GossipAdvert, GossipAdvertSendRequest},
+    p2p::GossipAdvert,
     transport::{FlowTag, TransportError, TransportNotification, TransportStateChange},
     NodeId, SubnetId,
 };
 
 use bincode::{deserialize, serialize};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
+use phantom_newtype::AmountOf;
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 
@@ -195,6 +196,31 @@ pub(crate) enum GossipMessage {
     Chunk(GossipChunk),
     /// The retransmission request variant.
     RetransmissionRequest(GossipRetransmissionRequest),
+}
+
+/// Request from artifact manager to send adverts for newly added validated
+/// artifacts
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GossipAdvertSendRequest {
+    /// The advert to be sent
+    pub(crate) advert: GossipAdvert,
+
+    /// How to distribute the advert
+    pub(crate) action: GossipAdvertAction,
+}
+
+pub(crate) enum PercentageType {}
+pub(crate) type Percentage = AmountOf<PercentageType, u32>;
+
+/// Specifies how to distribute the adverts
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum GossipAdvertAction {
+    /// Send to all peers
+    SendToAllPeers,
+
+    /// Send to a random subset of peers.
+    /// The argument specifies the subset size, as percentage of subnet size
+    SendToRandomSubset(Percentage),
 }
 
 /// A *Gossip* message can be converted into a

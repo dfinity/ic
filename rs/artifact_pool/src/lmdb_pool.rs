@@ -198,7 +198,7 @@ impl From<(Height, &CryptoHash)> for IdKey {
         let mut bytes: Vec<u8> = vec![0; len];
         let (left, right) = bytes.split_at_mut(8);
         left.copy_from_slice(&u64::to_be_bytes(height.get()));
-        right.copy_from_slice(&hash_bytes);
+        right.copy_from_slice(hash_bytes);
         IdKey(bytes)
     }
 }
@@ -313,6 +313,16 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
             .unwrap_or_else(|err| {
                 panic!("Error opening LMDB environment at {:?}: {:?}", path, err)
             });
+
+        unsafe {
+            // Mark fds created by lmdb as FD_CLOEXEC to prevent them from leaking into
+            // canister sandbox process. Details in NODE-166
+            let mut fd: lmdb_sys::mdb_filehandle_t = lmdb_sys::mdb_filehandle_t::default();
+            lmdb_sys::mdb_env_get_fd(db_env.env(), &mut fd);
+            nix::fcntl::fcntl(fd, nix::fcntl::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC))
+                .expect("Unable to mark FD_CLOEXEC");
+        };
+
         // Create all databases.
         let meta = if read_only {
             db_env
@@ -338,12 +348,12 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                 .map(|type_key| {
                     // Use DUP_SORT to enable multi-value for each HeightKey.
                     let store = if read_only {
-                        db_env.open_db(Some(&type_key.name)).unwrap_or_else(|err| {
+                        db_env.open_db(Some(type_key.name)).unwrap_or_else(|err| {
                             panic!("Error opening db {}: {:?}", type_key.name, err)
                         })
                     } else {
                         db_env
-                            .create_db(Some(&type_key.name), DatabaseFlags::DUP_SORT)
+                            .create_db(Some(type_key.name), DatabaseFlags::DUP_SORT)
                             .unwrap_or_else(|err| {
                                 panic!("Error creating db {}: {:?}", type_key.name, err)
                             })
@@ -505,12 +515,12 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         // delete from all index tables
         for type_key in Artifact::type_keys() {
             // only delete if meta exists
-            if let Some(meta) = self.get_meta(tx, &type_key) {
+            if let Some(meta) = self.get_meta(tx, type_key) {
                 // skip to next db if min height is already higher
                 if meta.min >= height_key {
                     continue;
                 }
-                let index_db = self.get_index_db(&type_key);
+                let index_db = self.get_index_db(type_key);
                 {
                     let mut cursor = tx.open_rw_cursor(index_db)?;
                     loop {
@@ -540,7 +550,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                 };
                 match meta {
                     None => tx.del(self.meta, &type_key, None)?,
-                    Some(meta) => self.update_meta(tx, &type_key, &meta)?,
+                    Some(meta) => self.update_meta(tx, type_key, &meta)?,
                 }
             }
         }
@@ -1624,8 +1634,8 @@ mod tests {
             }
         // Test get highest iter
         } else {
-            let result_vec: Vec<T> = pool_by_type.get_highest_iter().collect();
-            assert_eq!(result_vec.len(), 3);
+            let result_vec = pool_by_type.get_highest_iter();
+            assert_eq!(result_vec.count(), 3);
         }
     }
 
@@ -1914,8 +1924,8 @@ mod tests {
                 let rb_ops = random_beacon_ops();
                 pool.mutate(rb_ops.clone());
                 let iter = pool.random_beacon().get_all();
-                let msgs_from_pool: Vec<RandomBeacon> = iter.collect();
-                assert_eq!(msgs_from_pool.len(), rb_ops.ops.len());
+                let msgs_from_pool = iter;
+                assert_eq!(msgs_from_pool.count(), rb_ops.ops.len());
                 // purge at height 10
                 let mut purge_ops = PoolSectionOps::new();
                 purge_ops.purge_below(Height::from(10));

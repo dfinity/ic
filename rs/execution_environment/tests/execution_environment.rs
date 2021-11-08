@@ -30,6 +30,7 @@ use ic_test_utilities::state::get_stopping_canister_on_nns;
 use ic_test_utilities::{
     crypto::mock_random_number_generator,
     cycles_account_manager::CyclesAccountManagerBuilder,
+    execution_state::ExecutionStateBuilder,
     history::MockIngressHistory,
     metrics::{fetch_histogram_vec_count, metric_vec},
     mock_time,
@@ -62,7 +63,6 @@ use ic_types::{
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, PrincipalId, QueueIndex, RegistryVersion, SubnetId,
 };
-use ic_wasm_utils::validation::WasmValidationConfig;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::{
@@ -77,8 +77,9 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX));
+        SubnetAvailableMemory::new(i64::MAX / 2);
 }
+const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 
 fn initial_state(
     subnet_type: SubnetType,
@@ -197,14 +198,7 @@ fn test_outgoing_messages(
         let wasm_binary = wabt::wat2wasm(wat).unwrap();
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
-        let execution_state = hypervisor
-            .create_execution_state(
-                wasm_binary,
-                tmpdir.path().into(),
-                WasmValidationConfig::default(),
-            )
-            .unwrap();
-
+        let execution_state = ExecutionStateBuilder::new(wasm_binary, tmpdir.path().into()).build();
         let mut canister = CanisterState {
             system_state,
             execution_state: Some(execution_state),
@@ -503,7 +497,7 @@ fn test_allocate_memory_for_output_requests() {
                 .create_execution_state(
                     wasm_binary,
                     tmpdir.path().into(),
-                    WasmValidationConfig::default(),
+                    &EmbeddersConfig::default(),
                 )
                 .unwrap();
 
@@ -524,7 +518,7 @@ fn test_allocate_memory_for_output_requests() {
             );
 
             // Tiny canister memory allocation prevents enqueuing an output request.
-            let subnet_available_memory = SubnetAvailableMemory::new(NumBytes::new(1 << 30));
+            let subnet_available_memory = SubnetAvailableMemory::new(1 << 30);
             canister.system_state.memory_allocation =
                 MemoryAllocation::try_from(NumBytes::new(13)).unwrap();
             let execute_message_result = exec_env.execute_canister_message(
@@ -537,7 +531,7 @@ fn test_allocate_memory_for_output_requests() {
                 subnet_available_memory.clone(),
             );
             canister = execute_message_result.canister;
-            assert_eq!(1 << 30, subnet_available_memory.get().get());
+            assert_eq!(1 << 30, subnet_available_memory.get());
             if ENFORCE_MESSAGE_MEMORY_USAGE {
                 assert!(!canister.system_state.queues().has_output());
             } else {
@@ -546,7 +540,7 @@ fn test_allocate_memory_for_output_requests() {
             }
 
             // Tiny `SubnetAvailableMemory` also prevents enqueuing an output request.
-            let subnet_available_memory = SubnetAvailableMemory::new(NumBytes::new(13));
+            let subnet_available_memory = SubnetAvailableMemory::new(13);
             canister.system_state.memory_allocation =
                 MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
             let execute_message_result = exec_env.execute_canister_message(
@@ -559,7 +553,7 @@ fn test_allocate_memory_for_output_requests() {
                 subnet_available_memory.clone(),
             );
             canister = execute_message_result.canister;
-            assert_eq!(13, subnet_available_memory.get().get());
+            assert_eq!(13, subnet_available_memory.get());
             if ENFORCE_MESSAGE_MEMORY_USAGE {
                 assert!(!canister.system_state.queues().has_output());
             } else {
@@ -569,7 +563,7 @@ fn test_allocate_memory_for_output_requests() {
 
             // But large enough canister memory allocation and `SubnetAvailableMemory` allow
             // enqueuing an outgoing request.
-            let subnet_available_memory = SubnetAvailableMemory::new(NumBytes::new(1 << 30));
+            let subnet_available_memory = SubnetAvailableMemory::new(1 << 30);
             canister.system_state.memory_allocation =
                 MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
             let execute_message_result = exec_env.execute_canister_message(
@@ -587,12 +581,12 @@ fn test_allocate_memory_for_output_requests() {
                 assert_eq!(1, canister.system_state.queues().reserved_slots());
                 // Subnet available memory should have decreased by `MAX_RESPONSE_COUNT_BYTES`.
                 assert_eq!(
-                    (1 << 30) - MAX_RESPONSE_COUNT_BYTES as u64,
-                    subnet_available_memory.get().get()
+                    (1 << 30) - MAX_RESPONSE_COUNT_BYTES as i64,
+                    subnet_available_memory.get()
                 );
             } else {
                 assert_eq!(3, canister.system_state.queues().reserved_slots());
-                assert_eq!(1 << 30, subnet_available_memory.get().get());
+                assert_eq!(1 << 30, subnet_available_memory.get());
             }
             // And the expected request should be enqueued.
             assert_correct_request(&mut canister.system_state);
@@ -915,6 +909,7 @@ fn stopping_canister_rejects_requests() {
                     &mut mock_random_number_generator(),
                     &ProvisionalWhitelist::Set(BTreeSet::new()),
                     MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                    MAX_NUMBER_OF_CANISTERS,
                 )
                 .0;
 
@@ -1122,6 +1117,7 @@ fn execute_stop_canister_updates_ingress_history_when_called_on_already_stopped_
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1159,6 +1155,7 @@ fn execute_stop_canister_does_not_update_ingress_history_when_called_on_running_
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1190,6 +1187,7 @@ fn execute_stop_canister_does_not_update_ingress_history_when_called_on_stopping
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1223,6 +1221,7 @@ fn execute_stop_canister_writes_failure_to_ingress_history_when_called_with_inco
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1287,6 +1286,7 @@ fn test_canister_status_helper(
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1342,6 +1342,7 @@ fn test_request_nonexistent_canister(method: Method) {
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1493,6 +1494,7 @@ fn start_canister_from_another_canister() {
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1560,6 +1562,7 @@ fn stop_canister_from_another_canister() {
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1637,6 +1640,7 @@ fn starting_a_stopping_canister_succeeds() {
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1681,6 +1685,7 @@ fn subnet_ingress_message_unknown_method() {
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1730,6 +1735,7 @@ fn subnet_canister_request_unknown_method() {
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1784,6 +1790,7 @@ fn subnet_ingress_message_on_create_canister_fails() {
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1833,6 +1840,7 @@ fn subnet_canister_request_bad_candid_payload() {
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -1949,6 +1957,7 @@ fn execute_create_canister_request(
             &mut mock_random_number_generator(),
             &ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            MAX_NUMBER_OF_CANISTERS,
         )
         .0
 }
@@ -2168,6 +2177,7 @@ fn execute_setup_initial_dkg_request(
             &mut mock_random_number_generator(),
             &ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            MAX_NUMBER_OF_CANISTERS,
         )
         .0
 }
@@ -2268,6 +2278,7 @@ fn install_code_fails_on_invalid_compute_allocation() {
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -2317,6 +2328,7 @@ fn install_code_fails_on_invalid_memory_allocation() {
                 &mut mock_random_number_generator(),
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             )
             .0;
 
@@ -2396,6 +2408,7 @@ fn metrics_are_observed_for_subnet_messages() {
                 &mut csprng,
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                MAX_NUMBER_OF_CANISTERS,
             );
         }
 
@@ -2413,6 +2426,7 @@ fn metrics_are_observed_for_subnet_messages() {
             &mut csprng,
             &ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            MAX_NUMBER_OF_CANISTERS,
         );
 
         assert_eq!(
@@ -2817,7 +2831,7 @@ fn management_message_to_canister_with_not_enough_balance_is_not_accepted() {
                 .build();
             let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
             let ingress_induction_cost = cycles_account_manager
-                .ingress_induction_cost(&ingress.content())
+                .ingress_induction_cost(ingress.content())
                 .unwrap()
                 .cost();
             assert_eq!(
@@ -2960,7 +2974,7 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
                 .create_execution_state(
                     wasm_binary,
                     tmpdir.path().into(),
-                    WasmValidationConfig::default(),
+                    &EmbeddersConfig::default(),
                 )
                 .unwrap();
 
@@ -2982,7 +2996,7 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
 
             let subnet_available_memory_bytes_num = 1 << 30;
             let subnet_available_memory =
-                SubnetAvailableMemory::new(NumBytes::from(subnet_available_memory_bytes_num));
+                SubnetAvailableMemory::new(subnet_available_memory_bytes_num);
             canister.system_state.memory_allocation =
                 MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
             exec_env.execute_canister_message(
@@ -2996,7 +3010,7 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
             );
             assert_eq!(
                 subnet_available_memory_bytes_num,
-                subnet_available_memory.get().get()
+                subnet_available_memory.get()
             );
         },
     );

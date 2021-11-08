@@ -38,9 +38,9 @@ pub mod util {
     ///   provider, which contains the secret key, and the key identifier.
     /// * `seed` is a source of randomness.
     /// * `message` is a test message.
-    pub fn test_threshold_signatures<R: Rng + CryptoRng, S: SecretKeyStore>(
+    pub fn test_threshold_signatures<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore>(
         public_coefficients: &CspPublicCoefficients,
-        signers: &[(&LocalCspServer<R, S>, KeyId)],
+        signers: &[(&LocalCspServer<R, S, C>, KeyId)],
         seed: Randomness,
         message: &[u8],
     ) {
@@ -77,9 +77,10 @@ pub mod util {
             // * Signatures cannot be generated with an incorrect key_id:
             if let Some((csp_server, _key_id)) = signers.get(0) {
                 let wrong_key_id = KeyId::from(rng.gen::<[u8; 32]>());
-                let key_ids: Vec<KeyId> = signers.iter().map(|(_, key_id)| *key_id).collect();
+                let mut key_ids = signers.iter().map(|(_, key_id)| *key_id);
+
                 assert!(
-                    !key_ids.contains(&wrong_key_id),
+                    !key_ids.any(|x| x == wrong_key_id),
                     "Bad RNG: A randomly generated KeyId was in the list of keys"
                 );
                 assert!(
@@ -207,7 +208,7 @@ pub mod util {
             assert!(verifier
                 .threshold_verify_combined_signature(
                     AlgorithmId::ThresBls12_381,
-                    &message,
+                    message,
                     incorrect_signature,
                     public_coefficients.clone()
                 )

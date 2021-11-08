@@ -2,7 +2,11 @@ use super::{
     canister_state::CanisterState,
     metadata_state::{IngressHistoryState, Stream, Streams, SystemMetadata},
 };
-use crate::{metadata_state::StreamMap, CanisterQueues};
+use crate::{
+    canister_state::{system_state::push_input, ENFORCE_MESSAGE_MEMORY_USAGE},
+    metadata_state::StreamMap,
+    CanisterQueues,
+};
 use ic_base_types::PrincipalId;
 use ic_interfaces::{
     execution_environment::CanisterOutOfCyclesError, messages::CanisterInputMessage,
@@ -43,6 +47,10 @@ pub enum StateError {
     /// Message enqueuing failed due to calling a subnet method with
     /// an invalid payload.
     InvalidSubnetPayload,
+
+    /// Message enqueuing would have caused the canister or subnet to run over
+    /// their memory limit.
+    OutOfMemory { requested: NumBytes, available: i64 },
 }
 
 pub const LABEL_VALUE_CANISTER_NOT_FOUND: &str = "CanisterNotFound";
@@ -52,6 +60,7 @@ pub const LABEL_VALUE_CANISTER_STOPPING: &str = "CanisterStopping";
 pub const LABEL_VALUE_CANISTER_OUT_OF_CYCLES: &str = "CanisterOutOfCycles";
 pub const LABEL_VALUE_UNKNOWN_SUBNET_METHOD: &str = "UnknownSubnetMethod";
 pub const LABEL_VALUE_INVALID_SUBNET_PAYLOAD: &str = "InvalidSubnetPayload";
+pub const LABEL_VALUE_OUT_OF_MEMORY: &str = "OutOfMemory";
 
 impl StateError {
     /// Returns a string representation of the `StateError` variant name to be
@@ -65,6 +74,7 @@ impl StateError {
             StateError::CanisterOutOfCycles(_) => LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
             StateError::UnknownSubnetMethod(_) => LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
             StateError::InvalidSubnetPayload => LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
+            StateError::OutOfMemory { .. } => LABEL_VALUE_OUT_OF_MEMORY,
         }
     }
 }
@@ -95,6 +105,14 @@ impl std::fmt::Display for StateError {
             StateError::InvalidSubnetPayload => write!(
                 f,
                 "Cannot enqueue management message. Candid payload is invalid."
+            ),
+            StateError::OutOfMemory {
+                requested,
+                available,
+            } => write!(
+                f,
+                "Cannot enqueue message. Out of memory: requested {}, available {}",
+                requested, available
             ),
         }
     }
@@ -170,13 +188,15 @@ impl ReplicatedState {
         consensus_queue: Vec<Response>,
         root: PathBuf,
     ) -> Self {
-        Self {
+        let mut res = Self {
             canister_states,
             metadata,
             subnet_queues,
             consensus_queue,
             root,
-        }
+        };
+        res.update_stream_responses_size_bytes();
+        res
     }
 
     pub fn path(&self) -> &Path {
@@ -196,7 +216,7 @@ impl ReplicatedState {
     }
 
     pub fn take_canister_states(&mut self) -> BTreeMap<CanisterId, CanisterState> {
-        std::mem::replace(&mut self.canister_states, BTreeMap::new())
+        std::mem::take(&mut self.canister_states)
     }
 
     /// Insert the canister state into the replicated state. If a canister
@@ -278,16 +298,21 @@ impl ReplicatedState {
 
     /// Returns the total memory taken by canisters in bytes.
     ///
-    /// Either the memory allocation that has been reserved is taken into
-    /// account or the logical memory used in case no memory allocation has
-    /// been reserved explicitly.
+    /// This accounts for the canister memory reservation, where specified; and
+    /// the actual canister memory usage, where no explicit memory reservation
+    /// has been made.
     pub fn total_memory_taken(&self) -> NumBytes {
-        self.canisters_iter()
+        let mut memory_taken = self
+            .canisters_iter()
             .map(|canister| match canister.memory_allocation() {
                 MemoryAllocation::Reserved(bytes) => bytes,
                 MemoryAllocation::BestEffort => canister.memory_usage(),
             })
-            .sum()
+            .sum();
+        if ENFORCE_MESSAGE_MEMORY_USAGE {
+            memory_taken += (self.subnet_queues.memory_usage() as u64).into();
+        }
+        memory_taken
     }
 
     pub fn find_subnet_id(&self, principal_id: PrincipalId) -> Result<SubnetId, UserError> {
@@ -308,17 +333,36 @@ impl ReplicatedState {
 
     /// Pushes a `RequestOrResponse` into the induction pool (canister or subnet
     /// input queue).
+    ///
+    /// On failure (queue full, canister not found, out of memory), returns the
+    /// corresponding error and the original message.
+    ///
+    /// Updates `subnet_available_memory` to reflect any change in memory usage.
     pub fn push_input(
         &mut self,
         index: QueueIndex,
         msg: RequestOrResponse,
+        max_canister_memory_size: NumBytes,
+        subnet_available_memory: &mut i64,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         match self.canister_state_mut(&msg.receiver()) {
-            Some(receiver_canister) => receiver_canister.push_input(index, msg),
+            Some(receiver_canister) => receiver_canister.push_input(
+                index,
+                msg,
+                max_canister_memory_size,
+                subnet_available_memory,
+            ),
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
                 if msg.receiver().get_ref() == subnet_id {
-                    self.subnet_queues.push_input(index, msg)
+                    push_input(
+                        &mut self.subnet_queues,
+                        index,
+                        msg,
+                        // No canister limit, so pass the subnet limit twice.
+                        *subnet_available_memory,
+                        subnet_available_memory,
+                    )
                 } else {
                     Err((StateError::CanisterNotFound(msg.receiver()), msg))
                 }
@@ -342,7 +386,7 @@ impl ReplicatedState {
         Ok(())
     }
 
-    /// Extracts the next inter-canister or ingress message (in that order) from
+    /// Extracts the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
     pub fn pop_subnet_input(&mut self) -> Option<CanisterInputMessage> {
         self.subnet_queues.pop_input()
@@ -382,6 +426,24 @@ impl ReplicatedState {
     pub fn subnet_queues(&self) -> &CanisterQueues {
         &self.subnet_queues
     }
+
+    /// Updates the byte size of responses in streams for each canister.
+    fn update_stream_responses_size_bytes(&mut self) {
+        let stream_responses_size_bytes = self.metadata.streams.responses_size_bytes();
+        for (canister_id, canister_state) in self.canister_states.iter_mut() {
+            canister_state.set_stream_responses_size_bytes(
+                stream_responses_size_bytes
+                    .get(canister_id)
+                    .cloned()
+                    .unwrap_or_default(),
+            )
+        }
+    }
+
+    /// Returns the number of canisters in this `ReplicatedState`.
+    pub fn num_canisters(&self) -> usize {
+        self.canister_states.len()
+    }
 }
 
 /// A trait exposing `ReplicatedState` functionality for the exclusive use of
@@ -389,9 +451,6 @@ impl ReplicatedState {
 pub trait ReplicatedStateMessageRouting {
     /// Returns a reference to the streams.
     fn streams(&self) -> &StreamMap;
-
-    /// Returns a mutable reference to the streams.
-    fn mut_streams(&mut self) -> &mut Streams;
 
     /// Removes the streams from this `ReplicatedState`.
     fn take_streams(&mut self) -> Streams;
@@ -402,11 +461,7 @@ pub trait ReplicatedStateMessageRouting {
 
 impl ReplicatedStateMessageRouting for ReplicatedState {
     fn streams(&self) -> &StreamMap {
-        &self.metadata.streams.streams()
-    }
-
-    fn mut_streams(&mut self) -> &mut Streams {
-        Arc::make_mut(&mut self.metadata.streams)
+        self.metadata.streams.streams()
     }
 
     fn take_streams(&mut self) -> Streams {
@@ -418,6 +473,7 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
         assert!(self.metadata.streams.streams().is_empty());
 
         *Arc::make_mut(&mut self.metadata.streams) = streams;
+        self.update_stream_responses_size_bytes();
     }
 }
 

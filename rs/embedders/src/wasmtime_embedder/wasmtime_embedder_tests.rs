@@ -1,14 +1,14 @@
 use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
+use crate::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
-use ic_replicated_state::SystemState;
+use ic_replicated_state::{Memory, SystemState};
 use ic_system_api::{ApiType, SystemApiImpl, SystemStateAccessor};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, types::ids::canister_test_id,
 };
 use ic_types::{ComputeAllocation, NumBytes, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
-use ic_wasm_utils::instrumentation::{instrument, InstructionCostTable};
 
 use lazy_static::lazy_static;
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use wasmtime::{Config, Engine, Module, Store, Val};
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX));
+        SubnetAvailableMemory::new(i64::MAX / 2);
 }
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 
@@ -27,8 +27,11 @@ fn test_wasmtime_system_api() {
     let canister_id = canister_test_id(53);
     let system_state = SystemState::new_for_start(canister_id);
     let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-    let system_state_accessor =
-        ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+    let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
+        system_state,
+        cycles_account_manager,
+        &Memory::default(),
+    );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
     let system_api = SystemApiImpl::new(

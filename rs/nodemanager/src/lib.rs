@@ -45,4 +45,5 @@ mod registry_helper;
 mod release_package;
 mod release_package_provider;
 mod replica_process;
+mod ssh_access_manager;
 mod utils;

@@ -1,34 +1,26 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, ExecutionParameters, SubnetAvailableMemory, SystemApi,
-};
-use ic_logger::replica_logger::no_op_logger;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, SystemApi};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{StateError, SystemState};
-use ic_system_api::{ApiType, SystemApiImpl, SystemStateAccessor, SystemStateAccessorDirect};
+use ic_replicated_state::{Memory, StateError, SystemState};
+use ic_system_api::{SystemStateAccessor, SystemStateAccessorDirect};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
-    mock_time,
     state::SystemStateBuilder,
     types::{
-        ids::{canister_test_id, subnet_test_id, user_test_id},
+        ids::{canister_test_id, user_test_id},
         messages::{RequestBuilder, ResponseBuilder},
     },
 };
 use ic_types::{
-    messages::CallContextId, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, CanisterId,
-    ComputeAllocation, Cycles, NumInstructions, SubnetId,
+    messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, ComputeAllocation, Cycles, NumInstructions,
 };
-use maplit::btreemap;
-use std::{collections::BTreeMap, convert::From, sync::Arc};
+use std::{convert::From, sync::Arc};
+
+mod common;
+use common::*;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
-
-const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
-const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
 
 #[test]
 fn push_output_request_fails_not_enough_cycles_for_request() {
@@ -62,7 +54,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
     );
 
     let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        SystemStateAccessorDirect::new(system_state, cycles_account_manager, &Memory::default());
 
     assert_eq!(
         system_state_accessor.push_output_request(
@@ -114,7 +106,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
     );
 
     let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        SystemStateAccessorDirect::new(system_state, cycles_account_manager, &Memory::default());
 
     assert_eq!(
         system_state_accessor.push_output_request(
@@ -149,8 +141,11 @@ fn push_output_request_succeeds_with_enough_cycles() {
         NumSeconds::from(100_000),
     );
 
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::clone(&cycles_account_manager));
+    let system_state_accessor = SystemStateAccessorDirect::new(
+        system_state,
+        Arc::clone(&cycles_account_manager),
+        &Memory::default(),
+    );
 
     assert_eq!(
         system_state_accessor.push_output_request(
@@ -182,8 +177,11 @@ fn correct_charging_source_canister_for_a_request() {
 
     let initial_cycles_balance = system_state.cycles_balance;
 
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::clone(&cycles_account_manager));
+    let system_state_accessor = SystemStateAccessorDirect::new(
+        system_state,
+        Arc::clone(&cycles_account_manager),
+        &Memory::default(),
+    );
 
     let request = RequestBuilder::default()
         .sender(canister_test_id(0))
@@ -216,7 +214,7 @@ fn correct_charging_source_canister_for_a_request() {
     // ExecutionEnvironmentImpl::execute_canister_response()
     // => Mock the response_cycles_refund() invocation from the
     // execute_canister_response()
-    let mut system_state = system_state_accessor.release_system_state();
+    let mut system_state = system_state_accessor.release_system_state().0;
     cycles_account_manager.response_cycles_refund(&mut system_state, &mut response);
 
     // MAX_NUM_INSTRUCTIONS also gets partially refunded in the real
@@ -228,73 +226,6 @@ fn correct_charging_source_canister_for_a_request() {
             ),
         system_state.cycles_balance
     );
-}
-
-fn execution_parameters() -> ExecutionParameters {
-    ExecutionParameters {
-        instruction_limit: NumInstructions::new(5_000_000_000),
-        canister_memory_limit: NumBytes::new(4 << 30),
-        subnet_available_memory: SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX)),
-        compute_allocation: ComputeAllocation::default(),
-    }
-}
-
-fn setup() -> (
-    SubnetId,
-    SubnetType,
-    Arc<RoutingTable>,
-    Arc<BTreeMap<SubnetId, SubnetType>>,
-) {
-    let subnet_id = subnet_test_id(1);
-    let subnet_type = SubnetType::Application;
-    let routing_table = Arc::new(RoutingTable::new(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-    }));
-    let subnet_records = Arc::new(btreemap! {
-        subnet_id => subnet_type,
-    });
-
-    (subnet_id, subnet_type, routing_table, subnet_records)
-}
-
-fn get_update_api_type() -> ApiType {
-    let (subnet_id, subnet_type, routing_table, subnet_records) = setup();
-    ApiType::update(
-        mock_time(),
-        vec![],
-        Cycles::from(0),
-        user_test_id(1).get(),
-        CallContextId::from(1),
-        subnet_id,
-        subnet_type,
-        routing_table,
-        subnet_records,
-    )
-}
-
-fn get_system_api_with_max_cycles_per_canister(
-    api_type: ApiType,
-    system_state: SystemState,
-    cycles_account_manager: CyclesAccountManager,
-) -> SystemApiImpl<SystemStateAccessorDirect> {
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
-    SystemApiImpl::new(
-        system_state_accessor.canister_id(),
-        api_type,
-        system_state_accessor,
-        CANISTER_CURRENT_MEMORY_USAGE,
-        execution_parameters(),
-        no_op_logger(),
-    )
-}
-
-fn get_system_api(
-    api_type: ApiType,
-    system_state: SystemState,
-    cycles_account_manager: CyclesAccountManager,
-) -> SystemApiImpl<SystemStateAccessorDirect> {
-    get_system_api_with_max_cycles_per_canister(api_type, system_state, cycles_account_manager)
 }
 
 #[test]

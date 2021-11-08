@@ -2,6 +2,8 @@ use crate::state_layout::CheckpointManager;
 use crate::utils::do_copy;
 use ic_logger::ReplicaLogger;
 use ic_utils::fs::{sync_and_mark_files_readonly, sync_path};
+use ic_utils::thread::parallel_map;
+use std::convert::identity;
 use std::io::Error;
 use std::{
     fs, io,
@@ -107,7 +109,15 @@ impl BasicCheckpointManager {
 
     /// Atomically copies a checkpoint with the specified name located at src
     /// path into the specified dst path.
-    fn copy_checkpoint(&self, name: &str, src: &Path, dst: &Path) -> std::io::Result<()> {
+    ///
+    /// If a thread-pool is provided then files are copied in parallel.
+    fn copy_checkpoint(
+        &self,
+        name: &str,
+        src: &Path,
+        dst: &Path,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> std::io::Result<()> {
         let scratch_name = format!("scratchpad_{}", name);
         let scratchpad = self.tmp().join(&scratch_name);
         self.ensure_dir_exists(&scratchpad)?;
@@ -122,6 +132,7 @@ impl BasicCheckpointManager {
                 src,
                 scratchpad.as_path(),
                 FilePermissions::ReadOnly,
+                thread_pool,
             )?;
             std::fs::rename(&scratchpad, &dst)?;
             sync_path(&dst)
@@ -162,14 +173,19 @@ impl CheckpointManager for BasicCheckpointManager {
         &self.root
     }
 
-    fn tip_to_checkpoint(&self, tip: &Path, name: &str) -> std::io::Result<PathBuf> {
+    fn tip_to_checkpoint(
+        &self,
+        tip: &Path,
+        name: &str,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> std::io::Result<PathBuf> {
         self.ensure_dir_exists(&self.checkpoints())?;
         let cp_path = self.checkpoints().join(name);
 
         if cp_path.exists() {
             return Err(Error::new(io::ErrorKind::AlreadyExists, name));
         }
-        self.copy_checkpoint(name, tip, cp_path.as_path())?;
+        self.copy_checkpoint(name, tip, cp_path.as_path(), thread_pool)?;
         Ok(cp_path)
     }
 
@@ -190,6 +206,7 @@ impl CheckpointManager for BasicCheckpointManager {
             &cp_path,
             scratchpad,
             FilePermissions::ReadWrite,
+            None,
         )
     }
 
@@ -231,7 +248,7 @@ impl CheckpointManager for BasicCheckpointManager {
         let backups_dir = self.backups();
         self.ensure_dir_exists(&backups_dir)?;
         let dst = backups_dir.join(name);
-        self.copy_checkpoint(name, cp_path.as_path(), dst.as_path())?;
+        self.copy_checkpoint(name, cp_path.as_path(), dst.as_path(), None)?;
         sync_path(&backups_dir)
     }
 
@@ -308,6 +325,7 @@ impl CheckpointManager for BasicCheckpointManager {
             cp_path.as_path(),
             tip,
             FilePermissions::ReadWrite,
+            None,
         ) {
             Ok(()) => Ok(()),
             Err(e) => {
@@ -343,16 +361,116 @@ enum FilePermissions {
 
 /// Recursively copies `src` to `dst` using the given permission policy for
 /// files. Directories containing a file called "tombstone" are not copied to
-/// the destination.
+/// the destination. If a thread-pool is provided then files are copied in
+/// parallel.
 ///
 /// NOTE: If the function returns an error, the changes to the file
 /// system applied by this function are not undone.
 fn copy_recursively_respecting_tombstones(
     log: &ReplicaLogger,
+    root_src: &Path,
+    root_dst: &Path,
+    dst_permissions: FilePermissions,
+    thread_pool: Option<&mut scoped_threadpool::Pool>,
+) -> std::io::Result<()> {
+    let mut copy_plan = CopyPlan {
+        create_and_sync_dir: vec![],
+        copy_and_sync_file: vec![],
+    };
+
+    build_copy_plan(root_src, root_dst, &mut copy_plan)?;
+
+    // Ensure that the target root directory exists.
+    // Note: all the files and directories below the target root (including the
+    // target root itself) will be synced after this function returns.  However,
+    // create_dir_all might create some parents that won't be synced. It's fine
+    // because:
+    //   1. We only care about internal consistency of checkpoints, and the
+    //   parents create_dir_all might have created do not belong to a
+    //   checkpoint.
+    //
+    //   2. We only invoke this function with DST being a child of a
+    //   directory that is wiped out on replica start, so we don't care much
+    //   about this temporary directory being properly synced.
+    fs::create_dir_all(&root_dst)?;
+    match thread_pool {
+        Some(thread_pool) => {
+            let results = parallel_map(thread_pool, copy_plan.create_and_sync_dir.iter(), |op| {
+                fs::create_dir_all(&op.dst)
+            });
+            results.into_iter().try_for_each(identity)?;
+            let results = parallel_map(thread_pool, copy_plan.copy_and_sync_file.iter(), |op| {
+                copy_and_sync_file(log, &op.src, &op.dst, dst_permissions)
+            });
+            results.into_iter().try_for_each(identity)?;
+            let results = parallel_map(thread_pool, copy_plan.create_and_sync_dir.iter(), |op| {
+                sync_path(&op.dst)
+            });
+            results.into_iter().try_for_each(identity)?;
+        }
+        None => {
+            for op in copy_plan.create_and_sync_dir.iter() {
+                fs::create_dir_all(&op.dst)?;
+            }
+            for op in copy_plan.copy_and_sync_file.into_iter() {
+                copy_and_sync_file(log, &op.src, &op.dst, dst_permissions)?;
+            }
+            for op in copy_plan.create_and_sync_dir.iter() {
+                sync_path(&op.dst)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Copies the given file and ensures that the `read/write` permission of the
+/// target file match the given permission.
+fn copy_and_sync_file(
+    log: &ReplicaLogger,
     src: &Path,
     dst: &Path,
     dst_permissions: FilePermissions,
 ) -> std::io::Result<()> {
+    do_copy(log, src, dst)?;
+
+    // We keep the directory writable though to make sure we can rename
+    // them or delete the files.
+    let dst_metadata = dst.metadata()?;
+    let mut permissions = dst_metadata.permissions();
+    match dst_permissions {
+        FilePermissions::ReadOnly => permissions.set_readonly(true),
+        FilePermissions::ReadWrite => permissions.set_readonly(false),
+    }
+    fs::set_permissions(&dst, permissions)?;
+    sync_path(&dst)
+}
+
+// Describes how to copy one directory to another.
+// The order of operations is improtant:
+// 1. All directories should be created first.
+// 2. After that files can be copied in _any_ order.
+// 3. Finally, directories should be synced.
+struct CopyPlan {
+    create_and_sync_dir: Vec<CreateAndSyncDir>,
+    copy_and_sync_file: Vec<CopyAndSyncFile>,
+}
+
+// Describes an operation for creating and syncing a directory.
+// Note that a directory can be synced only after all its children are created.
+struct CreateAndSyncDir {
+    dst: PathBuf,
+}
+
+// Describes an operation for copying and syncing a file.
+struct CopyAndSyncFile {
+    src: PathBuf,
+    dst: PathBuf,
+}
+
+/// Traverse the source file tree and constructs a copy-plan:
+/// a collection of I/O operations that need to be performed to copy the source
+/// to the destination while ignoring directories that have tombstones.
+fn build_copy_plan(src: &Path, dst: &Path, plan: &mut CopyPlan) -> std::io::Result<()> {
     let src_metadata = src.metadata()?;
 
     if src_metadata.is_dir() {
@@ -363,46 +481,23 @@ fn copy_recursively_respecting_tombstones(
             return Ok(());
         }
 
+        // First create the target directory.
+        plan.create_and_sync_dir.push(CreateAndSyncDir {
+            dst: PathBuf::from(dst),
+        });
+
+        // Then copy and sync all children.
         let entries = src.read_dir()?;
-
-        // Note: all the files and directories below DST and DST itself will be
-        // synced after this function returns.  However, create_dir_all might
-        // create some parents that won't be synced. It's fine because
-        //
-        //   1. We only care about internal consistency of checkpoints, and the
-        //   parents create_dir_all might have created do not belong to a
-        //   checkpoint.
-        //
-        //   2. We only invoke this function with DST being a child of a
-        //   directory that is wiped out on replica start, so we don't care much
-        //   about this temporary directory being properly synced.
-        fs::create_dir_all(&dst)?;
-
         for entry_result in entries {
             let entry = entry_result?;
             let dst_entry = dst.join(entry.file_name());
-            copy_recursively_respecting_tombstones(
-                log,
-                &entry.path(),
-                &dst_entry,
-                dst_permissions,
-            )?;
+            build_copy_plan(&entry.path(), &dst_entry, plan)?;
         }
     } else {
-        do_copy(log, src, dst)?;
-
-        // We keep the directory writable though to make sure we can rename
-        // them or delete the files.
-        let dst_metadata = dst.metadata()?;
-        let mut permissions = dst_metadata.permissions();
-        match dst_permissions {
-            FilePermissions::ReadOnly => permissions.set_readonly(true),
-            FilePermissions::ReadWrite => permissions.set_readonly(false),
-        }
-        fs::set_permissions(dst, permissions)?;
+        plan.copy_and_sync_file.push(CopyAndSyncFile {
+            src: PathBuf::from(src),
+            dst: PathBuf::from(dst),
+        });
     }
-
-    // Note that the directory is synced after all the files and directories in
-    // it had been recursively synced.
-    sync_path(dst)
+    Ok(())
 }

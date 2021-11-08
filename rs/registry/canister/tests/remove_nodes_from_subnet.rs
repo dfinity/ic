@@ -35,7 +35,7 @@ fn test_the_anonymous_user_cannot_remove_nodes_from_subnet() {
             .await;
 
             let node_ids_to_remove =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await
                     .membership
                     .iter()
@@ -61,7 +61,7 @@ fn test_the_anonymous_user_cannot_remove_nodes_from_subnet() {
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
@@ -79,7 +79,7 @@ fn test_the_anonymous_user_cannot_remove_nodes_from_subnet() {
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
@@ -112,7 +112,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_remove_nodes_from_su
             .await;
 
             let node_ids_to_remove =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await
                     .membership
                     .iter()
@@ -141,7 +141,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_remove_nodes_from_su
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
@@ -191,11 +191,9 @@ fn test_remove_nodes_from_subnet_succeeds() {
                     .await;
             assert_eq!(subnet_list_record.subnets.len(), 3);
 
-            let subnet_record = get_value::<SubnetRecord>(
-                &registry,
-                &make_subnet_record_key(subnet1_id).as_bytes(),
-            )
-            .await;
+            let subnet_record =
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet1_id).as_bytes())
+                    .await;
 
             // Remove all but the first node in each subnet
             let node_ids_to_remove = subnet_record
@@ -221,15 +219,13 @@ fn test_remove_nodes_from_subnet_succeeds() {
             );
 
             // Check that both Subnets lost all of their nodes
-            let subnet1_record = get_value::<SubnetRecord>(
-                &registry,
-                &make_subnet_record_key(subnet1_id).as_bytes(),
-            )
-            .await;
+            let subnet1_record =
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet1_id).as_bytes())
+                    .await;
             assert_eq!(subnet1_record.membership.len(), 1);
             let subnet2_record = get_value::<SubnetRecord>(
                 &registry,
-                &make_subnet_record_key(SubnetId::new(
+                make_subnet_record_key(SubnetId::new(
                     PrincipalId::try_from(subnet_list_record.subnets[2].clone()).unwrap(),
                 ))
                 .as_bytes(),
@@ -281,7 +277,7 @@ fn test_removing_unassigned_nodes_from_subnet_does_nothing() {
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
 
@@ -305,7 +301,7 @@ fn test_removing_unassigned_nodes_from_subnet_does_nothing() {
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
             for node_id in unassigned_node_ids {

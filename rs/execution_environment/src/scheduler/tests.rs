@@ -3,7 +3,7 @@ use super::*;
 use crate::execution_environment::MockExecutionEnvironment;
 use candid::Encode;
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::SchedulerConfig;
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
 use ic_ic00_types::{CanisterIdRecord, Method};
 use ic_interfaces::execution_environment::{
     CanisterHeartbeatError, ExecuteMessageResult, HypervisorError,
@@ -12,10 +12,10 @@ use ic_interfaces::messages::CanisterInputMessage;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_replicated_state::canister_state::QUEUE_INDEX_NONE;
+use ic_replicated_state::canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE};
 use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CallOrigin, ExportedFunctions, NumWasmPages64,
+    CallOrigin, ExportedFunctions,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -33,7 +33,7 @@ use ic_test_utilities::{
     },
     with_test_replica_logger,
 };
-use ic_types::messages::{CallbackId, RequestOrResponse};
+use ic_types::messages::{CallbackId, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES};
 use ic_types::methods::SystemMethod;
 use ic_types::{
     ingress::WasmResult,
@@ -54,7 +54,9 @@ use std::{convert::TryFrom, path::PathBuf, time::Duration};
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(1 << 30);
 const LAST_ROUND_MAX: u64 = 100;
-const MAX_SUBNET_AVAILABLE_MEMORY: NumBytes = NumBytes::new(std::u64::MAX);
+const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
+const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
+const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 
 lazy_static! {
     static ref INITIAL_CYCLES: Cycles =
@@ -106,9 +108,9 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -170,9 +172,9 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter_mut() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -190,9 +192,9 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
 
             for canister_state in state.canisters_iter_mut() {
@@ -248,9 +250,9 @@ fn canister_gets_heap_delta_rate_limited() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 ExecutionRound::from(1),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             assert_eq!(
                 state
@@ -268,9 +270,9 @@ fn canister_gets_heap_delta_rate_limited() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 ExecutionRound::from(2),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             assert_eq!(
                 state
@@ -329,9 +331,9 @@ fn inner_loop_stops_when_no_instructions_consumed() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter_mut() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -397,9 +399,9 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter_mut() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 1);
@@ -605,6 +607,101 @@ fn induct_messages_to_self_works() {
     )
 }
 
+/// Creates state with two canisters. Source canister has two requests for
+/// itself and two requests for destination canister in its output queues.
+/// Source canister only has enough memory for one request, subnet only has
+/// enough memory for 2 requests.
+///
+/// Ensures that `induct_messages_on_same_subnet()` moves one message from each
+/// output queue into the corresponding input queue.
+#[test]
+fn induct_messages_on_same_subnet_respects_memory_limits() {
+    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(0));
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config: SchedulerConfig {
+            scheduler_cores: 1,
+            max_instructions_per_round: NumInstructions::from(1),
+            max_instructions_per_message: NumInstructions::from(1),
+            ..SchedulerConfig::application_subnet()
+        },
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: 2,
+        message_num_per_canister: 0,
+    };
+
+    let mut exec_env = MockExecutionEnvironment::new();
+    // Subnet has memory for 2 more requests (plus epsilon, for small responses).
+    exec_env
+        .expect_subnet_available_memory()
+        .times(..)
+        .return_const(MAX_RESPONSE_COUNT_BYTES as i64 * 25 / 10);
+    // Canisters can have up to 5 outstanding requests (plus epsilon). I.e. for
+    // source canister, 4 outgoing + 1 incoming request plus small responses.
+    exec_env
+        .expect_max_canister_memory_size()
+        .times(..)
+        .return_const(NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64 * 55 / 10));
+    let exec_env = Arc::new(exec_env);
+
+    scheduler_test(
+        &scheduler_test_fixture,
+        |scheduler| {
+            let mut state = get_initial_state(2, 0);
+            let mut canisters = state.take_canister_states();
+            let mut canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
+            let source_canister_id = canister_ids.pop().unwrap();
+            let dest_canister_id = canister_ids.pop().unwrap();
+
+            let source_canister = canisters.get_mut(&source_canister_id).unwrap();
+            let self_request = RequestBuilder::default()
+                .sender(source_canister_id)
+                .receiver(source_canister_id)
+                .build();
+            source_canister
+                .push_output_request(self_request.clone())
+                .unwrap();
+            source_canister.push_output_request(self_request).unwrap();
+            let other_request = RequestBuilder::default()
+                .sender(source_canister_id)
+                .receiver(dest_canister_id)
+                .build();
+            source_canister
+                .push_output_request(other_request.clone())
+                .unwrap();
+            source_canister.push_output_request(other_request).unwrap();
+            state.put_canister_states(canisters);
+
+            let (own_subnet_id, routing_table) = setup_routing_table();
+            state.metadata.network_topology.routing_table = routing_table;
+            state.metadata.own_subnet_id = own_subnet_id;
+
+            scheduler.induct_messages_on_same_subnet(&mut state);
+
+            let mut canisters = state.take_canister_states();
+            let source_canister = canisters.remove(&source_canister_id).unwrap();
+            let dest_canister = canisters.remove(&dest_canister_id).unwrap();
+            let source_canister_queues = source_canister.system_state.queues();
+            let dest_canister_queues = dest_canister.system_state.queues();
+            if ENFORCE_MESSAGE_MEMORY_USAGE {
+                // Only one message should have been inducted from each queue: we first induct
+                // messages to self and hit the canister memory limit (1 more reserved slot);
+                // then induct messages for `dest_canister` and hit the subnet memory limit (2
+                // more reserved slots, minus the 1 before).
+                assert_eq!(2, source_canister_queues.output_message_count());
+                assert_eq!(1, source_canister_queues.input_queues_message_count());
+                assert_eq!(1, dest_canister_queues.input_queues_message_count());
+            } else {
+                // Without memory limits all messages should have been inducted.
+                assert_eq!(0, source_canister_queues.output_message_count());
+                assert_eq!(2, source_canister_queues.input_queues_message_count());
+                assert_eq!(2, dest_canister_queues.input_queues_message_count());
+            }
+        },
+        ingress_history_writer,
+        exec_env,
+    )
+}
+
 /// A test to ensure that there are multiple iterations of the loop in
 /// inner_round().
 #[test]
@@ -613,10 +710,15 @@ fn test_multiple_iterations_of_inner_loop() {
     // first sends a message to the second. In the second iteration, the second
     // executes the received message.
     let mut exec_env = MockExecutionEnvironment::new();
+    // Return sufficiently large subnet and canister memory limits.
     exec_env
         .expect_subnet_available_memory()
         .times(..)
-        .returning(move |_| NumBytes::from(10));
+        .return_const(SUBNET_AVAILABLE_MEMORY);
+    exec_env
+        .expect_max_canister_memory_size()
+        .times(..)
+        .return_const(MAX_CANISTER_MEMORY_SIZE);
     exec_env
         .expect_execute_canister_message()
         .times(2)
@@ -705,9 +807,9 @@ fn test_multiple_iterations_of_inner_loop() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter_mut() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -744,7 +846,11 @@ fn canister_can_run_for_multiple_iterations() {
     exec_env
         .expect_subnet_available_memory()
         .times(..)
-        .returning(move |_| NumBytes::from(10));
+        .return_const(SUBNET_AVAILABLE_MEMORY);
+    exec_env
+        .expect_max_canister_memory_size()
+        .times(..)
+        .return_const(MAX_CANISTER_MEMORY_SIZE);
     exec_env
         .expect_execute_canister_message()
         .times(..)
@@ -803,9 +909,9 @@ fn canister_can_run_for_multiple_iterations() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             // Verify that we actually ran 6 iterations.
             assert_eq!(
@@ -856,9 +962,9 @@ fn validate_consumed_instructions_metric() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter_mut() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -890,6 +996,90 @@ fn validate_consumed_instructions_metric() {
                     .instructions_consumed_per_message
                     .get_sample_sum(),
                 100_f64,
+            );
+        },
+        ingress_history_writer,
+        exec_env,
+    );
+}
+
+#[test]
+fn only_charge_for_allocation_after_specified_duration() {
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config: SchedulerConfig::application_subnet(),
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: 1,
+        message_num_per_canister: 0,
+    };
+    let exec_env = default_exec_env_mock(
+        &scheduler_test_fixture,
+        0,
+        scheduler_test_fixture
+            .scheduler_config
+            .max_instructions_per_message,
+        NumBytes::new(0),
+    );
+    let exec_env = Arc::new(exec_env);
+
+    let ingress_history_writer = default_ingress_history_writer_mock(0);
+    let ingress_history_writer = Arc::new(ingress_history_writer);
+    let prev_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
+    let initial_cycles = 1_000_000;
+    scheduler_test(
+        &scheduler_test_fixture,
+        |scheduler| {
+            let time_between_batches = scheduler
+                .cycles_account_manager
+                .duration_between_allocation_charges()
+                / 2;
+            // Just enough memory to cost us one cycle per second.
+            let bytes_per_cycle = (1_u128 << 30)
+                .checked_div(
+                    CyclesAccountManagerConfig::application_subnet()
+                        .gib_storage_per_second_fee
+                        .get(),
+                )
+                .unwrap() as u64
+                + 1;
+            let mut state = ReplicatedStateBuilder::new()
+                .with_canister(
+                    CanisterStateBuilder::new()
+                        .with_memory_allocation(NumBytes::from(bytes_per_cycle))
+                        .with_cycles(initial_cycles)
+                        .build(),
+                )
+                .with_time(prev_time + time_between_batches)
+                .with_time_of_last_allocation(prev_time)
+                .build();
+
+            // Don't charge because the time since the last charge is too small.
+            state = scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                ExecutionRound::from(1),
+                ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
+            );
+            let canister_state = state.canisters_iter().next().unwrap();
+            assert_eq!(
+                canister_state.system_state.cycles_balance.get(),
+                initial_cycles
+            );
+
+            // The time of the current batch is now long enough that allocation charging
+            // should be triggered.
+            state.metadata.batch_time += time_between_batches;
+            state = scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                ExecutionRound::from(1),
+                ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
+            );
+            let canister_state = state.canisters_iter().next().unwrap();
+            assert_eq!(
+                canister_state.system_state.cycles_balance.get(),
+                initial_cycles - 10
             );
         },
         ingress_history_writer,
@@ -934,9 +1124,9 @@ fn dont_execute_any_canisters_if_not_enough_cycles() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 ExecutionRound::from(1),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 1);
@@ -1012,15 +1202,20 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
                     .build();
                 state.put_canister_state(canister_state);
             }
-            state.metadata.batch_time = UNIX_EPOCH + Duration::from_secs(2);
+            state.metadata.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
+            state.metadata.batch_time = state.metadata.time_of_last_allocation_charge
+                + scheduler
+                    .cycles_account_manager
+                    .duration_between_allocation_charges();
 
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH + Duration::from_secs(1),
                 ExecutionRound::from(1),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
+
             for (_, canister) in state.canister_states.iter() {
                 assert!(canister.execution_state.is_none());
                 assert_eq!(
@@ -1084,9 +1279,9 @@ fn can_execute_messages_with_just_enough_cycles() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 ExecutionRound::from(1),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -1157,9 +1352,9 @@ fn execute_only_canisters_with_messages() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 ExecutionRound::from(1),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -1240,9 +1435,9 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -1311,9 +1506,9 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter() {
                 let id = &canister_state.canister_id();
@@ -1380,9 +1575,9 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 7);
@@ -1438,7 +1633,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     exec_env
         .expect_execute_subnet_message()
         .times(3)
-        .returning(move |_, state, _, _, _, _| (state, NumInstructions::from(0)));
+        .returning(move |_, state, _, _, _, _, _| (state, NumInstructions::from(0)));
 
     let exec_env = Arc::new(exec_env);
 
@@ -1482,9 +1677,9 @@ fn subnet_messages_respect_instruction_limit_per_round() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
         },
         ingress_history_writer,
@@ -1548,9 +1743,9 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 ExecutionRound::from(1),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
         },
         ingress_history_writer,
@@ -1614,9 +1809,9 @@ fn execute_heartbeat_before_messages() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 ExecutionRound::from(1),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
         },
         ingress_history_writer,
@@ -1684,9 +1879,9 @@ fn execute_multiple_heartbeats() {
                 state = scheduler.execute_round(
                     state,
                     Randomness::from([0; 32]),
-                    UNIX_EPOCH,
                     ExecutionRound::from(1),
                     ProvisionalWhitelist::Set(BTreeSet::new()),
+                    MAX_NUMBER_OF_CANISTERS,
                 );
             }
         },
@@ -1812,7 +2007,7 @@ fn can_record_metrics_single_scheduler_thread() {
             scheduler_config,
             ExecutionRound::from(0),
             mock_time(),
-            MAX_SUBNET_AVAILABLE_MEMORY,
+            SUBNET_AVAILABLE_MEMORY,
             Arc::new(RoutingTable::default()),
             subnet_records,
             HeartbeatHandling::Execute {
@@ -1909,12 +2104,17 @@ fn can_record_metrics_for_a_round() {
             );
 
             let round = ExecutionRound::from(4);
+            state.metadata.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
+            state.metadata.batch_time = state.metadata.time_of_last_allocation_charge
+                + scheduler
+                    .cycles_account_manager
+                    .duration_between_allocation_charges();
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
 
             let registry = &scheduler_test_fixture.metrics_registry;
@@ -1931,9 +2131,54 @@ fn can_record_metrics_for_a_round() {
                 4
             );
             assert_eq!(
+                fetch_histogram_stats(registry, "execution_round_preparation_duration_seconds")
+                    .unwrap()
+                    .count,
+                1
+            );
+            assert_eq!(
                 fetch_histogram_stats(
                     registry,
-                    "scheduler_charge_resource_allocation_and_use_duration"
+                    "execution_round_preparation_ingress_pruning_duration_seconds"
+                )
+                .unwrap()
+                .count,
+                1
+            );
+            assert_eq!(
+                fetch_histogram_stats(registry, "execution_round_scheduling_duration_seconds")
+                    .unwrap()
+                    .count,
+                1
+            );
+            assert_eq!(
+                fetch_histogram_stats(registry, "execution_round_finalization_duration_seconds")
+                    .unwrap()
+                    .count,
+                1
+            );
+            assert_eq!(
+                fetch_histogram_stats(
+                    registry,
+                    "execution_round_finalization_stop_canisters_duration_seconds"
+                )
+                .unwrap()
+                .count,
+                1
+            );
+            assert_eq!(
+                fetch_histogram_stats(
+                    registry,
+                    "execution_round_finalization_ingress_history_prune_duration_seconds"
+                )
+                .unwrap()
+                .count,
+                1
+            );
+            assert_eq!(
+                fetch_histogram_stats(
+                    registry,
+                    "execution_round_finalization_charge_resources_duration_seconds"
                 )
                 .unwrap()
                 .count,
@@ -1949,6 +2194,85 @@ fn can_record_metrics_for_a_round() {
                     "scheduler_canister_messages_where_cycles_were_charged"
                 ),
                 Some(10)
+            );
+        },
+        ingress_history_writer,
+        exec_env,
+    );
+}
+
+#[test]
+fn heap_delta_rate_limiting_metrics_recorded() {
+    let heap_delta_per_message = 1024;
+    // Two canisters each get one message.
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config: SchedulerConfig {
+            scheduler_cores: 1,
+            ..SchedulerConfig::application_subnet()
+        },
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: 2,
+        message_num_per_canister: 1,
+    };
+    let exec_env = Arc::new(default_exec_env_mock(
+        &scheduler_test_fixture,
+        1,
+        NumInstructions::from(10),
+        NumBytes::new(heap_delta_per_message),
+    ));
+
+    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(1));
+
+    scheduler_test(
+        &scheduler_test_fixture,
+        |scheduler| {
+            let mut state = get_initial_state(
+                scheduler_test_fixture.canister_num,
+                scheduler_test_fixture.message_num_per_canister,
+            );
+            // One canister starts with a heap delta already at the limit, so it should be
+            // rate limited.
+            let canister0 = state.canisters_iter_mut().next().unwrap();
+            canister0.scheduler_state.heap_delta_debit = scheduler.config.heap_delta_rate_limit;
+
+            scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                ExecutionRound::from(2),
+                ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
+            );
+
+            let registry = &scheduler_test_fixture.metrics_registry;
+            assert_eq!(
+                fetch_histogram_stats(registry, "scheduler_canister_heap_delta_debits")
+                    .unwrap()
+                    .count as u64,
+                2
+            );
+            assert_eq!(
+                fetch_histogram_stats(registry, "scheduler_canister_heap_delta_debits")
+                    .unwrap()
+                    .sum as u64,
+                scheduler.config.heap_delta_rate_limit.get() + 1024
+            );
+            assert_eq!(
+                fetch_histogram_stats(
+                    registry,
+                    "scheduler_heap_delta_rate_limited_canisters_per_round"
+                )
+                .unwrap()
+                .count as u64,
+                1
+            );
+            assert_eq!(
+                fetch_histogram_stats(
+                    registry,
+                    "scheduler_heap_delta_rate_limited_canisters_per_round"
+                )
+                .unwrap()
+                .sum as u64,
+                1
             );
         },
         ingress_history_writer,
@@ -2027,9 +2351,9 @@ fn requested_method_does_not_exist() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 round,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -2062,7 +2386,7 @@ fn stopping_canisters_are_stopped_when_they_are_ready() {
     exec_env
         .expect_subnet_available_memory()
         .times(..)
-        .returning(move |_| NumBytes::from(10));
+        .return_const(SUBNET_AVAILABLE_MEMORY);
     let exec_env = Arc::new(exec_env);
 
     // Expect ingress history writer to be called twice to respond to
@@ -2101,9 +2425,9 @@ fn stopping_canisters_are_stopped_when_they_are_ready() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 ExecutionRound::from(1),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             assert_eq!(state.canister_states.len(), 1);
             for canister_state in state.canisters_iter() {
@@ -2133,7 +2457,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
     exec_env
         .expect_subnet_available_memory()
         .times(..)
-        .returning(move |_| NumBytes::from(10));
+        .return_const(SUBNET_AVAILABLE_MEMORY);
 
     // Expect ingress history writer to never be called since the canister
     // isn't ready to be stopped.
@@ -2192,9 +2516,9 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 ExecutionRound::from(1),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             assert_eq!(state.canister_states.len(), 1);
             assert_eq!(
@@ -2269,7 +2593,7 @@ fn execution_round_metrics_are_recorded() {
     exec_env
         .expect_execute_subnet_message()
         .times(3)
-        .returning(move |_, state, _, _, _, _| (state, NumInstructions::from(0)));
+        .returning(move |_, state, _, _, _, _, _| (state, NumInstructions::from(0)));
 
     let exec_env = Arc::new(exec_env);
 
@@ -2309,9 +2633,9 @@ fn execution_round_metrics_are_recorded() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 ExecutionRound::from(1),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             assert_eq!(1, scheduler.metrics.round.duration.get_sample_count(),);
             assert_eq!(1, scheduler.metrics.round.instructions.get_sample_count(),);
@@ -2569,9 +2893,9 @@ fn heartbeat_metrics_are_recorded() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 ExecutionRound::from(1),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             assert_eq!(
                 2,
@@ -2657,9 +2981,9 @@ fn execution_round_does_not_too_early() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                UNIX_EPOCH,
                 ExecutionRound::from(1),
                 ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
             );
             assert_eq!(
                 2,
@@ -2751,7 +3075,8 @@ fn canisters_reject_open_call_contexts_when_forcibly_uninstalled() {
                 )
                 .build();
 
-            scheduler.charge_canisters_for_resource_allocation_and_usage(&mut state, time_now);
+            state.metadata.time_of_last_allocation_charge = time_now;
+            scheduler.charge_canisters_for_resource_allocation_and_usage(&mut state);
 
             // Verify that the response is in the output queue.
             assert!(
@@ -2809,11 +3134,6 @@ fn test_uninstall_canister() {
         mock_time(),
     );
 
-    // Stable memory and execution state are dropped.
-    assert_eq!(
-        canister.system_state.stable_memory_size,
-        NumWasmPages64::new(0)
-    );
     assert_eq!(canister.execution_state, None);
 }
 
@@ -2888,9 +3208,9 @@ proptest! {
                 scheduler.execute_round(
                     state.clone(),
                     Randomness::from([0; 32]),
-                    UNIX_EPOCH,
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
                     ProvisionalWhitelist::Set(BTreeSet::new()),
+                    MAX_NUMBER_OF_CANISTERS,
                 );
             },
             ingress_history_writer,
@@ -2936,16 +3256,16 @@ proptest! {
                 let new_state1 = scheduler.execute_round(
                     state.clone(),
                     Randomness::from([0; 32]),
-                    UNIX_EPOCH,
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
                     ProvisionalWhitelist::Set(BTreeSet::new()),
+                    MAX_NUMBER_OF_CANISTERS,
                 );
                 let new_state2 = scheduler.execute_round(
                     state.clone(),
                     Randomness::from([0; 32]),
-                    UNIX_EPOCH,
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
                     ProvisionalWhitelist::Set(BTreeSet::new()),
+                    MAX_NUMBER_OF_CANISTERS,
                 );
                 assert_eq!(new_state1, new_state2);
             },
@@ -3001,9 +3321,9 @@ proptest! {
                         scheduler.execute_round(
                             state,
                             Randomness::from([0; 32]),
-                            UNIX_EPOCH,
                             ExecutionRound::from(round),
                             ProvisionalWhitelist::Set(BTreeSet::new()),
+                            MAX_NUMBER_OF_CANISTERS,
                         );
                 }
                 for canister_state in state.canisters_iter() {
@@ -3055,9 +3375,9 @@ proptest! {
                 let state = scheduler.execute_round(
                     state.clone(),
                     Randomness::from([0; 32]),
-                    UNIX_EPOCH,
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
                     ProvisionalWhitelist::Set(BTreeSet::new()),
+                    MAX_NUMBER_OF_CANISTERS,
                 );
                 assert_eq!(state.canisters_iter().count(), original_canister_count);
             },
@@ -3092,7 +3412,7 @@ proptest! {
 
         for i in 0..number_of_rounds {
             // Ask for partitioning.
-            let ordered_canister_ids = apply_scheduler_strategy(
+            let ordered_canister_ids = apply_scheduling_strategy(
                 scheduler_cores,
                 ExecutionRound::new(i as u64),
                 &mut replicated_state.canister_states,
@@ -3155,10 +3475,15 @@ fn default_exec_env_mock(
     let num_instructions_left =
         f.scheduler_config.max_instructions_per_message - cycles_per_message;
 
+    // Return sufficiently large subnet and canister memory limits.
     exec_env
         .expect_subnet_available_memory()
         .times(..)
-        .returning(move |_| NumBytes::from(10));
+        .return_const(SUBNET_AVAILABLE_MEMORY);
+    exec_env
+        .expect_max_canister_memory_size()
+        .times(..)
+        .return_const(MAX_CANISTER_MEMORY_SIZE);
     exec_env
         .expect_execute_canister_message()
         .times(calls)

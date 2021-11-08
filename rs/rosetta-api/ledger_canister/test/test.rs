@@ -56,7 +56,7 @@ async fn simple_send(
                 to: to.get_principal_id().into(),
                 created_at_time: None,
             },
-            &from,
+            from,
         )
         .await
 }
@@ -381,6 +381,7 @@ fn notify_timeout_test() {
 
         let mut send_whitelist = HashSet::new();
         send_whitelist.insert(CanisterId::new(us).unwrap());
+        send_whitelist.insert(test_canister.canister_id());
 
         let ledger_canister = proj
             .cargo_bin("ledger-canister")
@@ -449,10 +450,16 @@ fn notify_test() {
             .install_(&r, Vec::new())
             .await?;
 
+        let test_canister_2 = proj
+            .cargo_bin("test-notified")
+            .install_(&r, Vec::new())
+            .await?;
+
         let minting_account = create_sender(0);
 
         let mut send_whitelist = HashSet::new();
         send_whitelist.insert(CanisterId::new(us).unwrap());
+        send_whitelist.insert(test_canister.canister_id());
 
         let (node_max_memory_size_bytes, max_message_size_bytes): (usize, usize) = {
             let blocks_per_archive_node = 8;
@@ -564,6 +571,38 @@ fn notify_test() {
 
         assert_eq!(2, count);
 
+        // Notification of non whitelisted target should fail
+        let block_height: BlockHeight = ledger_canister
+            .update_(
+                "send_pb",
+                protobuf,
+                SendArgs {
+                    from_subaccount: None,
+                    to: test_canister_2.canister_id().into(),
+                    amount: ICPTs::from_icpts(1).unwrap(),
+                    fee: TRANSACTION_FEE,
+                    memo: Memo(0),
+                    created_at_time: None,
+                },
+            )
+            .await?;
+
+        let notify_not_whitelisted = NotifyCanisterArgs {
+            block_height,
+            max_fee: TRANSACTION_FEE,
+            from_subaccount: None,
+            to_canister: test_canister_2.canister_id(),
+            to_subaccount: None,
+        };
+
+        let r4: Result<(), String> = ledger_canister
+            .update_("notify_pb", protobuf, notify_not_whitelisted)
+            .await;
+
+        assert!(r4
+            .unwrap_err()
+            .contains("Notifying non-whitelisted canister is not allowed"));
+
         Ok(())
     });
 }
@@ -654,8 +693,8 @@ fn sub_account_test() {
 }
 
 #[test]
-#[should_panic(expected = "Sending from 2vxsx-fae is not allowed")]
-fn check_anonymous_cannot_send() {
+#[should_panic]
+fn non_whitelisted_send_test() {
     local_test_e(|r| async move {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
         let sub_account = |x| Some(Subaccount([x; 32]));
@@ -666,7 +705,6 @@ fn check_anonymous_cannot_send() {
             AccountIdentifier::new(us, sub_account(1)),
             ICPTs::from_icpts(10).unwrap(),
         );
-
         let ledger_canister = proj
             .cargo_bin("ledger-canister")
             .install_(
@@ -682,7 +720,7 @@ fn check_anonymous_cannot_send() {
             )
             .await?;
 
-        // Send a payment from an anonymous user, should fail
+        // Send a payment from non-whitelisted canister,should fail
         let _: BlockHeight = ledger_canister
             .update_(
                 "send_pb",

@@ -54,21 +54,6 @@ fn can_copy_page() {
 }
 
 #[test]
-fn can_make_page_deltas() {
-    let mut page_map = PageMap::new();
-    let page = [5u8; PAGE_SIZE];
-    let pages = &[(PageIndex::new(5), &page)];
-    let page_delta = page_map.allocate(pages);
-    assert_eq!(page_delta.len(), 1);
-    assert_eq!(
-        page_delta
-            .get_page(PageIndex::new(5), &page_map.page_allocator)
-            .unwrap(),
-        &page
-    )
-}
-
-#[test]
 fn new_delta_wins_on_update() {
     let mut page_map = PageMap::new();
     let page_1 = [1u8; PAGE_SIZE];
@@ -100,7 +85,7 @@ fn persisted_map_is_equivalent_to_the_original() {
     original_map.update(pages);
 
     original_map.persist_delta(&heap_file).unwrap();
-    let persisted_map = PageMap::open(&heap_file).unwrap();
+    let persisted_map = PageMap::open(&heap_file, None).unwrap();
 
     assert_eq!(persisted_map, original_map);
 }
@@ -115,7 +100,8 @@ fn can_persist_and_load_an_empty_page_map() {
 
     let original_map = PageMap::default();
     original_map.persist_delta(&heap_file).unwrap();
-    let persisted_map = PageMap::open(&heap_file).expect("opening an empty page map must succeed");
+    let persisted_map =
+        PageMap::open(&heap_file, None).expect("opening an empty page map must succeed");
 
     assert_eq!(original_map, persisted_map);
 }
@@ -137,7 +123,7 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
         .write_all(&vec![1; PAGE_SIZE / 2])
         .unwrap();
 
-    match PageMap::open(&heap_file) {
+    match PageMap::open(&heap_file, None) {
         Err(err) => assert!(
             err.is_invalid_heap_file(),
             "Expected invalid heap file error, got {:?}",

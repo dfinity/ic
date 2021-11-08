@@ -128,7 +128,7 @@ fn get_registry(
 
     let registry_client = Arc::new(RegistryClientImpl::new(
         data_provider,
-        Some(&metrics_registry),
+        Some(metrics_registry),
     ));
     registry_client.fetch_and_start_polling().unwrap();
     registry_client
@@ -204,6 +204,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         Arc::clone(&state_manager) as _,
         Arc::clone(&ingress_history_writer) as _,
         scheduler,
+        cfg.hypervisor,
         cycles_account_manager,
         replica_config.subnet_id,
         &metrics_registry,
@@ -264,7 +265,7 @@ fn print_query_result(res: Result<WasmResult, UserError>) {
 }
 
 fn print_ingress_result(message_id: &MessageId, ingress_hist_reader: &dyn IngressHistoryReader) {
-    let status = (ingress_hist_reader.get_latest_status())(&message_id);
+    let status = (ingress_hist_reader.get_latest_status())(message_id);
     print!("ingress ");
     match status {
         IngressStatus::Completed { result, .. } => {
@@ -325,7 +326,7 @@ fn execute_ingress_message(
         }
         sleep(WAIT_PER_BATCH);
 
-        let ingress_result = (ingress_history.get_latest_status())(&msg_id);
+        let ingress_result = (ingress_history.get_latest_status())(msg_id);
         match ingress_result {
             IngressStatus::Completed { result, .. } => return Ok(result),
             IngressStatus::Failed { error, .. } => return Err(error),

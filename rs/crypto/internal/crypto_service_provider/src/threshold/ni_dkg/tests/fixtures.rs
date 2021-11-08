@@ -48,7 +48,7 @@ pub fn random_algorithm_id(rng: &mut ChaCha20Rng) -> AlgorithmId {
 /// A single node with its CSP
 pub struct MockNode {
     pub node_id: NodeId,
-    pub csp: Csp<ChaCha20Rng, VolatileSecretKeyStore>,
+    pub csp: Csp<ChaCha20Rng, VolatileSecretKeyStore, VolatileSecretKeyStore>,
 }
 impl MockNode {
     pub fn random(rng: &mut ChaCha20Rng) -> Self {

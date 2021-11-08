@@ -9,10 +9,11 @@ pub mod testing {
     pub use super::replicated_state::testing::ReplicatedStateTesting;
 }
 pub use canister_state::{
+    execution_state::Memory,
     num_bytes_from, num_bytes_try_from64,
     system_state::{
-        CallContext, CallContextAction, CallContextManager, CallOrigin, CanisterMetrics,
-        CanisterStatus, SystemState,
+        memory_required_to_push_request, CallContext, CallContextAction, CallContextManager,
+        CallOrigin, CanisterMetrics, CanisterStatus, SystemState,
     },
     CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, Global,
     NumWasmPages, NumWasmPages64, SchedulerState,

@@ -302,7 +302,7 @@ impl<T: HasCFInfos> PersistentHeightIndexedPool<T> {
         }
 
         iter.key().map(|key| {
-            let (height, _) = decompose_key(&key);
+            let (height, _) = decompose_key(key);
             Height::new(height)
         })
     }
@@ -507,7 +507,7 @@ fn remove_block_payload(db: &DB, batch: &mut WriteBatch, bytes: &[u8]) {
 }
 
 fn deserialize_catch_up_package(bytes: &[u8]) -> Option<ValidatedArtifact<pb::CatchUpPackage>> {
-    deserialize(&bytes).ok()
+    deserialize(bytes).ok()
 }
 
 fn deserialize_catch_up_package_fn(
@@ -1514,8 +1514,8 @@ mod tests {
             }
         // Test get highest iter
         } else {
-            let result_vec: Vec<T> = pool_by_type.get_highest_iter().collect();
-            assert_eq!(result_vec.len(), 3);
+            let result_vec = pool_by_type.get_highest_iter();
+            assert_eq!(result_vec.count(), 3);
         }
     }
 
@@ -1853,8 +1853,8 @@ mod tests {
                 let rb_ops = random_beacon_ops();
                 pool.mutate(rb_ops.clone());
                 let iter = pool.random_beacon().get_all();
-                let msgs_from_pool: Vec<RandomBeacon> = iter.collect();
-                assert_eq!(msgs_from_pool.len(), rb_ops.ops.len());
+                let msgs_from_pool = iter;
+                assert_eq!(msgs_from_pool.count(), rb_ops.ops.len());
                 // purge at height 10
                 let mut purge_ops = PoolSectionOps::new();
                 purge_ops.purge_below(Height::from(10));

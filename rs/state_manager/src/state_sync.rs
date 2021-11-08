@@ -12,11 +12,10 @@ use ic_interfaces::{
 use ic_logger::{info, warn};
 use ic_types::{
     artifact::{
-        Advert, AdvertSendRequest, ArtifactKind, ArtifactTag, Priority, StateSyncArtifactId,
-        StateSyncAttribute, StateSyncFilter, StateSyncMessage,
+        Advert, AdvertClass, AdvertSendRequest, ArtifactKind, ArtifactTag, Priority,
+        StateSyncArtifactId, StateSyncAttribute, StateSyncFilter, StateSyncMessage,
     },
     chunkable::Chunkable,
-    p2p::GossipAdvertType,
     Height, NodeId,
 };
 
@@ -69,7 +68,7 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
             .state_layout
             .checkpoint(height)
             .expect("failed to create checkpoint layout");
-        let state = crate::checkpoint::load_checkpoint(&ro_layout, self.own_subnet_type)
+        let state = crate::checkpoint::load_checkpoint(&ro_layout, self.own_subnet_type, None)
             .expect("failed to recover checkpoint");
         self.on_synced_checkpoint(state, height, msg.manifest, msg.root_hash);
 
@@ -205,7 +204,7 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
                     };
                 }
 
-                return match attr.height.cmp(&max_sync_height) {
+                return match attr.height.cmp(max_sync_height) {
                     Ordering::Less => Priority::Drop,
                     // Drop the advert if the hashes do not match.
                     Ordering::Equal if *hash != attr.root_hash => {
@@ -246,7 +245,7 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
 
     /// Returns requested state as a Chunkable artifact for StateSync.
     fn get_chunk_tracker(&self, id: &StateSyncArtifactId) -> Box<dyn Chunkable + Send + Sync> {
-        self.create_chunkable_state(&id)
+        self.create_chunkable_state(id)
     }
 }
 
@@ -267,7 +266,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateManagerImpl {
             .cloned()
             .map(|advert| AdvertSendRequest {
                 advert,
-                advert_type: GossipAdvertType::Produced,
+                advert_class: AdvertClass::Critical,
             })
             .collect();
 

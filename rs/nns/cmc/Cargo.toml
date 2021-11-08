@@ -1,0 +1,34 @@
+[package]
+name = "cycles-minting-canister"
+version = "0.8.0"
+description = "Canister for cycles administration"
+edition = "2018"
+
+[dependencies]
+candid = "0.7.4"
+dfn_candid = {path = "../../rust_canisters/dfn_candid"}
+dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
+dfn_core = {path = "../../rust_canisters/dfn_core"}
+ic-base-types = {path="../../types/base_types"}
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-nns-common = { path = "../../nns/common" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-protobuf = { path = "../../protobuf" }
+ic-types = {path = "../../types/types"}
+lazy_static = "1.4.0"
+ledger-canister = {path = "../../rosetta-api/ledger_canister"}
+on_wire = {path = "../../rust_canisters/on_wire"}
+
+base64 = "0.13.0"
+prost = "0.9.0"
+rand = "0.7.3"
+serde = "1.0"
+serde_cbor = "0.11.2"
+sha2 = "0.9.1"
+yansi = "0.5.0"
+
+ic-certified-map = { git = "https://github.com/dfinity/cdk-rs", rev = "7b635c6b33d3c90be03d0f1041ad60320795a494"}
+
+[[bin]]
+name = "cycles-minting-canister"
+path = "src/main.rs"

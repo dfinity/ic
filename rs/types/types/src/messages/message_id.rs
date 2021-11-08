@@ -84,7 +84,7 @@ impl TryFrom<&[u8]> for MessageId {
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         if bytes.len() == EXPECTED_MESSAGE_ID_LENGTH {
             let mut array = [0; EXPECTED_MESSAGE_ID_LENGTH];
-            array.copy_from_slice(&bytes);
+            array.copy_from_slice(bytes);
             Ok(MessageId(array))
         } else {
             Err(MessageIdError::InvalidLength {

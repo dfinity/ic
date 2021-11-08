@@ -6,10 +6,10 @@ use crate::server::api::{
     MultiSignatureCspServer,
 };
 use crate::server::local_csp_server::LocalCspServer;
-use crate::Csp;
+use crate::{CryptoServiceProvider, Csp};
 use ic_types::crypto::AlgorithmId;
 use rand::{thread_rng, Rng, SeedableRng};
-use rand_chacha::{ChaCha20Rng, ChaChaRng};
+use rand_chacha::ChaChaRng;
 use strum::IntoEnumIterator;
 
 #[test]
@@ -140,13 +140,13 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
     );
 }
 
-fn csp_server_with_empty_key_store() -> LocalCspServer<ChaCha20Rng, TempSecretKeyStore> {
+fn csp_server_with_empty_key_store() -> impl MultiSignatureCspServer + BasicSignatureCspServer {
     let key_store = TempSecretKeyStore::new();
     let csprng = ChaChaRng::from_seed(thread_rng().gen::<[u8; 32]>());
     LocalCspServer::new_for_test(csprng, key_store)
 }
 
-fn verifier() -> Csp<ChaCha20Rng, TempSecretKeyStore> {
+fn verifier() -> impl CryptoServiceProvider {
     let dummy_key_store = TempSecretKeyStore::new();
     let csprng = ChaChaRng::from_seed(thread_rng().gen::<[u8; 32]>());
     Csp::of(csprng, dummy_key_store)

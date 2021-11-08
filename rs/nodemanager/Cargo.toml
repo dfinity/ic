@@ -38,10 +38,10 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 lazy_static = "1.4.0"
-nix = "0.20.0"
+nix = "0.23.0"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 rand = "0.7.3"
-prost = "0.8.0"
+prost = "0.9.0"
 registry-canister = { path = "../registry/canister" }
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_cbor = "0.11.1"

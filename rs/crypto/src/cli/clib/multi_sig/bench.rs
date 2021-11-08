@@ -95,15 +95,15 @@ fn core(num_signers: &str) -> Result<(), (String, i32)> {
         let after_keygen = Instant::now();
         let message =
             "Twas brillig, and the slithy toves, did gyre and gimble in the wabe".as_bytes();
-        let signatures = sign(&message, &key_pairs).map_err(|e| (format!("{:?}", e), 2))?;
+        let signatures = sign(message, &key_pairs).map_err(|e| (format!("{:?}", e), 2))?;
         let after_signing = Instant::now();
-        verify_individual(&message, &signatures, &key_pairs)
+        verify_individual(message, &signatures, &key_pairs)
             .map_err(|_| ("Individual signature verification failed".to_string(), 2))?;
         let after_individual_verification = Instant::now();
         let combined_signature =
             multi::combine(&signatures).map_err(|e| (format!("Error combining: {:?}", e), 2))?;
         let after_combining = Instant::now();
-        verify_combined(&message, &combined_signature, &key_pairs)
+        verify_combined(message, &combined_signature, &key_pairs)
             .map_err(|_| ("Combined signature verification failed".to_string(), 2))?;
         let after_combined_verification = Instant::now();
 

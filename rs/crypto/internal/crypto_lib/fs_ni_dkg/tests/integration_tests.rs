@@ -63,7 +63,7 @@ fn potpourri() {
     verify_ciphertext_integrity(&crsz, &tau10, &associated_data, sys)
         .expect("ciphertext integrity check failed");
 
-    let out = dec_chunks(&dk, 1, &crsz, &tau10, &associated_data)
+    let out = dec_chunks(dk, 1, &crsz, &tau10, &associated_data)
         .expect("It should be possible to decrypt");
     println!("decrypted: {:?}", out);
     let mut last3 = vec![0; 3];
@@ -77,7 +77,7 @@ fn potpourri() {
         dk.update(sys, rng);
     }
     // Should be impossible to decrypt now.
-    let out = dec_chunks(&dk, 1, &crsz, &tau10, &associated_data);
+    let out = dec_chunks(dk, 1, &crsz, &tau10, &associated_data);
     match out {
         Err(DecErr::ExpiredKey) => (),
         _ => panic!("old ciphertexts should be lost forever"),
@@ -152,7 +152,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     let plaintext_chunks: Vec<Vec<isize>> = plaintexts
         .iter_mut()
         .map(|plaintext| {
-            let mut bytes = miracl_fr_to_bytes(&plaintext).0;
+            let mut bytes = miracl_fr_to_bytes(plaintext).0;
             bytes.reverse(); // Make little endian.
             let chunks = bytes[..].chunks(CHUNK_BYTES); // The last, most significant, chunk may be partial.
             chunks
@@ -189,7 +189,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
 
     // Check that decryption succeeds
     let dk = &receiver_fs_keys[1].1;
-    let out = dec_chunks(&dk, 1, &crsz, &tau, &associated_data);
+    let out = dec_chunks(dk, 1, &crsz, &tau, &associated_data);
     println!("decrypted: {:?}", out);
     assert!(
         out.unwrap() == plaintext_chunks[1],
@@ -258,7 +258,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
             // Note: Relies on BIG::new() being zero.
             data.iter().fold(BIG::new(), |mut acc, term| {
                 acc.shl(CHUNK_BYTES << 3);
-                acc.add(&term);
+                acc.add(term);
                 acc.rmod(&BIG::new_ints(&rom::CURVE_ORDER)); // Needed to avoid getting a buffer overflow.
                 acc
             })
@@ -280,8 +280,8 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         // Check that the combination is correct:
         // ... for plaintexts:
         for (plaintext, reconstituted_plaintext) in plaintexts.iter().zip(&combined_plaintexts) {
-            let mut diff = BIG::new_big(&plaintext);
-            diff.sub(&reconstituted_plaintext);
+            let mut diff = BIG::new_big(plaintext);
+            diff.sub(reconstituted_plaintext);
             diff.rmod(&spec_p);
             assert!(diff.iszilch(), "Reconstituted plaintext does not match");
         }
@@ -293,10 +293,10 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
             .zip(&receiver_fs_public_keys)
         {
             let mut ciphertext_computed_directly: ECP =
-                public_key.mul2(&combined_r, &g1, &plaintext);
+                public_key.mul2(&combined_r, &g1, plaintext);
             ciphertext_computed_directly.affine();
             let mut ciphertext_copy = ECP::new();
-            ciphertext_copy.copy(&ciphertext);
+            ciphertext_copy.copy(ciphertext);
             ciphertext_copy.affine();
             assert!(
                 ciphertext_computed_directly.equals(&ciphertext_copy),

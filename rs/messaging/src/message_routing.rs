@@ -2,6 +2,7 @@ use crate::{
     routing, scheduling,
     state_machine::{StateMachine, StateMachineImpl},
 };
+use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::state_manager::{CertificationScope, StateManagerError};
 use ic_interfaces::{
@@ -474,7 +475,7 @@ impl BatchProcessorImpl {
 
         let routing_table_record = self.registry.get_routing_table(registry_version)?;
         let routing_table = routing_table_record.unwrap_or_default();
-        let nns_subnet_id = self.get_nns_subnet_id(subnet_ids, registry_version);
+        let nns_subnet_id = self.get_nns_subnet_id(registry_version);
 
         Ok(NetworkTopology {
             subnets,
@@ -483,17 +484,13 @@ impl BatchProcessorImpl {
         })
     }
 
-    fn get_nns_subnet_id(
-        &self,
-        subnet_ids: Vec<SubnetId>,
-        registry_version: RegistryVersion,
-    ) -> SubnetId {
-        for subnet_id in subnet_ids {
-            if self.get_subnet_type(subnet_id, registry_version) == SubnetType::System {
-                return subnet_id;
-            }
+    fn get_nns_subnet_id(&self, registry_version: RegistryVersion) -> SubnetId {
+        // Note: The following assumes that root == NNS subnet.
+        match self.registry.get_root_subnet_id(registry_version) {
+            Ok(Some(subnet_id)) => subnet_id,
+            Ok(None) => unreachable!("Could not find the NNS subnet id"),
+            Err(err) => unreachable!("Could not find the NNS subnet id: {}", err),
         }
-        unreachable!("Could not find the NNS subnet id.");
     }
 
     fn get_subnet_record(
@@ -542,6 +539,15 @@ impl BatchProcessorImpl {
     ) -> SubnetFeatures {
         let record = self.get_subnet_record(subnet_id, registry_version);
         record.features.unwrap_or_default().into()
+    }
+
+    fn get_max_number_of_canisters(
+        &self,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+    ) -> u64 {
+        let record = self.get_subnet_record(subnet_id, registry_version);
+        record.max_number_of_canisters
     }
 }
 
@@ -607,6 +613,8 @@ impl BatchProcessor for BatchProcessorImpl {
         let provisional_whitelist = self.get_provisional_whitelist(batch.registry_version);
         let subnet_features =
             self.get_subnet_features(state.metadata.own_subnet_id, batch.registry_version);
+        let max_number_of_canisters =
+            self.get_max_number_of_canisters(state.metadata.own_subnet_id, batch.registry_version);
 
         let batch_requires_full_state_hash = batch.requires_full_state_hash;
         let mut state_after_round = self.state_machine.execute_round(
@@ -615,6 +623,7 @@ impl BatchProcessor for BatchProcessorImpl {
             batch,
             provisional_whitelist,
             subnet_features,
+            max_number_of_canisters,
         );
         self.observe_canisters_memory_usage(&state_after_round);
 
@@ -800,6 +809,7 @@ impl MessageRoutingImpl {
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
         scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+        hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
         metrics_registry: &MetricsRegistry,
@@ -811,6 +821,7 @@ impl MessageRoutingImpl {
         )));
         let stream_handler = Box::new(routing::stream_handler::StreamHandlerImpl::new(
             subnet_id,
+            hypervisor_config,
             metrics_registry,
             Arc::clone(&time_in_stream_metrics),
             log.clone(),
@@ -867,7 +878,7 @@ impl MessageRoutingImpl {
             subnet_id,
             metrics_registry,
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
-                &metrics_registry,
+                metrics_registry,
             ))),
             log.clone(),
         ));

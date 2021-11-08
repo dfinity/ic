@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
-use ic_nns_common::registry::encode_or_panic;
+use candid::Encode;
+use dfn_candid::candid_one;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
@@ -12,7 +13,7 @@ use ic_protobuf::registry::node_rewards::v2::{
 };
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
 use maplit::btreemap;
-use registry_canister::{init::RegistryCanisterInitPayloadBuilder, proto_on_wire::protobuf};
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use std::collections::BTreeMap;
 
 #[test]
@@ -48,7 +49,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
         // The anonymous end-user tries to update the node rewards table, bypassing
         // the proposals canister. This should be rejected.
         let response: Result<(), String> = registry
-            .update_("update_node_rewards_table", protobuf, payload.clone())
+            .update_("update_node_rewards_table", candid_one, payload.clone())
             .await;
 
         assert_matches!(
@@ -64,7 +65,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
         // Go through an upgrade cycle, and verify that it still works the same
         registry.upgrade_to_self_binary(vec![]).await.unwrap();
         let response: Result<(), String> = registry
-            .update_("update_node_rewards_table", protobuf, payload.clone())
+            .update_("update_node_rewards_table", candid_one, payload.clone())
             .await;
 
         assert_matches!(
@@ -126,7 +127,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_the_node_rew
                 &attacker_canister,
                 &registry,
                 "update_node_rewards_table",
-                encode_or_panic(&payload),
+                Encode!(&payload).unwrap(),
             )
             .await
         );
@@ -179,7 +180,7 @@ fn test_the_governance_canister_can_update_the_node_rewards_table() {
                 &fake_governance_canister,
                 &registry,
                 "update_node_rewards_table",
-                encode_or_panic(&payload),
+                Encode!(&payload).unwrap(),
             )
             .await
         );

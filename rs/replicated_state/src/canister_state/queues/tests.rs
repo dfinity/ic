@@ -260,6 +260,12 @@ fn test_message_picking_round_robin() {
 
     /* POPPING */
 
+    // Pop ingress first due to the round-robin across ingress and x-net messages
+    match queues.pop_input().expect("could not pop a message") {
+        CanisterInputMessage::Ingress(msg) => assert_eq!(msg.source, user_test_id(77)),
+        msg => panic!("unexpected message popped: {:?}", msg),
+    }
+
     // Pop request from other_1
     match queues.pop_input().expect("could not pop a message") {
         CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, other_1),
@@ -284,12 +290,6 @@ fn test_message_picking_round_robin() {
         msg => panic!("unexpected message popped: {:?}", msg),
     }
 
-    // Pop last ingress msg
-    match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Ingress(msg) => assert_eq!(msg.source, user_test_id(77)),
-        msg => panic!("unexpected message popped: {:?}", msg),
-    }
-
     assert!(!queues.has_input());
     assert!(queues.pop_input().is_none());
 }
@@ -304,7 +304,7 @@ fn test_input_scheduling() {
     let other_3 = canister_test_id(3);
 
     let mut queues = CanisterQueues::default();
-    assert_eq!(false, queues.has_input());
+    assert!(!queues.has_input());
 
     let push_input_from = |queues: &mut CanisterQueues, sender: &CanisterId, index: u64| {
         queues
@@ -353,7 +353,7 @@ fn test_input_scheduling() {
     assert_sender(&other_1, queues.pop_input().unwrap());
     assert_schedule(&queues, &[]);
 
-    assert_eq!(false, queues.has_input());
+    assert!(!queues.has_input());
 }
 
 #[test]
@@ -509,19 +509,23 @@ fn test_stats() {
     expected_mu_stats += MemoryUsageStats {
         reserved_slots: -1,
         responses_size_bytes: msg_size[3],
+        oversized_requests_extra_bytes: 0,
+        transient_stream_responses_size_bytes: 0,
     };
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
-    // Push a request into the same output queue (to `other_1`).
+    // Push an oversized request into the same output queue (to `other_1`).
     let msg = RequestBuilder::default()
         .sender(this)
         .receiver(other_1)
         .method_name(NAME)
+        .method_payload(vec![13; MAX_RESPONSE_COUNT_BYTES])
         .build();
     msg_size[4] = msg.count_bytes();
     queues.push_output_request(msg).unwrap();
-    // One more reserved slot, no reserved response bytes.
+    // One more reserved slot, no reserved response bytes, oversized request.
     expected_mu_stats.reserved_slots += 1;
+    expected_mu_stats.oversized_requests_extra_bytes += msg_size[4] - MAX_RESPONSE_COUNT_BYTES;
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
@@ -558,8 +562,10 @@ fn test_stats() {
         (_, _, RequestOrResponse::Request(msg)) => assert_eq!(msg.receiver, other_1),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
-    // No stats changes.
+    // No input queue changes.
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
+    // Oversized request was popped.
+    expected_mu_stats.oversized_requests_extra_bytes -= msg_size[4] - MAX_RESPONSE_COUNT_BYTES;
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
     // Ensure no more outgoing messages.
@@ -585,6 +591,8 @@ fn test_stats() {
     expected_mu_stats += MemoryUsageStats {
         reserved_slots: -1,
         responses_size_bytes: msg_size[5],
+        oversized_requests_extra_bytes: 0,
+        transient_stream_responses_size_bytes: 0,
     };
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
@@ -637,7 +645,7 @@ fn test_stats() {
 #[test]
 /// Enqueues requests and responses into input and output queues, verifying that
 /// input queue and memory usage stats are accurate along the way.
-fn test_stats_induct_messages_to_self() {
+fn test_stats_induct_message_to_self() {
     let this = canister_test_id(13);
     let iq_size: usize = InputQueue::new(DEFAULT_QUEUE_CAPACITY).calculate_size_bytes();
 
@@ -646,6 +654,9 @@ fn test_stats_induct_messages_to_self() {
     let mut expected_mu_stats = MemoryUsageStats::default();
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+
+    // No messages to induct.
+    assert!(queues.induct_message_to_self(this).is_none());
 
     // Push a request to self.
     let request = RequestBuilder::default()
@@ -663,8 +674,9 @@ fn test_stats_induct_messages_to_self() {
     expected_mu_stats.reserved_slots += 1;
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
-    // Induct the request.
-    queues.induct_messages_to_self(this);
+    // Induct request.
+    assert!(queues.induct_message_to_self(this).is_some());
+
     // Request is now in the input queue.
     expected_iq_stats += InputQueuesStats {
         message_count: 1,
@@ -700,11 +712,14 @@ fn test_stats_induct_messages_to_self() {
     expected_mu_stats += MemoryUsageStats {
         reserved_slots: -1,
         responses_size_bytes: response_size,
+        oversized_requests_extra_bytes: 0,
+        transient_stream_responses_size_bytes: 0,
     };
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
     // Induct the response.
-    queues.induct_messages_to_self(this);
+    assert!(queues.induct_message_to_self(this).is_some());
+
     // Response is now in the input queue.
     expected_iq_stats += InputQueuesStats {
         message_count: 1,

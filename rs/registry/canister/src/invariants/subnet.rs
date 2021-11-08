@@ -12,7 +12,10 @@ use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
 use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_RECORD_KEY_PREFIX};
 
+const MAX_NUM_SSH_KEYS: usize = 50;
+
 /// Subnet invariants hold iff:
+///    * Each SSH key access list does not contain more than 50 keys
 ///    * Subnet membership contains no repetition
 ///    * Each node belongs to at most one subnet
 ///    * Each subnet contains at least one node
@@ -35,6 +38,23 @@ pub(crate) fn check_subnet_invariants(
                     subnet_id
                 )
             });
+
+        if subnet_record.ssh_readonly_access.len() > MAX_NUM_SSH_KEYS
+            || subnet_record.ssh_backup_access.len() > MAX_NUM_SSH_KEYS
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Mutation would have resulted in an SSH key access list that is too long, \
+                    the maximum allowable length is {}, and the `readonly` and `backup` lists had \
+                    {} and {} keys, respectively",
+                    MAX_NUM_SSH_KEYS,
+                    subnet_record.ssh_readonly_access.len(),
+                    subnet_record.ssh_backup_access.len()
+                ),
+                source: None,
+            });
+        }
+
         let num_nodes = subnet_record.membership.len();
         let mut subnet_members: HashSet<NodeId> = subnet_record
             .membership

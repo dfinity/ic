@@ -74,6 +74,23 @@ message SubnetRecord {
 
   // Information on whether a feature is supported by this subnet.
   SubnetFeatures features = 23;
+
+  // The number of canisters allowed to be created on this subnet.
+  //
+  // A value of 0 is equivalent to setting no limit. This also provides an easy way
+  // to maintain compatibility of different versions of replica and registry.
+  uint64 max_number_of_canisters = 24;
+
+  // The list of public keys whose owners have "readonly" SSH access to all replicas on this subnet,
+  // in case it is necessary to perform disaster recovery.
+  repeated string ssh_readonly_access = 25;
+
+  // The list of public keys whose owners have "backup" SSH access to nodes on the NNS subnet
+  // to make sure the NNS can be backed up.
+  repeated string ssh_backup_access = 26;
+
+  // ECDSA Config
+  EcdsaConfig ecdsa_config = 27;
 }
 
 // Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
@@ -128,6 +145,9 @@ message InitialNiDkgTranscriptRecord {
 // Per subnet P2P configuration
 // Note: protoc is mangling the name P2PConfig to P2pConfig
 message GossipConfig {
+  reserved 9;
+  reserved "relay_config";
+
   // max outstanding request per peer MIN/DEFAULT/MAX 1/20/200
   uint32 max_artifact_streams_per_peer = 1;
   // timeout for a outstanding request 3_000/15_000/180_000
@@ -144,16 +164,20 @@ message GossipConfig {
   uint32 registry_poll_period_ms = 7;
   // period for sending a retransmission request    
   uint32 retransmission_request_ms = 8;
-  // config for advert relay optimization.
+  // config for advert distribution.
   // If this field is not specified, the feature is turned off.
-  GossipAdvertRelayConfig relay_config = 9;
+  GossipAdvertConfig advert_config = 10;
 }
 
-// Per subnet config for advert relay optimization.
-message GossipAdvertRelayConfig {
-  // The subset of peers to broadcast relays to, specified in percentage.
-  // 0 < relay_percentage <= 100
-  uint32 relay_percentage = 1;
+// Per subnet config for advert distribution.
+message GossipAdvertConfig {
+  // The subset of peers to broadcast to, specified in percentage.
+  // This is only  used when the P2P clients mark the advert as
+  // requiring best effort distribution. In future, this fixed
+  // percentage could be replaced by dynamic computation of the
+  // distribution set size, as a function of subnet size.
+  // 0 < best_effort_percentage <= 100
+  uint32 best_effort_percentage = 1;
 }
 
 // Represents the type of subnet. Subnets of different type might exhibit different
@@ -179,4 +203,11 @@ message SubnetFeatures {
     // This feature flag controls whether canister execution happens
     // in sandboxed process or not. It is disabled by default.
     bool canister_sandboxing = 2;
+}
+
+// Per subnet P2P configuration
+// Note: protoc is mangling the name P2PConfig to P2pConfig
+message EcdsaConfig {
+  // Number of quadruples to create in advance.
+  uint32 quadruples_to_create_in_advance = 1;
 }

@@ -52,7 +52,7 @@ fn setup_sharing_instance_and_witness(
     let cc: Vec<_> = pk
         .iter()
         .zip(&s)
-        .map(|(yi, si)| yi.mul2(&r, &g1, &si))
+        .map(|(yi, si)| yi.mul2(&r, &g1, si))
         .collect();
     (pk, aa, rr, cc, r, s)
 }
@@ -222,7 +222,7 @@ fn setup_chunking_instance_and_witness(rng: &mut impl RAND) -> (ChunkingInstance
         let mut chunk_i = Vec::new();
         for r_j in &r {
             let s_ij = BIG::randomnum(&bb, rng);
-            chunk_i.push(y_i.mul2(&r_j, &g1, &s_ij));
+            chunk_i.push(y_i.mul2(r_j, &g1, &s_ij));
             s_i.push(s_ij);
         }
         s.push(s_i);

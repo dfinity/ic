@@ -25,7 +25,7 @@ fn usage() -> Result<(), (String, i32)> {
 fn core(threshold: &str, eligibility: &str, seed: Option<&str>) -> Result<(), (String, i32)> {
     let mut rng = {
         let seed = if let Some(seed) = seed {
-            sha256(&seed.as_bytes())
+            sha256(seed.as_bytes())
         } else {
             let mut rng = StdRng::from_entropy();
             rng.gen::<[u8; 32]>()

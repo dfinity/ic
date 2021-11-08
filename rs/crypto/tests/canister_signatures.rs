@@ -219,7 +219,7 @@ fn temp_crypto_with_registry_with_root_pubkey(
         }),
     };
     registry_data
-        .add(&ROOT_SUBNET_ID_KEY, registry_version, Some(root_subnet_id))
+        .add(ROOT_SUBNET_ID_KEY, registry_version, Some(root_subnet_id))
         .expect("failed to add root subnet ID to registry");
 
     let root_subnet_pubkey = PublicKeyProto::from(threshold_sig_pubkey);

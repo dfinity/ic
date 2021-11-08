@@ -92,10 +92,9 @@ const ALL_ARTIFACT_NAMES: [&str; 13] = [
 
 fn parse_artifact_names<'a, 'b>(names: &'a [&'b str]) -> Vec<&'static str> {
     for name in names {
-        if ALL_ARTIFACT_NAMES
+        if !ALL_ARTIFACT_NAMES
             .iter()
-            .find(|x| x.eq_ignore_ascii_case(name))
-            .is_none()
+            .any(|x| x.eq_ignore_ascii_case(name))
         {
             panic!("Unknown artifact name '{}'", name)
         }

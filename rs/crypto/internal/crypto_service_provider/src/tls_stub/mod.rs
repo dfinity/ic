@@ -28,7 +28,7 @@ fn key_from_secret_key_store<S: SecretKeyStore>(
     self_cert: &TlsPublicKeyCert,
 ) -> Result<PKey<Private>, CspTlsSecretKeyError> {
     let secret_key: CspSecretKey = secret_key_store
-        .get(&tls_cert_hash_as_key_id(&self_cert))
+        .get(&tls_cert_hash_as_key_id(self_cert))
         .ok_or(CspTlsSecretKeyError::SecretKeyNotFound)?;
     let secret_key_der_bytes = match secret_key {
         CspSecretKey::TlsEd25519(secret_key_der_bytes) => Ok(secret_key_der_bytes),
@@ -119,7 +119,7 @@ fn peer_cert_chain_from_stream(
         (None, _) => Ok(None),
         (Some(verified_chain), true) => {
             let cert_chain = CspCertificateChain::try_from(verified_chain)?;
-            let peer_cert = peer_cert_from_stream(&tls_stream)?;
+            let peer_cert = peer_cert_from_stream(tls_stream)?;
             ensure_chain_leaf_consistency(&cert_chain, &peer_cert)?;
             Ok(Some(cert_chain))
         }

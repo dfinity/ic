@@ -165,7 +165,9 @@ impl ValidSetRuleImpl {
                     StateError::CanisterOutOfCycles { .. } => ErrorCode::CanisterOutOfCycles,
                     StateError::UnknownSubnetMethod(_) => ErrorCode::CanisterOutOfCycles,
                     StateError::InvalidSubnetPayload => ErrorCode::CanisterOutOfCycles,
-                    StateError::QueueFull { .. } => unreachable!("Unexpected error: {}", err),
+                    StateError::QueueFull { .. } | StateError::OutOfMemory { .. } => {
+                        unreachable!("Unexpected error: {}", err)
+                    }
                 };
                 self.ingress_history_writer.set_status(
                     &mut state,
@@ -291,7 +293,7 @@ impl ValidSetRule for ValidSetRuleImpl {
     fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngressContent>) {
         for msg in msgs {
             let message_id = msg.id();
-            if !self.is_duplicate(&state, &msg) {
+            if !self.is_duplicate(state, &msg) {
                 self.induct_message(state, msg);
             } else {
                 self.observe_inducted_ingress_status(LABEL_VALUE_DUPLICATE);

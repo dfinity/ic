@@ -531,10 +531,10 @@ fn parse_topology(
     node_id: &NodeId,
 ) -> (NodeId, NodeId, Role) {
     let node_ids: Vec<NodeId> = registry_node_list.iter().map(|n| n.0).collect();
-    assert_eq!(node_ids.contains(&node_id), true);
+    assert!(node_ids.contains(node_id));
 
     let l = node_ids.len();
-    assert_eq!(l >= 3, true);
+    assert!(l >= 3);
     let role = if *node_id == node_ids[0] {
         Role::Source
     } else {

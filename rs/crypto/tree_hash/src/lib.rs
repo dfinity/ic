@@ -321,9 +321,9 @@ impl HashTree {
     /// Does not `panic!`.
     pub fn digest(&self) -> &Digest {
         match &self {
-            HashTree::Leaf { digest } => &digest,
-            HashTree::Node { digest, .. } => &digest,
-            HashTree::Fork { digest, .. } => &digest,
+            HashTree::Leaf { digest } => digest,
+            HashTree::Node { digest, .. } => digest,
+            HashTree::Fork { digest, .. } => digest,
         }
     }
 
@@ -331,7 +331,7 @@ impl HashTree {
     /// `HashTree::Fork`. panic!s if the tree is not a fork.
     pub fn left_tree(&self) -> &HashTree {
         match &self {
-            HashTree::Fork { left_tree, .. } => &left_tree,
+            HashTree::Fork { left_tree, .. } => left_tree,
             _ => panic!("Not a fork: {:?}", self),
         }
     }
@@ -340,7 +340,7 @@ impl HashTree {
     /// `HashTree::Fork`. panic!s if the tree is not a fork.
     pub fn right_tree(&self) -> &HashTree {
         match &self {
-            HashTree::Fork { right_tree, .. } => &right_tree,
+            HashTree::Fork { right_tree, .. } => right_tree,
             _ => panic!("Not a fork: {:?}", self),
         }
     }
@@ -349,7 +349,7 @@ impl HashTree {
     /// `HashTree::Node`. panic!s if the tree is not `HashTree::Node`.
     pub fn node_tree(&self) -> &HashTree {
         match &self {
-            HashTree::Node { hash_tree, .. } => &hash_tree,
+            HashTree::Node { hash_tree, .. } => hash_tree,
             _ => panic!("Not a node: {:?}", self),
         }
     }

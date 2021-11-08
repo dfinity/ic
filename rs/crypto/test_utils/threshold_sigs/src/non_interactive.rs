@@ -27,7 +27,7 @@ pub fn create_transcript(
     dealings: &BTreeMap<NodeId, NiDkgDealing>,
     node_id: NodeId,
 ) -> NiDkgTranscript {
-    crypto_for(node_id, &crypto_components)
+    crypto_for(node_id, crypto_components)
         .create_transcript(ni_dkg_config, dealings)
         .unwrap_or_else(|error| {
             panic!("failed to create transcript for {:?}: {:?}", node_id, error)
@@ -51,7 +51,7 @@ pub fn run_ni_dkg_and_create_single_transcript(
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
 ) -> NiDkgTranscript {
     let dealings =
-        load_resharing_transcript_if_needed_and_create_dealings(&ni_dkg_config, crypto_components);
+        load_resharing_transcript_if_needed_and_create_dealings(ni_dkg_config, crypto_components);
     let transcript_creator = ni_dkg_config.dealers().get().iter().next().unwrap();
     create_transcript(
         ni_dkg_config,
@@ -116,7 +116,7 @@ pub fn load_resharing_transcript_and_create_dealing(
     node_id: NodeId,
 ) -> NiDkgDealing {
     if let Some(resharing_transcript) = ni_dkg_config.resharing_transcript() {
-        load_transcript(&resharing_transcript, crypto_components, node_id);
+        load_transcript(resharing_transcript, crypto_components, node_id);
     }
 
     create_dealing(ni_dkg_config, crypto_components, node_id)
@@ -144,7 +144,7 @@ pub fn retain_only_active_keys(
     node_id: NodeId,
     retained_transcripts: HashSet<NiDkgTranscript>,
 ) {
-    crypto_for(node_id, &crypto_components)
+    crypto_for(node_id, crypto_components)
         .retain_only_active_keys(retained_transcripts)
         .unwrap_or_else(|error| {
             panic!(
@@ -163,7 +163,7 @@ pub fn sign_threshold_for_each<H: Signable>(
     signers
         .iter()
         .map(|signer| {
-            let sig_share = crypto_for(*signer, &crypto_components)
+            let sig_share = crypto_for(*signer, crypto_components)
                 .sign_threshold(msg, DkgId::NiDkgId(dkg_id))
                 .unwrap_or_else(|_| panic!("signing by node {:?} failed", signer));
             (*signer, sig_share)

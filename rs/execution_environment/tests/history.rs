@@ -137,7 +137,8 @@ fn test_invalid_transitions() {
         let all_statuses = vec![Unknown, received(), processing(), completed(), failed()];
         // creates the cartesian product of all states and filters out the valid
         // transitions
-        let all_invalid_transitions: Vec<(IngressStatus, IngressStatus)> = all_statuses
+
+        for (origin_state, next_state) in all_statuses
             .iter()
             .flat_map(|from| {
                 all_statuses
@@ -145,9 +146,7 @@ fn test_invalid_transitions() {
                     .map(move |to| (from.clone(), to.clone()))
             })
             .filter(|t| !valid_transitions.contains(t))
-            .collect();
-
-        for (origin_state, next_state) in all_invalid_transitions.into_iter() {
+        {
             // ingress_history_writer contains a prometheus::Histogram which is not
             // unwind-safe. It doesn't matter for the purposes of this test.
             let ingress_history_writer = std::panic::AssertUnwindSafe(&ingress_history_writer);

@@ -62,7 +62,7 @@ impl ChangeSetOperation for ChangeSet {
     }
 
     fn dedup_push(&mut self, action: ChangeAction) -> Result<(), ChangeAction> {
-        if self.iter().find(|x| x.content_eq(&action)).is_none() {
+        if !self.iter().any(|x| x.content_eq(&action)) {
             self.push(action);
             Ok(())
         } else {

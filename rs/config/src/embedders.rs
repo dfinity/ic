@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::feature_status::FeatureStatus;
+
 // Defining 100000 globals in a module can result in significant overhead in
 // each message's execution time (about 40x), so set a limit 3 orders of
 // magnitude lower which should still allow for reasonable canisters to be
@@ -8,12 +10,6 @@ pub(crate) const MAX_GLOBALS: usize = 200;
 // Current max number of functions used by a canister on the Alpha network is
 // about 2800, so we set a limit at two times that.
 pub(crate) const MAX_FUNCTIONS: usize = 6000;
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-pub enum FeatureStatus {
-    Enabled,
-    Disabled,
-}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {

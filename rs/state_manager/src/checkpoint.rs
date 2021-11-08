@@ -1,11 +1,11 @@
 use crate::{CheckpointError, CheckpointMetrics};
+use ic_base_types::CanisterId;
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::Memory;
 use ic_replicated_state::{
-    canister_state::execution_state::WasmBinary, SchedulerState, SystemState,
-};
-use ic_replicated_state::{
-    page_map::PageMap, CanisterMetrics, CanisterState, ExecutionState, ReplicatedState,
+    canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
+    ExecutionState, NumWasmPages64, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{
     CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadPolicy, ReadWritePolicy, RwPolicy,
@@ -13,6 +13,7 @@ use ic_state_layout::{
 };
 use ic_types::Height;
 use ic_utils::ic_features::*;
+use ic_utils::thread::parallel_map;
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom};
 use std::sync::Arc;
@@ -20,6 +21,9 @@ use std::sync::Arc;
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent the to given one
 /// and a result of the operation.
+///
+/// This function uses the provided thread-pool to parallelize expensive
+/// operations.
 ///
 /// If the result is `Ok`, the returned state is "rebased" to use
 /// files from the newly created checkpoint. If the result is `Err`,
@@ -29,6 +33,7 @@ pub fn make_checkpoint(
     height: Height,
     layout: &StateLayout,
     metrics: &CheckpointMetrics,
+    thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<ReplicatedState, CheckpointError> {
     let tip = layout.tip().map_err(CheckpointError::from)?;
 
@@ -37,7 +42,7 @@ pub fn make_checkpoint(
             .step_duration
             .with_label_values(&["serialize_to_tip"])
             .start_timer();
-        serialize_to_tip(&state, &tip)?;
+        serialize_to_tip(state, &tip, thread_pool)?;
     }
 
     let cp = {
@@ -45,7 +50,7 @@ pub fn make_checkpoint(
             .step_duration
             .with_label_values(&["tip_to_checkpoint"])
             .start_timer();
-        layout.tip_to_checkpoint(tip, height)?
+        layout.tip_to_checkpoint(tip, height, Some(thread_pool))?
     };
 
     let state = {
@@ -53,7 +58,7 @@ pub fn make_checkpoint(
             .step_duration
             .with_label_values(&["load"])
             .start_timer();
-        load_checkpoint(&cp, state.metadata.own_subnet_type)?
+        load_checkpoint(&cp, state.metadata.own_subnet_type, Some(thread_pool))?
     };
 
     Ok(state)
@@ -62,6 +67,7 @@ pub fn make_checkpoint(
 fn serialize_to_tip(
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy>,
+    thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<(), CheckpointError> {
     tip.system_metadata()
         .serialize(state.system_metadata().into())?;
@@ -69,38 +75,53 @@ fn serialize_to_tip(
     tip.subnet_queues()
         .serialize((state.subnet_queues()).into())?;
 
-    for canister_state in state.canisters_iter() {
-        let canister_layout = tip.canister(&canister_state.canister_id())?;
-        canister_layout
-            .queues()
-            .serialize(canister_state.system_state.queues().into())?;
+    let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
+        serialize_canister_to_tip(canister_state, tip)
+    });
 
-        canister_state
-            .system_state
-            .stable_memory
-            .persist_and_sync_delta(&canister_layout.stable_memory_blob())?;
+    for result in results.into_iter() {
+        result?;
+    }
+    Ok(())
+}
 
-        let execution_state_bits = match &canister_state.execution_state {
-            Some(execution_state) => {
-                canister_layout
-                    .wasm()
-                    .serialize(&execution_state.wasm_binary.binary)?;
-                execution_state
-                    .page_map
-                    .persist_and_sync_delta(&canister_layout.vmemory_0())?;
+fn serialize_canister_to_tip(
+    canister_state: &CanisterState,
+    tip: &CheckpointLayout<RwPolicy>,
+) -> Result<(), CheckpointError> {
+    let canister_layout = tip.canister(&canister_state.canister_id())?;
+    canister_layout
+        .queues()
+        .serialize(canister_state.system_state.queues().into())?;
 
-                execution_state.cow_mem_mgr.checkpoint();
+    let execution_state_bits = match &canister_state.execution_state {
+        Some(execution_state) => {
+            canister_layout
+                .wasm()
+                .serialize(&execution_state.wasm_binary.binary)?;
+            execution_state
+                .wasm_memory
+                .page_map
+                .persist_and_sync_delta(&canister_layout.vmemory_0())?;
+            execution_state
+                .stable_memory
+                .page_map
+                .persist_and_sync_delta(&canister_layout.stable_memory_blob())?;
 
-                Some(ExecutionStateBits {
-                    exported_globals: execution_state.exported_globals.clone(),
-                    heap_size: execution_state.heap_size,
-                    exports: execution_state.exports.clone(),
-                    last_executed_round: execution_state.last_executed_round,
-                })
-            }
-            None => None,
-        };
-        canister_layout.canister().serialize(
+            execution_state.cow_mem_mgr.checkpoint();
+
+            Some(ExecutionStateBits {
+                exported_globals: execution_state.exported_globals.clone(),
+                heap_size: execution_state.wasm_memory.size,
+                exports: execution_state.exports.clone(),
+                last_executed_round: execution_state.last_executed_round,
+            })
+        }
+        None => None,
+    };
+    canister_layout
+        .canister()
+        .serialize(
             CanisterStateBits {
                 controllers: canister_state.system_state.controllers.clone(),
                 last_full_execution_round: canister_state.scheduler_state.last_full_execution_round,
@@ -130,20 +151,24 @@ fn serialize_to_tip(
                     .system_state
                     .canister_metrics
                     .consumed_cycles_since_replica_started,
-                stable_memory_size: canister_state.system_state.stable_memory_size,
+                stable_memory_size: canister_state
+                    .execution_state
+                    .as_ref()
+                    .map(|es| es.stable_memory.size)
+                    .unwrap_or_else(|| NumWasmPages64::from(0)),
                 heap_delta_debit: canister_state.scheduler_state.heap_delta_debit,
             }
             .into(),
-        )?;
-    }
-    Ok(())
+        )
+        .map_err(CheckpointError::from)
 }
 
 /// loads the node state heighted with `height` using the specified
 /// directory layout.
-pub fn load_checkpoint<P: ReadPolicy>(
+pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
     checkpoint_layout: &CheckpointLayout<P>,
     own_subnet_type: SubnetType,
+    thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> Result<ReplicatedState, CheckpointError> {
     let into_checkpoint_error =
         |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
@@ -164,89 +189,25 @@ pub fn load_checkpoint<P: ReadPolicy>(
     .map_err(|err| into_checkpoint_error("CanisterQueues".into(), err))?;
 
     let mut canister_states = BTreeMap::new();
-    for canister_id in checkpoint_layout.canister_ids()?.iter() {
-        let canister_layout = checkpoint_layout.canister(canister_id)?;
-        let canister_state_bits: CanisterStateBits = CanisterStateBits::try_from(
-            canister_layout.canister().deserialize()?,
-        )
-        .map_err(|err| {
-            into_checkpoint_error(
-                format!("canister_states[{}]::canister_state_bits", canister_id),
-                err,
-            )
-        })?;
-        let session_nonce = None;
+    let canister_ids = checkpoint_layout.canister_ids()?;
+    match thread_pool {
+        Some(thread_pool) => {
+            let results = parallel_map(thread_pool, canister_ids.iter(), |canister_id| {
+                load_canister_state_from_checkpoint(checkpoint_layout, canister_id)
+            });
 
-        let execution_state = match canister_state_bits.execution_state_bits {
-            Some(execution_state_bits) => {
-                let page_map = PageMap::open(&canister_layout.vmemory_0())?;
-                let wasm_binary = WasmBinary::new(canister_layout.wasm().deserialize()?);
-                let canister_root = canister_layout.raw_path();
-                Some(ExecutionState {
-                    canister_root: canister_root.clone(),
-                    session_nonce,
-                    wasm_binary,
-                    page_map,
-                    exported_globals: execution_state_bits.exported_globals,
-                    heap_size: execution_state_bits.heap_size,
-                    exports: execution_state_bits.exports,
-                    last_executed_round: execution_state_bits.last_executed_round,
-                    cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readonly(
-                        canister_layout.raw_path(),
-                    )),
-                    mapped_state: None,
-                })
+            for canister_state in results.into_iter() {
+                let canister_state = canister_state?;
+                canister_states.insert(canister_state.system_state.canister_id(), canister_state);
             }
-            None => None,
-        };
-
-        let stable_memory_bin_file = canister_layout.stable_memory_blob();
-        let stable_memory = PageMap::open(&stable_memory_bin_file)?;
-        let stable_memory_size = canister_state_bits.stable_memory_size;
-
-        let queues =
-            ic_replicated_state::CanisterQueues::try_from(canister_layout.queues().deserialize()?)
-                .map_err(|err| {
-                    into_checkpoint_error(
-                        format!("canister_states[{}]::system_state::queues", canister_id),
-                        err,
-                    )
-                })?;
-        let canister_metrics = CanisterMetrics {
-            scheduled_as_first: canister_state_bits.scheduled_as_first,
-            skipped_round_due_to_no_messages: canister_state_bits.skipped_round_due_to_no_messages,
-            executed: canister_state_bits.executed,
-            interruped_during_execution: canister_state_bits.interruped_during_execution,
-            consumed_cycles_since_replica_started: canister_state_bits
-                .consumed_cycles_since_replica_started,
-        };
-        let system_state = SystemState::new_from_checkpoint(
-            canister_state_bits.controllers,
-            *canister_id,
-            queues,
-            stable_memory_size,
-            stable_memory,
-            canister_state_bits.memory_allocation,
-            canister_state_bits.freeze_threshold,
-            canister_state_bits.status,
-            canister_state_bits.certified_data,
-            canister_metrics,
-            canister_state_bits.cycles_balance,
-        );
-
-        canister_states.insert(
-            system_state.canister_id(),
-            CanisterState {
-                system_state,
-                execution_state,
-                scheduler_state: SchedulerState {
-                    last_full_execution_round: canister_state_bits.last_full_execution_round,
-                    compute_allocation: canister_state_bits.compute_allocation,
-                    accumulated_priority: canister_state_bits.accumulated_priority,
-                    heap_delta_debit: canister_state_bits.heap_delta_debit,
-                },
-            },
-        );
+        }
+        None => {
+            for canister_id in canister_ids.iter() {
+                let canister_state =
+                    load_canister_state_from_checkpoint(checkpoint_layout, canister_id)?;
+                canister_states.insert(canister_state.system_state.canister_id(), canister_state);
+            }
+        }
     }
 
     let state = ReplicatedState::new_from_checkpoint(
@@ -259,6 +220,102 @@ pub fn load_checkpoint<P: ReadPolicy>(
     );
 
     Ok(state)
+}
+
+fn load_canister_state_from_checkpoint<P: ReadPolicy>(
+    checkpoint_layout: &CheckpointLayout<P>,
+    canister_id: &CanisterId,
+) -> Result<CanisterState, CheckpointError> {
+    let into_checkpoint_error =
+        |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
+            path: checkpoint_layout.raw_path().into(),
+            field,
+            proto_err: err.to_string(),
+        };
+    let canister_layout = checkpoint_layout.canister(canister_id)?;
+    let canister_state_bits: CanisterStateBits =
+        CanisterStateBits::try_from(canister_layout.canister().deserialize()?).map_err(|err| {
+            into_checkpoint_error(
+                format!("canister_states[{}]::canister_state_bits", canister_id),
+                err,
+            )
+        })?;
+    let session_nonce = None;
+
+    let execution_state = match canister_state_bits.execution_state_bits {
+        Some(execution_state_bits) => {
+            let wasm_memory = Memory::new(
+                PageMap::open(
+                    &canister_layout.vmemory_0(),
+                    Some(checkpoint_layout.height()),
+                )?,
+                execution_state_bits.heap_size,
+            );
+            let stable_memory = Memory::new(
+                PageMap::open(
+                    &canister_layout.stable_memory_blob(),
+                    Some(checkpoint_layout.height()),
+                )?,
+                canister_state_bits.stable_memory_size,
+            );
+            let wasm_binary = WasmBinary::new(canister_layout.wasm().deserialize()?);
+            let canister_root = canister_layout.raw_path();
+            Some(ExecutionState {
+                canister_root,
+                session_nonce,
+                wasm_binary,
+                wasm_memory,
+                stable_memory,
+                exported_globals: execution_state_bits.exported_globals,
+                exports: execution_state_bits.exports,
+                last_executed_round: execution_state_bits.last_executed_round,
+                cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readonly(
+                    canister_layout.raw_path(),
+                )),
+                mapped_state: None,
+            })
+        }
+        None => None,
+    };
+
+    let queues =
+        ic_replicated_state::CanisterQueues::try_from(canister_layout.queues().deserialize()?)
+            .map_err(|err| {
+                into_checkpoint_error(
+                    format!("canister_states[{}]::system_state::queues", canister_id),
+                    err,
+                )
+            })?;
+    let canister_metrics = CanisterMetrics {
+        scheduled_as_first: canister_state_bits.scheduled_as_first,
+        skipped_round_due_to_no_messages: canister_state_bits.skipped_round_due_to_no_messages,
+        executed: canister_state_bits.executed,
+        interruped_during_execution: canister_state_bits.interruped_during_execution,
+        consumed_cycles_since_replica_started: canister_state_bits
+            .consumed_cycles_since_replica_started,
+    };
+    let system_state = SystemState::new_from_checkpoint(
+        canister_state_bits.controllers,
+        *canister_id,
+        queues,
+        canister_state_bits.memory_allocation,
+        canister_state_bits.freeze_threshold,
+        canister_state_bits.status,
+        canister_state_bits.certified_data,
+        canister_metrics,
+        canister_state_bits.cycles_balance,
+    );
+
+    Ok(CanisterState {
+        system_state,
+        execution_state,
+        scheduler_state: SchedulerState {
+            last_full_execution_round: canister_state_bits.last_full_execution_round,
+            compute_allocation: canister_state_bits.compute_allocation,
+            accumulated_priority: canister_state_bits.accumulated_priority,
+            heap_delta_debit: canister_state_bits.heap_delta_debit,
+        },
+    })
 }
 
 pub fn handle_disk_format_changes<P: ReadWritePolicy>(
@@ -283,11 +340,11 @@ pub fn handle_disk_format_changes<P: ReadWritePolicy>(
 
                 let mut pages_to_write = Vec::new();
                 let mapped_state = cow_mem_mgr.get_map();
-                for (idx, data) in execution_state.page_map.host_pages_iter() {
+                for (idx, data) in execution_state.wasm_memory.page_map.host_pages_iter() {
                     pages_to_write.push(idx.get());
                     mapped_state.update_heap_page(idx.get(), data);
                 }
-                mapped_state.soft_commit(&pages_to_write.as_mut_slice());
+                mapped_state.soft_commit(pages_to_write.as_mut_slice());
                 cow_mem_mgr.create_snapshot(execution_state.last_executed_round.get());
             } else if should_downgrade {
                 let cow_mem_mgr = CowMemoryManagerImpl::open_readonly(canister_layout.raw_path());
@@ -338,6 +395,7 @@ pub fn reopen_state_as_tip<P: ReadWritePolicy>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::NUMBER_OF_CHECKPOINT_THREADS;
     use ic_base_types::NumSeconds;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
@@ -367,6 +425,10 @@ mod tests {
         CheckpointMetrics::new(&metrics_registry)
     }
 
+    fn thread_pool() -> scoped_threadpool::Pool {
+        scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS)
+    }
+
     fn empty_wasm() -> BinaryEncodedWasm {
         BinaryEncodedWasm::new(vec![
             0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d,
@@ -374,12 +436,15 @@ mod tests {
         ])
     }
 
-    fn one_page_of(byte: u8) -> PageMap {
+    fn one_page_of(byte: u8) -> Memory {
         let contents = [byte; PAGE_SIZE];
         let delta = &[(PageIndex::from(0), &contents)];
         let mut page_map = PageMap::new();
         page_map.update(delta);
-        page_map
+        Memory {
+            page_map,
+            size: NumWasmPages::from(1),
+        }
     }
 
     fn mark_readonly(path: &std::path::Path) -> std::io::Result<()> {
@@ -393,8 +458,14 @@ mod tests {
         height: Height,
         layout: &StateLayout,
     ) -> ReplicatedState {
-        make_checkpoint(state, height, &layout, &checkpoint_metrics())
-            .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
+        make_checkpoint(
+            state,
+            height,
+            layout,
+            &checkpoint_metrics(),
+            &mut thread_pool(),
+        )
+        .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
     }
 
     #[test]
@@ -483,7 +554,13 @@ mod tests {
             // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
             let expected_scratchpad_dir = root.join("tmp").join("scratchpad_000000000000002a");
 
-            match make_checkpoint(&state, HEIGHT, &layout, &checkpoint_metrics()) {
+            match make_checkpoint(
+                &state,
+                HEIGHT,
+                &layout,
+                &checkpoint_metrics(),
+                &mut thread_pool(),
+            ) {
                 Err(_) => assert!(
                     !expected_scratchpad_dir.exists(),
                     "Expected incomplete scratchpad to be deleted"
@@ -515,13 +592,16 @@ mod tests {
                 INITIAL_CYCLES,
                 NumSeconds::from(100_000),
             );
+            let mut buf = page_map::Buffer::new(PageMap::default());
+            buf.write(&[1, 2, 3, 4][..], 0);
+            let stable_memory = Memory::new(buf.into_page_map(), NumWasmPages64::new(1));
             let execution_state = ExecutionState {
                 canister_root: root.clone(),
                 session_nonce: None,
                 wasm_binary: WasmBinary::new(wasm.clone()),
-                page_map: page_map.clone(),
+                wasm_memory: page_map.clone(),
+                stable_memory,
                 exported_globals: vec![],
-                heap_size: NumWasmPages::from(0),
                 exports: ExportedFunctions::new(BTreeSet::new()),
                 last_executed_round: ExecutionRound::from(0),
                 cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(
@@ -530,11 +610,6 @@ mod tests {
                 mapped_state: None,
             };
             canister_state.execution_state = Some(execution_state);
-            canister_state.system_state.stable_memory_size = NumWasmPages64::new(1);
-
-            let mut buf = page_map::Buffer::new(canister_state.system_state.stable_memory);
-            buf.write(&[1, 2, 3, 4][..], 0);
-            canister_state.system_state.stable_memory = buf.into_page_map();
 
             let own_subnet_type = SubnetType::Application;
             let mut state =
@@ -542,8 +617,12 @@ mod tests {
             state.put_canister_state(canister_state);
             let _state = make_checkpoint_and_get_state(&state, HEIGHT, &layout);
 
-            let recovered_state =
-                load_checkpoint(&layout.checkpoint(HEIGHT).unwrap(), own_subnet_type).unwrap();
+            let recovered_state = load_checkpoint(
+                &layout.checkpoint(HEIGHT).unwrap(),
+                own_subnet_type,
+                Some(&mut thread_pool()),
+            )
+            .unwrap();
 
             assert_eq!(canister_ids(&recovered_state), vec![canister_id]);
 
@@ -559,17 +638,30 @@ mod tests {
                 wasm.as_slice()
             );
             assert_eq!(
-                canister.execution_state.as_ref().unwrap().page_map,
+                canister.execution_state.as_ref().unwrap().wasm_memory,
                 page_map
             );
             assert_eq!(
-                canister.system_state.stable_memory_size,
+                canister
+                    .execution_state
+                    .as_ref()
+                    .unwrap()
+                    .stable_memory
+                    .size,
                 NumWasmPages64::new(1)
             );
 
             // Verify that the deserialized stable memory is correctly retrieved.
             let mut data = vec![0, 0, 0, 0];
-            let buf = page_map::Buffer::new(canister.system_state.stable_memory.clone());
+            let buf = page_map::Buffer::new(
+                canister
+                    .execution_state
+                    .as_ref()
+                    .unwrap()
+                    .stable_memory
+                    .page_map
+                    .clone(),
+            );
             buf.read(&mut data[..], 0);
             assert_eq!(data, vec![1, 2, 3, 4]);
         });
@@ -595,8 +687,12 @@ mod tests {
                 &layout,
             );
 
-            let recovered_state =
-                load_checkpoint(&layout.checkpoint(HEIGHT).unwrap(), own_subnet_type).unwrap();
+            let recovered_state = load_checkpoint(
+                &layout.checkpoint(HEIGHT).unwrap(),
+                own_subnet_type,
+                Some(&mut thread_pool()),
+            )
+            .unwrap();
             assert!(recovered_state.canisters_iter().next().is_none());
         });
     }
@@ -612,8 +708,9 @@ mod tests {
             match layout
                 .checkpoint(MISSING_HEIGHT)
                 .map_err(CheckpointError::from)
-                .and_then(|c| load_checkpoint(&c, SubnetType::Application))
-            {
+                .and_then(|c| {
+                    load_checkpoint(&c, SubnetType::Application, Some(&mut thread_pool()))
+                }) {
                 Err(CheckpointError::NotFound(_)) => (),
                 Err(err) => panic!("Expected to get NotFound error, got {:?}", err),
                 Ok(_) => panic!("Expected to get an error, got state!"),
@@ -647,7 +744,13 @@ mod tests {
                 NumSeconds::from(100_000),
             ));
 
-            let result = make_checkpoint(&state, HEIGHT, &layout, &checkpoint_metrics());
+            let result = make_checkpoint(
+                &state,
+                HEIGHT,
+                &layout,
+                &checkpoint_metrics(),
+                &mut thread_pool(),
+            );
 
             assert!(
                 result.is_err()
@@ -701,8 +804,12 @@ mod tests {
             state.put_canister_state(canister_state);
             let _state = make_checkpoint_and_get_state(&state, HEIGHT, &layout);
 
-            let recovered_state =
-                load_checkpoint(&layout.checkpoint(HEIGHT).unwrap(), own_subnet_type).unwrap();
+            let recovered_state = load_checkpoint(
+                &layout.checkpoint(HEIGHT).unwrap(),
+                own_subnet_type,
+                Some(&mut thread_pool()),
+            )
+            .unwrap();
 
             assert_eq!(canister_ids(&recovered_state), vec![canister_id]);
 
@@ -748,8 +855,12 @@ mod tests {
             state.put_canister_state(canister_state);
             let _state = make_checkpoint_and_get_state(&state, HEIGHT, &layout);
 
-            let loaded_state =
-                load_checkpoint(&layout.checkpoint(HEIGHT).unwrap(), own_subnet_type).unwrap();
+            let loaded_state = load_checkpoint(
+                &layout.checkpoint(HEIGHT).unwrap(),
+                own_subnet_type,
+                Some(&mut thread_pool()),
+            )
+            .unwrap();
 
             assert_eq!(canister_ids(&loaded_state), vec![canister_id]);
 
@@ -789,8 +900,12 @@ mod tests {
             state.put_canister_state(canister_state);
             let _state = make_checkpoint_and_get_state(&state, HEIGHT, &layout);
 
-            let recovered_state =
-                load_checkpoint(&layout.checkpoint(HEIGHT).unwrap(), own_subnet_type).unwrap();
+            let recovered_state = load_checkpoint(
+                &layout.checkpoint(HEIGHT).unwrap(),
+                own_subnet_type,
+                Some(&mut thread_pool()),
+            )
+            .unwrap();
 
             assert_eq!(canister_ids(&recovered_state), vec![canister_id]);
 
@@ -825,8 +940,12 @@ mod tests {
             let original_state = state.clone();
             let _state = make_checkpoint_and_get_state(&state, HEIGHT, &layout);
 
-            let recovered_state =
-                load_checkpoint(&layout.checkpoint(HEIGHT).unwrap(), own_subnet_type).unwrap();
+            let recovered_state = load_checkpoint(
+                &layout.checkpoint(HEIGHT).unwrap(),
+                own_subnet_type,
+                Some(&mut thread_pool()),
+            )
+            .unwrap();
 
             assert_eq!(
                 original_state.subnet_queues(),

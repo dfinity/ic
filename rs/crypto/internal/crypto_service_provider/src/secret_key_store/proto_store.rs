@@ -19,7 +19,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-const SKS_DATA_FILENAME: &str = "sks_data.pb";
 const CURRENT_SKS_VERSION: u32 = 2;
 
 // TODO(CRP-523): turn this to FromStr-trait once KeyId is not public.
@@ -67,9 +66,9 @@ pub struct ProtoSecretKeyStore {
 
 impl ProtoSecretKeyStore {
     /// Creates a database instance.
-    pub fn open(dir: &Path, logger: Option<ReplicaLogger>) -> Self {
+    pub fn open(dir: &Path, file_name: &str, logger: Option<ReplicaLogger>) -> Self {
         Self::check_path(dir);
-        let proto_file = dir.join(SKS_DATA_FILENAME);
+        let proto_file = dir.join(file_name);
         let secret_keys = match Self::read_sks_data_from_disk(&proto_file) {
             Some(sks_proto) => sks_proto,
             None => SecretKeys::new(),
@@ -79,6 +78,11 @@ impl ProtoSecretKeyStore {
             keys: Arc::new(RwLock::new(secret_keys)),
             logger: logger.unwrap_or_else(no_op_logger),
         }
+    }
+
+    /// Returns the path to the protobuf file storing the keys.
+    pub fn proto_file_path(&self) -> &Path {
+        self.proto_file.as_path()
     }
 
     fn read_sks_data_from_disk(sks_data_file: &Path) -> Option<SecretKeys> {
@@ -106,8 +110,8 @@ impl ProtoSecretKeyStore {
             0 => {
                 let mut secret_keys = SecretKeys::new();
                 for (key_id_string, key_bytes) in sks_proto.key_id_to_csp_secret_key.iter() {
-                    let key_id = key_id_from_display_string(&key_id_string);
-                    let mut csp_key: CspSecretKey = serde_cbor::from_slice(&key_bytes)
+                    let key_id = key_id_from_display_string(key_id_string);
+                    let mut csp_key: CspSecretKey = serde_cbor::from_slice(key_bytes)
                         .unwrap_or_else(|e| {
                             panic!("Error deserializing key with ID {}: {}", key_id, e)
                         });
@@ -133,7 +137,7 @@ impl ProtoSecretKeyStore {
             1 => {
                 let mut secret_keys = SecretKeys::new();
                 for (key_id_hex, sk_proto) in sks_proto.key_id_to_secret_key_v1.iter() {
-                    let key_id = key_id_from_hex(&key_id_hex);
+                    let key_id = key_id_from_hex(key_id_hex);
                     let mut csp_key = serde_cbor::from_slice(&sk_proto.csp_secret_key)
                         .unwrap_or_else(|e| {
                             panic!("Error deserializing key with ID {}: {}", key_id, e)
@@ -176,7 +180,7 @@ impl ProtoSecretKeyStore {
         }
         let mut secret_keys = SecretKeys::new();
         for (key_id_hex, sk_proto) in sks_proto.key_id_to_secret_key_v1.iter() {
-            let key_id = key_id_from_hex(&key_id_hex);
+            let key_id = key_id_from_hex(key_id_hex);
             let csp_key = serde_cbor::from_slice(&sk_proto.csp_secret_key)
                 .unwrap_or_else(|e| panic!("Error deserializing key with ID {}: {}", key_id, e));
             let maybe_scope = if sk_proto.scope.is_empty() {

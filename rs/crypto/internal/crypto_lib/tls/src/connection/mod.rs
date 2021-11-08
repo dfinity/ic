@@ -148,7 +148,7 @@ mod connector {
         set_certificate(client_cert, &mut builder)?;
         check_private_key(client_cert, &mut builder)?;
         let mut connect_config =
-            build_connect_configuration(builder, &client_cert, &trusted_server_cert)?;
+            build_connect_configuration(builder, client_cert, trusted_server_cert)?;
         connect_config.set_verify_hostname(false);
         Ok(connect_config)
     }

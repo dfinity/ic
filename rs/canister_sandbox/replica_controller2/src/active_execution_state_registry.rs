@@ -250,6 +250,7 @@ impl BorrowedSystemStateAccessor {
 mod tests {
     use super::*;
 
+    use ic_replicated_state::Memory;
     use ic_test_utilities::{
         cycles_account_manager::CyclesAccountManagerBuilder, state::SystemStateBuilder,
     };
@@ -302,11 +303,12 @@ mod tests {
             SystemStateAccessorDirect::new(
                 SystemStateBuilder::default().build(),
                 Arc::new(CyclesAccountManagerBuilder::new().build()),
+                &Memory::default(),
             ),
             move |id, _exec_out| {
                 exec1_finished_copy.put(id.to_string());
             },
-            &"exec",
+            "exec",
         );
 
         let borrow = reg.borrow_system_state_accessor(&exec1_id);

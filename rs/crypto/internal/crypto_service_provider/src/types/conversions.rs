@@ -194,7 +194,7 @@ impl AsRef<[u8]> for CspPublicKey {
             CspPublicKey::EcdsaSecp256k1(bytes) => &bytes.0,
             CspPublicKey::Ed25519(bytes) => &bytes.0,
             CspPublicKey::MultiBls12_381(public_key_bytes) => &public_key_bytes.0,
-            CspPublicKey::RsaSha256(public_key_bytes) => &public_key_bytes.as_der(),
+            CspPublicKey::RsaSha256(public_key_bytes) => public_key_bytes.as_der(),
         }
     }
 }
@@ -232,7 +232,7 @@ impl AsRef<[u8]> for CspSignature {
                 ThresBls12_381_Signature::Individual(sig_bytes) => &sig_bytes.0,
                 ThresBls12_381_Signature::Combined(sig_bytes) => &sig_bytes.0,
             },
-            CspSignature::RsaSha256(bytes) => &bytes,
+            CspSignature::RsaSha256(bytes) => bytes,
         }
     }
 }

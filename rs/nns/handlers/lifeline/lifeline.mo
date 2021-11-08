@@ -7,10 +7,8 @@ import Governance "canister:governance";
 actor {
     private let governanceCanister : Principal = Prim.principalOfActor Governance;
     private let root : Principal = Prim.principalOfActor Root;
-    type ProposalId = Nat64;
-    type NeuronId = Nat64;
 
-    type CreateUpgradeRootProposalPayload = { wasm_module : Blob; module_arg : Blob; stop_upgrade_start : Bool };
+    type UpgradeRootProposalPayload = { wasm_module : Blob; module_arg : Blob; stop_upgrade_start : Bool };
 
     // IC00 is the management canister. We rely on it for the four
     // fundamental methods as listed below.
@@ -29,17 +27,10 @@ actor {
       stop_canister : CanisterIdRecord -> async ()
     };
 
-    public shared func submit_upgrade_root_proposal(neuron_id : NeuronId, pl : CreateUpgradeRootProposalPayload) : async () {
-      throw Prim.error(
-        "Method 'submit_upgrade_root_proposal' was removed in PR 11771. "
-        # "Use method 'manage_neuron' of the governance canister instead to submit a proposal to upgrade the "
-        # "root canister.")
-    };
-
-    public shared ({caller}) func upgrade_root(wasm : Blob, module_arg : Blob, stop_upgrade_start : Bool) : async () {
+    public shared ({caller}) func upgrade_root(pl : UpgradeRootProposalPayload) : async () {
       assert caller == governanceCanister;
 
-      if stop_upgrade_start {
+      if (pl.stop_upgrade_start) {
         debug { Prim.debugPrint ("upgrade_root: stopping the root canister " # debug_show root) };
         await ic00.stop_canister({canister_id = root});
       };
@@ -48,14 +39,14 @@ actor {
       await ic00.install_code({
         mode = #upgrade;
         canister_id = root;
-        wasm_module = wasm;
-        arg = module_arg;
+        wasm_module = pl.wasm_module;
+        arg = pl.module_arg;
         compute_allocation = null;
         memory_allocation = ?1073741824; // Root canister is given 1 GiB of memory.
         query_allocation = null
       });
 
-      if stop_upgrade_start {
+      if (pl.stop_upgrade_start) {
         debug { Prim.debugPrint ("upgrade_root: starting the root canister") };
         await ic00.start_canister({canister_id = root});
       };

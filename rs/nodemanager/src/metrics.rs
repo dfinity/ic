@@ -8,6 +8,7 @@ pub struct NodeManagerMetrics {
     pub resident_mem_used: IntGauge,
     /// Registry version last used to succesfully fetch datacenter information
     pub datacenter_registry_version: IntGauge,
+    pub ssh_access_registry_version: IntGauge,
 }
 
 impl NodeManagerMetrics {
@@ -24,6 +25,10 @@ impl NodeManagerMetrics {
             datacenter_registry_version: metrics_registry.int_gauge(
                 "datacenter_registry_version",
                 "Registry version last used to successfully fetch datacenter information",
+            ),
+            ssh_access_registry_version: metrics_registry.int_gauge(
+                "shh_access_registry_version",
+                "Registry version last used to update the SSH public keys",
             ),
         }
     }

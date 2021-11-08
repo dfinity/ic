@@ -14,10 +14,11 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libc = "0.2.91"
-prost = "0.8.0"
+prost = "0.9.0"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.1"
+scoped_threadpool = "0.1.*"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 tempfile = "3.1.0"
 

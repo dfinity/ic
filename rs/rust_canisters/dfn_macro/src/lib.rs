@@ -40,8 +40,8 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, quote_spanned};
 use std::collections::VecDeque;
 use syn::{
-    punctuated::Punctuated, spanned::Spanned, token::Comma, token::Paren, Attribute, Expr,
-    ExprCall, ExprPath, FnArg, ItemFn, Pat, PatIdent, PatTuple, Path, PathArguments, PathSegment,
+    punctuated::Punctuated, spanned::Spanned, token::Comma, token::Paren, Expr, ExprCall, ExprPath,
+    FnArg, ItemFn, Pat, PatIdent, PatTuple, Path, PathArguments, PathSegment,
 };
 
 #[derive(Clone)]
@@ -121,7 +121,6 @@ fn get_ident(arg: &FnArg, default_id: &str, method: &str) -> Result<PatIdent, (S
 struct FunctionInfo {
     pub function_call: ExprCall,
     pub tuple_pat: Pat,
-    pub attrs: Vec<Attribute>,
     pub name: Ident,
     pub is_async: bool,
 }
@@ -169,7 +168,6 @@ fn function_info(
     });
 
     let name = signature.ident;
-    let attrs = fun.attrs;
 
     let args: Punctuated<ExprPath, Comma> = tuple_elems
         .iter()
@@ -218,7 +216,6 @@ fn function_info(
         FunctionInfo {
             function_call,
             tuple_pat,
-            attrs,
             name,
             is_async,
         },

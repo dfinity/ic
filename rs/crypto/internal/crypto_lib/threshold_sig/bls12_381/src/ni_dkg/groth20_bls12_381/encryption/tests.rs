@@ -307,7 +307,7 @@ fn decryption_should_fail_below_epoch() {
             .zip(&ciphertexts_at_epochs)
         {
             let plaintext_maybe = decrypt(
-                &ciphertext,
+                ciphertext,
                 &secret_key,
                 node_index,
                 ciphertext_epoch,
@@ -377,7 +377,7 @@ fn zk_proofs_should_verify() {
 
     verify_zk_proofs(
         epoch,
-        &public_keys,
+        public_keys,
         &public_coefficients,
         &ciphertext,
         &chunking_proof,
@@ -431,7 +431,7 @@ fn zk_proofs_should_not_verify_with_wrong_epoch() {
     let epoch = Epoch::from(6); // Wrong epoch.
     let zk_result = verify_zk_proofs(
         epoch,
-        &public_keys,
+        public_keys,
         &public_coefficients,
         &ciphertext,
         &chunking_proof,

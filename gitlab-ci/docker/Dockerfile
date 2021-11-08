@@ -3,7 +3,7 @@ FROM ubuntu:20.04
 # Make sure the motoko_version corresponds to the same version in nix/sources.json
 ARG motoko_version=0.5.10
 ARG sdk_version=0.8.0
-ARG rust_version=1.52.1
+ARG rust_version=1.55.0
 
 # The image expects the following volumes mounted from the host:
 # /cache - holding the sccache artifacts
@@ -42,9 +42,12 @@ RUN useradd -ms /bin/bash -u 1000 ubuntu && \
 RUN usermod -a -G sudo ubuntu && echo "ubuntu ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # Install sccache in /usr/bin/sccache
-RUN V=v0.2.15; cd /usr/bin; \
-    curl --fail -L https://github.com/mozilla/sccache/releases/download/$V/sccache-$V-x86_64-unknown-linux-musl.tar.gz \
-    | tar xvz --strip-components=1 "sccache-$V-x86_64-unknown-linux-musl/sccache" && chmod 0755 /usr/bin/sccache
+ARG GITLAB_TOKEN=""
+RUN if [ -n "${GITLAB_TOKEN}" ]; then \
+       V=v0.2.18-alpha+dfinity; cd /usr/bin; \
+       curl --fail -L -o /usr/bin/sccache -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "https://gitlab.com/api/v4/projects/30166821/packages/generic/sccache/$V/sccache" && \
+       chmod 0755 /usr/bin/sccache && ln -s /usr/bin/sccache /usr/bin/sccache-run; \
+    fi
 
 # Install buildevents in /usr/bin/
 RUN cd /usr/bin; \
@@ -102,6 +105,10 @@ RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1
     gpg --batch --verify /tini.asc /tini && chmod +x /tini
 
 RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline junit-xml paramiko python-gitlab libhoney
+
+# Install the latest capsule.
+ARG CAPSULE_TOKEN
+RUN if [ -n "$CAPSULE_TOKEN" ]; then curl -u "gitlab-ci-token:$CAPSULE_TOKEN" --fail -L -o /usr/bin/capsule https://gitlab.com/api/v4/projects/29782482/packages/generic/capsule/0.1.10/capsule && chmod +x /usr/bin/capsule && ln /usr/bin/capsule /usr/bin/placebo; fi
 
 USER 1000
 

@@ -189,7 +189,7 @@ impl<'a> QueryContext<'a> {
                 call_origin.clone(),
                 query.method_name.as_str(),
                 query.method_payload.as_slice(),
-                query.source.clone().get(),
+                query.source.get(),
                 query_kind.clone(),
                 &measurement_scope,
             )
@@ -207,7 +207,7 @@ impl<'a> QueryContext<'a> {
                     call_origin,
                     query.method_name.as_str(),
                     query.method_payload.as_slice(),
-                    query.source.clone().get(),
+                    query.source.get(),
                     NonReplicatedQueryKind::Stateful,
                     &measurement_scope,
                 );
@@ -576,7 +576,7 @@ impl<'a> QueryContext<'a> {
             call_origin,
             request.method_name.as_str(),
             request.method_payload.as_slice(),
-            request.sender.clone().get(),
+            request.sender.get(),
             NonReplicatedQueryKind::Stateful,
             measurement_scope,
         );

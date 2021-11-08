@@ -21,6 +21,7 @@ ic-crypto-test-utils = { path = "../crypto/test_utils" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-embedders = { path = "../embedders" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -40,7 +41,7 @@ ic-universal-canister = { path = "../universal_canister/lib" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = "1.4.0"
 mockall = "0.7.2"
-nix = "0.20.0"
+nix = "0.23.0"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 proptest = "0.9.4"
 rand = "0.7.3"

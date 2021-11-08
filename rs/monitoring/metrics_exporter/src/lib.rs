@@ -1,11 +1,10 @@
 use hyper::{server::conn::Http, service::service_fn, Body, Response};
 use ic_config::metrics::{Config, Exporter};
-use ic_crypto_tls_interfaces::{AllowedClients, SomeOrAllNodes, TlsHandshake};
+use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::registry::RegistryClient;
 use ic_metrics::registry::MetricsRegistry;
 use prometheus::{Encoder, TextEncoder};
 use slog::{error, trace, warn};
-use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::string::String;
 use std::sync::Arc;
@@ -107,13 +106,6 @@ impl MetricsRuntimeImpl {
         let metrics_registry = self.metrics_registry.clone();
         let log = self.log.clone();
 
-        let mut clients_certs = Vec::new();
-        let mut clients_certs_exist = false;
-        if let Some(clients_x509_cert) = self.config.clients_x509_cert.clone() {
-            clients_certs.push(clients_x509_cert);
-            clients_certs_exist = true;
-        }
-
         let aservice = service_fn(move |_req| {
             // Clone again to ensure that `metrics_registry` outlives this closure.
             let metrics_registry = metrics_registry.clone();
@@ -150,43 +142,32 @@ impl MetricsRuntimeImpl {
                 if let Ok((stream, _)) = listener.accept().await {
                     tokio::spawn(async move {
                         let mut b = [0_u8; 1];
-                        if stream.peek(&mut b).await.is_ok() {
-                            if b[0] == 22 {
-                                if let Some((registry_client, crypto)) = crypto_tls {
-                                    // TLS
-                                    let allowed_clients =
-                                        AllowedClients::new(SomeOrAllNodes::All, HashSet::new())
-                                            .expect("invalid allowed clients");
-                                    // Note: the unwrap() can't fail since we tested Some(crypto)
-                                    // above.
-                                    let registry_version = registry_client.get_latest_version();
-                                    match crypto
-                                        .perform_tls_server_handshake_temp_with_optional_client_auth(
-                                            stream,
-                                            allowed_clients,
-                                            registry_version,
-                                            )
-                                        .await
+                        if stream.peek(&mut b).await.is_ok() && b[0] == 22 {
+                            if let Some((registry_client, crypto)) = crypto_tls {
+                                // Note: the unwrap() can't fail since we tested Some(crypto)
+                                // above.
+                                let registry_version = registry_client.get_latest_version();
+                                match crypto
+                                    .perform_tls_server_handshake_without_client_auth(
+                                        stream,
+                                        registry_version,
+                                    )
+                                    .await
+                                {
+                                    Err(e) => warn!(log, "TLS error: {}", e),
+                                    Ok(stream) => {
+                                        if let Err(e) =
+                                            http.serve_connection(stream, aservice).await
                                         {
-                                            Err(e) => warn!(log, "TLS error: {}", e),
-                                            Ok((stream, peer)) => {
-                                                if clients_certs_exist && peer == ic_crypto_tls_interfaces::Peer::Unauthenticated {
-                                                    trace!(log, "Connection error: can't serve TLS connection because the client is not unauthenticated.");
-                                                } else if let Err(e) =
-                                                    http.serve_connection(stream, aservice).await
-                                                    {
-                                                        trace!(log, "Connection error: {}", e);
-                                                    }
-                                            }
-                                        };
-                                } else {
-                                    trace!(log, "Connection error: unsupported HTTPS connection");
-                                }
-                            } else {
-                                // HTTP
-                                if let Err(e) = http.serve_connection(stream, aservice).await {
-                                    trace!(log, "Connection error: {}", e);
-                                }
+                                            trace!(log, "Connection error: {}", e);
+                                        }
+                                    }
+                                };
+                            }
+                        } else {
+                            // Fallback to Http.
+                            if let Err(e) = http.serve_connection(stream, aservice).await {
+                                trace!(log, "Connection error: {}", e);
                             }
                         }
                     });

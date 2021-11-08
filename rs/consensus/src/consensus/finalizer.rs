@@ -333,7 +333,7 @@ impl Finalizer {
         pool: &PoolReader<'_>,
         block: &Block,
     ) -> Option<FinalizationShare> {
-        let content = FinalizationContent::new(block.height, ic_crypto::crypto_hash(&block));
+        let content = FinalizationContent::new(block.height, ic_crypto::crypto_hash(block));
         let signature = self
             .crypto
             .sign(

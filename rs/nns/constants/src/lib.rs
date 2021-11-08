@@ -106,3 +106,6 @@ pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {
         NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES
     }
 }
+
+/// The whitelist of allowed node types
+pub const NODE_TYPES: &[&str] = &["default", "small", "storage_upgrade"];

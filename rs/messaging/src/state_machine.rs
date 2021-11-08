@@ -24,6 +24,7 @@ pub(crate) trait StateMachine: Send {
         batch: Batch,
         provisional_whitelist: ProvisionalWhitelist,
         subnet_features: SubnetFeatures,
+        max_number_of_canisters: u64,
     ) -> ReplicatedState;
 }
 pub(crate) struct StateMachineImpl {
@@ -69,10 +70,9 @@ impl StateMachine for StateMachineImpl {
         batch: Batch,
         provisional_whitelist: ProvisionalWhitelist,
         subnet_features: SubnetFeatures,
+        max_number_of_canisters: u64,
     ) -> ReplicatedState {
         let phase_timer = Timer::start();
-
-        let time_of_previous_batch = state.metadata.batch_time;
 
         let mut metadata = state.system_metadata().clone();
         metadata.batch_time = batch.time;
@@ -97,9 +97,9 @@ impl StateMachine for StateMachineImpl {
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
-            time_of_previous_batch,
             ExecutionRound::from(batch.batch_number.get()),
             provisional_whitelist,
+            max_number_of_canisters,
         );
         self.observe_phase_duration(PHASE_EXECUTION, &phase_timer);
 

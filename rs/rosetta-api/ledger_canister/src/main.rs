@@ -128,7 +128,10 @@ async fn send(
     let caller_principal_id = caller();
 
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
-        panic!("Sending from {} is not allowed", caller_principal_id);
+        panic!(
+            "Sending from non-self-authenticating principal or non-whitelisted canister is not allowed: {}",
+            caller_principal_id
+        );
     }
 
     let from = AccountIdentifier::new(caller_principal_id, from_subaccount);
@@ -193,7 +196,17 @@ pub async fn notify(
     let caller_principal_id = caller();
 
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
-        panic!("Notifying from {} is not allowed", caller_principal_id);
+        panic!(
+            "Notifying from non-self-authenticating principal or non-whitelisted canister is not allowed: {}",
+            caller_principal_id
+        );
+    }
+
+    if !LEDGER.read().unwrap().can_be_notified(&to_canister) {
+        panic!(
+            "Notifying non-whitelisted canister is not allowed: {}",
+            to_canister
+        );
     }
 
     let expected_from = AccountIdentifier::new(caller_principal_id, from_subaccount);
@@ -203,20 +216,6 @@ pub async fn notify(
     if max_fee != TRANSACTION_FEE {
         panic!("Transaction fee should be {}", TRANSACTION_FEE);
     }
-
-    // This transaction provides and on chain record that a notification was
-    // attempted
-    let transfer = Operation::Transfer {
-        from: expected_from,
-        to: expected_to,
-        amount: ICPTs::ZERO,
-        fee: max_fee,
-    };
-
-    // While this payment has been made here, it isn't actually committed until you
-    // make an inter canister call. As such we don't reject without rollback until
-    // an inter-canister call has definitely been made
-    add_payment(Memo(block_height), transfer, None);
 
     let raw_block: EncodedBlock =
         match block(block_height).unwrap_or_else(|| panic!("Block {} not found", block_height)) {
@@ -264,6 +263,20 @@ pub async fn notify(
 
     change_notification_state(block_height, block_timestamp, true).expect("Notification failed");
 
+    // This transaction provides and on chain record that a notification was
+    // attempted
+    let transfer = Operation::Transfer {
+        from: expected_from,
+        to: expected_to,
+        amount: ICPTs::ZERO,
+        fee: max_fee,
+    };
+
+    // While this payment has been made here, it isn't actually committed until you
+    // make an inter canister call. As such we don't reject without rollback until
+    // an inter-canister call has definitely been made
+    add_payment(Memo(block_height), transfer, None);
+
     let response = if notify_using_protobuf {
         let bytes = ProtoBuf(transaction_notification_args)
             .into_bytes()
@@ -286,7 +299,7 @@ pub async fn notify(
         )
         .await
     };
-    // Don't panic after here or the notification may be locked like it succeeded
+    // Don't panic after here or the notification might look like it succeeded
     // when actually it failed
 
     // propagate the response/rejection from 'to_canister' if it's shorter than this
@@ -478,7 +491,6 @@ async fn archive_blocks() {
                 "[ledger] Archiving failed. Archived {} out of {} blocks. Error {}",
                 num_sent_blocks, num_blocks, err
             ));
-            return;
         }
     }
 }
@@ -635,7 +647,7 @@ fn total_supply_() {
 fn iter_blocks_() {
     over(protobuf, |IterBlocksArgs { start, length }| {
         let blocks = &LEDGER.read().unwrap().blockchain.blocks;
-        ledger_canister::iter_blocks(&blocks, start, length)
+        ledger_canister::iter_blocks(blocks, start, length)
     });
 }
 

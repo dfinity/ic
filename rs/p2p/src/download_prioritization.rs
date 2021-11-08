@@ -315,7 +315,7 @@ impl AdvertTracker {
     /// Adds a peer. If the peer already exists, it is ignored.
     fn add_peer(&mut self, node_id: NodeId) {
         for x in &self.peers {
-            if x.clone().get() == node_id.get() {
+            if (*x).get() == node_id.get() {
                 return;
             }
         }
@@ -324,7 +324,7 @@ impl AdvertTracker {
 
     /// Removes a peer
     fn remove_peer(&mut self, node_id: NodeId) {
-        self.peers.retain(|x| x.clone().get() != node_id.get());
+        self.peers.retain(|x| (*x).get() != node_id.get());
     }
 
     /// Returns the DownloadAttemptTracker for a chunk
@@ -1577,10 +1577,7 @@ pub(crate) mod test {
             let peer_advert_map = peer_advert_queues.peer_advert_map_ref.read().unwrap();
             for (_, advert_tracker) in peer_advert_map.iter() {
                 let advert_tracker = advert_tracker.read().unwrap();
-                assert_eq!(
-                    advert_tracker.peer_attempted(chunk_id0, &node_test_id(peer)),
-                    false
-                );
+                assert!(!advert_tracker.peer_attempted(chunk_id0, &node_test_id(peer)));
                 node_count += 1;
             }
         }
@@ -1595,10 +1592,7 @@ pub(crate) mod test {
             for (_, advert_tracker) in peer_advert_map.iter() {
                 let mut advert_tracker = advert_tracker.write().unwrap();
                 advert_tracker.record_attempt(chunk_id0, &node_test_id(peer));
-                assert_eq!(
-                    advert_tracker.peer_attempted(chunk_id0, &node_test_id(peer)),
-                    true
-                );
+                assert!(advert_tracker.peer_attempted(chunk_id0, &node_test_id(peer)));
                 node_count += 1;
             }
         }
@@ -1609,18 +1603,12 @@ pub(crate) mod test {
         let peer_advert_map = peer_advert_queues.peer_advert_map_ref.read().unwrap();
         for (_, advert_tracker) in peer_advert_map.iter() {
             let mut advert_tracker = advert_tracker.write().unwrap();
-            assert_eq!(
-                advert_tracker.peer_attempted(chunk_id0, &node_test_id(2)),
-                false
-            );
+            assert!(!advert_tracker.peer_attempted(chunk_id0, &node_test_id(2)));
             advert_tracker.record_attempt(chunk_id0, &node_test_id(2));
-            assert_eq!(
-                advert_tracker.peer_attempted(chunk_id0, &node_test_id(2)),
-                true
-            );
+            assert!(advert_tracker.peer_attempted(chunk_id0, &node_test_id(2)));
             node_count += 1;
             // check is attempts are saturated
-            assert_eq!(advert_tracker.is_attempts_round_complete(chunk_id0), true);
+            assert!(advert_tracker.is_attempts_round_complete(chunk_id0));
             advert_tracker.attempts_round_reset(chunk_id0);
         }
         assert_eq!(node_count, 1);
@@ -1633,10 +1621,7 @@ pub(crate) mod test {
             let peer_advert_map = peer_advert_queues.peer_advert_map_ref.read().unwrap();
             for (_, advert_tracker) in peer_advert_map.iter() {
                 let advert_tracker = advert_tracker.read().unwrap();
-                assert_eq!(
-                    advert_tracker.peer_attempted(chunk_id0, &node_test_id(peer)),
-                    false
-                );
+                assert!(!advert_tracker.peer_attempted(chunk_id0, &node_test_id(peer)));
                 node_count += 1;
             }
         }
@@ -1663,9 +1648,9 @@ pub(crate) mod test {
             .map(|t| {
                 let mut tracker = t.write().unwrap();
                 tracker.unset_in_progress(chunk_id0);
-                assert_eq!(tracker.is_in_progress(chunk_id0), false);
+                assert!(!tracker.is_in_progress(chunk_id0));
                 tracker.set_in_progress(chunk_id0, &node_test_id(0));
-                assert_eq!(tracker.is_in_progress(chunk_id0), true);
+                assert!(tracker.is_in_progress(chunk_id0));
             });
     }
 }

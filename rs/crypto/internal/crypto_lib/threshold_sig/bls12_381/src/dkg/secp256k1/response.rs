@@ -61,8 +61,8 @@ pub fn create_response(
                 receiver_index,
                 &receiver_secret_key,
                 &receiver_public_key,
-                &dealer_public_key_bytes,
-                &dealing,
+                dealer_public_key_bytes,
+                dealing,
             )
             .map(|complaint_maybe| (*dealer_public_key_bytes, complaint_maybe))
         })
@@ -104,7 +104,7 @@ pub fn verify_response(
     }
     for (dealer_public_key_bytes, complaint_maybe) in &response.complaints {
         let dealing = verified_dealings
-            .get(&dealer_public_key_bytes)
+            .get(dealer_public_key_bytes)
             .ok_or_else(|| {
                 DkgVerifyResponseError::InvalidResponseError(InvalidArgumentError {
                     message: "Cannot respond to no dealing".to_string(),
@@ -113,11 +113,11 @@ pub fn verify_response(
         if let Some(complaint) = complaint_maybe {
             complaint::verify_complaint(
                 dkg_id,
-                &dealing,
+                dealing,
                 receiver_index,
-                &dealer_public_key_bytes,
+                dealer_public_key_bytes,
                 &receiver_public_key_bytes,
-                &complaint,
+                complaint,
             )?
         }
     }

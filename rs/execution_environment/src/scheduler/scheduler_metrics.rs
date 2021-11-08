@@ -12,7 +12,6 @@ use crate::metrics::{
 pub(super) struct SchedulerMetrics {
     pub(super) canister_age: Histogram,
     pub(super) canister_compute_allocation_violation: IntCounter,
-    pub(super) charge_resource_allocation_and_use_duration: Histogram,
     pub(super) compute_utilization_per_core: Histogram,
     pub(super) instructions_consumed_per_message: Histogram,
     pub(super) instructions_consumed_per_round: Histogram,
@@ -35,14 +34,23 @@ pub(super) struct SchedulerMetrics {
     pub(super) inner_round_loop_consumed_max_instructions: IntCounter,
     pub(super) num_canisters_uninstalled_out_of_cycles: IntCounter,
     pub(super) round: ScopedMetrics,
+    pub(super) round_preparation_duration: Histogram,
+    pub(super) round_preparation_ingress: Histogram,
     pub(super) round_consensus_queue: ScopedMetrics,
     pub(super) round_subnet_queue: ScopedMetrics,
+    pub(super) round_scheduling_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
     pub(super) round_inner_iteration: ScopedMetrics,
     pub(super) round_inner_iteration_thread: ScopedMetrics,
     pub(super) round_inner_iteration_thread_heartbeat: ScopedMetrics,
     pub(super) round_inner_iteration_thread_message: ScopedMetrics,
+    pub(super) round_finalization_duration: Histogram,
+    pub(super) round_finalization_stop_canisters: Histogram,
+    pub(super) round_finalization_ingress: Histogram,
+    pub(super) round_finalization_charge: Histogram,
     pub(super) execution_round_failed_heartbeat_executions: IntCounter,
+    pub(super) canister_heap_delta_debits: Histogram,
+    pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -61,12 +69,6 @@ impl SchedulerMetrics {
             canister_compute_allocation_violation: metrics_registry.int_counter(
                 "scheduler_compute_allocation_violations",
                 "Total number of canister allocation violations.",
-            ),
-            charge_resource_allocation_and_use_duration: metrics_registry.histogram(
-                "scheduler_charge_resource_allocation_and_use_duration",
-                "Duration of charging canisters for the resource allocation and use in seconds.",
-                // 10µs, 20µs, 50µs, 100µs, ..., 1s, 2s, 5s
-                decimal_buckets(-5, 0),
             ),
             compute_utilization_per_core: metrics_registry.histogram(
                 "scheduler_compute_utilization_per_core",
@@ -88,8 +90,8 @@ impl SchedulerMetrics {
             executable_canisters_per_round: metrics_registry.histogram(
                 "scheduler_executable_canisters_per_round",
                 "Number of canisters that can be executed per round.",
-                // 1, 2, 5, …, 100, 200, 500
-                decimal_buckets(0, 2),
+                // 1, 2, 5, …, 1000, 2000, 5000
+                decimal_buckets(0, 3),
             ),
             expired_ingress_messages_count: metrics_registry.int_counter(
                 "scheduler_expired_ingress_messages_count",
@@ -99,11 +101,10 @@ impl SchedulerMetrics {
                 "replicated_state_ingress_history_length",
                 "Total number of entries kept in the ingress history.",
             ),
-            msg_execution_duration: metrics_registry.histogram(
+            msg_execution_duration: duration_histogram(
                 "scheduler_message_execution_duration_seconds",
                 "Duration of single message execution in seconds.",
-                // 10µs, 20µs, 50µs, 100µs, ..., 1s, 2s, 5s
-                decimal_buckets(-5, 0),
+                metrics_registry,
             ),
             registered_canisters: metrics_registry.int_gauge_vec(
                 "replicated_state_registered_canisters",
@@ -194,6 +195,16 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
+            round_preparation_duration: duration_histogram(
+                "execution_round_preparation_duration_seconds",
+                "Duration of execution round preparation in seconds.",
+                metrics_registry,
+            ),
+            round_preparation_ingress: duration_histogram(
+                "execution_round_preparation_ingress_pruning_duration_seconds",
+                "Duration of purging ingress during execution round preparation in seconds.",
+                metrics_registry,
+            ),
             round_consensus_queue: ScopedMetrics {
                 duration: duration_histogram(
                     "execution_round_consensus_queue_duration_seconds",
@@ -234,6 +245,11 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
+            round_scheduling_duration: duration_histogram(
+                "execution_round_scheduling_duration_seconds",
+                "Duration of execution round scheduling in seconds.",
+                metrics_registry,
+            ),
             round_inner: ScopedMetrics {
                 duration: duration_histogram(
                     "execution_round_inner_duration_seconds",
@@ -328,10 +344,43 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
+            round_finalization_duration: duration_histogram(
+                "execution_round_finalization_duration_seconds",
+                "Duration of execution round finalization in seconds.",
+                metrics_registry,
+            ),
+            round_finalization_stop_canisters: duration_histogram(
+                "execution_round_finalization_stop_canisters_duration_seconds",
+                "Duration of stopping canisters during execution round finalization in seconds.",
+                metrics_registry,
+            ),
+            round_finalization_ingress: duration_histogram(
+                "execution_round_finalization_ingress_history_prune_duration_seconds",
+                "Duration of pruning ingress during execution round finalization in seconds.",
+                metrics_registry,
+            ),
+            round_finalization_charge: duration_histogram(
+                "execution_round_finalization_charge_resources_duration_seconds",
+                "Duration of charging for resources during execution round finalization in seconds.",
+                metrics_registry,
+            ),
             execution_round_failed_heartbeat_executions: metrics_registry.int_counter(
                 "execution_round_failed_heartbeat_executions",
                 "Total number of heartbeat executions that completed in error"
-            )
+            ),
+            canister_heap_delta_debits: metrics_registry.histogram(
+                "scheduler_canister_heap_delta_debits",
+                "The heap delta debit of a canister at the end of the round, before \
+                subtracting the rate limit allowed amount.",
+                // 1 MB, 2 MB, 5 MB, ..., 10 GB, 20 GB, 50 GB
+                decimal_buckets(6, 10)
+            ),
+            heap_delta_rate_limited_canisters_per_round: metrics_registry.histogram(
+                "scheduler_heap_delta_rate_limited_canisters_per_round",
+                "Number of canisters that were heap delta rate limited in a given round.",
+                // 1, 2, 5, …, 1000, 2000, 5000
+                decimal_buckets(0, 3),
+            ),
         }
     }
 

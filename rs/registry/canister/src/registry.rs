@@ -12,9 +12,11 @@ use crate::{
         registry_stable_storage::Version as ReprVersion, ChangelogEntry, RegistryStableStorage,
     },
 };
+use ic_certified_map::RbTree;
 use prost::Message;
 use std::cmp::max;
 use std::collections::{BTreeMap, VecDeque};
+use std::fmt;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -25,6 +27,38 @@ use dfn_core::println;
 /// so that we're able to call pop_front().
 pub type RegistryMap = BTreeMap<Vec<u8>, VecDeque<RegistryValue>>;
 pub type Version = u64;
+#[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Default)]
+pub struct EncodedVersion([u8; 8]);
+
+impl EncodedVersion {
+    pub const fn as_version(&self) -> Version {
+        Version::from_be_bytes(self.0)
+    }
+}
+
+impl fmt::Debug for EncodedVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_version())
+    }
+}
+
+impl From<Version> for EncodedVersion {
+    fn from(v: Version) -> Self {
+        Self(v.to_be_bytes())
+    }
+}
+
+impl From<EncodedVersion> for Version {
+    fn from(v: EncodedVersion) -> Self {
+        v.as_version()
+    }
+}
+
+impl AsRef<[u8]> for EncodedVersion {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
 
 /// The main struct for the Registry.
 ///
@@ -50,7 +84,7 @@ pub struct Registry {
     /// Each entry contains a blob which is a serialized
     /// RegistryAtomicMutateRequest.  We keep the serialized version around to
     /// make sure that hash trees stay the same even if protobuf schema evolves.
-    changelog: Vec<(Version, Vec<u8>)>,
+    changelog: RbTree<EncodedVersion, Vec<u8>>,
 }
 
 impl Registry {
@@ -161,7 +195,7 @@ impl Registry {
         };
         let bytes = pb_encode(&req);
 
-        self.changelog.push((version, bytes));
+        self.changelog.insert(version.into(), bytes);
 
         for mutation in req.mutations {
             (*self.store.entry(mutation.key).or_default()).push_back(RegistryValue {
@@ -196,7 +230,7 @@ impl Registry {
             .map(|m| {
                 let key = &m.key;
                 let latest = self
-                    .get_last(&key)
+                    .get_last(key)
                     .filter(|registry_value| !registry_value.deletion_marker);
                 match (Type::from_i32(m.mutation_type), latest) {
                     (None, _) => Err(Error::MalformedMessage(format!(
@@ -252,8 +286,8 @@ impl Registry {
                 changelog: self
                     .changelog
                     .iter()
-                    .map(|(version, bytes)| ChangelogEntry {
-                        version: *version,
+                    .map(|(encoded_version, bytes)| ChangelogEntry {
+                        version: encoded_version.as_version(),
                         encoded_mutation: bytes.clone(),
                     })
                     .collect(),
@@ -277,8 +311,8 @@ impl Registry {
         self.serializable_form_at(ReprVersion::Version1)
     }
 
-    pub fn changelog(&self) -> &[(Version, Vec<u8>)] {
-        &self.changelog[..]
+    pub fn changelog(&self) -> &RbTree<EncodedVersion, Vec<u8>> {
+        &self.changelog
     }
 
     /// Sets the content of the registry from its serialized representation.
@@ -350,7 +384,7 @@ impl Registry {
                     .into_iter()
                     .map(|(v, mutations)| {
                         (
-                            v,
+                            EncodedVersion::from(v),
                             pb_encode(&RegistryAtomicMutateRequest {
                                 mutations,
                                 preconditions: vec![],
@@ -526,7 +560,7 @@ mod tests {
         assert_eq!(key2_values.len(), 2);
         assert_eq!(key1_values[0].value, value1);
         assert_eq!(key1_values[0].version, 4);
-        assert_eq!(key1_values[1].deletion_marker, true);
+        assert!(key1_values[1].deletion_marker);
         assert_eq!(key1_values[1].version, 3);
 
         assert_eq!(deltas, registry.get_changes_since(0, Some(4)));
@@ -540,7 +574,7 @@ mod tests {
         let key2_values = &deltas.get(1).unwrap().values;
         assert_eq!(key1_values.len(), 2);
         assert_eq!(key2_values.len(), 2);
-        assert_eq!(key1_values[0].deletion_marker, true);
+        assert!(key1_values[0].deletion_marker);
         assert_eq!(key1_values[0].version, 3);
         assert_eq!(key1_values[1].value, value2);
         assert_eq!(key1_values[1].version, 2);

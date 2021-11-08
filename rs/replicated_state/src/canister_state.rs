@@ -8,7 +8,6 @@ use crate::canister_state::system_state::{CanisterStatus, SystemState};
 use crate::StateError;
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_interfaces::messages::CanisterInputMessage;
-use ic_types::messages::MAX_RESPONSE_COUNT_BYTES;
 use ic_types::methods::SystemMethod;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
@@ -68,7 +67,7 @@ pub struct CanisterState {
     /// This may or may not exist depending on whether or not the canister has
     /// an actual wasm module. A valid canister is not required to contain a
     /// Wasm module. Canisters without Wasm modules can exist as a store of
-    /// DFNs; temporarily when they are being upgraded, etc.
+    /// ICP; temporarily when they are being upgraded, etc.
     pub execution_state: Option<ExecutionState>,
 
     /// See `SchedulerState` for documentation.
@@ -97,12 +96,28 @@ impl CanisterState {
     }
 
     /// See `SystemState::push_input` for documentation.
+    ///
+    /// `max_canister_memory_size` is the replica's configured maximum canister
+    /// memory usage. The specific canister may have an explicit memory
+    /// allocation, which would override this maximum. Based on the canister's
+    /// specific memory limit we compute the canister's available memory and
+    /// pass that to `SystemState::push_input()` (which doesn't have all the
+    /// data necessary to compute it itself).
     pub fn push_input(
         &mut self,
         index: QueueIndex,
         msg: RequestOrResponse,
+        max_canister_memory_size: NumBytes,
+        subnet_available_memory: &mut i64,
     ) -> Result<(), (StateError, RequestOrResponse)> {
-        self.system_state.push_input(index, msg)
+        let canister_available_memory = self.memory_limit(max_canister_memory_size).get() as i64
+            - self.memory_usage().get() as i64;
+        self.system_state.push_input(
+            index,
+            msg,
+            canister_available_memory,
+            subnet_available_memory,
+        )
     }
 
     /// See `SystemState::pop_input` for documentation.
@@ -145,6 +160,30 @@ impl CanisterState {
         self.system_state.output_into_iter(canister_id)
     }
 
+    /// Inducts messages from the output queue to `self` into the input queue
+    /// from `self` while respecting queue capacity; the canister's computed
+    /// available memory; and subnet available memory.
+    ///
+    /// `max_canister_memory_size` is the replica's configured maximum canister
+    /// memory usage. The specific canister may have an explicit memory
+    /// allocation, which would override this maximum. Based on the canister's
+    /// specific memory limit we compute the canister's available memory and
+    /// pass that to `SystemState::induct_messages_to_self()` (which doesn't
+    /// have all the data necessary to compute it itself).
+    ///
+    /// `subnet_available_memory` is updated to reflect the change in memory
+    /// usage due to inducting the messages.
+    pub fn induct_messages_to_self(
+        &mut self,
+        max_canister_memory_size: NumBytes,
+        subnet_available_memory: &mut i64,
+    ) {
+        let canister_available_memory = self.memory_limit(max_canister_memory_size).get() as i64
+            - self.memory_usage().get() as i64;
+        self.system_state
+            .induct_messages_to_self(canister_available_memory, subnet_available_memory)
+    }
+
     pub fn into_parts(self) -> (Option<ExecutionState>, SystemState, SchedulerState) {
         (
             self.execution_state,
@@ -167,20 +206,17 @@ impl CanisterState {
 
     /// The amount of memory currently being used by the canister.
     pub fn memory_usage(&self) -> NumBytes {
-        let mut memory_usage = self
-            .execution_state
+        self.execution_state
             .as_ref()
             .map_or(NumBytes::from(0), |es| es.memory_usage())
-            + self.system_state.memory_usage();
+            + self.system_state.memory_usage()
+    }
 
-        if ENFORCE_MESSAGE_MEMORY_USAGE {
-            let queues = self.system_state.queues();
-            let message_memory_usage =
-                queues.responses_size_bytes() + queues.reserved_slots() * MAX_RESPONSE_COUNT_BYTES;
-            memory_usage += (message_memory_usage as u64).into();
-        }
-
-        memory_usage
+    /// Sets the (transient) size in bytes of responses from this canister
+    /// routed into streams and not yet garbage collected.
+    pub(super) fn set_stream_responses_size_bytes(&mut self, size_bytes: usize) {
+        self.system_state
+            .set_stream_responses_size_bytes(size_bytes);
     }
 
     /// Returns the current memory allocation of the canister.
@@ -269,9 +305,7 @@ pub fn num_bytes_try_from64(pages: NumWasmPages64) -> Result<NumBytes, String> {
 }
 
 pub mod testing {
-    use ic_types::{messages::RequestOrResponse, QueueIndex};
-
-    use crate::{CanisterState, StateError};
+    use super::*;
 
     pub use super::queues::testing::CanisterQueuesTesting;
 
@@ -291,7 +325,12 @@ pub mod testing {
             index: QueueIndex,
             msg: RequestOrResponse,
         ) -> Result<(), (StateError, RequestOrResponse)> {
-            (self as &mut CanisterState).push_input(index, msg)
+            (self as &mut CanisterState).push_input(
+                index,
+                msg,
+                (i64::MAX as u64 / 2).into(),
+                &mut (i64::MAX / 2),
+            )
         }
     }
 }

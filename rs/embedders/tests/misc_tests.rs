@@ -1,7 +1,7 @@
 mod wasmtime_simple;
 
+use ic_embedders::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_wasm_types::BinaryEncodedWasm;
-use ic_wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use parity_wasm::elements::Module;
 
 fn assert_memory_and_table_exports(module: &Module) {

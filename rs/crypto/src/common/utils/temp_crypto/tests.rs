@@ -34,7 +34,7 @@ fn should_create_with_tempdir_that_exists() {
 fn should_set_correct_tempdir_permissions() {
     let temp_crypto = TempCryptoComponent::new(empty_fake_registry(), node_test_id(NODE_ID));
     // the 40 indicates that this is a directory, 700 is the file permission we set.
-    assert_eq!(permission_mode(&temp_crypto.temp_dir.path()), 0o40700);
+    assert_eq!(permission_mode(temp_crypto.temp_dir.path()), 0o40700);
 }
 
 fn permission_mode(path: &Path) -> u32 {

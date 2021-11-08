@@ -49,7 +49,7 @@ pub fn generate_ed25519_tlscert() -> (PKey<Private>, TlsPublicKeyCert) {
 /// Converts the `cert` into an `X509PublicKeyCert`.
 pub fn x509_public_key_cert(cert: &X509) -> X509PublicKeyCert {
     X509PublicKeyCert {
-        certificate_der: cert_to_der(&cert),
+        certificate_der: cert_to_der(cert),
     }
 }
 
@@ -188,9 +188,7 @@ impl CertBuilder {
             .set_version(version - 1) // OpenSSL uses index origin 0 for version
             .expect("unable to set version");
         builder
-            .set_serial_number(&serial_number(
-                self.serial_number.clone().unwrap_or(DEFAULT_SERIAL),
-            ))
+            .set_serial_number(&serial_number(self.serial_number.unwrap_or(DEFAULT_SERIAL)))
             .expect("unable to set serial number");
         let subject_cn = x509_name_with_cn(
             &self.cn.clone().unwrap_or_else(|| DEFAULT_CN.to_string()),
@@ -219,7 +217,7 @@ impl CertBuilder {
         }
         if let Some((ca_key, issuer)) = &self.ca_signing_data {
             // CA signed cert:
-            let issuer_cn = x509_name_with_cn(&issuer, self.duplicate_issuer_cn);
+            let issuer_cn = x509_name_with_cn(issuer, self.duplicate_issuer_cn);
             builder
                 .set_issuer_name(&issuer_cn)
                 .expect("unable to set issuer cn");

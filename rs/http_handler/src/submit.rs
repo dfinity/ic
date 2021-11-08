@@ -11,8 +11,9 @@ use ic_registry_client::helper::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
+    canonical_error::{internal_error, invalid_argument_error, out_of_range_error, CanonicalError},
     malicious_flags::MaliciousFlags,
-    messages::{HttpHandlerError, SignedIngress, SignedRequestBytes},
+    messages::{SignedIngress, SignedRequestBytes},
     time::current_time,
     CountBytes, RegistryVersion, SubnetId,
 };
@@ -27,7 +28,7 @@ fn get_registry_data(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: Arc<dyn RegistryClient>,
-) -> Result<(IngressMessageSettings, ProvisionalWhitelist), Response<Body>> {
+) -> Result<(IngressMessageSettings, ProvisionalWhitelist), CanonicalError> {
     let settings = match registry_client.get_ingress_message_settings(subnet_id, registry_version) {
         Ok(Some(settings)) => settings,
         Ok(None) => {
@@ -36,10 +37,7 @@ fn get_registry_data(
                 registry_version, subnet_id
             );
             warn!(log, "{}", err_msg);
-            return Err(common::make_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &err_msg,
-            ));
+            return Err(internal_error(&err_msg));
         }
         Err(err) => {
             let err_msg = format!(
@@ -47,10 +45,7 @@ fn get_registry_data(
                 registry_version, subnet_id, err
             );
             error!(log, "{}", err_msg);
-            return Err(common::make_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &err_msg,
-            ));
+            return Err(internal_error(&err_msg));
         }
     };
 
@@ -81,33 +76,22 @@ pub(crate) async fn handle(
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     malicious_flags: MaliciousFlags,
     body: Vec<u8>,
-) -> Response<Body> {
+) -> Result<Response<Body>, CanonicalError> {
     // Actual parsing.
     let msg: SignedIngress = match SignedRequestBytes::from(body).try_into() {
         Ok(msg) => msg,
         Err(e) => {
-            let error_code = match e {
-                HttpHandlerError::InvalidEncoding(_) => StatusCode::UNPROCESSABLE_ENTITY,
-                _ => StatusCode::BAD_REQUEST,
-            };
-            return common::make_response(
-                error_code,
+            return Err(invalid_argument_error(
                 format!("Could not parse body as submit message: {}", e).as_str(),
-            );
+            ));
         }
     };
     let message_id = msg.id();
     let registry_version = registry_client.get_latest_version();
     let (ingress_registry_settings, provisional_whitelist) =
-        match get_registry_data(&log, subnet_id, registry_version, registry_client) {
-            Ok(v) => v,
-            Err(err) => {
-                return err;
-            }
-        };
+        get_registry_data(&log, subnet_id, registry_version, registry_client)?;
     if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
-        return common::make_response(
-            StatusCode::PAYLOAD_TOO_LARGE,
+        return Err(out_of_range_error(
             format!(
                 "Request {} is too large. Message bytes {} is bigger than the max allowed {}.",
                 message_id,
@@ -115,7 +99,7 @@ pub(crate) async fn handle(
                 ingress_registry_settings.max_ingress_bytes_per_message
             )
             .as_str(),
-        );
+        ));
     }
 
     if let Err(err) = validate_request(
@@ -125,7 +109,9 @@ pub(crate) async fn handle(
         registry_version,
         &malicious_flags,
     ) {
-        return common::make_response_on_validation_error(message_id, err, &log);
+        return Err(common::make_response_on_validation_error(
+            message_id, err, &log,
+        ));
     }
 
     let ingress_filter_callback = ingress_filter
@@ -136,12 +122,7 @@ pub(crate) async fn handle(
         .expect("The service must always be able to process requests")
         .call((provisional_whitelist, msg.content().clone()));
 
-    if let Err(canonical_error) = ingress_filter_callback.await {
-        return common::make_response(
-            StatusCode::from(canonical_error.code),
-            canonical_error.message.as_str(),
-        );
-    }
+    ingress_filter_callback.await?;
     let ingress_log_entry = msg.log_entry();
     let ingress_sender_callback = ingress_sender
         .lock()
@@ -151,23 +132,20 @@ pub(crate) async fn handle(
         .expect("The service must always be able to process requests")
         .call(msg);
 
-    match ingress_sender_callback.await {
-        Err(canonical_error) => common::make_response(
-            StatusCode::from(canonical_error.code),
-            canonical_error.message.as_str(),
-        ),
-        Ok(_) => {
-            // We're pretty much done, just need to send the message to ingress and
-            // make_response to the client
-            info_sample!(
-                "message_id" => &message_id,
-                log,
-                "ingress_message_submit";
-                ingress_message => ingress_log_entry
-            );
-            common::make_response(StatusCode::ACCEPTED, "")
-        }
-    }
+    ingress_sender_callback.await?;
+    // We're pretty much done, just need to send the message to ingress and
+    // make_response to the client
+    info_sample!(
+        "message_id" => &message_id,
+        log,
+        "ingress_message_submit";
+        ingress_message => ingress_log_entry
+    );
+
+    let mut response = Response::new(Body::from(""));
+    *response.status_mut() = StatusCode::ACCEPTED;
+    *response.headers_mut() = common::get_cors_headers();
+    Ok(response)
 }
 
 #[cfg(test)]

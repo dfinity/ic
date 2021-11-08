@@ -147,7 +147,7 @@ impl EcdsaPoolSection for EcdsaPoolSectionImpl {
 }
 
 /// The artifact pool implementation.
-struct EcdsaPoolImpl {
+pub struct EcdsaPoolImpl {
     validated: EcdsaPoolSectionImpl,
     unvalidated: EcdsaPoolSectionImpl,
     log: ReplicaLogger,
@@ -194,7 +194,7 @@ impl MutableEcdsaPool for EcdsaPoolImpl {
                     self.validated.insert_object(message);
                 }
                 EcdsaChangeAction::MoveToValidated(ref msg_id) => {
-                    if let Some(removed) = self.unvalidated.remove_object(&msg_id) {
+                    if let Some(removed) = self.unvalidated.remove_object(msg_id) {
                         self.validated.insert_object(removed);
                     } else {
                         warn!(
@@ -204,15 +204,15 @@ impl MutableEcdsaPool for EcdsaPoolImpl {
                     }
                 }
                 EcdsaChangeAction::RemoveUnvalidated(ref msg_id) => {
-                    if self.unvalidated.remove_object(&msg_id).is_none() {
+                    if self.unvalidated.remove_object(msg_id).is_none() {
                         warn!(
                             self.log,
                             "RemoveUnvalidated:: artifact was not found: {:?}", action
                         );
                     }
                 }
-                EcdsaChangeAction::HandleInvalid(ref msg_id) => {
-                    if self.unvalidated.remove_object(&msg_id).is_none() {
+                EcdsaChangeAction::HandleInvalid(ref msg_id, _) => {
+                    if self.unvalidated.remove_object(msg_id).is_none() {
                         warn!(
                             self.log,
                             "HandleInvalid:: artifact was not found: {:?}", action
@@ -253,34 +253,16 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::types::ids::NODE_1;
     use ic_test_utilities::FastForwardTimeSource;
-    use ic_types::crypto::canister_threshold_sig::idkg::{
-        IDkgDealers, IDkgDealing, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptOperation,
-        IDkgTranscriptParams,
-    };
-    use ic_types::crypto::AlgorithmId;
-    use ic_types::{Height, NumberOfNodes, RegistryVersion};
+    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptId};
+    use ic_types::Height;
     use std::collections::BTreeSet;
 
-    fn create_ecdsa_dealing(id: IDkgTranscriptId) -> EcdsaDealing {
-        let mut nodes = BTreeSet::new();
-        nodes.insert(NODE_1);
-        let transcript_params = IDkgTranscriptParams::new(
-            id,
-            NumberOfNodes::from(1),
-            IDkgDealers::new(nodes.clone()).unwrap(),
-            NumberOfNodes::from(1),
-            IDkgReceivers::new(nodes).unwrap(),
-            NumberOfNodes::from(1),
-            RegistryVersion::from(0),
-            AlgorithmId::Placeholder,
-            IDkgTranscriptOperation::Random,
-        );
-
+    fn create_ecdsa_dealing(transcript_id: IDkgTranscriptId) -> EcdsaDealing {
         let dealing = IDkgDealing::dummy_for_tests();
         EcdsaDealing {
-            finalized_height: Height::from(10),
+            requested_height: Height::from(10),
             dealer_id: NODE_1,
-            transcript_params,
+            transcript_id,
             dealing,
         }
     }
@@ -326,7 +308,7 @@ mod tests {
         for id in &validated {
             assert!(validated_expected.contains(id));
             assert!(ecdsa_pool.contains(id));
-            assert!(ecdsa_pool.get_validated_by_identifier(&id).is_some());
+            assert!(ecdsa_pool.get_validated_by_identifier(id).is_some());
 
             assert!(ecdsa_pool.validated().contains(id));
             assert!(ecdsa_pool.validated().get(id).is_some());
@@ -339,7 +321,7 @@ mod tests {
         for id in &unvalidated {
             assert!(unvalidated_expected.contains(id));
             assert!(ecdsa_pool.contains(id));
-            assert!(ecdsa_pool.get_validated_by_identifier(&id).is_none());
+            assert!(ecdsa_pool.get_validated_by_identifier(id).is_none());
 
             assert!(ecdsa_pool.unvalidated().contains(id));
             assert!(ecdsa_pool.unvalidated().get(id).is_some());
@@ -389,8 +371,8 @@ mod tests {
         assert!(object_pool.get_object(&key_2).is_none());
         assert!(object_pool.remove_object(&key_2).is_none());
 
-        let items: Vec<(&CryptoHashOf<EcdsaDealing>, &EcdsaDealing)> = object_pool.iter().collect();
-        assert_eq!(items.len(), 0);
+        let items = object_pool.iter();
+        assert_eq!(items.count(), 0);
     }
 
     #[test]
@@ -541,7 +523,10 @@ mod tests {
         };
         check_state(&ecdsa_pool, &[msg_id.clone()], &[]);
 
-        ecdsa_pool.apply_changes(vec![EcdsaChangeAction::HandleInvalid(msg_id)]);
+        ecdsa_pool.apply_changes(vec![EcdsaChangeAction::HandleInvalid(
+            msg_id,
+            "test".to_string(),
+        )]);
         check_state(&ecdsa_pool, &[], &[]);
     }
 }

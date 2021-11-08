@@ -97,7 +97,7 @@ impl WasmtimeSimple {
         module_registry: &ModuleRegistry,
         wasm_binary: &[u8],
     ) -> Instance {
-        instantiate_module(&self.engine, &mut self.store, module_registry, &wasm_binary).unwrap()
+        instantiate_module(&self.engine, &mut self.store, module_registry, wasm_binary).unwrap()
     }
 }
 
@@ -138,7 +138,7 @@ fn instantiate_module(
     module_registry: &ModuleRegistry,
     wasm_binary: &[u8],
 ) -> Result<Instance, Box<dyn std::error::Error>> {
-    let module = Module::new(&engine, &wasm_binary)?;
+    let module = Module::new(engine, &wasm_binary)?;
     // Resolve import using module_registry.
     let mut imports = vec![];
     for i in module.imports() {

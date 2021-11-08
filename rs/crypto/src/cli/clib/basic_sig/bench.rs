@@ -37,9 +37,9 @@ fn core() -> Result<(), (String, i32)> {
         let after_keygen = Instant::now();
         let message =
             "Twas brillig, and the slithy toves, did gyre and gimble in the wabe".as_bytes();
-        let signature = sign(&message, &secret_key).map_err(|e| (format!("{:?}", e), 2))?;
+        let signature = sign(message, &secret_key).map_err(|e| (format!("{:?}", e), 2))?;
         let after_signing = Instant::now();
-        verify(&signature, &message, &public_key)
+        verify(&signature, message, &public_key)
             .map_err(|_| ("Signature verification failed".to_string(), 2))?;
         let after_verification = Instant::now();
 

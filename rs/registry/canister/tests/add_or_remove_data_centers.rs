@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
+use candid::Encode;
 use canister_test::Canister;
-use ic_nns_common::registry::encode_or_panic;
+use dfn_candid::candid_one;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
@@ -15,7 +16,7 @@ use ic_protobuf::registry::dc::v1::{
 use ic_registry_keys::make_data_center_record_key;
 use ic_registry_transport::{deserialize_get_value_response, serialize_get_value_request};
 use ic_registry_transport::{Error, Error::KeyNotPresent};
-use registry_canister::{init::RegistryCanisterInitPayloadBuilder, proto_on_wire::protobuf};
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 
 /// Attempt to get a value from the Registry and return the error if one
 /// occurs, or else panic!
@@ -63,7 +64,7 @@ fn test_the_anonymous_user_cannot_add_or_remove_data_centers() {
         // The anonymous end-user tries to add data centers, bypassing
         // the Governance canister. This should be rejected.
         let response: Result<(), String> = registry
-            .update_("add_or_remove_data_centers", protobuf, payload.clone())
+            .update_("add_or_remove_data_centers", candid_one, payload.clone())
             .await;
 
         assert_matches!(
@@ -78,7 +79,7 @@ fn test_the_anonymous_user_cannot_add_or_remove_data_centers() {
         // Go through an upgrade cycle, and verify that it still works the same
         registry.upgrade_to_self_binary(vec![]).await.unwrap();
         let response: Result<(), String> = registry
-            .update_("add_or_remove_data_centers", protobuf, payload.clone())
+            .update_("add_or_remove_data_centers", candid_one, payload.clone())
             .await;
 
         assert_matches!(
@@ -132,7 +133,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_or_remove_data_
                 &attacker_canister,
                 &registry,
                 "add_or_remove_data_centers",
-                encode_or_panic(&payload),
+                Encode!(&payload).unwrap(),
             )
             .await
         );
@@ -209,7 +210,7 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
                 &fake_governance_canister,
                 &registry,
                 "add_or_remove_data_centers",
-                encode_or_panic(&payload),
+                Encode!(&payload).unwrap(),
             )
             .await
         );
@@ -261,7 +262,7 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
                 &fake_governance_canister,
                 &registry,
                 "add_or_remove_data_centers",
-                encode_or_panic(&payload),
+                Encode!(&payload).unwrap(),
             )
             .await
         );
@@ -292,7 +293,7 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
                 &fake_governance_canister,
                 &registry,
                 "add_or_remove_data_centers",
-                encode_or_panic(&payload),
+                Encode!(&payload).unwrap(),
             )
             .await
         );

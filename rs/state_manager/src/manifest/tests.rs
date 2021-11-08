@@ -1,16 +1,19 @@
 use super::{
-    compute_manifest, diff_manifest, filter_out_zero_chunks, hash::ManifestHash, manifest_hash,
-    validate_chunk, validate_manifest, ChunkValidationError, DiffScript, ManifestValidationError,
-    STATE_SYNC_V1,
+    compute_manifest, diff_manifest, file_chunk_range, filter_out_zero_chunks, hash::ManifestHash,
+    manifest_hash, validate_chunk, validate_manifest, ChunkValidationError, DiffScript,
+    ManifestValidationError, CURRENT_STATE_SYNC_VERSION, STATE_SYNC_V1,
 };
+use crate::ManifestMetrics;
 
 use ic_crypto_sha::Sha256;
+use ic_metrics::MetricsRegistry;
 use ic_types::{
     crypto::CryptoHash,
     state_sync::{decode_manifest, encode_manifest, ChunkInfo, FileInfo, Manifest},
     CryptoHashOfState,
 };
 
+use ic_logger::replica_logger::no_op_logger;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 
@@ -178,6 +181,8 @@ fn simple_manifest() -> ([u8; 32], Manifest) {
 
 #[test]
 fn test_simple_manifest_computation() {
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
     let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
 
     let root = dir.path();
@@ -189,8 +194,15 @@ fn test_simple_manifest_computation() {
     fs::write(subdir.join("queue"), vec![0u8; 0]).expect("failed to create file 'queue'");
     fs::write(subdir.join("metadata"), vec![2u8; 1050]).expect("failed to create file 'queue'");
 
-    let manifest =
-        compute_manifest(STATE_SYNC_V1, &root, 1024).expect("failed to compute manifest");
+    let manifest = compute_manifest(
+        &manifest_metrics,
+        &no_op_logger(),
+        STATE_SYNC_V1,
+        root,
+        1024,
+        None,
+    )
+    .expect("failed to compute manifest");
 
     let (expected_hash, expected_manifest) = simple_manifest();
 
@@ -308,7 +320,7 @@ fn test_diff_simple_manifest() {
         .zip(indices.into_iter())
         .collect();
     assert_eq!(
-        diff_manifest(&manifest_old, &manifest_new),
+        diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {
             copy_files,
             copy_chunks: Default::default(),
@@ -360,7 +372,7 @@ fn test_diff_simple_manifest() {
     let fetch_chunks: HashSet<usize> = maplit::hashset! {2};
 
     assert_eq!(
-        diff_manifest(&manifest_old, &manifest_new),
+        diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {
             copy_files,
             copy_chunks,
@@ -372,6 +384,8 @@ fn test_diff_simple_manifest() {
 
 #[test]
 fn test_diff_manifest() {
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
     let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let root = dir.path();
 
@@ -386,16 +400,30 @@ fn test_diff_manifest() {
         .expect("failed to create file 'metadata'");
     fs::write(subdir.join("queue"), vec![0u8; 0]).expect("failed to create file 'queue'");
 
-    let manifest_old =
-        compute_manifest(STATE_SYNC_V1, &root, 1024 * 1024).expect("failed to compute manifest");
+    let manifest_old = compute_manifest(
+        &manifest_metrics,
+        &no_op_logger(),
+        STATE_SYNC_V1,
+        root,
+        1024 * 1024,
+        None,
+    )
+    .expect("failed to compute manifest");
 
     fs::write(subdir.join("metadata"), vec![3u8; 2048 * 1024])
         .expect("failed to write file 'metadata'");
     fs::write(subdir.join("queue"), vec![0u8; 2048 * 1024]).expect("failed to write file 'queue'");
     // The files in the manifest is sorted by relative path. The index of file
     // 'metadata' is 2. The indices of its chunks are 3 and 4.
-    let manifest_new =
-        compute_manifest(STATE_SYNC_V1, &root, 1024 * 1024).expect("failed to compute manifest");
+    let manifest_new = compute_manifest(
+        &manifest_metrics,
+        &no_op_logger(),
+        STATE_SYNC_V1,
+        root,
+        1024 * 1024,
+        None,
+    )
+    .expect("failed to compute manifest");
 
     let copy_files: HashMap<usize, usize> = maplit::hashmap! {
         0 => 0,
@@ -409,7 +437,7 @@ fn test_diff_manifest() {
     };
 
     assert_eq!(
-        diff_manifest(&manifest_old, &manifest_new),
+        diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {
             copy_files,
             copy_chunks,
@@ -421,6 +449,8 @@ fn test_diff_manifest() {
 
 #[test]
 fn test_filter_all_zero_chunks() {
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
     let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let root = dir.path();
 
@@ -435,12 +465,80 @@ fn test_filter_all_zero_chunks() {
         .expect("failed to create file 'metadata'");
     fs::write(subdir.join("queue"), vec![0u8; 1050 * 1024]).expect("failed to create file 'queue'");
 
-    let manifest =
-        compute_manifest(STATE_SYNC_V1, &root, 1024 * 1024).expect("failed to compute manifest");
+    let manifest = compute_manifest(
+        &manifest_metrics,
+        &no_op_logger(),
+        STATE_SYNC_V1,
+        root,
+        1024 * 1024,
+        None,
+    )
+    .expect("failed to compute manifest");
 
     let fetch_chunks: HashSet<usize> = maplit::hashset! {0, 3, 4, 6};
 
     assert_eq!(filter_out_zero_chunks(&manifest), fetch_chunks);
+}
+
+#[test]
+fn test_missing_simple_manifest() {
+    let (_, manifest_old) = simple_manifest();
+    let manifest_new = manifest_old.clone();
+    let len = manifest_new.file_table.len();
+    let indices = (0..len).collect::<Vec<usize>>();
+    let copy_files: HashMap<_, _> = indices
+        .clone()
+        .into_iter()
+        .zip(indices.into_iter())
+        .collect();
+    assert_eq!(
+        diff_manifest(&manifest_old, &Default::default(), &manifest_new),
+        DiffScript {
+            copy_files,
+            copy_chunks: Default::default(),
+            fetch_chunks: Default::default(),
+            zeros_chunks: 0,
+        }
+    );
+
+    // the chunk_2 from the file_1 is marked as missing, but chunk_1 is the same as
+    // chunk_2
+    let missing_chunks = maplit::hashset! {2};
+
+    assert_eq!(
+        diff_manifest(&manifest_old, &missing_chunks, &manifest_new),
+        DiffScript {
+            copy_files: maplit::hashmap! {
+                0 => 0,
+                2 => 2,
+                3 => 3,
+            },
+            copy_chunks: maplit::hashmap! {
+                1 => 1, 2 => 1,
+            },
+            fetch_chunks: Default::default(),
+            zeros_chunks: 0,
+        }
+    );
+
+    // both chunk_1 and chunk_2 from file_1 are missing, need to be fetched
+    let missing_chunks = maplit::hashset! {1, 2};
+
+    assert_eq!(
+        diff_manifest(&manifest_old, &missing_chunks, &manifest_new),
+        DiffScript {
+            copy_files: maplit::hashmap! {
+                0 => 0,
+                2 => 2,
+                3 => 3,
+            },
+            copy_chunks: Default::default(),
+            // Even though chunks 1 and 2 have the same hash, we do not handle this case and
+            // simply ask to fetch both independently
+            fetch_chunks: maplit::hashset! {1, 2},
+            zeros_chunks: 0,
+        }
+    );
 }
 
 #[test]
@@ -450,4 +548,120 @@ fn test_simple_manifest_encoding_roundtrip() {
         decode_manifest(&encode_manifest(&manifest)[..]),
         Ok(manifest)
     );
+}
+
+#[test]
+fn test_hash_plan() {
+    use crate::manifest::{build_chunk_table, files_with_sizes, hash_plan, ChunkAction};
+    use bit_vec::BitVec;
+    use maplit::btreemap;
+    use std::path::PathBuf;
+
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
+    let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+    let root = dir.path();
+
+    fs::write(root.join("root.bin"), vec![2u8; 1000 * 1024])
+        .expect("failed to create file 'root.bin'");
+
+    let subdir = root.join("subdir");
+    fs::create_dir_all(&subdir).expect("failed to create dir 'subdir'");
+
+    fs::write(subdir.join("memory"), vec![1u8; 2048 * 1024])
+        .expect("failed to create file 'memory'");
+
+    fs::write(subdir.join("metadata"), vec![3u8; 1050 * 1024])
+        .expect("failed to create file 'metadata'");
+
+    let max_chunk_size = 1024 * 1024;
+
+    let manifest_old = compute_manifest(
+        &manifest_metrics,
+        &no_op_logger(),
+        STATE_SYNC_V1,
+        root,
+        max_chunk_size,
+        None,
+    )
+    .expect("failed to compute manifest");
+
+    let mut memory_new = vec![1u8; 1024 * 1024];
+    memory_new.append(&mut vec![6u8; 2048 * 1024]);
+
+    fs::write(subdir.join("memory"), memory_new).expect("failed to write file 'memory'");
+
+    // Compute the manifest from scratch.
+    let manifest_new = compute_manifest(
+        &manifest_metrics,
+        &no_op_logger(),
+        CURRENT_STATE_SYNC_VERSION,
+        root,
+        max_chunk_size,
+        None,
+    )
+    .expect("failed to compute manifest");
+
+    // Compute the manifest incrementally.
+    let mut files = Vec::new();
+    files_with_sizes(root, "".into(), &mut files).expect("failed to traverse the files");
+    // We sort the table to make sure that the table is the same on all replicas
+    files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
+
+    // Assume that only the `memory` file keeps the record of dirty chunks and other
+    // files don't.
+    let mut dirty_chunks_memory = BitVec::from_elem(3, true);
+    dirty_chunks_memory.set(0, false);
+
+    let dirty_file_chunks = btreemap! {
+        PathBuf::from("subdir").join("memory") => dirty_chunks_memory,
+    };
+
+    let chunk_actions = hash_plan(&manifest_old, &files, dirty_file_chunks, max_chunk_size);
+    let reused_hash = manifest_old.chunk_table[1].hash;
+
+    assert_eq!(
+        chunk_actions,
+        vec![
+            ChunkAction::Recompute,
+            ChunkAction::UseHash(reused_hash),
+            ChunkAction::Recompute,
+            ChunkAction::Recompute,
+            ChunkAction::Recompute,
+            ChunkAction::Recompute
+        ]
+    );
+
+    let (file_table, chunk_table) = build_chunk_table(
+        &manifest_metrics,
+        &no_op_logger(),
+        root,
+        files,
+        max_chunk_size,
+        chunk_actions,
+    );
+
+    let incremental_manifest = Manifest {
+        version: CURRENT_STATE_SYNC_VERSION,
+        file_table,
+        chunk_table,
+    };
+
+    assert_eq!(manifest_new, incremental_manifest);
+}
+
+#[test]
+fn test_file_chunk_range() {
+    let manifest = simple_manifest().1;
+    for file_index in 0..manifest.file_table.len() {
+        let range = file_chunk_range(&manifest, file_index);
+
+        // Size of file == sum of size of chunks
+        assert_eq!(
+            manifest.file_table[file_index].size_bytes,
+            range
+                .map(|chunk_index| manifest.chunk_table[chunk_index].size_bytes as u64)
+                .sum::<u64>()
+        );
+    }
 }

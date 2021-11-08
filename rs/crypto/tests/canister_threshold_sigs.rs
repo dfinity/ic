@@ -1,8 +1,8 @@
 use ic_base_types::PrincipalId;
 use ic_crypto_internal_types::sign::canister_threshold_sig::{
-    CspIDkgComplaint, CspIDkgDealing, CspIDkgOpening, CspThresholdSignatureMsg,
+    CspIDkgComplaint, CspIDkgDealing, CspIDkgOpening, CspThresholdEcdsaSigShare,
 };
-use ic_interfaces::crypto::{IDkgTranscriptGenerator, ThresholdEcdsaSignature};
+use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
 use ic_test_utilities::crypto::{crypto_for, temp_crypto_components_for};
 use ic_test_utilities::types::ids::NODE_1;
 use ic_types::crypto::canister_threshold_sig::idkg::{
@@ -11,10 +11,11 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    PreSignatureQuadruple, ThresholdSignatureInputs, ThresholdSignatureMsg,
+    PreSignatureQuadruple, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+    ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NumberOfNodes, RegistryVersion};
+use ic_types::{NumberOfNodes, Randomness, RegistryVersion};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
@@ -59,8 +60,9 @@ fn should_run_create_transcript() {
 #[test]
 fn should_run_verify_transcript() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
+    let params = fake_params();
     let transcript = fake_transcript();
-    let result = crypto_for(NODE_1, &crypto_components).verify_transcript(&transcript);
+    let result = crypto_for(NODE_1, &crypto_components).verify_transcript(&params, &transcript);
     assert!(result.is_ok());
 }
 
@@ -76,11 +78,9 @@ fn should_run_load_transcript() {
 fn should_run_verify_complaint() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     let complaint = fake_complaint();
-    let result = crypto_for(NODE_1, &crypto_components).verify_complaint(
-        IDkgTranscriptId(1),
-        NODE_1,
-        &complaint,
-    );
+    let transcript = fake_transcript();
+    let result =
+        crypto_for(NODE_1, &crypto_components).verify_complaint(&transcript, NODE_1, &complaint);
     assert!(result.is_ok());
 }
 
@@ -88,18 +88,19 @@ fn should_run_verify_complaint() {
 fn should_run_open_transcript() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     let complaint = fake_complaint();
-    let result =
-        crypto_for(NODE_1, &crypto_components).open_transcript(IDkgTranscriptId(1), &complaint);
+    let transcript = fake_transcript();
+    let result = crypto_for(NODE_1, &crypto_components).open_transcript(&transcript, &complaint);
     assert!(result.is_ok());
 }
 
 #[test]
 fn should_run_verify_opening() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
+    let transcript = fake_transcript();
     let opening = fake_opening();
     let complaint = fake_complaint();
     let result = crypto_for(NODE_1, &crypto_components).verify_opening(
-        IDkgTranscriptId(1),
+        &transcript,
         NODE_1,
         &opening,
         &complaint,
@@ -126,39 +127,48 @@ fn should_run_retain_active_transcripts() {
 }
 
 #[test]
-fn should_run_sign_threshold() {
+fn should_run_sign_share() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     let inputs = fake_sig_inputs();
-    let result = crypto_for(NODE_1, &crypto_components).sign_threshold(&inputs);
+    let result = crypto_for(NODE_1, &crypto_components).sign_share(&inputs);
     assert!(result.is_ok());
 }
 
 #[test]
-fn should_run_validate_threshold_sig_share() {
+fn should_run_verify_sig_share() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     let inputs = fake_sig_inputs();
-    let msg = ThresholdSignatureMsg {
-        internal_msg: CspThresholdSignatureMsg {},
+    let msg = ThresholdEcdsaSigShare {
+        internal_msg: CspThresholdEcdsaSigShare {},
     };
-    let result =
-        crypto_for(NODE_1, &crypto_components).validate_threshold_sig_share(NODE_1, &inputs, &msg);
+    let result = crypto_for(NODE_1, &crypto_components).verify_sig_share(NODE_1, &inputs, &msg);
     assert!(result.is_ok());
 }
 
 #[test]
-fn should_run_combine_threshold_sig_shares() {
+fn should_run_combine_sig_shares() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     let inputs = fake_sig_inputs();
-    let result = crypto_for(NODE_1, &crypto_components).combine_threshold_sig_shares(&inputs, &[]);
+    let result = crypto_for(NODE_1, &crypto_components).combine_sig_shares(&inputs, &[]);
     assert!(result.is_ok());
 }
 
 #[test]
-fn should_run_get_ecdsa_public_key() {
+fn should_run_verify_combined_sig() {
+    let crypto_components = temp_crypto_components_for(&[NODE_1]);
+    let inputs = fake_sig_inputs();
+    let fake_signature = ThresholdEcdsaCombinedSignature { signature: vec![] };
+    let result =
+        crypto_for(NODE_1, &crypto_components).verify_combined_sig(&inputs, &fake_signature);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn should_run_get_public_key() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     let key_transcript = fake_transcript();
     let result = crypto_for(NODE_1, &crypto_components)
-        .get_ecdsa_public_key(PrincipalId::new_user_test_id(1), key_transcript);
+        .get_public_key(PrincipalId::new_user_test_id(1), key_transcript);
     assert!(result.is_ok());
 }
 
@@ -189,6 +199,7 @@ fn fake_transcript() -> IDkgTranscript {
         registry_version: RegistryVersion::from(0),
         verified_dealings: BTreeMap::new(),
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
     }
 }
 
@@ -225,6 +236,7 @@ fn fake_key_and_presig_quadruple() -> (IDkgTranscript, PreSignatureQuadruple) {
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
             original_kappa_id,
         )),
+        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
     };
 
     let fake_lambda = IDkgTranscript {
@@ -233,6 +245,7 @@ fn fake_key_and_presig_quadruple() -> (IDkgTranscript, PreSignatureQuadruple) {
         registry_version: RegistryVersion::from(0),
         verified_dealings: BTreeMap::new(),
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
     };
 
     let fake_kappa_times_lambda = IDkgTranscript {
@@ -240,10 +253,10 @@ fn fake_key_and_presig_quadruple() -> (IDkgTranscript, PreSignatureQuadruple) {
         receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
         registry_version: RegistryVersion::from(0),
         verified_dealings: BTreeMap::new(),
-        transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::MaskedTimesMasked(
-            original_kappa_id,
-            lambda_id,
-        )),
+        transcript_type: IDkgTranscriptType::Masked(
+            IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(kappa_id, lambda_id),
+        ),
+        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
     };
 
     let fake_key = IDkgTranscript {
@@ -254,6 +267,7 @@ fn fake_key_and_presig_quadruple() -> (IDkgTranscript, PreSignatureQuadruple) {
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
             IDkgTranscriptId(50),
         )),
+        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
     };
 
     let fake_key_times_lambda = IDkgTranscript {
@@ -264,6 +278,7 @@ fn fake_key_and_presig_quadruple() -> (IDkgTranscript, PreSignatureQuadruple) {
         transcript_type: IDkgTranscriptType::Masked(
             IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(key_id, lambda_id),
         ),
+        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
     };
 
     let presig_quadruple = PreSignatureQuadruple::new(
@@ -277,13 +292,14 @@ fn fake_key_and_presig_quadruple() -> (IDkgTranscript, PreSignatureQuadruple) {
     (fake_key, presig_quadruple)
 }
 
-fn fake_sig_inputs() -> ThresholdSignatureInputs {
+fn fake_sig_inputs() -> ThresholdEcdsaSigInputs {
     let (fake_key, fake_presig_quadruple) = fake_key_and_presig_quadruple();
 
-    ThresholdSignatureInputs::new(
+    ThresholdEcdsaSigInputs::new(
         PrincipalId::new_user_test_id(1),
-        1,
-        vec![],
+        &[],
+        &[],
+        Randomness::from([0_u8; 32]),
         fake_presig_quadruple,
         fake_key,
     )

@@ -1,5 +1,5 @@
-use super::ALLOCATED_PAGES;
-use ic_sys::PageBytes;
+use super::{Page, PageAllocatorInner, PageInner, ALLOCATED_PAGES};
+use ic_sys::{PageBytes, PageIndex};
 use std::sync::Arc;
 
 // A memory page allocated on the Rust heap.
@@ -11,14 +11,6 @@ impl HeapBasedPage {
         ALLOCATED_PAGES.inc();
         Self(*contents)
     }
-
-    pub fn contents(&self) -> &PageBytes {
-        &self.0
-    }
-
-    pub fn copy_from_slice(&mut self, offset: usize, slice: &[u8]) {
-        (self.0[offset..offset + slice.len()]).copy_from_slice(slice);
-    }
 }
 
 impl Drop for HeapBasedPage {
@@ -27,15 +19,39 @@ impl Drop for HeapBasedPage {
     }
 }
 
+impl PageInner for HeapBasedPage {
+    type PageAllocatorInner = HeapBasedPageAllocator;
+
+    fn contents<'a>(&'a self, _page_allocator: &'a Self::PageAllocatorInner) -> &'a PageBytes {
+        &self.0
+    }
+
+    fn copy_from_slice<'a>(
+        &'a mut self,
+        offset: usize,
+        slice: &[u8],
+        _page_allocator: &'a Self::PageAllocatorInner,
+    ) {
+        (self.0[offset..offset + slice.len()]).copy_from_slice(slice);
+    }
+}
+
 // A trivial allocator that delegates to the default
 // Rust heap allocator.
+#[derive(Debug, Default)]
 pub struct HeapBasedPageAllocator {}
 
-impl HeapBasedPageAllocator {
-    pub fn allocate(&self, pages: &[&PageBytes]) -> Vec<Arc<HeapBasedPage>> {
+impl PageAllocatorInner for HeapBasedPageAllocator {
+    type PageInner = HeapBasedPage;
+    fn allocate(
+        &self,
+        pages: &[(PageIndex, &PageBytes)],
+    ) -> Vec<(PageIndex, Page<Self::PageInner>)> {
         pages
             .iter()
-            .map(|contents| Arc::new(HeapBasedPage::new(*contents)))
+            .map(|(page_index, contents)| {
+                (*page_index, Page(Arc::new(HeapBasedPage::new(*contents))))
+            })
             .collect()
     }
 }

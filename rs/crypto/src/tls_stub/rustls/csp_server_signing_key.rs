@@ -24,7 +24,7 @@ impl CspServerEd25519SigningKey {
     ) -> Self {
         Self {
             signer: CspServerEd25519Signer {
-                key_id: tls_cert_hash_as_key_id(&self_cert),
+                key_id: tls_cert_hash_as_key_id(self_cert),
                 tls_csp_server,
             },
         }

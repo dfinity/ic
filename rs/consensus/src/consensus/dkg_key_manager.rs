@@ -13,7 +13,7 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{
     consensus::{dkg::Summary, BlockPayload},
     crypto::threshold_sig::ni_dkg::{
-        errors::load_transcript_error::DkgLoadTranscriptError, NiDkgId, NiDkgTag,
+        errors::load_transcript_error::DkgLoadTranscriptError, NiDkgId, NiDkgTag, NiDkgTargetSubnet,
     },
     Height,
 };
@@ -135,21 +135,26 @@ impl DkgKeyManager {
         let last_height = match std::cmp::max(self.last_cup_height, self.last_dkg_summary_height) {
             Some(height) => height,
             None => {
-                info!(self.logger, "No transcripts have been loaded yet");
+                info!(
+                    every_n_seconds => 5,
+                    self.logger,
+                    "No transcripts have been loaded yet"
+                );
                 return false;
             }
         };
 
-        if id.start_block_height > last_height {
+        if id.start_block_height > last_height && id.target_subnet == NiDkgTargetSubnet::Local {
             info!(
+                every_n_seconds => 5,
                 self.logger,
-                "Transcript can't be loaded yet, height too low: {:?} {:?}", last_height, id
+                "Transcript can't be loaded yet, last height too low: {:?} {:?}", last_height, id
             );
             return false;
         }
 
         // Get the receiver
-        let rx = match self.pending_transcript_loads.get(&id) {
+        let rx = match self.pending_transcript_loads.get(id) {
             Some(rx) => &rx.1,
             None => {
                 return true;
@@ -163,7 +168,7 @@ impl DkgKeyManager {
             // key is no longer available, we will find out by then
             Ok(Ok(_)) => {
                 // Remove the handle of the loaded transcript
-                self.pending_transcript_loads.remove(&id);
+                self.pending_transcript_loads.remove(id);
                 true
             }
             Err(std::sync::mpsc::TryRecvError::Empty) => false,

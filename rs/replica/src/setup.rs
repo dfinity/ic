@@ -235,7 +235,7 @@ pub fn setup_crypto_registry(
             .map(|path| parse_threshold_sig_key(path).expect("failed to parse NNS PK file"));
 
         let data_provider = create_data_provider(
-            &config.registry_client.data_provider.as_ref().unwrap(),
+            config.registry_client.data_provider.as_ref().unwrap(),
             optional_nns_public_key,
         );
 

@@ -69,7 +69,7 @@ impl ControllerService for ControllerServiceImpl {
     }
 
     fn log_via_replica(&self, req: protocol::logging::LogRequest) -> rpc::Call<()> {
-        let protocol::logging::LogRequest((level, message)) = req;
+        let protocol::logging::LogRequest(level, message) = req;
         match level {
             protocol::logging::LogLevel::Info => info!(self.log, "CANISTER_SANDBOX: {}", message),
             protocol::logging::LogLevel::Debug => debug!(self.log, "CANISTER_SANDBOX: {}", message),

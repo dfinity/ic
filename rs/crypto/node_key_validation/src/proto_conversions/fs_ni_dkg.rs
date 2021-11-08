@@ -35,11 +35,12 @@ fn clib_fs_ni_dkg_pubkey_from_csp_pubkey_with_pop(
         (
             CspFsEncryptionPublicKey::Groth20_Bls12_381(pubkey),
             CspFsEncryptionPop::Groth20WithPop_Bls12_381(pop),
-        ) => public_key_into_miracl((&pubkey, &pop)),
+        ) => public_key_into_miracl((pubkey, pop)),
         _ => Err(()),
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FsNiDkgPubkeyFromPubkeyProtoError {
     PublicKeyConversion { error: String },

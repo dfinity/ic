@@ -9,6 +9,8 @@ import "ic_nns_common/pb/v1/types.proto";
 
 // The internal state of the Genesis Token Canister
 message Gtc {
+  reserved "forward_all_unclaimed_accounts_recipient_neuron_id";
+
   // Maps account addresses to the state of the account
   map<string, AccountState> accounts = 1;
 
@@ -23,8 +25,12 @@ message Gtc {
   // to when they call the GTC's `donate_account` method.
   ic_nns_common.pb.v1.NeuronId donate_account_recipient_neuron_id = 4;
 
-  reserved "forward_all_unclaimed_accounts_recipient_neuron_id";
-  reserved 5;
+  /// The ID of the Neuron that the funds of all unclaimed GTC accounts will be
+  /// transferred to when the `forward_whitelisted_unclaimed_accounts` GTC method is called.
+  ic_nns_common.pb.v1.NeuronId forward_whitelisted_unclaimed_accounts_recipient_neuron_id = 5;
+
+  // The accounts that are whitelisted to be forwarded, once forwarding is available.
+  repeated string whitelisted_accounts_to_forward = 6;
 }
 
 // The state of a GTC account
@@ -66,6 +72,9 @@ message AccountState {
 
   // The neurons that failed to be transferred
   repeated TransferredNeuron failed_transferred_neurons = 10;
+
+  // The account is whitelisted for forwarding.
+  bool is_whitelisted_for_forwarding = 11;
 }
 
 message TransferredNeuron {

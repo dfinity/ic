@@ -14,15 +14,13 @@ use ic_registry_routing_table::{resolve_destination, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{system_state::CanisterStatus, ENFORCE_MESSAGE_MEMORY_USAGE},
+    memory_required_to_push_request,
     page_map::PAGE_SIZE,
     NumWasmPages64, StateError,
 };
 use ic_types::{
     ingress::WasmResult,
-    messages::{
-        CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-        MAX_RESPONSE_COUNT_BYTES,
-    },
+    messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{Callback, WasmClosure},
     user_error::RejectCode,
     CanisterId, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
@@ -877,7 +875,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
             Ok(RejectCode::SysTransient as i32)
         };
 
-        let reservation_bytes = (MAX_RESPONSE_COUNT_BYTES as u64).into();
+        let reservation_bytes = (memory_required_to_push_request(&req) as u64).into();
         if ENFORCE_MESSAGE_MEMORY_USAGE
             && self
                 .memory_usage
@@ -1125,7 +1123,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             Some((data, _, status)) => match status {
                 ResponseStatus::NotRepliedYet => {
                     *status = ResponseStatus::JustRepliedWith(Some(WasmResult::Reply(
-                        std::mem::replace(data, Vec::new()),
+                        std::mem::take(data),
                     )));
                     Ok(())
                 }

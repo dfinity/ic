@@ -31,17 +31,17 @@ fn should_threshold_sign_if_sufficient_shares() {
     run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
 
     let msg = message();
-    let random_combiner = random_node_in(&config.receivers().get());
+    let random_combiner = random_node_in(config.receivers().get());
     let combined_sig = threshold_sign_and_combine(
         SignersAndCombiner {
-            signers: n_random_nodes_in(&config.receivers().get(), config.threshold().get()),
+            signers: n_random_nodes_in(config.receivers().get(), config.threshold().get()),
             combiner: random_combiner,
         },
         &msg,
         dkg_id,
         &crypto_components,
     );
-    let random_verifier = random_node_in(&config.receivers().get());
+    let random_verifier = random_node_in(config.receivers().get());
     let verify_combined_result = crypto_for(random_verifier, &crypto_components)
         .verify_threshold_sig_combined(&combined_sig, &msg, dkg_id);
 
@@ -64,11 +64,11 @@ fn should_produce_valid_signature_shares() {
         &crypto_components,
     );
 
-    let verifier = random_node_in(&config.receivers().get());
+    let verifier = random_node_in(config.receivers().get());
     sig_shares.iter().for_each(|(signer, sig_share)| {
         assert!(
             crypto_for(verifier, &crypto_components)
-                .verify_threshold_sig_share(&sig_share, &msg, dkg_id, *signer)
+                .verify_threshold_sig_share(sig_share, &msg, dkg_id, *signer)
                 .is_ok(),
             "node {:?} failed to verify threshold sig share of signer {:?}",
             verifier,
@@ -88,16 +88,14 @@ fn should_fail_to_combine_insufficient_shares() {
     run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
 
     let sig_shares = sign_threshold_for_each(
-        &n_random_nodes_in(&config.receivers().get(), num_of_shares_to_combine),
+        &n_random_nodes_in(config.receivers().get(), num_of_shares_to_combine),
         &message(),
         dkg_id,
         &crypto_components,
     );
-    let combination_result = crypto_for(
-        random_node_in(&config.receivers().get()),
-        &crypto_components,
-    )
-    .combine_threshold_sig_shares(sig_shares, dkg_id);
+    let combination_result =
+        crypto_for(random_node_in(config.receivers().get()), &crypto_components)
+            .combine_threshold_sig_shares(sig_shares, dkg_id);
 
     assert_eq!(
         combination_result.unwrap_err(),
@@ -127,11 +125,11 @@ fn run_ni_dkg_and_load_transcript_for_receivers(
     config: &NiDkgConfig,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
 ) {
-    let transcript = run_ni_dkg_and_create_single_transcript(&config, &crypto_components);
+    let transcript = run_ni_dkg_and_create_single_transcript(config, crypto_components);
     load_transcript_for_receivers_expecting_status(
         config,
         &transcript,
-        &crypto_components,
+        crypto_components,
         Some(LoadTranscriptResult::SigningKeyAvailable),
     );
 }
@@ -151,7 +149,7 @@ fn load_transcript_for_receivers_expecting_status(
     expected_status: Option<LoadTranscriptResult>,
 ) {
     for node_id in config.receivers().get() {
-        let result = crypto_for(*node_id, crypto_components).load_transcript(&transcript);
+        let result = crypto_for(*node_id, crypto_components).load_transcript(transcript);
 
         if result.is_err() {
             panic!(
@@ -185,9 +183,9 @@ fn threshold_sign_and_combine<H: Signable>(
         &signers_and_combiner.signers,
         msg,
         dkg_id,
-        &crypto_components,
+        crypto_components,
     );
-    crypto_for(signers_and_combiner.combiner, &crypto_components)
+    crypto_for(signers_and_combiner.combiner, crypto_components)
         .combine_threshold_sig_shares(sig_shares, dkg_id)
         .expect("failed to combine signature shares")
 }
@@ -201,7 +199,7 @@ fn sign_threshold_for_each<H: Signable>(
     signers
         .iter()
         .map(|signer| {
-            let sig_share = crypto_for(*signer, &crypto_components)
+            let sig_share = crypto_for(*signer, crypto_components)
                 .sign_threshold(msg, dkg_id)
                 .unwrap_or_else(|e| panic!("signing by node {:?} failed: {}", signer, e));
             (*signer, sig_share)
@@ -274,9 +272,9 @@ mod non_interactive_distributed_key_generation {
             .dkg_tag(NiDkgTag::HighThreshold)
             .registry_version(REG_V1)
             .build();
-        let mut env = NiDkgTestEnvironment::new_for_config(&config.get());
+        let mut env = NiDkgTestEnvironment::new_for_config(config.get());
         let transcript =
-            run_ni_dkg_and_create_single_transcript(&config.get(), &env.crypto_components);
+            run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
 
         let reshare_config = RandomNiDkgConfig::reshare(transcript, -2..=2, max_subnet_size);
         env.update_for_config(reshare_config.get());
@@ -303,9 +301,9 @@ mod non_interactive_distributed_key_generation {
             .dkg_tag(NiDkgTag::HighThreshold)
             .registry_version(REG_V1)
             .build();
-        let mut env = NiDkgTestEnvironment::new_for_config(&config.get());
+        let mut env = NiDkgTestEnvironment::new_for_config(config.get());
         let mut transcript =
-            run_ni_dkg_and_create_single_transcript(&config.get(), &env.crypto_components);
+            run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
 
         for _i in 1..=epochs {
             config = RandomNiDkgConfig::reshare(transcript, -2..=2, max_subnet_size);
@@ -399,7 +397,7 @@ mod non_interactive_distributed_key_generation {
 
         // All nodes can still decrypt transcript3
         load_transcript_for_receivers_expecting_status(
-            &config3.get(),
+            config3.get(),
             &transcript3,
             &env.crypto_components,
             Some(LoadTranscriptResult::SigningKeyAvailable),
@@ -417,7 +415,7 @@ mod non_interactive_distributed_key_generation {
         assert!(nodes_can_sign_in_epoch(&epoch2_nodes, dkg_id2, &env));
 
         // And all nodes can still load the old transcript (but not decrypt it)
-        load_transcript_for_receivers(&config3.get(), &transcript0, &env.crypto_components);
+        load_transcript_for_receivers(config3.get(), &transcript0, &env.crypto_components);
 
         // Even after the transcript is loaded again, key is not available
         assert!(nodes_cannot_sign_in_epoch_due_to_missing_secret_key(
@@ -486,7 +484,7 @@ mod non_interactive_distributed_key_generation {
         let transcript =
             run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
 
-        load_transcript_for_receivers(&config.get(), &transcript, &env.crypto_components);
+        load_transcript_for_receivers(config.get(), &transcript, &env.crypto_components);
 
         let dkg_id = DkgId::NiDkgId(config.get().dkg_id());
         let nodes = config.receiver_ids();
@@ -592,7 +590,7 @@ mod non_interactive_distributed_key_generation {
             .get()
             .iter()
             .map(|node| {
-                let transcript = crypto_for(*node, &crypto_components)
+                let transcript = crypto_for(*node, crypto_components)
                     .create_transcript(ni_dkg_config, dealings)
                     .unwrap_or_else(|error| {
                         panic!("failed to create transcript for {:?}: {:?}", node, error)

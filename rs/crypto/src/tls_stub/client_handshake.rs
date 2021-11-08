@@ -38,7 +38,7 @@ fn check_cert(
     server_cert_from_handshake: &TlsPublicKeyCert,
 ) -> Result<(), TlsClientHandshakeError> {
     let server_node_id_from_handshake_cert =
-        node_id_from_cert_subject_common_name(&server_cert_from_handshake)?;
+        node_id_from_cert_subject_common_name(server_cert_from_handshake)?;
     if server_node_id_from_handshake_cert != trusted_server_node_id {
         return Err(TlsClientHandshakeError::ServerNotAllowed(
             PeerNotAllowedError::HandshakeCertificateNodeIdNotAllowed,

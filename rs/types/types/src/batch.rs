@@ -434,31 +434,31 @@ mod tests {
             certified_height: Height::new(1),
             time: Time::from_nanos_since_unix_epoch(1),
         };
-        assert_eq!(context1.greater_or_equal(&context2), false);
-        assert_eq!(context2.greater_or_equal(&context1), true);
+        assert!(!context1.greater_or_equal(&context2));
+        assert!(context2.greater_or_equal(&context1));
 
         let context3 = ValidationContext {
             registry_version: RegistryVersion::new(1),
             certified_height: Height::new(2),
             time: Time::from_nanos_since_unix_epoch(1),
         };
-        assert_eq!(context1.greater_or_equal(&context3), false);
-        assert_eq!(context3.greater_or_equal(&context1), true);
+        assert!(!context1.greater_or_equal(&context3));
+        assert!(context3.greater_or_equal(&context1));
 
         let context4 = ValidationContext {
             registry_version: RegistryVersion::new(1),
             certified_height: Height::new(1),
             time: Time::from_nanos_since_unix_epoch(2),
         };
-        assert_eq!(context1.greater_or_equal(&context4), false);
-        assert_eq!(context4.greater_or_equal(&context1), true);
+        assert!(!context1.greater_or_equal(&context4));
+        assert!(context4.greater_or_equal(&context1));
 
         let context5 = ValidationContext {
             registry_version: RegistryVersion::new(0),
             certified_height: Height::new(2),
             time: Time::from_nanos_since_unix_epoch(1),
         };
-        assert_eq!(context1.greater_or_equal(&context5), false);
-        assert_eq!(context5.greater_or_equal(&context1), false);
+        assert!(!context1.greater_or_equal(&context5));
+        assert!(!context5.greater_or_equal(&context1));
     }
 }

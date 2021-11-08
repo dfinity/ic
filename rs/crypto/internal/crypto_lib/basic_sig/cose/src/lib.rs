@@ -174,7 +174,7 @@ impl CosePublicKey {
 
         match (e, n) {
             (serde_cbor::Value::Bytes(e), serde_cbor::Value::Bytes(n)) => {
-                let key = RsaPublicKey::from_components(&e, &n).map_err(|_| {
+                let key = RsaPublicKey::from_components(e, n).map_err(|_| {
                     CosePublicKeyParseError::MalformedPublicKey(AlgorithmId::RsaSha256)
                 })?;
                 let der = key.as_der().to_vec();

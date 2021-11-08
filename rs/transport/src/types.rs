@@ -134,9 +134,6 @@ pub(crate) struct ClientState {
 
 /// State about the server ports we are listening on
 pub(crate) struct ServerPortState {
-    /// The port number
-    pub port: ServerPort,
-
     /// Handle to the accept task for this port
     pub accept_task: AbortHandle,
 }

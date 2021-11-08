@@ -35,8 +35,8 @@ fn fr_serde_should_be_correct(hex_test_vector: &str, value: &BIG, test_name: &st
     );
     let bytes = hex::decode(hex_test_vector).expect("Invalid test vector hex encoding");
     let bytes = fr_bytes_from_vec(&bytes);
-    let parsed = miracl_fr_from_bytes(&bytes).expect("Failed to parse test vector");
-    let value_reduced = reduced_mod(&value);
+    let parsed = miracl_fr_from_bytes(bytes).expect("Failed to parse test vector");
+    let value_reduced = reduced_mod(value);
     assert!(
         is_equal(&value_reduced, &parsed),
         "Parsed value does not match for {}",
@@ -139,7 +139,7 @@ fn modulus_and_larger_should_fail_to_parse() {
     for (name, hex_test_vector) in &test_values {
         let bytes = hex::decode(hex_test_vector).expect("Invalid test vector hex encoding");
         let bytes = fr_bytes_from_vec(&bytes);
-        if miracl_fr_from_bytes(&bytes).is_ok() {
+        if miracl_fr_from_bytes(bytes).is_ok() {
             panic!("Should fail to parse {}", name);
         }
     }

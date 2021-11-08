@@ -94,7 +94,7 @@ impl SandboxService for SandboxServer {
             req.exec_id
         );
 
-        let result = self.manager.close_execution(&req.exec_id, req.commit_state);
+        let result = self.manager.close_execution(&req.exec_id);
         rpc::Call::new_resolved(Ok(CloseExecutionReply { success: result }))
     }
 }
@@ -127,7 +127,7 @@ mod tests {
         ExecutionParameters {
             instruction_limit: NumInstructions::new(1000),
             canister_memory_limit: NumBytes::new(4 << 30),
-            subnet_available_memory: SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX)),
+            subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2),
             compute_allocation: ComputeAllocation::default(),
         }
     }
@@ -315,9 +315,6 @@ mod tests {
     /// it.
     #[test]
     fn test_simple_canister() {
-        use ic_utils::ic_features::*;
-        sandboxed_execution_feature::enable(sandboxed_execution_feature::sandboxed_execution);
-
         let exec_finished_sync = Arc::new(SyncCell::<protocol::ctlsvc::ExecFinishedRequest>::new());
 
         let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
@@ -332,7 +329,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let rep = srv
             .open_state(OpenStateRequest {
@@ -343,7 +340,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let canister_id = canister_test_id(0);
 
@@ -374,7 +371,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let result = exec_finished_sync.get();
         assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
@@ -385,15 +382,13 @@ mod tests {
         let rep = srv
             .close_execution(protocol::sbxsvc::CloseExecutionRequest {
                 exec_id: "exec_foo".to_string(),
-                commit_state: true,
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         // Second time around, issue a query to read the counter. We
-        // expect to be able to read back the modified counter value
-        // (since we committed the previous state).
+        // will still read the same value of the counter.
         let rep = srv
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id: "exec_foo".to_string(),
@@ -415,30 +410,26 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let result = exec_finished_sync.get();
         assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
+        assert_eq!(WasmResult::Reply([0, 0, 0, 0].to_vec()), wasm_result);
 
         let rep = srv
             .close_execution(protocol::sbxsvc::CloseExecutionRequest {
                 exec_id: "exec_foo".to_string(),
-                commit_state: false,
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
     }
 
     /// Verify that memory writes result in correct page being marked
     /// dirty and passed back.
     #[test]
     fn test_memory_write_dirty() {
-        use ic_utils::ic_features::*;
-        sandboxed_execution_feature::enable(sandboxed_execution_feature::sandboxed_execution);
-
         let exec_finished_sync = Arc::new(SyncCell::<protocol::ctlsvc::ExecFinishedRequest>::new());
 
         let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
@@ -453,7 +444,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let rep = srv
             .open_state(OpenStateRequest {
@@ -464,7 +455,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let canister_id = canister_test_id(0);
 
@@ -495,7 +486,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
@@ -514,20 +505,16 @@ mod tests {
         let rep = srv
             .close_execution(protocol::sbxsvc::CloseExecutionRequest {
                 exec_id: "exec_foo".to_string(),
-                commit_state: true,
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
     }
 
     /// Verify that state is set up correctly with given page contents
     /// such that memory reads yield the correct data.
     #[test]
     fn test_memory_read_state() {
-        use ic_utils::ic_features::*;
-        sandboxed_execution_feature::enable(sandboxed_execution_feature::sandboxed_execution);
-
         let exec_finished_sync = Arc::new(SyncCell::<protocol::ctlsvc::ExecFinishedRequest>::new());
 
         let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
@@ -542,11 +529,11 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         // Create state setting up initial memory to have a couple
         // bytes set to particular values.
-        let mut page_data: Vec<u8> = [0].repeat(4096);
+        let mut page_data = [0; 4096];
         page_data[42] = 1;
         page_data[43] = 2;
         let rep = srv
@@ -561,7 +548,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let canister_id = canister_test_id(0);
 
@@ -587,7 +574,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
@@ -596,11 +583,10 @@ mod tests {
         let rep = srv
             .close_execution(protocol::sbxsvc::CloseExecutionRequest {
                 exec_id: "exec_foo".to_string(),
-                commit_state: true,
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
     }
 
     /// Verifies that we can create a simple canister and run multiple
@@ -609,9 +595,6 @@ mod tests {
     #[test]
     #[ignore]
     fn test_simple_canister_wasm_cache() {
-        use ic_utils::ic_features::*;
-        sandboxed_execution_feature::enable(sandboxed_execution_feature::sandboxed_execution);
-
         let exec_finished_sync = Arc::new(SyncCell::<protocol::ctlsvc::ExecFinishedRequest>::new());
         let exec_finished_sync_clone = Arc::clone(&exec_finished_sync);
 
@@ -636,7 +619,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let rep = srv
             .open_state(OpenStateRequest {
@@ -647,7 +630,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let canister_id = canister_test_id(0);
 
@@ -678,7 +661,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let result = exec_finished_sync.get();
         assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
@@ -690,11 +673,10 @@ mod tests {
         let rep = srv
             .close_execution(protocol::sbxsvc::CloseExecutionRequest {
                 exec_id: "exec_foo".to_string(),
-                commit_state: true,
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         // Ensure we close state.
         let rep = srv
@@ -703,7 +685,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         // Now re-issue the same call but with the previous cache on.
 
@@ -716,7 +698,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         // First time around, issue an update to increase the counter.
         let rep = srv
@@ -745,7 +727,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let result = exec_finished_sync.get();
         assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
@@ -756,11 +738,10 @@ mod tests {
         let rep = srv
             .close_execution(protocol::sbxsvc::CloseExecutionRequest {
                 exec_id: "exec_foo".to_string(),
-                commit_state: true,
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         // Second time around, issue a query to read the counter. We
         // expect to be able to read back the modified counter value
@@ -786,7 +767,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
 
         let result = exec_finished_sync.get();
         assert!(result.exec_output.num_instructions_left < NumInstructions::from(500));
@@ -796,10 +777,9 @@ mod tests {
         let rep = srv
             .close_execution(protocol::sbxsvc::CloseExecutionRequest {
                 exec_id: "exec_foo".to_string(),
-                commit_state: false,
             })
             .sync()
             .unwrap();
-        assert_eq!(true, rep.success);
+        assert!(rep.success);
     }
 }

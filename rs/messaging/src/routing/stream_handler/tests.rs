@@ -6,12 +6,13 @@
 use super::*;
 use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_IN_STREAM};
 use ic_base_types::NumSeconds;
+use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::QUEUE_INDEX_NONE,
-    replicated_state::LABEL_VALUE_CANISTER_NOT_FOUND,
+    canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
+    replicated_state::{LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_OUT_OF_MEMORY},
     testing::{ReplicatedStateTesting, SystemStateTesting},
     ReplicatedState, Stream,
 };
@@ -27,7 +28,7 @@ use ic_test_utilities::{
     with_test_replica_logger,
 };
 use ic_types::{
-    messages::{CallbackId, Payload, Request},
+    messages::{CallbackId, Payload, Request, MAX_RESPONSE_COUNT_BYTES},
     xnet::{testing::StreamSliceTesting, StreamIndex, StreamIndexedQueue},
     CanisterId, Cycles,
 };
@@ -37,6 +38,8 @@ use maplit::btreemap;
 const LOCAL_SUBNET: SubnetId = SUBNET_12;
 const REMOTE_SUBNET: SubnetId = SUBNET_23;
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
+const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(u64::MAX / 2);
 
 lazy_static! {
     static ref LOCAL_CANISTER: CanisterId = CanisterId::from(0x34);
@@ -596,7 +599,7 @@ fn induct_stream_slices_partial_success() {
         stream_slice.push_message(response);
 
         // The expected canister state must contain the 3 inducted messages...
-        if let Some(ref messages) = stream_slice.messages() {
+        if let Some(messages) = stream_slice.messages() {
             for (_stream_index, msg) in messages.iter() {
                 assert_eq!(
                     Ok(()),
@@ -724,6 +727,198 @@ fn induct_stream_slices_partial_success() {
     });
 }
 
+/// Tests that canister memory limit is enforced when inducting stream slices.
+///
+/// Sets up a stream handler with only enough canister memory for one in-flight
+/// request (plus epsilon) at a time; and a canister with one in-flight
+/// (outgoing) request. Tries to induct a slice consisting of `[request1,
+/// response, request2]`: `request1` will fail due to lack of memory; `response`
+/// will be inducted and consume the existing reservation; `request2` will be
+/// inducted successfully, as there is now available memory for one request.
+#[test]
+fn induct_stream_slices_canister_memory_limit() {
+    if !ENFORCE_MESSAGE_MEMORY_USAGE {
+        return;
+    }
+
+    with_test_replica_logger(|log| {
+        // Canister memory limit only allows for one in-flight request (plus epsilon).
+        let (stream_handler, initial_state, metrics_registry) = new_fixture_with_config(
+            &log,
+            HypervisorConfig {
+                subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
+                max_canister_memory_size: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10),
+                ..Default::default()
+            },
+        );
+
+        induct_stream_slices_memory_limits_impl(stream_handler, initial_state, metrics_registry);
+    });
+}
+
+/// Tests that subnet memory limit is enforced when inducting stream slices.
+///
+/// Sets up a stream handler with only enough subnet available memory for one
+/// in-flight request (plus epsilon) at a time; and a canister with one
+/// in-flight (outgoing) request. Tries to induct a slice consisting of
+/// `[request1, response, request2]`: `request1` will fail due to lack of
+/// memory; `response` will be inducted and consume the existing reservation;
+/// `request2` will be inducted successfully, as there is now available memory
+/// for one request.
+#[test]
+fn induct_stream_slices_subnet_memory_limit() {
+    if !ENFORCE_MESSAGE_MEMORY_USAGE {
+        return;
+    }
+
+    with_test_replica_logger(|log| {
+        // Subnet memory limit only allows for one in-flight request (plus epsilon).
+        let (stream_handler, initial_state, metrics_registry) = new_fixture_with_config(
+            &log,
+            HypervisorConfig {
+                subnet_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10),
+                max_canister_memory_size: MAX_CANISTER_MEMORY_SIZE,
+                ..Default::default()
+            },
+        );
+
+        induct_stream_slices_memory_limits_impl(stream_handler, initial_state, metrics_registry);
+    });
+}
+
+fn induct_stream_slices_memory_limits_impl(
+    stream_handler: StreamHandlerImpl,
+    mut initial_state: ReplicatedState,
+    metrics_registry: MetricsRegistry,
+) {
+    fn request_with_callback(callback_id: u64) -> RequestOrResponse {
+        let mut request = test_request(*REMOTE_CANISTER, *LOCAL_CANISTER);
+        // Set a callback ID that will allow us to identify the request.
+        request.sender_reply_callback = CallbackId::new(callback_id);
+        request.into()
+    }
+
+    let mut expected_state = initial_state.clone();
+
+    // Canister with a reservation for one incoming response.
+    let mut initial_canister_state = new_canister_state(
+        *LOCAL_CANISTER,
+        user_test_id(24).get(),
+        *INITIAL_CYCLES,
+        NumSeconds::from(100_000),
+    );
+    initial_canister_state
+        .push_output_request(test_request(*LOCAL_CANISTER, *REMOTE_CANISTER))
+        .unwrap();
+    initial_canister_state.output_into_iter().count();
+
+    let initial_stream = generate_outgoing_stream(StreamConfig {
+        messages_begin: 31,
+        message_count: 3,
+        signals_end: 43,
+    });
+    let mut expected_stream = initial_stream.clone();
+
+    let mut expected_canister_state = initial_canister_state.clone();
+
+    initial_state.put_canister_state(initial_canister_state);
+    initial_state.with_streams(btreemap![REMOTE_SUBNET => initial_stream]);
+
+    // Incoming slice: `request1`, response, `request2`.
+    let mut stream_slice = generate_stream_slice(StreamSliceConfig {
+        header_begin: 43,
+        header_end: None,
+        messages_begin: 43,
+        message_count: 0,
+        signals_end: 31,
+    });
+    let request1 = request_with_callback(13);
+    stream_slice.push_message(request1.clone());
+    stream_slice.push_message(test_response(*REMOTE_CANISTER, *LOCAL_CANISTER).into());
+    let request2 = request_with_callback(14);
+    stream_slice.push_message(request2);
+
+    // The expected canister state must contain the response and `request2`...
+    if let Some(messages) = stream_slice.messages() {
+        for (_stream_index, msg) in messages.iter().skip(1) {
+            assert_eq!(
+                Ok(()),
+                expected_canister_state
+                    .system_state
+                    .queues_mut()
+                    .push_input(QUEUE_INDEX_NONE, msg.clone())
+            );
+        }
+    }
+    // ...and signals for the 3 messages plus one reject response for `request1` in
+    // the output stream.
+    expected_stream.increment_signals_end();
+    expected_stream.increment_signals_end();
+    expected_stream.increment_signals_end();
+    expected_stream.push(generate_reject_response(
+        request1,
+        RejectContext::new(
+            RejectCode::SysTransient,
+            StateError::OutOfMemory {
+                requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
+                available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,
+            }
+            .to_string(),
+        ),
+    ));
+
+    expected_state.put_canister_state(expected_canister_state);
+    expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+
+    // Act
+    let inducted_state = stream_handler
+        .induct_stream_slices(initial_state, btreemap![REMOTE_SUBNET => stream_slice]);
+
+    // Assert
+    assert_eq!(
+        expected_state.system_metadata(),
+        inducted_state.system_metadata(),
+    );
+
+    assert_eq!(
+        expected_state.canister_state(&LOCAL_CANISTER),
+        inducted_state.canister_state(&LOCAL_CANISTER),
+    );
+
+    assert_eq!(expected_state, inducted_state);
+
+    assert_inducted_xnet_messages_eq(
+        metric_vec(&[
+            (
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                    (LABEL_STATUS, LABEL_VALUE_SUCCESS),
+                ],
+                1,
+            ),
+            (
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                    (LABEL_STATUS, LABEL_VALUE_OUT_OF_MEMORY),
+                ],
+                1,
+            ),
+            (
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                    (LABEL_STATUS, LABEL_VALUE_SUCCESS),
+                ],
+                1,
+            ),
+        ]),
+        &metrics_registry,
+    );
+    assert_eq!(
+        2,
+        fetch_inducted_payload_sizes_stats(&metrics_registry).count
+    );
+}
+
 /// Tests that given a loopback stream and a certified stream slice,
 /// messages are inducted (with signals added appropriately), and
 /// messages present in the initial state are removed as appropriate.
@@ -794,7 +989,7 @@ fn process_certified_stream_slices_success() {
             );
         }
         // ...and the 2 incoming messages inducted.
-        if let Some(ref messages) = stream_slice.messages() {
+        if let Some(messages) = stream_slice.messages() {
             for (_stream_index, msg) in messages.iter() {
                 assert_eq!(
                     Ok(()),
@@ -879,11 +1074,22 @@ fn process_certified_stream_slices_success() {
 /// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `MetricsRegistry` to
 /// be used by a test.
 fn new_fixture(log: &ReplicaLogger) -> (StreamHandlerImpl, ReplicatedState, MetricsRegistry) {
+    new_fixture_with_config(log, HypervisorConfig::default())
+}
+
+/// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `MetricsRegistry` to
+/// be used by a test, using the provided `HypervisorConfig` to construct the
+/// `StreamHandlerImpl`.
+fn new_fixture_with_config(
+    log: &ReplicaLogger,
+    hypervisor_config: HypervisorConfig,
+) -> (StreamHandlerImpl, ReplicatedState, MetricsRegistry) {
     let mut state =
         ReplicatedState::new_rooted_at(LOCAL_SUBNET, SubnetType::Application, "NOT_USED".into());
     let metrics_registry = MetricsRegistry::new();
     let stream_handler = StreamHandlerImpl::new(
         LOCAL_SUBNET,
+        hypervisor_config,
         &metrics_registry,
         Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
             &metrics_registry,

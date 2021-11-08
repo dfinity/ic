@@ -15,7 +15,9 @@ use tokio::net::TcpStream;
 mod tests;
 
 #[async_trait]
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore> CspTlsClientHandshake for Csp<R, S> {
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> CspTlsClientHandshake
+    for Csp<R, S, C>
+{
     async fn perform_tls_client_handshake(
         &self,
         tcp_stream: TcpStream,
@@ -45,7 +47,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore> CspTlsClientHandshake 
     }
 }
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore> Csp<R, S> {
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
     /// Creates a Connector for TLS. This allows to set up a TLS connection as a
     /// client. The `self_cert` is used as client certificate for mutual SSL and
     /// the corresponding private key must be in the secret key store. The
@@ -58,8 +60,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore> Csp<R, S> {
     ) -> Result<ConnectConfiguration, CspTlsClientHandshakeError> {
         Ok(ic_crypto_internal_tls::tls_connector(
             &key_from_secret_key_store(&*self.sks_read_lock(), &self_cert)?,
-            &self_cert.as_x509(),
-            &trusted_server_cert.as_x509(),
+            self_cert.as_x509(),
+            trusted_server_cert.as_x509(),
         )?)
     }
 }

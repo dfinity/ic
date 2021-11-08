@@ -49,8 +49,10 @@ pub(crate) enum RequestType {
     Status,
     /// A "submit" request
     Submit,
-    /// A "read" request
-    Read,
+    /// A "query" request
+    Query,
+    /// A "read_state" request
+    ReadState,
     /// A pre-flight OPTIONS request
     Options,
     /// A request for the dashboard, but one that required a redirection
@@ -61,8 +63,6 @@ pub(crate) enum RequestType {
     Pprof(PprofPage),
     /// A request for the latest Catch-Up Package (CUP)
     CatchUpPackage,
-    /// A request for backup artifacts of the given height
-    Artifacts(u64),
 }
 
 impl RequestType {
@@ -71,13 +71,13 @@ impl RequestType {
         match self {
             Status => "status",
             Submit => "submit",
-            Read => "read",
+            ReadState => "read_state",
+            Query => "query",
             Options => "options",
             RedirectToDashboard => "redirect_to_dashboard",
             Dashboard => "dashboard",
             Pprof(_) => "pprof",
             CatchUpPackage => "catch-up-package",
-            Artifacts(_) => "artifacts",
         }
     }
 }
@@ -97,7 +97,6 @@ pub(crate) enum ConnectionError {
     ServingHttpConnection,
     ServingHttpsConnection,
     Accept,
-    ClientAuthentication,
     Peek,
     PeekTimeout,
 }
@@ -110,7 +109,6 @@ impl ConnectionError {
             ServingHttpConnection => "serving_http_connection",
             ServingHttpsConnection => "serving_https_connection",
             Accept => "accept",
-            ClientAuthentication => "client_authentication",
             Peek => "peek",
             PeekTimeout => "peek_timeout",
         }

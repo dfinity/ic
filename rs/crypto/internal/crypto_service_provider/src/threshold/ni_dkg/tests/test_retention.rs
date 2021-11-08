@@ -45,7 +45,7 @@ fn test_retention() {
     // We will apply our tests to just one CSP:
     fn get_one_csp(
         state: &mut StateWithTranscript,
-    ) -> &mut Csp<ChaCha20Rng, VolatileSecretKeyStore> {
+    ) -> &mut Csp<ChaCha20Rng, VolatileSecretKeyStore, VolatileSecretKeyStore> {
         &mut state
             .network
             .nodes_by_node_id

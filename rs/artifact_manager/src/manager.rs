@@ -163,7 +163,7 @@ impl ArtifactManager for ArtifactManagerImpl {
 
         self.clients
             .get(&tag)
-            .and_then(|client| client.get_chunk_tracker(&artifact_id))
+            .and_then(|client| client.get_chunk_tracker(artifact_id))
     }
 }
 

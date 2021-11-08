@@ -50,7 +50,9 @@ impl From<CspThresholdSignatureKeygenError> for CryptoError {
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> ThresholdSignatureCspServer for LocalCspServer<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdSignatureCspServer
+    for LocalCspServer<R, S, C>
+{
     /// See the trait for documentation.
     ///
     /// Warning: The secret key store has no transactions, so in the event of

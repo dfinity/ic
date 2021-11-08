@@ -1,20 +1,17 @@
 use crate::tls_stub::rustls::cert_resolver::StaticCertResolver;
+use crate::tls_stub::rustls::certified_key;
 use crate::tls_stub::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use crate::tls_stub::rustls::node_cert_verifier::NodeServerCertVerifier;
 use crate::tls_stub::{tls_cert_from_registry, TlsCertFromRegistryError};
 use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
-use ic_crypto_tls_interfaces::{
-    SomeOrAllNodes, TlsClientHandshakeError, TlsPublicKeyCert, TlsStream,
-};
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsClientHandshakeError, TlsStream};
 use ic_interfaces::registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio_rustls::rustls::ciphersuite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use tokio_rustls::rustls::sign::CertifiedKey;
-use tokio_rustls::rustls::{
-    Certificate, ClientConfig, ProtocolVersion, ResolvesClientCert, SignatureScheme,
-};
+use tokio_rustls::rustls::{ClientConfig, ProtocolVersion, ResolvesClientCert, SignatureScheme};
 use tokio_rustls::webpki::DNSNameRef;
 use tokio_rustls::TlsConnector;
 
@@ -38,7 +35,7 @@ pub async fn perform_tls_client_handshake<P: CspTlsHandshakeSignerProvider>(
     );
     let server_cert_verifier = NodeServerCertVerifier::new(
         SomeOrAllNodes::new_with_single_node(server),
-        Arc::clone(&registry_client),
+        Arc::clone(registry_client),
         registry_version,
     );
     config
@@ -50,21 +47,9 @@ pub async fn perform_tls_client_handshake<P: CspTlsHandshakeSignerProvider>(
 
 fn static_cert_resolver(key: CertifiedKey, scheme: SignatureScheme) -> Arc<dyn ResolvesClientCert> {
     Arc::new(StaticCertResolver::new(key, scheme).expect(
-        "Failed to create the static cert resolver because the the signing key referenced \
+        "Failed to create the static cert resolver because the signing key referenced \
         in the certified key is incompatible with the signature scheme. This is an implementation error.",
     ))
-}
-
-fn certified_key(
-    self_tls_cert: TlsPublicKeyCert,
-    csp_server_signing_key: CspServerEd25519SigningKey,
-) -> CertifiedKey {
-    CertifiedKey {
-        cert: vec![Certificate(self_tls_cert.as_der().clone())],
-        key: Arc::new(Box::new(csp_server_signing_key)),
-        ocsp: None,
-        sct_list: None,
-    }
 }
 
 async fn connect(

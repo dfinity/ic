@@ -12,4 +12,4 @@ pub struct CspIDkgComplaint {}
 pub struct CspIDkgOpening {}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct CspThresholdSignatureMsg {}
+pub struct CspThresholdEcdsaSigShare {}

@@ -83,6 +83,10 @@ message SubnetCallContextManager {
     repeated SignWithEcdsaContextTree sign_with_mock_ecdsa_contexts = 5;
 }
 
+message TimeOfLastAllocationCharge {
+    uint64 time_of_last_allocation_charge_nanos = 1;
+}
+
 message SystemMetadata {
     uint64 generated_id_counter = 1;
     google.protobuf.BytesValue prev_state_hash = 2;
@@ -107,6 +111,8 @@ message SystemMetadata {
     reserved "stable_memory_delta_estimate";
 
     registry.subnet.v1.SubnetFeatures own_subnet_features = 13;
+
+    TimeOfLastAllocationCharge time_of_last_allocation_charge_nanos = 14;
 }
 
 message StableMemory {

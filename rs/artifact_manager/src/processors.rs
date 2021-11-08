@@ -25,13 +25,21 @@ use ic_types::{
     consensus::{certification::CertificationMessage, dkg, ConsensusMessage},
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
-    p2p::GossipAdvertType,
     NodeId, Time,
 };
 use prometheus::{histogram_opts, labels, Histogram, IntCounter};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
+
+#[derive(Debug, PartialEq, Eq)]
+enum AdvertSource {
+    /// The artifact was produced by this peer
+    Produced,
+
+    /// Artifact was downloaded from another peer and being relayed
+    Relayed,
+}
 
 /// A client may be either wrapped in `Box` or `Arc`.
 pub enum BoxOrArcClient<Artifact: ArtifactKind> {
@@ -297,10 +305,34 @@ impl<
             manager,
         )
     }
+
+    fn advert_class(&self, msg: &ConsensusMessage, source: AdvertSource) -> AdvertClass {
+        // Notify all peers for artifacts produced by us
+        if source == AdvertSource::Produced {
+            return AdvertClass::Critical;
+        }
+
+        // For relayed artifacts: use best effort for shares,
+        // notify all peers for the rest (actual objects like block
+        // proposals, notary/finalization)
+        match msg {
+            ConsensusMessage::RandomBeacon(_) => AdvertClass::Critical,
+            ConsensusMessage::Notarization(_) => AdvertClass::Critical,
+            ConsensusMessage::Finalization(_) => AdvertClass::Critical,
+            ConsensusMessage::RandomTape(_) => AdvertClass::Critical,
+            ConsensusMessage::CatchUpPackage(_) => AdvertClass::Critical,
+            ConsensusMessage::BlockProposal(_) => AdvertClass::Critical,
+            ConsensusMessage::RandomBeaconShare(_) => AdvertClass::BestEffort,
+            ConsensusMessage::NotarizationShare(_) => AdvertClass::BestEffort,
+            ConsensusMessage::FinalizationShare(_) => AdvertClass::BestEffort,
+            ConsensusMessage::RandomTapeShare(_) => AdvertClass::BestEffort,
+            ConsensusMessage::CatchUpPackageShare(_) => AdvertClass::BestEffort,
+        }
+    }
 }
 
 impl<
-        PoolConsensus: MutableConsensusPool + Send + Sync,
+        PoolConsensus: MutableConsensusPool + Send + Sync + 'static,
         PoolIngress: IngressPoolSelect + Send + Sync + 'static,
     > ArtifactProcessor<ConsensusArtifact> for ConsensusProcessor<PoolConsensus, PoolIngress>
 {
@@ -346,14 +378,14 @@ impl<
                 ConsensusAction::AddToValidated(to_add) => {
                     adverts.push(ConsensusArtifact::message_to_advert_send_request(
                         to_add,
-                        GossipAdvertType::Produced,
-                    ))
+                        self.advert_class(to_add, AdvertSource::Produced),
+                    ));
                 }
                 ConsensusAction::MoveToValidated(to_move) => {
                     adverts.push(ConsensusArtifact::message_to_advert_send_request(
                         to_move,
-                        GossipAdvertType::Relayed,
-                    ))
+                        self.advert_class(to_move, AdvertSource::Relayed),
+                    ));
                 }
                 ConsensusAction::RemoveFromValidated(_) => {}
                 ConsensusAction::RemoveFromUnvalidated(_) => {}
@@ -448,9 +480,18 @@ impl<Pool: MutableIngressPool + Send + Sync + 'static> IngressProcessor<Pool> {
             manager,
         )
     }
+
+    fn advert_class(&self, source: AdvertSource) -> AdvertClass {
+        // 1. Notify all peers for ingress messages received directly by us
+        // 2. For relayed ingress messages: don't notify any peers
+        match source {
+            AdvertSource::Produced => AdvertClass::Critical,
+            AdvertSource::Relayed => AdvertClass::None,
+        }
+    }
 }
 
-impl<Pool: MutableIngressPool + Send + Sync> ArtifactProcessor<IngressArtifact>
+impl<Pool: MutableIngressPool + Send + Sync + 'static> ArtifactProcessor<IngressArtifact>
     for IngressProcessor<Pool>
 {
     /// The method processes changes in the ingress pool.
@@ -470,9 +511,9 @@ impl<Pool: MutableIngressPool + Send + Sync> ArtifactProcessor<IngressArtifact>
             self.client.on_state_change(&*pool)
         };
 
-        let adverts = change_set
-            .iter()
-            .filter_map(|change_action| match change_action {
+        let mut adverts = Vec::new();
+        for change_action in change_set.iter() {
+            match change_action {
                 IngressAction::MoveToValidated((
                     message_id,
                     source_node_id,
@@ -480,26 +521,26 @@ impl<Pool: MutableIngressPool + Send + Sync> ArtifactProcessor<IngressArtifact>
                     attribute,
                     integrity_hash,
                 )) => {
-                    let advert_type = if *source_node_id == self.node_id {
-                        GossipAdvertType::Produced
+                    let advert_source = if *source_node_id == self.node_id {
+                        AdvertSource::Produced
                     } else {
-                        GossipAdvertType::Relayed
+                        AdvertSource::Relayed
                     };
-                    Some(AdvertSendRequest {
+                    adverts.push(AdvertSendRequest {
                         advert: Advert {
                             size: *size,
                             id: message_id.clone(),
                             attribute: attribute.clone(),
                             integrity_hash: integrity_hash.clone(),
                         },
-                        advert_type,
-                    })
+                        advert_class: self.advert_class(advert_source),
+                    });
                 }
                 IngressAction::RemoveFromUnvalidated(_)
                 | IngressAction::RemoveFromValidated(_)
-                | IngressAction::PurgeBelowExpiry(_) => None,
-            })
-            .collect();
+                | IngressAction::PurgeBelowExpiry(_) => {}
+            }
+        }
         self.ingress_pool
             .write()
             .unwrap()
@@ -605,13 +646,13 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
                 certification::ChangeAction::AddToValidated(msg) => {
                     adverts.push(CertificationArtifact::message_to_advert_send_request(
                         msg,
-                        GossipAdvertType::Produced,
+                        AdvertClass::Critical,
                     ))
                 }
                 certification::ChangeAction::MoveToValidated(msg) => {
                     adverts.push(CertificationArtifact::message_to_advert_send_request(
                         msg,
-                        GossipAdvertType::Relayed,
+                        AdvertClass::Critical,
                     ))
                 }
                 certification::ChangeAction::HandleInvalid(msg, reason) => {
@@ -704,18 +745,12 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> ArtifactProcessor<DkgArtif
             let change_set = self.client.on_state_change(&*dkg_pool);
             for change_action in change_set.iter() {
                 match change_action {
-                    DkgChangeAction::AddToValidated(to_add) => {
-                        adverts.push(DkgArtifact::message_to_advert_send_request(
-                            to_add,
-                            GossipAdvertType::Produced,
-                        ))
-                    }
-                    DkgChangeAction::MoveToValidated(message) => {
-                        adverts.push(DkgArtifact::message_to_advert_send_request(
-                            message,
-                            GossipAdvertType::Relayed,
-                        ))
-                    }
+                    DkgChangeAction::AddToValidated(to_add) => adverts.push(
+                        DkgArtifact::message_to_advert_send_request(to_add, AdvertClass::Critical),
+                    ),
+                    DkgChangeAction::MoveToValidated(message) => adverts.push(
+                        DkgArtifact::message_to_advert_send_request(message, AdvertClass::Critical),
+                    ),
                     DkgChangeAction::HandleInvalid(msg, reason) => {
                         self.invalidated_artifacts.inc();
                         warn!(self.log, "Invalid DKG message ({:?}): {:?}", reason, msg);

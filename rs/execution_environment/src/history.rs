@@ -180,11 +180,11 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                     let user_error_code_string = dashboard_label_value_from(user_error_code);
 
                     self.message_state_transition_failed_ic_duration_seconds
-                        .with_label_values(&[&reject_code, &user_error_code_string])
+                        .with_label_values(&[&reject_code, user_error_code_string])
                         .observe(ic_duration);
 
                     self.message_state_transition_failed_wall_clock_duration_seconds
-                        .with_label_values(&[&reject_code, &user_error_code_string])
+                        .with_label_values(&[&reject_code, user_error_code_string])
                         .observe(wall_duration);
                 }
             }
@@ -221,6 +221,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
     // of these values you will need to plan to change dashboards as well.
     match code {
         SubnetOversubscribed => "Subnet Oversubscribed",
+        MaxNumberOfCanistersReached => "Max Number of Canisters Reached",
         CanisterInvalidController => "Canister Invalid Controller",
         CanisterNotFound => "Canister Not Found",
         CanisterMethodNotFound => "Canister Method Not Found",

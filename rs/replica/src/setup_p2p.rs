@@ -103,6 +103,7 @@ pub fn construct_ic_stack(
             Arc::clone(&certified_stream_store) as Arc<_>,
             ingress_history_writer,
             scheduler,
+            config.hypervisor,
             Arc::clone(&cycles_account_manager),
             subnet_id,
             &metrics_registry,

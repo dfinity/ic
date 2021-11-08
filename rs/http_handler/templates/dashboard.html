@@ -103,7 +103,6 @@
                     <h3>System state</h3>
                     <table>
                         <tr><td>controllers</td><td>{{ c.system_state.collect_controllers_as_string() }}</td></tr>
-                        <tr><td>stable_memory_size</td><td>{{ c.system_state.stable_memory_size }} pages</td></tr>
                         <tr><td>certified_data length</td><td>{{ c.system_state.certified_data.len() }} bytes</td></tr>
                     </table>
                     <h3>Execution state</h3>
@@ -113,7 +112,8 @@
                         <tr><td>canister_root</td><td>{{ exec_state.canister_root.to_string_lossy() }}</td></tr>
                         <tr><td>wasm_binary size</td><td>{{ exec_state.wasm_binary.binary.len() }} bytes</td></tr>
                         <tr><td>wasm_binary sha256</td><td>{{ hex::encode(exec_state.wasm_binary.binary.hash_sha256()) }}</td></tr>
-                        <tr><td>heap_size</td><td>{{ exec_state.heap_size }} pages</td></tr>
+                        <tr><td>heap_size</td><td>{{ exec_state.wasm_memory.size }} pages</td></tr>
+                        <tr><td>stable_memory_size</td><td>{{ exec_state.stable_memory.size }} pages</td></tr>
                         <tr><td>exports</td><td>
                             {% let dbg = format!("{:?}",  exec_state.exports) %}
                             {% if dbg.len() > 5000 %}

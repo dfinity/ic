@@ -125,7 +125,7 @@ pub mod util {
         }
 
         // Get the combined public key
-        let public_key = crypto::combined_public_key(&public_coefficients);
+        let public_key = crypto::combined_public_key(public_coefficients);
         let secret_key = combined_secret_key(secret_keys);
         assert_eq!(public_key, crypto::public_key_from_secret_key(&secret_key));
 

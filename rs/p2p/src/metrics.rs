@@ -1,5 +1,5 @@
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
 /// The *Gossip* metrics.
 #[derive(Debug, Clone)]
@@ -83,8 +83,8 @@ pub struct DownloadManagementMetrics {
     // Advert fields.
     /// The number of sent adverts(total).
     pub adverts_sent: IntCounter,
-    /// The number of sent adverts(relayed).
-    pub adverts_relayed: IntCounter,
+    /// The number of sent adverts(by advert action).
+    pub adverts_by_action: IntCounterVec,
     /// The number of failures to send adverts.
     pub adverts_send_failed: IntCounter,
     /// The number of received adverts.
@@ -217,9 +217,10 @@ impl DownloadManagementMetrics {
                 "gossip_adverts_sent",
                 "Total number of artifact advertisements sent",
             ),
-            adverts_relayed: metrics_registry.int_counter(
-                "gossip_adverts_relayed",
-                "Total number of relayed artifact advertisements sent",
+            adverts_by_action: metrics_registry.int_counter_vec(
+                "gossip_adverts_by_action",
+                "Total number of artifact advertisements sent, by action type",
+                &["type"],
             ),
             adverts_send_failed: metrics_registry
                 .int_counter("adverts_send_failed", "Number of advert send failures"),

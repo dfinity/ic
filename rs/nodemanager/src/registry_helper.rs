@@ -44,7 +44,7 @@ impl RegistryHelper {
         logger: ReplicaLogger,
     ) -> Self {
         let data_provider = create_data_provider(
-            &config
+            config
                 .registry_client
                 .data_provider
                 .as_ref()
@@ -53,7 +53,7 @@ impl RegistryHelper {
         );
         let registry_client = Arc::new(RegistryClientImpl::new(
             data_provider,
-            Some(&metrics_registry),
+            Some(metrics_registry),
         ));
 
         if let Err(e) = registry_client.fetch_and_start_polling() {
@@ -78,7 +78,7 @@ impl RegistryHelper {
         if let Some((subnet_id, subnet_record)) = self
             .registry_client
             .get_listed_subnet_for_node_id(self.node_id, version)
-            .map_err(NodeManagerError::RegistryError)?
+            .map_err(NodeManagerError::RegistryClientError)?
         {
             if !subnet_record.start_as_nns {
                 return Ok(subnet_id);
@@ -171,7 +171,7 @@ impl RegistryHelper {
     ) -> NodeManagerResult<ReplicaVersionRecord> {
         self.registry_client
             .get_replica_version_record_from_version_id(&replica_version_id, version)
-            .map_err(NodeManagerError::RegistryError)?
+            .map_err(NodeManagerError::RegistryClientError)?
             .ok_or(NodeManagerError::ReplicaVersionMissingError(
                 replica_version_id,
                 version,
@@ -209,5 +209,14 @@ impl RegistryHelper {
     ) -> NodeManagerResult<ReplicaVersion> {
         ReplicaVersion::try_from(subnet.replica_version_id.as_ref())
             .map_err(NodeManagerError::ReplicaVersionParseError)
+    }
+
+    pub(crate) fn get_own_readonly_and_backup_keysets(
+        &self,
+        version: RegistryVersion,
+    ) -> NodeManagerResult<(Vec<String>, Vec<String>)> {
+        // CON-621: get the keysets from the subnet record
+        let _subnet_record = self.get_own_subnet_record(version);
+        Ok((vec![], vec![]))
     }
 }

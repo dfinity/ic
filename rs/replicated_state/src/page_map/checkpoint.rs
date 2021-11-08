@@ -31,7 +31,7 @@ struct Mapping {
 
 impl Mapping {
     fn new(path: &Path) -> Result<Option<Mapping>, PersistenceError> {
-        let file = OpenOptions::new().read(true).open(&path).map_err(|err| {
+        let file = OpenOptions::new().read(true).open(path).map_err(|err| {
             PersistenceError::FileSystemError {
                 path: path.display().to_string(),
                 context: "Failed to open file".to_string(),

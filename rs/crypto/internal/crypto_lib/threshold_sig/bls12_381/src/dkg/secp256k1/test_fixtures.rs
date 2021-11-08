@@ -338,7 +338,7 @@ impl StateWithResponses {
                     &self.dealings,
                     receiver_index,
                     key.public_key_bytes,
-                    &response,
+                    response,
                 )?;
             }
         }

@@ -4,10 +4,12 @@ use ic_test_utilities::types::{
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
 };
-use ic_types::Cycles;
+use ic_types::{messages::MAX_RESPONSE_COUNT_BYTES, CountBytes, Cycles};
 use ic_wasm_types::BinaryEncodedWasm;
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
+const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
+const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
 
@@ -36,6 +38,8 @@ fn canister_state_push_input_request_success() {
                     .receiver(CANISTER_ID)
                     .build()
                     .into(),
+                MAX_CANISTER_MEMORY_SIZE,
+                &mut SUBNET_AVAILABLE_MEMORY.clone(),
             )
             .unwrap();
     })
@@ -51,7 +55,12 @@ fn canister_state_push_input_response_no_reservation() {
 
         assert_eq!(
             Err((StateError::QueueFull { capacity: 0 }, response.clone())),
-            canister_state.push_input(QueueIndex::from(0), response,)
+            canister_state.push_input(
+                QueueIndex::from(0),
+                response,
+                MAX_CANISTER_MEMORY_SIZE,
+                &mut SUBNET_AVAILABLE_MEMORY.clone(),
+            )
         );
     })
 }
@@ -78,6 +87,8 @@ fn canister_state_push_input_response_success() {
                     .originator(CANISTER_ID)
                     .build()
                     .into(),
+                MAX_CANISTER_MEMORY_SIZE,
+                &mut SUBNET_AVAILABLE_MEMORY.clone(),
             )
             .unwrap();
     })
@@ -94,6 +105,8 @@ fn canister_state_push_input_request_mismatched_receiver() {
                     .receiver(OTHER_CANISTER_ID)
                     .build()
                     .into(),
+                MAX_CANISTER_MEMORY_SIZE,
+                &mut SUBNET_AVAILABLE_MEMORY.clone(),
             )
             .unwrap();
     })
@@ -110,8 +123,163 @@ fn canister_state_push_input_response_mismatched_originator() {
                     .originator(OTHER_CANISTER_ID)
                     .build()
                     .into(),
+                MAX_CANISTER_MEMORY_SIZE,
+                &mut SUBNET_AVAILABLE_MEMORY.clone(),
             )
             .unwrap();
+    })
+}
+
+#[test]
+fn canister_state_push_input_request_not_enough_subnet_memory() {
+    canister_state_test(|mut canister_state| {
+        let request: RequestOrResponse = RequestBuilder::default()
+            .sender(OTHER_CANISTER_ID)
+            .receiver(CANISTER_ID)
+            .build()
+            .into();
+
+        let mut subnet_available_memory = 13;
+        let res = canister_state.push_input(
+            QueueIndex::from(0),
+            request.clone(),
+            MAX_CANISTER_MEMORY_SIZE,
+            &mut subnet_available_memory,
+        );
+
+        if ENFORCE_MESSAGE_MEMORY_USAGE {
+            assert_eq!(
+                Err((
+                    StateError::OutOfMemory {
+                        requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
+                        available: 13.into()
+                    },
+                    request
+                )),
+                res
+            );
+            assert_eq!(13, subnet_available_memory);
+        } else {
+            res.unwrap();
+        }
+    })
+}
+
+#[test]
+fn canister_state_push_input_request_not_enough_canister_memory() {
+    canister_state_test(|mut canister_state| {
+        let request: RequestOrResponse = RequestBuilder::default()
+            .sender(OTHER_CANISTER_ID)
+            .receiver(CANISTER_ID)
+            .build()
+            .into();
+
+        let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
+        let res = canister_state.push_input(
+            QueueIndex::from(0),
+            request.clone(),
+            NumBytes::new(13),
+            &mut subnet_available_memory,
+        );
+
+        if ENFORCE_MESSAGE_MEMORY_USAGE {
+            assert_eq!(
+                Err((
+                    StateError::OutOfMemory {
+                        requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
+                        available: 13.into()
+                    },
+                    request
+                )),
+                res
+            );
+            assert_eq!(SUBNET_AVAILABLE_MEMORY, subnet_available_memory);
+        } else {
+            res.unwrap();
+        }
+    })
+}
+
+#[test]
+fn canister_state_push_input_response_not_enough_subnet_memory() {
+    canister_state_test(|mut canister_state| {
+        // Make an input queue reservation.
+        canister_state
+            .push_output_request(
+                RequestBuilder::default()
+                    .sender(CANISTER_ID)
+                    .receiver(OTHER_CANISTER_ID)
+                    .build(),
+            )
+            .unwrap();
+        canister_state.output_into_iter().count();
+
+        let response: RequestOrResponse = ResponseBuilder::default()
+            .respondent(OTHER_CANISTER_ID)
+            .originator(CANISTER_ID)
+            .build()
+            .into();
+
+        let mut subnet_available_memory = 13;
+        canister_state
+            .push_input(
+                QueueIndex::from(0),
+                response.clone(),
+                MAX_CANISTER_MEMORY_SIZE,
+                &mut subnet_available_memory,
+            )
+            .unwrap();
+
+        if ENFORCE_MESSAGE_MEMORY_USAGE {
+            assert_eq!(
+                13 + MAX_RESPONSE_COUNT_BYTES - response.count_bytes(),
+                subnet_available_memory as usize
+            );
+        } else {
+            assert_eq!(13, subnet_available_memory);
+        }
+    })
+}
+
+#[test]
+fn canister_state_push_input_response_not_enough_canister_memory() {
+    canister_state_test(|mut canister_state| {
+        // Make an input queue reservation.
+        canister_state
+            .push_output_request(
+                RequestBuilder::default()
+                    .sender(CANISTER_ID)
+                    .receiver(OTHER_CANISTER_ID)
+                    .build(),
+            )
+            .unwrap();
+        canister_state.output_into_iter().count();
+
+        let response: RequestOrResponse = ResponseBuilder::default()
+            .respondent(OTHER_CANISTER_ID)
+            .originator(CANISTER_ID)
+            .build()
+            .into();
+
+        let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
+        canister_state
+            .push_input(
+                QueueIndex::from(0),
+                response.clone(),
+                NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 + 13),
+                &mut subnet_available_memory,
+            )
+            .unwrap();
+
+        if ENFORCE_MESSAGE_MEMORY_USAGE {
+            assert_eq!(
+                SUBNET_AVAILABLE_MEMORY + MAX_RESPONSE_COUNT_BYTES as i64
+                    - response.count_bytes() as i64,
+                subnet_available_memory
+            );
+        } else {
+            assert_eq!(SUBNET_AVAILABLE_MEMORY, subnet_available_memory);
+        }
     })
 }
 

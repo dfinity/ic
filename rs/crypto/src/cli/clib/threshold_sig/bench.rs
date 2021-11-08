@@ -36,7 +36,7 @@ fn generate_public_keys(
         .zip(secret_keys)
         .map(|(index, maybe)| {
             maybe
-                .map(|_| api::individual_public_key(&public_coefficients, index))
+                .map(|_| api::individual_public_key(public_coefficients, index))
                 .transpose()
                 .map_err(|e| {
                     (
@@ -136,10 +136,10 @@ fn core(num_signers: &str) -> Result<(), (String, i32)> {
         let public_keys = generate_public_keys(&public_coefficients, &secret_keys)?;
         let after_public_key_derivation = Instant::now();
 
-        let signatures = sign(&message, &secret_keys)?;
+        let signatures = sign(message, &secret_keys)?;
         let after_signing = Instant::now();
 
-        verify_individual(&message, &signatures, &public_keys)?;
+        verify_individual(message, &signatures, &public_keys)?;
         let after_individual_verification = Instant::now();
 
         let combined_signature = api::combine_signatures(&signatures, threshold)

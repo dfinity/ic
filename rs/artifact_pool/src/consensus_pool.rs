@@ -959,7 +959,7 @@ mod tests {
             // Check backup for height 4
             let proposal_path = path.join("4").join(format!(
                 "block_proposal_{}_{}.bin",
-                bytes_to_hex_str(&proposal.content.get_hash()),
+                bytes_to_hex_str(proposal.content.get_hash()),
                 bytes_to_hex_str(&ic_crypto::crypto_hash(&proposal)),
             ));
             assert!(

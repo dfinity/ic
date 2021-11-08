@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
+use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use ic_types_test_utils::ids::node_test_id;
 use openssl::x509::{X509NameEntries, X509VerifyResult, X509};
 use openssl::{bn::BigNum, nid::Nid, pkey::Id, pkey::PKey};
@@ -61,7 +62,7 @@ mod keygen {
         let x509_cert = cert.as_x509();
         let public_key = x509_cert.public_key().unwrap();
         assert_eq!(x509_cert.verify(&public_key).ok(), Some(true));
-        assert_eq!(x509_cert.issued(&x509_cert), X509VerifyResult::OK);
+        assert_eq!(x509_cert.issued(x509_cert), X509VerifyResult::OK);
     }
 
     #[test]
@@ -71,8 +72,8 @@ mod keygen {
         let (_key_id, cert) = csp_server.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
         let x509_cert = cert.as_x509();
-        assert_eq!(cn_entries(&x509_cert).count(), 1);
-        let subject_cn = cn_entries(&x509_cert).next().unwrap();
+        assert_eq!(cn_entries(x509_cert).count(), 1);
+        let subject_cn = cn_entries(x509_cert).next().unwrap();
         let expected_subject_cn = node_test_id(NODE_1).get().to_string();
         assert_eq!(expected_subject_cn.as_bytes(), subject_cn.data().as_slice());
     }
@@ -83,7 +84,7 @@ mod keygen {
 
         let (_key_id, cert) = csp_server.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
-        let subject_cn = cn_entries(&cert.as_x509()).next().unwrap();
+        let subject_cn = cn_entries(cert.as_x509()).next().unwrap();
         assert_eq!(b"w43gn-nurca-aaaaa-aaaap-2ai", subject_cn.data().as_slice());
     }
 
@@ -165,11 +166,15 @@ mod keygen {
         let csp_server = csp_server_with_empty_key_store();
         let date_in_the_past = "20211004235959Z";
 
-        let _panic = csp_server.gen_tls_key_pair(node_test_id(NODE_1), &date_in_the_past);
+        let _panic = csp_server.gen_tls_key_pair(node_test_id(NODE_1), date_in_the_past);
     }
 
     fn secret_key_from_store(
-        csp_server: &mut LocalCspServer<impl CryptoRng + Rng, TempSecretKeyStore>,
+        csp_server: &mut LocalCspServer<
+            impl CryptoRng + Rng,
+            impl SecretKeyStore,
+            impl SecretKeyStore,
+        >,
         x509_cert: X509,
     ) -> CspSecretKey {
         let cert = TlsPublicKeyCert::new_from_x509(x509_cert)
@@ -199,7 +204,7 @@ mod sign {
     use crate::api::CspSigner;
     use crate::server::api::TlsHandshakeCspServer;
     use crate::types::CspPublicKey;
-    use crate::Csp;
+    use crate::{CryptoServiceProvider, Csp};
     use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
     use ic_types::crypto::AlgorithmId;
 
@@ -264,7 +269,7 @@ mod sign {
         );
     }
 
-    fn verifier() -> Csp<ChaCha20Rng, TempSecretKeyStore> {
+    fn verifier() -> impl CryptoServiceProvider {
         let dummy_key_store = TempSecretKeyStore::new();
         let csprng = ChaCha20Rng::from_seed(thread_rng().gen::<[u8; 32]>());
         Csp::of(csprng, dummy_key_store)
@@ -294,7 +299,8 @@ mod sign {
     }
 }
 
-fn csp_server_with_empty_key_store() -> LocalCspServer<ChaCha20Rng, TempSecretKeyStore> {
+fn csp_server_with_empty_key_store(
+) -> LocalCspServer<ChaCha20Rng, TempSecretKeyStore, VolatileSecretKeyStore> {
     let key_store = TempSecretKeyStore::new();
     let csprng = ChaCha20Rng::from_seed(thread_rng().gen::<[u8; 32]>());
     LocalCspServer::new_for_test(csprng, key_store)

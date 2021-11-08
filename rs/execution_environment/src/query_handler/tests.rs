@@ -26,26 +26,19 @@ use ic_types::{
     ingress::WasmResult, messages::UserQuery, user_error::ErrorCode, ComputeAllocation,
 };
 use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions, SubnetId};
-use ic_wasm_utils::validation::{WasmValidationConfig, WasmValidationLimits};
 use maplit::btreemap;
 use std::{path::Path, sync::Arc};
 
 const CYCLE_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 const INSTRUCTION_LIMIT: NumInstructions = NumInstructions::new(1_000_000_000);
 const MEMORY_CAPACITY: NumBytes = NumBytes::new(1_000_000_000);
+const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 
 fn with_setup<F>(subnet_type: SubnetType, f: F)
 where
     F: FnOnce(InternalHttpQueryHandlerImpl, CanisterManager, ReplicatedState),
 {
     fn canister_manager_config(subnet_id: SubnetId) -> CanisterMgrConfig {
-        let wasm_validation_config = WasmValidationConfig {
-            limits: WasmValidationLimits {
-                max_globals: 1000,
-                max_functions: 1000,
-            },
-            ..Default::default()
-        };
         CanisterMgrConfig::new(
             MEMORY_CAPACITY,
             Some(CYCLE_BALANCE),
@@ -54,7 +47,6 @@ where
             subnet_id,
             1000,
             1,
-            wasm_validation_config,
         )
     }
 
@@ -120,6 +112,7 @@ fn universal_canister(
             sender_subnet_id,
             CYCLE_BALANCE,
             CanisterSettings::default(),
+            MAX_NUMBER_OF_CANISTERS,
             state,
         )
         .0
@@ -136,7 +129,7 @@ fn universal_canister(
             ExecutionParameters {
                 instruction_limit: INSTRUCTION_LIMIT,
                 canister_memory_limit: MEMORY_CAPACITY,
-                subnet_available_memory: SubnetAvailableMemory::new(MEMORY_CAPACITY),
+                subnet_available_memory: SubnetAvailableMemory::new(MEMORY_CAPACITY.get() as i64),
                 compute_allocation: ComputeAllocation::default(),
             },
         )

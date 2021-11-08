@@ -52,7 +52,11 @@ pub async fn perform_tls_client_handshake(
 
     let mut tls_stream = unconnected_tls_stream(
         tls_connector,
-        "domain is irrelevant, because hostname verification is disabled",
+        // Even though the domain is irrelevant here because hostname verification is disabled, it
+        // is important that the domain is well-formed because some TLS implementations (e.g.,
+        // Rustls) abort the handshake if parsing of the domain fails (e.g., for SNI when sent to
+        // the server)
+        "www.domain-is-irrelevant-because-hostname-verification-is-disabled.com",
         tcp_stream,
     )?;
     Pin::new(&mut tls_stream).connect().await.map_err(|e| {

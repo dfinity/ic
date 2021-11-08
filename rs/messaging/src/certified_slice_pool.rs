@@ -1192,7 +1192,7 @@ impl CertifiedSlicePool {
             None => None,
 
             Some((subnet_id, slice)) => {
-                match slice.garbage_collect(&stream_position) {
+                match slice.garbage_collect(stream_position) {
                     // Some (or no) messages GC-ed. Retain the slice.
                     Ok(Some(slice)) => Some((subnet_id, slice)),
 

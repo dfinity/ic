@@ -1,5 +1,8 @@
 use ic_config::embedders::PersistenceType;
-use ic_embedders::WasmtimeEmbedder;
+use ic_embedders::{
+    wasm_utils::instrumentation::{instrument, InstructionCostTable},
+    WasmtimeEmbedder,
+};
 use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
 use ic_replicated_state::{Global, NumWasmPages};
 use ic_system_api::SystemStateAccessor;
@@ -9,23 +12,23 @@ use ic_test_utilities::{
 };
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    ComputeAllocation, NumBytes, NumInstructions,
+    ComputeAllocation, NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
-use ic_wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use std::sync::Arc;
 
 fn execution_parameters() -> ExecutionParameters {
     ExecutionParameters {
         instruction_limit: NumInstructions::new(5_000_000_000),
         canister_memory_limit: ic_types::NumBytes::from(4 << 30),
-        subnet_available_memory: SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX)),
+        subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2),
         compute_allocation: ComputeAllocation::default(),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use ic_replicated_state::Memory;
     use ic_test_utilities::types::ids::canister_test_id;
     use memory_tracker::DirtyPageTracking;
 
@@ -74,8 +77,11 @@ mod tests {
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
-        let system_state_accessor =
-            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
+            system_state,
+            cycles_account_manager,
+            &Memory::default(),
+        );
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
@@ -154,8 +160,11 @@ mod tests {
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
-        let system_state_accessor =
-            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
+            system_state,
+            cycles_account_manager,
+            &Memory::default(),
+        );
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
@@ -223,6 +232,7 @@ mod tests {
         let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
             system_state,
             Arc::clone(&cycles_account_manager),
+            &Memory::default(),
         );
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
@@ -254,8 +264,11 @@ mod tests {
 
         // Change the value of globals and verify we can get them back.
         let system_state = SystemStateBuilder::default().build();
-        let system_state_accessor =
-            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
+            system_state,
+            cycles_account_manager,
+            &Memory::default(),
+        );
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
@@ -308,6 +321,7 @@ mod tests {
         let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
             system_state,
             Arc::clone(&cycles_account_manager),
+            &Memory::default(),
         );
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
@@ -342,8 +356,11 @@ mod tests {
 
         // Change the value of globals and verify we can get them back.
         let system_state = SystemStateBuilder::default().build();
-        let system_state_accessor =
-            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
+            system_state,
+            cycles_account_manager,
+            &Memory::default(),
+        );
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
@@ -388,8 +405,11 @@ mod tests {
         .unwrap();
         let system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let system_state_accessor =
-            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
+            system_state,
+            cycles_account_manager,
+            &Memory::default(),
+        );
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
@@ -436,8 +456,11 @@ mod tests {
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
         let system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let system_state_accessor =
-            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
+            system_state,
+            cycles_account_manager,
+            &Memory::default(),
+        );
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
@@ -450,10 +473,7 @@ mod tests {
             .new_instance(
                 canister_test_id(1),
                 &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
-                &[Global::I64(0); DEFAULT_GLOBALS_LENGTH + 1]
-                    .iter()
-                    .cloned()
-                    .collect::<Vec<Global>>(),
+                &[Global::I64(0); DEFAULT_GLOBALS_LENGTH + 1].to_vec(),
                 NumWasmPages::from(0),
                 None,
                 None,

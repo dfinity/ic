@@ -58,7 +58,7 @@ impl TransportImpl {
         let client_state = client_map
             .get_mut(&client_type)
             .ok_or(TransportErrorCode::TransportClientNotFound)?;
-        let role = Self::connection_role(&self.node_id, &peer_id);
+        let role = Self::connection_role(&self.node_id, peer_id);
         // If we are the server, we should add the peer to the allowed_clients.
         if role == ConnectionRole::Server {
             self.allowed_clients.write().unwrap().insert(*peer_id);
@@ -89,7 +89,7 @@ impl TransportImpl {
             .ok_or(TransportErrorCode::TransportClientNotFound)?;
         let peer_state = client_state
             .peer_map
-            .get(&peer_id)
+            .get(peer_id)
             .ok_or(TransportErrorCode::PeerNotFound)?;
 
         // Remove flow from metrics.
@@ -107,7 +107,7 @@ impl TransportImpl {
                 )
             }
         }
-        client_state.peer_map.remove(&peer_id);
+        client_state.peer_map.remove(peer_id);
 
         info!(
             self.log,
@@ -128,7 +128,7 @@ impl TransportImpl {
         client_state: &mut ClientState,
         role: ConnectionRole,
     ) -> Result<(), TransportErrorCode> {
-        if client_state.peer_map.get(&peer_id).is_some() {
+        if client_state.peer_map.get(peer_id).is_some() {
             return Err(TransportErrorCode::PeerAlreadyRegistered);
         }
 
@@ -201,7 +201,7 @@ impl TransportImpl {
 
             let peer_ip = IpAddr::from_str(endpoint.ip_addr.as_str())
                 .unwrap_or_else(|_| panic!("Invalid node IP: {}", endpoint.ip_addr));
-            let flow_label = get_flow_label(&endpoint.ip_addr.as_str(), peer_id);
+            let flow_label = get_flow_label(endpoint.ip_addr.as_str(), peer_id);
             let server_port = endpoint.port as u16;
             let connecting_task = self.spawn_connect_task(
                 client_type,
@@ -925,16 +925,10 @@ impl TransportImpl {
         }
 
         let mut accept_ports = HashMap::new();
-        for (config_flow_tag, config_server_port, tcp_listener) in listeners {
+        for (config_flow_tag, _, tcp_listener) in listeners {
             let flow_tag = FlowTag::from(config_flow_tag);
             let accept_task = self.spawn_accept_task(client_type, flow_tag, tcp_listener);
-            accept_ports.insert(
-                flow_tag,
-                ServerPortState {
-                    port: ServerPort::from(config_server_port),
-                    accept_task,
-                },
-            );
+            accept_ports.insert(flow_tag, ServerPortState { accept_task });
         }
         client_map.insert(
             client_type,

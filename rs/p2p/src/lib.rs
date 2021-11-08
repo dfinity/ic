@@ -114,9 +114,8 @@ pub(crate) type P2PResult<T> = std::result::Result<T, P2PError>;
 pub(crate) mod utils {
     //! The utils module provides a mapping from a gossip message to the
     //! corresponding flow tag.
-    use ic_types::transport::FlowTag;
-
     use crate::gossip_protocol::GossipMessage;
+    use ic_types::transport::FlowTag;
 
     /// The FlowMapper struct holds a vector of flow tags.
     pub(crate) struct FlowMapper {
@@ -134,6 +133,96 @@ pub(crate) mod utils {
         pub(crate) fn map(&self, _msg: &GossipMessage) -> FlowTag {
             self.flow_tags[0]
         }
+    }
+}
+
+pub(crate) mod advert_utils {
+    use crate::gossip_protocol::{GossipAdvertAction, GossipAdvertSendRequest, Percentage};
+    use ic_logger::replica_logger::ReplicaLogger;
+    use ic_logger::{error, warn};
+    use ic_metrics::MetricsRegistry;
+    use ic_protobuf::registry::subnet::v1::GossipAdvertConfig;
+    use ic_types::artifact::AdvertClass;
+    use ic_types::p2p::GossipAdvert;
+    use prometheus::IntCounterVec;
+
+    /// Maps the P2P client advert send requests to the internal format,
+    /// based on the config
+    pub(crate) struct AdvertRequestBuilder {
+        pub(crate) advert_config: Option<GossipAdvertConfig>,
+        adverts_by_class: IntCounterVec,
+    }
+
+    impl AdvertRequestBuilder {
+        pub(crate) fn new(
+            mut advert_config: Option<GossipAdvertConfig>,
+            metrics_registry: &MetricsRegistry,
+            log: ReplicaLogger,
+        ) -> Self {
+            warn!(
+                log,
+                "AdvertRequestBuilder::new(): advert_config = {:?}", advert_config
+            );
+
+            if let Some(config) = &advert_config {
+                if let Err(e) = validate_advert_config(config) {
+                    error!(log, "AdvertRequestBuilder::new(): invalid config = {:?}", e);
+                    // Disable the feature on invalid config
+                    advert_config.take();
+                }
+            }
+
+            Self {
+                advert_config,
+                adverts_by_class: metrics_registry.int_counter_vec(
+                    "gossip_adverts_by_class",
+                    "Number of adverts from clients, by advert class",
+                    &["type"],
+                ),
+            }
+        }
+
+        /// Maps the client advert send request to the internal format
+        pub(crate) fn build(
+            &self,
+            advert: GossipAdvert,
+            advert_class: AdvertClass,
+        ) -> Option<GossipAdvertSendRequest> {
+            self.adverts_by_class
+                .with_label_values(&[advert_class.as_str()])
+                .inc();
+
+            let config = match &self.advert_config {
+                Some(config) => config,
+                None => {
+                    // Feature disabled, send to all peers
+                    return Some(GossipAdvertSendRequest {
+                        advert,
+                        action: GossipAdvertAction::SendToAllPeers,
+                    });
+                }
+            };
+
+            let action = match advert_class {
+                AdvertClass::Critical => Some(GossipAdvertAction::SendToAllPeers),
+                AdvertClass::BestEffort => Some(GossipAdvertAction::SendToRandomSubset(
+                    Percentage::from(config.best_effort_percentage),
+                )),
+                AdvertClass::None => None,
+            };
+            action.map(|action| GossipAdvertSendRequest { advert, action })
+        }
+    }
+
+    pub(crate) fn validate_advert_config(config: &GossipAdvertConfig) -> Result<(), String> {
+        if config.best_effort_percentage == 0 || config.best_effort_percentage > 100 {
+            return Err(format!(
+                "Invalid best effort percentage: {}",
+                config.best_effort_percentage
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -185,5 +274,113 @@ impl<T> From<P2PErrorCode> for P2PResult<T> {
     /// The function converts a P2P error code to a P2P result.
     fn from(p2p_error_code: P2PErrorCode) -> P2PResult<T> {
         Err(P2PError { p2p_error_code })
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use crate::advert_utils::{validate_advert_config, AdvertRequestBuilder};
+    use crate::download_prioritization::test::make_gossip_advert;
+    use crate::gossip_protocol::{GossipAdvertAction, GossipAdvertSendRequest, Percentage};
+    use ic_metrics::MetricsRegistry;
+    use ic_protobuf::registry::subnet::v1::GossipAdvertConfig;
+    use ic_test_utilities::p2p::p2p_test_setup_logger;
+    use ic_types::artifact::AdvertClass;
+
+    #[test]
+    fn test_advert_config_validation() {
+        assert!(validate_advert_config(&GossipAdvertConfig {
+            best_effort_percentage: 10,
+        })
+        .is_ok());
+        assert!(validate_advert_config(&GossipAdvertConfig {
+            best_effort_percentage: 90,
+        })
+        .is_ok());
+        assert!(validate_advert_config(&GossipAdvertConfig {
+            best_effort_percentage: 100,
+        })
+        .is_ok());
+
+        assert_eq!(
+            validate_advert_config(&GossipAdvertConfig {
+                best_effort_percentage: 0,
+            })
+            .err()
+            .unwrap(),
+            "Invalid best effort percentage: 0"
+        );
+        assert_eq!(
+            validate_advert_config(&GossipAdvertConfig {
+                best_effort_percentage: 110,
+            })
+            .err()
+            .unwrap(),
+            "Invalid best effort percentage: 110"
+        );
+    }
+
+    #[test]
+    fn test_advert_optimization_disabled() {
+        let builder = AdvertRequestBuilder::new(
+            None,
+            &MetricsRegistry::new(),
+            p2p_test_setup_logger().root.clone().into(),
+        );
+        let result = builder.build(make_gossip_advert(10), AdvertClass::Critical);
+        let expected = GossipAdvertSendRequest {
+            advert: make_gossip_advert(10),
+            action: GossipAdvertAction::SendToAllPeers,
+        };
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_advert_optimization_enabled() {
+        let builder = AdvertRequestBuilder::new(
+            Some(GossipAdvertConfig {
+                best_effort_percentage: 25,
+            }),
+            &MetricsRegistry::new(),
+            p2p_test_setup_logger().root.clone().into(),
+        );
+
+        // AdvertClass::Critical
+        {
+            let result = builder.build(make_gossip_advert(10), AdvertClass::Critical);
+            let expected = GossipAdvertSendRequest {
+                advert: make_gossip_advert(10),
+                action: GossipAdvertAction::SendToAllPeers,
+            };
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        // AdvertClass::BestEffort
+        {
+            let result = builder.build(make_gossip_advert(10), AdvertClass::BestEffort);
+            let expected = GossipAdvertSendRequest {
+                advert: make_gossip_advert(10),
+                action: GossipAdvertAction::SendToRandomSubset(Percentage::from(25)),
+            };
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        // AdvertClass::None
+        {
+            let result = builder.build(make_gossip_advert(10), AdvertClass::None);
+            assert!(result.is_none());
+        }
+    }
+
+    #[test]
+    fn test_advert_invalid_config() {
+        let builder = AdvertRequestBuilder::new(
+            Some(GossipAdvertConfig {
+                best_effort_percentage: 125,
+            }),
+            &MetricsRegistry::new(),
+            p2p_test_setup_logger().root.clone().into(),
+        );
+        assert!(builder.advert_config.is_none());
     }
 }

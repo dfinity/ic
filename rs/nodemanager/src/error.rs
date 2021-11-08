@@ -12,6 +12,7 @@ pub type NodeManagerResult<T> = Result<T, NodeManagerError>;
 
 /// Enumerates the possible errors that NodeManager may encounter
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum NodeManagerError {
     /// The given node is not assigned to any Subnet
     NodeUnassignedError(NodeId, RegistryVersion),
@@ -22,7 +23,7 @@ pub enum NodeManagerError {
 
     /// An error occurred when querying the Registry that prevents Node Manager
     /// from making progress
-    RegistryError(RegistryClientError),
+    RegistryClientError(RegistryClientError),
 
     /// The genesis or recovery CUP failed to be constructed
     MakeRegistryCupError(SubnetId, RegistryVersion),
@@ -120,7 +121,7 @@ impl fmt::Display for NodeManagerError {
                 "Node {:?} is not found in any subnet at registry version {:?}",
                 node_id, registry_version
             ),
-            NodeManagerError::RegistryError(e) => write!(f, "{:?}", e),
+            NodeManagerError::RegistryClientError(e) => write!(f, "{:?}", e),
             NodeManagerError::ReplicaVersionMissingError(replica_version, registry_version) => {
                 write!(
                     f,

@@ -35,7 +35,7 @@ impl Registry {
 
     pub fn get_subnet_list_record(&self) -> SubnetListRecord {
         match self.get(
-            &make_subnet_list_record_key().as_bytes(),
+            make_subnet_list_record_key().as_bytes(),
             self.latest_version(),
         ) {
             Some(RegistryValue {

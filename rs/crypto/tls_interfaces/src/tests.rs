@@ -135,7 +135,7 @@ mod tls_public_key_cert {
                                                 132,246,29,138,88,176,85,61,44,203,176,75,254,16,190,108,172,193,8,74,214,117,167,201,77,168,140,\
                                                 119,30,252,78,182,191,48,97,230,28,5]}";
 
-        let result: Result<TlsPublicKeyCert, json5::Error> = json5::from_str(&serialized);
+        let result: Result<TlsPublicKeyCert, json5::Error> = json5::from_str(serialized);
 
         assert!(result.is_ok());
 
@@ -149,7 +149,7 @@ mod tls_public_key_cert {
     fn should_fail_to_deserialize_malformed_der() {
         let bad_serialized = "{\"certificate_der\":[31,41,59,26]}";
 
-        let error: Result<TlsPublicKeyCert, json5::Error> = json5::from_str(&bad_serialized);
+        let error: Result<TlsPublicKeyCert, json5::Error> = json5::from_str(bad_serialized);
 
         assert!(matches!(error, Err(json5::Error::Message(error_string))
             if error_string.contains("TlsPublicKeyCertCreationError")

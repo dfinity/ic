@@ -9,6 +9,7 @@ use ic_interfaces::{
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_keys::ROOT_SUBNET_ID_KEY;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::{
     crypto::CryptoReturningOk,
@@ -21,7 +22,7 @@ use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::Payload,
     replica_config::ReplicaConfig,
-    Height, SubnetId, Time,
+    Height, RegistryVersion, SubnetId, Time,
 };
 use mockall::predicate::*;
 use mockall::*;
@@ -68,7 +69,15 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
     records: Vec<(u64, SubnetRecord)>,
 ) -> Dependencies {
     let time_source = FastForwardTimeSource::new();
+    let registry_version = RegistryVersion::from(records[0].clone().0);
     let (registry_data_provider, registry) = setup_registry_non_final(subnet_id, records);
+    registry_data_provider
+        .add(
+            ROOT_SUBNET_ID_KEY,
+            registry_version,
+            Some(ic_types::subnet_id_into_protobuf(subnet_test_id(0))),
+        )
+        .unwrap();
     registry.update_to_latest_version();
     let replica_config = ReplicaConfig {
         subnet_id,

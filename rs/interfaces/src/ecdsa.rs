@@ -10,7 +10,7 @@ pub enum EcdsaChangeAction {
     AddToValidated(EcdsaMessage),
     MoveToValidated(EcdsaMessageId),
     RemoveUnvalidated(EcdsaMessageId),
-    HandleInvalid(EcdsaMessageId),
+    HandleInvalid(EcdsaMessageId, String),
 }
 
 pub type EcdsaChangeSet = Vec<EcdsaChangeAction>;

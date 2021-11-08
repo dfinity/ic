@@ -70,7 +70,7 @@ impl BlockPayload {
     /// payload.
     pub fn as_data(&self) -> &DataPayload {
         match self {
-            BlockPayload::Data(data) => &data,
+            BlockPayload::Data(data) => data,
             _ => panic!("No data payload available on a summary block."),
         }
     }

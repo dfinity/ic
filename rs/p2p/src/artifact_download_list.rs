@@ -243,14 +243,14 @@ impl ArtifactDownloadList for ArtifactDownloadListImpl {
     /// The method returns the artifact tracker associated with the given
     /// integrity hash.
     fn get_tracker(&mut self, integrity_hash: &CryptoHash) -> Option<&mut ArtifactTracker> {
-        self.artifacts.get_mut(&integrity_hash)
+        self.artifacts.get_mut(integrity_hash)
     }
 
     /// The function removes the artifact download tracker if it exists in the
     /// download list.
     fn remove_tracker(&mut self, integrity_hash: &CryptoHash) {
         // Remove the integrity hash from the integrity hash index.
-        if let Some(tracker) = self.artifacts.remove(&integrity_hash) {
+        if let Some(tracker) = self.artifacts.remove(integrity_hash) {
             // Remove the integrity hash from the expiry entry.
             if let Some(expiry_entry) = self.expiry_index.get_mut(&tracker.expiry_instant) {
                 expiry_entry
@@ -295,7 +295,7 @@ mod tests {
                 .schedule_download(
                     node_test_id(0),
                     &gossip_advert,
-                    &gossip_config,
+                    gossip_config,
                     1,
                     artifact_manager,
                 )

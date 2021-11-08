@@ -354,7 +354,7 @@ fn store_artifacts(artifacts: Vec<ConsensusMessage>, path: &Path) -> Result<(), 
 // specified retention time.
 fn purge(threshold_secs: Duration, path: &Path, log: ReplicaLogger) -> Result<(), io::Error> {
     let mut leaves = Vec::new();
-    get_leaves(&path, &mut leaves)?;
+    get_leaves(path, &mut leaves)?;
     for path in leaves {
         let age = match path.metadata()?.modified()?.elapsed() {
             Ok(time) => time,
@@ -563,7 +563,7 @@ impl BackupArtifact {
                 artifact.height(),
                 format!(
                     "block_proposal_{}_{}.bin",
-                    bytes_to_hex_str(&artifact.content.get_hash()),
+                    bytes_to_hex_str(artifact.content.get_hash()),
                     bytes_to_hex_str(&ic_crypto::crypto_hash(artifact.as_ref())),
                 ),
             ),

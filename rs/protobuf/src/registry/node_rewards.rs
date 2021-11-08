@@ -2,10 +2,29 @@
 pub mod v2 {
     include!(std::concat!("../../gen/registry/registry.node_rewards.v2.rs"));
     use std::iter::Extend;
+    use std::collections::BTreeMap;
 
     impl UpdateNodeRewardsTableProposalPayload {
         pub fn get_rewards_table(&self) -> NodeRewardsTable {
             NodeRewardsTable { table: self.new_entries.clone() }
+        }
+    }
+
+    impl From<BTreeMap<String, BTreeMap<String, u64>>> for UpdateNodeRewardsTableProposalPayload {
+        fn from(map: BTreeMap<String, BTreeMap<String, u64>>) -> Self {
+            let mut payload = UpdateNodeRewardsTableProposalPayload::default();
+
+            for (region, node_type_to_rewards_map) in &map {
+                let mut rates: BTreeMap<String, NodeRewardRate> = BTreeMap::new();
+
+                for (node_type, &xdr_permyriad_per_node_per_month) in node_type_to_rewards_map {
+                    rates.insert(node_type.clone(), NodeRewardRate { xdr_permyriad_per_node_per_month });
+                }
+
+                payload.new_entries.insert(region.clone(), NodeRewardRates { rates });
+            }
+
+            payload
         }
     }
 
@@ -30,6 +49,23 @@ pub mod v2 {
         use super::*;
         #[allow(unused_imports)]
         use maplit::btreemap;
+
+        #[test]
+        fn test_from_btreemap() {
+            let json = r#"
+                { "us-west": { "default": 10, "storage_upgrade": 24 }, "france": { "default": 50 } }
+            "#;
+
+            let map: BTreeMap<String, BTreeMap<String, u64>> = serde_json::from_str(json).unwrap();
+            let payload = UpdateNodeRewardsTableProposalPayload::from(map);
+
+            let us_west = payload.new_entries.get("us-west").unwrap();
+            let france = payload.new_entries.get("france").unwrap();
+
+            assert_eq!(us_west.rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 10);
+            assert_eq!(us_west.rates.get("storage_upgrade").unwrap().xdr_permyriad_per_node_per_month, 24);
+            assert_eq!(france.rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 50);
+        }
 
         #[test]
         fn test_extend_node_reward_table() {

@@ -16,7 +16,7 @@ fn should_generate_valid_self_signed_certificate() {
     let x509_cert = cert.as_x509();
     let public_key = x509_cert.public_key().unwrap();
     assert_eq!(x509_cert.verify(&public_key).ok(), Some(true));
-    assert_eq!(x509_cert.issued(&x509_cert), X509VerifyResult::OK);
+    assert_eq!(x509_cert.issued(x509_cert), X509VerifyResult::OK);
 }
 
 #[test]
@@ -26,8 +26,8 @@ fn should_set_cert_subject_cn() {
     let (cert, _sk) = generate_tls_keys(SUBJECT_CN, NOT_AFTER);
 
     let x509_cert = cert.as_x509();
-    assert_eq!(subject_cn_entries(&x509_cert).count(), 1);
-    let subject_cn = subject_cn_entries(&x509_cert).next().unwrap();
+    assert_eq!(subject_cn_entries(x509_cert).count(), 1);
+    let subject_cn = subject_cn_entries(x509_cert).next().unwrap();
     assert_eq!(SUBJECT_CN.as_bytes(), subject_cn.data().as_slice());
 }
 
@@ -38,8 +38,8 @@ fn should_set_cert_issuer_cn_to_subject_cn() {
     let (cert, _sk) = generate_tls_keys(SUBJECT_CN, NOT_AFTER);
 
     let x509_cert = cert.as_x509();
-    assert_eq!(issuer_cn_entries(&x509_cert).count(), 1);
-    let issuer_cn = issuer_cn_entries(&x509_cert).next().unwrap();
+    assert_eq!(issuer_cn_entries(x509_cert).count(), 1);
+    let issuer_cn = issuer_cn_entries(x509_cert).next().unwrap();
     assert_eq!(SUBJECT_CN.as_bytes(), issuer_cn.data().as_slice());
 }
 
@@ -49,7 +49,7 @@ fn should_set_different_serial_numbers_for_multiple_certs() {
     let mut serial_samples = BTreeSet::new();
     for _i in 0..SAMPLE_SIZE {
         let (cert, _sk) = generate_tls_keys("some common name 1", NOT_AFTER);
-        serial_samples.insert(serial_number(&cert.as_x509()));
+        serial_samples.insert(serial_number(cert.as_x509()));
     }
     assert_eq!(serial_samples.len(), SAMPLE_SIZE);
 }

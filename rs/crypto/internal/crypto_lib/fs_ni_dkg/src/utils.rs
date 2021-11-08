@@ -47,12 +47,12 @@ pub fn big_one() -> BIG {
 
 /// Addition of two field elements modulo the prime order of the group.
 pub fn field_add(left: &BIG, right: &BIG) -> BIG {
-    BIG::modadd(&left, &right, &curve_order())
+    BIG::modadd(left, right, &curve_order())
 }
 
 /// Multiplication of two field elements modulo the prime order of the group.
 pub fn field_mul(left: &BIG, right: &BIG) -> BIG {
-    BIG::modmul(&left, &right, &curve_order())
+    BIG::modmul(left, right, &curve_order())
 }
 
 // Helpers to compute SHA256 hashes of elements of  Z_p/G_1/G_2.
@@ -95,7 +95,7 @@ pub fn oracle_p(dst: &[u8], msg: &[u8], spec_p: &BIG) -> BIG {
     // element of Z_MODULUS. However, MODULUS is 381-bit, while p is about 256 bits,
     // so the output is practically uniform modulo `p`.
     let mut x = hash_to_field_bls12381(hmac::MC_SHA2, ecp::HASH_TYPE, dst, msg, 1)[0].redc();
-    x.rmod(&spec_p);
+    x.rmod(spec_p);
     x
 }
 
@@ -117,7 +117,7 @@ fn hash_to_field_bls12381(
     let m = spec_r.nbits();
     let ll = ceil(k + ceil(m, 2), 8);
     let mut okm: [u8; 512] = [0; 512];
-    hmac::xmd_expand(hash, hlen, &mut okm, ll * ctr, &dst, &msg);
+    hmac::xmd_expand(hash, hlen, &mut okm, ll * ctr, dst, msg);
     let mut fd: [u8; 256] = [0; 256];
     for i in 0..ctr {
         for j in 0..ll {
@@ -148,7 +148,7 @@ fn hash_to_field2_bls12381(
     let m = spec_r.nbits();
     let ll = ceil(k + ceil(m, 2), 8);
     let mut okm: [u8; 512] = [0; 512];
-    hmac::xmd_expand(hash, hlen, &mut okm, 2 * ll * ctr, &dst, &msg);
+    hmac::xmd_expand(hash, hlen, &mut okm, 2 * ll * ctr, dst, msg);
     let mut fd: [u8; 256] = [0; 256];
     for i in 0..ctr {
         for j in 0..ll {

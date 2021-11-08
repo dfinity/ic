@@ -51,7 +51,7 @@ fn test_anonymous_and_unauthorized_users_cannot_update_icp_xdr_coversion_rate() 
         assert_eq!(
             get_value::<IcpXdrConversionRateRecord>(
                 &registry,
-                &make_icp_xdr_conversion_rate_record_key().as_bytes()
+                make_icp_xdr_conversion_rate_record_key().as_bytes()
             )
             .await,
             IcpXdrConversionRateRecord::default()
@@ -71,7 +71,7 @@ fn test_anonymous_and_unauthorized_users_cannot_update_icp_xdr_coversion_rate() 
         assert_eq!(
             get_value::<IcpXdrConversionRateRecord>(
                 &registry,
-                &make_icp_xdr_conversion_rate_record_key().as_bytes()
+                make_icp_xdr_conversion_rate_record_key().as_bytes()
             )
             .await,
             IcpXdrConversionRateRecord::default()

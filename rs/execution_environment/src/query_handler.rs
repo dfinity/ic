@@ -150,7 +150,7 @@ impl QueryHandler for InternalHttpQueryHandlerImpl {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
         let subnet_available_memory =
-            SubnetAvailableMemory::new(self.config.subnet_memory_capacity);
+            SubnetAvailableMemory::new(self.config.subnet_memory_capacity.get() as i64);
         let max_canister_memory_size = self.config.max_canister_memory_size;
 
         let mut context = query_context::QueryContext::new(

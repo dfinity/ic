@@ -19,7 +19,7 @@ ic-crypto-internal-multi-sig-bls12381 = { path = "../internal/crypto_lib/multi_s
 ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
 ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
-x509-parser = { version = "0.9.1" }
+x509-parser = { version = "0.12.0" }
 
 [dev-dependencies]
 curve25519-dalek = "3.0.2"

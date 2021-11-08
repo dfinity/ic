@@ -100,6 +100,55 @@ fn validate_version_range(
     Ok(p.current_version.0)
 }
 
+/// Decodes registry deltas from their hash tree representation.
+pub fn decode_hash_tree(
+    since_version: u64,
+    hash_tree: MixedHashTree,
+) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion), CertificationError> {
+    // Extract structured deltas from their tree representation.
+    let labeled_tree = LabeledTree::<Vec<u8>>::try_from(hash_tree).map_err(|err| {
+        CertificationError::MalformedHashTree(format!(
+            "failed to convert hash tree to labeled tree: {:?}",
+            err
+        ))
+    })?;
+
+    let certified_payload = CertifiedPayload::deserialize(LabeledTreeDeserializer::new(
+        &labeled_tree,
+    ))
+    .map_err(|err| {
+        CertificationError::DeserError(format!(
+            "failed to unpack certified payload from the labeled tree: {}",
+            err
+        ))
+    })?;
+
+    // Validate that the deltas form a proper range and convert them to the
+    // format that RegistryClient wants.
+    let current_version = validate_version_range(since_version, &certified_payload)?;
+
+    let changes = certified_payload
+        .delta
+        .into_iter()
+        .flat_map(|(v, mutate_req)| {
+            mutate_req.0.mutations.into_iter().map(move |m| {
+                let value = if m.mutation_type == Type::Delete as i32 {
+                    None
+                } else {
+                    Some(m.value)
+                };
+                RegistryTransportRecord {
+                    key: String::from_utf8_lossy(&m.key[..]).to_string(),
+                    value,
+                    version: RegistryVersion::from(v),
+                }
+            })
+        })
+        .collect();
+
+    Ok((changes, RegistryVersion::from(current_version)))
+}
+
 /// Parses a response of the "get_certified_changes_since" registry method,
 /// validates data integrity and authenticity and returns
 ///   * The list of changes to apply.
@@ -142,48 +191,9 @@ pub fn decode_certified_deltas(
     )
     .map_err(embed_certificate_error)?;
 
-    // Extract structured deltas from their tree representation.
-    let labeled_tree = LabeledTree::<Vec<u8>>::try_from(mixed_hash_tree).map_err(|err| {
-        CertificationError::MalformedHashTree(format!(
-            "failed to convert hash tree to labeled tree: {:?}",
-            err
-        ))
-    })?;
+    let (changes, current_version) = decode_hash_tree(since_version, mixed_hash_tree)?;
 
-    let certified_payload = CertifiedPayload::deserialize(LabeledTreeDeserializer::new(
-        &labeled_tree,
-    ))
-    .map_err(|err| {
-        CertificationError::DeserError(format!(
-            "failed to unpack certified payload from the labeled tree: {}",
-            err
-        ))
-    })?;
-
-    // Validate that the deltas form a proper range and convert them to the
-    // format that RegistryClient wants.
-    let current_version = validate_version_range(since_version, &certified_payload)?;
-
-    let changes = certified_payload
-        .delta
-        .into_iter()
-        .flat_map(|(v, mutate_req)| {
-            mutate_req.0.mutations.into_iter().map(move |m| {
-                let value = if m.mutation_type == Type::Delete as i32 {
-                    None
-                } else {
-                    Some(m.value)
-                };
-                RegistryTransportRecord {
-                    key: String::from_utf8_lossy(&m.key[..]).to_string(),
-                    value,
-                    version: RegistryVersion::from(v),
-                }
-            })
-        })
-        .collect();
-
-    Ok((changes, RegistryVersion::from(current_version), time))
+    Ok((changes, current_version, time))
 }
 
 /// An auxiliary type that instructs serde to deserialize blob as a protobuf

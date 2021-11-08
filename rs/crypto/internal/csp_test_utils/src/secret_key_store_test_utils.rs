@@ -41,7 +41,8 @@ impl TempSecretKeyStore {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let tempdir = mk_temp_dir_with_permissions(0o700);
-        let store = ProtoSecretKeyStore::open(tempdir.path(), None);
+        let temp_file = &"temp_sks_data.pb";
+        let store = ProtoSecretKeyStore::open(tempdir.path(), temp_file, None);
         TempSecretKeyStore { store, tempdir }
     }
 }

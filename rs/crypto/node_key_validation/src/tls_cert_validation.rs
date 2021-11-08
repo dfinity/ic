@@ -166,7 +166,7 @@ fn ed25519_pubkey_from_x509_cert(
 fn verify_ed25519_public_key(
     public_key: &BasicSigEd25519PublicKeyBytes,
 ) -> Result<(), KeyValidationError> {
-    if !ic_crypto_internal_basic_sig_ed25519::verify_public_key(&public_key) {
+    if !ic_crypto_internal_basic_sig_ed25519::verify_public_key(public_key) {
         return Err(invalid_tls_certificate_error(
             "public key verification failed",
         ));
@@ -192,7 +192,7 @@ fn verify_ed25519_signature(
 ) -> CryptoResult<()> {
     let sig = BasicSigEd25519SignatureBytes::try_from(&x509_cert.signature_value.data.to_vec())?;
     let msg = x509_cert.tbs_certificate.as_ref();
-    ic_crypto_internal_basic_sig_ed25519::verify(&sig, msg, &public_key)
+    ic_crypto_internal_basic_sig_ed25519::verify(&sig, msg, public_key)
 }
 
 fn invalid_tls_certificate_error<S: Into<String>>(internal_error: S) -> KeyValidationError {

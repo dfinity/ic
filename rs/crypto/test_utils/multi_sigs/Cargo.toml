@@ -1,0 +1,13 @@
+[package]
+name = "ic-crypto-test-utils-multi-sigs"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-crypto = { path = "../.." }
+ic-registry-client = { path = "../../../registry/client" }
+ic-registry-common = { path = "../../../registry/common" }
+ic-registry-keys = { path = "../../../registry/keys" }
+ic-types = { path = "../../../types/types" }
+rand = "0.7.3"
+

@@ -35,10 +35,7 @@ pub struct InstanceStats {
 
 /// Errors that can be returned when fetching the available memory on a subnet.
 pub enum SubnetAvailableMemoryError {
-    InsufficientMemory {
-        requested: NumBytes,
-        available: NumBytes,
-    },
+    InsufficientMemory { requested: NumBytes, available: i64 },
 }
 
 /// This struct is used to manage the view of the current amount of memory
@@ -50,18 +47,18 @@ pub enum SubnetAvailableMemoryError {
 /// provide them with a way to view the latest state of memory available in a
 /// thread safe way. Hence, we use `Arc<RwLock<>>` here.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct SubnetAvailableMemory(Arc<RwLock<NumBytes>>);
+pub struct SubnetAvailableMemory(Arc<RwLock<i64>>);
 
 impl SubnetAvailableMemory {
-    pub fn new(amount: NumBytes) -> Self {
+    pub fn new(amount: i64) -> Self {
         Self(Arc::new(RwLock::new(amount)))
     }
 
     /// Try to use some memory capacity and fail if not enough is available
     pub fn try_decrement(&self, requested: NumBytes) -> Result<(), SubnetAvailableMemoryError> {
         let mut available = self.0.write().unwrap();
-        if requested <= *available {
-            *available -= requested;
+        if requested.get() as i64 <= *available {
+            *available -= requested.get() as i64;
             Ok(())
         } else {
             Err(SubnetAvailableMemoryError::InsufficientMemory {
@@ -73,10 +70,10 @@ impl SubnetAvailableMemory {
 
     pub fn increment(&self, amount: NumBytes) {
         let mut available = self.0.write().unwrap();
-        *available += amount;
+        *available += amount.get() as i64;
     }
 
-    pub fn get(self) -> NumBytes {
+    pub fn get(&self) -> i64 {
         *self.0.read().unwrap()
     }
 }
@@ -668,8 +665,8 @@ pub trait Scheduler: Send {
         &self,
         state: Self::State,
         randomness: Randomness,
-        time_of_previous_batch: Time,
         current_round: ExecutionRound,
         provisional_whitelist: ProvisionalWhitelist,
+        max_number_of_canisters: u64,
     ) -> Self::State;
 }

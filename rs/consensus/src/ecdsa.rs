@@ -183,6 +183,7 @@ use ic_types::{
 
 use std::sync::Arc;
 
+mod payload_builder;
 mod pre_signer;
 
 /// `EcdsaImpl` is the consensus component responsible for processing threshold

@@ -19,7 +19,7 @@ pub fn individual_multi_signature_contribution_verifies(
     public_key: PublicKey,
     message: &[u8],
 ) {
-    let signature = multi_crypto::sign_message(&message, secret_key);
+    let signature = multi_crypto::sign_message(message, secret_key);
     assert!(multi_crypto::verify_individual_message_signature(
         message, signature, public_key
     ));

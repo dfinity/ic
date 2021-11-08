@@ -33,7 +33,14 @@ pub trait CheckpointManager: Send + Sync {
     /// Atomically creates a checkpoint from the "tip" directory.
     /// "name" identifies the name of the checkpoint to be created
     /// and it need not be a directory path.
-    fn tip_to_checkpoint(&self, tip: &Path, name: &str) -> std::io::Result<PathBuf>;
+    ///
+    /// If a thread-pool is provided then files are copied in parallel.
+    fn tip_to_checkpoint(
+        &self,
+        tip: &Path,
+        name: &str,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> std::io::Result<PathBuf>;
 
     /// Removes a checkpoint identified by "name".
     fn remove_checkpoint(&self, name: &str) -> std::io::Result<()>;
@@ -231,7 +238,7 @@ impl StateLayout {
 
     /// Returns the the raw root path for state
     pub fn raw_path(&self) -> &Path {
-        &self.cp_manager.raw_path()
+        self.cp_manager.raw_path()
     }
 
     /// Returns the path to the temporary directory.
@@ -263,6 +270,12 @@ impl StateLayout {
         Ok(tmp.join(format!("state_sync_scratchpad_{:016x}", height.get())))
     }
 
+    /// Returns the path to cache an unfinished statesync at `height`
+    pub fn state_sync_cache(&self, height: Height) -> Result<PathBuf, LayoutError> {
+        let tmp = self.tmp()?;
+        Ok(tmp.join(format!("state_sync_cache_{:016x}", height.get())))
+    }
+
     pub fn cleanup_tip(&self) -> Result<(), LayoutError> {
         if self.tip_path().exists() {
             std::fs::remove_dir_all(self.tip_path()).map_err(|err| LayoutError::IoError {
@@ -281,9 +294,13 @@ impl StateLayout {
         &self,
         tip: CheckpointLayout<RwPolicy>,
         height: Height,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let cp_name = self.checkpoint_name(height);
-        match self.cp_manager.tip_to_checkpoint(tip.raw_path(), &cp_name) {
+        match self
+            .cp_manager
+            .tip_to_checkpoint(tip.raw_path(), &cp_name, thread_pool)
+        {
             Ok(new_cp) => CheckpointLayout::new(new_cp, height),
             Err(err) if is_dir_already_exists_err(&err) => Err(LayoutError::AlreadyExists(height)),
             Err(err) => Err(LayoutError::IoError {

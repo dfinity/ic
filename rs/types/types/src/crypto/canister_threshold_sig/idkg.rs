@@ -13,12 +13,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
-//Note:
-//* We may need an API for consensus to know which transcripts have been loaded.
+pub mod conversions;
+pub use conversions::*;
 
-// It should uniquely identify a transcript.
-// Can be a string decided by Consensus, e.g. by hashing the fields below, or a
-// u64. (CRP-1104)
+/// Unique identifier for an IDkg transcript.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscriptId(pub usize);
 
@@ -29,7 +27,7 @@ impl IDkgTranscriptId {
     }
 }
 
-/// A set of receivers for interactive DKG.
+/// A set of receivers for IDkg.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct IDkgReceivers {
     receivers: BTreeSet<NodeId>,
@@ -101,7 +99,7 @@ impl IDkgReceivers {
     }
 }
 
-/// A set of dealers for interactive DKG.
+/// A set of dealers for IDkg.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct IDkgDealers {
     dealers: BTreeSet<NodeId>,
@@ -173,6 +171,7 @@ impl IDkgDealers {
     }
 }
 
+/// Parameters used in the creation of IDkg dealings and transcripts.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscriptParams {
     pub transcript_id: IDkgTranscriptId,
@@ -218,43 +217,52 @@ impl IDkgTranscriptParams {
     }
 }
 
-// Design consideration:
-// We could use either full transcripts or IDkgTranscriptId in the Resharing and
-// Multiplication variants.
+/// Origin identifier of a Masked IDkg transcript.
+///
+/// When the transcript derives from earlier transcripts, these are included
+/// in this enum.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum IDkgMaskedTranscriptOrigin {
     Random,
-    MaskedTimesMasked(IDkgTranscriptId, IDkgTranscriptId),
     UnmaskedTimesMasked(IDkgTranscriptId, IDkgTranscriptId),
 }
 
+/// Origin identifier of an Unmasked IDkg transcript.
+///
+/// The earlier transcripts used to derive this transcript are included in this
+/// enum.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum IDkgUnmaskedTranscriptOrigin {
     ReshareMasked(IDkgTranscriptId),
     ReshareUnmasked(IDkgTranscriptId),
 }
 
+/// Type and origin of an IDkg transcript.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum IDkgTranscriptType {
     Masked(IDkgMaskedTranscriptOrigin),
     Unmasked(IDkgUnmaskedTranscriptOrigin),
 }
 
+/// Collection of verified IDkg dealings, together with metadata.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,
     pub receivers: IDkgReceivers,
     pub registry_version: RegistryVersion,
-    pub verified_dealings: BTreeMap<NodeId, VerifiedIDkgDealing>,
+    pub verified_dealings: BTreeMap<NodeId, IDkgMultiSignedDealing>,
     pub transcript_type: IDkgTranscriptType,
+    pub algorithm_id: AlgorithmId,
 }
 
+/// Identifier for the way an IDkg transcript is created.
+///
+/// If earlier transcripts are used in the creation, these are included here.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum IDkgTranscriptOperation {
     Random,
     ReshareOfMasked(IDkgTranscript),
     ReshareOfUnmasked(IDkgTranscript),
-    MaskedTimesMasked(IDkgTranscript, IDkgTranscript),
     UnmaskedTimesMasked(IDkgTranscript, IDkgTranscript),
 }
 
@@ -272,10 +280,9 @@ impl IDkgTranscript {
     }
 }
 
+/// Dealing of an IDkg sharing.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgDealing {
-    // The identity of the dealer is usually part of the consensus types, and verified there.
-    //pub dealer_id:  NodeId,
     pub internal_dealing: CspIDkgDealing,
 }
 
@@ -287,14 +294,15 @@ impl IDkgDealing {
     }
 }
 
+/// Dealing of an IDkg sharing, along with a combined multisignature.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct VerifiedIDkgDealing {
+pub struct IDkgMultiSignedDealing {
     pub signature: CombinedMultiSigOf<IDkgDealing>,
     pub signers: BTreeSet<NodeId>,
     pub dealing: IDkgDealing,
 }
 
-// IDkgComplaint against an indivdual dealing in a transcript.
+/// Complaint against an individual IDkg dealing in a transcript.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct IDkgComplaint {
     pub transcript_id: IDkgTranscriptId,
@@ -322,6 +330,7 @@ impl IDkgComplaint {
     }
 }
 
+/// Opening created in response to an IDkgComplaint.
 pub struct IDkgOpening {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,

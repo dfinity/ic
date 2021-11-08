@@ -4,6 +4,7 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
+cvt = "0.1.1"
 debug_stub_derive = "0.3.0"
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
@@ -18,9 +19,10 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-ic-wasm-utils = { path = "../wasm_utils" }
 lazy_static = "1.4.0"
+libc = "0.2.91"
 maplit = "1.0.2"
+nix = "0.23.0"
 phantom_newtype = { path = "../phantom_newtype" }
 serde = { version = "1.0.99", features = [ "derive", "rc" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
@@ -29,3 +31,7 @@ tempfile = "3.1.0"
 [dev-dependencies]
 criterion = "0.3"
 ic-test-utilities = { path = "../test_utilities" }
+
+[[bench]]
+name = "bench_allocator"
+harness = false

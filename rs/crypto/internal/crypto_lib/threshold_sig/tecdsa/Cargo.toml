@@ -9,10 +9,22 @@ edition = "2018"
 ic-crypto-sha = { path = "../../../../sha" }
 k256 = { version = "0.9.5", features = ["arithmetic"] }
 p256 = { version = "0.9.0", features = ["arithmetic"] }
+zeroize = { version = "1.1.1", features = ["zeroize_derive"] }
 rand_core = "0.5"
 rand_chacha = "0.2.2"
 sha2 = "0.9"
+hex = "0.4"
+hex-literal = "0.3.3"
+subtle = "2.4"
 
 [dev-dependencies]
-hex = "0.4"
 rand = "0.7"
+criterion = "0.3"
+
+[[bench]]
+name = "field_ops"
+harness = false
+
+[[bench]]
+name = "hash2curve"
+harness = false

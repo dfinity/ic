@@ -101,8 +101,9 @@ fn should_return_error_from_csp() {
     ));
 }
 
-fn local_csp_server() -> LocalCspServer<OsRng, VolatileSecretKeyStore> {
-    LocalCspServer::new(
+fn local_csp_server() -> LocalCspServer<OsRng, VolatileSecretKeyStore, VolatileSecretKeyStore> {
+    LocalCspServer::new_with_os_rng(
+        VolatileSecretKeyStore::new(),
         VolatileSecretKeyStore::new(),
         Arc::new(CryptoMetrics::none()),
         no_op_logger(),

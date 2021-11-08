@@ -107,9 +107,9 @@ pub fn initial_dkg_transcript(
     receiver_keys: &BTreeMap<NodeId, PublicKeyProto>,
 ) -> NiDkgTranscript {
     let dkg_config = initial_dkg_config.get();
-    ensure_matching_node_ids(&dkg_config.receivers(), receiver_keys);
+    ensure_matching_node_ids(dkg_config.receivers(), receiver_keys);
 
-    let dealer = first_dealer(&dkg_config);
+    let dealer = first_dealer(dkg_config);
     let registry = fake_registry_with_encryption_keys(receiver_keys, dkg_config.registry_version());
     let dealer_crypto = TempCryptoComponent::new(Arc::new(registry), dealer);
 

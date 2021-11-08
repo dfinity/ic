@@ -6,9 +6,12 @@ use checkpoint::Checkpoint;
 use ic_sys::PageBytes;
 pub use ic_sys::{PageIndex, PAGE_SIZE};
 pub use page_allocator::allocated_pages_count;
+// Exported publicly for benchmarking.
+pub use page_allocator::{DefaultPageAllocatorImpl, HeapBasedPageAllocator, PageAllocatorInner};
 // NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
 // operation. This allows us to simplify canister state management: we can
 // simply have a copy of the whole PageMap in every canister snapshot.
+use ic_types::Height;
 use int_map::IntMap;
 use page_allocator::{Page, PageAllocator};
 use std::collections::HashMap;
@@ -22,12 +25,6 @@ use std::path::Path;
 struct PageDelta(IntMap<Page>);
 
 impl PageDelta {
-    /// Returns the number of pages in the delta.
-    #[cfg(test)]
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-
     /// Gets content of the page at the specified index.
     ///
     /// The given `page_allocator` must be the same as the one used for
@@ -247,18 +244,23 @@ pub struct PageMap {
     /// the `page_delta`.
     checkpoint: Checkpoint,
 
+    /// The height of the checkpoint that backs the page map.
+    pub base_height: Option<Height>,
+
     /// The map containing pages overriding pages from the `checkpoint`.
     /// We need these pages to be able to reconstruct the full heap.
+    /// It is reset when `strip_all_deltas()` method is called.
     page_delta: PageDelta,
 
-    /// The map containing deltas accumulated since the beginning of
-    /// the execution round.  This delta is reset when
-    /// `take_round_delta()` method is called.
+    /// The map containing deltas accumulated since the beginning of the
+    /// execution round.  It is reset when `strip_round_delta()` or
+    /// `strip_all_deltas()` methods are called.
     ///
     /// Invariant: round_delta ⊆ page_delta
     round_delta: PageDelta,
 
     /// The allocator for PageDelta pages.
+    /// It is reset when `strip_all_deltas()` method is called.
     page_allocator: PageAllocator,
 }
 
@@ -273,10 +275,11 @@ impl PageMap {
     /// Creates a page map backed by the provided heap file.
     ///
     /// Note that the file is assumed to be read-only.
-    pub fn open(heap_file: &Path) -> Result<Self, PersistenceError> {
+    pub fn open(heap_file: &Path, base_height: Option<Height>) -> Result<Self, PersistenceError> {
         let checkpoint = Checkpoint::open(heap_file)?;
         Ok(Self {
             checkpoint,
+            base_height,
             page_delta: Default::default(),
             round_delta: Default::default(),
             page_allocator: Default::default(),
@@ -285,7 +288,7 @@ impl PageMap {
 
     /// Modifies this page map by adding the given dirty pages to it.
     pub fn update(&mut self, pages: &[(PageIndex, &PageBytes)]) {
-        let page_delta = self.allocate(pages);
+        let page_delta = self.page_allocator.allocate(pages);
         self.apply(page_delta);
     }
 
@@ -362,13 +365,25 @@ impl PageMap {
     }
 
     /// Removes the page delta from this page map.
-    pub fn strip_delta(&mut self) {
-        std::mem::take(&mut self.page_delta);
+    pub fn strip_all_deltas(&mut self) {
+        // Ensure that all pages are dropped before we drop the page allocator.
+        // This is not necessary for correctness in the current implementation,
+        // because page destructors are currently trivial. Nevertheless, it is
+        // a good property to maintain.
+        {
+            std::mem::take(&mut self.page_delta);
+            std::mem::take(&mut self.round_delta);
+        }
+        std::mem::take(&mut self.page_allocator);
     }
 
     /// Removes the round delta from this page map.
     pub fn strip_round_delta(&mut self) {
         std::mem::take(&mut self.round_delta);
+    }
+
+    pub fn get_page_delta_indices(&self) -> Vec<PageIndex> {
+        self.page_delta.iter().map(|(index, _)| index).collect()
     }
 
     /// Returns the length of the modified prefix in host pages.
@@ -391,31 +406,25 @@ impl PageMap {
     }
 
     // Modifies this page map by applying the given page delta to it.
-    fn apply(&mut self, delta: PageDelta) {
+    fn apply<I>(&mut self, delta: I)
+    where
+        I: IntoIterator<Item = (PageIndex, Page)>,
+    {
+        let delta = PageDelta(delta.into_iter().map(|(i, p)| (i.get(), p)).collect());
         // Delta is a persistent data structure and is cheap to clone.
         self.page_delta.update(delta.clone());
         self.round_delta.update(delta)
     }
 
-    // Allocates the given dirty pages and returns them as a page delta.
-    fn allocate(&mut self, pages: &[(PageIndex, &PageBytes)]) -> PageDelta {
-        let dirty_pages: Vec<_> = pages.iter().map(|x| x.1).collect();
-        let tracked_pages = self.page_allocator.allocate(dirty_pages.as_slice());
-
-        PageDelta(
-            pages
-                .iter()
-                .cloned()
-                .zip(tracked_pages.into_iter())
-                .map(|((num, _), tracked_page)| (num.get(), tracked_page))
-                .collect(),
-        )
-    }
-
     // Copies the page with the given index. This is used by `Buffer`.
-    fn copy_page(&mut self, page: PageIndex) -> Page {
-        let contents = self.get_page(page);
-        self.page_allocator.allocate(&[contents]).pop().unwrap()
+    fn copy_page(&mut self, page_index: PageIndex) -> Page {
+        let initialized = self.page_allocator.ensure_initialized();
+        let contents = self.get_page(page_index);
+        self.page_allocator
+            .allocate_initialized(initialized, &[(page_index, contents)])
+            .pop()
+            .unwrap()
+            .1
     }
 }
 
@@ -511,12 +520,7 @@ impl Buffer {
     ///
     /// Complexity: O(dirtied pages)
     pub fn into_page_map(mut self) -> PageMap {
-        let delta: IntMap<_> = self
-            .dirty_pages
-            .into_iter()
-            .map(|(n, p)| (n.get(), p))
-            .collect();
-        self.page_map.apply(PageDelta(delta));
+        self.page_map.apply(self.dirty_pages.into_iter());
         self.page_map
     }
 }

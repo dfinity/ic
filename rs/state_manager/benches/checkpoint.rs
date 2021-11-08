@@ -5,13 +5,16 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_layout::StateLayout;
-use ic_state_manager::{checkpoint::make_checkpoint, CheckpointMetrics};
+use ic_state_manager::{
+    checkpoint::make_checkpoint, CheckpointMetrics, NUMBER_OF_CHECKPOINT_THREADS,
+};
 use ic_test_utilities::{
     state::new_canister_state,
     types::ids::{canister_test_id, subnet_test_id, user_test_id},
     with_test_replica_logger,
 };
 use ic_types::{Cycles, Height};
+use std::rc::Rc;
 use tempfile::Builder;
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -24,6 +27,7 @@ fn criterion_make_checkpoint(c: &mut Criterion) {
         height: Height,
         layout: StateLayout,
         metrics: CheckpointMetrics,
+        thread_pool: Rc<scoped_threadpool::Pool>, // Rc is needed for `Clone`
     }
 
     let mut group = c.benchmark_group("state manager");
@@ -55,18 +59,26 @@ fn criterion_make_checkpoint(c: &mut Criterion) {
                     ));
                     let metrics_registry = MetricsRegistry::new();
                     let metrics = CheckpointMetrics::new(&metrics_registry);
+                    let thread_pool =
+                        Rc::new(scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS));
                     BenchData {
                         state,
                         height: HEIGHT,
                         layout,
                         metrics,
+                        thread_pool,
                     }
                 })
             },
             // Do the actual measurement
-            |data| {
-                let _node_state =
-                    make_checkpoint(&data.state, data.height, &data.layout, &data.metrics);
+            |mut data| {
+                let _node_state = make_checkpoint(
+                    &data.state,
+                    data.height,
+                    &data.layout,
+                    &data.metrics,
+                    Rc::get_mut(&mut data.thread_pool).unwrap(),
+                );
             },
         )
     });

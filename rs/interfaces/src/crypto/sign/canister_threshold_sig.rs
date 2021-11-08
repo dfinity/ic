@@ -1,134 +1,204 @@
+//! Traits for canister-requested threshold signatures
+//! (and the associated I-DKG)
+
 use ic_base_types::NodeId;
 use ic_base_types::PrincipalId;
 use ic_types::crypto::canister_threshold_sig::error::{
-    CombineSignatureError, EcdsaPublicKeyError, IDkgComplaintVerificationError, IDkgDealingError,
-    IDkgDealingVerificationError, IDkgOpeningVerificationError, IDkgTranscriptCreationError,
-    IDkgTranscriptLoadError, IDkgTranscriptOpeningError, IDkgTranscriptVerificationError,
-    ThresholdSignatureGenerationError, ThresholdSignatureVerificationError,
+    IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
+    IDkgLoadTranscriptWithOpeningsError, IDkgOpenTranscriptError, IDkgVerifyComplaintError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
+    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
+    ThresholdEcdsaGetPublicKeyError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
-    IDkgTranscriptParams, VerifiedIDkgDealing,
+    IDkgComplaint, IDkgDealing, IDkgMultiSignedDealing, IDkgOpening, IDkgTranscript,
+    IDkgTranscriptParams,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPublicKey, ThresholdSignatureInputs, ThresholdSignatureMsg,
+    EcdsaPublicKey, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+    ThresholdEcdsaSigShare,
 };
 use std::collections::BTreeMap;
 
-pub trait IDkgTranscriptGenerator {
-    // Create a dealing of a prescribed type.
-    // If the dealing is of type resharing or multiplication we need to check that
-    // the referred transcripts have been preloaded. A dealing contains a
-    // polynomial commitment and encryption of the polynomial evaluation in the
-    // receivers' index.
+/// A Crypto Component interface to run Interactive-DKG
+/// (for canister threshold signatures).
+pub trait IDkgProtocol {
+    /// Create a dealing of a prescribed type.
+    ///
+    /// A dealing contains a polynomial commitment and encryption of the secret
+    /// shares of the receivers.
+    /// In addition, for some transcript types, this contains a contextual proof
+    /// for the secret value being shared.
+    ///
+    /// The type of dealing created is determined by the
+    /// `IDkgTranscriptOperation` specified in the `params`.
+    ///
+    /// For resharing or multiplication, the relevant previous dealings
+    /// must have been loaded via prior calls to `load_transcript`.
     fn create_dealing(
         &self,
         params: &IDkgTranscriptParams,
-    ) -> Result<IDkgDealing, IDkgDealingError>;
+    ) -> Result<IDkgDealing, IDkgCreateDealingError>;
 
-    //Public Verification of the dealing
+    /// Perform public verification of a dealing.
+    ///
+    /// This checks the consistency of the dealing with the params and verifies
+    /// the optional contextual proof.
     fn verify_dealing_public(
         &self,
         params: &IDkgTranscriptParams,
         dealing: &IDkgDealing,
-    ) -> Result<(), IDkgDealingVerificationError>;
+    ) -> Result<(), IDkgVerifyDealingPublicError>;
 
-    // Note:
-    // * For private verification we could also store the decrypted value, but we
-    //   need to be smart when purging the SKS, as this dealing may never appear in
-    //   a transcript. It seems premature optimization
+    /// Perform private verification of a dealing.
+    ///
+    /// If called by a receiver of the dealing, this verifies:
+    /// * Decryptability of the receiver's ciphertext
+    /// * The consistencty of the decrypted share with the polynomial
+    ///   commitment.
+    ///
+    /// # Errors
+    /// * IDkgVerifyDealingPrivateError::NotAReceiver if the caller isn't in the
+    ///   dealing's receivers
     fn verify_dealing_private(
         &self,
         params: &IDkgTranscriptParams,
         dealing: &IDkgDealing,
-    ) -> Result<(), IDkgDealingVerificationError>;
+    ) -> Result<(), IDkgVerifyDealingPrivateError>;
 
-    // Probably we don't want to repeat all validations. But we can perform
-    // consistency checks: e.g. size of ciphertexts and polynomial commitment and
-    // that they all have the same transcript ID. VerifiedIDkgDealings include the
-    // multisig on the dealing.
+    /// Combine the given dealings into a transcript.
+    ///
+    /// Performs the following on each dealing:
+    /// * Checks consistency with the params
+    /// * Checks that the multisignature was computed by at least
+    /// `IDkgTranscriptParams::verification_threshold` receivers
+    /// * Verifies the (combined) multisignature
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        dealings: &BTreeMap<NodeId, VerifiedIDkgDealing>,
-    ) -> Result<IDkgTranscript, IDkgTranscriptCreationError>;
+        dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    ) -> Result<IDkgTranscript, IDkgCreateTranscriptError>;
 
-    // Verification all multi-sig on the various dealings in the transcript.
+    /// Verify the multisignature on each dealing in the transcript.
+    ///
+    /// Also checks that each multisignature was computed by at least
+    /// `IDkgTranscriptParams::verification_threshold` receivers.
     fn verify_transcript(
         &self,
+        params: &IDkgTranscriptParams,
         transcript: &IDkgTranscript,
-    ) -> Result<(), IDkgTranscriptVerificationError>;
+    ) -> Result<(), IDkgVerifyTranscriptError>;
 
-    // Here we have three possible outputs:
-    // * Success
-    // * A `IDkgComplaint`
-    // * Some error that does not result in a complaint.
-    // What's the best output for this?
-    // Q: Can we assume that required transcripts will be reloaded if the replica
-    // restarts?
+    /// Load the transcript.
+    ///
+    /// This:
+    /// * Decrypts this receiver's ciphertext in each dealing
+    /// * Checks the consistency of the decrypted shares with the polynomial
+    ///   commitment
+    /// * Recombines the secret share from all dealers' contributions
+    /// * Combines the polynomial commitments to get any needed public data
+    /// * Stores the recombined secret in the local canister secret key store
+    ///
+    /// # Returns
+    /// * `Ok([])` if decryption succeeded
+    /// * `Ok(Vec<IDkgComplaints>)` if some dealings require Openings
+    /// * `Err` if a fatal error occurred
     fn load_transcript(
         &self,
         transcript: &IDkgTranscript,
-    ) -> Result<Vec<IDkgComplaint>, IDkgTranscriptLoadError>;
+    ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError>;
 
+    /// Verify the validity of a complaint against some dealings.
+    ///
+    /// This:
+    /// * Checks the decryption verification proof
+    /// * Attempts decryption-from-proof of the complainer's ciphertext and
+    ///   either:
+    ///   * Confirms that the ciphertext can't be decrypted
+    ///   * Checks that the decrypted share is not consistent with the
+    ///     polynomial commitment.
     fn verify_complaint(
         &self,
-        transcript_id: IDkgTranscriptId,
+        transcript: &IDkgTranscript,
         complainer: NodeId,
         complaint: &IDkgComplaint,
-    ) -> Result<(), IDkgComplaintVerificationError>;
+    ) -> Result<(), IDkgVerifyComplaintError>;
 
+    /// Generate an opening for the dealing given in `complaint`.
     fn open_transcript(
         &self,
-        transcript_id: IDkgTranscriptId,
+        transcript: &IDkgTranscript,
         complaint: &IDkgComplaint,
-    ) -> Result<IDkgOpening, IDkgTranscriptOpeningError>;
+    ) -> Result<IDkgOpening, IDkgOpenTranscriptError>;
 
+    /// Verify that an opening corresponds to the complaint,
+    /// and matches the commitment in the transcript.
     fn verify_opening(
         &self,
-        transcript_id: IDkgTranscriptId,
+        transcript: &IDkgTranscript,
         opener: NodeId,
         opening: &IDkgOpening,
         complaint: &IDkgComplaint,
-    ) -> Result<(), IDkgOpeningVerificationError>;
+    ) -> Result<(), IDkgVerifyOpeningError>;
 
-    // The openings should also encode the position of the receiver, e.g. by using a
-    // map between receivers and openings. The openings must have previously
-    // been verified using verify_opening
+    /// Load the transcript (cf. `load_transcript`),
+    /// with the help of `openings`.
+    ///
+    /// # Preconditions
+    /// * For each (complaint, (opener, opening)) tuple, it holds that
+    ///   `verify_opening(transcript, opener, opening, complaint).is_ok()`
     fn load_transcript_with_openings(
         &self,
         transcript: IDkgTranscript,
-        opening: BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
-    ) -> Result<(), IDkgTranscriptLoadError>;
+        openings: BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
+    ) -> Result<(), IDkgLoadTranscriptWithOpeningsError>;
 
-    // Retain only the given transcripts in the state
-    fn retain_active_transcripts(&self, active_transcripts: &[IDkgTranscriptId]);
+    /// Retain only the given transcripts in the local state.
+    fn retain_active_transcripts(&self, active_transcripts: &[IDkgTranscript]);
 }
 
-// No state is kept between the various calls in this API.
-pub trait ThresholdEcdsaSignature: IDkgTranscriptGenerator {
-    fn sign_threshold(
+/// A Crypto Component interface to generate ECDSA threshold signature shares.
+pub trait ThresholdEcdsaSigner {
+    /// Generate a signature share.
+    fn sign_share(
         &self,
-        inputs: &ThresholdSignatureInputs,
-    ) -> Result<ThresholdSignatureMsg, ThresholdSignatureGenerationError>;
+        inputs: &ThresholdEcdsaSigInputs,
+    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError>;
+}
 
-    fn validate_threshold_sig_share(
+/// A Crypto Component interface to perform public operations in the ECDSA
+/// threshold signature scheme.
+pub trait ThresholdEcdsaSigVerifier {
+    /// Verify that the given signature share was correctly created from
+    /// `inputs`.
+    fn verify_sig_share(
         &self,
-        // `signer` is used to check that each node open the shares for their prescribed index.
         signer: NodeId,
-        inputs: &ThresholdSignatureInputs,
-        output: &ThresholdSignatureMsg,
-    ) -> Result<(), ThresholdSignatureVerificationError>;
+        inputs: &ThresholdEcdsaSigInputs,
+        share: &ThresholdEcdsaSigShare,
+    ) -> Result<(), ThresholdEcdsaVerifySigShareError>;
 
-    fn combine_threshold_sig_shares(
+    /// Combine the given signature shares into a convential ECDSA signature.
+    ///
+    /// The signature is returned as raw bytes.
+    fn combine_sig_shares(
         &self,
-        inputs: &ThresholdSignatureInputs,
-        outputs: &[ThresholdSignatureMsg],
-    ) -> Result<Vec<u8>, CombineSignatureError>;
+        inputs: &ThresholdEcdsaSigInputs,
+        shares: &[ThresholdEcdsaSigShare],
+    ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError>;
 
-    fn get_ecdsa_public_key(
+    /// Verify that a combined signature was properly created from the inputs.
+    fn verify_combined_sig(
+        &self,
+        inputs: &ThresholdEcdsaSigInputs,
+        signature: &ThresholdEcdsaCombinedSignature,
+    ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError>;
+
+    /// Get the master public key for the given canister.
+    fn get_public_key(
         &self,
         canister_id: PrincipalId,
         key_transcript: IDkgTranscript,
-    ) -> Result<EcdsaPublicKey, EcdsaPublicKeyError>;
+    ) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError>;
 }

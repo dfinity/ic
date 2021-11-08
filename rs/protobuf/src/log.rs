@@ -30,7 +30,7 @@ pub mod log_entry {
                 key: slog::Key,
                 serializer: &mut dyn slog::Serializer,
             ) -> slog::Result {
-                serializer.emit_serde(&key, self)
+                serializer.emit_serde(key, self)
             }
         }
 

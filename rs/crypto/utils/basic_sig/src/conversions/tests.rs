@@ -83,8 +83,7 @@ fn pem_pk_decoding_should_match_test_data() {
         )
         .expect("Invalid public key in test data");
         // Test:
-        let decoded =
-            internal_types::PublicKey::from_pem(&pem).expect("Conversion from der failed");
+        let decoded = internal_types::PublicKey::from_pem(pem).expect("Conversion from der failed");
         assert_eq!(
             test_public_key, decoded,
             "Parsing yielded a different result for test vector:\n    raw:  {}\n    der:  {}",

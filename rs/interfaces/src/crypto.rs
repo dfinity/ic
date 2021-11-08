@@ -35,8 +35,8 @@ pub use sign::canister_threshold_sig::*;
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::consensus::dkg as consensus_dkg;
 use ic_types::consensus::{
-    Block, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent, NotarizationContent,
-    RandomBeaconContent, RandomTapeContent,
+    ecdsa::EcdsaDealing, Block, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
 use ic_types::messages::{MessageId, WebAuthnEnvelope};
 
@@ -63,6 +63,9 @@ pub trait Crypto:
     // NotarizationContent
     + MultiSigner<NotarizationContent>
     + MultiSigVerifier<NotarizationContent>
+    // EcdsaDealing
+    + MultiSigner<EcdsaDealing>
+    + MultiSigVerifier<EcdsaDealing>
     // RequestId/WebAuthn
     + BasicSigVerifierByPublicKey<MessageId>
     + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
@@ -110,6 +113,8 @@ impl<T> Crypto for T where
         + MultiSigVerifier<FinalizationContent>
         + MultiSigner<NotarizationContent>
         + MultiSigVerifier<NotarizationContent>
+        + MultiSigner<EcdsaDealing>
+        + MultiSigVerifier<EcdsaDealing>
         + BasicSigVerifierByPublicKey<MessageId>
         + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
         + ThresholdSigner<CatchUpContent>

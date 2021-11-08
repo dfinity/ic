@@ -117,16 +117,16 @@ fn x509_v3_certificate(
         .set_issuer_name(&cn)
         .expect("unable to set issuer cn");
     builder
-        .set_pubkey(&key_pair)
+        .set_pubkey(key_pair)
         .expect("unable to set public key");
     builder
         .set_not_before(&now)
         .expect("unable to set 'not before'");
     builder
-        .set_not_after(&not_after)
+        .set_not_after(not_after)
         .expect("unable to set 'not after'");
     builder
-        .sign(&key_pair, message_digest)
+        .sign(key_pair, message_digest)
         .expect("unable to sign");
     builder.build()
 }

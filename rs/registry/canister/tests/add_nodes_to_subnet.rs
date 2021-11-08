@@ -52,7 +52,7 @@ fn test_the_anonymous_user_cannot_add_nodes_to_subnet() {
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
             for node_id in &unassigned_node_ids {
@@ -74,7 +74,7 @@ fn test_the_anonymous_user_cannot_add_nodes_to_subnet() {
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
             for node_id in &unassigned_node_ids {
@@ -134,7 +134,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_add_nodes_to_subnet(
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
             for node_id in unassigned_node_ids {
@@ -187,7 +187,7 @@ fn test_add_nodes_to_subnet_succeeds() {
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
 
@@ -214,7 +214,7 @@ fn test_add_nodes_to_subnet_succeeds() {
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             // the number of nodes doubled
             assert_eq!(
@@ -275,7 +275,7 @@ fn test_adding_nodes_to_another_subnet_fails() {
             assert_eq!(subnet_list_record.subnets.len(), 3);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
 
@@ -302,7 +302,7 @@ fn test_adding_nodes_to_another_subnet_fails() {
             assert_eq!(subnet_list_record.subnets.len(), 3);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             // the number of nodes remains the same
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);

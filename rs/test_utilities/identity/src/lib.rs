@@ -13,13 +13,13 @@ use ed25519_dalek::SecretKey as OtherSecretKey;
 // workload generator
 fn get_pub() -> PublicKey {
     let contents = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
-    let (_secret_key, public_key) = SecretKey::from_pem(&contents).expect("Invalid secret key.");
+    let (_secret_key, public_key) = SecretKey::from_pem(contents).expect("Invalid secret key.");
     public_key
 }
 
 fn get_pair() -> ed25519_dalek::Keypair {
     let contents = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
-    let (secret_key, public_key) = SecretKey::from_pem(&contents).expect("Invalid secret key.");
+    let (secret_key, public_key) = SecretKey::from_pem(contents).expect("Invalid secret key.");
     let secret_bytes = secret_key.as_bytes();
     let public_bytes = public_key.as_bytes();
 

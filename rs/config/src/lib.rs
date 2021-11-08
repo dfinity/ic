@@ -8,6 +8,7 @@ pub mod consensus;
 pub mod crypto;
 pub mod embedders;
 pub mod execution_environment;
+pub mod feature_status;
 pub mod firewall;
 pub mod http_handler;
 pub mod logger;

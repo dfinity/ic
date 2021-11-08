@@ -64,7 +64,7 @@ struct XNetPayloadBuilderFixture {
     pub state_manager: Arc<StateManagerImpl>,
     pub certified_height: Height,
     pub metrics: MetricsRegistry,
-    pub temp_dir: TempDir,
+    pub _temp_dir: TempDir,
 }
 
 impl XNetPayloadBuilderFixture {
@@ -93,7 +93,7 @@ impl XNetPayloadBuilderFixture {
             state_manager,
             certified_height: fixture.certified_height,
             metrics: fixture.metrics,
-            temp_dir: fixture.temp_dir,
+            _temp_dir: fixture.temp_dir,
         }
     }
 

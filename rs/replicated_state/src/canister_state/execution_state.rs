@@ -1,5 +1,7 @@
 use super::SessionNonce;
-use crate::{num_bytes_from, NumWasmPages, PageIndex, PageMap};
+use crate::{
+    num_bytes_from, num_bytes_try_from64, NumWasmPages, NumWasmPages64, PageIndex, PageMap,
+};
 use ic_config::embedders::PersistenceType;
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState, MappedStateImpl};
 use ic_interfaces::execution_environment::HypervisorResult;
@@ -165,6 +167,43 @@ impl WasmBinary {
     }
 }
 
+/// Represents a canister's wasm or stable memory.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Memory<T = NumWasmPages> {
+    /// The contents of this memory.
+    pub page_map: PageMap,
+    /// The size of the memory in wasm pages. This does not indicate how much
+    /// data is stored in the `page_map`, only the number of pages the memory
+    /// has access to. For example, if a canister grows it's memory to N pages
+    /// that will be reflected in this field, but the `page_map` will remain
+    /// empty until data is written to the memory.
+    pub size: T,
+}
+
+impl<T> Memory<T> {
+    pub fn new(page_map: PageMap, size: T) -> Self {
+        Memory { page_map, size }
+    }
+}
+
+impl Default for Memory<NumWasmPages> {
+    fn default() -> Self {
+        Self {
+            page_map: PageMap::default(),
+            size: NumWasmPages::from(0),
+        }
+    }
+}
+
+impl Default for Memory<NumWasmPages64> {
+    fn default() -> Self {
+        Self {
+            page_map: PageMap::default(),
+            size: NumWasmPages64::from(0),
+        }
+    }
+}
+
 /// The part of the canister state that can be accessed during execution
 ///
 /// Note that execution state is used to track ephemeral information.
@@ -203,14 +242,13 @@ pub struct ExecutionState {
 
     /// The persistent heap of the module.
     #[debug_stub = "PageMap"]
-    pub page_map: PageMap,
+    pub wasm_memory: Memory,
+
+    /// The canister stable memory which is persisted across canister upgrades.
+    pub stable_memory: Memory<NumWasmPages64>,
 
     /// The state of exported globals. Internal globals are not accessible.
     pub exported_globals: Vec<Global>,
-
-    /// The current size of Wasm heap. It can change when canister
-    /// calls `memory.grow`.
-    pub heap_size: NumWasmPages,
 
     /// A set of the functions that a Wasm module exports.
     pub exports: ExportedFunctions,
@@ -232,31 +270,31 @@ impl PartialEq for ExecutionState {
     fn eq(&self, rhs: &Self) -> bool {
         (
             &self.wasm_binary.binary,
-            &self.page_map,
+            &self.wasm_memory,
             &self.exported_globals,
             &self.exports,
-            self.heap_size,
         ) == (
             &rhs.wasm_binary.binary,
-            &rhs.page_map,
+            &rhs.wasm_memory,
             &rhs.exported_globals,
             &rhs.exports,
-            rhs.heap_size,
         )
     }
 }
 
 impl ExecutionState {
     /// Initializes a new execution state for a canister.
+    /// The state will be created with empty stable memory, but may have wasm
+    /// memory from data sections in the wasm module.
     pub fn new(
         wasm_binary: BinaryEncodedWasm,
         canister_root: PathBuf,
         exports: ExportedFunctions,
-        pages: &[(PageIndex, Box<PageBytes>)],
+        wasm_memory_pages: &[(PageIndex, Box<PageBytes>)],
     ) -> HypervisorResult<Self> {
-        let mut page_map = PageMap::default();
-        page_map.update(
-            &pages
+        let mut wasm_memory = Memory::default();
+        wasm_memory.page_map.update(
+            &wasm_memory_pages
                 .iter()
                 .map(|(index, bytes)| (*index, bytes as &PageBytes))
                 .collect::<Vec<(PageIndex, &PageBytes)>>(),
@@ -267,13 +305,19 @@ impl ExecutionState {
             let mapped_state = cow_mem_mgr.get_map();
             let mut updated_pages = Vec::new();
 
-            for i in page_map.host_pages_iter() {
+            for i in wasm_memory.page_map.host_pages_iter() {
                 let page_idx = i.0;
                 updated_pages.push(page_idx.get());
-                mapped_state.update_heap_page(page_idx.get(), page_map.get_page(page_idx));
+                mapped_state
+                    .update_heap_page(page_idx.get(), wasm_memory.page_map.get_page(page_idx));
             }
             mapped_state.soft_commit(&updated_pages);
         }
+        let mapped_state = if cow_mem_mgr.is_valid() {
+            Some(Arc::new(cow_mem_mgr.get_map()))
+        } else {
+            None
+        };
         let session_nonce = None;
 
         let wasm_binary = WasmBinary::new(wasm_binary);
@@ -283,12 +327,12 @@ impl ExecutionState {
             session_nonce,
             wasm_binary,
             exports,
-            page_map,
+            wasm_memory,
+            stable_memory: Memory::default(),
             exported_globals: vec![],
-            heap_size: NumWasmPages::from(0),
             last_executed_round: ExecutionRound::from(0),
             cow_mem_mgr,
-            mapped_state: None,
+            mapped_state,
         };
 
         Ok(execution_state)
@@ -304,7 +348,9 @@ impl ExecutionState {
         // We use 8 bytes per global.
         let globals_size_bytes = 8 * self.exported_globals.len() as u64;
         let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
-        num_bytes_from(self.heap_size)
+        num_bytes_from(self.wasm_memory.size)
+            + num_bytes_try_from64(self.stable_memory.size)
+                .expect("could not convert from wasm pages to bytes")
             + NumBytes::from(globals_size_bytes)
             + NumBytes::from(wasm_binary_size_bytes)
     }

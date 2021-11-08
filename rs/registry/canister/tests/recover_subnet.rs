@@ -94,7 +94,7 @@ fn test_recover_subnet_with_replacement_nodes() {
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
 
@@ -123,7 +123,7 @@ fn test_recover_subnet_with_replacement_nodes() {
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record =
-                get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                     .await;
 
             // Assert that `membership` has been replaced by `unassigned_node_ids`

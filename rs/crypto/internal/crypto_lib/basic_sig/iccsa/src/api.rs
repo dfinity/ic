@@ -104,30 +104,25 @@ fn verify_certified_vars_certificate(
     sig: &SignatureBytes,
     pk: &PublicKeyBytes,
 ) -> CryptoResult<()> {
-    ic_certified_vars::verify_certificate(
-        certificate,
-        &canister_id,
-        root_pubkey,
-        digest.as_bytes(),
-    )
-    .map_err(|err| match &err {
-        CertificateValidationError::DeserError(_)
-        | CertificateValidationError::MalformedHashTree(_) => CryptoError::MalformedSignature {
-            algorithm: AlgorithmId::IcCanisterSignature,
-            sig_bytes: sig.0.clone(),
-            internal_error: format!("malformed certificate: {}", err),
-        },
-        CertificateValidationError::InvalidSignature(_)
-        | CertificateValidationError::CertifiedDataMismatch { .. }
-        | CertificateValidationError::SubnetDelegationNotAllowed => {
-            CryptoError::SignatureVerification {
+    ic_certified_vars::verify_certificate(certificate, canister_id, root_pubkey, digest.as_bytes())
+        .map_err(|err| match &err {
+            CertificateValidationError::DeserError(_)
+            | CertificateValidationError::MalformedHashTree(_) => CryptoError::MalformedSignature {
                 algorithm: AlgorithmId::IcCanisterSignature,
-                public_key_bytes: pk.0.clone(),
                 sig_bytes: sig.0.clone(),
-                internal_error: format!("certificate verification failed: {}", err),
+                internal_error: format!("malformed certificate: {}", err),
+            },
+            CertificateValidationError::InvalidSignature(_)
+            | CertificateValidationError::CertifiedDataMismatch { .. }
+            | CertificateValidationError::SubnetDelegationNotAllowed => {
+                CryptoError::SignatureVerification {
+                    algorithm: AlgorithmId::IcCanisterSignature,
+                    public_key_bytes: pk.0.clone(),
+                    sig_bytes: sig.0.clone(),
+                    internal_error: format!("certificate verification failed: {}", err),
+                }
             }
-        }
-    })?;
+        })?;
     Ok(())
 }
 
@@ -151,10 +146,10 @@ fn lookup_path_in_tree(
     pk: &PublicKeyBytes,
     sig: &SignatureBytes,
 ) -> CryptoResult<()> {
-    let seed_hash = Sha256::hash(&seed);
-    let msg_hash = Sha256::hash(&msg);
+    let seed_hash = Sha256::hash(seed);
+    let msg_hash = Sha256::hash(msg);
     let tree =
-        ic_crypto_tree_hash::lookup_path(&canister_sig_tree, &[b"sig", &seed_hash, &msg_hash])
+        ic_crypto_tree_hash::lookup_path(canister_sig_tree, &[b"sig", &seed_hash, &msg_hash])
             .ok_or_else(|| CryptoError::SignatureVerification {
                 algorithm: AlgorithmId::IcCanisterSignature,
                 public_key_bytes: pk.0.clone(),

@@ -1,0 +1,32 @@
+[package]
+name = "tecdsa-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+num-bigint = "0.4"
+hex = "0.4"
+
+[dependencies.tecdsa]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fe"
+path = "fuzz_targets/fe.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "scalar"
+path = "fuzz_targets/scalar.rs"
+test = false
+doc = false

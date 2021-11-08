@@ -98,7 +98,7 @@ fn cow_state_heap_basic() {
     let mapped_state = cow_mem_mgr.get_map();
     let pages_to_commit = mapped_state.copy_to_heap(offset_to_write_at as u64, &random_bytes35);
 
-    mapped_state.soft_commit(&pages_to_commit.as_slice());
+    mapped_state.soft_commit(pages_to_commit.as_slice());
 
     // Intentionally drop the mappings to force unmaps
     drop(mapped_state);

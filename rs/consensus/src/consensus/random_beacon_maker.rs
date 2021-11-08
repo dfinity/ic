@@ -65,10 +65,9 @@ impl<'a> RandomBeaconMaker {
             Ok(is_beacon_maker)
                 if is_beacon_maker
                     && next_beacon.is_none()
-                    && pool
+                    && !pool
                         .get_random_beacon_shares(next_height)
-                        .find(|s| s.signature.signer == my_node_id)
-                        .is_none() =>
+                        .any(|s| s.signature.signer == my_node_id) =>
             {
                 let content =
                     RandomBeaconContent::new(next_height, ic_crypto::crypto_hash(&beacon));

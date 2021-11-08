@@ -51,7 +51,7 @@ pub fn main(args: &[String]) -> Result<(), (String, i32)> {
 
 /// Creates a Crypto Service Provider (CSP) in the current working directory.
 /// This is used for the command line interface (CLI).
-pub fn csp() -> Csp<OsRng, ProtoSecretKeyStore> {
+pub fn csp() -> Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
     let path = std::env::current_dir()
         .expect("Cannot get current working directory")
         .join(".secret_key_store");

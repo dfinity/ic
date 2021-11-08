@@ -9,17 +9,19 @@ use ic_crypto_internal_csp::types::{CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
-    MultiSigVerifier, MultiSigner, Signable, ThresholdEcdsaSignature, ThresholdSigVerifier,
-    ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    MultiSigVerifier, MultiSigner, Signable, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_logger::{debug, new_logger};
 use ic_types::crypto::canister_threshold_sig::error::{
-    CombineSignatureError, EcdsaPublicKeyError, ThresholdSignatureGenerationError,
-    ThresholdSignatureVerificationError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaGetPublicKeyError,
+    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPublicKey, ThresholdSignatureInputs, ThresholdSignatureMsg,
+    EcdsaPublicKey, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+    ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::threshold_sig::errors::threshold_sign_error::ThresholdSignError;
 use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
@@ -445,19 +447,19 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
     }
 }
 
-impl<C: CryptoServiceProvider> ThresholdEcdsaSignature for CryptoComponentFatClient<C> {
-    fn sign_threshold(
+impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentFatClient<C> {
+    fn sign_share(
         &self,
-        inputs: &ThresholdSignatureInputs,
-    ) -> Result<ThresholdSignatureMsg, ThresholdSignatureGenerationError> {
+        inputs: &ThresholdEcdsaSigInputs,
+    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
         let logger = new_logger!(&self.logger;
-            crypto.trait_name => "ThresholdEcdsaSignature",
-            crypto.method_name => "sign_threshold",
+            crypto.trait_name => "ThresholdEcdsaSigner",
+            crypto.method_name => "sign_share",
         );
         debug!(logger;
             crypto.description => "start",
         );
-        let result = canister_threshold_sig::mocks::sign_threshold(inputs);
+        let result = canister_threshold_sig::mocks::sign_share(inputs);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
@@ -465,22 +467,23 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSignature for CryptoComponentFatCli
         );
         result
     }
+}
 
-    fn validate_threshold_sig_share(
+impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatClient<C> {
+    fn verify_sig_share(
         &self,
         signer: NodeId,
-        inputs: &ThresholdSignatureInputs,
-        output: &ThresholdSignatureMsg,
-    ) -> Result<(), ThresholdSignatureVerificationError> {
+        inputs: &ThresholdEcdsaSigInputs,
+        share: &ThresholdEcdsaSigShare,
+    ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
         let logger = new_logger!(&self.logger;
-            crypto.trait_name => "ThresholdEcdsaSignature",
-            crypto.method_name => "validate_threshold_sig_share",
+            crypto.trait_name => "ThresholdEcdsaSigVerifier",
+            crypto.method_name => "verify_sig_share",
         );
         debug!(logger;
             crypto.description => "start",
         );
-        let result =
-            canister_threshold_sig::mocks::validate_threshold_sig_share(signer, inputs, output);
+        let result = canister_threshold_sig::mocks::verify_sig_share(signer, inputs, share);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
@@ -489,19 +492,19 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSignature for CryptoComponentFatCli
         result
     }
 
-    fn combine_threshold_sig_shares(
+    fn combine_sig_shares(
         &self,
-        inputs: &ThresholdSignatureInputs,
-        outputs: &[ThresholdSignatureMsg],
-    ) -> Result<Vec<u8>, CombineSignatureError> {
+        inputs: &ThresholdEcdsaSigInputs,
+        shares: &[ThresholdEcdsaSigShare],
+    ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
         let logger = new_logger!(&self.logger;
-            crypto.trait_name => "ThresholdEcdsaSignature",
-            crypto.method_name => "combine_threshold_sig_shares",
+            crypto.trait_name => "ThresholdEcdsaSigVerifier",
+            crypto.method_name => "combine_sig_shares",
         );
         debug!(logger;
             crypto.description => "start",
         );
-        let result = canister_threshold_sig::mocks::combine_threshold_sig_shares(inputs, outputs);
+        let result = canister_threshold_sig::mocks::combine_sig_shares(inputs, shares);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
@@ -510,20 +513,40 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSignature for CryptoComponentFatCli
         result
     }
 
-    fn get_ecdsa_public_key(
+    fn verify_combined_sig(
+        &self,
+        inputs: &ThresholdEcdsaSigInputs,
+        signature: &ThresholdEcdsaCombinedSignature,
+    ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
+        let logger = new_logger!(&self.logger;
+            crypto.trait_name => "ThresholdEcdsaSigVerifier",
+            crypto.method_name => "verify_combined_sig",
+        );
+        debug!(logger;
+            crypto.description => "start",
+        );
+        let result = canister_threshold_sig::mocks::verify_combined_sig(inputs, signature);
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
+
+    fn get_public_key(
         &self,
         canister_id: PrincipalId,
         key_transcript: IDkgTranscript,
-    ) -> Result<EcdsaPublicKey, EcdsaPublicKeyError> {
+    ) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "ThresholdEcdsaSignature",
-            crypto.method_name => "get_ecdsa_public_key",
+            crypto.method_name => "get_public_key",
         );
         debug!(logger;
             crypto.description => "start",
         );
-        let result =
-            canister_threshold_sig::mocks::get_ecdsa_public_key(canister_id, key_transcript);
+        let result = canister_threshold_sig::mocks::get_public_key(canister_id, key_transcript);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

@@ -29,7 +29,9 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> NiDkgCspServer for LocalCspServer<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspServer
+    for LocalCspServer<R, S, C>
+{
     fn gen_forward_secure_key_pair(
         &self,
         node_id: NodeId,
@@ -174,7 +176,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> NiDkgCspServer for LocalCspServer<R,
                     }
                     None => None,
                 };
-                let receiver_keys = specialise::groth20::receiver_keys(&receiver_keys).map_err(
+                let receiver_keys = specialise::groth20::receiver_keys(receiver_keys).map_err(
                     |(receiver_index, error)| {
                         ni_dkg_errors::CspDkgCreateReshareDealingError::MalformedFsPublicKeyError {
                             receiver_index,

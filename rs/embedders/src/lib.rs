@@ -1,6 +1,7 @@
 pub mod cow_memory_creator;
 mod signal_handler;
 pub mod wasm_executor;
+pub mod wasm_utils;
 pub mod wasmtime_embedder;
 
 use ic_cycles_account_manager::CyclesAccountManager;

@@ -6,7 +6,10 @@ use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label};
 use ic_interfaces::state_manager::StateReader;
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
-use ic_types::messages::MessageId;
+use ic_types::{
+    canonical_error::{invalid_argument_error, permission_denied_error, CanonicalError},
+    messages::MessageId,
+};
 use ic_validator::RequestValidationError;
 use prost::Message;
 use serde::Serialize;
@@ -15,14 +18,6 @@ use std::sync::Arc;
 pub const CONTENT_TYPE_HTML: &str = "text/html";
 pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
 pub const CONTENT_TYPE_PROTOBUF: &str = "application/x-protobuf";
-
-/// Helper function to generate a response.
-pub fn make_response(status_code: StatusCode, body: &str) -> Response<Body> {
-    let mut resp = Response::new(Body::from(body.to_string()));
-    *resp.status_mut() = status_code;
-    *resp.headers_mut() = get_cors_headers();
-    resp
-}
 
 /// Add CORS headers to provided Response. In particular we allow
 /// wildcard origin, POST and GET and allow Accept, Authorization and
@@ -99,19 +94,17 @@ pub(crate) fn make_response_on_validation_error(
     message_id: MessageId,
     err: RequestValidationError,
     log: &ReplicaLogger,
-) -> Response<Body> {
+) -> CanonicalError {
     match err {
         RequestValidationError::InvalidIngressExpiry(msg)
-        | RequestValidationError::InvalidDelegationExpiry(msg) => {
-            make_response(StatusCode::BAD_REQUEST, &msg)
-        }
+        | RequestValidationError::InvalidDelegationExpiry(msg) => invalid_argument_error(&msg),
         _ => {
             let message = format!(
                 "Failed to authenticate request {} due to: {}",
                 message_id, err
             );
             info!(log, "{}", message);
-            make_response(StatusCode::FORBIDDEN, message.as_str())
+            permission_denied_error(&message)
         }
     }
 }

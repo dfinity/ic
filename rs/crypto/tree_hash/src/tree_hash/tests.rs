@@ -43,7 +43,7 @@ fn hash_node_with_leaf(label: &Label, leaf_data: &str) -> HashTree {
         digest: leaf_digest(leaf_data),
     };
     HashTree::Node {
-        digest: node_digest(&label, &hash_leaf.digest().0),
+        digest: node_digest(label, &hash_leaf.digest().0),
         label: label.clone(),
         hash_tree: Box::new(hash_leaf),
     }
@@ -52,7 +52,7 @@ fn hash_node_with_leaf(label: &Label, leaf_data: &str) -> HashTree {
 // Returns a HashTree::HashNode that contains a HashLeaf with the given data.
 fn hash_node_with_hash_tree(label: &Label, hash_tree: HashTree) -> HashTree {
     HashTree::Node {
-        digest: node_digest(&label, &hash_tree.digest().0),
+        digest: node_digest(label, &hash_tree.digest().0),
         label: label.clone(),
         hash_tree: Box::new(hash_tree),
     }
@@ -992,20 +992,20 @@ fn check_recompute_digest_works(
 ) {
     let orig_digest = orig_builder.as_hash_tree().unwrap().digest().to_owned();
     let orig_witness_generator = orig_builder.witness_generator().unwrap();
-    let orig_witness = orig_witness_generator.witness(&partial_tree).unwrap();
+    let orig_witness = orig_witness_generator.witness(partial_tree).unwrap();
 
     let modified_digest = modified_builder.as_hash_tree().unwrap().digest().to_owned();
     let modified_witness_generator = modified_builder.witness_generator().unwrap();
-    let modified_witness = modified_witness_generator.witness(&partial_tree).unwrap();
+    let modified_witness = modified_witness_generator.witness(partial_tree).unwrap();
     let mixed_hash_tree = modified_witness_generator
-        .mixed_hash_tree(&partial_tree)
+        .mixed_hash_tree(partial_tree)
         .unwrap();
 
     assert_eq!(orig_witness, modified_witness);
     let witness = &orig_witness;
     assert_ne!(orig_digest, modified_digest);
 
-    let recomputed_digest = recompute_digest(&partial_tree, witness).unwrap();
+    let recomputed_digest = recompute_digest(partial_tree, witness).unwrap();
     assert_eq!(recomputed_digest, modified_digest);
     assert_eq!(recomputed_digest, mixed_hash_tree.digest());
     assert_eq!(
@@ -1853,7 +1853,7 @@ impl LabeledTreeFixture {
 
     fn witness_for(&self, partial_tree: &LabeledTree<Vec<u8>>) -> Witness {
         let witness_gen = self.builder.witness_generator().unwrap();
-        witness_gen.witness(&partial_tree).unwrap()
+        witness_gen.witness(partial_tree).unwrap()
     }
 }
 

@@ -13,7 +13,7 @@ use ic_interfaces::{
     state_manager::{StateManager, StateManagerError},
     validation::{ValidationError, ValidationResult},
 };
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client::helper::{
@@ -235,12 +235,21 @@ impl DkgImpl {
             match ic_interfaces::crypto::NiDkgAlgorithm::create_dealing(&*self.crypto, config) {
                 Ok(dealing) => DealingContent::new(dealing, config.dkg_id()),
                 Err(err) => {
-                    error!(
-                        self.logger,
-                        "Couldn't create a DKG dealing at height {:?}: {:?}",
-                        config.dkg_id().start_block_height,
-                        err
-                    );
+                    match config.dkg_id().target_subnet {
+                        NiDkgTargetSubnet::Local => error!(
+                            self.logger,
+                            "Couldn't create a DKG dealing at height {:?}: {:?}",
+                            config.dkg_id().start_block_height,
+                            err
+                        ),
+                        // NOTE: In rare cases, we might hit this case.
+                        NiDkgTargetSubnet::Remote(_) => info!(
+                            self.logger,
+                            "Waiting for Remote DKG dealing at height {:?}: {:?}",
+                            config.dkg_id().start_block_height,
+                            err
+                        ),
+                    };
                     return None;
                 }
             };
@@ -257,55 +266,35 @@ impl DkgImpl {
         }
     }
 
-    // Validates the DKG messages against the provided config. If multiple messages
-    // are found for the same dealer, we deduplicate them and — if multiple messages
-    // remain — we invalidate all of them, because the dealer is considered as
-    // faulty or malicious. If only one message remains, we validate it.
+    // Validates the DKG messages against the provided config.
     //
     // Invalidates the message if:
     // - no DKG config among onging DKGs was found,
     // - the dealer is not on the list of dealers wrt. DKG config,
-    // - the validated DKG pool already contains a dealing from this dealer,
     // - the dealing signature is invalid,
     // - the dealing is invalid.
     //
-    // We skip the validation if an error occurs during the signature or dealing
-    // verification.
-    fn validate_dealings(
+    // We simply remove the message from the pool if we already have a dealing
+    // from the dealer of the the message, because it is possible for honest
+    // dealers to provide multiple, non-identical dealings in certain
+    // situations. We skip the validation if an error occurs during the
+    // signature or dealing verification.
+    fn validate_dealings_for_dealer(
         &self,
         dkg_pool: &dyn DkgPool,
         configs: &BTreeMap<NiDkgId, NiDkgConfig>,
         dkg_start_height: Height,
         messages: Vec<&Message>,
     ) -> ChangeSet {
-        // Deduplicate all messages.
-        let unique_messages = &messages
-            .iter()
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-
-        // Look at the remaining messages after the deduplication.
-        let message = match unique_messages.as_slice() {
-            [] => return ChangeSet::new(),
-            // If there exactly one message remained, we validate it.
-            [message] => message,
-            // Otherwise, this dealer must have produced multiple distinguishable
-            // dealings, so we discard all of them as invalid.
-            _ => {
-                return messages
-                    .iter()
-                    .map(|invalid_message| {
-                        get_handle_invalid_change_action(
-                            invalid_message,
-                            format!(
-                                "The replica with Id={:?} produced multiple dealings.",
-                                &invalid_message.signature.signer
-                            ),
-                        )
-                    })
-                    .collect()
-            }
+        // Because dealing generation is not entirely deterministic, it is
+        // actually possible to recieve multiple dealings from an honest dealer.
+        // As such, we simply try validating the first message in the list, and
+        // get a result for that message. Other messages will be dealt with by
+        // subsequent calls to this function.
+        let message = if let Some(message) = messages.first() {
+            message
+        } else {
+            return ChangeSet::new();
         };
 
         let message_dkg_id = message.content.dkg_id;
@@ -335,12 +324,12 @@ impl DkgImpl {
         let dealer_id = &message.signature.signer;
 
         // If the validated pool already contains this exact message, we skip it.
-        if dkg_pool.get_validated().any(|item| item.eq(&message)) {
+        if dkg_pool.get_validated().any(|item| item.eq(message)) {
             return ChangeSet::new();
         }
 
         // If the dealing comes from a non-dealer, reject it.
-        if !config.dealers().get().contains(&dealer_id) {
+        if !config.dealers().get().contains(dealer_id) {
             return get_handle_invalid_change_action(
                 message,
                 format!("Replica with Id={:?} is not a dealer.", dealer_id),
@@ -348,17 +337,14 @@ impl DkgImpl {
             .into();
         }
 
-        // If there exists another validated dealing from this dealer and DKG id, reject
-        // it.
+        // If we already have a dealing from this dealer, we simply remove the
+        // message from the pool. Multiple distinguishable valid dealings can be
+        // created by an honest node because dkg dealings are not deterministic,
+        // and in the case of a restart it is possible it might forget that it
+        // has already sent out a dealing. See
+        // https://dfinity.atlassian.net/browse/CON-534 for more details.
         if contains_dkg_messages(dkg_pool, config, *dealer_id) {
-            return get_handle_invalid_change_action(
-                message,
-                format!(
-                    "A dealing from replica with Id={:?} is already validated.",
-                    dealer_id
-                ),
-            )
-            .into();
+            return ChangeSet::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
         }
 
         // Verify the signature and reject if it's invalid, or skip, if there was an
@@ -389,13 +375,13 @@ impl DkgImpl {
         // reject, if it was rejected, or skip, if there was an error.
         match ic_interfaces::crypto::NiDkgAlgorithm::verify_dealing(
             &*self.crypto,
-            &config,
+            config,
             *dealer_id,
             &message.content.dealing,
         )
         .map_err(DkgMessageValidationError::from)
         {
-            Ok(()) => ChangeAction::MoveToValidated((**message).clone()).into(),
+            Ok(()) => ChangeAction::MoveToValidated((*message).clone()).into(),
             Err(ValidationError::Permanent(err)) => get_handle_invalid_change_action(
                 message,
                 format!("Dealing verification failed: {:?}", err),
@@ -413,7 +399,7 @@ fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
     block: &Block,
 ) -> HashMap<NiDkgId, HashSet<NodeId>> {
-    get_dkg_dealings(pool_reader, &block)
+    get_dkg_dealings(pool_reader, block)
         .into_iter()
         .map(|(dkg_id, dealings)| (dkg_id, dealings.into_iter().map(|(key, _)| key).collect()))
         .collect()
@@ -548,7 +534,7 @@ pub fn create_payload(
     // If the height is not a start height, create a payload with new dealings.
 
     // Get all dealer ids from the chain.
-    let dealers_from_chain = get_dealers_from_chain(pool_reader, &parent);
+    let dealers_from_chain = get_dealers_from_chain(pool_reader, parent);
     let age_threshold = Duration::from_millis(dealing_age_threshold_ms);
     // Filter from the validated pool all dealings whose dealer has no dealing on
     // the chain yet.
@@ -709,7 +695,7 @@ fn create_transcript(
     let no_dealings = BTreeMap::new();
     let dealings = all_dealings.get(&config.dkg_id()).unwrap_or(&no_dealings);
     let transcript =
-        ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, &config, dealings)?;
+        ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)?;
     Ok(transcript)
 }
 
@@ -747,7 +733,7 @@ fn validate_dealings_payload(
     }
 
     // Get a list of all dealers, who created a dealing already, indexed by DKG id.
-    let dealers_from_chain = get_dealers_from_chain(pool_reader, &parent);
+    let dealers_from_chain = get_dealers_from_chain(pool_reader, parent);
 
     // Check that all messages have a valid DKG config from the summary and the
     // dealer is valid, then verify each dealing.
@@ -788,7 +774,7 @@ fn validate_dealings_payload(
                 // Verify the dealing.
                 ic_interfaces::crypto::NiDkgAlgorithm::verify_dealing(
                     crypto,
-                    &config,
+                    config,
                     message.signature.signer,
                     &message.content.dealing,
                 )?;
@@ -891,7 +877,7 @@ fn compute_remote_dkg_data(
         registry_client,
         state_manager,
         validation_context,
-        &logger,
+        logger,
     )?;
 
     let mut config_groups = Vec::new();
@@ -1089,9 +1075,9 @@ fn create_remote_dkg_configs(
     };
 
     let low_thr_config =
-        do_create_remote_dkg_config(&low_thr_dkg_id, &dealers, &receivers, registry_version);
+        do_create_remote_dkg_config(&low_thr_dkg_id, dealers, receivers, registry_version);
     let high_thr_config =
-        do_create_remote_dkg_config(&high_thr_dkg_id, &dealers, &receivers, registry_version);
+        do_create_remote_dkg_config(&high_thr_dkg_id, dealers, receivers, registry_version);
     let sibl_err = String::from("Failed to create the sibling config");
     match (low_thr_config, high_thr_config) {
         (Ok(config0), Ok(config1)) => Ok((config0, config1)),
@@ -1210,7 +1196,7 @@ impl Dkg for DkgImpl {
         let changeset = dealings
             .par_iter()
             .map(|dealings| {
-                self.validate_dealings(
+                self.validate_dealings_for_dealer(
                     dkg_pool,
                     &dkg_summary.configs,
                     start_height,
@@ -1425,6 +1411,7 @@ mod tests {
         dependencies, dependencies_with_subnet_params,
         dependencies_with_subnet_records_with_raw_state_manager, Dependencies,
     };
+    use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_interfaces::{
         artifact_pool::UnvalidatedArtifact, consensus_pool::ConsensusPool, dkg::MutableDkgPool,
@@ -2448,15 +2435,7 @@ mod tests {
             // from that dealer already.
             let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
-                &[ChangeAction::HandleInvalid(_, reason)] => {
-                    assert_eq!(
-                        reason,
-                        &format!(
-                            "A dealing from replica with Id={:?} is already validated.",
-                            node_id_1
-                        )
-                    );
-                }
+                &[ChangeAction::RemoveFromUnvalidated(_)] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
             node_2.dkg_pool.apply_changes(change_set);
@@ -2536,8 +2515,8 @@ mod tests {
         });
     }
 
-    // Creates two distiguishable dealings from one dealer and makes sure they both
-    // get invalidated.
+    // Creates two distiguishable dealings from one dealer and makes sure that
+    // one is still accepted
     #[test]
     fn test_validate_dealing_works_3() {
         run_validation_test(&|node_1: ValidationTestComponents,
@@ -2589,15 +2568,7 @@ mod tests {
             node_2.sync_key_manager();
             let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
             match &change_set.as_slice() {
-                &[ChangeAction::HandleInvalid(_, reason1), ChangeAction::HandleInvalid(_, reason2), ChangeAction::MoveToValidated(_)] =>
-                {
-                    let expected_reason = format!(
-                        "The replica with Id={} produced multiple dealings.",
-                        node_id_1
-                    );
-                    assert_eq!(*reason1, expected_reason);
-                    assert_eq!(*reason2, expected_reason);
-                }
+                &[ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_)] => {}
                 val => panic!("Unexpected change set: {:?}", val),
             };
         });
@@ -3239,10 +3210,12 @@ mod tests {
             );
             let messages = vec![Message::fake(wrong_height_dealing_content, node_test_id(0))];
             let result = validate_dealings_payload(&messages, &parent);
-            match result {
-                Err(ValidationError::Permanent(PermanentError::MissingDkgConfigForDealing)) => (),
-                x => panic!("Expected MissingDkgConfigForDealing error but got {:?}", x),
-            }
+            assert_matches!(
+                result,
+                Err(ValidationError::Permanent(
+                    PermanentError::MissingDkgConfigForDealing
+                ))
+            );
 
             // Use a valid dealing but invalid signer, such that `InvalidDealer` is returned
             let messages = vec![Message::fake(
@@ -3250,10 +3223,10 @@ mod tests {
                 node_test_id(1),
             )];
             let result = validate_dealings_payload(&messages, &parent);
-            match result {
-                Err(ValidationError::Permanent(PermanentError::InvalidDealer(_))) => (),
-                x => panic!("Expected InvalidDealer error but got {:?}", x),
-            }
+            assert_matches!(
+                result,
+                Err(ValidationError::Permanent(PermanentError::InvalidDealer(_)))
+            );
 
             // Use valid message and valid signer but add messges to parent block as well.
             // Now the message is already in the blockchain, and `DealerAlreadyDealt` error
@@ -3270,11 +3243,12 @@ mod tests {
             let mut parent = Block::from(pool.make_next_block());
             parent.payload = payload;
             let result = validate_dealings_payload(&messages, &parent);
-            dbg!(&result);
-            match result {
-                Err(ValidationError::Permanent(PermanentError::DealerAlreadyDealt(_))) => (),
-                x => panic!("Expected DealerAlreadyDealt error but got {:?}", x),
-            }
+            assert_matches!(
+                result,
+                Err(ValidationError::Permanent(
+                    PermanentError::DealerAlreadyDealt(_)
+                ))
+            );
         })
     }
 

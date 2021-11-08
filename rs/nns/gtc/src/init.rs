@@ -49,6 +49,8 @@ pub struct GenesisTokenCanisterInitPayloadBuilder {
     pub total_alloc: u32,
     pub genesis_timestamp_seconds: u64,
     pub donate_account_recipient_neuron_id: Option<NeuronId>,
+    pub forward_whitelisted_unclaimed_accounts_recipient_neuron_id: Option<NeuronId>,
+    pub forward_unclaimed_accounts_whitelist: Vec<String>,
     pub sr_months_to_release: Option<u8>,
     pub ect_months_to_release: Option<u8>,
     pub rng: Option<StdRng>,
@@ -117,6 +119,13 @@ impl GenesisTokenCanisterInitPayloadBuilder {
         }
     }
 
+    pub fn add_forward_whitelist(&mut self, forward_whitelist: &[&str]) {
+        for address in forward_whitelist {
+            self.forward_unclaimed_accounts_whitelist
+                .push(address.to_string());
+        }
+    }
+
     /// Return the set `StdRng`. If no `StdRng` has been set, create a new one,
     /// set it, and return it.
     fn get_rng(&mut self, optional_seed: Option<[u8; 32]>) -> &mut StdRng {
@@ -171,6 +180,10 @@ impl GenesisTokenCanisterInitPayloadBuilder {
             total_alloc: self.total_alloc,
             genesis_timestamp_seconds: self.genesis_timestamp_seconds,
             donate_account_recipient_neuron_id: self.donate_account_recipient_neuron_id.clone(),
+            forward_whitelisted_unclaimed_accounts_recipient_neuron_id: self
+                .forward_whitelisted_unclaimed_accounts_recipient_neuron_id
+                .clone(),
+            whitelisted_accounts_to_forward: self.forward_unclaimed_accounts_whitelist.clone(),
         }
     }
 }

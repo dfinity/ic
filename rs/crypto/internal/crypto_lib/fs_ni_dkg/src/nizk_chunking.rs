@@ -183,7 +183,7 @@ pub fn prove_chunking(
     let beta: Vec<BIG> = (0..NUM_ZK_REPETITIONS)
         .map(|_| BIG::randomnum(&spec_p, rng))
         .collect();
-    let bb: Vec<ECP> = beta.iter().map(|beta_i| g1.mul(&beta_i)).collect();
+    let bb: Vec<ECP> = beta.iter().map(|beta_i| g1.mul(beta_i)).collect();
     let (first_move, first_challenge, z_s) = loop {
         let sigma: Vec<BIG> = (0..NUM_ZK_REPETITIONS)
             .map(|_| BIG::modadd(&BIG::randomnum(&range_big, rng), &p_sub_s, &spec_p))
@@ -191,13 +191,13 @@ pub fn prove_chunking(
         let cc: Vec<ECP> = beta
             .iter()
             .zip(&sigma)
-            .map(|(beta_i, sigma_i)| y0.mul2(&beta_i, &g1, &sigma_i))
+            .map(|(beta_i, sigma_i)| y0.mul2(beta_i, &g1, sigma_i))
             .collect();
 
         let first_move = FirstMoveChunking::from(&y0, &bb, &cc);
         // Verifier's challenge.
         let first_challenge =
-            ChunksOracle::new(&instance, &first_move).get_all_chunks(spec_n, spec_m);
+            ChunksOracle::new(instance, &first_move).get_all_chunks(spec_n, spec_m);
 
         // z_s = [sum [e_ijk * s_ij | i <- [1..n], j <- [1..m]] + sigma_k | k <- [1..l]]
         let z_s: Result<Vec<BIG>, ()> = (0..NUM_ZK_REPETITIONS)
@@ -210,7 +210,7 @@ pub fn prove_chunking(
                         e_i.iter().zip(s_i.iter()).for_each(|(e_ij, s_ij)| {
                             acc = BIG::modadd(
                                 &acc,
-                                &BIG::modmul(&BIG::new_int(e_ij[k] as isize), &s_ij, &spec_p),
+                                &BIG::modmul(&BIG::new_int(e_ij[k] as isize), s_ij, &spec_p),
                                 &spec_p,
                             );
                         });
@@ -267,7 +267,7 @@ pub fn prove_chunking(
                     z_rk = BIG::modadd(
                         &z_rk,
                         &BIG::modmul(
-                            &BIG::modmul(&BIG::new_int(*e_ijk as isize), &r_j, &spec_p),
+                            &BIG::modmul(&BIG::new_int(*e_ijk as isize), r_j, &spec_p),
                             &xpow,
                             &spec_p,
                         ),
@@ -282,7 +282,7 @@ pub fn prove_chunking(
     let mut xpow = second_challenge;
     let mut z_beta = delta[0];
     beta.iter().for_each(|beta_k| {
-        z_beta = BIG::modadd(&z_beta, &BIG::modmul(&beta_k, &xpow, &spec_p), &spec_p);
+        z_beta = BIG::modadd(&z_beta, &BIG::modmul(beta_k, &xpow, &spec_p), &spec_p);
         xpow = BIG::modmul(&xpow, &second_challenge, &spec_p);
     });
     ProofChunking {
@@ -322,7 +322,7 @@ pub fn verify_chunking(
     let zz_big = BIG::new_int(zz as isize);
 
     for z_sk in nizk.z_s.iter() {
-        if BIG::comp(&z_sk, &zz_big) >= 0 {
+        if BIG::comp(z_sk, &zz_big) >= 0 {
             return Err(ZkProofChunkingError::InvalidProof);
         }
     }
@@ -330,7 +330,7 @@ pub fn verify_chunking(
     let first_move = FirstMoveChunking::from(&nizk.y0, &nizk.bb, &nizk.cc);
     let second_move = SecondMoveChunking::from(&nizk.z_s, &nizk.dd, &nizk.yy);
     // e_{m,n,l} = oracle(instance, y_0, bb, cc)
-    let e = ChunksOracle::new(&instance, &first_move).get_all_chunks(spec_n, spec_m);
+    let e = ChunksOracle::new(instance, &first_move).get_all_chunks(spec_n, spec_m);
 
     // x = oracle(e, z_s, dd, yy)
     let x = chunking_proof_challenge_oracle(&e, &second_move);
@@ -368,7 +368,7 @@ pub fn verify_chunking(
             &instance.randomizers_r,
             &e_ijk_polynomials,
         ));
-        let rhs = g1.mul(&z_ri);
+        let rhs = g1.mul(z_ri);
         verifies = verifies && lhs.equals(&rhs);
     });
     if !verifies {
@@ -417,7 +417,7 @@ pub fn verify_chunking(
         .iter()
         .zip(xpowers.iter())
         .for_each(|(z_sk, xpow)| {
-            acc = BIG::modadd(&acc, &BIG::modmul(&z_sk, &xpow, &spec_p), &spec_p);
+            acc = BIG::modadd(&acc, &BIG::modmul(z_sk, xpow, &spec_p), &spec_p);
         });
     let mut rhs = ECP::muln(num_receivers, &instance.public_keys, &nizk.z_r);
     rhs.add(&nizk.y0.mul2(&nizk.z_beta, &g1, &acc));

@@ -63,6 +63,7 @@ members = [
   "monitoring/pprof",
   "nns/constants",
   "nns/common",
+  "nns/cmc",
   "nns/handlers/lifeline",
   "nns/handlers/root",
   "nns/identity",
@@ -88,7 +89,6 @@ members = [
   "replica",
   "replicated_state",
   "rosetta-api/ledger_canister",
-  "rosetta-api/cycles_minting_canister",
   "rust_canisters/dfn_core",
   "rust_canisters/dfn_candid",
   "rust_canisters/dfn_http",
@@ -115,7 +115,6 @@ members = [
   "universal_canister/lib",
   "utils",
   "validator",
-  "wasm_utils",
 ]
 
 exclude = [
@@ -131,11 +130,6 @@ debug = true
 [profile.dev.package.miracl_core_bls12381]
 # Optimise the miracl_core_bls12381 cryptographic library, or else NiDKG tests take 4 hours.
 opt-level = 3
-
-[patch.crates-io.oid-registry]
-version = "0.1.1"
-git = "https://github.com/dfinity/oid-registry.git"
-rev = "79a4482af85b364a137affd5848ef534e88a4176"
 
 [patch.crates-io]
 # TODO (CRP-1204): Remove this once tokio-rustls has been updated.

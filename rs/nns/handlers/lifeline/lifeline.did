@@ -1,9 +1,12 @@
-type NeuronId = nat64;
-
 service : {
   canister_status: (record {canister_id: principal;}) ->
    (record {
+      balance: vec record {
+                     blob;
+                     nat;
+                   };
       controller: principal;
+      cycles: nat;
       memory_size: nat;
       module_hash: opt blob;
       status: variant {
@@ -12,4 +15,10 @@ service : {
                 stopping;
               };
     });
+  upgrade_root:
+   (record {
+      module_arg: blob;
+      stop_upgrade_start: bool;
+      wasm_module: blob;
+    }) -> ();
 }

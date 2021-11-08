@@ -122,7 +122,7 @@ impl<'a> ConsensusRunner<'a> {
         let node_id = deps.replica_config.node_id;
 
         let mut context = self.logger.get_context();
-        context.node_id = format!("{}", node_id.clone().get());
+        context.node_id = format!("{}", node_id.get());
 
         let replica_logger = self.logger.with_new_context(context);
 

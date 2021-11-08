@@ -1,42 +1,51 @@
-use ic_crypto_internal_types::sign::canister_threshold_sig::CspThresholdSignatureMsg;
+use ic_crypto_internal_types::sign::canister_threshold_sig::CspThresholdEcdsaSigShare;
 use ic_types::crypto::canister_threshold_sig::error::{
-    CombineSignatureError, EcdsaPublicKeyError, ThresholdSignatureGenerationError,
-    ThresholdSignatureVerificationError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaGetPublicKeyError,
+    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPublicKey, ThresholdSignatureInputs, ThresholdSignatureMsg,
+    EcdsaPublicKey, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+    ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, PrincipalId};
 
-pub fn sign_threshold(
-    _inputs: &ThresholdSignatureInputs,
-) -> Result<ThresholdSignatureMsg, ThresholdSignatureGenerationError> {
-    Ok(ThresholdSignatureMsg {
-        internal_msg: CspThresholdSignatureMsg {},
+pub fn sign_share(
+    _inputs: &ThresholdEcdsaSigInputs,
+) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
+    Ok(ThresholdEcdsaSigShare {
+        internal_msg: CspThresholdEcdsaSigShare {},
     })
 }
 
-pub fn validate_threshold_sig_share(
+pub fn verify_sig_share(
     _signer: NodeId,
-    _inputs: &ThresholdSignatureInputs,
-    _output: &ThresholdSignatureMsg,
-) -> Result<(), ThresholdSignatureVerificationError> {
+    _inputs: &ThresholdEcdsaSigInputs,
+    _share: &ThresholdEcdsaSigShare,
+) -> Result<(), ThresholdEcdsaVerifySigShareError> {
     Ok(())
 }
 
-pub fn combine_threshold_sig_shares(
-    _inputs: &ThresholdSignatureInputs,
-    _outputs: &[ThresholdSignatureMsg],
-) -> Result<Vec<u8>, CombineSignatureError> {
-    Ok(vec![])
+pub fn combine_sig_shares(
+    _inputs: &ThresholdEcdsaSigInputs,
+    _shares: &[ThresholdEcdsaSigShare],
+) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
+    Ok(ThresholdEcdsaCombinedSignature { signature: vec![] })
 }
 
-pub fn get_ecdsa_public_key(
+pub fn verify_combined_sig(
+    _inputs: &ThresholdEcdsaSigInputs,
+    _signature: &ThresholdEcdsaCombinedSignature,
+) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
+    Ok(())
+}
+
+pub fn get_public_key(
     _canister_id: PrincipalId,
     _key_transcript: IDkgTranscript,
-) -> Result<EcdsaPublicKey, EcdsaPublicKeyError> {
+) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError> {
     Ok(EcdsaPublicKey {
         algorithm_id: AlgorithmId::EcdsaSecp256k1,
         public_key: vec![],

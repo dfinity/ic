@@ -25,7 +25,7 @@ ic-registry-client = { path = "../registry/client" }
 ic-registry-common = { path = "../registry/common" }
 ic-registry-keys = { path = "../registry/keys" }
 lazy_static = "1.4.0"
-nix = "0.20.0"
+nix = "0.23.0"
 notify = "4.0.12"
 openssl = "0.10.29"
 phantom_newtype = { path = "../phantom_newtype" }

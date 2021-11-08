@@ -203,7 +203,7 @@ mod tls {
         let x509_cert = cert.as_x509();
         let public_key = x509_cert.public_key().unwrap();
         assert_eq!(x509_cert.verify(&public_key).ok(), Some(true));
-        assert_eq!(x509_cert.issued(&x509_cert), X509VerifyResult::OK);
+        assert_eq!(x509_cert.issued(x509_cert), X509VerifyResult::OK);
     }
 
     #[test]
@@ -213,8 +213,8 @@ mod tls {
         let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
         let x509_cert = cert.as_x509();
-        assert_eq!(cn_entries(&x509_cert).count(), 1);
-        let subject_cn = cn_entries(&x509_cert).next().unwrap();
+        assert_eq!(cn_entries(x509_cert).count(), 1);
+        let subject_cn = cn_entries(x509_cert).next().unwrap();
         let expected_subject_cn = node_test_id(NODE_1).get().to_string();
         assert_eq!(expected_subject_cn.as_bytes(), subject_cn.data().as_slice());
     }
@@ -225,7 +225,7 @@ mod tls {
 
         let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
-        let subject_cn = cn_entries(&cert.as_x509()).next().unwrap();
+        let subject_cn = cn_entries(cert.as_x509()).next().unwrap();
         assert_eq!(b"w43gn-nurca-aaaaa-aaaap-2ai", subject_cn.data().as_slice());
     }
 
@@ -304,7 +304,7 @@ mod tls {
         let mut csp = Csp::of(rng(), volatile_key_store());
         let date_in_the_past = "20211004235959Z";
 
-        let _panic = csp.gen_tls_key_pair(node_test_id(NODE_1), &date_in_the_past);
+        let _panic = csp.gen_tls_key_pair(node_test_id(NODE_1), date_in_the_past);
     }
 
     fn rng() -> impl CryptoRng + Rng + Clone {
@@ -312,7 +312,7 @@ mod tls {
     }
 
     fn secret_key_from_store(
-        csp: &mut Csp<impl CryptoRng + Rng, VolatileSecretKeyStore>,
+        csp: &mut Csp<impl CryptoRng + Rng, impl SecretKeyStore, impl SecretKeyStore>,
         x509_cert: X509,
     ) -> CspSecretKey {
         let cert = TlsPublicKeyCert::new_from_x509(x509_cert)

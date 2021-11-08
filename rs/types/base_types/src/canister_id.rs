@@ -99,7 +99,7 @@ impl AsRef<PrincipalId> for CanisterId {
 
 impl AsRef<[u8]> for CanisterId {
     fn as_ref(&self) -> &[u8] {
-        &self.0.as_slice()
+        self.0.as_slice()
     }
 }
 

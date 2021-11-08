@@ -24,6 +24,7 @@ ic-registry-client = { path = "../registry/client" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 linked-hash-map = "0.5.3"
 lru = { version = "0.6.0", default-features = false }
+phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }

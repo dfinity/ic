@@ -5,18 +5,13 @@ use ic_interfaces::{
     state_manager::StateManager, time_source::TimeSource,
 };
 use ic_logger::{error, warn, ReplicaLogger};
-use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client::helper::subnet::{NotarizationDelaySettings, SubnetRegistry};
-use ic_registry_common::values::deserialize_registry_value;
-use ic_registry_keys::make_subnet_record_key;
-use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::Rank,
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
 };
 use std::collections::BTreeMap;
-use std::convert::TryFrom;
 use std::time::Duration;
 
 /// The acceptable gap between the finalized height and the certified height. If
@@ -80,19 +75,14 @@ pub fn is_root_subnet(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
 ) -> Result<bool, String> {
-    let bytes = registry_client.get_value(&make_subnet_record_key(subnet_id), registry_version);
-    let subnet_record =
-        deserialize_registry_value::<SubnetRecord>(bytes).map_err(|e| e.to_string())?;
-    match subnet_record {
-        Some(SubnetRecord { subnet_type, .. }) => {
-            let subnet_type = SubnetType::try_from(subnet_type).map_err(|err| err.to_string())?;
-            Ok(subnet_type == SubnetType::System)
-        }
-        None => Err(format!(
-            "subnet record for subnet {:?} not found at registry version {:?}",
-            subnet_id, registry_version
-        )),
-    }
+    let root_subnet_id = registry_client
+        .get_root_subnet_id(registry_version)
+        .map_err(|e| format!("Encountered error retrieving root subnet id {:?}", e))?
+        .ok_or(format!(
+            "No value for root subnet id at registry version {:?}",
+            registry_version
+        ))?;
+    Ok(root_subnet_id == subnet_id)
 }
 
 /// Return true if the time since round start is greater than the required block

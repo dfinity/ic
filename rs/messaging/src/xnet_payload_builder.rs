@@ -395,7 +395,7 @@ impl XNetPayloadBuilderImpl {
             .map(|subnet_id| {
                 (
                     subnet_id,
-                    self.expected_indices_for_stream(subnet_id, &state, past_payloads),
+                    self.expected_indices_for_stream(subnet_id, state, past_payloads),
                 )
             })
             .collect::<BTreeMap<SubnetId, ExpectedIndices>>();
@@ -587,7 +587,7 @@ impl XNetPayloadBuilderImpl {
             subnet_id,
             slice.header().signals_end,
             expected.signal_index,
-            &state,
+            state,
         ) {
             SignalsValidationResult::Valid => {
                 self.metrics
@@ -839,7 +839,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 Err(e) => {
                     log!(self.log, e.log_level(), "{}", e);
                     self.metrics
-                        .observe_build_duration(&e.to_label_value(), timer);
+                        .observe_build_duration(e.to_label_value(), timer);
 
                     XNetPayload::default()
                 }
@@ -1089,7 +1089,7 @@ impl PoolRefillTask {
                 Ok(endpoint_locator) => endpoint_locator,
                 Err(e) => {
                     log!(self.log, e.log_level(), "{}", e);
-                    self.metrics.observe_pull_attempt(&e.to_label_value());
+                    self.metrics.observe_pull_attempt(e.to_label_value());
                     continue;
                 }
             };

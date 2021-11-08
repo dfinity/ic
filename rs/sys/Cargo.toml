@@ -8,10 +8,9 @@ hex = "0.4.2"
 ic-crypto-sha = { path = "../crypto/sha" }
 lazy_static = "1.4.0"
 libc = "0.2.91"
-nix = "0.20.0"
+nix = "0.23.0"
 wsl = "0.1.0"
 phantom_newtype = { path = "../phantom_newtype" }
 
 [dev-dependencies]
 tempfile = "3.1.0"
-

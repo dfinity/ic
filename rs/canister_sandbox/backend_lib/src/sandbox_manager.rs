@@ -11,46 +11,41 @@
 //!
 //! All of the above objects as well as the functionality provided
 //! towards the controller are found in this module.
-use crate::logging::log;
-use crate::system_state_accessor_rpc::SystemStateAccessorRPC;
+use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
+use std::sync::{Arc, Mutex};
+
 use ic_canister_sandbox_common::{
     controller_service::ControllerService,
     protocol,
     protocol::logging::{LogLevel, LogRequest},
 };
 use ic_config::embedders::{Config, PersistenceType};
-use ic_embedders::wasm_executor::compute_page_delta;
-use ic_embedders::WasmtimeEmbedder;
+use ic_embedders::{
+    wasm_executor::compute_page_delta,
+    wasm_utils::{
+        instrumentation::{instrument, InstructionCostTable},
+        validation::validate_wasm_binary,
+    },
+    WasmtimeEmbedder,
+};
 use ic_interfaces::execution_environment::{HypervisorError, InstanceStats};
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{EmbedderCache, Global, NumWasmPages, PageMap};
-use ic_sys::{PageBytes, PageIndex};
 use ic_system_api::SystemApiImpl;
 use ic_types::{
     methods::{FuncRef, SystemMethod, WasmMethod},
     NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
-use ic_wasm_utils::{
-    instrumentation::{instrument, InstructionCostTable},
-    validation::{validate_wasm_binary, WasmValidationConfig},
-};
 use memory_tracker::DirtyPageTracking;
-use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
-use std::sync::{Arc, Mutex};
 
-/// This represents the state object as it is used in the RPC protocol.
-/// It "generally" holds the runtime state required for wasm execution
-/// at a given point in time -- it can temporarily be "empty" when
-/// there is an execution in progress.
+use crate::logging::log;
+use crate::system_state_accessor_rpc::SystemStateAccessorRPC;
+
+/// This represents the "state" object as it is used in the RPC protocol.
+#[derive(Clone)]
 struct State {
-    /// Actual runtime state -- held here unless state is presently
-    /// "locked" in an execution (option is None).
-    inner: Mutex<Option<Box<StateInner>>>,
-}
-/// Inner synchronized data held in state.
-struct StateInner {
     /// Global variables.
     globals: Vec<Global>,
 
@@ -58,21 +53,6 @@ struct StateInner {
     pages: PageMap,
 
     /// Wasm memory size.
-    heap_size: NumWasmPages,
-}
-
-/// Represents the state that exists after the end of execution, but
-/// that is not reflected in the wasm (memory) state (yet). It will
-/// simply be discarded unless replica explicitly decides to apply
-/// the changes.
-struct VolatileState {
-    /// Updated global variables after execution.
-    globals: Vec<Global>,
-
-    /// Updated PageMap after execution.
-    pages: PageMap,
-
-    /// Updated heap size after execution.
     heap_size: NumWasmPages,
 }
 
@@ -94,9 +74,6 @@ struct Execution {
     /// The canister wasm used in this execution.
     canister_wasm: Arc<CanisterWasm>,
 
-    /// The (heap) state used in this execution.
-    state: Arc<State>,
-
     /// Handle for RPC service to controller (e.g. for syscalls).
     controller: Arc<dyn ControllerService>,
 
@@ -112,22 +89,9 @@ enum ExecutionInner {
     /// The execution thread is running.
     Running,
 
-    /// The execution is finished -- state is "released" from actual
-    /// execution thread, and there may be a volatile state that could
-    /// be committed.
-    FinishedOk {
-        /// Run time state that will be returned to the state object
-        /// used in the execution.
-        runtime_state: Box<StateInner>,
-        /// State that has been created during execution (e.g. updated
-        /// pages, global variables etc.) but that has not yet been
-        /// committed to the runtime state.
-        volatile_state: VolatileState,
-    },
+    FinishedOk {},
 
-    FinishedError {
-        runtime_state: Box<StateInner>,
-    },
+    FinishedError {},
 
     /// Execution is finished and has been closed. This is an
     /// intermittent state before the object is destroyed -- it should
@@ -153,14 +117,11 @@ impl Execution {
         workers: &mut threadpool::ThreadPool,
         exec_input: protocol::structs::ExecInput,
     ) -> Result<Arc<Self>, ExecutionInstantiateError> {
-        let runtime_state = state
-            .borrow_runtime_state()
-            .ok_or(ExecutionInstantiateError)?;
+        let runtime_state = (*state).clone();
 
         let instance = Arc::new(Self {
             exec_id,
             canister_wasm,
-            state,
             controller,
             internal: Mutex::new(ExecutionInner::Running),
         });
@@ -173,17 +134,16 @@ impl Execution {
 
     // Actual wasm code execution -- this is run on the target thread
     // in the thread pool.
-    fn entry(&self, exec_input: protocol::structs::ExecInput, runtime_state: Box<StateInner>) {
+    fn entry(&self, exec_input: protocol::structs::ExecInput, runtime_state: State) {
         fn record_error(
             exec: &Execution,
             err: HypervisorError,
-            runtime_state: Box<StateInner>,
             num_instructions_left: NumInstructions,
             globals: Vec<Global>,
             instance_stats: InstanceStats,
             heap_size: NumWasmPages,
         ) {
-            *exec.internal.lock().unwrap() = ExecutionInner::FinishedError { runtime_state };
+            *exec.internal.lock().unwrap() = ExecutionInner::FinishedError {};
             let exec_output = protocol::structs::ExecOutput {
                 wasm_result: Err(err),
                 num_instructions_left,
@@ -231,7 +191,6 @@ impl Execution {
                 record_error(
                     self,
                     err,
-                    runtime_state,
                     NumInstructions::from(0),
                     exec_input.globals,
                     InstanceStats {
@@ -255,15 +214,7 @@ impl Execution {
                 page_delta: vec![],
             };
 
-            let volatile_state = VolatileState {
-                globals: instance.get_exported_globals(),
-                pages: runtime_state.pages.clone(),
-                heap_size: instance.heap_size(),
-            };
-            *self.internal.lock().unwrap() = ExecutionInner::FinishedOk {
-                runtime_state,
-                volatile_state,
-            };
+            *self.internal.lock().unwrap() = ExecutionInner::FinishedOk {};
             self.controller
                 .exec_finished(protocol::ctlsvc::ExecFinishedRequest {
                     exec_id: self.exec_id.to_string(),
@@ -288,11 +239,11 @@ impl Execution {
                     .iter()
                     .map(|x| protocol::structs::IndexedPage {
                         index: x.0,
-                        data: x.1.to_vec(),
+                        data: *x.1,
                     })
                     .collect();
 
-                let mut pages = runtime_state.pages.clone();
+                let mut pages = runtime_state.pages;
                 pages.update(&page_delta);
 
                 let exec_output = protocol::structs::ExecOutput {
@@ -304,15 +255,7 @@ impl Execution {
                     page_delta: ser_page_delta,
                 };
 
-                let volatile_state = VolatileState {
-                    globals: run_result.exported_globals,
-                    pages,
-                    heap_size: instance.heap_size(),
-                };
-                *self.internal.lock().unwrap() = ExecutionInner::FinishedOk {
-                    runtime_state,
-                    volatile_state,
-                };
+                *self.internal.lock().unwrap() = ExecutionInner::FinishedOk {};
                 self.controller
                     .exec_finished(protocol::ctlsvc::ExecFinishedRequest {
                         exec_id: self.exec_id.to_string(),
@@ -323,7 +266,6 @@ impl Execution {
                 record_error(
                     self,
                     err,
-                    runtime_state,
                     num_instructions_left,
                     exec_input.globals,
                     instance_stats,
@@ -336,7 +278,7 @@ impl Execution {
     /// Closes the current execution (assuming that it has finished).
     /// Optionally, commits changes made during execution to the state.
     /// The state is finally unlocked.
-    pub(crate) fn close(&self, commit_state: bool) -> bool {
+    pub(crate) fn close(&self) -> bool {
         let mut guard = self.internal.lock().unwrap();
 
         // "Optimistically" replace present state with "Closed" state --
@@ -344,26 +286,8 @@ impl Execution {
         // way to perform a consuming in-place modification of an
         // enum.
         match std::mem::replace(&mut *guard, ExecutionInner::Closed) {
-            ExecutionInner::FinishedOk {
-                mut runtime_state,
-                volatile_state,
-            } => {
-                if commit_state {
-                    runtime_state.globals = volatile_state.globals;
-                    runtime_state.heap_size = volatile_state.heap_size;
-                    runtime_state.pages = volatile_state.pages;
-                }
-                self.state.return_runtime_state(runtime_state);
-                true
-            }
-            ExecutionInner::FinishedError { runtime_state } => {
-                // After a failed call (no matter if at tip or branch
-                // state), the memory map is not in good shape. If the
-                // state object is to be reused, then its mapping needs
-                // to be reset as well.
-                self.state.return_runtime_state(runtime_state);
-                !commit_state
-            }
+            ExecutionInner::FinishedOk {} => true,
+            ExecutionInner::FinishedError {} => true,
             ExecutionInner::Running => {
                 // Restore state to running if it was running before --
                 // cannot close yet.
@@ -384,45 +308,17 @@ impl State {
         memory_size: NumWasmPages,
     ) -> Self {
         let mut page_map = PageMap::new();
-        let page_refs: Vec<(PageIndex, &PageBytes)> = wasm_memory
+        let page_refs: Vec<_> = wasm_memory
             .iter()
-            .map(|page| {
-                (
-                    page.index,
-                    protocol::structs::IndexedPage::page_bytes_ref(&page.data[..]),
-                )
-            })
+            .map(|page| (page.index, &page.data))
             .collect();
         page_map.update(&page_refs);
 
         Self {
-            inner: Mutex::new(Some(Box::new(StateInner {
-                globals: globals.to_vec(),
-                pages: page_map,
-                heap_size: memory_size,
-            }))),
+            globals: globals.to_vec(),
+            pages: page_map,
+            heap_size: memory_size,
         }
-    }
-
-    // Internal function used by execution -- borrows actual state
-    // internals and marks state as "locked".
-    // Precondition: state is "unlocked"
-    fn borrow_runtime_state(&self) -> Option<Box<StateInner>> {
-        let runtime_state = {
-            let mut guard = self.inner.lock().unwrap();
-            guard.take()
-        };
-        runtime_state
-    }
-
-    // Internal function used by execution -- return previously
-    // borrowed state, "unlocks" state object.
-    // Precondition: state is "locked", and the given runtime state
-    // is the one previously obtained through "borrow_runtime_state".
-    fn return_runtime_state(&self, runtime_state: Box<StateInner>) {
-        let mut guard = self.inner.lock().unwrap();
-
-        *guard = Some(runtime_state);
     }
 }
 
@@ -440,21 +336,15 @@ impl CanisterWasm {
         let mut config = Config::new();
         config.persistence_type = PersistenceType::Sigsegv;
 
-        let embedder = Arc::new(WasmtimeEmbedder::new(config, log));
+        let embedder = Arc::new(WasmtimeEmbedder::new(config.clone(), log));
         let compilate = Arc::new(
-            validate_wasm_binary(
-                &wasm,
-                // TODO(EXC-501): Read EmbedderConfig at sandbox process
-                // start and have it passed from parent process such
-                // that correct config is used here.
-                WasmValidationConfig::default(),
-            )
-            .map_err(HypervisorError::from)
-            .and_then(|_| {
-                instrument(&wasm, &InstructionCostTable::new()).map_err(HypervisorError::from)
-            })
-            .and_then(|output| embedder.compile(PersistenceType::Sigsegv, &output.binary))
-            .unwrap(),
+            validate_wasm_binary(&wasm, &config)
+                .map_err(HypervisorError::from)
+                .and_then(|_| {
+                    instrument(&wasm, &InstructionCostTable::new()).map_err(HypervisorError::from)
+                })
+                .and_then(|output| embedder.compile(PersistenceType::Sigsegv, &output.binary))
+                .unwrap(),
         );
         Self {
             embedder,
@@ -521,13 +411,13 @@ impl SandboxManager {
     ) -> bool {
         log(
             &*self.controller,
-            LogRequest((
+            LogRequest(
                 LogLevel::Debug,
                 format!(
                     "Opening wasm session: Wasm id: {:?}; wasm file path: {:?}",
                     &wasm_id, wasm_file_path
                 ),
-            )),
+            ),
         );
 
         let mut guard = self.repr.lock().unwrap();
@@ -541,13 +431,13 @@ impl SandboxManager {
 
         log(
             &*self.controller,
-            LogRequest((
+            LogRequest(
                 LogLevel::Debug,
                 format!(
                     "Opened wasm session: Wasm id: {:?}; wasm file path: {:?}",
                     &wasm_id, wasm_file_path
                 ),
-            )),
+            ),
         );
 
         true
@@ -558,10 +448,10 @@ impl SandboxManager {
         let mut guard = self.repr.lock().unwrap();
         log(
             &*self.controller,
-            LogRequest((
+            LogRequest(
                 LogLevel::Debug,
                 format!("Closing wasm session: Wasm id: {:?}", &wasm_id),
-            )),
+            ),
         );
         guard.canister_wasms.remove(wasm_id).is_some()
     }
@@ -591,10 +481,10 @@ impl SandboxManager {
         let mut guard = self.repr.lock().unwrap();
         log(
             &*self.controller,
-            LogRequest((
+            LogRequest(
                 LogLevel::Debug,
                 format!("Closing state session: state id: {:?}", &state_id),
-            )),
+            ),
         );
         guard.states.remove(state_id).is_some()
     }
@@ -616,13 +506,13 @@ impl SandboxManager {
         eprintln!("Exec: Exec id: {:?}", &exec_id);
         log(
             &*self.controller,
-            LogRequest((
+            LogRequest(
                 LogLevel::Debug,
                 format!(
                     "Opening exec session: Exec id: {:?} on state {:?} with wasm {:?}",
                     &exec_id, &wasm_id, &wasm_id
                 ),
-            )),
+            ),
         );
 
         if let Some(_exec_id) = guard.active_execs.get(&exec_id.to_owned()) {
@@ -642,8 +532,8 @@ impl SandboxManager {
             if let Some(state) = state {
                 let exec = Execution::create(
                     exec_id.to_string(),
-                    Arc::clone(&wasm_runner),
-                    Arc::clone(&state),
+                    Arc::clone(wasm_runner),
+                    Arc::clone(state),
                     Arc::clone(&self.controller),
                     &mut guard.workers,
                     exec_input,
@@ -653,13 +543,13 @@ impl SandboxManager {
                     guard.active_execs.insert(exec_id.to_owned(), exec);
                     log(
                         &*self.controller,
-                        LogRequest((
+                        LogRequest(
                             LogLevel::Debug,
                             format!(
                                 "Opened exec session: Exec id: {:?} on state {:?} with wasm {:?}",
                                 &exec_id, &wasm_id, &wasm_id
                             ),
-                        )),
+                        ),
                     );
 
                     true
@@ -683,12 +573,12 @@ impl SandboxManager {
     /// replica, as we assume a malicious sandboxed process. For
     /// stability reasons we should ensure still that sandbox is
     /// robust.
-    pub fn close_execution(&self, exec_id: &str, commit_state: bool) -> bool {
+    pub fn close_execution(&self, exec_id: &str) -> bool {
         let mut guard = self.repr.lock().unwrap();
         match guard.active_execs.remove(exec_id) {
             Some(exec) => {
                 // **Attempt** closing the execution object.
-                exec.close(commit_state)
+                exec.close()
             }
             None => false,
         }

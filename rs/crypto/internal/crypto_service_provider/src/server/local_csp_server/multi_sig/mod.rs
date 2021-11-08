@@ -13,7 +13,9 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> MultiSignatureCspServer for LocalCspServer<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> MultiSignatureCspServer
+    for LocalCspServer<R, S, C>
+{
     fn multi_sign(
         &self,
         algorithm_id: AlgorithmId,

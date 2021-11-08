@@ -1,4 +1,7 @@
-use crate::{embedders::PersistenceType, subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE};
+use crate::{
+    embedders::PersistenceType, feature_status::FeatureStatus,
+    subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE,
+};
 use ic_base_types::NumSeconds;
 use ic_types::{
     Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
@@ -66,6 +69,9 @@ pub struct Config {
 
     /// Maximum number of controllers a canister can have.
     pub max_controllers: usize,
+
+    /// Indicates whether canisters sandboxing is enabled or not.
+    pub canister_sandboxing_flag: FeatureStatus,
 }
 
 impl Default for Config {
@@ -88,6 +94,8 @@ impl Default for Config {
             // Maximum number of controllers allowed in a request (specified in the public
             // Spec).
             max_controllers: 10,
+            // Change this value to enable/disable canister sandboxing by default.
+            canister_sandboxing_flag: FeatureStatus::Disabled,
         }
     }
 }

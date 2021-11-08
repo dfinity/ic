@@ -471,6 +471,11 @@ impl Consensus for ConsensusImpl {
 
                 // Log starvation if configured
                 if self.config.detect_starvation() && time_since_last_invoked > unit_delay {
+                    self.metrics
+                        .starvation_counter
+                        .with_label_values(&[component_name])
+                        .inc();
+
                     warn!(
                         every_n_seconds => 5,
                         self.log,
@@ -651,7 +656,18 @@ mod tests {
         Box<dyn ConsensusPool>,
         Arc<FastForwardTimeSource>,
     ) {
-        let subnet_id = subnet_test_id(0);
+        set_up_consensus_with_subnet_record_and_subnet_id(record, pool_config, subnet_test_id(0))
+    }
+
+    fn set_up_consensus_with_subnet_record_and_subnet_id(
+        record: SubnetRecord,
+        pool_config: ArtifactPoolConfig,
+        subnet_id: SubnetId,
+    ) -> (
+        ConsensusImpl,
+        Box<dyn ConsensusPool>,
+        Arc<FastForwardTimeSource>,
+    ) {
         let Dependencies {
             pool,
             membership,
@@ -749,11 +765,12 @@ mod tests {
             // ensure that an consensus_impl with a subnet record with is_halted = false
             // returns changes
             let (mut consensus_impl, pool, consensus_time_source) =
-                set_up_consensus_with_subnet_record(
+                set_up_consensus_with_subnet_record_and_subnet_id(
                     SubnetRecordBuilder::from(&committee)
                         .with_dkg_interval_length(interval_length)
                         .build(),
                     pool_config,
+                    subnet_test_id(1),
                 );
 
             // when the consensus time source and the registry time are equal, consensus

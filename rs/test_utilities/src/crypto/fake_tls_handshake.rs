@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, Peer, TlsClientHandshakeError, TlsHandshake,
+    AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake,
     TlsServerHandshakeError, TlsStream,
 };
 use ic_types::{NodeId, RegistryVersion};
@@ -39,15 +39,6 @@ impl TlsHandshake for FakeTlsHandshake {
         _allowed_clients: AllowedClients,
         _registry_version: RegistryVersion,
     ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
-        unimplemented!()
-    }
-
-    async fn perform_tls_server_handshake_temp_with_optional_client_auth(
-        &self,
-        _tcp_stream: TcpStream,
-        _allowed_authenticating_clients: AllowedClients,
-        _registry_version: RegistryVersion,
-    ) -> Result<(TlsStream, Peer), TlsServerHandshakeError> {
         unimplemented!()
     }
 

@@ -34,7 +34,7 @@ pub fn hash_message_to_g1(msg: &[u8]) -> G1Projective {
 pub fn hash_public_key_to_g1(public_key: &[u8]) -> G1Projective {
     bls::hash_to_g1(
         &DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP[..],
-        &public_key,
+        public_key,
     )
 }
 

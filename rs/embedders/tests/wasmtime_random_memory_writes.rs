@@ -1,10 +1,11 @@
 use ic_config::embedders::{Config, PersistenceType};
+use ic_embedders::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NumWasmPages;
+use ic_replicated_state::{Memory, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{ApiType, SystemApiImpl, SystemStateAccessor};
 use ic_test_utilities::{
@@ -19,7 +20,6 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
 };
 use ic_wasm_types::BinaryEncodedWasm;
-use ic_wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -30,7 +30,7 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(NumBytes::new(std::u64::MAX));
+        SubnetAvailableMemory::new(i64::MAX / 2);
 }
 
 fn test_api_for_update(
@@ -56,8 +56,11 @@ fn test_api_for_update(
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
 
-    let system_state_accessor =
-        ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+    let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
+        system_state,
+        cycles_account_manager,
+        &Memory::default(),
+    );
     SystemApiImpl::new(
         system_state_accessor.canister_id(),
         ApiType::update(

@@ -58,13 +58,17 @@ pub struct CyclesAccountManager {
     /// The maximum allowed instructions to be spent on a single message
     /// execution.
     max_num_instructions: NumInstructions,
+
     /// The maximum amount of cycles a canister can hold.
     /// If set to None, the canisters have no upper limit.
     max_cycles_per_canister: Option<Cycles>,
+
     /// The subnet type of this [`CyclesAccountManager`].
     own_subnet_type: SubnetType,
+
     /// The subnet id of this [`CyclesAccountManager`].
     subnet_id: SubnetId,
+
     /// The configuration of this [`CyclesAccountManager`] controlling the fees
     /// that are charged for various operations.
     config: CyclesAccountManagerConfig,
@@ -293,7 +297,7 @@ impl CyclesAccountManager {
         &self,
         ingress: &SignedIngressContent,
     ) -> Result<IngressInductionCost, IngressInductionCostError> {
-        let paying_canister = if is_subnet_message(&ingress, self.subnet_id) {
+        let paying_canister = if is_subnet_message(ingress, self.subnet_id) {
             // If a subnet message, inspect the payload to figure out who should pay for the
             // message.
             match Method::from_str(ingress.method_name()) {
@@ -352,6 +356,11 @@ impl CyclesAccountManager {
             }
             None => Ok(IngressInductionCost::Free),
         }
+    }
+
+    /// How often canisters should be charged for memory and compute allocation.
+    pub fn duration_between_allocation_charges(&self) -> Duration {
+        self.config.duration_between_allocation_charges
     }
 
     ////////////////////////////////////////////////////////////////////////////

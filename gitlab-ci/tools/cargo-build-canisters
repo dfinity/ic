@@ -8,6 +8,7 @@ PATH=$(
     echo "${p%:}"
 )
 export PATH=/opt/cargo/bin:$PATH
+CI_PROJECT_DIR="${CI_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 
 rm -rf "$CI_PROJECT_DIR/artifacts/canisters"
 mkdir -p "$CI_PROJECT_DIR/artifacts/canisters"

@@ -387,7 +387,7 @@ fn build_transcript_result(
             Ok(Ok(NiDkgTranscript::try_from(transcript)?))
         }
         pb::ni_dkg_transcript_result::Val::ErrorString(error_string) => {
-            Ok(Err(std::str::from_utf8(&error_string)
+            Ok(Err(std::str::from_utf8(error_string)
                 .map_err(|e| format!("Failed to convert ErrorString: {:?}", e))?
                 .to_string()))
         }

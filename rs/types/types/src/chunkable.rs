@@ -224,7 +224,7 @@ impl TryFrom<pb::ArtifactChunk> for ArtifactChunk {
     type Error = ProxyDecodeError;
 
     fn try_from(chunk: pb::ArtifactChunk) -> Result<Self, Self::Error> {
-        let witness = chunk.witnesses.iter().map(|w| deserialize(&w)).collect();
+        let witness = chunk.witnesses.iter().map(|w| deserialize(w)).collect();
         let witness = match witness {
             Ok(witness) => witness,
             Err(_) => {

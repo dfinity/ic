@@ -40,32 +40,31 @@ pub fn spawn_socketed_process(
         // Unsafe section required due to raw call to libc posix_spawn function
         // as well as raw handling of raw file descriptor.
         // Safety is assured, cf. posix_spawn API.
-        let mut pid = std::mem::MaybeUninit::<libc::pid_t>::uninit().assume_init();
-        let mut file_actions =
-            std::mem::MaybeUninit::<libc::posix_spawn_file_actions_t>::uninit().assume_init();
-        let mut attr = std::mem::MaybeUninit::<libc::posix_spawnattr_t>::uninit().assume_init();
+        let mut pid = std::mem::MaybeUninit::<libc::pid_t>::uninit();
+        let file_actions = std::ptr::null_mut::<libc::posix_spawn_file_actions_t>();
+        let attr = std::ptr::null_mut::<libc::posix_spawnattr_t>();
 
-        libc::posix_spawn_file_actions_init(&mut file_actions);
-        libc::posix_spawn_file_actions_adddup2(&mut file_actions, sock_sandbox.as_raw_fd(), 3);
-        libc::posix_spawnattr_init(&mut attr);
+        libc::posix_spawn_file_actions_init(file_actions);
+        libc::posix_spawn_file_actions_adddup2(file_actions, sock_sandbox.as_raw_fd(), 3);
+        libc::posix_spawnattr_init(attr);
 
         let spawn_result = libc::posix_spawn(
-            &mut pid,
+            pid.as_mut_ptr(),
             exec_path.as_ptr(),
-            &file_actions,
-            &attr,
+            file_actions,
+            attr,
             argvp.as_ptr(),
             envp.as_ptr(),
         );
 
-        libc::posix_spawn_file_actions_destroy(&mut file_actions);
-        libc::posix_spawnattr_destroy(&mut attr);
+        libc::posix_spawn_file_actions_destroy(file_actions);
+        libc::posix_spawnattr_destroy(attr);
 
         if spawn_result != 0 {
             return Err(std::io::Error::last_os_error());
         }
 
-        pid
+        pid.assume_init()
     };
 
     Ok(SocketedProcess {

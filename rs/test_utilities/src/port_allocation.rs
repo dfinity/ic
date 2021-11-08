@@ -68,13 +68,15 @@ mod tests {
     // Allocate 10 ports from the allocator
     // listen on the ports in the same process
     fn allocate_and_use_10_ports() {
-        let listen_errors: Vec<Result<(), Box<dyn Error>>> = allocate_ports("127.0.0.1", 10)
-            .unwrap()
-            .iter()
-            .map(listen_helper)
-            .filter(|listen_result| listen_result.is_err())
-            .collect();
-        assert_eq!(listen_errors.len(), 0)
+        assert_eq!(
+            allocate_ports("127.0.0.1", 10)
+                .unwrap()
+                .iter()
+                .map(listen_helper)
+                .filter(|listen_result| listen_result.is_err())
+                .count(),
+            0
+        )
     }
 
     rusty_fork_test! {
@@ -108,15 +110,14 @@ mod tests {
             }
 
             // Wait on children
-            let success_child_count: Vec<Result<(), i32>> = children
+
+            assert_eq!(children
                 .iter()
                 .map(|pid| match waitpid(*pid, None) {
                     Ok(WaitStatus::Exited(_, 0)) => Ok(()),
                     _ => Err(-1),
                 })
-                .filter(|r| r.is_ok())
-                .collect();
-            assert_eq!(success_child_count.len(), child_count as usize);
+                .filter(|r| r.is_ok()).count(), child_count as usize);
         }
     }
 }

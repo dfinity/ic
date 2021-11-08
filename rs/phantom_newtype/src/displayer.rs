@@ -39,6 +39,6 @@ where
     Displayer: DisplayerOf<T>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Displayer::display(&self.value, f)
+        Displayer::display(self.value, f)
     }
 }

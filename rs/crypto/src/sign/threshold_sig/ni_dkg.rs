@@ -33,7 +33,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result =
-            dealing::create_dealing(&self.node_id, &self.csp, &self.registry_client, &config);
+            dealing::create_dealing(&self.node_id, &self.csp, &self.registry_client, config);
         self.metrics
             .observe_ni_dkg_method_duration_seconds("create_dealing", start_time);
         debug!(logger;

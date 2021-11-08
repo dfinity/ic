@@ -12,7 +12,7 @@ ic-sys = { path = "../sys" }
 ic-utils = { path = "../utils" }
 libc = "0.2.91"
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "1cf86b5cc09947e94a787065cadd163a42ef7f18" }
-nix = "0.20.0"
+nix = "0.23.0"
 num-integer = "0.1.43"
 parking_lot = "0.11.1"
 lazy_static = "1.4.0"

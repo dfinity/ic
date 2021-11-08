@@ -19,18 +19,28 @@ use ic_types::{
     state_sync::{decode_manifest, Manifest, MANIFEST_CHUNK},
     CryptoHashOfState, Height,
 };
-use std::collections::{HashMap, HashSet};
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
+
+pub mod cache;
 
 /// The state of the communication with up-to-date nodes.
+#[derive(Clone)]
 enum DownloadState {
     /// Haven't received any chunks yet, waiting for the manifest chunk.
     Blank,
     /// In the process of loading chunks, have some more to load.
     Loading {
+        /// The received manifest
         manifest: Manifest,
+        /// Set of chunks that still need to be fetched. For the purpose of this
+        /// set chunk 0 is the manifest. To get indices into the manifests's
+        /// chunk table subtract 1.
         fetch_chunks: HashSet<usize>,
     },
     /// Successfully completed and returned the artifact to P2P, nothing else to
@@ -61,24 +71,15 @@ pub struct IncompleteState {
 
 impl Drop for IncompleteState {
     fn drop(&mut self) {
-        if let Err(err) = std::fs::remove_dir_all(&self.root) {
-            // If the state sync succeeded, the root will be moved to
-            // checkpoints, so NotFound is expected here.
-            if err.kind() != std::io::ErrorKind::NotFound {
-                warn!(
-                    self.log,
-                    "Failed to remove incomplete state sync state at {}: {}",
-                    self.root.display(),
-                    err
-                );
-            }
-        }
         if self.state_sync_refs.remove(&self.height).is_none() {
             warn!(
                 self.log,
                 "State sync refs does not contain incomplete state @{}.", self.height,
             );
         }
+
+        // We need to record the download state before passing self to the cache, as
+        // passing it to the cache might alter the download state
         let description = match self.state {
             DownloadState::Blank => "aborted before receiving any chunks",
             DownloadState::Loading { .. } => "aborted before receiving all the chunks",
@@ -86,6 +87,10 @@ impl Drop for IncompleteState {
         };
 
         info!(self.log, "State sync @{} {}", self.height, description);
+
+        // Pass self to the cache, taking ownership of chunks on disk
+        let cache = Arc::clone(&self.state_sync_refs.cache);
+        cache.write().push(self);
     }
 }
 
@@ -224,7 +229,7 @@ impl IncompleteState {
 
                 let nr_pages = data.len() / PAGE_SIZE;
                 let pages_to_copy: Vec<u64> = (0..nr_pages).map(|page| page as u64).collect();
-                dst_mapped_state.copy_to_heap(0, &data);
+                dst_mapped_state.copy_to_heap(0, data);
                 dst_mapped_state.soft_commit(&pages_to_copy);
             } else {
                 assert!(!src_path.ends_with("state_file"));
@@ -324,7 +329,7 @@ impl IncompleteState {
                         let chunk = &manifest_old.chunk_table[idx];
                         let data = &src_data[chunk.byte_range()];
 
-                        dst.write_at(&data, chunk.offset).unwrap_or_else(|err| {
+                        dst.write_at(data, chunk.offset).unwrap_or_else(|err| {
                             fatal!(
                                 log,
                                 "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
@@ -401,7 +406,7 @@ impl IncompleteState {
                         let base = src_heap_base.add(src_chunk.offset as usize);
                         std::slice::from_raw_parts(base, src_chunk.size_bytes as usize)
                     };
-                    dst_mapped_state.copy_to_heap(dst_chunk.offset, &bytes);
+                    dst_mapped_state.copy_to_heap(dst_chunk.offset, bytes);
 
                     dst_mapped_state.soft_commit(&pages_to_copy);
                 }
@@ -446,7 +451,7 @@ impl IncompleteState {
 
                 let src_data = &src_map.as_slice()[byte_range];
                 if let Err(err) =
-                    crate::manifest::validate_chunk(*dst_chunk_index, &src_data, &manifest_new)
+                    crate::manifest::validate_chunk(*dst_chunk_index, src_data, manifest_new)
                 {
                     let byte_range = src_chunk.byte_range();
                     warn!(
@@ -465,7 +470,7 @@ impl IncompleteState {
                     continue;
                 }
 
-                dst.write_at(&src_data, dst_chunk.offset)
+                dst.write_at(src_data, dst_chunk.offset)
                     .unwrap_or_else(|err| {
                         fatal!(
                             log,
@@ -509,7 +514,7 @@ impl IncompleteState {
                 mapped_state.update_heap_page(*pi, &bytes[offset..]);
             }
 
-            mapped_state.soft_commit(&pages_to_copy.as_slice());
+            mapped_state.soft_commit(pages_to_copy.as_slice());
             return;
         }
 
@@ -562,7 +567,7 @@ impl IncompleteState {
             .expect("failed to create checkpoint layout");
 
         // Recover the state to make sure it's usable
-        match crate::checkpoint::load_checkpoint(&ro_layout, own_subnet_type) {
+        match crate::checkpoint::load_checkpoint(&ro_layout, own_subnet_type, None) {
             Err(err) => {
                 let elapsed = started_at.elapsed();
                 metrics
@@ -651,6 +656,189 @@ impl IncompleteState {
             Err(err) => fatal!(log, "Unexpected layout error: {}", err),
         }
     }
+
+    /// Preallocates the files listed in the manifest and copies the chunks
+    /// that we have locally.
+    /// Returns a set of chunks that still need to be fetched
+    fn initialize_state_on_disk(&mut self, manifest_new: &Manifest) -> HashSet<usize> {
+        Self::preallocate_layout(&self.log, &self.root, manifest_new);
+
+        let state_sync_size_fetch = self.metrics.state_sync_size.with_label_values(&["fetch"]);
+        let state_sync_size_copy = self.metrics.state_sync_size.with_label_values(&["copy"]);
+        let state_sync_size_preallocate = self
+            .metrics
+            .state_sync_size
+            .with_label_values(&["preallocate"]);
+        let total_bytes: u64 = manifest_new.file_table.iter().map(|f| f.size_bytes).sum();
+
+        // Get the cache line. We now own an Arc on that cache line, so we are extending
+        // the lifetime of the data on disk as long as we keep this cache line in scope
+        let cache = self.state_sync_refs.cache.read().get();
+
+        // A little helper struct of all we need to know to copy out of
+        struct DiffData<'a> {
+            manifest_old: &'a Manifest,
+            missing_chunks: HashSet<usize>,
+            root_old: PathBuf,
+            height_old: Height,
+        }
+
+        // Get a DiffData from the cache or checkpoint_ref, or neither
+        let diff_data: Option<DiffData> =
+            match (cache.as_ref(), self.manifest_with_checkpoint_ref.as_ref()) {
+                (Some(cache_entry), Some((checkpoint_manifest, checkpoint_ref))) => {
+                    let cache_height = cache_entry.height;
+                    let checkpoint_height = checkpoint_ref.0.height;
+                    if cache_height > checkpoint_height {
+                        // The cache will have missing chunks. However, it likely started from a
+                        // DiffScript with the same checkpoint we have now, so there should be more
+                        // relevant chunks in the cache than in the checkpoint.
+                        // This is just a heuristic however, as the cached chunks might have been
+                        // initialized with a DiffScript from an older checkpoint.
+                        Some(DiffData {
+                            manifest_old: &cache_entry.manifest,
+                            missing_chunks: cache_entry.missing_chunks.clone(),
+                            // The data at root_old will live at least as long as the
+                            // StateSyncCacheEntry, so cloning the path is safe
+                            root_old: cache_entry.path().to_path_buf(),
+                            height_old: cache_entry.height,
+                        })
+                    } else {
+                        // This should be a special case that can only happen if the source of the
+                        // checkpoint is outside of state sync, as otherwise we would have cleared
+                        // the cache upon successfully syncing a state.
+                        let checkpoint_old = checkpoint_ref
+                            .0
+                            .state_layout
+                            .checkpoint(checkpoint_height)
+                            .unwrap_or_else(|err| {
+                                fatal!(
+                                    &self.log,
+                                    "Failed to get checkpoint path for height {}: {}",
+                                    checkpoint_height,
+                                    err
+                                );
+                            });
+                        Some(DiffData {
+                            manifest_old: checkpoint_manifest,
+                            missing_chunks: Default::default(),
+                            root_old: checkpoint_old.raw_path().to_path_buf(),
+                            height_old: checkpoint_height,
+                        })
+                    }
+                }
+                (Some(cache_entry), None) => Some(DiffData {
+                    manifest_old: &cache_entry.manifest,
+                    missing_chunks: cache_entry.missing_chunks.clone(),
+                    root_old: cache_entry.path().to_path_buf(),
+                    height_old: cache_entry.height,
+                }),
+                (None, Some((checkpoint_manifest, checkpoint_ref))) => {
+                    let checkpoint_height = checkpoint_ref.0.height;
+                    let checkpoint_old = checkpoint_ref
+                        .0
+                        .state_layout
+                        .checkpoint(checkpoint_height)
+                        .unwrap_or_else(|err| {
+                            fatal!(
+                                &self.log,
+                                "Failed to get checkpoint path for height {}: {}",
+                                checkpoint_height,
+                                err
+                            );
+                        });
+                    Some(DiffData {
+                        manifest_old: checkpoint_manifest,
+                        missing_chunks: Default::default(),
+                        // The data in root_old will live at least as long as self.checkpoint_ref,
+                        // so cloning here is safe
+                        root_old: checkpoint_old.raw_path().to_path_buf(),
+                        height_old: checkpoint_height,
+                    })
+                }
+                (None, None) => None,
+            };
+
+        if let Some(DiffData {
+            manifest_old,
+            missing_chunks,
+            root_old,
+            height_old,
+        }) = diff_data
+        {
+            info!(
+                self.log,
+                "Initializing state for height {} based on {} at height {}",
+                self.height,
+                if missing_chunks.is_empty() {
+                    "checkpoint"
+                } else {
+                    "cache"
+                },
+                height_old
+            );
+            let diff_script =
+                crate::manifest::diff_manifest(manifest_old, &missing_chunks, manifest_new);
+            debug!(
+                self.log,
+                "State sync diff script (@{} -> @{}): {:?}", height_old, self.height, diff_script
+            );
+
+            // diff_script contains indices into the manifest chunk table, but p2p
+            // counts the manifest itself as chunk 0, so all other chunk indices are
+            // shifted by 1
+            let mut fetch_chunks = diff_script.fetch_chunks.iter().map(|i| *i + 1).collect();
+
+            Self::copy_files(
+                &self.log,
+                &root_old,
+                &self.root,
+                manifest_old,
+                manifest_new,
+                &diff_script,
+                &mut fetch_chunks,
+            );
+
+            Self::copy_chunks(
+                &self.log,
+                &root_old,
+                &self.root,
+                manifest_old,
+                manifest_new,
+                &diff_script,
+                &mut fetch_chunks,
+            );
+
+            let diff_bytes: u64 = diff_script
+                .fetch_chunks
+                .iter()
+                .map(|i| manifest_new.chunk_table[*i].size_bytes as u64)
+                .sum();
+
+            let preallocate_bytes = diff_script.zeros_chunks * crate::manifest::DEFAULT_CHUNK_SIZE;
+
+            state_sync_size_fetch.inc_by(diff_bytes);
+            state_sync_size_preallocate.inc_by(preallocate_bytes as u64);
+            state_sync_size_copy.inc_by(total_bytes - diff_bytes - preallocate_bytes as u64);
+
+            fetch_chunks
+        } else {
+            info!(
+                self.log,
+                "Initializing state sync for height {} without any caches or previous checkpoints",
+                self.height
+            );
+            let non_zero_chunks = filter_out_zero_chunks(manifest_new);
+            let diff_bytes: u64 = non_zero_chunks
+                .iter()
+                .map(|i| manifest_new.chunk_table[*i].size_bytes as u64)
+                .sum();
+            state_sync_size_fetch.inc_by(diff_bytes);
+            state_sync_size_preallocate.inc_by(total_bytes - diff_bytes);
+
+            non_zero_chunks.iter().map(|i| *i + 1).collect()
+        }
+    }
 }
 
 impl Chunkable for IncompleteState {
@@ -666,6 +854,7 @@ impl Chunkable for IncompleteState {
                 manifest: _,
                 ref fetch_chunks,
             } => {
+                #[allow(clippy::needless_collect)]
                 let ids: Vec<_> = fetch_chunks
                     .iter()
                     .map(|id| ChunkId::new(*id as u32))
@@ -726,104 +915,7 @@ impl Chunkable for IncompleteState {
 
                     trace!(self.log, "Received manifest:\n{}", manifest);
 
-                    Self::preallocate_layout(&self.log, &self.root, &manifest);
-
-                    let state_sync_size_fetch =
-                        self.metrics.state_sync_size.with_label_values(&["fetch"]);
-
-                    let state_sync_size_copy =
-                        self.metrics.state_sync_size.with_label_values(&["copy"]);
-
-                    let state_sync_size_preallocate = self
-                        .metrics
-                        .state_sync_size
-                        .with_label_values(&["preallocate"]);
-
-                    let total_bytes: u64 = manifest.file_table.iter().map(|f| f.size_bytes).sum();
-                    let mut fetch_chunks: HashSet<usize>;
-
-                    if let Some((manifest_old, checkpoint_ref)) =
-                        &self.manifest_with_checkpoint_ref.take()
-                    {
-                        info!(
-                            self.log,
-                            "Will use local state {} to speed up state sync",
-                            checkpoint_ref.0.height
-                        );
-
-                        let manifest_new = &manifest;
-                        let diff_script =
-                            crate::manifest::diff_manifest(manifest_old, manifest_new);
-
-                        debug!(
-                            self.log,
-                            "State sync diff script (@{} -> @{}): {:?}",
-                            checkpoint_ref.0.height,
-                            self.height,
-                            diff_script
-                        );
-
-                        let height_old = checkpoint_ref.0.height;
-                        let checkpoint_old = checkpoint_ref
-                            .0
-                            .state_layout
-                            .checkpoint(height_old)
-                            .unwrap_or_else(|err| {
-                                fatal!(
-                                    &self.log,
-                                    "Failed to get checkpoint path for height {}: {}",
-                                    height_old,
-                                    err
-                                )
-                            });
-                        let root_old = checkpoint_old.raw_path();
-
-                        fetch_chunks = diff_script.fetch_chunks.iter().map(|i| *i + 1).collect();
-
-                        Self::copy_files(
-                            &self.log,
-                            root_old,
-                            &self.root,
-                            &manifest_old,
-                            &manifest_new,
-                            &diff_script,
-                            &mut fetch_chunks,
-                        );
-
-                        Self::copy_chunks(
-                            &self.log,
-                            root_old,
-                            &self.root,
-                            &manifest_old,
-                            &manifest_new,
-                            &diff_script,
-                            &mut fetch_chunks,
-                        );
-
-                        let diff_bytes: u64 = diff_script
-                            .fetch_chunks
-                            .iter()
-                            .map(|i| manifest_new.chunk_table[*i].size_bytes as u64)
-                            .sum();
-
-                        let preallocate_bytes =
-                            diff_script.zeros_chunks * crate::manifest::DEFAULT_CHUNK_SIZE;
-
-                        state_sync_size_fetch.inc_by(diff_bytes);
-                        state_sync_size_preallocate.inc_by(preallocate_bytes as u64);
-                        state_sync_size_copy
-                            .inc_by(total_bytes - diff_bytes - preallocate_bytes as u64);
-                    } else {
-                        let non_zero_chunks = filter_out_zero_chunks(&manifest);
-                        let diff_bytes: u64 = non_zero_chunks
-                            .iter()
-                            .map(|i| manifest.chunk_table[*i].size_bytes as u64)
-                            .sum();
-                        state_sync_size_fetch.inc_by(diff_bytes);
-                        state_sync_size_preallocate.inc_by(total_bytes - diff_bytes);
-
-                        fetch_chunks = non_zero_chunks.iter().map(|i| *i + 1).collect();
-                    }
+                    let fetch_chunks = self.initialize_state_on_disk(&manifest);
 
                     if fetch_chunks.is_empty() {
                         debug!(

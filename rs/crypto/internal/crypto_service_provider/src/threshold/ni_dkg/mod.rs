@@ -37,7 +37,7 @@ pub const NIDKG_FS_SCOPE: Scope = Scope::Const(ConstScope::NiDkgFsEncryptionKeys
 /// Non-interactive distributed key generation client
 ///
 /// Please see the trait definition for full documentation.
-impl<R: Rng + CryptoRng, S: SecretKeyStore> NiDkgCspClient for Csp<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspClient for Csp<R, S, C> {
     /// Creates a key pair for encrypting threshold key shares in transmission
     /// from dealers to receivers.
     fn create_forward_secure_key_pair(

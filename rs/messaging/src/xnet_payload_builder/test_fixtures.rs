@@ -265,7 +265,7 @@ pub(crate) fn get_registry_and_urls_for_test(
         subnets.push(subnet_id.get().into_vec());
 
         let mut subnet_record = test_subnet_record();
-        subnet_record.membership = vec![node_id.clone().get().into_vec()];
+        subnet_record.membership = vec![node_id.get().into_vec()];
 
         // Set node to subnet assignment.
         data_provider

@@ -381,3 +381,11 @@ pub static ECT_ACCOUNTS: &[(&str, u32); 164] = &[
     ("fcd573fc9ddfc927cef626a49808bad5550d4b7d", 514726),
     ("fd8e8ee2b5a1ac28d9533ed96b6b4307f3583d01", 51472),
 ];
+
+/// Accounts that are whitelisted for forwarding.
+pub static FORWARD_WHITELIST: &[&str; 4] = &[
+    "e1010ab2dd3974f2dea3a9e271ea70aab079f1f3",
+    "5a9dac9315fdd1c3d13ef8af7fdfeb522db08f02",
+    "7954a09303b1958f65bd1cb48f0d61ce63a9e5ae",
+    "b98c1a42aac4cca0581b558f21e3a62fe3d9cd51",
+];

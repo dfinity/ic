@@ -9,7 +9,9 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> SecretKeyStoreCspServer for LocalCspServer<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> SecretKeyStoreCspServer
+    for LocalCspServer<R, S, C>
+{
     fn sks_contains(&self, id: &KeyId) -> bool {
         self.sks_read_lock().contains(id)
     }

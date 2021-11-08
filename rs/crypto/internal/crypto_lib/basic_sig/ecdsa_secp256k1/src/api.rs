@@ -240,7 +240,7 @@ fn secp256k1_sig_to_bytes(
 /// # Returns
 /// The generated signature
 pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> CryptoResult<types::SignatureBytes> {
-    let signing_key = EcKey::private_key_from_der(&sk.0.expose_secret()).map_err(|_| {
+    let signing_key = EcKey::private_key_from_der(sk.0.expose_secret()).map_err(|_| {
         CryptoError::MalformedSecretKey {
             algorithm: AlgorithmId::EcdsaSecp256k1,
             internal_error: "OpenSSL error".to_string(), // don't leak sensitive information

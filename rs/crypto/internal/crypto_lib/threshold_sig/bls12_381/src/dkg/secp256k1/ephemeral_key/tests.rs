@@ -96,7 +96,7 @@ mod test {
         let mut rng = ChaChaRng::from_seed(seed.get());
         let secret_key = EphemeralSecretKey::random(&mut rng);
 
-        let left = create_pop_data(&mut rng, dkg_id, &secret_key, &sender);
+        let left = create_pop_data(&mut rng, dkg_id, &secret_key, sender);
         let right = {
             let pop_bytes = EphemeralPopBytes::from(&left.pop);
             verification_pop_data(dkg_id, sender, (left.public_key_bytes, pop_bytes))
@@ -110,7 +110,7 @@ mod test {
     pub fn honest_keys_should_validate(seed: Randomness, dkg_id: IDkgId, sender: &[u8]) {
         let mut rng = ChaChaRng::from_seed(seed.get());
         let (_secret_key_bytes, public_key_bytes, pop_bytes) =
-            create_ephemeral(&mut rng, dkg_id, &sender);
+            create_ephemeral(&mut rng, dkg_id, sender);
         assert!(verify_ephemeral(dkg_id, sender, (public_key_bytes, pop_bytes)).is_ok())
     }
     pub fn incorrect_dkg_should_not_validate(
@@ -125,7 +125,7 @@ mod test {
         );
         let mut rng = ChaChaRng::from_seed(seed.get());
         let (_secret_key_bytes, public_key_bytes, pop_bytes) =
-            create_ephemeral(&mut rng, dkg_id, &sender);
+            create_ephemeral(&mut rng, dkg_id, sender);
         assert!(verify_ephemeral(incorrect_dkg_id, sender, (public_key_bytes, pop_bytes)).is_err())
     }
     pub fn incorrect_sender_should_not_validate(
@@ -140,7 +140,7 @@ mod test {
         );
         let mut rng = ChaChaRng::from_seed(seed.get());
         let (_secret_key_bytes, public_key_bytes, pop_bytes) =
-            create_ephemeral(&mut rng, dkg_id, &sender);
+            create_ephemeral(&mut rng, dkg_id, sender);
         assert!(verify_ephemeral(dkg_id, incorrect_sender, (public_key_bytes, pop_bytes)).is_err())
     }
 }

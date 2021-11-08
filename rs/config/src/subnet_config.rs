@@ -1,6 +1,8 @@
 //! This module implements support for static configurations for components that
 //! can be different for different subnet types.
 
+use std::time::Duration;
+
 use crate::execution_environment::SUBNET_HEAP_DELTA_CAPACITY;
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
@@ -205,6 +207,9 @@ pub struct CyclesAccountManagerConfig {
     /// reserved compute allocation is a scarce resource, and should be
     /// appropriately charged for.
     pub compute_percent_allocated_per_second_fee: Cycles,
+
+    /// How often to charge canisters for memory and compute allocations.
+    pub duration_between_allocation_charges: Duration,
 }
 
 impl CyclesAccountManagerConfig {
@@ -228,6 +233,7 @@ impl CyclesAccountManagerConfig {
             ingress_byte_reception_fee: Cycles::new(2_000),
             // 4 SDR per GiB per year => 4e12 Cycles per year
             gib_storage_per_second_fee: Cycles::new(127_000),
+            duration_between_allocation_charges: Duration::from_secs(10),
         }
     }
 
@@ -243,6 +249,7 @@ impl CyclesAccountManagerConfig {
             ingress_message_reception_fee: Cycles::new(0),
             ingress_byte_reception_fee: Cycles::new(0),
             gib_storage_per_second_fee: Cycles::new(0),
+            duration_between_allocation_charges: Duration::from_secs(10),
         }
     }
 }

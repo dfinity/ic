@@ -73,7 +73,7 @@ fn core(message_size: &str) -> Result<(), (String, i32)> {
     for iteration in 0..iterations {
         let context = format!("Run {}", iteration);
         let time_start = Instant::now();
-        let mut state = Sha256::new_with_context(&ByteWrapper::new(&context.as_bytes()));
+        let mut state = Sha256::new_with_context(&ByteWrapper::new(context.as_bytes()));
         state.write(&data);
         let digest = state.finish();
         let time_stop = Instant::now();

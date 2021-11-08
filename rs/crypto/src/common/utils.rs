@@ -225,7 +225,9 @@ fn generate_tls_keys(crypto_root: &Path, node: NodeId) -> TlsPublicKeyCert {
     csp.gen_tls_key_pair(node, "99991231235959Z")
 }
 
-pub(crate) fn csp_at_root(crypto_root: &Path) -> Csp<OsRng, ProtoSecretKeyStore> {
+pub(crate) fn csp_at_root(
+    crypto_root: &Path,
+) -> Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
     let config = config_with_dir_and_permissions(crypto_root);
     // disable metrics
     Csp::new(&config, None, Arc::new(CryptoMetrics::none()))

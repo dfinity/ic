@@ -145,11 +145,11 @@ fn compute_priority(
                 Drop
             } else {
                 // Drop notarization we already have
-                if block_sets.notarized_validated.contains(&block_hash) {
+                if block_sets.notarized_validated.contains(block_hash) {
                     Drop
                 }
                 // Postpone notarization we might already have
-                else if block_sets.notarized_unvalidated.contains(&block_hash)
+                else if block_sets.notarized_unvalidated.contains(block_hash)
                     || height >= finalized_height + Height::from(LOOK_AHEAD)
                 {
                     Later
@@ -164,7 +164,7 @@ fn compute_priority(
                 Drop
             } else {
                 // Postpone finalization we might already have
-                if block_sets.finalized_unvalidated.contains(&block_hash)
+                if block_sets.finalized_unvalidated.contains(block_hash)
                     || height >= finalized_height + Height::from(LOOK_AHEAD)
                 {
                     Later

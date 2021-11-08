@@ -29,7 +29,7 @@ fn with_setup<F>(
             .unwrap();
     }
     tmpfile.as_file().sync_all().unwrap();
-    let mut page_map = PageMap::open(tmpfile.path()).unwrap();
+    let mut page_map = PageMap::open(tmpfile.path(), None).unwrap();
     let pages: Vec<(PageIndex, PageBytes)> = page_delta
         .into_iter()
         .map(|i| (i, [i.get() as u8; PAGE_SIZE]))
@@ -308,12 +308,11 @@ fn prefetch_for_write_checkpoint() {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(5), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
+            assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
             if new_signal_handler_available() {
-                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
                 assert_eq!(tracker.take_dirty_pages().len(), 1);
             } else {
                 // The old signal handler detects dirty pages on the second signal.
-                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
                 assert_eq!(tracker.take_dirty_pages().len(), 0);
             }
         },
@@ -331,12 +330,11 @@ fn prefetch_for_write_zeros() {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(80), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
+            assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
             if new_signal_handler_available() {
-                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
                 assert_eq!(tracker.take_dirty_pages().len(), 1);
             } else {
                 // The old signal handler detects dirty pages on the second signal.
-                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
                 assert_eq!(tracker.take_dirty_pages().len(), 0);
             }
         },
@@ -354,12 +352,11 @@ fn prefetch_for_write_page_delta_single_page() {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(50), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
+            assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
             if new_signal_handler_available() {
-                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
                 assert_eq!(tracker.take_dirty_pages().len(), 1);
             } else {
                 // The old signal handler detects dirty pages on the second signal.
-                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
                 assert_eq!(tracker.take_dirty_pages().len(), 0);
             }
         },
@@ -379,12 +376,11 @@ fn prefetch_for_write_page_delta_different_pages() {
             assert_eq!(tracker.num_accessed_pages(), 1);
             sigsegv(&tracker, PageIndex::new(52), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 2);
+            assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
             if new_signal_handler_available() {
-                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
                 assert_eq!(tracker.take_dirty_pages().len(), 2);
             } else {
                 // The old signal handler detects dirty pages on the second signal.
-                assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
                 assert_eq!(tracker.take_dirty_pages().len(), 0);
             }
         },

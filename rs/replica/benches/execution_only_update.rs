@@ -152,7 +152,7 @@ fn execute_ingress_message(
             batch = build_batch(message_routing, vec![])
         }
 
-        let ingress_result = (ingress_history.get_latest_status())(&msg_id);
+        let ingress_result = (ingress_history.get_latest_status())(msg_id);
         match ingress_result {
             IngressStatus::Completed { result, .. } => return Ok(result),
             IngressStatus::Failed { error, .. } => return Err(error),
@@ -213,6 +213,7 @@ fn criterion_calls(criterion: &mut Criterion) {
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&ingress_history_writer) as Arc<_>,
         scheduler,
+        ExecutionConfig::default(),
         cycles_account_manager,
         bench_replica.replica_config.subnet_id,
         &bench_replica.metrics_registry,

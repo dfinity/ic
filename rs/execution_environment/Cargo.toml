@@ -30,10 +30,9 @@ ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-ic-wasm-utils = { path = "../wasm_utils" }
 lazy_static = "1.4.0"
 memory_tracker = { path = "../memory_tracker" }
-nix = "0.20.0"
+nix = "0.23.0"
 num-traits = "0.2.12"
 num-rational = "0.2.2"
 scoped_threadpool = "0.1.*"
@@ -59,6 +58,8 @@ proptest = "0.9.4"
 tempfile = "3.1.0"
 tokio = "1.10.0"
 wabt = "0.10.0"
+criterion = "0.3"
+iai = "0.1"
 
 [build-dependencies]
 escargot = "0.5"
@@ -74,3 +75,11 @@ path = "testgrid/cow_wasmtime_tests.rs"
 [features]
 default = []
 sigsegv_handler_debug = []
+
+[[bench]]
+name = "execute_update_iai"
+harness = false
+
+[[bench]]
+name = "execute_update"
+harness = false

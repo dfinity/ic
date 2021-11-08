@@ -23,8 +23,10 @@ pub mod types;
 pub mod xnet_payload_builder;
 pub use ic_universal_canister as universal_canister;
 
+pub mod execution_state;
 mod logger;
 mod util;
+
 pub use logger::{with_test_logger, with_test_replica_logger};
 pub use util::mock_time;
 pub use util::with_timeout;

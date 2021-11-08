@@ -3,16 +3,17 @@ mod signal_stack;
 mod system_api;
 pub mod system_api_charges;
 
-#[cfg(test)]
-mod wasmtime_embedder_tests;
+use std::{collections::HashMap, convert::TryFrom};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
-use self::host_memory::{MemoryPageSize, MemoryStart};
+use wasmtime::{unix::StoreExt, Memory, Mutability, Store, Val, ValType};
 
-use super::InstanceRunResult;
-use crate::cow_memory_creator::{CowMemoryCreator, CowMemoryCreatorProxy};
 use host_memory::MmapMemoryCreator;
 pub use host_memory::WasmtimeMemoryCreator;
-use ic_config::embedders::{Config, PersistenceType};
+use ic_config::embedders::{Config as EmbeddersConfig, PersistenceType};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
@@ -26,18 +27,22 @@ use ic_types::{
     CanisterId, NumInstructions,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use ic_wasm_utils::{
-    instrumentation::{instrument, InstructionCostTable},
-    validation::WasmValidationConfig,
-};
 use memory_tracker::{DirtyPageTracking, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
-use std::{collections::HashMap, convert::TryFrom};
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
+
+use crate::wasm_utils::{
+    instrumentation::{instrument, InstructionCostTable},
+    validation::{ensure_determinism, validate_wasm_binary},
 };
-use wasmtime::{unix::StoreExt, Memory, Mutability, Store, Val, ValType};
+
+use crate::cow_memory_creator::{CowMemoryCreator, CowMemoryCreatorProxy};
+
+use super::InstanceRunResult;
+
+use self::host_memory::{MemoryPageSize, MemoryStart};
+
+#[cfg(test)]
+mod wasmtime_embedder_tests;
 
 const NUM_INSTRUCTION_GLOBAL_NAME: &str = "canister counter_instructions";
 
@@ -76,8 +81,8 @@ pub struct WasmtimeEmbedder {
 }
 
 impl WasmtimeEmbedder {
-    pub fn new(config: Config, log: ReplicaLogger) -> Self {
-        let Config {
+    pub fn new(config: EmbeddersConfig, log: ReplicaLogger) -> Self {
+        let EmbeddersConfig {
             max_wasm_stack_size,
             ..
         } = config;
@@ -95,7 +100,7 @@ impl WasmtimeEmbedder {
         wasm_binary: &BinaryEncodedWasm,
     ) -> HypervisorResult<EmbedderCache> {
         let mut config = wasmtime::Config::default();
-        ic_wasm_utils::ensure_determinism(&mut config);
+        ensure_determinism(&mut config);
         let cached_mem_creator = match persistence_type {
             PersistenceType::Sigsegv => {
                 let raw_creator = MmapMemoryCreator {};
@@ -178,10 +183,10 @@ impl WasmtimeEmbedder {
         &self,
         wasm_binary: Vec<u8>,
         canister_root: PathBuf,
-        wasm_validation_config: WasmValidationConfig,
+        config: &EmbeddersConfig,
     ) -> HypervisorResult<ExecutionState> {
         let wasm_binary = BinaryEncodedWasm::new(wasm_binary);
-        ic_wasm_utils::validation::validate_wasm_binary(&wasm_binary, wasm_validation_config)?;
+        validate_wasm_binary(&wasm_binary, config)?;
 
         let instrumentation_output = instrument(&wasm_binary, &InstructionCostTable::new())?;
 
@@ -219,7 +224,7 @@ impl WasmtimeEmbedder {
             .expect("incompatible embedder cache, expected BinaryEncodedWasm");
 
         let mut store = Store::new(
-            &module.engine(),
+            module.engine(),
             StoreData {
                 system_api,
                 num_instructions_global: None,
@@ -237,7 +242,7 @@ impl WasmtimeEmbedder {
                 cow_mem_creator_proxy.replace(memory_creator);
 
                 let instance = linker
-                    .instantiate(&mut store, &module)
+                    .instantiate(&mut store, module)
                     .expect("failed to create Wasmtime instance");
 
                 // After the Wasm module instance and its corresponding memory
@@ -249,7 +254,7 @@ impl WasmtimeEmbedder {
             }
             (None, None) => (
                 linker
-                    .instantiate(&mut store, &module)
+                    .instantiate(&mut store, module)
                     .expect("failed to create Wasmtime instance"),
                 PersistenceType::Sigsegv,
             ),

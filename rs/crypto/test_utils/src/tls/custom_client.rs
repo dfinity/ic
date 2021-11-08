@@ -138,7 +138,11 @@ impl CustomClient {
 
         let tls_connector = self.tls_connector();
         let tls_state = tls_connector
-            .into_ssl("domain is irrelevant, because hostname verification is disabled")
+            // Even though the domain is irrelevant here because hostname verification is disabled,
+            // it is important that the domain is well-formed because some TLS implementations
+            // (e.g., Rustls) abort the handshake if parsing of the domain fails (e.g., for SNI when
+            // sent to the server)
+            .into_ssl("www.domain-is-irrelevant-because-hostname-verification-is-disabled.com")
             .expect("failed to convert TLS connector to state object");
         let mut tls_stream = tokio_openssl::SslStream::new(tls_state, tcp_stream)
             .expect("failed to create tokio_openssl::SslStream");

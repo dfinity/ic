@@ -4,7 +4,9 @@ use ic_interfaces::registry::{
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     replica_version::v1::ReplicaVersionRecord,
-    subnet::v1::{CatchUpPackageContents, GossipConfig, SubnetListRecord, SubnetRecord},
+    subnet::v1::{
+        CatchUpPackageContents, EcdsaConfig, GossipConfig, SubnetListRecord, SubnetRecord,
+    },
 };
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_common::values::deserialize_registry_value;
@@ -71,6 +73,13 @@ pub trait SubnetRegistry {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<Option<GossipConfig>>;
+
+    /// Returns ecdsa config
+    fn get_ecdsa_config(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<Option<EcdsaConfig>>;
 
     /// Returns notarization delay settings:
     /// - the unit delay for blockmaker;
@@ -222,6 +231,16 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         let subnet = deserialize_registry_value::<SubnetRecord>(bytes)?;
         Ok(subnet.map(|subnet| subnet.gossip_config))
+    }
+
+    fn get_ecdsa_config(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<Option<EcdsaConfig>> {
+        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
+        let subnet = deserialize_registry_value::<SubnetRecord>(bytes)?;
+        Ok(subnet.map(|subnet| subnet.ecdsa_config))
     }
 
     fn get_notarization_delay_settings(

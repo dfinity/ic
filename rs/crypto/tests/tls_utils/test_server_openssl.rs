@@ -134,25 +134,6 @@ impl OpenSslServer {
         Ok(authenticated_node)
     }
 
-    pub async fn run_with_optional_client_auth(self) -> Result<Peer, TlsServerHandshakeError> {
-        let tcp_stream = self.accept_connection_on_listener().await;
-
-        let (tls_stream, peer) = self
-            .crypto
-            .perform_tls_server_handshake_temp_with_optional_client_auth(
-                tcp_stream,
-                self.allowed_clients.clone(),
-                REG_V1,
-            )
-            .await?;
-        let (tls_read_half, tls_write_half) = tls_stream.split();
-
-        self.send_msg_to_client_if_configured(tls_write_half).await;
-        self.expect_msg_from_client_if_configured(tls_read_half)
-            .await;
-        Ok(peer)
-    }
-
     pub async fn run_without_client_auth(self) -> Result<(), TlsServerHandshakeError> {
         let tcp_stream = self.accept_connection_on_listener().await;
 
@@ -196,7 +177,7 @@ impl OpenSslServer {
 
     async fn send_msg_to_client_if_configured(&self, mut write_half: TlsWriteHalf) {
         if let Some(msg_for_client) = &self.msg_for_client {
-            let num_bytes_written = write_half.write(&msg_for_client.as_bytes()).await.unwrap();
+            let num_bytes_written = write_half.write(msg_for_client.as_bytes()).await.unwrap();
             assert_eq!(num_bytes_written, msg_for_client.as_bytes().len());
         }
     }

@@ -128,7 +128,7 @@ impl Notary {
     fn is_notary(&self, pool: &PoolReader<'_>, previous_beacon: &RandomBeacon) -> bool {
         match self.membership.node_belongs_to_notarization_committee(
             previous_beacon.height().increment(),
-            &previous_beacon,
+            previous_beacon,
             self.replica_config.node_id,
         ) {
             Ok(value) => value,

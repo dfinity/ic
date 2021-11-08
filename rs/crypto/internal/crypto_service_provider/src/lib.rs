@@ -42,6 +42,9 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Instant;
 
+const SKS_DATA_FILENAME: &str = "sks_data.pb";
+const CANISTER_SKS_DATA_FILENAME: &str = "canister_sks_data.pb";
+
 /// Describes the interface of the crypto service provider (CSP), e.g. for
 /// signing and key generation. The Csp struct implements this trait.
 pub trait CryptoServiceProvider:
@@ -114,10 +117,10 @@ impl PublicKeyData {
 }
 
 /// Implements the CryptoServiceProvider for an RNG and a SecretKeyStore.
-pub struct Csp<R: Rng + CryptoRng, S: SecretKeyStore> {
+pub struct Csp<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> {
     // CSPRNG stands for cryptographically secure random number generator.
     csprng: CspRwLock<R>,
-    csp_server: Arc<LocalCspServer<R, S>>,
+    csp_server: Arc<LocalCspServer<R, S, C>>,
     public_key_data: PublicKeyData,
     logger: ReplicaLogger,
 }
@@ -140,6 +143,12 @@ impl<T> CspRwLock<T> {
         // Note: The name will appear on metric dashboards and may be used in alerts, do
         // not change this unless you are also updating the monitoring.
         Self::new(content, "secret_key_store".to_string(), metrics)
+    }
+
+    pub fn new_for_csks(content: T, metrics: Arc<CryptoMetrics>) -> Self {
+        // Note: The name will appear on metric dashboards and may be used in alerts, do
+        // not change this unless you are also updating the monitoring.
+        Self::new(content, "canister_secret_key_store".to_string(), metrics)
     }
 
     fn new(content: T, lock_name: String, metrics: Arc<CryptoMetrics>) -> Self {
@@ -169,7 +178,7 @@ impl<T> CspRwLock<T> {
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> Csp<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
     fn rng_write_lock(&self) -> RwLockWriteGuard<'_, R> {
         // TODO (CRP-696): inline this method
         self.csprng.write()
@@ -186,7 +195,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> Csp<R, S> {
     }
 }
 
-impl Csp<OsRng, ProtoSecretKeyStore> {
+impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
     /// Creates a production-grade crypto service provider.
     pub fn new(
         config: &CryptoConfig,
@@ -194,8 +203,16 @@ impl Csp<OsRng, ProtoSecretKeyStore> {
         metrics: Arc<CryptoMetrics>,
     ) -> Self {
         let logger = logger.unwrap_or_else(no_op_logger);
-        let secret_key_store =
-            ProtoSecretKeyStore::open(&config.crypto_root, Some(new_logger!(&logger)));
+        let secret_key_store = ProtoSecretKeyStore::open(
+            &config.crypto_root,
+            SKS_DATA_FILENAME,
+            Some(new_logger!(&logger)),
+        );
+        let canister_key_store = ProtoSecretKeyStore::open(
+            &config.crypto_root,
+            CANISTER_SKS_DATA_FILENAME,
+            Some(new_logger!(&logger)),
+        );
         let node_public_keys = match read_node_public_keys(&config.crypto_root) {
             Ok(node_pks) => node_pks,
             Err(_) => Default::default(),
@@ -207,6 +224,7 @@ impl Csp<OsRng, ProtoSecretKeyStore> {
             public_key_data,
             csp_server: Arc::new(LocalCspServer::new(
                 secret_key_store,
+                canister_key_store,
                 metrics,
                 new_logger!(&logger),
             )),
@@ -215,7 +233,7 @@ impl Csp<OsRng, ProtoSecretKeyStore> {
     }
 }
 
-impl<R: Rng + CryptoRng + Clone> Csp<R, ProtoSecretKeyStore> {
+impl<R: Rng + CryptoRng + Clone> Csp<R, ProtoSecretKeyStore, VolatileSecretKeyStore> {
     /// Creates a crypto service provider for testing.
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the random
@@ -231,14 +249,14 @@ impl<R: Rng + CryptoRng + Clone> Csp<R, ProtoSecretKeyStore> {
             public_key_data,
             csp_server: Arc::new(LocalCspServer::new_for_test(
                 csprng,
-                ProtoSecretKeyStore::open(&config.crypto_root, None),
+                ProtoSecretKeyStore::open(&config.crypto_root, SKS_DATA_FILENAME, None),
             )),
             logger: no_op_logger(),
         }
     }
 }
 
-impl<R: Rng + CryptoRng> Csp<R, VolatileSecretKeyStore> {
+impl<R: Rng + CryptoRng> Csp<R, VolatileSecretKeyStore, VolatileSecretKeyStore> {
     /// Resets public key data according to the given `NodePublicKeys`.
     ///
     /// Note: This is for testing only and MUST NOT be used in production.
@@ -247,7 +265,7 @@ impl<R: Rng + CryptoRng> Csp<R, VolatileSecretKeyStore> {
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> NodePublicKeyData for Csp<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NodePublicKeyData for Csp<R, S, C> {
     fn node_public_keys(&self) -> NodePublicKeys {
         self.public_key_data.node_public_keys.clone()
     }
@@ -269,11 +287,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> NodePublicKeyData for Csp<R, S> {
     }
 }
 
-impl<R: Rng + CryptoRng + Clone, S: SecretKeyStore> Csp<R, S> {
+impl<R: Rng + CryptoRng + Clone, S: SecretKeyStore> Csp<R, S, VolatileSecretKeyStore> {
     /// Creates a crypto service provider for testing.
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the secret
-    /// key store is not guaranteed.
+    /// key store and the canister secret key store is not guaranteed.
     pub fn of(csprng: R, secret_key_store: S) -> Self {
         let node_public_keys = Default::default();
         let public_key_data = PublicKeyData::new(node_public_keys);

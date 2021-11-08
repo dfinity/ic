@@ -137,6 +137,12 @@ impl MutableDkgPool for DkgPoolImpl {
                         },
                     );
                 }
+                ChangeAction::RemoveFromUnvalidated(message) => {
+                    let hash = crypto_hash(&message);
+                    self.unvalidated
+                        .remove(&hash)
+                        .expect("Unvalidated artifact was not found.");
+                }
                 ChangeAction::Purge(height) => self.purge(height),
             }
         }

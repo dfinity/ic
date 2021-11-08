@@ -335,7 +335,7 @@ fn nodes_cannot_be_removed_if_any_in_subnet() {
 
         // Add the assigned nodes to the list of nodes to be removed
         let subnet_record =
-            get_value::<SubnetRecord>(&registry, &make_subnet_record_key(subnet_id).as_bytes())
+            get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
                 .await;
         nodes_to_remove.append(
             &mut subnet_record

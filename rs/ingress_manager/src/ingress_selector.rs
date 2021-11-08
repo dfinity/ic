@@ -84,7 +84,7 @@ impl<'a> IngressSelector for IngressManager {
                     IngressMessageId::from(ingress_obj),
                     &ingress_obj.signed_ingress,
                     &state,
-                    &context,
+                    context,
                     &settings,
                     &past_ingress_set,
                     num_messages,
@@ -189,7 +189,7 @@ impl<'a> IngressSelector for IngressManager {
                 ingress_id.clone(),
                 &ingress,
                 &state,
-                &context,
+                context,
                 &settings,
                 &past_ingress,
                 0, // message count is checked above.
@@ -552,7 +552,7 @@ mod tests {
                 let ingress_messages = vec![m1.clone(), m2, m3];
                 for m in ingress_messages.iter() {
                     let message_id = IngressMessageId::from(m);
-                    let attribute = IngressMessageAttribute::new(&m);
+                    let attribute = IngressMessageAttribute::new(m);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: m.clone(),
                         peer_id: node_test_id(0),
@@ -566,7 +566,7 @@ mod tests {
                         crypto_hash(m.binary()).get(),
                     ))]);
                     // check that message is indeed in the pool
-                    assert_eq!(ingress_pool.contains(&message_id), true);
+                    assert!(ingress_pool.contains(&message_id));
                 }
 
                 let payload = ingress_manager.get_ingress_payload(
@@ -1389,7 +1389,7 @@ mod tests {
                 let ingress_messages = vec![m1.clone(), m2, m3, m4];
                 for m in ingress_messages.iter() {
                     let message_id = IngressMessageId::from(m);
-                    let attribute = IngressMessageAttribute::new(&m);
+                    let attribute = IngressMessageAttribute::new(m);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: m.clone(),
                         peer_id: node_test_id(0),
@@ -1403,7 +1403,7 @@ mod tests {
                         crypto_hash(m.binary()).get(),
                     ))]);
                     // check that message is indeed in the pool
-                    assert_eq!(ingress_pool.contains(&message_id), true);
+                    assert!(ingress_pool.contains(&message_id));
                 }
 
                 let payload = ingress_manager.get_ingress_payload(

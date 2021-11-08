@@ -157,7 +157,7 @@ impl Transport for TransportImpl {
         node_record: &NodeRecord,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
-        self.start_peer_connections(&peer_id, node_record, client_type, registry_version)
+        self.start_peer_connections(peer_id, node_record, client_type, registry_version)
     }
 
     fn stop_connections(
@@ -181,7 +181,7 @@ impl Transport for TransportImpl {
             Some(client_state) => client_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
         };
-        let peer_state = match client_state.peer_map.get(&peer_id) {
+        let peer_state = match client_state.peer_map.get(peer_id) {
             Some(peer_state) => peer_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
         };
@@ -202,7 +202,7 @@ impl Transport for TransportImpl {
             .expect("Transport client not found");
         let peer_state = client_state
             .peer_map
-            .get(&peer_id)
+            .get(peer_id)
             .expect("Transport client not found");
         peer_state
             .flow_map
@@ -224,7 +224,7 @@ impl Transport for TransportImpl {
             .expect("Transport client not found");
         let peer_state = client_state
             .peer_map
-            .get(&peer_id)
+            .get(peer_id)
             .expect("Transport client not found");
         peer_state
             .flow_map

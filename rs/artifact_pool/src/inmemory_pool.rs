@@ -34,7 +34,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
     fn insert(&mut self, artifact: T) {
         let msg = artifact.as_ref();
         let hash = msg.get_cm_hash().digest().clone();
-        self.indexes.insert(&msg, &hash);
+        self.indexes.insert(msg, &hash);
         self.artifacts.entry(hash).or_insert(artifact);
     }
 
@@ -206,6 +206,10 @@ where
                 std::ops::Bound::Included(range.max),
             ))
             .map(|(h, _)| h);
+
+        // returning the iterator directly isn't trusted due to the use of `self` in the
+        // closure
+        #[allow(clippy::needless_collect)]
         let vec: Vec<T> = heights.map(|h| self.get_by_height(*h)).flatten().collect();
         Box::new(vec.into_iter())
     }
@@ -240,7 +244,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
     for InMemoryPoolSection<T>
 {
     fn contains(&self, msg_id: &ConsensusMessageId) -> bool {
-        self.artifacts.get(&msg_id.hash.digest()).is_some()
+        self.artifacts.get(msg_id.hash.digest()).is_some()
     }
 
     fn get(&self, msg_id: &ConsensusMessageId) -> Option<ConsensusMessage> {
@@ -351,11 +355,10 @@ pub mod test {
                 pool.insert(make_artifact(fake_random_beacon(min)));
                 pool.insert(make_artifact(fake_random_beacon(max)));
 
-                let result: Vec<RandomBeacon> = pool
+                let result = pool
                     .random_beacon()
-                    .get_by_height_range(pool.random_beacon().height_range().unwrap())
-                    .collect();
-                assert_eq!(result.len(), 2);
+                    .get_by_height_range(pool.random_beacon().height_range().unwrap());
+                assert_eq!(result.count(), 2);
             }
         ));
     }

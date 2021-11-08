@@ -54,7 +54,7 @@ pub fn get_nodes_from_registry(
 //    node_id              node whose peers are to be looked up
 pub fn get_peers(registry_node_list: &[(NodeId, NodeRecord)], node_id: NodeId) -> Vec<NodeId> {
     let mut node_ids: Vec<_> = registry_node_list.iter().map(|(id, _)| *id).collect();
-    node_ids.retain(|n| n.clone().get() != node_id.clone().get());
+    node_ids.retain(|n| (*n).get() != node_id.get());
     node_ids
 }
 
@@ -180,7 +180,7 @@ impl P2PTestSynchronizer {
 
         // Signal barrier
         let mut signal_file_name = dir.clone();
-        signal_file_name.push(format!("Node_{}", self.node_id.clone().get()));
+        signal_file_name.push(format!("Node_{}", self.node_id.get()));
         let file = File::create(signal_file_name.as_path());
         file.expect("Barrier Signal Failed");
 

@@ -43,7 +43,7 @@ impl RegistryClientImpl {
         metrics_registry: Option<&MetricsRegistry>,
     ) -> Self {
         let metrics = match metrics_registry {
-            Some(metrics_registry) => Arc::new(Metrics::new(&metrics_registry)),
+            Some(metrics_registry) => Arc::new(Metrics::new(metrics_registry)),
             None => Arc::new(Metrics::new(&MetricsRegistry::new())),
         };
 

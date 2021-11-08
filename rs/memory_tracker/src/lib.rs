@@ -12,11 +12,18 @@ use std::{
     ops::Range,
 };
 
-const MAX_PAGES_TO_MAP: usize = 32;
-const MAX_PAGES_TO_COPY: usize = 32;
+// The upper bound on the number of pages that are memory mapped from the
+// checkpoint file per signal handler call. Higher value gives higher
+// throughput in memory intensive workloads, but may regress performance
+// in other workloads because it increases work per signal handler call.
+const MAX_PAGES_TO_MAP: usize = 128;
+// The upper bound on the number of pages copied from PageMap. In contrast
+// to `MAX_PAGES_TO_MAP`, this value also affects memory usage. Setting it
+// too high may increase memory usage.
+const MAX_PAGES_TO_COPY: usize = 64;
 
-/// The new signal handler requires `AccessKind` which currently available only
-/// on Linux without WSL.
+// The new signal handler requires `AccessKind` which currently available only
+// on Linux without WSL.
 fn new_signal_handler_available() -> bool {
     cfg!(target_os = "linux") && !*ic_sys::IS_WSL
 }
@@ -402,6 +409,7 @@ pub fn sigsegv_fault_handler_old(
         return false;
     };
 
+    #[allow(clippy::branches_sharing_code)]
     if tracker
         .accessed_bitmap
         .borrow()

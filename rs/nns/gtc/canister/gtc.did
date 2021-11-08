@@ -1,6 +1,7 @@
 type AccountState = record {
   authenticated_principal_id : opt principal;
   successfully_transferred_neurons : vec TransferredNeuron;
+  is_whitelisted_for_forwarding : bool;
   has_donated : bool;
   failed_transferred_neurons : vec TransferredNeuron;
   neuron_ids : vec NeuronId;
@@ -21,6 +22,7 @@ service : {
   balance : (text) -> (nat32) query;
   claim_neurons : (text) -> (Result);
   donate_account : (text) -> (Result_1);
+  forward_whitelisted_unclaimed_accounts : (null) -> (Result_1);
   get_account : (text) -> (Result_2) query;
   len : () -> (nat16) query;
   total : () -> (nat32) query;

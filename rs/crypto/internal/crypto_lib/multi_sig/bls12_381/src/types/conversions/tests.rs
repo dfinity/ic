@@ -43,14 +43,14 @@ proptest! {
     }
     #[test]
     fn signature_bulk_conversion(signatures in proptest::collection::vec(arbitrary::individual_signature(), 0..10)) {
-        let bytes: Vec<IndividualSignatureBytes> = signatures.iter().cloned().map(|signature| signature.into()).collect();
-        let reconstructed_signatures: Result<Vec<IndividualSignature>, CryptoError> = bytes.into_iter().map(|bytes| bytes.try_into()).collect();
+        let bytes = signatures.iter().cloned().map(IndividualSignatureBytes::from);
+        let reconstructed_signatures: Result<Vec<IndividualSignature>, CryptoError> = bytes.map(|bytes| bytes.try_into()).collect();
         assert_eq!(Ok(signatures), reconstructed_signatures);
     }
     #[test]
     fn pop_bulk_conversion(pops in proptest::collection::vec(arbitrary::pop(), 0..10)) {
-        let bytes: Vec<PopBytes> = pops.iter().cloned().map(|pop| pop.into()).collect();
-        let reconstructed_pops: Result<Vec<Pop>, CryptoError> = bytes.into_iter().map(|bytes| bytes.try_into()).collect();
+        let bytes = pops.iter().cloned().map(PopBytes::from);
+        let reconstructed_pops: Result<Vec<Pop>, CryptoError> = bytes.map(|bytes| bytes.try_into()).collect();
         assert_eq!(Ok(pops), reconstructed_pops);
     }
 

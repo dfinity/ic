@@ -1,11 +1,12 @@
-use std::mem::size_of;
-
 use ic_interfaces::execution_environment::{ExecutionParameters, HypervisorResult, InstanceStats};
 use ic_replicated_state::{Global, NumWasmPages, PageIndex};
 use ic_sys::PageBytes;
 use ic_system_api::ApiType;
 use ic_types::{ingress::WasmResult, methods::FuncRef, CanisterId, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
+use serde_big_array::big_array;
+
+big_array! { BigArray; }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Round(pub u64);
@@ -44,18 +45,6 @@ pub struct ExecOutput {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct IndexedPage {
     pub index: PageIndex,
-    /// Data should probably be a fixed 4096 array, but serde does
-    /// not deal well with it.
-    pub data: Vec<u8>,
-}
-
-impl IndexedPage {
-    // A helper for converting a general slice into `&PageBytes`.
-    // This should be removed once `IndexedPage` moves away from `Vec<u8>`.
-    pub fn page_bytes_ref(slice: &[u8]) -> &PageBytes {
-        assert_eq!(slice.len(), size_of::<PageBytes>());
-        // SAFETY: The length of the slice matches the size of `PageBytes` and
-        // the returned reference has the same lifetime as the slice.
-        unsafe { &*(slice.as_ptr() as *const PageBytes) }
-    }
+    #[serde(with = "BigArray")]
+    pub data: PageBytes,
 }

@@ -131,7 +131,7 @@ impl HasVersion for Block {
 
 impl<H, T: HasVersion> HasVersion for Hashed<H, T> {
     fn version(&self) -> &ReplicaVersion {
-        &self.value.version()
+        self.value.version()
     }
 }
 
@@ -423,7 +423,7 @@ impl From<&Notarization> for pb::Notarization {
                 .signature
                 .signers
                 .iter()
-                .map(|node_id| node_id.clone().get().into_vec())
+                .map(|node_id| (*node_id).get().into_vec())
                 .collect(),
         }
     }
@@ -501,7 +501,7 @@ impl From<&Finalization> for pb::Finalization {
                 .signature
                 .signers
                 .iter()
-                .map(|node_id| node_id.clone().get().into_vec())
+                .map(|node_id| (*node_id).get().into_vec())
                 .collect(),
         }
     }

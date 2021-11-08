@@ -76,7 +76,7 @@ impl RoundDb {
         let roundb = unsafe {
             rw_txn
                 .create_db(
-                    Some(&format!("round-{}", round).as_str()),
+                    Some(format!("round-{}", round).as_str()),
                     DatabaseFlags::INTEGER_KEY,
                 )
                 .unwrap_or_else(|err| panic!("failed to create round-{}: {}", round, err))
@@ -86,7 +86,7 @@ impl RoundDb {
     fn open(ro_txn: &RoTransaction, round: u64) -> Self {
         let roundb = unsafe {
             ro_txn
-                .open_db(Some(&format!("round-{}", round).as_str()))
+                .open_db(Some(format!("round-{}", round).as_str()))
                 .map_err(|err| CowError::SlotDbError {
                     op: SlotDbOp::OpenDb,
                     round,
@@ -99,7 +99,7 @@ impl RoundDb {
     fn drop(rw_txn: &mut RwTransaction, round: u64) {
         let roundb = unsafe {
             rw_txn
-                .open_db(Some(&format!("round-{}", round).as_str()))
+                .open_db(Some(format!("round-{}", round).as_str()))
                 .unwrap_or_else(|err| panic!("failed to open round-{}: {}", round, err))
         };
         unsafe {
@@ -257,11 +257,11 @@ impl SlotMgr {
             .expect("completed_rounds created");
 
         let current_round_table = env
-            .open_db(Some(&"Current".to_string().as_str()))
+            .open_db(Some("Current".to_string().as_str()))
             .expect("current_round_table created");
 
         let slots_to_gc = env
-            .open_db(Some(&"CurrentRoundOverwritten".to_string().as_str()))
+            .open_db(Some("CurrentRoundOverwritten".to_string().as_str()))
             .expect("current_round_table created");
 
         SlotMgr {
@@ -293,13 +293,13 @@ impl SlotMgr {
             .expect("completed_rounds created");
         let current_round_table = env
             .create_db(
-                Some(&"Current".to_string().as_str()),
+                Some("Current".to_string().as_str()),
                 DatabaseFlags::INTEGER_KEY,
             )
             .expect("current_round_table created");
         let slots_to_gc = env
             .create_db(
-                Some(&"CurrentRoundOverwritten".to_string().as_str()),
+                Some("CurrentRoundOverwritten".to_string().as_str()),
                 DatabaseFlags::INTEGER_KEY,
             )
             .expect("current_round_table created");

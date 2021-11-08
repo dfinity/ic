@@ -18,7 +18,7 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> CspSigner for Csp<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> CspSigner for Csp<R, S, C> {
     fn sign(
         &self,
         algorithm_id: AlgorithmId,
@@ -57,7 +57,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> CspSigner for Csp<R, S> {
                 // in ECDSA), so we do it here with SHA256, which is the only
                 // supported hash currently.
                 let msg_hash = sha256(msg);
-                ecdsa_secp256r1::verify(&signature, &msg_hash, &public_key)
+                ecdsa_secp256r1::verify(signature, &msg_hash, &public_key)
             }
             (
                 AlgorithmId::EcdsaSecp256k1,
@@ -68,7 +68,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> CspSigner for Csp<R, S> {
                 // in ECDSA), so we do it here with SHA256, which is the only
                 // supported hash currently.
                 let msg_hash = sha256(msg);
-                ecdsa_secp256k1::verify(&signature, &msg_hash, &public_key)
+                ecdsa_secp256k1::verify(signature, &msg_hash, &public_key)
             }
             (
                 AlgorithmId::Ed25519,
@@ -78,7 +78,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> CspSigner for Csp<R, S> {
             // Ed25519 CLib impl. hashes the message,
             // as the hash algorithm is fixed, so we pass the full message.
             {
-                ed25519::verify(&signature, msg, &public_key)
+                ed25519::verify(signature, msg, &public_key)
             }
             (
                 AlgorithmId::RsaSha256,
@@ -87,7 +87,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> CspSigner for Csp<R, S> {
             ) =>
             // RSA hashes the message using SHA-256
             {
-                public_key.verify_pkcs1_sha256(&msg, &signature)
+                public_key.verify_pkcs1_sha256(msg, signature)
             }
             (
                 AlgorithmId::MultiBls12_381,

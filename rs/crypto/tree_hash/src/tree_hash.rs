@@ -566,7 +566,7 @@ fn find_subtree_node<'a>(target_label: &Label, hash_tree: &'a HashTree) -> &'a H
             right_tree,
             ..
         } => {
-            let largest_left = largest_label(&left_tree);
+            let largest_left = largest_label(left_tree);
             if *target_label <= largest_left {
                 find_subtree_node(target_label, left_tree)
             } else {

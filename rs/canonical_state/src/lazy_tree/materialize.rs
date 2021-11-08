@@ -47,7 +47,7 @@ pub fn materialize_partial(
     pattern: &TreePattern,
 ) -> Option<LabeledTree<Vec<u8>>> {
     match pattern {
-        LabeledTree::Leaf(()) => materialize(&lazy_tree),
+        LabeledTree::Leaf(()) => materialize(lazy_tree),
         LabeledTree::SubTree(children) => {
             if let LazyFork(f) = lazy_tree {
                 let subtrees: Vec<_> = children

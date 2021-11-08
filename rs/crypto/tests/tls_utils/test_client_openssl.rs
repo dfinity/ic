@@ -94,7 +94,7 @@ impl OpenSslClient {
     async fn send_msg_to_server_if_configured(&self, mut tls_write_half: TlsWriteHalf) {
         if let Some(msg_for_server) = &self.msg_for_server {
             let num_bytes_written = tls_write_half
-                .write(&msg_for_server.as_bytes())
+                .write(msg_for_server.as_bytes())
                 .await
                 .unwrap();
             assert_eq!(num_bytes_written, msg_for_server.as_bytes().len());

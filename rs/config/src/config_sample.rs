@@ -345,14 +345,14 @@ mod tests {
 
             if trimmed.starts_with("//") {
                 if let Some(pos) = line.find(EXAMPLE_MARKER) {
-                    last_group.push(&line[pos + EXAMPLE_MARKER.len()..].trim())
+                    last_group.push(line[pos + EXAMPLE_MARKER.len()..].trim())
                 }
             } else if !trimmed.is_empty() || !last_group.is_empty() {
                 if trimmed.starts_with('}') && !last_group.is_empty() {
-                    line_variants.push(std::mem::replace(&mut last_group, Vec::new()));
+                    line_variants.push(std::mem::take(&mut last_group));
                 }
                 last_group.push(line);
-                line_variants.push(std::mem::replace(&mut last_group, Vec::new()));
+                line_variants.push(std::mem::take(&mut last_group));
             }
         }
         if !last_group.is_empty() {

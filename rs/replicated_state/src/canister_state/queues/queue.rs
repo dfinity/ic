@@ -390,7 +390,7 @@ impl IngressQueue {
     pub(super) fn pop(&mut self) -> Option<Ingress> {
         let res = pop_queue(&mut self.queue);
         if let Some(msg) = res.as_ref() {
-            self.size_bytes -= Self::ingress_size_bytes(&msg);
+            self.size_bytes -= Self::ingress_size_bytes(msg);
             debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
         }
         res

@@ -289,59 +289,72 @@ impl<C> HttpRequest<C> {
     }
 }
 
-/// Internal representation of the content of a
-/// `api/v2/canister/_/{read_state|query}` request.
-#[derive(Debug, PartialEq, Clone)]
-pub enum ReadContent {
-    Query(UserQuery),
-    ReadState(ReadState),
-}
-
-impl HttpRequestContent for ReadContent {
+impl HttpRequestContent for UserQuery {
     fn id(&self) -> MessageId {
-        match self {
-            Self::ReadState(read_state) => read_state.id(),
-            Self::Query(query) => query.id(),
-        }
+        self.id()
     }
 
     fn sender(&self) -> UserId {
-        match self {
-            Self::ReadState(read_state) => read_state.source,
-            Self::Query(query) => query.source,
-        }
+        self.source
     }
 
     fn ingress_expiry(&self) -> u64 {
-        match self {
-            Self::ReadState(read_state) => read_state.ingress_expiry,
-            Self::Query(query) => query.ingress_expiry,
-        }
+        self.ingress_expiry
     }
 
     fn nonce(&self) -> Option<Vec<u8>> {
-        match self {
-            Self::ReadState(read_state) => read_state.nonce.clone(),
-            Self::Query(query) => query.nonce.clone(),
-        }
+        self.nonce.clone()
     }
 }
 
-impl TryFrom<HttpRequestEnvelope<HttpReadContent>> for HttpRequest<ReadContent> {
+impl HttpRequestContent for ReadState {
+    fn id(&self) -> MessageId {
+        self.id()
+    }
+
+    fn sender(&self) -> UserId {
+        self.source
+    }
+
+    fn ingress_expiry(&self) -> u64 {
+        self.ingress_expiry
+    }
+
+    fn nonce(&self) -> Option<Vec<u8>> {
+        self.nonce.clone()
+    }
+}
+
+impl TryFrom<HttpRequestEnvelope<HttpReadContent>> for HttpRequest<UserQuery> {
     type Error = HttpHandlerError;
 
     fn try_from(envelope: HttpRequestEnvelope<HttpReadContent>) -> Result<Self, Self::Error> {
         let auth = Authentication::try_from(&envelope)?;
         match envelope.content {
             HttpReadContent::Query { query } => Ok(HttpRequest {
-                content: ReadContent::Query(UserQuery::try_from(query)?),
+                content: UserQuery::try_from(query)?,
                 auth,
             }),
+            _ => Err(HttpHandlerError::InvalidEncoding(
+                "Could not decode the query message.".to_string(),
+            )),
+        }
+    }
+}
 
+impl TryFrom<HttpRequestEnvelope<HttpReadContent>> for HttpRequest<ReadState> {
+    type Error = HttpHandlerError;
+
+    fn try_from(envelope: HttpRequestEnvelope<HttpReadContent>) -> Result<Self, Self::Error> {
+        let auth = Authentication::try_from(&envelope)?;
+        match envelope.content {
             HttpReadContent::ReadState { read_state } => Ok(HttpRequest {
-                content: ReadContent::ReadState(ReadState::try_from(read_state)?),
+                content: ReadState::try_from(read_state)?,
                 auth,
             }),
+            _ => Err(HttpHandlerError::InvalidEncoding(
+                "Could not decode the read state message.".to_string(),
+            )),
         }
     }
 }

@@ -1,12 +1,12 @@
 use crate::QueryExecutionType;
 use ic_canister_sandbox_replica_controller2::sandboxed_execution_controller::SandboxedExecutionController;
 use ic_config::embedders::PersistenceType;
+use ic_config::feature_status::FeatureStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cow_state::{error::CowError, CowMemoryManager};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
-    wasm_executor::{WasmExecutor, WasmExecutorConfig},
-    WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
+    wasm_executor::WasmExecutor, WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorResult, SubnetAvailableMemory,
@@ -32,7 +32,6 @@ use ic_types::{
     SubnetId, Time,
 };
 use ic_wasm_types::BinaryEncodedWasm;
-use ic_wasm_utils::validation::WasmValidationConfig;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
@@ -639,52 +638,6 @@ impl Hypervisor {
         self.system_execution_result_with_old_system_state(output, system_state, scheduler_state)
     }
 
-    pub fn execute_empty(&self, canister: CanisterState) -> (CanisterState, HypervisorResult<()>) {
-        let method = WasmMethod::System(SystemMethod::Empty);
-        let memory_usage = canister.memory_usage();
-        let canister_id = canister.canister_id();
-        let (execution_state, system_state, scheduler_state) = canister.into_parts();
-
-        // Validate that the Wasm module is present.
-        let execution_state = match execution_state {
-            None => {
-                return (
-                    CanisterState::from_parts(None, system_state, scheduler_state),
-                    Err(HypervisorError::WasmModuleNotFound),
-                );
-            }
-            Some(es) => es,
-        };
-
-        let output = execute(
-            ApiType::start(),
-            SystemState::new_for_start(canister_id),
-            memory_usage,
-            ExecutionParameters {
-                instruction_limit: NumInstructions::from(0),
-                canister_memory_limit: memory_usage,
-                subnet_available_memory: SubnetAvailableMemory::new(memory_usage),
-                compute_allocation: ComputeAllocation::zero(),
-            },
-            FuncRef::Method(method),
-            execution_state,
-            Arc::clone(&self.cycles_account_manager),
-            Arc::clone(&self.metrics),
-            Arc::clone(&self.wasm_executor),
-            self.sandbox_executor.clone(),
-        );
-
-        let (canister, _, heap_delta) = self.system_execution_result_with_old_system_state(
-            output,
-            system_state,
-            scheduler_state,
-        );
-        // In contrast to other methods, the empty method returns `()` instead of
-        // the heap delta.
-        let result = heap_delta.map(|_| ());
-        (canister, result)
-    }
-
     /// Executes the system method `canister_pre_upgrade`.
     ///
     /// Returns:
@@ -1087,12 +1040,21 @@ impl Hypervisor {
         &self,
         wasm_binary: Vec<u8>,
         canister_root: PathBuf,
-        wasm_validation_config: WasmValidationConfig,
+        system_state: SystemState,
+        memory_usage: NumBytes,
     ) -> HypervisorResult<ExecutionState> {
         self.wasm_executor.create_execution_state(
             wasm_binary,
             canister_root,
-            wasm_validation_config,
+            system_state,
+            memory_usage,
+            ExecutionParameters {
+                instruction_limit: NumInstructions::from(0),
+                canister_memory_limit: memory_usage,
+                subnet_available_memory: SubnetAvailableMemory::new(memory_usage.get() as i64),
+                compute_allocation: ComputeAllocation::zero(),
+            },
+            self.cycles_account_manager.clone(),
         )
     }
 
@@ -1122,13 +1084,20 @@ impl Hypervisor {
         let wasm_executor = WasmExecutor::new(
             wasm_embedder,
             metrics_registry,
-            WasmExecutorConfig::from(embedder_config),
+            embedder_config,
             log.clone(),
         );
 
+        let sandbox_executor = match config.canister_sandboxing_flag {
+            FeatureStatus::Enabled => {
+                Some(Arc::new(SandboxedExecutionController::new(log.clone())))
+            }
+            FeatureStatus::Disabled => None,
+        };
+
         Self {
             wasm_executor: Arc::new(wasm_executor),
-            sandbox_executor: None,
+            sandbox_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
             own_subnet_id,
             own_subnet_type,
@@ -1139,7 +1108,11 @@ impl Hypervisor {
 
     #[cfg(test)]
     pub fn compile_count(&self) -> u64 {
-        self.wasm_executor.compile_count_for_testing()
+        if let Some(sandbox_executor) = &self.sandbox_executor {
+            sandbox_executor.compile_count_for_testing()
+        } else {
+            self.wasm_executor.compile_count_for_testing()
+        }
     }
 }
 

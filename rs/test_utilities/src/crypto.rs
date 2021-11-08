@@ -10,9 +10,9 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript,
 };
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier, KeyManager,
-    LoadTranscriptResult, NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
-    ThresholdSigner,
+    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier, IDkgProtocol,
+    KeyManager, LoadTranscriptResult, NiDkgAlgorithm, ThresholdSigVerifier,
+    ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner, Signable};
 use ic_interfaces::registry::RegistryClient;
@@ -20,6 +20,8 @@ use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_types::crypto::canister_threshold_sig::error::*;
+use ic_types::crypto::canister_threshold_sig::idkg::*;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
@@ -29,7 +31,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
     config::NiDkgConfig, DkgId, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTranscript,
 };
 use ic_types::crypto::{
-    BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
+    AlgorithmId, BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoResult, IndividualMultiSig,
     IndividualMultiSigOf, ThresholdSigShare, ThresholdSigShareOf, UserPublicKey,
 };
@@ -360,6 +362,101 @@ impl KeyManager for CryptoReturningOk {
     fn node_public_keys(&self) -> NodePublicKeys {
         unimplemented!()
     }
+}
+
+impl IDkgProtocol for CryptoReturningOk {
+    fn create_dealing(
+        &self,
+        _params: &IDkgTranscriptParams,
+    ) -> Result<IDkgDealing, IDkgCreateDealingError> {
+        Ok(IDkgDealing::dummy_for_tests())
+    }
+
+    fn verify_dealing_public(
+        &self,
+        _params: &IDkgTranscriptParams,
+        _dealing: &IDkgDealing,
+    ) -> Result<(), IDkgVerifyDealingPublicError> {
+        Ok(())
+    }
+
+    fn verify_dealing_private(
+        &self,
+        _params: &IDkgTranscriptParams,
+        _dealing: &IDkgDealing,
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        Ok(())
+    }
+
+    fn create_transcript(
+        &self,
+        _params: &IDkgTranscriptParams,
+        verified_dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
+        let mut receivers = BTreeSet::new();
+        receivers.insert(node_test_id(0));
+        Ok(IDkgTranscript {
+            transcript_id: IDkgTranscriptId(0),
+            receivers: IDkgReceivers::new(receivers).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: verified_dealings.clone(),
+            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+            algorithm_id: AlgorithmId::Placeholder,
+        })
+    }
+
+    // Verification all multi-sig on the various dealings in the transcript.
+    fn verify_transcript(
+        &self,
+        _params: &IDkgTranscriptParams,
+        _transcript: &IDkgTranscript,
+    ) -> Result<(), IDkgVerifyTranscriptError> {
+        Ok(())
+    }
+
+    fn load_transcript(
+        &self,
+        _transcript: &IDkgTranscript,
+    ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
+        Ok(vec![])
+    }
+
+    fn verify_complaint(
+        &self,
+        _transcript: &IDkgTranscript,
+        _complainer: NodeId,
+        _complaint: &IDkgComplaint,
+    ) -> Result<(), IDkgVerifyComplaintError> {
+        Ok(())
+    }
+
+    fn open_transcript(
+        &self,
+        _transcript: &IDkgTranscript,
+        _complaint: &IDkgComplaint,
+    ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
+        Ok(IDkgOpening::dummy_for_tests())
+    }
+
+    fn verify_opening(
+        &self,
+        _transcript: &IDkgTranscript,
+        _opener: NodeId,
+        _opening: &IDkgOpening,
+        _complaint: &IDkgComplaint,
+    ) -> Result<(), IDkgVerifyOpeningError> {
+        Ok(())
+    }
+
+    fn load_transcript_with_openings(
+        &self,
+        _transcript: IDkgTranscript,
+        _openings: BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
+    ) -> Result<(), IDkgLoadTranscriptWithOpeningsError> {
+        Ok(())
+    }
+
+    fn retain_active_transcripts(&self, _active_transcripts: &[IDkgTranscript]) {}
 }
 
 pub fn mock_random_number_generator() -> Box<dyn RngCore> {

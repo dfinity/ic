@@ -79,7 +79,7 @@ impl Membership {
         // `sort_unstable` is effectively the same as `sort` but slightly more
         // efficient.
         node_ids.sort_unstable();
-        let mut rng = Csprng::from_random_beacon_and_purpose(&previous_beacon, purpose);
+        let mut rng = Csprng::from_random_beacon_and_purpose(previous_beacon, purpose);
         node_ids.shuffle(&mut rng);
         Ok(node_ids)
     }
@@ -249,20 +249,20 @@ pub mod test {
     fn test_sufficient_block_makers_elected() {
         for n in 1..201 {
             let subnet_members = (0..n).map(node_test_id).collect::<Vec<NodeId>>();
-            let block_makers: Vec<_> = subnet_members
-                .iter()
-                .filter(|node| {
-                    matches!(
-                        Membership::get_block_maker_rank_from_shuffled_nodes(
-                            *node,
-                            &subnet_members,
-                        ),
-                        Ok(Some(_))
-                    )
-                })
-                .collect();
+
             assert_eq!(
-                block_makers.len(),
+                subnet_members
+                    .iter()
+                    .filter(|node| {
+                        matches!(
+                            Membership::get_block_maker_rank_from_shuffled_nodes(
+                                *node,
+                                &subnet_members,
+                            ),
+                            Ok(Some(_))
+                        )
+                    })
+                    .count(),
                 get_faults_tolerated(subnet_members.len()) + 1usize
             );
         }

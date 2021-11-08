@@ -319,7 +319,7 @@ impl<T: AccessPolicy> MappedStateCommon<T> {
                 // https://en.wikipedia.org/wiki/Splice_(system_call)
                 // https://web.archive.org/web/20130521163124/http://kerneltrap.org/node/6505
                 unsafe {
-                    let vec = nix::sys::uio::IoVec::from_slice(&::std::slice::from_raw_parts(
+                    let vec = nix::sys::uio::IoVec::from_slice(::std::slice::from_raw_parts(
                         self.get_mapped_base().add(offset),
                         PAGE_SIZE,
                     ));
@@ -693,7 +693,9 @@ impl CowMemoryManagerCommon<ReadOnly> {
             }
             let sm = std::ptr::read(header_base as *mut StateMeta);
 
-            assert_eq!(sm.magic, STATE_MAGIC);
+            let magic = std::ptr::addr_of!(sm.magic);
+
+            assert_eq!(magic.read_unaligned(), STATE_MAGIC);
             munmap(header_base, PAGE_SIZE);
             sm
         }
@@ -891,9 +893,8 @@ fn get_slot_mgr(state_root: &Path) -> Arc<SlotMgr> {
 
 impl<T: AccessPolicy> CowMemoryManagerCommon<T> {
     fn create_map(&self, state_file: File, round_to_use: Option<u64>) -> Result<MapInfo, CowError> {
-        unsafe {
-            assert_eq!(self.meta.magic, STATE_MAGIC);
-        }
+        let magic = std::ptr::addr_of!(self.meta.magic);
+        assert_eq!(unsafe { magic.read_unaligned() }, STATE_MAGIC);
 
         let slot_mgr = get_slot_mgr(&self.state_root);
 
@@ -1083,7 +1084,7 @@ impl CowMemoryManager for CowMemoryManagerCommon<ReadWrite> {
         let base_path = &get_slot_mgr_base_path(&self.state_root);
         let mut smgr_list_write = SLOT_MGR_LIST.write();
         if let Some(smgr) = smgr_list_write.get(base_path) {
-            if Arc::strong_count(&smgr) == 1 {
+            if Arc::strong_count(smgr) == 1 {
                 // remove if this is the last active reference
                 smgr_list_write.remove(base_path);
             }

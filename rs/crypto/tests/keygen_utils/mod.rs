@@ -122,7 +122,7 @@ impl TestKeygenCryptoBuilder {
                     .clone(),
                 node_id,
                 KeyPurpose::NodeSigning,
-                Arc::clone(&data_provider),
+                Arc::clone(data_provider),
                 registry_version,
             );
         }
@@ -131,7 +131,7 @@ impl TestKeygenCryptoBuilder {
                 pub_key.clone(),
                 node_id,
                 KeyPurpose::NodeSigning,
-                Arc::clone(&data_provider),
+                Arc::clone(data_provider),
                 registry_version,
             );
         }
@@ -156,7 +156,7 @@ impl TestKeygenCryptoBuilder {
                     .clone(),
                 node_id,
                 KeyPurpose::CommitteeSigning,
-                Arc::clone(&data_provider),
+                Arc::clone(data_provider),
                 registry_version,
             );
         }
@@ -165,7 +165,7 @@ impl TestKeygenCryptoBuilder {
                 pub_key.clone(),
                 node_id,
                 KeyPurpose::CommitteeSigning,
-                Arc::clone(&data_provider),
+                Arc::clone(data_provider),
                 registry_version,
             );
         }
@@ -190,7 +190,7 @@ impl TestKeygenCryptoBuilder {
                     .clone(),
                 node_id,
                 KeyPurpose::DkgDealingEncryption,
-                Arc::clone(&data_provider),
+                Arc::clone(data_provider),
                 registry_version,
             );
         }
@@ -199,7 +199,7 @@ impl TestKeygenCryptoBuilder {
                 pub_key.clone(),
                 node_id,
                 KeyPurpose::DkgDealingEncryption,
-                Arc::clone(&data_provider),
+                Arc::clone(data_provider),
                 registry_version,
             );
         }
@@ -220,7 +220,7 @@ impl TestKeygenCryptoBuilder {
             add_tls_cert_to_registry(
                 tls_certificate.expect("invalid use of builder: tls cert was not generated."),
                 node_id,
-                Arc::clone(&data_provider),
+                Arc::clone(data_provider),
                 registry_version,
             );
         }
@@ -228,7 +228,7 @@ impl TestKeygenCryptoBuilder {
             add_tls_cert_to_registry(
                 cert.clone(),
                 node_id,
-                Arc::clone(&data_provider),
+                Arc::clone(data_provider),
                 registry_version,
             );
         }

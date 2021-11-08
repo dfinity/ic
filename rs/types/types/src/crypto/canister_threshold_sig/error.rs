@@ -18,12 +18,11 @@ pub enum PresignatureQuadrupleCreationError {
 impl_display_using_debug!(PresignatureQuadrupleCreationError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum ThresholdSignatureInputsCreationError {
+pub enum ThresholdEcdsaSigInputsCreationError {
     NonmatchingTranscriptIds,
 }
-impl_display_using_debug!(ThresholdSignatureInputsCreationError);
+impl_display_using_debug!(ThresholdEcdsaSigInputsCreationError);
 
-// The errors that might occur are still TBD
 #[derive(Copy, Clone, Debug)]
 pub enum IDkgParamsValidationError {
     TooManyReceivers { receivers_count: usize },
@@ -34,61 +33,75 @@ pub enum IDkgParamsValidationError {
 impl_display_using_debug!(IDkgParamsValidationError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum EcdsaPublicKeyError {}
-impl_display_using_debug!(EcdsaPublicKeyError);
+pub enum ThresholdEcdsaGetPublicKeyError {}
+impl_display_using_debug!(ThresholdEcdsaGetPublicKeyError);
 
 #[derive(Copy, Clone, Debug)]
 pub enum IDkgTranscriptParsingError {}
 impl_display_using_debug!(IDkgTranscriptParsingError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum IDkgTranscriptCreationError {}
-impl_display_using_debug!(IDkgTranscriptCreationError);
+pub enum IDkgCreateTranscriptError {}
+impl_display_using_debug!(IDkgCreateTranscriptError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum IDkgTranscriptVerificationError {}
-impl_display_using_debug!(IDkgTranscriptVerificationError);
+pub enum IDkgVerifyTranscriptError {}
+impl_display_using_debug!(IDkgVerifyTranscriptError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum IDkgTranscriptOpeningError {}
-impl_display_using_debug!(IDkgTranscriptOpeningError);
+pub enum IDkgOpenTranscriptError {}
+impl_display_using_debug!(IDkgOpenTranscriptError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum IDkgTranscriptLoadError {}
-impl_display_using_debug!(IDkgTranscriptLoadError);
+pub enum IDkgLoadTranscriptError {}
+impl_display_using_debug!(IDkgLoadTranscriptError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum IDkgDealingError {}
-impl_display_using_debug!(IDkgDealingError);
+pub enum IDkgLoadTranscriptWithOpeningsError {}
+impl_display_using_debug!(IDkgLoadTranscriptWithOpeningsError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum IDkgDealingVerificationError {}
-impl_display_using_debug!(IDkgDealingVerificationError);
+pub enum IDkgCreateDealingError {}
+impl_display_using_debug!(IDkgCreateDealingError);
+
+#[derive(Copy, Clone, Debug)]
+pub enum IDkgVerifyDealingPublicError {}
+impl_display_using_debug!(IDkgVerifyDealingPublicError);
+
+#[derive(Copy, Clone, Debug)]
+pub enum IDkgVerifyDealingPrivateError {
+    NotAReceiver,
+}
+impl_display_using_debug!(IDkgVerifyDealingPrivateError);
 
 #[derive(Copy, Clone, Debug)]
 pub enum IDkgComplaintParsingError {}
 impl_display_using_debug!(IDkgComplaintParsingError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum IDkgComplaintVerificationError {}
-impl_display_using_debug!(IDkgComplaintVerificationError);
+pub enum IDkgVerifyComplaintError {}
+impl_display_using_debug!(IDkgVerifyComplaintError);
 
 #[derive(Copy, Clone, Debug)]
 pub enum IDkgOpeningParsingError {}
 impl_display_using_debug!(IDkgOpeningParsingError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum IDkgOpeningVerificationError {}
-impl_display_using_debug!(IDkgOpeningVerificationError);
+pub enum IDkgVerifyOpeningError {}
+impl_display_using_debug!(IDkgVerifyOpeningError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum ThresholdSignatureVerificationError {}
-impl_display_using_debug!(ThresholdSignatureVerificationError);
+pub enum ThresholdEcdsaVerifySigShareError {}
+impl_display_using_debug!(ThresholdEcdsaVerifySigShareError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum ThresholdSignatureGenerationError {}
-impl_display_using_debug!(ThresholdSignatureGenerationError);
+pub enum ThresholdEcdsaSignShareError {}
+impl_display_using_debug!(ThresholdEcdsaSignShareError);
 
 #[derive(Copy, Clone, Debug)]
-pub enum CombineSignatureError {}
-impl_display_using_debug!(CombineSignatureError);
+pub enum ThresholdEcdsaVerifyCombinedSignatureError {}
+impl_display_using_debug!(ThresholdEcdsaVerifyCombinedSignatureError);
+
+#[derive(Copy, Clone, Debug)]
+pub enum ThresholdEcdsaCombineSigSharesError {}
+impl_display_using_debug!(ThresholdEcdsaCombineSigSharesError);

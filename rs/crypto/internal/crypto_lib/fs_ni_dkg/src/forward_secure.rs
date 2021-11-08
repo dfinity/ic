@@ -362,7 +362,7 @@ pub fn node_gen(node: &BTENode, child: Bit, rng: &mut impl RAND, sys: &SysParam)
     // Compute new b and new d_t.
     let mut new_b = node.b.clone();
     let mut new_d_t = LinkedList::new();
-    let f_tau = match ftau_partial(&new_tau, &sys) {
+    let f_tau = match ftau_partial(&new_tau, sys) {
         None => {
             unreachable!("node_gen() on leaf node");
         }
@@ -374,7 +374,7 @@ pub fn node_gen(node: &BTENode, child: Bit, rng: &mut impl RAND, sys: &SysParam)
     if let Some((_, d)) = iter.next() {
         new_b.add(&f_tau.mul(&delta));
         if child == Bit::One {
-            new_b.add(&d);
+            new_b.add(d);
         }
     };
     // The remanining entries of `d_t` are used for `new_d_t`
@@ -446,7 +446,7 @@ impl SecretKey {
                 epoch.push(Bit::Zero);
             }
         }
-        self.update_to(&epoch, &sys, rng);
+        self.update_to(&epoch, sys, rng);
     }
 
     /// A simpler but slower variant of the above.
@@ -505,7 +505,7 @@ impl SecretKey {
             match self.bte_nodes.back() {
                 None => return,
                 Some(cur) => {
-                    if is_prefix(&cur.tau, &epoch) {
+                    if is_prefix(&cur.tau, epoch) {
                         break;
                     }
                 }
@@ -561,14 +561,14 @@ impl SecretKey {
                 let mut k = n + 1;
                 d_t.iter().for_each(|d| {
                     let mut tmp = sys.f[k].mul(&delta);
-                    tmp.add(&d);
+                    tmp.add(d);
                     d_t_blind.push_back(tmp);
                     k += 1;
                 });
                 let mut d_h_blind = Vec::new();
                 node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
                     let mut tmp = f.mul(&delta);
-                    tmp.add(&d);
+                    tmp.add(d);
                     d_h_blind.push(tmp);
                 });
                 self.bte_nodes.push_back(BTENode {
@@ -601,14 +601,14 @@ impl SecretKey {
         let mut k = n;
         d_t.iter().for_each(|d| {
             let mut tmp = sys.f[k].mul(&delta);
-            tmp.add(&d);
+            tmp.add(d);
             d_t_blind.push_back(tmp);
             k += 1;
         });
         let mut d_h_blind = Vec::new();
         node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
             let mut tmp = f.mul(&delta);
-            tmp.add(&d);
+            tmp.add(d);
             d_h_blind.push(tmp);
         });
 
@@ -655,31 +655,31 @@ impl SecretKey {
 
     pub fn deserialize(buf: &[u8]) -> SecretKey {
         let mut cur = 0;
-        let listlen = unleb128(&buf, &mut cur);
+        let listlen = unleb128(buf, &mut cur);
         let mut bte_nodes = LinkedList::new();
         for _i in 0..listlen {
-            let taulen = unleb128(&buf, &mut cur);
+            let taulen = unleb128(buf, &mut cur);
             let mut tau: Vec<Bit> = Vec::new();
             for _i in 0..taulen {
                 tau.push(Bit::from(buf[cur]));
                 cur += 1;
             }
-            let a = unecp(&buf, &mut cur);
-            let b = unecp2(&buf, &mut cur);
-            let dslen = unleb128(&buf, &mut cur);
+            let a = unecp(buf, &mut cur);
+            let b = unecp2(buf, &mut cur);
+            let dslen = unleb128(buf, &mut cur);
 
             let mut d_t = LinkedList::new();
             for _i in 0..dslen {
-                let d = unecp2(&buf, &mut cur);
+                let d = unecp2(buf, &mut cur);
                 d_t.push_back(d);
             }
-            let d_hlen = unleb128(&buf, &mut cur);
+            let d_hlen = unleb128(buf, &mut cur);
             let mut d_h = Vec::new();
             for _i in 0..d_hlen {
-                let d = unecp2(&buf, &mut cur);
+                let d = unecp2(buf, &mut cur);
                 d_h.push(d);
             }
-            let e = unecp2(&buf, &mut cur);
+            let e = unecp2(buf, &mut cur);
             bte_nodes.push_back(BTENode {
                 tau,
                 a,
@@ -815,6 +815,11 @@ pub fn enc_chunks(
         if si.len() != chunks {
             return None; // Chunk lengths disagree.
         }
+        for x in si.iter() {
+            if *x < CHUNK_MIN || *x > CHUNK_MAX {
+                return None; // Chunk out of range.
+            }
+        }
     }
 
     use miracl_core::bls12381::pair::g1mul;
@@ -850,12 +855,12 @@ pub fn enc_chunks(
         .map(|(sj, pk)| {
             sj.iter()
                 .zip(&spec_r)
-                .map(|(s, spec_r)| pk.mul2(&spec_r, &g1, &BIG::new_int(*s)))
+                .map(|(s, spec_r)| pk.mul2(spec_r, &g1, &BIG::new_int(*s)))
                 .collect()
         })
         .collect();
 
-    let extended_tau = extend_tau(&cc, &rr, &ss, &tau, associated_data);
+    let extended_tau = extend_tau(&cc, &rr, &ss, tau, associated_data);
     let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
     let mut zz = Vec::new();
     for j in 0..chunks {
@@ -923,7 +928,7 @@ pub fn baby_giant(tgt: &FP12, base: &FP12, lo: isize, range: isize) -> Option<is
         g.reduce();
         g.tobytes(&mut bytes);
         babies.insert(bytes, n);
-        g.mul(&base);
+        g.mul(base);
         n += 1;
     }
     g.inverse();
@@ -935,7 +940,7 @@ pub fn baby_giant(tgt: &FP12, base: &FP12, lo: isize, range: isize) -> Option<is
     } else {
         t = t.pow(&BIG::new_int(-lo));
     }
-    t.mul(&tgt);
+    t.mul(tgt);
 
     let mut x = lo;
     loop {
@@ -979,8 +984,8 @@ pub fn dec_chunks(
     tau: &[Bit],
     associated_data: &[u8],
 ) -> Result<Vec<isize>, DecErr> {
-    let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, &tau, associated_data);
-    let dk = match find_prefix(dks, &tau) {
+    let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, tau, associated_data);
+    let dk = match find_prefix(dks, tau) {
         None => return Err(DecErr::ExpiredKey),
         Some(node) => node,
     };
@@ -988,7 +993,7 @@ pub fn dec_chunks(
     let mut l = dk.tau.len();
     for tmp in dk.d_t.iter() {
         if extended_tau[l] == Bit::One {
-            bneg.add(&tmp);
+            bneg.add(tmp);
         }
         l += 1
     }
@@ -1012,8 +1017,8 @@ pub fn dec_chunks(
         .iter()
         .zip(crsz.rr.iter().zip(crsz.ss.iter().zip(crsz.zz.iter())))
         .map(|(c, (spec_r, (s, z)))| {
-            let mut m = pair::ate2(&g2, &c, &bneg, &spec_r);
-            m.mul(&pair::ate2(&z, &dk.a, &eneg, &s));
+            let mut m = pair::ate2(&g2, c, &bneg, spec_r);
+            m.mul(&pair::ate2(z, &dk.a, &eneg, s));
             pair::fexp(&m)
         })
         .collect();
@@ -1042,7 +1047,7 @@ pub fn dec_chunks(
     let mut acc = BIG::new_int(0);
     let r = BIG::new_ints(&rom::CURVE_ORDER);
     for src in dlogs.iter() {
-        acc = BIG::modadd(&src, &BIG::modmul(&acc, &b, &r), &r);
+        acc = BIG::modadd(src, &BIG::modmul(&acc, &b, &r), &r);
     }
     acc.tobytes(&mut big_bytes);
     fr_bytes[..].clone_from_slice(&big_bytes[16..(32 + 16)]);
@@ -1088,7 +1093,7 @@ pub fn verify_ciphertext_integrity(
     use miracl_core::bls12381::pair;
     let mut g1_neg = ECP::generator();
     g1_neg.neg();
-    let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, &tau, associated_data);
+    let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, tau, associated_data);
     let mut id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
 
     // Pre-compute the line calculations (for pairing) on `id`
@@ -1120,7 +1125,7 @@ pub fn verify_ciphertext_integrity(
             // for the three pairing computations.
             pair::another_pc(&mut r, &precomp_id, spec_r);
             pair::another_pc(&mut r, &PRECOMP_SYS_H[..], s);
-            pair::another(&mut r, &z, &g1_neg);
+            pair::another(&mut r, z, &g1_neg);
 
             // Collapse the Fp12 array built above,
             // by making the appropriate multiplications of the Miller loop.
@@ -1152,7 +1157,7 @@ fn extend_tau(
     map.insert_hashed("ciphertext-chunks", &cc.to_vec());
     map.insert_hashed("randomizers-r", &rr.to_vec());
     map.insert_hashed("randomizers-s", &ss.to_vec());
-    map.insert_hashed("epoch", &(epoch_from_tau_vec(&tau).get() as usize));
+    map.insert_hashed("epoch", &(epoch_from_tau_vec(tau).get() as usize));
     map.insert_hashed("associated-data", &associated_data.to_vec());
 
     let hash = random_oracle(DOMAIN_CIPHERTEXT_NODE, &map);
@@ -1195,7 +1200,7 @@ fn ftau_partial(tau: &[Bit], sys: &SysParam) -> Option<ECP2> {
     let mut id = sys.f0.clone();
     tau.iter().zip(sys.f.iter()).for_each(|(t, f)| {
         if *t == Bit::One {
-            id.add(&f);
+            id.add(f);
         }
     });
     Some(id)
@@ -1221,7 +1226,7 @@ const LAMBDA_H: usize = 256;
 pub fn mk_sys_params() -> SysParam {
     let mut f = Vec::new();
     let dst = b"DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_";
-    let f0 = htp2_bls12381(dst, &"f0");
+    let f0 = htp2_bls12381(dst, "f0");
     for i in 0..LAMBDA_T {
         let s = format!("f{}", i + 1);
         f.push(htp2_bls12381(dst, &s));
@@ -1237,7 +1242,7 @@ pub fn mk_sys_params() -> SysParam {
         f0,
         f,
         f_h,
-        h: htp2_bls12381(dst, &"h"),
+        h: htp2_bls12381(dst, "h"),
     }
 }
 
@@ -1277,7 +1282,7 @@ pub fn solve_cheater_log(spec_n: usize, spec_m: usize, target: &FP12) -> Option<
     //   invDelta = inverse of Delta mod spec_r
     // That is, answer = scaled_answer * invDelta.
     for delta in 1..ee {
-        target_power.mul(&target);
+        target_power.mul(target);
         match baby_giant(&target_power, &base, 1 - zz, 2 * zz - 1) {
             None => {}
             Some(scaled_answer) => {

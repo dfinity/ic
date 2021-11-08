@@ -297,7 +297,7 @@ mod random_oracles {
             };
             let hash_1 = random_oracle_to_miracl_g1(&domain_1, &hashable_struct);
             let hash_2 = random_oracle_to_miracl_g1(&domain_2, &hashable_struct);
-            assert_eq!(hash_1.equals(&hash_2), false);
+            assert!(!hash_1.equals(&hash_2));
         }
     }
 }

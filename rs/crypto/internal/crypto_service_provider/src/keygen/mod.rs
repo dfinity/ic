@@ -25,7 +25,7 @@ pub use tls_keygen::tls_cert_hash_as_key_id;
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> CspKeyGenerator for Csp<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> CspKeyGenerator for Csp<R, S, C> {
     fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<(KeyId, CspPublicKey), CryptoError> {
         match alg_id {
             AlgorithmId::MultiBls12_381 => {
@@ -56,19 +56,21 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> CspKeyGenerator for Csp<R, S> {
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> CspSecretKeyStoreChecker for Csp<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> CspSecretKeyStoreChecker
+    for Csp<R, S, C>
+{
     fn sks_contains(&self, key_id: &KeyId) -> bool {
         self.csp_server.sks_contains(key_id)
     }
 
     fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> bool {
         // we calculate the key_id first to minimize locking time:
-        let key_id = tls_cert_hash_as_key_id(&cert);
+        let key_id = tls_cert_hash_as_key_id(cert);
         self.sks_contains(&key_id)
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> Csp<R, S> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
     fn store_secret_key_or_panic(&self, csp_secret_key: CspSecretKey, key_id: KeyId) {
         match &self.sks_write_lock().insert(key_id, csp_secret_key, None) {
             Ok(()) => {}
@@ -123,13 +125,13 @@ mod tls_keygen {
         bytes_hash_as_key_id(AlgorithmId::Tls, cert.as_der())
     }
 
-    impl<R: Rng + CryptoRng, S: SecretKeyStore> Csp<R, S> {
+    impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
         pub(super) fn store_tls_secret_key(
             &mut self,
             cert: &TlsPublicKeyCert,
             secret_key: TlsEd25519SecretKeyDerBytes,
         ) -> KeyId {
-            let key_id = tls_cert_hash_as_key_id(&cert);
+            let key_id = tls_cert_hash_as_key_id(cert);
             self.store_secret_key_or_panic(CspSecretKey::TlsEd25519(secret_key), key_id);
             key_id
         }

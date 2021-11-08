@@ -2,8 +2,8 @@ use super::*;
 use async_trait::async_trait;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, MalformedPeerCertificateError, Peer,
-    TlsClientHandshakeError, TlsHandshake, TlsServerHandshakeError, TlsStream,
+    AllowedClients, AuthenticatedPeer, MalformedPeerCertificateError, TlsClientHandshakeError,
+    TlsHandshake, TlsServerHandshakeError, TlsStream,
 };
 use ic_logger::{debug, new_logger};
 use ic_types::registry::RegistryClientError;
@@ -55,33 +55,23 @@ where
 
     async fn perform_tls_server_handshake_with_rustls(
         &self,
-        _tcp_stream: TcpStream,
-        _allowed_clients: AllowedClients,
-        _registry_version: RegistryVersion,
-    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
-        // TODO: CRP-1109: Implement the server handshake with rustls
-        todo!()
-    }
-
-    async fn perform_tls_server_handshake_temp_with_optional_client_auth(
-        &self,
         tcp_stream: TcpStream,
-        allowed_authenticating_clients: AllowedClients,
+        allowed_clients: AllowedClients,
         registry_version: RegistryVersion,
-    ) -> Result<(TlsStream, Peer), TlsServerHandshakeError> {
+    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "TlsHandshake",
-            crypto.method_name => "perform_tls_server_handshake_temp_with_optional_client_auth",
+            crypto.method_name => "perform_tls_server_handshake_with_rustls",
             crypto.registry_version => registry_version.get(),
-            crypto.allowed_tls_clients => format!("{:?}", allowed_authenticating_clients),
+            crypto.allowed_tls_clients => format!("{:?}", allowed_clients),
         );
         debug!(logger; crypto.description => "start",);
-        let result = server_handshake::perform_tls_server_handshake_temp_with_optional_client_auth(
+        let result = rustls::server_handshake::perform_tls_server_handshake(
             &self.csp,
             self.node_id,
             &self.registry_client,
             tcp_stream,
-            allowed_authenticating_clients,
+            allowed_clients,
             registry_version,
         )
         .await;

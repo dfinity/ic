@@ -186,7 +186,56 @@ fn build_registry_proto() {
     let mut config = base_config();
     config.out_dir("gen/registry");
 
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+    config.type_attribute(
+        ".registry.conversion_rate",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.crypto",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.node_operator",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.nns",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.node",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.firewall",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.routing_table",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.provisional_whitelist",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.subnet",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.replica_version",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+
+    config.type_attribute(
+        ".registry.node_rewards.v2",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+
+    config.type_attribute(
+        ".registry.dc",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
 
     let registry_files = [
         "def/registry/conversion_rate/v1/conversion_rate.proto",
@@ -246,22 +295,10 @@ fn build_types_proto() {
     let mut config = base_config();
     config.out_dir("gen/types");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
-    config.type_attribute(
-        ".types.v1.CatchUpPackage",
-        "#[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]",
-    );
-    config.type_attribute(
-        ".types.v1.SubnetId",
-        "#[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]",
-    );
-    config.type_attribute(
-        ".types.v1.NiDkgId",
-        "#[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]",
-    );
-    config.type_attribute(
-        ".types.v1.PrincipalId",
-        "#[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]",
-    );
+    config.type_attribute(".types.v1.CatchUpPackage", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.SubnetId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.NiDkgId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.PrincipalId", "#[derive(Eq, Hash)]");
     let files = [
         "def/types/v1/types.proto",
         "def/types/v1/dkg.proto",

@@ -339,7 +339,7 @@ pub fn chunking_proof_from_miracl(chunking_proof: &ProofChunking) -> ZKProofDec 
 pub fn chunking_proof_into_miracl(proof: &ZKProofDec) -> Result<ProofChunking, ()> {
     // TODO: return type
     let chunking_proof = ProofChunking {
-        y0: miracl_g1_from_bytes(&proof.first_move_y0.as_bytes())?,
+        y0: miracl_g1_from_bytes(proof.first_move_y0.as_bytes())?,
         bb: proof.first_move_b[..]
             .iter()
             .map(|g1| miracl_g1_from_bytes(g1.as_bytes()))
@@ -352,7 +352,7 @@ pub fn chunking_proof_into_miracl(proof: &ZKProofDec) -> Result<ProofChunking, (
             .iter()
             .map(|g1| miracl_g1_from_bytes(g1.as_bytes()))
             .collect::<Result<_, _>>()?,
-        yy: miracl_g1_from_bytes(&proof.second_move_y.as_bytes())?,
+        yy: miracl_g1_from_bytes(proof.second_move_y.as_bytes())?,
         z_r: proof
             .response_z_r
             .iter()
@@ -362,7 +362,7 @@ pub fn chunking_proof_into_miracl(proof: &ZKProofDec) -> Result<ProofChunking, (
             .iter()
             .map(|fr| miracl_fr_from_bytes(fr.as_bytes()))
             .collect::<Result<_, _>>()?,
-        z_beta: miracl_fr_from_bytes(&proof.response_z_b.as_bytes())?,
+        z_beta: miracl_fr_from_bytes(proof.response_z_b.as_bytes())?,
     };
     if chunking_proof.dd.len() != chunking_proof.z_r.len() + 1 {
         return Err(());
@@ -390,10 +390,10 @@ pub fn sharing_proof_from_miracl(sharing_proof: &ProofSharing) -> ZKProofShare {
 pub fn sharing_proof_into_miracl(proof: &ZKProofShare) -> Result<ProofSharing, ()> {
     // TODO: Error type
     Ok(ProofSharing {
-        ff: miracl_g1_from_bytes(&proof.first_move_f.as_bytes())?,
-        aa: miracl_g2_from_bytes(&proof.first_move_a.as_bytes())?,
-        yy: miracl_g1_from_bytes(&proof.first_move_y.as_bytes())?,
-        z_r: miracl_fr_from_bytes(&proof.response_z_r.as_bytes())?,
-        z_alpha: miracl_fr_from_bytes(&proof.response_z_a.as_bytes())?,
+        ff: miracl_g1_from_bytes(proof.first_move_f.as_bytes())?,
+        aa: miracl_g2_from_bytes(proof.first_move_a.as_bytes())?,
+        yy: miracl_g1_from_bytes(proof.first_move_y.as_bytes())?,
+        z_r: miracl_fr_from_bytes(proof.response_z_r.as_bytes())?,
+        z_alpha: miracl_fr_from_bytes(proof.response_z_a.as_bytes())?,
     })
 }

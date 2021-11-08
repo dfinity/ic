@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod canister_state {
+    use ic_base_types::NumBytes;
     use ic_replicated_state::{testing::SystemStateTesting, StateError};
     use ic_test_utilities::state::{
         get_running_canister, get_stopped_canister, get_stopping_canister,
@@ -8,6 +9,9 @@ mod canister_state {
     use ic_test_utilities::types::messages::{RequestBuilder, ResponseBuilder};
     use ic_types::messages::RequestOrResponse;
     use ic_types::QueueIndex;
+
+    const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
+    const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
 
     #[test]
     fn running_canister_accepts_requests() {
@@ -56,7 +60,12 @@ mod canister_state {
 
         let request = RequestOrResponse::Request(RequestBuilder::new().build());
         assert_eq!(
-            canister.push_input(QueueIndex::new(0), request.clone()),
+            canister.push_input(
+                QueueIndex::new(0),
+                request.clone(),
+                MAX_CANISTER_MEMORY_SIZE,
+                &mut SUBNET_AVAILABLE_MEMORY.clone(),
+            ),
             Err((StateError::CanisterStopping(canister_test_id(0)), request))
         );
     }
@@ -96,7 +105,12 @@ mod canister_state {
 
         let request = RequestOrResponse::Request(RequestBuilder::new().build());
         assert_eq!(
-            canister.push_input(QueueIndex::new(0), request.clone()),
+            canister.push_input(
+                QueueIndex::new(0),
+                request.clone(),
+                MAX_CANISTER_MEMORY_SIZE,
+                &mut SUBNET_AVAILABLE_MEMORY.clone(),
+            ),
             Err((StateError::CanisterStopped(canister_test_id(0)), request))
         );
     }
@@ -122,7 +136,12 @@ mod canister_state {
                 .build(),
         );
         assert_eq!(
-            canister.push_input(QueueIndex::new(0), response.clone()),
+            canister.push_input(
+                QueueIndex::new(0),
+                response.clone(),
+                MAX_CANISTER_MEMORY_SIZE,
+                &mut SUBNET_AVAILABLE_MEMORY.clone(),
+            ),
             Err((StateError::CanisterStopped(canister_test_id(0)), response))
         );
     }

@@ -452,7 +452,7 @@ fn verify_notaries(
         Err(PermanentError::InsufficientSignatures)?
     }
     for node_id in signers.iter() {
-        verify_notary(membership, height, &previous_beacon, *node_id)?;
+        verify_notary(membership, height, previous_beacon, *node_id)?;
     }
     Ok(())
 }
@@ -463,7 +463,7 @@ fn verify_notary(
     previous_beacon: &RandomBeacon,
     node_id: NodeId,
 ) -> ValidationResult<ValidatorError> {
-    if !membership.node_belongs_to_notarization_committee(height, &previous_beacon, node_id)? {
+    if !membership.node_belongs_to_notarization_committee(height, previous_beacon, node_id)? {
         Err(PermanentError::SignerNotInMultiSigCommittee(node_id))?
     };
     Ok(())
@@ -501,7 +501,7 @@ fn get_min_validated_ranks(
             let height = Height::from(h);
             (
                 height,
-                find_lowest_ranked_proposals(&pool, height)
+                find_lowest_ranked_proposals(pool, height)
                     .first()
                     .map(|block| block.rank()),
             )
@@ -786,7 +786,7 @@ impl Validator {
                         continue;
                     } else if verification.is_ok() {
                         if get_notarized_parent(pool_reader, &proposal).is_ok() {
-                            self.metrics.observe_block(&pool_reader, &proposal);
+                            self.metrics.observe_block(pool_reader, &proposal);
                             known_ranks.insert(proposal.height(), Some(proposal.rank()));
                             change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
                             change_set
@@ -840,7 +840,7 @@ impl Validator {
 
                 match self.check_block_validity(pool_reader, &proposal, dkg_pool) {
                     Ok(()) => {
-                        self.metrics.observe_block(&pool_reader, &proposal);
+                        self.metrics.observe_block(pool_reader, &proposal);
                         known_ranks.insert(proposal.height(), Some(proposal.rank()));
                         change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
                     }
@@ -1649,58 +1649,46 @@ pub mod test {
 
     #[test]
     fn test_validation_context_ordering() {
-        assert_eq!(
-            false,
-            ValidationContext {
-                registry_version: RegistryVersion::from(10),
-                certified_height: Height::from(5),
-                time: ic_test_utilities::mock_time(),
-            }
-            .greater_or_equal(&ValidationContext {
-                registry_version: RegistryVersion::from(11),
-                certified_height: Height::from(4),
-                time: ic_test_utilities::mock_time(),
-            }),
-        );
-        assert_eq!(
-            true,
-            ValidationContext {
-                registry_version: RegistryVersion::from(10),
-                certified_height: Height::from(5),
-                time: ic_test_utilities::mock_time(),
-            }
-            .greater_or_equal(&ValidationContext {
-                registry_version: RegistryVersion::from(10),
-                certified_height: Height::from(5),
-                time: ic_test_utilities::mock_time(),
-            }),
-        );
-        assert_eq!(
-            true,
-            ValidationContext {
-                registry_version: RegistryVersion::from(11),
-                certified_height: Height::from(5),
-                time: ic_test_utilities::mock_time(),
-            }
-            .greater_or_equal(&ValidationContext {
-                registry_version: RegistryVersion::from(11),
-                certified_height: Height::from(4),
-                time: ic_test_utilities::mock_time(),
-            }),
-        );
-        assert_eq!(
-            false,
-            ValidationContext {
-                registry_version: RegistryVersion::from(10),
-                certified_height: Height::from(5),
-                time: ic_test_utilities::mock_time(),
-            }
-            .greater_or_equal(&ValidationContext {
-                registry_version: RegistryVersion::from(11),
-                certified_height: Height::from(6),
-                time: ic_test_utilities::mock_time(),
-            }),
-        );
+        assert!(!ValidationContext {
+            registry_version: RegistryVersion::from(10),
+            certified_height: Height::from(5),
+            time: ic_test_utilities::mock_time(),
+        }
+        .greater_or_equal(&ValidationContext {
+            registry_version: RegistryVersion::from(11),
+            certified_height: Height::from(4),
+            time: ic_test_utilities::mock_time(),
+        }),);
+        assert!(ValidationContext {
+            registry_version: RegistryVersion::from(10),
+            certified_height: Height::from(5),
+            time: ic_test_utilities::mock_time(),
+        }
+        .greater_or_equal(&ValidationContext {
+            registry_version: RegistryVersion::from(10),
+            certified_height: Height::from(5),
+            time: ic_test_utilities::mock_time(),
+        }),);
+        assert!(ValidationContext {
+            registry_version: RegistryVersion::from(11),
+            certified_height: Height::from(5),
+            time: ic_test_utilities::mock_time(),
+        }
+        .greater_or_equal(&ValidationContext {
+            registry_version: RegistryVersion::from(11),
+            certified_height: Height::from(4),
+            time: ic_test_utilities::mock_time(),
+        }),);
+        assert!(!ValidationContext {
+            registry_version: RegistryVersion::from(10),
+            certified_height: Height::from(5),
+            time: ic_test_utilities::mock_time(),
+        }
+        .greater_or_equal(&ValidationContext {
+            registry_version: RegistryVersion::from(11),
+            certified_height: Height::from(6),
+            time: ic_test_utilities::mock_time(),
+        }),);
     }
 
     #[test]

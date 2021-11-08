@@ -9,6 +9,7 @@ use crate::registry_helper::RegistryHelper;
 use crate::release_package::ReleasePackage;
 use crate::release_package_provider::ReleasePackageProvider;
 use crate::replica_process::ReplicaProcess;
+use crate::ssh_access_manager::SshAccessManager;
 use crate::utils;
 use ic_config::registry_client::DataProviderConfig;
 use ic_config::{
@@ -37,6 +38,7 @@ pub struct NodeManager {
     // for tokio 1.0+ we can use `tokio::task::JoinHandle`
     release_package: Arc<std::sync::atomic::AtomicBool>,
     firewall: Arc<std::sync::atomic::AtomicBool>,
+    ssh_access_manager: Arc<std::sync::atomic::AtomicBool>,
     replica_process: Arc<Mutex<ReplicaProcess>>,
 }
 
@@ -183,6 +185,9 @@ impl NodeManager {
             logger.clone(),
         )
         .start();
+        let ssh_access_manager =
+            SshAccessManager::new(Arc::clone(&registry), Arc::clone(&metrics), logger.clone())
+                .start();
         Ok(Self {
             logger,
             _async_log_guard,
@@ -191,6 +196,7 @@ impl NodeManager {
             release_package,
             replica_process,
             firewall,
+            ssh_access_manager,
         })
     }
 
@@ -204,6 +210,9 @@ impl NodeManager {
             .as_ref()
             .store(false, std::sync::atomic::Ordering::Relaxed);
         self.firewall
+            .as_ref()
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        self.ssh_access_manager
             .as_ref()
             .store(false, std::sync::atomic::Ordering::Relaxed);
         let e = self.replica_process.clone().lock().unwrap().stop();
@@ -232,7 +241,6 @@ impl NodeManager {
     ) -> (NodeManagerMetrics, MetricsRuntimeImpl) {
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
-            clients_x509_cert: None,
         };
 
         let metrics_runtime = MetricsRuntimeImpl::new(
@@ -244,7 +252,7 @@ impl NodeManager {
             logger,
         );
 
-        let metrics = NodeManagerMetrics::new(&metrics_registry);
+        let metrics = NodeManagerMetrics::new(metrics_registry);
 
         (metrics, metrics_runtime)
     }

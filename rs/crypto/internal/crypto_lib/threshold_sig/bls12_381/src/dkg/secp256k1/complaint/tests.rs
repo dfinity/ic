@@ -46,7 +46,7 @@ fn test_honest_dealing_gets_no_complaints(
         .enumerate()
         .map(|(index, secret_key_bytes)| {
             let sender = format!("Node Number {}", index);
-            create_ephemeral_public_key(&mut rng, dkg_id, &secret_key_bytes, &sender.as_bytes())
+            create_ephemeral_public_key(&mut rng, dkg_id, &secret_key_bytes, sender.as_bytes())
                 .expect("Failed to generate test receiver public keys")
         })
         .collect();
@@ -119,7 +119,7 @@ fn test_incorrect_share_gets_verified_complaint(
         .enumerate()
         .map(|(index, secret_key_bytes)| {
             let sender = format!("Node Number {}", index);
-            create_ephemeral_public_key(&mut rng, dkg_id, &secret_key_bytes, &sender.as_bytes())
+            create_ephemeral_public_key(&mut rng, dkg_id, &secret_key_bytes, sender.as_bytes())
                 .expect("Failed to generate test receiver public keys")
         })
         .collect();
@@ -197,8 +197,8 @@ fn test_incorrect_share_gets_verified_complaint(
         dkg_id,
         &dealing,
         receiver_index,
-        &dealer_public_key_bytes,
-        &receiver_public_key_bytes,
+        dealer_public_key_bytes,
+        receiver_public_key_bytes,
         &complaint_bytes,
     );
     verification.unwrap(); // CLibComplaint should be upheld; otherwise this

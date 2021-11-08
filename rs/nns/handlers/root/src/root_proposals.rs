@@ -456,7 +456,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
 }
 
 fn get_proposal_clone(proposer: &PrincipalId) -> Result<GovernanceUpgradeRootProposal, String> {
-    let proposal = PROPOSALS.with(|proposals| proposals.borrow().get(&proposer).cloned());
+    let proposal = PROPOSALS.with(|proposals| proposals.borrow().get(proposer).cloned());
     if proposal.is_none() {
         let message = format!(
             "No root governance upgrade proposal from {} is pending",

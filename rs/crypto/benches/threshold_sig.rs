@@ -109,7 +109,7 @@ fn bench_threshold_sign<M: Measurement>(
         bench.iter_batched(
             || {
                 let message = signable_with_random_32_bytes();
-                let signer = crypto_for(random_node(&nodes_in_subnet), &crypto_components);
+                let signer = crypto_for(random_node(nodes_in_subnet), crypto_components);
                 (message, signer)
             },
             |(message, signer)| {
@@ -133,14 +133,14 @@ fn bench_verify_threshold_sig_share_incl_loading_pubkey<M: Measurement>(
         bench.iter_batched(
             || {
                 let message = signable_with_random_32_bytes();
-                let signer_node_id = random_node(&nodes_in_subnet);
-                let signer = crypto_for(signer_node_id, &crypto_components);
+                let signer_node_id = random_node(nodes_in_subnet);
+                let signer = crypto_for(signer_node_id, crypto_components);
                 let sig_share = signer
                     .sign_threshold(&message, DkgId::NiDkgId(dkg_id))
                     .expect("failed to threshold sign");
 
-                let verifier_node_id = random_node(&nodes_in_subnet);
-                let verifier = crypto_for(verifier_node_id, &crypto_components);
+                let verifier_node_id = random_node(nodes_in_subnet);
+                let verifier = crypto_for(verifier_node_id, crypto_components);
 
                 // Because the public key used for verifying signature shares is
                 // calculated _lazily_ and then stored in the verifier's threshold
@@ -148,8 +148,8 @@ fn bench_verify_threshold_sig_share_incl_loading_pubkey<M: Measurement>(
                 // performing the benchmark to ensure that the public key is
                 // calculated as part of the benchmark. After purging, the
                 // transcript is loaded again.
-                purge_dkg_id_from_data_store(dkg_id, &verifier, &transcript);
-                load_transcript(&transcript, &crypto_components, verifier_node_id);
+                purge_dkg_id_from_data_store(dkg_id, verifier, transcript);
+                load_transcript(transcript, crypto_components, verifier_node_id);
 
                 (sig_share, message, verifier, signer_node_id)
             },
@@ -178,12 +178,12 @@ fn bench_verify_threshold_sig_share_excl_loading_pubkey<M: Measurement>(
         bench.iter_batched(
             || {
                 let message = signable_with_random_32_bytes();
-                let signer_node_id = random_node(&nodes_in_subnet);
-                let signer = crypto_for(signer_node_id, &crypto_components);
+                let signer_node_id = random_node(nodes_in_subnet);
+                let signer = crypto_for(signer_node_id, crypto_components);
                 let sig_share = signer
                     .sign_threshold(&message, DkgId::NiDkgId(dkg_id))
                     .expect("failed to threshold sign");
-                let verifier = crypto_for(random_node(&nodes_in_subnet), &crypto_components);
+                let verifier = crypto_for(random_node(nodes_in_subnet), crypto_components);
 
                 // Because the public key used for verifying signature shares is
                 // calculated _lazily_ and then stored in the verifier's threshold
@@ -227,8 +227,8 @@ fn bench_combine_threshold_sig_shares<M: Measurement>(
             || {
                 let message = signable_with_random_32_bytes();
                 let sig_shares =
-                    sign_threshold_for_each(&nodes, &message, dkg_id, &crypto_components);
-                let combiner = crypto_for(random_node(&nodes), &crypto_components);
+                    sign_threshold_for_each(nodes, &message, dkg_id, crypto_components);
+                let combiner = crypto_for(random_node(nodes), crypto_components);
                 (sig_shares, combiner)
             },
             |(sig_shares, combiner)| {
@@ -252,11 +252,11 @@ fn bench_verify_threshold_sig_combined<M: Measurement>(
             || {
                 let message = signable_with_random_32_bytes();
                 let sig_shares =
-                    sign_threshold_for_each(&nodes, &message, dkg_id, &crypto_components);
-                let threshold_sig = crypto_for(random_node(&nodes), &crypto_components)
+                    sign_threshold_for_each(nodes, &message, dkg_id, crypto_components);
+                let threshold_sig = crypto_for(random_node(nodes), crypto_components)
                     .combine_threshold_sig_shares(sig_shares, DkgId::NiDkgId(dkg_id))
                     .expect("failed to combine threshold signature shares");
-                let verifier = crypto_for(random_node(&nodes), &crypto_components);
+                let verifier = crypto_for(random_node(nodes), crypto_components);
                 (threshold_sig, message, verifier)
             },
             |(threshold_sig, message, verifier)| {

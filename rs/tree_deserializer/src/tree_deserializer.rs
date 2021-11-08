@@ -132,7 +132,7 @@ impl<'de> MapAccess<'de> for TreeMapAccess<'de> {
         let t = self.value.ok_or_else(|| {
             Error::BadState("attempt to take a value before getting the key".to_string())
         })?;
-        let d = LabeledTreeDeserializer::new(&t);
+        let d = LabeledTreeDeserializer::new(t);
         seed.deserialize(d)
     }
 }

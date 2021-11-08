@@ -17,7 +17,7 @@ use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
-    subnet::v1::{CatchUpPackageContents, GossipAdvertRelayConfig, GossipConfig, SubnetRecord},
+    subnet::v1::{CatchUpPackageContents, GossipAdvertConfig, GossipConfig, SubnetRecord},
 };
 use ic_registry_keys::make_node_record_key;
 use ic_registry_keys::{
@@ -139,51 +139,7 @@ impl Registry {
             value: encode_or_panic(&response.subnet_threshold_public_key),
         };
 
-        let subnet_record = SubnetRecord {
-            membership: payload
-                .node_ids
-                .iter()
-                .map(|id| id.get().into_vec())
-                .collect::<Vec<_>>(),
-
-            ingress_bytes_per_block_soft_cap: payload.ingress_bytes_per_block_soft_cap,
-            max_ingress_bytes_per_message: payload.max_ingress_bytes_per_message,
-            max_ingress_messages_per_block: payload.max_ingress_messages_per_block,
-            max_block_payload_size: payload.max_block_payload_size,
-            replica_version_id: payload.replica_version_id.clone(),
-            unit_delay_millis: payload.unit_delay_millis,
-            initial_notary_delay_millis: payload.initial_notary_delay_millis,
-            dkg_interval_length: payload.dkg_interval_length,
-            dkg_dealings_per_block: payload.dkg_dealings_per_block,
-
-            gossip_config: Some(GossipConfig {
-                max_artifact_streams_per_peer: payload.gossip_max_artifact_streams_per_peer,
-                max_chunk_wait_ms: payload.gossip_max_chunk_wait_ms,
-                max_duplicity: payload.gossip_max_duplicity,
-                max_chunk_size: payload.gossip_max_chunk_size,
-                receive_check_cache_size: payload.gossip_receive_check_cache_size,
-                pfn_evaluation_period_ms: payload.gossip_pfn_evaluation_period_ms,
-                registry_poll_period_ms: payload.gossip_registry_poll_period_ms,
-                retransmission_request_ms: payload.gossip_retransmission_request_ms,
-                relay_config: payload
-                    .relay_percentage
-                    .map(|ratio| GossipAdvertRelayConfig {
-                        relay_percentage: ratio,
-                    }),
-            }),
-
-            start_as_nns: payload.start_as_nns,
-
-            subnet_type: payload.subnet_type.into(),
-
-            is_halted: payload.is_halted,
-
-            max_instructions_per_message: payload.max_instructions_per_message,
-            max_instructions_per_round: payload.max_instructions_per_round,
-            max_instructions_per_install_code: payload.max_instructions_per_install_code,
-
-            features: Some(payload.features.into()),
-        };
+        let subnet_record: SubnetRecord = payload.into();
 
         // 4. Update registry with the new subnet data
         // The subnet data is the new subnet record plus the update to the global
@@ -259,7 +215,7 @@ pub struct CreateSubnetPayload {
     pub gossip_pfn_evaluation_period_ms: u32,
     pub gossip_registry_poll_period_ms: u32,
     pub gossip_retransmission_request_ms: u32,
-    pub relay_percentage: Option<u32>,
+    pub advert_best_effort_percentage: Option<u32>,
 
     pub start_as_nns: bool,
 
@@ -272,6 +228,10 @@ pub struct CreateSubnetPayload {
     pub max_instructions_per_install_code: u64,
 
     pub features: SubnetFeatures,
+
+    pub max_number_of_canisters: u64,
+    pub ssh_readonly_access: Vec<String>,
+    pub ssh_backup_access: Vec<String>,
 }
 
 impl From<CreateSubnetPayload> for SubnetRecord {
@@ -302,9 +262,11 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 pfn_evaluation_period_ms: val.gossip_pfn_evaluation_period_ms,
                 registry_poll_period_ms: val.gossip_registry_poll_period_ms,
                 retransmission_request_ms: val.gossip_retransmission_request_ms,
-                relay_config: val.relay_percentage.map(|ratio| GossipAdvertRelayConfig {
-                    relay_percentage: ratio,
-                }),
+                advert_config: val
+                    .advert_best_effort_percentage
+                    .map(|val| GossipAdvertConfig {
+                        best_effort_percentage: val,
+                    }),
             }),
 
             start_as_nns: val.start_as_nns,
@@ -317,6 +279,10 @@ impl From<CreateSubnetPayload> for SubnetRecord {
             max_instructions_per_round: val.max_instructions_per_round,
             max_instructions_per_install_code: val.max_instructions_per_install_code,
             features: Some(val.features.into()),
+            max_number_of_canisters: val.max_number_of_canisters,
+            ssh_readonly_access: val.ssh_readonly_access,
+            ssh_backup_access: val.ssh_backup_access,
+            ecdsa_config: None,
         }
     }
 }

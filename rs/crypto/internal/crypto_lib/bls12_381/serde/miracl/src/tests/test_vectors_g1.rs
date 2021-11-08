@@ -24,13 +24,13 @@ fn g1_serde_should_be_correct(hex_test_vector: &str, value: &ECP, test_name: &st
     let bytes = g1_bytes_from_vec(&bytes);
     let parsed = miracl_g1_from_bytes(&bytes).expect("Failed to parse test vector");
     assert!(
-        parsed.equals(&value),
+        parsed.equals(value),
         "Parsed value does not match for {} {}",
         test_name,
         {
             let mut neg = parsed;
             neg.neg();
-            if neg.equals(&value) {
+            if neg.equals(value) {
                 "due to sign error"
             } else {
                 ""
@@ -187,13 +187,13 @@ fn miracl_g1_from_bytes_checks_subgroup_order() {
         "BUG! 3 divides the subgroup order?!"
     );
     let bad_g1 = miracl_g1_to_bytes(&p);
-    let unchecked = miracl_g1_from_bytes_unchecked(&bad_g1.as_bytes())
+    let unchecked = miracl_g1_from_bytes_unchecked(bad_g1.as_bytes())
         .expect("BUG! cannot deserialize what was just serialized");
     assert!(
         !unchecked.mul(&subgroup_order).is_infinity(),
         "BUG! 3 divides the subgroup order?!"
     );
-    let checked = miracl_g1_from_bytes(&bad_g1.as_bytes());
+    let checked = miracl_g1_from_bytes(bad_g1.as_bytes());
     assert!(
         !checked.is_ok(),
         "Deserializing a point outside subgroup should fail"
