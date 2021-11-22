@@ -1,7 +1,5 @@
 use super::SessionNonce;
-use crate::{
-    num_bytes_from, num_bytes_try_from64, NumWasmPages, NumWasmPages64, PageIndex, PageMap,
-};
+use crate::{num_bytes_from, NumWasmPages, NumWasmPages64, PageIndex, PageMap};
 use ic_config::embedders::PersistenceType;
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState, MappedStateImpl};
 use ic_interfaces::execution_environment::HypervisorResult;
@@ -244,9 +242,6 @@ pub struct ExecutionState {
     #[debug_stub = "PageMap"]
     pub wasm_memory: Memory,
 
-    /// The canister stable memory which is persisted across canister upgrades.
-    pub stable_memory: Memory<NumWasmPages64>,
-
     /// The state of exported globals. Internal globals are not accessible.
     pub exported_globals: Vec<Global>,
 
@@ -284,17 +279,15 @@ impl PartialEq for ExecutionState {
 
 impl ExecutionState {
     /// Initializes a new execution state for a canister.
-    /// The state will be created with empty stable memory, but may have wasm
-    /// memory from data sections in the wasm module.
     pub fn new(
         wasm_binary: BinaryEncodedWasm,
         canister_root: PathBuf,
         exports: ExportedFunctions,
-        wasm_memory_pages: &[(PageIndex, Box<PageBytes>)],
+        pages: &[(PageIndex, Box<PageBytes>)],
     ) -> HypervisorResult<Self> {
         let mut wasm_memory = Memory::default();
         wasm_memory.page_map.update(
-            &wasm_memory_pages
+            &pages
                 .iter()
                 .map(|(index, bytes)| (*index, bytes as &PageBytes))
                 .collect::<Vec<(PageIndex, &PageBytes)>>(),
@@ -328,7 +321,6 @@ impl ExecutionState {
             wasm_binary,
             exports,
             wasm_memory,
-            stable_memory: Memory::default(),
             exported_globals: vec![],
             last_executed_round: ExecutionRound::from(0),
             cow_mem_mgr,
@@ -349,8 +341,6 @@ impl ExecutionState {
         let globals_size_bytes = 8 * self.exported_globals.len() as u64;
         let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
         num_bytes_from(self.wasm_memory.size)
-            + num_bytes_try_from64(self.stable_memory.size)
-                .expect("could not convert from wasm pages to bytes")
             + NumBytes::from(globals_size_bytes)
             + NumBytes::from(wasm_binary_size_bytes)
     }

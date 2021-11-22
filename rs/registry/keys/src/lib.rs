@@ -176,6 +176,10 @@ pub fn make_nns_canister_records_key() -> String {
     "nns_canister_records".to_string()
 }
 
+pub fn make_unassigned_nodes_replica_version() -> String {
+    "unassigned_nodes_replica_version".to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

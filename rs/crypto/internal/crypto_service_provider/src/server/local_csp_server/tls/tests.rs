@@ -269,6 +269,57 @@ mod sign {
         );
     }
 
+    #[test]
+    fn should_fail_to_sign_if_secret_key_in_store_has_invalid_der_encoding() {
+        let csp_server = csp_server_with_empty_key_store();
+        let key_id = KeyId([42; 32]);
+        let secret_key_with_invalid_der = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes {
+            bytes: b"invalid DER encoding".to_vec(),
+        });
+        assert!(csp_server
+            .sks_write_lock()
+            .insert(key_id, secret_key_with_invalid_der, None)
+            .is_ok());
+
+        let result = csp_server.sign(&random_message(), &key_id);
+
+        assert_eq!(
+            result.unwrap_err(),
+            CspTlsSignError::MalformedSecretKey {
+                error: "Failed to convert TLS secret key DER from key store to OpenSSL private key"
+                    .to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn should_fail_to_sign_if_secret_key_in_store_has_invalid_length() {
+        let csp_server = csp_server_with_empty_key_store();
+        let key_id = KeyId([42; 32]);
+
+        let secret_key_with_invalid_length =
+            CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes {
+                bytes: PKey::generate_ed448()
+                    .expect("failed to create Ed2448 key pair")
+                    .private_key_to_der()
+                    .expect("failed to serialize Ed2448 key to DER"),
+            });
+        assert!(csp_server
+            .sks_write_lock()
+            .insert(key_id, secret_key_with_invalid_length, None)
+            .is_ok());
+
+        let result = csp_server.sign(&random_message(), &key_id);
+
+        assert_eq!(
+            result.unwrap_err(),
+            CspTlsSignError::MalformedSecretKey {
+                error: "Invalid length of raw OpenSSL private key: expected 32 bytes, but got 57"
+                    .to_string()
+            }
+        );
+    }
+
     fn verifier() -> impl CryptoServiceProvider {
         let dummy_key_store = TempSecretKeyStore::new();
         let csprng = ChaCha20Rng::from_seed(thread_rng().gen::<[u8; 32]>());

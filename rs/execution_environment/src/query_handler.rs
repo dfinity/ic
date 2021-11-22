@@ -14,7 +14,7 @@ use crate::{
 use ic_config::execution_environment::Config;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_interfaces::{
-    execution_environment::{QueryHandler, SubnetAvailableMemory},
+    execution_environment::{QueryExecutionService, QueryHandler, SubnetAvailableMemory},
     state_manager::StateReader,
 };
 use ic_logger::ReplicaLogger;
@@ -39,7 +39,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
     task::{Context, Poll},
 };
-use tower::Service;
+use tower::{util::BoxService, Service, ServiceBuilder};
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -86,7 +86,7 @@ fn label<T: Into<Label>>(t: T) -> Label {
     t.into()
 }
 
-pub(crate) struct InternalHttpQueryHandlerImpl {
+pub(crate) struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
     own_subnet_id: SubnetId,
@@ -98,13 +98,13 @@ pub(crate) struct InternalHttpQueryHandlerImpl {
 }
 
 /// Struct that is responsible for handling queries sent by user.
-pub(crate) struct HttpQueryHandlerImpl {
+pub(crate) struct HttpQueryHandler {
     internal: Arc<dyn QueryHandler<State = ReplicatedState>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     threadpool: Arc<Mutex<threadpool::ThreadPool>>,
 }
 
-impl InternalHttpQueryHandlerImpl {
+impl InternalHttpQueryHandler {
     pub(crate) fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
@@ -127,7 +127,7 @@ impl InternalHttpQueryHandlerImpl {
     }
 }
 
-impl QueryHandler for InternalHttpQueryHandlerImpl {
+impl QueryHandler for InternalHttpQueryHandler {
     type State = ReplicatedState;
 
     fn query(
@@ -169,21 +169,34 @@ impl QueryHandler for InternalHttpQueryHandlerImpl {
     }
 }
 
-impl HttpQueryHandlerImpl {
-    pub(crate) fn new(
+impl HttpQueryHandler {
+    pub(crate) fn new_service(
+        max_buffered_queries: usize,
+        threads: usize,
         internal: Arc<dyn QueryHandler<State = ReplicatedState>>,
         threadpool: Arc<Mutex<threadpool::ThreadPool>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    ) -> Self {
-        Self {
+    ) -> QueryExecutionService {
+        let base_service = Self {
             internal,
             state_reader,
             threadpool,
-        }
+        };
+        let base_service = BoxService::new(
+            ServiceBuilder::new()
+                .concurrency_limit(threads)
+                .service(base_service),
+        );
+
+        // TODO(NET-795): provide documentation on the design of the interface
+        ServiceBuilder::new()
+            .load_shed()
+            .buffer(max_buffered_queries)
+            .service(base_service)
     }
 }
 
-impl QueryHandler for HttpQueryHandlerImpl {
+impl QueryHandler for HttpQueryHandler {
     type State = ReplicatedState;
 
     fn query(
@@ -210,7 +223,7 @@ impl Default for FutureQueryResult {
     }
 }
 
-impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandlerImpl {
+impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
     type Response = HttpQueryResponse;
     type Error = CanonicalError;
     #[allow(clippy::type_complexity)]

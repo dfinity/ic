@@ -50,6 +50,14 @@ impl TlsHandshake for FakeTlsHandshake {
         unimplemented!()
     }
 
+    async fn perform_tls_server_handshake_without_client_auth_with_rustls(
+        &self,
+        _tcp_stream: TcpStream,
+        _registry_version: RegistryVersion,
+    ) -> Result<TlsStream, TlsServerHandshakeError> {
+        unimplemented!()
+    }
+
     async fn perform_tls_client_handshake(
         &self,
         _tcp_stream: TcpStream,

@@ -540,8 +540,8 @@ fn get_valid_system_apis(
                 vec![(
                     API_VERSION_IC0,
                     FunctionSignature {
-                        param_types: vec![],
-                        return_type: vec![ValueType::I64, ValueType::I64],
+                        param_types: vec![ValueType::I32],
+                        return_type: vec![],
                     },
                 )],
             ),
@@ -550,8 +550,8 @@ fn get_valid_system_apis(
                 vec![(
                     API_VERSION_IC0,
                     FunctionSignature {
-                        param_types: vec![],
-                        return_type: vec![ValueType::I64, ValueType::I64],
+                        param_types: vec![ValueType::I32],
+                        return_type: vec![],
                     },
                 )],
             ),
@@ -560,8 +560,8 @@ fn get_valid_system_apis(
                 vec![(
                     API_VERSION_IC0,
                     FunctionSignature {
-                        param_types: vec![],
-                        return_type: vec![ValueType::I64, ValueType::I64],
+                        param_types: vec![ValueType::I32],
+                        return_type: vec![],
                     },
                 )],
             ),
@@ -570,8 +570,8 @@ fn get_valid_system_apis(
                 vec![(
                     API_VERSION_IC0,
                     FunctionSignature {
-                        param_types: vec![ValueType::I64, ValueType::I64],
-                        return_type: vec![ValueType::I64, ValueType::I64],
+                        param_types: vec![ValueType::I64, ValueType::I64, ValueType::I32],
+                        return_type: vec![],
                     },
                 )],
             ),

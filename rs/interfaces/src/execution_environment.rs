@@ -16,7 +16,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
-use tower::util::BoxService;
+use tower::{buffer::Buffer, load_shed::LoadShed, util::BoxService};
 
 /// Instance execution statistics. The stats are cumulative and
 /// contain measurements from the point in time when the instance was
@@ -106,11 +106,29 @@ pub type HypervisorResult<T> = Result<T, HypervisorError>;
 
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.
-pub type IngressFilterService =
-    BoxService<(ProvisionalWhitelist, SignedIngressContent), (), CanonicalError>;
+// Since this service will be shared across many connections we must
+// make it cloneable by introducing a bounded buffer infront of it.
+// https://docs.rs/tower/0.4.10/tower/buffer/index.html
+// The buffer also dampens usage by reducing the risk of
+// spiky traffic when users retry in case failed requests.
+pub type IngressFilterService = LoadShed<
+    Buffer<
+        BoxService<(ProvisionalWhitelist, SignedIngressContent), (), CanonicalError>,
+        (ProvisionalWhitelist, SignedIngressContent),
+    >,
+>;
 
-pub type QueryExecutionService =
-    BoxService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, CanonicalError>;
+// Since this service will be shared across many connections we must
+// make it cloneable by introducing a bounded buffer infront of it.
+// https://docs.rs/tower/0.4.10/tower/buffer/index.html
+// The buffer also dampens usage by reducing the risk of
+// spiky traffic when users retry in case failed requests.
+pub type QueryExecutionService = LoadShed<
+    Buffer<
+        BoxService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, CanonicalError>,
+        (UserQuery, Option<CertificateDelegation>),
+    >,
+>;
 
 /// Interface for the component to execute queries on canisters.  It can be used
 /// by the HttpHandler and other system components to execute queries.
@@ -507,8 +525,13 @@ pub trait SystemApi {
     /// Traps if current canister balance cannot fit in a 64-bit value.
     fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64>;
 
-    /// Returns the current balance in cycles.
-    fn ic0_canister_cycles_balance128(&self) -> HypervisorResult<(u64, u64)>;
+    /// This system call indicates the current cycle balance
+    /// of the canister.
+    ///
+    /// The amount of cycles is represented by a 128-bit value
+    /// and is copied in the canister memory starting
+    /// starting at the location `dst`.
+    fn ic0_canister_cycles_balance128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_available128` instead.
     /// This API supports only 64-bit values.
@@ -518,8 +541,13 @@ pub trait SystemApi {
     /// Traps if the amount of cycles available cannot fit in a 64-bit value.
     fn ic0_msg_cycles_available(&self) -> HypervisorResult<u64>;
 
-    /// Cycles sent in the current call and still available.
-    fn ic0_msg_cycles_available128(&self) -> HypervisorResult<(u64, u64)>;
+    /// This system call indicates the amount of cycles sent
+    /// in the current call and still available.
+    ///
+    /// The amount of cycles is represented by a 128-bit value
+    /// and is copied in the canister memory starting
+    /// starting at the location `dst`.
+    fn ic0_msg_cycles_available128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_refunded128` instead.
     /// This API supports only 64-bit values.
@@ -529,8 +557,13 @@ pub trait SystemApi {
     /// Traps if the amount of refunded cycles cannot fit in a 64-bit value.
     fn ic0_msg_cycles_refunded(&self) -> HypervisorResult<u64>;
 
-    /// Cycles that came back with the response, as a refund.
-    fn ic0_msg_cycles_refunded128(&self) -> HypervisorResult<(u64, u64)>;
+    /// This system call indicates the amount of cycles sent
+    /// that came back with the response as a refund.
+    ///
+    /// The amount of cycles is represented by a 128-bit value
+    /// and is copied in the canister memory starting
+    /// starting at the location `dst`.
+    fn ic0_msg_cycles_refunded128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_accept128` instead.
     /// This API supports only 64-bit values.
@@ -573,7 +606,12 @@ pub trait SystemApi {
     /// EXE-117: the last point is not properly handled yet.  In particular, a
     /// refund can come back to the canister after this call finishes which
     /// causes the canister's balance to overflow.
-    fn ic0_msg_cycles_accept128(&mut self, max_amount: Cycles) -> HypervisorResult<(u64, u64)>;
+    fn ic0_msg_cycles_accept128(
+        &mut self,
+        max_amount: Cycles,
+        dst: u32,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 
     /// Sets the certified data for the canister.
     /// See: https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-certified-data

@@ -1,7 +1,7 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_replicated_state::{
-    canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
+    canister_state::{DEFAULT_QUEUE_CAPACITY, ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
     testing::SystemStateTesting,
     SystemState,
 };
@@ -225,4 +225,47 @@ fn induct_messages_to_self_respects_memory_limit_impl(
         // Expect the output queue to be empty.
         assert!(!system_state.queues().has_output());
     }
+}
+
+#[test]
+fn induct_messages_to_self_full_queue() {
+    let canister_id = canister_test_id(1);
+    let mut system_state = SystemState::new_running(
+        canister_id,
+        user_test_id(1).get(),
+        Cycles::new(5_000_000_000_000),
+        NumSeconds::new(0),
+    );
+
+    // Request to self.
+    let request = RequestBuilder::default()
+        .sender(canister_id)
+        .receiver(canister_id)
+        .build();
+
+    // Push`DEFAULT_QUEUE_CAPACITY - 1` requests.
+    for _ in 0..DEFAULT_QUEUE_CAPACITY - 1 {
+        system_state
+            .queues_mut()
+            .push_output_request(request.clone())
+            .unwrap();
+    }
+
+    system_state.induct_messages_to_self(
+        CANISTER_AVAILABLE_MEMORY,
+        &mut SUBNET_AVAILABLE_MEMORY.clone(),
+    );
+
+    // Expect exactly one request to have been inducted before the queue filled up.
+    assert_eq!(
+        Some(CanisterInputMessage::Request(request)),
+        system_state.pop_input()
+    );
+    assert_eq!(None, system_state.pop_input());
+
+    // All other requests should still be in the output queue.
+    assert_eq!(
+        DEFAULT_QUEUE_CAPACITY - 2,
+        system_state.output_into_iter(canister_id).count()
+    );
 }

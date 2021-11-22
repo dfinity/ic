@@ -9,7 +9,7 @@
 // annotated with `#[candid_method(query/update)]` to be able to generate the
 // did definition of the method.
 
-use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+use ic_nns_governance::{governance::ONE_DAY_SECONDS, pb::v1::manage_neuron::NeuronIdOrSubaccount};
 use rand::rngs::StdRng;
 use rand_core::{RngCore, SeedableRng};
 use std::boxed::Box;
@@ -372,6 +372,8 @@ fn canister_post_upgrade() {
         }
     }
     .expect("Couldn't upgrade canister.");
+
+    governance_mut().proto.wait_for_quiet_threshold_seconds = ONE_DAY_SECONDS;
 }
 
 #[export_name = "canister_update update_authz"]

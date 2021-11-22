@@ -16,7 +16,7 @@ use ic_nns_governance::{
         subaccount_from_slice, Environment, Governance, Ledger,
         EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
-        REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
@@ -61,6 +61,8 @@ use registry_canister::mutations::{
     do_add_node_operator::AddNodeOperatorPayload,
     do_update_icp_xdr_conversion_rate::UpdateIcpXdrConversionRatePayload,
 };
+
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
@@ -72,7 +74,7 @@ use std::path::PathBuf;
 use dfn_protobuf::ToProto;
 use ic_nns_governance::governance::{
     MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-    ONE_YEAR_SECONDS,
+    ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
 use ic_nns_governance::pb::v1::governance_error::ErrorType::{NotFound, ResourceExhausted};
@@ -81,13 +83,14 @@ use ic_nns_governance::pb::v1::manage_neuron_response::MergeMaturityResponse;
 use ic_nns_governance::pb::v1::proposal::Action;
 use ic_nns_governance::pb::v1::ProposalRewardStatus::{AcceptVotes, ReadyToSettle};
 use ic_nns_governance::pb::v1::ProposalStatus::Rejected;
-use ic_nns_governance::pb::v1::{ProposalRewardStatus, RewardNodeProviders, UpdateNodeProvider};
-use ledger_canister::Subaccount;
 
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
 /// the FakeDriver. It is being used here until the older tests have been
 /// ported to the new 'fixtures' module.
 mod fake;
+
+use ic_nns_governance::pb::v1::{ProposalRewardStatus, RewardNodeProviders, UpdateNodeProvider};
+use ledger_canister::Subaccount;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
@@ -259,7 +262,7 @@ fn test_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_sh
             },
             Neuron {
                 dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
-                cached_neuron_stake_e8s: 1,
+                cached_neuron_stake_e8s: 40,
                 ..Neuron::default()
             },
         ],
@@ -294,7 +297,7 @@ fn test_two_neuron_disagree_largest_stake_wins() {
         vec![
             Neuron {
                 dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
-                cached_neuron_stake_e8s: 8,
+                cached_neuron_stake_e8s: 400,
                 ..Neuron::default()
             },
             Neuron {
@@ -311,7 +314,7 @@ fn test_two_neuron_disagree_largest_stake_wins() {
         vec![
             Neuron {
                 dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
-                cached_neuron_stake_e8s: 8,
+                cached_neuron_stake_e8s: 400,
                 ..Neuron::default()
             },
             Neuron {
@@ -351,7 +354,7 @@ fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins() {
         vec![
             Neuron {
                 dissolve_state: NOTDISSOLVING_MAX_DISSOLVE_DELAY,
-                cached_neuron_stake_e8s: 1,
+                cached_neuron_stake_e8s: 21,
                 ..Neuron::default()
             },
             Neuron {
@@ -368,7 +371,7 @@ fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins() {
         vec![
             Neuron {
                 dissolve_state: NOTDISSOLVING_MAX_DISSOLVE_DELAY,
-                cached_neuron_stake_e8s: 1,
+                cached_neuron_stake_e8s: 21,
                 ..Neuron::default()
             },
             Neuron {
@@ -413,7 +416,7 @@ fn test_two_neuron_disagree_identical_stake_older_wins() {
         vec![
             Neuron {
                 dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
-                cached_neuron_stake_e8s: 4,
+                cached_neuron_stake_e8s: 200,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS
                     - MAX_NEURON_AGE_FOR_AGE_BONUS,
                 ..Neuron::default()
@@ -433,7 +436,7 @@ fn test_two_neuron_disagree_identical_stake_older_wins() {
         vec![
             Neuron {
                 dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
-                cached_neuron_stake_e8s: 4,
+                cached_neuron_stake_e8s: 200,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS
                     - MAX_NEURON_AGE_FOR_AGE_BONUS,
                 ..Neuron::default()
@@ -1453,7 +1456,7 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
                 Neuron {
                     id: Some(NeuronId {id: 1}),
                  controller: Some(principal(2)),
-                    cached_neuron_stake_e8s: 51,
+                    cached_neuron_stake_e8s: 951,
                     account: driver.random_byte_array().to_vec(),
                  // One year
                  dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(31557600)),
@@ -2062,7 +2065,7 @@ fn compute_maturities(
                 )
             })
             .collect(),
-        wait_for_quiet_threshold_seconds: 1,
+        wait_for_quiet_threshold_seconds: 10,
         economics: Some(NetworkEconomics::default()),
         ..Default::default()
     };
@@ -5003,7 +5006,7 @@ fn test_recompute_tally() {
         .collect(),
         ..Default::default()
     };
-    pinfo.recompute_tally(10);
+    pinfo.recompute_tally(10, ONE_DAY_SECONDS);
     assert_eq!(
         Some(Tally {
             timestamp_seconds: 10,
@@ -7202,4 +7205,882 @@ fn test_join_community_fund() {
             .joined_community_fund_timestamp_seconds
             .unwrap_or(0)
     );
+}
+
+/// Struct to help with the wait for quiet tests.
+struct NeuronVote {
+    vote_and_time: Option<(Vote, u64)>,
+    stake: u64,
+}
+
+/// Helper function for testing wait for quiet.
+/// The idea is to simplify testing different voting dynamics.
+///
+/// Takes as inputs:
+/// - The initial duration of the voting period
+/// - A vector of neuron votes, representing what neurons are in the system, and
+///   when and how they vote.
+///
+/// Returns the governance mock and the proposal id.
+fn wait_for_quiet_test_helper(
+    initial_expiration_seconds: u64,
+    in_neuron_votes: &mut Vec<NeuronVote>,
+) -> (Governance, ProposalId, u64) {
+    let mut neuron_votes = vec![NeuronVote {
+        vote_and_time: Some((Vote::Yes, 0)),
+        stake: 1,
+    }];
+    neuron_votes.append(in_neuron_votes);
+    neuron_votes.sort_by(|a, b| match (a.vote_and_time, b.vote_and_time) {
+        (Some((_, a_time)), Some((_, b_time))) => a_time.cmp(&b_time),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        _ => Ordering::Equal,
+    });
+    let mut fake_driver = fake::FakeDriver::default();
+    let fixture = GovernanceProto {
+        economics: Some(NetworkEconomics::default()),
+        neurons: neuron_votes
+            .iter()
+            .enumerate()
+            .map(|(i, neuron_vote)| {
+                (
+                    i as u64,
+                    Neuron {
+                        id: Some(NeuronId { id: i as u64 }),
+                        dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                        controller: Some(principal(i as u64)),
+                        cached_neuron_stake_e8s: neuron_vote.stake,
+                        ..Neuron::default()
+                    },
+                )
+            })
+            .collect::<HashMap<u64, Neuron>>(),
+        wait_for_quiet_threshold_seconds: initial_expiration_seconds,
+        ..Default::default()
+    };
+
+    let mut gov = Governance::new(
+        fixture,
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+    );
+    let pid = gov
+        .make_proposal(
+            &NeuronId { id: 0 },
+            // Must match neuron 1's serialized_id.
+            &principal(0),
+            &Proposal {
+                summary: "Summary".to_string(),
+                action: Some(proposal::Action::Motion(Motion {
+                    motion_text: "Some proposal".to_string(),
+                })),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let expected_initial_deadline_seconds =
+        DEFAULT_TEST_START_TIMESTAMP_SECONDS + initial_expiration_seconds;
+    let initial_deadline_seconds = gov
+        .get_proposal_data(ProposalId { id: 1 })
+        .unwrap()
+        .wait_for_quiet_state
+        .as_ref()
+        .unwrap()
+        .current_deadline_timestamp_seconds;
+    assert_eq!(expected_initial_deadline_seconds, initial_deadline_seconds);
+    let mut time_since_proposal_seconds = 0;
+    for (i, neuron_vote) in neuron_votes.iter().enumerate().skip(1) {
+        if let Some(vote_and_time) = neuron_vote.vote_and_time {
+            fake_driver.advance_time_by(vote_and_time.1 - time_since_proposal_seconds);
+            time_since_proposal_seconds = vote_and_time.1;
+            fake::register_vote_assert_success(
+                &mut gov,
+                principal(i as u64),
+                NeuronId { id: i as u64 },
+                pid,
+                vote_and_time.0,
+            );
+        } else {
+            break;
+        }
+    }
+    (gov, pid, initial_deadline_seconds)
+}
+
+/// Simulates the situation in which there is a big voter close to the deadline
+/// that votes against the trend. Asserts the deadline has moved by at least
+/// half of the possible delay, but not more than the maximum.
+#[test]
+fn test_wfq_big_late_voter_delay() {
+    let initial_expiration_seconds = 1000;
+    let mut neuron_votes = vec![
+        NeuronVote {
+            vote_and_time: Some((Vote::Yes, 1)),
+            stake: 100_000_000,
+        },
+        NeuronVote {
+            vote_and_time: Some((Vote::No, 900)),
+            stake: 100_000_002,
+        },
+        NeuronVote {
+            vote_and_time: None,
+            stake: 10_000_000,
+        },
+    ];
+    let (gov, pid, initial_deadline_seconds) =
+        wait_for_quiet_test_helper(initial_expiration_seconds, &mut neuron_votes);
+    let deadline_after_test = gov
+        .get_proposal_data(pid)
+        .unwrap()
+        .wait_for_quiet_state
+        .as_ref()
+        .unwrap()
+        .current_deadline_timestamp_seconds;
+    assert!(
+        deadline_after_test
+            > initial_deadline_seconds + WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS / 2
+    );
+    assert!(
+        deadline_after_test < initial_deadline_seconds + WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS
+    );
+}
+
+/// Simulates a similar situation to the previous test, with the difference that
+/// the big voter reaches a majority, so there is no point in extending the
+/// deadline.
+#[test]
+fn test_wfq_majority_reached_no_delay() {
+    let initial_expiration_seconds = 1000;
+    let mut neuron_votes = vec![
+        NeuronVote {
+            vote_and_time: Some((Vote::Yes, 1)),
+            stake: 100_000_000,
+        },
+        NeuronVote {
+            vote_and_time: Some((Vote::No, 900)),
+            stake: 200_000_000,
+        },
+    ];
+    let (gov, pid, initial_deadline_seconds) =
+        wait_for_quiet_test_helper(initial_expiration_seconds, &mut neuron_votes);
+    let deadline_after_test = gov
+        .get_proposal_data(pid)
+        .unwrap()
+        .wait_for_quiet_state
+        .as_ref()
+        .unwrap()
+        .current_deadline_timestamp_seconds;
+    assert!(
+        deadline_after_test
+            < initial_deadline_seconds + WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS / 20
+    );
+}
+
+/// Simulates a situation in wich most of the voting is done at the beginning of
+/// the interval and there is no controversy. In such situation there should be
+/// no effect on the deadline.
+#[test]
+fn test_wfq_low_noise() {
+    let initial_expiration_seconds = 1000;
+    let mut neuron_votes = vec![
+        NeuronVote {
+            vote_and_time: Some((Vote::Yes, 10)),
+            stake: 100_000_000,
+        },
+        NeuronVote {
+            vote_and_time: Some((Vote::Yes, 100)),
+            stake: 100_000_000,
+        },
+        NeuronVote {
+            vote_and_time: Some((Vote::Yes, 250)),
+            stake: 100_000_000,
+        },
+        NeuronVote {
+            vote_and_time: None,
+            stake: 500_000_000,
+        },
+    ];
+    let (gov, pid, initial_deadline_seconds) =
+        wait_for_quiet_test_helper(initial_expiration_seconds, &mut neuron_votes);
+    let deadline_after_test = gov
+        .get_proposal_data(pid)
+        .unwrap()
+        .wait_for_quiet_state
+        .as_ref()
+        .unwrap()
+        .current_deadline_timestamp_seconds;
+    assert_eq!(deadline_after_test, initial_deadline_seconds);
+}
+
+/// simulates a situation in which there are multiple swings close to the
+/// deadline, extending it several times. Checks that the deadline has been
+/// extended more than the maximum (thus has been extended several times).
+#[test]
+fn test_wfq_multiple_delays() {
+    let initial_expiration_seconds = 1000;
+    let mut neuron_votes = vec![
+        NeuronVote {
+            vote_and_time: Some((Vote::No, 10)),
+            stake: 100_000_000,
+        },
+        NeuronVote {
+            vote_and_time: Some((Vote::Yes, 900)),
+            stake: 100_000_000,
+        },
+        NeuronVote {
+            vote_and_time: Some((Vote::No, 32200)),
+            stake: 100_000_000,
+        },
+        NeuronVote {
+            vote_and_time: Some((Vote::Yes, 51000)),
+            stake: 100_000_000,
+        },
+        NeuronVote {
+            vote_and_time: None,
+            stake: 1_000_000,
+        },
+    ];
+    let (gov, pid, initial_deadline_seconds) =
+        wait_for_quiet_test_helper(initial_expiration_seconds, &mut neuron_votes);
+    let deadline_after_test = gov
+        .get_proposal_data(pid)
+        .unwrap()
+        .wait_for_quiet_state
+        .as_ref()
+        .unwrap()
+        .current_deadline_timestamp_seconds;
+    assert!(
+        deadline_after_test > initial_deadline_seconds + WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS
+    );
+}
+
+/// Real voting data
+#[test]
+fn test_wfq_real_data() {
+    let initial_expiration_seconds = ONE_DAY_SECONDS;
+    let mut neuron_votes = {
+        vec![
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 0)),
+                stake: 353515574,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 234)),
+                stake: 97193797941,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 745)),
+                stake: 2042085059,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 1416)),
+                stake: 6142394930,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 1590)),
+                stake: 43161041120,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 2340)),
+                stake: 205898650248,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 2636)),
+                stake: 25698159726,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 3016)),
+                stake: 2466839372,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 3744)),
+                stake: 57217848385,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 3777)),
+                stake: 10707432666,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 4000)),
+                stake: 1281383126386,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 4056)),
+                stake: 7445855878,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 4453)),
+                stake: 129231509,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 5043)),
+                stake: 797768017,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 5696)),
+                stake: 206694565,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 5708)),
+                stake: 313220629653,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 6857)),
+                stake: 11928697907,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 7897)),
+                stake: 4363900439,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 8867)),
+                stake: 93273975020,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 9318)),
+                stake: 769701244,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 9640)),
+                stake: 2330877624,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 12482)),
+                stake: 10066532378,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 13796)),
+                stake: 41257526769,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 14671)),
+                stake: 201314526,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 14806)),
+                stake: 2765532993,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 15659)),
+                stake: 215871429,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 16716)),
+                stake: 2954208069,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 16889)),
+                stake: 175619576694,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 17201)),
+                stake: 2983554526,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::No, 17220)),
+                stake: 28132394322,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 18049)),
+                stake: 6965879980,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 19845)),
+                stake: 34841385360,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 19953)),
+                stake: 10447089553,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 20223)),
+                stake: 61615796398,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 20363)),
+                stake: 569604644,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 21112)),
+                stake: 3661210208,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 21586)),
+                stake: 845886788,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 21884)),
+                stake: 1015526376,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 22921)),
+                stake: 9073764808,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 22985)),
+                stake: 5149255219,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 24260)),
+                stake: 100427188890,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 24407)),
+                stake: 762337331757,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 24580)),
+                stake: 562111058,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 24597)),
+                stake: 1218235448,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 25344)),
+                stake: 1138636112,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 25356)),
+                stake: 845812914,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 26174)),
+                stake: 1852836133,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 26532)),
+                stake: 2802337531,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 28178)),
+                stake: 20243100661,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 28254)),
+                stake: 58313880182,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 28940)),
+                stake: 2980472480,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 29380)),
+                stake: 223138436,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 29428)),
+                stake: 2364063637,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 29484)),
+                stake: 108447910,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 29910)),
+                stake: 18929068975,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 30300)),
+                stake: 225405974033,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 30733)),
+                stake: 737832810,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 30953)),
+                stake: 1083769179347,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 31433)),
+                stake: 1387194081,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 32962)),
+                stake: 4012112347,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 33052)),
+                stake: 1677393462,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 33657)),
+                stake: 1915715598,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 34483)),
+                stake: 1843348693,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 36320)),
+                stake: 111612460,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 36640)),
+                stake: 5029065765,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 37785)),
+                stake: 12271928291,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 38974)),
+                stake: 228832259,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 40059)),
+                stake: 36253363346,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 40113)),
+                stake: 3194934230,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 41400)),
+                stake: 36178052230,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 41637)),
+                stake: 3035352446,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 43810)),
+                stake: 7649273646,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 44108)),
+                stake: 1010202599,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 44171)),
+                stake: 5631956256142,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 44776)),
+                stake: 22527023403,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 47001)),
+                stake: 37765872796,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 47973)),
+                stake: 3041822169,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 49349)),
+                stake: 2665743133,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 49403)),
+                stake: 509910798,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 49704)),
+                stake: 5199038411,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 50691)),
+                stake: 4516531632,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 53254)),
+                stake: 832702964,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 53943)),
+                stake: 4104424750,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 56791)),
+                stake: 998839134,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 57849)),
+                stake: 20157812743,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::No, 58321)),
+                stake: 6035055556,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::No, 58383)),
+                stake: 30705095819,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 58803)),
+                stake: 529001961,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 59307)),
+                stake: 43955612349,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 59897)),
+                stake: 3267094884,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 60101)),
+                stake: 154689073,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 60913)),
+                stake: 13572846359,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 62780)),
+                stake: 32588091077,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 62879)),
+                stake: 150145019,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 66011)),
+                stake: 1543084015,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 67048)),
+                stake: 1081324123442,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 67100)),
+                stake: 32884140137,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 67743)),
+                stake: 63393687969,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 70078)),
+                stake: 401310940,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 70944)),
+                stake: 444573411,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 71604)),
+                stake: 4692964656,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 76507)),
+                stake: 10639628606,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 77615)),
+                stake: 1820002001,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 78719)),
+                stake: 533205724612,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 82884)),
+                stake: 4029578423,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 87128)),
+                stake: 2914734043,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 87826)),
+                stake: 1680165373,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 87902)),
+                stake: 401670146,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 92758)),
+                stake: 4006259449,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 93841)),
+                stake: 52060043788,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 96009)),
+                stake: 6362738860,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 99285)),
+                stake: 360839700,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 100107)),
+                stake: 5516219444,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 100378)),
+                stake: 38680923792,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 102312)),
+                stake: 5729420131,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 105941)),
+                stake: 4637595636,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 110022)),
+                stake: 3099824893,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 110550)),
+                stake: 127837960,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 111492)),
+                stake: 7804039761,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 115478)),
+                stake: 804053523,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 117338)),
+                stake: 11046054044,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 117627)),
+                stake: 4167123167,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 119873)),
+                stake: 10679212233,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 123023)),
+                stake: 7067247894,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 124423)),
+                stake: 25205259292,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 124759)),
+                stake: 20193617638,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 128298)),
+                stake: 37509111570,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 134194)),
+                stake: 938369667,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 138752)),
+                stake: 1792599974,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 141300)),
+                stake: 470598467,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 141628)),
+                stake: 1228253327444,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 144399)),
+                stake: 1972124675,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 146500)),
+                stake: 221626989,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 149343)),
+                stake: 4368358092,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 150521)),
+                stake: 60091650988,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 150535)),
+                stake: 277604120,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 150826)),
+                stake: 1118685913,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 151448)),
+                stake: 3462015793628,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 151507)),
+                stake: 1852741327,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 152801)),
+                stake: 3441305840,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 153089)),
+                stake: 2000530886,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 153902)),
+                stake: 12644131151,
+            },
+            NeuronVote {
+                vote_and_time: Some((Vote::Yes, 154197)),
+                stake: 3123690897615595,
+            },
+        ]
+    };
+    let (gov, pid, initial_deadline_seconds) =
+        wait_for_quiet_test_helper(initial_expiration_seconds, &mut neuron_votes);
+    let deadline_after_test = gov
+        .get_proposal_data(pid)
+        .unwrap()
+        .wait_for_quiet_state
+        .as_ref()
+        .unwrap()
+        .current_deadline_timestamp_seconds;
+    //TODO(alejandro): How much should the deadline be extended in this case?
+    assert!(
+        deadline_after_test < initial_deadline_seconds + WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS
+    );
+}
+
+/// Tests a situation in which the majority changes with every vote, with a vote
+/// every 20s.
+#[test]
+fn test_wfq_constant_flipping() {
+    let initial_expiration_seconds = ONE_DAY_SECONDS;
+    let mut neuron_votes: Vec<NeuronVote> = vec![NeuronVote {
+        vote_and_time: Some((Vote::Yes, 1)),
+        stake: 10,
+    }];
+
+    for i in 1..ONE_DAY_SECONDS / 10 {
+        let vote: Vote;
+        if i % 2 == 0 {
+            vote = Vote::Yes;
+        } else {
+            vote = Vote::No;
+        }
+        neuron_votes.push(NeuronVote {
+            vote_and_time: Some((vote, 20 * i as u64)),
+            stake: 20,
+        })
+    }
+    let (gov, pid, initial_deadline_seconds) =
+        wait_for_quiet_test_helper(initial_expiration_seconds, &mut neuron_votes);
+    let deadline_after_test = gov
+        .get_proposal_data(pid)
+        .unwrap()
+        .wait_for_quiet_state
+        .as_ref()
+        .unwrap()
+        .current_deadline_timestamp_seconds;
+
+    assert!(deadline_after_test <= initial_deadline_seconds + 2 * ONE_DAY_SECONDS);
 }

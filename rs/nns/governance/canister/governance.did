@@ -235,6 +235,7 @@ type ProposalData = record {
   decided_timestamp_seconds : nat64;
   proposal : opt Proposal;
   proposer : opt NeuronId;
+  wait_for_quiet_state : opt WaitForQuietState;
   executed_timestamp_seconds : nat64;
 };
 type ProposalInfo = record {
@@ -245,6 +246,7 @@ type ProposalInfo = record {
   ballots : vec record { nat64; Ballot };
   proposal_timestamp_seconds : nat64;
   reward_event_round : nat64;
+  deadline_timestamp_seconds : opt nat64;
   failed_timestamp_seconds : nat64;
   reject_cost_e8s : nat64;
   latest_tally : opt Tally;
@@ -292,6 +294,7 @@ type Tally = record {
   timestamp_seconds : nat64;
 };
 type UpdateNodeProvider = record { reward_account : opt AccountIdentifier };
+type WaitForQuietState = record { current_deadline_timestamp_seconds : nat64 };
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
   claim_or_refresh_neuron_from_account : (ClaimOrRefreshNeuronFromAccount) -> (

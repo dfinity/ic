@@ -70,7 +70,7 @@ where
 {
     let clean_name = name.as_ref().replace("/i64", "").replace("/stable", "");
     let params_type = match name.as_ref() {
-        name if name.contains("64") || name.contains("128") => "i64",
+        name if name.contains("64") => "i64",
         _ => "i32",
     };
     let imports = format!(
@@ -455,8 +455,8 @@ lazy_static! {
             render(
                 LOOP_1M,
                 "canister_cycles_balance128",
-                NoParams(),
-                Results2(),
+               Param1(0),
+               NoResults(),
             ),
             11_000_004,
         ),
@@ -467,18 +467,13 @@ lazy_static! {
         ),
         (
             "ic0.msg_cycles_available128() loop/1M",
-            render(LOOP_1M, "msg_cycles_available128", NoParams(), Results2()),
+            render(LOOP_1M, "msg_cycles_available128", Param1(0), NoResults()),
             11_000_004,
         ),
         (
             "ic0.msg_cycles_accept() loop/1M",
             render(LOOP_1M, "msg_cycles_accept/i64", Param1(1), Result1()),
             12_000_004,
-        ),
-        (
-            "ic0.msg_cycles_accept128() loop/1M",
-            render(LOOP_1M, "msg_cycles_accept128", Params2(0, 1), Results2()),
-            13_000_004,
         ),
         (
             "ic0.data_certificate_present() loop/1M",

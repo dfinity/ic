@@ -5,11 +5,11 @@ use crate::registry_helper::RegistryHelper;
 use crate::release_package_provider::ReleasePackageProvider;
 use crate::replica_process::ReplicaProcess;
 use crate::utils;
-use ic_http_utils::file_downloader::check_file_hash;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_registry_common::local_store::LocalStoreImpl;
+use ic_registry_keys::make_unassigned_nodes_replica_version;
 use ic_types::consensus::catchup::CUPWithOriginalProtobuf;
 use ic_types::{
     crypto::threshold_sig::{ni_dkg::NiDkgTag, ThresholdSigPublicKey},
@@ -109,9 +109,16 @@ impl ReleasePackage {
         &self,
     ) -> NodeManagerResult<(ReplicaVersion, Option<(SubnetId, ThresholdSigPublicKey)>)> {
         let latest_registry_version = self.registry.get_latest_version();
-        let (latest_subnet_id, subnet_record) = self
-            .registry
-            .get_own_subnet_record(latest_registry_version)?;
+        let (latest_subnet_id, subnet_record) =
+            match self.registry.get_own_subnet_record(latest_registry_version) {
+                Ok(val) => val,
+                // TODO (cm): uncomment this part once the registry field can be updated and the
+                // code is ready to be tested.
+                // Err(NodeManagerError::NodeUnassignedError(_, _)) => {
+                //     return self.upgrade_as_unassigned().await
+                // }
+                Err(err) => return Err(err),
+            };
 
         // 0. Special case for when we are doing boostrap disaster recovery for
         // nns and replacing the local registry store. Because we replace the
@@ -364,47 +371,7 @@ impl ReleasePackage {
         if ReleasePackageProvider::release_package_is_available(&replica_version_record) {
             info!(self.logger, "Upgrade is guest-OS upgrade");
             // Download base OS upgrade
-            let download_path = self
-                .release_package_provider
-                .make_version_dir(new_replica_version)?
-                .join("base-os.tar.gz");
-            info!(self.logger, "Upgrading from {:?}", download_path);
-            let _ = self
-                .release_package_provider
-                .download_release_package(new_replica_version.clone())
-                .await?;
-            // Better safe than sorry.
-            check_file_hash(
-                &download_path,
-                &replica_version_record.release_package_sha256_hex,
-            )
-            .expect("Upgrade file with correct checksum needed here");
-
-            let mut script = self.ic_binary_dir.clone();
-            script.push("install-upgrade.sh");
-            let mut c = Command::new("sudo");
-            let out = c
-                .arg(script.into_os_string())
-                .arg(download_path)
-                .output()
-                .map_err(|e| NodeManagerError::file_command_error(e, &c))?;
-
-            info!(self.logger, "Installing upgrade {:?}", out);
-            if out.status.success() {
-                let mut c = Command::new("sudo");
-                let out = c
-                    .arg("reboot")
-                    .output()
-                    .map_err(|e| NodeManagerError::file_command_error(e, &c))?;
-
-                info!(self.logger, "Rebooting {:?}", out);
-
-                exit(42);
-            } else {
-                warn!(self.logger, "Upgrade has failed");
-
-                Err(NodeManagerError::UpgradeError("Upgrade failed".to_string()))
-            }
+            self.download_and_upgrade(new_replica_version).await
         } else {
             info!(self.logger, "Upgrade is replica/nodemanager upgrade");
             // Download the replica version referred to by the CUP with
@@ -474,6 +441,71 @@ impl ReleasePackage {
                 new_replica_version.clone(),
                 Some((latest_subnet_id, cup_public_key)),
             ))
+        }
+    }
+
+    #[allow(dead_code)]
+    async fn upgrade_as_unassigned<T>(&self) -> NodeManagerResult<T> {
+        let registry = &self.registry.registry_client;
+        match registry.get_value(
+            &make_unassigned_nodes_replica_version(),
+            registry.get_latest_version(),
+        ) {
+            Ok(Some(bytes)) => {
+                let version = String::from_utf8_lossy(bytes.as_ref());
+                let replica_version =
+                    ReplicaVersion::try_from(version.as_ref()).map_err(|err| {
+                        NodeManagerError::UpgradeError(format!(
+                            "Couldn't parse the replica version: {}",
+                            err
+                        ))
+                    })?;
+                self.download_and_upgrade(&replica_version).await
+            }
+            _ => Err(NodeManagerError::UpgradeError(
+                "No replica version for unassigned nodes found".to_string(),
+            )),
+        }
+    }
+
+    async fn download_and_upgrade<T>(
+        &self,
+        replica_version: &ReplicaVersion,
+    ) -> NodeManagerResult<T> {
+        let download_path = self
+            .release_package_provider
+            .make_version_dir(replica_version)?
+            .join("base-os.tar.gz");
+        info!(self.logger, "Upgrading from {:?}", download_path);
+        let _ = self
+            .release_package_provider
+            .download_release_package(replica_version.clone())
+            .await?;
+
+        let mut script = self.ic_binary_dir.clone();
+        script.push("install-upgrade.sh");
+        let mut c = Command::new("sudo");
+        let out = c
+            .arg(script.into_os_string())
+            .arg(download_path)
+            .output()
+            .map_err(|e| NodeManagerError::file_command_error(e, &c))?;
+
+        info!(self.logger, "Installing upgrade {:?}", out);
+        if out.status.success() {
+            let mut c = Command::new("sudo");
+            let out = c
+                .arg("reboot")
+                .output()
+                .map_err(|e| NodeManagerError::file_command_error(e, &c))?;
+
+            info!(self.logger, "Rebooting {:?}", out);
+
+            exit(42);
+        } else {
+            warn!(self.logger, "Upgrade has failed");
+
+            Err(NodeManagerError::UpgradeError("Upgrade failed".to_string()))
         }
     }
 

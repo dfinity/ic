@@ -48,34 +48,40 @@ impl Polynomial {
         Self::new(curve, vec![])
     }
 
-    /// Creates a random polynomial of specified degree
+    /// Creates a random polynomial with the specified number of coefficients
     pub fn random<R: CryptoRng + RngCore>(
         curve: EccCurveType,
-        degree: usize,
+        num_coefficients: usize,
         rng: &mut R,
     ) -> ThresholdEcdsaResult<Self> {
-        let mut coefficients = Vec::with_capacity(degree);
+        let mut coefficients = Vec::with_capacity(num_coefficients);
 
-        for _ in 0..=degree {
+        for _ in 0..num_coefficients {
             coefficients.push(EccScalar::random(curve, rng)?)
         }
 
         Self::new(curve, coefficients)
     }
 
-    /// Creates a random polynomial of specified degree with a fixed constant
-    /// element
+    /// Creates a random polynomial with the specified number of coefficients,
+    /// one of which is the specified constant
     pub fn random_with_constant<R: CryptoRng + RngCore>(
         constant: EccScalar,
-        degree: usize,
+        num_coefficients: usize,
         rng: &mut R,
     ) -> ThresholdEcdsaResult<Self> {
+        if num_coefficients == 0 {
+            return Err(ThresholdEcdsaError::InvalidArguments(
+                "Cannot have degree=0 polynomial with given constant".to_string(),
+            ));
+        }
+
         let curve = constant.curve_type();
-        let mut coefficients = Vec::with_capacity(degree);
+        let mut coefficients = Vec::with_capacity(num_coefficients);
 
         coefficients.push(constant);
 
-        for _ in 1..=degree {
+        for _ in 1..num_coefficients {
             coefficients.push(EccScalar::random(curve, rng)?)
         }
 
@@ -94,11 +100,35 @@ impl Polynomial {
         }
     }
 
-    /// Return the coefficients
+    /// Return the coefficients resized to the desired size
     ///
-    /// Our internal representation allows high zero coefficients,
-    /// which are removed here.
-    pub fn non_zero_coefficients(&self) -> Vec<EccScalar> {
+    /// The return value is zero-padded on the high coefficients as
+    /// necessary. It is ensured that no coefficients are truncated.
+    pub fn get_coefficients(
+        &self,
+        num_coefficients: usize,
+    ) -> ThresholdEcdsaResult<Vec<EccScalar>> {
+        if self.coefficients.len() > num_coefficients {
+            for c in &self.coefficients[num_coefficients..] {
+                if !c.is_zero() {
+                    return Err(ThresholdEcdsaError::InvalidArguments(
+                        "Too many coefficients".to_string(),
+                    ));
+                }
+            }
+        }
+
+        let mut coeff = Vec::with_capacity(num_coefficients);
+
+        for i in 0..num_coefficients {
+            coeff.push(self.coeff(i));
+        }
+
+        Ok(coeff)
+    }
+
+    /// Return the count of non-zero coefficients
+    pub fn non_zero_coefficients(&self) -> usize {
         let zeros = self
             .coefficients
             .iter()
@@ -106,8 +136,7 @@ impl Polynomial {
             .take_while(|c| c.is_zero())
             .count();
 
-        let len = self.coefficients.len() - zeros;
-        self.coefficients[0..len].to_vec()
+        self.coefficients.len() - zeros
     }
 
     /// Polynomial addition
@@ -242,5 +271,69 @@ impl Polynomial {
             }
         }
         Ok(poly)
+    }
+}
+
+/// A simple (discrete log) commitment to a polynomial
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SimpleCommitment {
+    pub points: Vec<EccPoint>,
+}
+
+impl SimpleCommitment {
+    /// Create a new simple commitment
+    ///
+    /// The polynomial must have at most num_coefficients coefficients
+    pub fn new(poly: &Polynomial, num_coefficients: usize) -> ThresholdEcdsaResult<Self> {
+        let curve = EccCurve::new(poly.curve_type());
+        let g = curve.generator_g()?;
+
+        let mut points = Vec::with_capacity(num_coefficients);
+
+        for coeff in poly.get_coefficients(num_coefficients)? {
+            points.push(g.scalar_mul(&coeff)?);
+        }
+
+        Ok(Self { points })
+    }
+}
+
+/// A Pederson commitment to a polynomial
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PedersenCommitment {
+    pub points: Vec<EccPoint>,
+}
+
+impl PedersenCommitment {
+    /// Create a new Pederson commitment
+    ///
+    /// Both polynomials must have at most num_coefficients coefficients.
+    /// The masking polynomial should be randomly generated with a secure
+    /// random number generator.
+    pub fn new(
+        p_values: &Polynomial,
+        p_masking: &Polynomial,
+        num_coefficients: usize,
+    ) -> ThresholdEcdsaResult<Self> {
+        if p_values.curve_type() != p_masking.curve_type() {
+            return Err(ThresholdEcdsaError::CurveMismatch);
+        }
+
+        let curve = EccCurve::new(p_values.curve_type());
+        let g = curve.generator_g()?;
+        let h = curve.generator_h()?;
+
+        let coeffs_values = p_values.get_coefficients(num_coefficients)?;
+        let coeffs_masking = p_masking.get_coefficients(num_coefficients)?;
+
+        let mut points = Vec::with_capacity(num_coefficients);
+
+        for (coeff_values, coeff_masking) in coeffs_values.iter().zip(coeffs_masking) {
+            // compute c = g*a + h*b
+            let c = g.mul_points(coeff_values, &h, &coeff_masking)?;
+            points.push(c);
+        }
+
+        Ok(Self { points })
     }
 }

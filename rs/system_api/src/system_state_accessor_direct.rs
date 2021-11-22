@@ -5,8 +5,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::CanisterStatus, page_map, Memory, NumWasmPages64, StateError,
-    SystemState,
+    canister_state::system_state::CanisterStatus, page_map, NumWasmPages64, StateError, SystemState,
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, Request},
@@ -43,35 +42,27 @@ pub struct SystemStateAccessorDirect {
     /// allows us to allocate a dirty page once and modify it in-place in
     /// subsequent calls.
     stable_memory_buffer: RefCell<page_map::Buffer>,
-    stable_memory_size: RefCell<NumWasmPages64>,
 }
 
 impl SystemStateAccessorDirect {
     pub fn new(
         system_state: SystemState,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        stable_memory: &Memory<NumWasmPages64>,
     ) -> Self {
         Self {
             cycles_account_manager: Arc::clone(&cycles_account_manager),
-            system_state: RefCell::new(system_state),
             stable_memory_buffer: RefCell::new(page_map::Buffer::new(
-                stable_memory.page_map.clone(),
+                system_state.stable_memory.page_map.clone(),
             )),
-            stable_memory_size: RefCell::new(stable_memory.size),
+            system_state: RefCell::new(system_state),
         }
     }
 
-    /// Drop the `SystemStateAccessorDirect` and get out it's resulting
-    /// `SystemState` and stable memory.
-    pub fn release_system_state(self) -> (SystemState, Memory<NumWasmPages64>) {
-        (
-            self.system_state.into_inner(),
-            Memory::new(
-                self.stable_memory_buffer.into_inner().into_page_map(),
-                self.stable_memory_size.into_inner(),
-            ),
-        )
+    pub fn release_system_state(self) -> SystemState {
+        let mut system_state = self.system_state.into_inner();
+        system_state.stable_memory.page_map =
+            self.stable_memory_buffer.into_inner().into_page_map();
+        system_state
     }
 }
 
@@ -143,7 +134,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
     }
 
     fn stable_size(&self) -> HypervisorResult<u32> {
-        let size = self.stable_memory_size.borrow().get();
+        let size = self.system_state.borrow().stable_memory.size.get();
         if size > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
             return Err(HypervisorError::Trapped(StableMemoryTooBigFor32Bit));
         }
@@ -160,7 +151,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
             return Ok(-1);
         }
 
-        *self.stable_memory_size.borrow_mut() =
+        self.system_state.borrow_mut().stable_memory.size =
             NumWasmPages64::from(initial_page_count + additional_pages);
 
         Ok(initial_page_count
@@ -208,7 +199,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
     }
 
     fn stable64_size(&self) -> HypervisorResult<u64> {
-        Ok(self.stable_memory_size.borrow().get())
+        Ok(self.system_state.borrow().stable_memory.size.get())
     }
 
     fn stable64_grow(&self, additional_pages: u64) -> HypervisorResult<i64> {
@@ -219,7 +210,7 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
             return Ok(-1);
         }
 
-        *self.stable_memory_size.borrow_mut() =
+        self.system_state.borrow_mut().stable_memory.size =
             NumWasmPages64::from(initial_page_count + additional_pages);
 
         Ok(initial_page_count as i64)

@@ -5,6 +5,7 @@
 /// As much as possible the naming of structs in this module should match the
 /// naming used in the [Interface
 /// Specification](https://sdk.dfinity.org/docs/interface-spec/index.html)
+mod body;
 mod catch_up_package;
 mod common;
 mod dashboard;
@@ -17,6 +18,7 @@ mod submit;
 mod types;
 
 use crate::{
+    body::BodyParserService,
     catch_up_package::CatchUpPackageService,
     dashboard::DashboardService,
     metrics::{
@@ -26,7 +28,6 @@ use crate::{
     status::StatusService,
     types::*,
 };
-use futures_util::stream::StreamExt;
 use http::request::Parts;
 use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
 use ic_base_thread::ObservableCountingSemaphore;
@@ -47,8 +48,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{NodeTopology, ReplicatedState};
 use ic_types::{
     canonical_error::{
-        internal_error, invalid_argument_error, out_of_range_error, resource_exhausted_error,
-        unknown_error, CanonicalError,
+        internal_error, invalid_argument_error, resource_exhausted_error, CanonicalError,
     },
     malicious_flags::MaliciousFlags,
     messages::{
@@ -60,6 +60,7 @@ use ic_types::{
 };
 use metrics::HttpHandlerMetrics;
 use rand::Rng;
+use std::convert::Infallible;
 use std::io::{Error, ErrorKind, Write};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -68,7 +69,6 @@ use std::time::Duration;
 use tempfile::NamedTempFile;
 use tokio::{
     net::{TcpListener, TcpStream},
-    sync::Mutex,
     time::{timeout, Instant},
 };
 use tower::{
@@ -115,12 +115,12 @@ const MAX_TCP_PEEK_TIMEOUT_SECS: u64 = 11;
 
 // Request with body size bigger than 'MAX_REQUEST_SIZE_BYTES' will be rejected
 // and appropriate error code will be returned to the user.
-const MAX_REQUEST_SIZE_BYTES: usize = 5 * 1024 * 1024; // 5MB
+pub(crate) const MAX_REQUEST_SIZE_BYTES: usize = 5 * 1024 * 1024; // 5MB
 
 // If the request body is not received/parsed within
 // 'MAX_REQUEST_RECEIVE_DURATION', then the request will be rejected and
 // appropriate error code will be returned to the user.
-const MAX_REQUEST_RECEIVE_DURATION: Duration = Duration::from_secs(300); // 5 min
+pub(crate) const MAX_REQUEST_RECEIVE_DURATION: Duration = Duration::from_secs(300); // 5 min
 
 // Number of times to try fetching the root delegation before giving up.
 const MAX_FETCH_DELEGATION_ATTEMPTS: u8 = 10;
@@ -142,9 +142,10 @@ struct HttpHandler {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
 
-    ingress_filter: Arc<Mutex<IngressFilterService>>,
-    ingress_sender: Arc<Mutex<IngressIngestionService>>,
-    query_handler: Arc<Mutex<QueryExecutionService>>,
+    body_parser: BodyParserService,
+    ingress_filter: IngressFilterService,
+    ingress_sender: IngressIngestionService,
+    query_handler: QueryExecutionService,
     read_state_service: LoadShed<ConcurrencyLimit<ReadStateService>>,
     status_service: LoadShed<ConcurrencyLimit<StatusService>>,
     dashboard_service: LoadShed<ConcurrencyLimit<DashboardService>>,
@@ -282,9 +283,9 @@ pub async fn start_server(
         subnet_type,
         nns_subnet_id,
         log.clone(),
-        Arc::new(Mutex::new(ingress_filter)),
-        Arc::new(Mutex::new(ingress_sender)),
-        Arc::new(Mutex::new(query_handler)),
+        ingress_filter,
+        ingress_sender,
+        query_handler,
         state_reader,
         ingress_verifier,
         consensus_pool_cache,
@@ -415,9 +416,9 @@ impl HttpHandler {
         subnet_type: SubnetType,
         nns_subnet_id: SubnetId,
         log: ReplicaLogger,
-        ingress_filter: Arc<Mutex<IngressFilterService>>,
-        ingress_sender: Arc<Mutex<IngressIngestionService>>,
-        query_handler: Arc<Mutex<QueryExecutionService>>,
+        ingress_filter: IngressFilterService,
+        ingress_sender: IngressIngestionService,
+        query_handler: QueryExecutionService,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         validator: Arc<dyn IngressSigVerifier + Send + Sync>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
@@ -452,6 +453,10 @@ impl HttpHandler {
             registry_client,
             state_reader,
             validator,
+            body_parser: BodyParserService::new(
+                MAX_REQUEST_SIZE_BYTES,
+                MAX_REQUEST_RECEIVE_DURATION,
+            ),
             ingress_filter,
             ingress_sender,
             query_handler,
@@ -478,7 +483,7 @@ fn create_main_service(
         let route_metrics = Arc::clone(&metrics);
         let route_http_handler = http_handler.clone();
         async move {
-            Ok::<_, BoxError>(
+            Ok::<_, Infallible>(
                 route(route_metrics, route_http_handler, app_layer, request, timer).await,
             )
         }
@@ -602,7 +607,7 @@ async fn serve_secure_connection(
 
 async fn route(
     metrics: Arc<HttpHandlerMetrics>,
-    http_handler: HttpHandler,
+    mut http_handler: HttpHandler,
     app_layer: AppLayer,
     request: Request<Body>,
     mut request_timer: HistogramVecTimer<'_, REQUESTS_NUM_LABELS>,
@@ -617,7 +622,15 @@ async fn route(
             request_timer.set_label(LABEL_TYPE, request_type.as_str());
             let parse_body_result = match request_type {
                 RequestType::Options | RequestType::RedirectToDashboard => Ok(Vec::new()),
-                _ => parse_body(body, MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES).await,
+                _ => {
+                    http_handler
+                        .body_parser
+                        .ready()
+                        .await
+                        .expect("The service must always be able to process requests")
+                        .call(body)
+                        .await
+                }
             };
             match parse_body_result {
                 Ok(parsed_body) => {
@@ -675,7 +688,7 @@ async fn route_to_handlers(
                 &http_handler.log,
                 Arc::clone(&http_handler.health_status),
                 Arc::clone(&http_handler.delegation_from_nns),
-                Arc::clone(&http_handler.query_handler),
+                http_handler.query_handler.clone(),
                 Arc::clone(&http_handler.validator),
                 Arc::clone(&http_handler.registry_client),
                 parsed_body,
@@ -701,8 +714,8 @@ async fn route_to_handlers(
                 http_handler.subnet_id,
                 Arc::clone(&http_handler.registry_client),
                 Arc::clone(&http_handler.validator),
-                Arc::clone(&http_handler.ingress_sender),
-                Arc::clone(&http_handler.ingress_filter),
+                http_handler.ingress_sender.clone(),
+                http_handler.ingress_filter.clone(),
                 http_handler.malicious_flags.clone(),
                 parsed_body,
             )
@@ -911,53 +924,6 @@ fn get_random_node_from_nns_subnet(
         })
 }
 
-async fn parse_body(
-    mut body: Body,
-    max_request_receive_duration: Duration,
-    max_request_body_size_bytes: usize,
-) -> Result<Vec<u8>, CanonicalError> {
-    // Read "content-length" bytes
-    // Parse the body only when needed.
-    let mut parsed_body = Vec::<u8>::new();
-    // Timeout when we are waiting for the next chunk because this wait depends on
-    // the user.
-    loop {
-        match timeout(max_request_receive_duration, body.next()).await {
-            Ok(chunk_option) => match chunk_option {
-                Some(chunk) => match chunk {
-                    Err(err) => {
-                        return Err(unknown_error(
-                            format!("Unexpected error while reading request: {}", err).as_str(),
-                        ));
-                    }
-                    Ok(bytes) => {
-                        if parsed_body.len() + bytes.len() > max_request_body_size_bytes {
-                            return Err(out_of_range_error(
-                                format!(
-                                    "The request body is bigger than {} bytes.",
-                                    max_request_body_size_bytes
-                                )
-                                .as_str(),
-                            ));
-                        }
-                        parsed_body.append(&mut bytes.to_vec());
-                    }
-                },
-                // End of stream.
-                None => {
-                    return Ok(parsed_body);
-                }
-            },
-            Err(_err) => {
-                return Err(out_of_range_error(&format!(
-                    "The request body was not received within {:?} seconds.",
-                    max_request_receive_duration
-                )));
-            }
-        }
-    }
-}
-
 // Here we perform a few checks:
 //  * Is the method correct, e.g. POST?
 //  * Is there a "content-type: application/cbor" header?
@@ -1021,96 +987,4 @@ fn redirect_to_dashboard() -> Response<Body> {
         hyper::header::HeaderValue::from_static(HTTP_DASHBOARD_URL_PATH),
     );
     response
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rand::{distributions::Alphanumeric, thread_rng, Rng};
-
-    #[tokio::test]
-    async fn test_succesfully_parse_small_body() {
-        let (mut sender, body) = Body::channel();
-        assert!(sender
-            .send_data(bytes::Bytes::from("hello world"))
-            .await
-            .is_ok());
-        // We need to drop the channel so 'parse_body' will know there aren't any new
-        // chunks. If we remove this line the test should run forever.
-        std::mem::drop(sender);
-        assert_eq!(
-            parse_body(body, MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES)
-                .await
-                .ok(),
-            Some(Vec::<u8>::from("hello world"))
-        );
-    }
-
-    #[tokio::test]
-    async fn test_stop_and_return_error_when_parsing_big_body() {
-        let (mut sender, body) = Body::channel();
-        let chunk_size: usize = 1024;
-        let rand_string: String = thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(chunk_size)
-            .map(char::from)
-            .collect();
-
-        let jh = tokio::task::spawn(parse_body(
-            body,
-            MAX_REQUEST_RECEIVE_DURATION,
-            MAX_REQUEST_SIZE_BYTES,
-        ));
-        for _i in 0..(MAX_REQUEST_SIZE_BYTES / chunk_size) {
-            assert!(sender
-                .send_data(bytes::Bytes::from(rand_string.clone()))
-                .await
-                .is_ok());
-        }
-        // We are at the limit, so sending an extra byte will succeed and cause the
-        // parse_body function to return.
-        assert!(sender.send_data(bytes::Bytes::from("a")).await.is_ok());
-        let response = jh
-            .await
-            .unwrap()
-            .expect_err("parse_body must have returned an Err.");
-        assert_eq!(
-            response,
-            out_of_range_error(&format!(
-                "The request body is bigger than {} bytes.",
-                MAX_REQUEST_SIZE_BYTES
-            ))
-        );
-        // Check we can't send more data. The other end of the channel - the body - is
-        // dropped.
-        assert!(sender
-            .send_data(bytes::Bytes::from(rand_string.clone()))
-            .await
-            .is_err());
-    }
-
-    #[tokio::test]
-    async fn test_time_out_during_body_parsing() {
-        let (mut sender, body) = Body::channel();
-        let time_to_wait = Duration::from_secs(5);
-        let jh = tokio::task::spawn(parse_body(body, time_to_wait, MAX_REQUEST_SIZE_BYTES));
-        assert!(sender
-            .send_data(bytes::Bytes::from("hello world"))
-            .await
-            .is_ok());
-        // If we drop the sender here the test will fail because parse_body has all the
-        // chunks so it won't timeout.
-        tokio::time::sleep(time_to_wait + Duration::from_secs(1)).await;
-        let response = jh
-            .await
-            .unwrap()
-            .expect_err("parse_body must have returned an Err.");
-        assert_eq!(
-            response,
-            out_of_range_error(&format!(
-                "The request body was not received within {:?} seconds.",
-                time_to_wait
-            ))
-        );
-    }
 }

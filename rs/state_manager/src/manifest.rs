@@ -22,6 +22,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, Weak};
 
 pub const STATE_SYNC_V1: u32 = 1;
 
@@ -117,6 +118,7 @@ impl fmt::Display for ChunkValidationError {
 impl std::error::Error for ChunkValidationError {}
 
 /// Relative path to a file and the size of the file.
+#[derive(Clone)]
 struct FileWithSize(PathBuf, u64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -209,8 +211,130 @@ fn update_metrics(metrics: &ManifestMetrics, chunk_actions: &[ChunkAction], chun
     metrics.reused_chunk_bytes.inc_by(reused_bytes);
 }
 
+// Computes file_table and chunk_table of a manifest using a parallel algorithm.
+// All the parallel work is spawned in the specified thread pool.
+fn build_chunk_table_parallel(
+    thread_pool: &mut scoped_threadpool::Pool,
+    metrics: &ManifestMetrics,
+    log: &ReplicaLogger,
+    root: &Path,
+    files: Vec<FileWithSize>,
+    max_chunk_size: u32,
+    chunk_actions: Vec<ChunkAction>,
+) -> (Vec<FileInfo>, Vec<ChunkInfo>) {
+    // Build a chunk table and file table filled with blank hashes.
+    let mut chunk_table: Vec<ChunkInfo> = {
+        let mut chunks = Vec::with_capacity(chunk_actions.len());
+        for (file_index, FileWithSize(_, size_bytes)) in files.iter().enumerate() {
+            let n = count_chunks(*size_bytes, max_chunk_size);
+            for i in 0..n {
+                let offset = i as u64 * max_chunk_size as u64;
+                let size_bytes = (size_bytes - offset).min(max_chunk_size as u64) as u32;
+                chunks.push(ChunkInfo {
+                    file_index: file_index as u32,
+                    offset,
+                    size_bytes,
+                    hash: [0; 32],
+                });
+            }
+        }
+        chunks
+    };
+
+    assert_eq!(chunk_table.len(), chunk_actions.len());
+
+    let mut file_table: Vec<FileInfo> = files
+        .into_iter()
+        .map(|FileWithSize(relative_path, size_bytes)| FileInfo {
+            relative_path,
+            size_bytes,
+            hash: [0; 32],
+        })
+        .collect();
+
+    // We cache the files that are currently being hashed to avoid opening them
+    // individually for each chunk. The values in the cache are weak references,
+    // so the last thread that has a strong reference will release the value
+    // and close the corresponding file.
+    // This way we keep the number of files opened at the same time
+    // low (it doesn't exceed the number of the threads).
+    let file_cache: Arc<Mutex<HashMap<u32, Weak<ScopedMmap>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+
+    // Compute real chunk hashes in parallel.
+    // NB. We must populate hashes of all the chunks in a file before we compute
+    // file hashes.
+    thread_pool.scoped(|scope| {
+        for (chunk_idx, chunk_info) in chunk_table.iter_mut().enumerate() {
+            let chunk_action = chunk_actions[chunk_idx].clone();
+            let file_path = root.join(&file_table[chunk_info.file_index as usize].relative_path);
+            let file_size = file_table[chunk_info.file_index as usize].size_bytes;
+            let file_cache = Arc::clone(&file_cache);
+            scope.execute(move || {
+                let mmap: Arc<ScopedMmap> = if file_size > max_chunk_size as u64 {
+                    // We only use the file cache if there is more than one chunk in the file,
+                    // otherwise the synchronization cost is unnecessary.
+                    let mut cache = file_cache.lock().unwrap();
+                    match cache.get(&chunk_info.file_index).and_then(Weak::upgrade) {
+                        Some(mmap) => mmap,
+                        None => {
+                            let mmap = Arc::new(
+                                ScopedMmap::from_path(&file_path).expect("failed to open file"),
+                            );
+                            cache.insert(chunk_info.file_index, Arc::downgrade(&mmap));
+                            mmap
+                        }
+                    }
+                } else {
+                    Arc::new(ScopedMmap::from_path(&file_path).expect("failed to open file"))
+                };
+                let data = mmap.as_slice();
+
+                let mut hasher = chunk_hasher();
+                let chunk_start = chunk_info.offset as usize;
+                let chunk_end = chunk_start + chunk_info.size_bytes as usize;
+                hasher.write(&data[chunk_start..chunk_end]);
+                chunk_info.hash = hasher.finish();
+
+                match chunk_action {
+                    ChunkAction::Recompute => (),
+                    ChunkAction::UseHash(precomputed_hash) => {
+                        debug_assert_eq!(chunk_info.hash, precomputed_hash);
+                        if chunk_info.hash != precomputed_hash {
+                            metrics.reused_chunk_hash_error_count.inc();
+                            warn!(
+                                log,
+                                "Hash mismatch in chunk with index {} in file {}, recomputed hash {:?}, reused hash {:?}",
+                                chunk_idx,
+                                file_path.display(),
+                                chunk_info.hash,
+                                precomputed_hash
+                            );
+                        }
+                    }
+                }
+            });
+        }
+    });
+
+    // After we computed all the chunk hashes, we can finally compute file hashes.
+    for (file_index, file_info) in file_table.iter_mut().enumerate() {
+        let mut hasher = file_hasher();
+        let chunk_range = file_chunk_range(&chunk_table, file_index);
+        (chunk_range.len() as u32).update_hash(&mut hasher);
+        for chunk_idx in chunk_range {
+            write_chunk_hash(&mut hasher, &chunk_table[chunk_idx])
+        }
+        file_info.hash = hasher.finish();
+    }
+
+    update_metrics(metrics, &chunk_actions, &chunk_table);
+
+    (file_table, chunk_table)
+}
+
 /// Build a chunk table from the file table.
-fn build_chunk_table(
+fn build_chunk_table_sequential(
     metrics: &ManifestMetrics,
     log: &ReplicaLogger,
     root: &Path,
@@ -384,23 +508,10 @@ fn files_with_sizes(
 /// Returns the range of chunks belonging to the file with the specified index.
 ///
 /// If the file is empty and doesn't have any chunks, returns an empty range.
-#[allow(clippy::reversed_empty_ranges)]
-pub fn file_chunk_range(manifest: &Manifest, file_index: usize) -> Range<usize> {
-    if let Some(start) = manifest
-        .chunk_table
-        .iter()
-        .position(|c| c.file_index as usize == file_index)
-    {
-        match manifest.chunk_table[start..]
-            .iter()
-            .position(|c| c.file_index as usize != file_index)
-        {
-            Some(len) => start..(start + len),
-            None => start..manifest.chunk_table.len(),
-        }
-    } else {
-        0..0
-    }
+pub fn file_chunk_range(chunk_table: &[ChunkInfo], file_index: usize) -> Range<usize> {
+    let start = chunk_table.partition_point(|c| (c.file_index as usize) < file_index);
+    let end = chunk_table.partition_point(|c| (c.file_index as usize) < file_index + 1);
+    start..end
 }
 
 /// Makes a "hash plan": an instruction how to compute the hash of each chunk of
@@ -568,6 +679,7 @@ fn dirty_pages_to_dirty_chunks(
 
 /// Computes manifest for the checkpoint located at `checkpoint_root_path`.
 pub fn compute_manifest(
+    thread_pool: &mut scoped_threadpool::Pool,
     metrics: &ManifestMetrics,
     log: &ReplicaLogger,
     version: u32,
@@ -607,20 +719,62 @@ pub fn compute_manifest(
         None => default_hash_plan(&files, max_chunk_size),
     };
 
-    let (file_table, chunk_table) = build_chunk_table(
-        metrics,
-        log,
-        checkpoint_root_path,
-        files,
-        max_chunk_size,
-        chunk_actions,
-    );
+    if files
+        .iter()
+        .any(|FileWithSize(path, _)| path.ends_with("state_file"))
+    {
+        // The parallel algorithm doesn't handle COW memory manager, which is a subject
+        // for removal anyway.
+        let (file_table, chunk_table) = build_chunk_table_sequential(
+            metrics,
+            log,
+            checkpoint_root_path,
+            files,
+            max_chunk_size,
+            chunk_actions,
+        );
+        Ok(Manifest {
+            version,
+            file_table,
+            chunk_table,
+        })
+    } else {
+        #[cfg(debug_assertions)]
+        let (seq_file_table, seq_chunk_table) = {
+            let metrics_registry = ic_metrics::MetricsRegistry::new();
+            let metrics = ManifestMetrics::new(&metrics_registry);
+            build_chunk_table_sequential(
+                &metrics,
+                log,
+                checkpoint_root_path,
+                files.clone(),
+                max_chunk_size,
+                chunk_actions.clone(),
+            )
+        };
 
-    Ok(Manifest {
-        version,
-        file_table,
-        chunk_table,
-    })
+        let (file_table, chunk_table) = build_chunk_table_parallel(
+            thread_pool,
+            metrics,
+            log,
+            checkpoint_root_path,
+            files,
+            max_chunk_size,
+            chunk_actions,
+        );
+
+        #[cfg(debug_assertions)]
+        {
+            assert_eq!(file_table, seq_file_table);
+            assert_eq!(chunk_table, seq_chunk_table);
+        }
+
+        Ok(Manifest {
+            version,
+            file_table,
+            chunk_table,
+        })
+    }
 }
 
 /// Validates manifest contents and checks that the hash of the manifest matches

@@ -209,9 +209,9 @@ pub trait BalancesStore {
     // Update balance for an account using function f.
     // Its arg is previous balance or None if not found and
     // return value is the new balance.
-    fn update<F>(&mut self, acc: AccountIdentifier, action_on_acc: F)
+    fn update<F, E>(&mut self, acc: AccountIdentifier, action_on_acc: F) -> Result<ICPTs, E>
     where
-        F: FnMut(Option<&ICPTs>) -> ICPTs;
+        F: FnMut(Option<&ICPTs>) -> Result<ICPTs, E>;
 }
 
 impl BalancesStore for HashMap<AccountIdentifier, ICPTs> {
@@ -219,27 +219,37 @@ impl BalancesStore for HashMap<AccountIdentifier, ICPTs> {
         self.get(k)
     }
 
-    fn update<F>(&mut self, k: AccountIdentifier, mut f: F)
+    fn update<F, E>(&mut self, k: AccountIdentifier, mut f: F) -> Result<ICPTs, E>
     where
-        F: FnMut(Option<&ICPTs>) -> ICPTs,
+        F: FnMut(Option<&ICPTs>) -> Result<ICPTs, E>,
     {
         match self.entry(k) {
             Occupied(mut entry) => {
-                let new_v = f(Some(entry.get()));
+                let new_v = f(Some(entry.get()))?;
                 if new_v != ICPTs::ZERO {
                     *entry.get_mut() = new_v;
                 } else {
                     entry.remove_entry();
                 }
+                Ok(new_v)
             }
             Vacant(entry) => {
-                let new_v = f(None);
+                let new_v = f(None)?;
                 if new_v != ICPTs::ZERO {
                     entry.insert(new_v);
                 }
+                Ok(new_v)
             }
-        };
+        }
     }
+}
+
+/// An error returned by `Balances` if the debit operation fails.
+#[derive(Debug)]
+pub enum BalanceError {
+    /// An error indicating that the account doesn't hold enough funds for
+    /// completing the transaction.
+    InsufficientFunds { balance: ICPTs },
 }
 
 /// Describes the state of users accounts at the tip of the chain
@@ -265,7 +275,7 @@ impl<S: Default + BalancesStore> Balances<S> {
         }
     }
 
-    pub fn add_payment(&mut self, payment: &Operation) {
+    pub fn add_payment(&mut self, payment: &Operation) -> Result<(), BalanceError> {
         match payment {
             Operation::Transfer {
                 from,
@@ -274,12 +284,12 @@ impl<S: Default + BalancesStore> Balances<S> {
                 fee,
             } => {
                 let debit_amount = (*amount + *fee).expect("amount + fee failed");
-                self.debit(from, debit_amount);
+                self.debit(from, debit_amount)?;
                 self.credit(to, *amount);
                 self.icpt_pool += *fee;
             }
             Operation::Burn { from, amount, .. } => {
-                self.debit(from, *amount);
+                self.debit(from, *amount)?;
                 self.icpt_pool += *amount;
             }
             Operation::Mint { to, amount, .. } => {
@@ -287,38 +297,42 @@ impl<S: Default + BalancesStore> Balances<S> {
                 self.icpt_pool -= *amount;
             }
         }
+        Ok(())
     }
 
     // Debiting an account will automatically remove it from the `inner`
     // HashMap if the balance reaches zero.
-    pub fn debit(&mut self, from: &AccountIdentifier, amount: ICPTs) {
+    pub fn debit(
+        &mut self,
+        from: &AccountIdentifier,
+        amount: ICPTs,
+    ) -> Result<ICPTs, BalanceError> {
         self.store.update(*from, |prev| {
             let mut balance = match prev {
                 Some(x) => *x,
-                None => panic!("You tried to withdraw funds from empty account {}", from),
+                None => {
+                    return Err(BalanceError::InsufficientFunds {
+                        balance: ICPTs::ZERO,
+                    });
+                }
             };
             if balance < amount {
-                panic!(
-                    "You have tried to spend more than the balance of account {}",
-                    from
-                );
+                return Err(BalanceError::InsufficientFunds { balance });
             }
+
             balance -= amount;
-            balance
-        });
+            Ok(balance)
+        })
     }
 
     // Crediting an account will automatically add it to the `inner` HashMap if
     // not already present.
     pub fn credit(&mut self, to: &AccountIdentifier, amount: ICPTs) {
-        self.store.update(*to, |prev| {
-            let mut balance = match prev {
-                Some(x) => *x,
-                None => ICPTs::ZERO,
-            };
-            balance += amount;
-            balance
-        });
+        self.store
+            .update(*to, |prev| -> Result<ICPTs, std::convert::Infallible> {
+                Ok((amount + *prev.unwrap_or(&ICPTs::ZERO)).expect("integer overflow"))
+            })
+            .unwrap();
     }
 
     pub fn account_balance(&self, account: &AccountIdentifier) -> ICPTs {
@@ -729,7 +743,7 @@ impl Ledger {
         memo: Memo,
         payment: Operation,
         created_at_time: Option<TimeStamp>,
-    ) -> Result<(BlockHeight, HashOf<EncodedBlock>), String> {
+    ) -> Result<(BlockHeight, HashOf<EncodedBlock>), TransferError> {
         self.add_payment_with_timestamp(memo, payment, created_at_time, dfn_core::api::now().into())
     }
 
@@ -741,17 +755,19 @@ impl Ledger {
         payment: Operation,
         created_at_time: Option<TimeStamp>,
         now: TimeStamp,
-    ) -> Result<(BlockHeight, HashOf<EncodedBlock>), String> {
+    ) -> Result<(BlockHeight, HashOf<EncodedBlock>), TransferError> {
         self.purge_old_transactions(now);
 
         let created_at_time = created_at_time.unwrap_or(now);
 
         if created_at_time + self.transaction_window < now {
-            return Err("Rejecting expired transaction.".to_owned());
+            return Err(TransferError::TxTooOld {
+                allowed_window_nanos: self.transaction_window.as_nanos() as u64,
+            });
         }
 
         if created_at_time > now + ic_types::ingress::PERMITTED_DRIFT {
-            return Err("Rejecting transaction with timestamp in the future.".to_owned());
+            return Err(TransferError::TxCreatedInFuture);
         }
 
         let transaction = Transaction {
@@ -762,16 +778,25 @@ impl Ledger {
 
         let transaction_hash = transaction.hash();
 
-        if self.transactions_by_hash.contains_key(&transaction_hash) {
-            return Err("Transaction already exists on chain.".to_owned());
+        if let Some(block_height) = self.transactions_by_hash.get(&transaction_hash) {
+            return Err(TransferError::TxDuplicate {
+                duplicate_of: *block_height,
+            });
         }
 
         let block = Block::new_from_transaction(self.blockchain.last_hash, transaction, now);
         let block_timestamp = block.timestamp;
 
-        self.balances.add_payment(&payment);
+        self.balances.add_payment(&payment).map_err(|e| match e {
+            BalanceError::InsufficientFunds { balance } => {
+                TransferError::InsufficientFunds { balance }
+            }
+        })?;
 
-        let height = self.blockchain.add_block(block)?;
+        let height = self
+            .blockchain
+            .add_block(block)
+            .expect("failed to add block");
 
         self.transactions_by_hash.insert(transaction_hash, height);
         self.transactions_by_height.push_back(TransactionInfo {
@@ -793,7 +818,9 @@ impl Ledger {
                 from: account,
                 amount: balance,
             };
-            self.balances.add_payment(&operation);
+            self.balances
+                .add_payment(&operation)
+                .expect("failed to burn funds that must have existed");
             self.blockchain
                 .add_block(Block::new_from_transaction(
                     self.blockchain.last_hash,
@@ -838,7 +865,9 @@ impl Ledger {
     /// This adds a pre created block to the ledger. This should only be used
     /// during canister migration or upgrade
     pub fn add_block(&mut self, block: Block) -> Result<BlockHeight, String> {
-        self.balances.add_payment(&block.transaction.operation);
+        self.balances
+            .add_payment(&block.transaction.operation)
+            .map_err(|e| format!("failed to execute transfer {:?}: {:?}", block, e))?;
         self.blockchain.add_block(block)
     }
 
@@ -939,12 +968,7 @@ impl Ledger {
     }
 
     pub fn can_send(&self, principal_id: &PrincipalId) -> bool {
-        principal_id.is_self_authenticating()
-            || LEDGER
-                .read()
-                .unwrap()
-                .send_whitelist
-                .contains(&CanisterId::new(*principal_id).unwrap())
+        !principal_id.is_anonymous()
     }
 
     /// Check if it's allowed to notify this canister
@@ -1107,7 +1131,8 @@ mod tests {
         b.add_payment(&Operation::Mint {
             to: canister,
             amount: ICPTs::from_e8s(1000),
-        });
+        })
+        .unwrap();
         // verify that an account entry exists for the `canister`
         assert_eq!(b.store.get(&canister), Some(&ICPTs::from_e8s(1000)));
         // make 2 transfers that empty the account
@@ -1117,7 +1142,8 @@ mod tests {
                 to: target_canister,
                 amount: ICPTs::from_e8s(400),
                 fee: ICPTs::from_e8s(100),
-            });
+            })
+            .unwrap();
         }
         // target canister's balance adds up
         assert_eq!(b.store.get(&target_canister), Some(&ICPTs::from_e8s(800)));
@@ -1133,7 +1159,8 @@ mod tests {
             to: canister,
             amount: ICPTs::from_e8s(0),
             fee: ICPTs::from_e8s(100),
-        });
+        })
+        .unwrap();
         // No new account should have been created
         assert_eq!(b.store.len(), 1);
         // and the fee should have been taken from sender
@@ -1142,7 +1169,8 @@ mod tests {
         b.add_payment(&Operation::Mint {
             to: canister,
             amount: ICPTs::from_e8s(0),
-        });
+        })
+        .unwrap();
 
         // No new account should have been created
         assert_eq!(b.store.len(), 1);
@@ -1150,7 +1178,8 @@ mod tests {
         b.add_payment(&Operation::Burn {
             from: target_canister,
             amount: ICPTs::from_e8s(700),
-        });
+        })
+        .unwrap();
 
         // And burn should have exhausted the target_canister
         assert_eq!(b.store.len(), 0);
@@ -1169,7 +1198,8 @@ mod tests {
         b.add_payment(&Operation::Mint {
             to: uid0,
             amount: ICPTs::from_e8s(mint_amount),
-        });
+        })
+        .unwrap();
         assert_eq!(b.icpt_pool.get_e8s(), pool_start_balance - mint_amount);
         assert_eq!(b.account_balance(&uid0).get_e8s(), mint_amount);
 
@@ -1178,7 +1208,8 @@ mod tests {
             to: uid1,
             amount: ICPTs::from_e8s(send_amount),
             fee: ICPTs::from_e8s(send_fee),
-        });
+        })
+        .unwrap();
 
         assert_eq!(
             b.icpt_pool.get_e8s(),
@@ -1286,14 +1317,18 @@ mod tests {
 
         let now = dfn_core::api::now().into();
 
-        assert!(state
-            .add_payment(
-                Memo(1),
-                transfer.clone(),
-                Some(now - state.transaction_window - Duration::from_secs(1))
-            )
-            .unwrap_err()
-            .contains("expired transaction"));
+        assert_eq!(
+            TransferError::TxTooOld {
+                allowed_window_nanos: Duration::from_secs(24 * 60 * 60).as_nanos() as u64,
+            },
+            state
+                .add_payment(
+                    Memo(1),
+                    transfer.clone(),
+                    Some(now - state.transaction_window - Duration::from_secs(1))
+                )
+                .unwrap_err()
+        );
 
         state
             .add_payment(
@@ -1303,20 +1338,23 @@ mod tests {
             )
             .unwrap();
 
-        assert!(state
-            .add_payment(
-                Memo(3),
-                transfer.clone(),
-                Some(now + Duration::from_secs(120))
-            )
-            .unwrap_err()
-            .contains("in the future"));
+        assert_eq!(
+            TransferError::TxCreatedInFuture,
+            state
+                .add_payment(
+                    Memo(3),
+                    transfer.clone(),
+                    Some(now + Duration::from_secs(120))
+                )
+                .unwrap_err()
+        );
 
         state.add_payment(Memo(4), transfer, Some(now)).unwrap();
     }
 
     /// Check that block timestamps don't go backwards.
     #[test]
+    #[should_panic(expected = "timestamp is older")]
     fn monotonic_timestamps() {
         let mut state = Ledger::default();
 
@@ -1331,15 +1369,14 @@ mod tests {
 
         state.add_payment(Memo(2), transfer.clone(), None).unwrap();
 
-        assert!(state
+        state
             .add_payment_with_timestamp(
                 Memo(2),
                 transfer,
                 None,
                 state.blockchain.last_timestamp - Duration::from_secs(1),
             )
-            .unwrap_err()
-            .contains("timestamp is older"));
+            .unwrap();
     }
 
     /// Check that duplicate transactions during transaction_window
@@ -1407,10 +1444,12 @@ mod tests {
             3
         );
 
-        assert!(state
-            .add_payment(Memo::default(), transfer.clone(), Some(now))
-            .unwrap_err()
-            .contains("Transaction already exists on chain"));
+        assert_eq!(
+            TransferError::TxDuplicate { duplicate_of: 0 },
+            state
+                .add_payment(Memo::default(), transfer.clone(), Some(now))
+                .unwrap_err()
+        );
 
         // A day later we should have forgotten about these transactions.
         let t = state.blockchain.last_timestamp + Duration::from_secs(1);
@@ -1427,15 +1466,17 @@ mod tests {
             4
         );
 
-        assert!(state
-            .add_payment_with_timestamp(
-                Memo::default(),
-                transfer,
-                Some(t),
-                state.blockchain.last_timestamp + Duration::from_secs(1),
-            )
-            .unwrap_err()
-            .contains("Transaction already exists on chain"));
+        assert_eq!(
+            TransferError::TxDuplicate { duplicate_of: 4 },
+            state
+                .add_payment_with_timestamp(
+                    Memo::default(),
+                    transfer,
+                    Some(t),
+                    state.blockchain.last_timestamp + Duration::from_secs(1),
+                )
+                .unwrap_err()
+        );
     }
 
     #[test]
@@ -1583,6 +1624,80 @@ pub struct SendArgs {
     pub created_at_time: Option<TimeStamp>,
 }
 
+impl From<SendArgs> for TransferArgs {
+    fn from(
+        SendArgs {
+            memo,
+            amount,
+            fee,
+            from_subaccount,
+            to,
+            created_at_time,
+        }: SendArgs,
+    ) -> Self {
+        Self {
+            memo,
+            amount,
+            fee,
+            from_subaccount,
+            to: to.to_address(),
+            created_at_time,
+        }
+    }
+}
+
+pub type Address = [u8; 32];
+
+/// Argument taken by the transfer endpoint
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct TransferArgs {
+    pub memo: Memo,
+    pub amount: ICPTs,
+    pub fee: ICPTs,
+    pub from_subaccount: Option<Subaccount>,
+    pub to: Address,
+    pub created_at_time: Option<TimeStamp>,
+}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub enum TransferError {
+    BadFee { expected_fee: ICPTs },
+    InsufficientFunds { balance: ICPTs },
+    TxTooOld { allowed_window_nanos: u64 },
+    TxCreatedInFuture,
+    TxDuplicate { duplicate_of: BlockHeight },
+}
+
+impl fmt::Display for TransferError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BadFee { expected_fee } => {
+                write!(f, "transaction fee should be {}", expected_fee)
+            }
+            Self::InsufficientFunds { balance } => {
+                write!(
+                    f,
+                    "the debit account doesn't have enough funds to complete the transaction, current balance: {}",
+                    balance
+                )
+            }
+            Self::TxTooOld {
+                allowed_window_nanos,
+            } => write!(
+                f,
+                "transaction is older than {} seconds",
+                allowed_window_nanos / 1_000_000_000
+            ),
+            Self::TxCreatedInFuture => write!(f, "transaction's created_at_time is in future"),
+            Self::TxDuplicate { duplicate_of } => write!(
+                f,
+                "transaction is a duplicate of another transaction in block {}",
+                duplicate_of
+            ),
+        }
+    }
+}
+
 /// Struct sent by the ledger canister when it notifies a recipient of a payment
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct TransactionNotification {
@@ -1629,7 +1744,13 @@ impl NotifyCanisterArgs {
     }
 }
 
-/// Argument taken by the account_balance endpoint
+/// Arguments taken by the account_balance candid endpoint.
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct BinaryAccountBalanceArgs {
+    pub account: Address,
+}
+
+/// Argument taken by the account_balance_dfx endpoint
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct AccountBalanceArgs {
     pub account: AccountIdentifier,

@@ -126,7 +126,7 @@ fn compute_priority(
             } else if height < beacon_height + Height::from(LOOK_AHEAD) {
                 Fetch
             } else {
-                Later
+                Stash
             }
         }
         ConsensusMessageAttribute::NotarizationShare(_) => {
@@ -136,7 +136,7 @@ fn compute_priority(
             } else if height < notarized_height + Height::from(LOOK_AHEAD) {
                 Fetch
             } else {
-                Later
+                Stash
             }
         }
         ConsensusMessageAttribute::Notarization(block_hash, _) => {
@@ -152,7 +152,7 @@ fn compute_priority(
                 else if block_sets.notarized_unvalidated.contains(block_hash)
                     || height >= finalized_height + Height::from(LOOK_AHEAD)
                 {
-                    Later
+                    Stash
                 } else {
                     Fetch
                 }
@@ -167,7 +167,7 @@ fn compute_priority(
                 if block_sets.finalized_unvalidated.contains(block_hash)
                     || height >= finalized_height + Height::from(LOOK_AHEAD)
                 {
-                    Later
+                    Stash
                 } else {
                     Fetch
                 }
@@ -181,7 +181,7 @@ fn compute_priority(
             } else if height < finalized_height + Height::from(LOOK_AHEAD) {
                 Fetch
             } else {
-                Later
+                Stash
             }
         }
         ConsensusMessageAttribute::RandomTape(_)
@@ -191,7 +191,7 @@ fn compute_priority(
             } else if height < finalized_height + Height::from(LOOK_AHEAD) {
                 Fetch
             } else {
-                Later
+                Stash
             }
         }
         ConsensusMessageAttribute::CatchUpPackage(_) => FetchNow,
@@ -252,7 +252,7 @@ mod tests {
             ));
             pool.insert_unvalidated(notarization.clone());
 
-            // Possible duplicate notarization ==> Later
+            // Possible duplicate notarization ==> Stash
             let mut dup_notarization = notarization.clone();
             let dup_notarization_id = dup_notarization.get_id();
             dup_notarization.signature.signers = vec![node_test_id(42)];
@@ -262,7 +262,7 @@ mod tests {
             pool.remove_validated(block.clone());
             pool.insert_unvalidated(block.clone());
             let priority = get_priority_function(&pool, expected_batch_height, &test_metrics());
-            assert_eq!(priority(&dup_notarization_id, &attr), Later);
+            assert_eq!(priority(&dup_notarization_id, &attr), Stash);
 
             // Moving block to validated does not affect result
             pool.remove_unvalidated(block.clone());
@@ -273,7 +273,7 @@ mod tests {
                     &dup_notarization_id,
                     &ConsensusMessageAttribute::from(&dup_msg)
                 ),
-                Later
+                Stash
             );
 
             // Definite duplicate notarization ==> Drop
@@ -295,7 +295,7 @@ mod tests {
             ));
             pool.insert_unvalidated(finalization.clone());
 
-            // Possible duplicate finalization ==> Later
+            // Possible duplicate finalization ==> Stash
             let mut dup_finalization = finalization.clone();
             let dup_finalization_id = dup_finalization.get_id();
             dup_finalization.signature.signers = vec![node_test_id(42)];
@@ -306,7 +306,7 @@ mod tests {
                     &dup_finalization_id,
                     &ConsensusMessageAttribute::from(&dup_msg)
                 ),
-                Later
+                Stash
             );
 
             // Once finalized, possible duplicate finalization ==> Drop

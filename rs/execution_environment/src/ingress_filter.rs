@@ -2,7 +2,7 @@ use crate::{
     common::{PendingFutureResult, PendingFutureResultInternal},
     ExecutionEnvironmentImpl,
 };
-use ic_interfaces::state_manager::StateReader;
+use ic_interfaces::{execution_environment::IngressFilterService, state_manager::StateReader};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{canonical_error::CanonicalError, messages::SignedIngressContent};
@@ -10,7 +10,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
-use tower::Service;
+use tower::{util::BoxService, Service, ServiceBuilder};
 
 pub(crate) struct IngressFilter {
     exec_env: Arc<ExecutionEnvironmentImpl>,
@@ -19,16 +19,28 @@ pub(crate) struct IngressFilter {
 }
 
 impl IngressFilter {
-    pub(crate) fn new(
+    pub(crate) fn new_service(
+        max_buffered_queries: usize,
+        threads: usize,
         threadpool: Arc<Mutex<threadpool::ThreadPool>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         exec_env: Arc<ExecutionEnvironmentImpl>,
-    ) -> Self {
-        Self {
+    ) -> IngressFilterService {
+        let base_service = Self {
             exec_env,
             state_reader,
             threadpool,
-        }
+        };
+        let base_service = BoxService::new(
+            ServiceBuilder::new()
+                .concurrency_limit(threads)
+                .service(base_service),
+        );
+        // TODO(NET-795): provide documentation on the design of the interface
+        ServiceBuilder::new()
+            .load_shed()
+            .buffer(max_buffered_queries)
+            .service(base_service)
     }
 }
 

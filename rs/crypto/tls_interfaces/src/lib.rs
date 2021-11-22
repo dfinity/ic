@@ -540,6 +540,15 @@ pub trait TlsHandshake {
         registry_version: RegistryVersion,
     ) -> Result<TlsStream, TlsServerHandshakeError>;
 
+    /// This method will eventually replace
+    /// `perform_tls_server_handshake_without_client_auth`. Please refer to
+    /// the docs of that method.
+    async fn perform_tls_server_handshake_without_client_auth_with_rustls(
+        &self,
+        tcp_stream: TcpStream,
+        registry_version: RegistryVersion,
+    ) -> Result<TlsStream, TlsServerHandshakeError>;
+
     /// Transforms a TCP stream into a TLS stream by first performing a TLS
     /// client handshake and then verifying that the peer is the given `server`.
     ///

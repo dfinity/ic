@@ -159,6 +159,7 @@ impl Purger {
                 true
             } else {
                 warn!(
+                    every_n_seconds => 30,
                     self.log,
                     "Execution state is not yet available at {:?} that is below \
                     CUP height at {:?}. Cancel purge.",

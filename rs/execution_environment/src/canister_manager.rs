@@ -18,7 +18,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::{
-    CallOrigin, CanisterState, CanisterStatus, Memory, ReplicatedState, SchedulerState, SystemState,
+    CallOrigin, CanisterState, CanisterStatus, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_types::{
@@ -57,6 +57,11 @@ pub(crate) enum StopCanisterResult {
     /// The request was successfully accepted.  A response will follow
     /// eventually when the canister does stop.
     RequestAccepted,
+}
+
+/// Returns true if the canister is empty, false otherwise.
+fn canister_is_empty(canister: &CanisterState) -> bool {
+    canister.execution_state.is_none() && canister.system_state.stable_memory.size.get() == 0
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -439,7 +444,7 @@ impl CanisterManager {
         }
         match context.mode {
             CanisterInstallMode::Install => {
-                if old_canister.execution_state.is_some() {
+                if !canister_is_empty(old_canister) {
                     return (
                         execution_parameters.instruction_limit,
                         Err(CanisterManagerError::CanisterNonEmpty(context.canister_id)),
@@ -840,7 +845,7 @@ impl CanisterManager {
         let execution_state = match self.hypervisor.create_execution_state(
             context.wasm_module,
             layout.raw_path(),
-            system_state.clone(),
+            system_state,
             old_canister.memory_usage(),
         ) {
             Ok(execution_state) => Some(execution_state),
@@ -852,6 +857,9 @@ impl CanisterManager {
             }
         };
 
+        let mut system_state = old_canister.system_state.clone();
+        // According to spec, we must clear stable memory on install and reinstall.
+        system_state.clear_stable_memory();
         let scheduler_state = old_canister.scheduler_state.clone();
         let mut new_canister = CanisterState::new(system_state, execution_state, scheduler_state);
 
@@ -977,8 +985,7 @@ impl CanisterManager {
                 .upgrade();
         }
 
-        // Replace the execution state of the canister with a new execution state, but
-        // persist the stable memory (if it exists).
+        // Replace the execution state of the canister with a new execution state.
         let layout = canister_layout(&canister_layout_path, &canister_id);
         new_canister.execution_state = match self.hypervisor.create_execution_state(
             context.wasm_module,
@@ -987,14 +994,7 @@ impl CanisterManager {
             new_canister.memory_usage(),
         ) {
             Err(err) => return (instructions_limit, Err((canister_id, err).into())),
-            Ok(mut execution_state) => {
-                let stable_memory = match new_canister.execution_state {
-                    Some(es) => es.stable_memory,
-                    None => Memory::default(),
-                };
-                execution_state.stable_memory = stable_memory;
-                Some(execution_state)
-            }
+            Ok(execution_state) => Some(execution_state),
         };
 
         // Update allocations.  This must happen after we have created the new
@@ -1604,6 +1604,9 @@ pub fn uninstall_canister(
 ) -> Vec<Response> {
     // Drop the canister's execution state.
     canister.execution_state = None;
+
+    // Drop its stable memory
+    canister.system_state.clear_stable_memory();
 
     // Drop its certified data.
     canister.system_state.certified_data = Vec::new();

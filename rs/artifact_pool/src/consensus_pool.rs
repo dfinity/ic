@@ -688,8 +688,7 @@ mod tests {
         RegistryVersion,
     };
     use prost::Message;
-    use std::convert::TryFrom;
-    use std::{fs, io::Read};
+    use std::{convert::TryFrom, fs, io::Read, time::Instant};
 
     #[test]
     fn test_timestamp() {
@@ -1036,7 +1035,13 @@ mod tests {
                 no_op_logger(),
             );
 
-            let purging_interval = Duration::from_millis(1000);
+            // NOTE: Unfortunately, this test can not trivially be made walltime
+            // independend. We are tracking the time this test takes, to provide some
+            // context, should the test fail.
+            let test_start_time = Instant::now();
+            let mut next_wakeup_time = test_start_time;
+
+            let purging_interval = Duration::from_millis(2000);
             pool.backup = Some(Backup::new(
                 &pool,
                 backup_dir.path().into(),
@@ -1091,7 +1096,8 @@ mod tests {
 
             // Let's sleep so that the previous heights are close to being purged.
             let sleep_time = purging_interval / 10 * 8;
-            std::thread::sleep(sleep_time);
+            next_wakeup_time += sleep_time;
+            sleep_until(next_wakeup_time, test_start_time);
             time_source
                 .set_time(time_source.get_relative_time() + sleep_time)
                 .unwrap();
@@ -1106,13 +1112,15 @@ mod tests {
             // sync
             pool.backup.as_ref().unwrap().sync_backup();
 
+            //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 8));
             // We expect 5 folders for heights 0 to 4.
             assert_eq!(fs::read_dir(&group_path).unwrap().count(), 5);
 
             // We sleep just enough so that purging is overdue and the oldest artifacts are
             // approximately 1 purging interval old.
             let sleep_time = purging_interval / 10 * 3;
-            std::thread::sleep(sleep_time);
+            next_wakeup_time += sleep_time;
+            sleep_until(next_wakeup_time, test_start_time);
             time_source
                 .set_time(time_source.get_relative_time() + sleep_time)
                 .unwrap();
@@ -1122,13 +1130,16 @@ mod tests {
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
+            //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 11));
             // We expect only 2 folders to survive the purging: 3, 4
             assert_eq!(fs::read_dir(&group_path).unwrap().count(), 2);
             assert!(group_path.join("3").exists());
             assert!(group_path.join("4").exists());
 
             let sleep_time = purging_interval + purging_interval / 10 * 3;
-            std::thread::sleep(sleep_time);
+            next_wakeup_time += sleep_time;
+            sleep_until(next_wakeup_time, test_start_time);
+
             time_source
                 .set_time(time_source.get_relative_time() + sleep_time)
                 .unwrap();
@@ -1138,13 +1149,15 @@ mod tests {
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
+            //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 24));
             // We deleted all artifacts, but the group folder was updated by this and needs
             // to age now.
             assert!(group_path.exists());
             assert_eq!(fs::read_dir(&group_path).unwrap().count(), 0);
 
             let sleep_time = purging_interval + purging_interval / 10 * 3;
-            std::thread::sleep(sleep_time);
+            next_wakeup_time += sleep_time;
+            sleep_until(next_wakeup_time, test_start_time);
             time_source
                 .set_time(time_source.get_relative_time() + sleep_time)
                 .unwrap();
@@ -1154,13 +1167,15 @@ mod tests {
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
+            //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 37));
             // The group folder expired and was deleted.
             assert!(!group_path.exists());
             assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
 
             // We wait more and make sure the subnet folder is purged.
             let sleep_time = purging_interval + purging_interval / 10 * 3;
-            std::thread::sleep(sleep_time);
+            next_wakeup_time += sleep_time;
+            sleep_until(next_wakeup_time, test_start_time);
             time_source
                 .set_time(time_source.get_relative_time() + sleep_time)
                 .unwrap();
@@ -1170,9 +1185,23 @@ mod tests {
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
+            //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 50));
             // The subnet_id folder expired and was deleted.
             assert!(!path.exists());
             assert_eq!(fs::read_dir(&backup_dir).unwrap().count(), 0);
         })
+    }
+
+    fn sleep_until(time: Instant, test_start_time: Instant) {
+        let now = Instant::now();
+        let sleep_time = time.duration_since(now);
+        std::thread::sleep(sleep_time);
+
+        let now = Instant::now();
+        println!(
+            "Runtime: {:?} ms, expected: {:?} ms",
+            now.duration_since(test_start_time).as_millis(),
+            time.duration_since(test_start_time).as_millis()
+        );
     }
 }

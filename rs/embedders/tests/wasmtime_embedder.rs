@@ -28,7 +28,6 @@ fn execution_parameters() -> ExecutionParameters {
 
 #[cfg(test)]
 mod tests {
-    use ic_replicated_state::Memory;
     use ic_test_utilities::types::ids::canister_test_id;
     use memory_tracker::DirtyPageTracking;
 
@@ -77,11 +76,8 @@ mod tests {
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
-        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
-            system_state,
-            cycles_account_manager,
-            &Memory::default(),
-        );
+        let system_state_accessor =
+            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
@@ -160,11 +156,8 @@ mod tests {
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
-        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
-            system_state,
-            cycles_account_manager,
-            &Memory::default(),
-        );
+        let system_state_accessor =
+            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
@@ -232,7 +225,6 @@ mod tests {
         let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
             system_state,
             Arc::clone(&cycles_account_manager),
-            &Memory::default(),
         );
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
@@ -264,11 +256,8 @@ mod tests {
 
         // Change the value of globals and verify we can get them back.
         let system_state = SystemStateBuilder::default().build();
-        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
-            system_state,
-            cycles_account_manager,
-            &Memory::default(),
-        );
+        let system_state_accessor =
+            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
@@ -321,7 +310,6 @@ mod tests {
         let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
             system_state,
             Arc::clone(&cycles_account_manager),
-            &Memory::default(),
         );
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
@@ -356,11 +344,8 @@ mod tests {
 
         // Change the value of globals and verify we can get them back.
         let system_state = SystemStateBuilder::default().build();
-        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
-            system_state,
-            cycles_account_manager,
-            &Memory::default(),
-        );
+        let system_state_accessor =
+            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
@@ -405,11 +390,8 @@ mod tests {
         .unwrap();
         let system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
-            system_state,
-            cycles_account_manager,
-            &Memory::default(),
-        );
+        let system_state_accessor =
+            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
@@ -456,11 +438,8 @@ mod tests {
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
         let system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
-            system_state,
-            cycles_account_manager,
-            &Memory::default(),
-        );
+        let system_state_accessor =
+            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),

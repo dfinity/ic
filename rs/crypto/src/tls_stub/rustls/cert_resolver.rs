@@ -16,7 +16,6 @@ pub struct StaticCertResolver {
 }
 
 impl StaticCertResolver {
-    #[allow(unused)]
     /// Creates a new `StaticCertResolver`.
     ///
     /// Returns an error if `certified_key` is incompatible with `sig_scheme`.

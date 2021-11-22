@@ -128,7 +128,12 @@ pub fn spawn_canister_sandbox_process_with_factory(
             )),
             reply_handler,
         );
-        transport::socket_read_demux::<_, _, _>(demux, socket);
+        transport::socket_read_messages::<_, _>(
+            move |message| {
+                demux.handle(message);
+            },
+            socket,
+        );
         // If we the connection drops, but it is not terminated from
         // our end, that implies that the sandbox process died. At
         // that point we need to terminate replica as we have no way

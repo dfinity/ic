@@ -598,18 +598,19 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
 
         let mut canister_state = state.take_canister_state(&canister_id).unwrap();
         let mut es = canister_state.execution_state.take().unwrap();
+        let mut system_state = &mut canister_state.system_state;
 
         let mut buf = page_map::Buffer::new(PageMap::default());
         // let layout = canister_layout(state.path(), &canister_id);
         // system_state.stable_memory = StableMemory::open(layout.raw_path());
-        es.stable_memory.size = NumWasmPages64::new(10);
+        system_state.stable_memory.size = NumWasmPages64::new(10);
 
         buf.write(&random_bytes[..], get_page_off(p0_o0));
 
         buf.write(&random_bytes1[..], get_page_off(p0_o10));
 
         buf.write(&random_bytes2[..], get_page_off(p0_o14));
-        es.stable_memory.page_map = buf.into_page_map();
+        system_state.stable_memory.page_map = buf.into_page_map();
 
         // sm.commit();
 
@@ -654,23 +655,10 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
         assert_eq!(vec![height(1)], heights_to_certify(&dst_state_manager));
 
         let canister_state = recovered_state.take_canister_state(&canister_id).unwrap();
-        let buf = page_map::Buffer::new(
-            canister_state
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .page_map
-                .clone(),
-        );
+        let buf = page_map::Buffer::new(canister_state.system_state.stable_memory.page_map.clone());
 
         assert_eq!(
-            canister_state
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .size,
+            canister_state.system_state.stable_memory.size,
             NumWasmPages64::new(10)
         );
 
@@ -764,23 +752,10 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
         );
 
         let canister_state = recovered_state.take_canister_state(&canister_id).unwrap();
-        let buf = page_map::Buffer::new(
-            canister_state
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .page_map
-                .clone(),
-        );
+        let buf = page_map::Buffer::new(canister_state.system_state.stable_memory.page_map.clone());
 
         assert_eq!(
-            canister_state
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .size,
+            canister_state.system_state.stable_memory.size,
             NumWasmPages64::new(10)
         );
 
@@ -848,8 +823,8 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
         let mut canister_state = state.take_canister_state(&canister_id).unwrap();
         let mut es = canister_state.execution_state.take().unwrap();
 
-        es.stable_memory.size += NumWasmPages64::new(50);
-        let mut buf = page_map::Buffer::new(es.stable_memory.page_map);
+        canister_state.system_state.stable_memory.size += NumWasmPages64::new(50);
+        let mut buf = page_map::Buffer::new(canister_state.system_state.stable_memory.page_map);
         buf.write(
             &random_bytes1,
             get_page_off(p0_o0),
@@ -861,7 +836,7 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
             get_page_off(p1_o4),
             // None,
         );
-        es.stable_memory.page_map = buf.into_page_map();
+        canister_state.system_state.stable_memory.page_map = buf.into_page_map();
 
         // sm.commit();
 
@@ -914,23 +889,10 @@ fn cow_state_can_do_simple_state_sync_transfer_with_stable_memory() {
         let canister_state = recovered_state.take_canister_state(&canister_id).unwrap();
 
         assert_eq!(
-            canister_state
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .size,
+            canister_state.system_state.stable_memory.size,
             NumWasmPages64::new(60)
         );
-        let buf = page_map::Buffer::new(
-            canister_state
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .page_map
-                .clone(),
-        );
+        let buf = page_map::Buffer::new(canister_state.system_state.stable_memory.page_map);
 
         buf.read(
             &mut read_bytes,

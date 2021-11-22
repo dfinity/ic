@@ -197,11 +197,8 @@ impl WasmExecutor {
         }: WasmExecutionInput,
     ) -> WasmExecutionOutput {
         let canister_id = system_state.canister_id;
-        let system_state_accessor = SystemStateAccessorDirect::new(
-            system_state,
-            cycles_account_manager,
-            &execution_state.stable_memory,
-        );
+        let system_state_accessor =
+            SystemStateAccessorDirect::new(system_state, cycles_account_manager);
 
         let embedder_cache = self.get_embedder_cache(&execution_state);
         match embedder_cache {
@@ -210,7 +207,7 @@ impl WasmExecutor {
                 return WasmExecutionOutput {
                     wasm_result: Err(err),
                     num_instructions_left: NumInstructions::from(0),
-                    system_state: system_state_accessor.release_system_state().0,
+                    system_state: system_state_accessor.release_system_state(),
                     execution_state,
                     instance_stats: InstanceStats {
                         accessed_pages: 0,
@@ -271,8 +268,7 @@ impl WasmExecutor {
                     num_instructions_left: NumInstructions::from(0),
                     system_state: system_api
                         .release_system_state_accessor()
-                        .release_system_state()
-                        .0,
+                        .release_system_state(),
                     execution_state,
                     instance_stats: InstanceStats {
                         accessed_pages: 0,
@@ -285,7 +281,6 @@ impl WasmExecutor {
         let (execution_result, available_num_instructions, system_state, instance_stats) = {
             instance.set_num_instructions(instruction_limit);
             let run_result = instance.run(func_ref);
-            let update_stable_memory = run_result.is_ok();
             match run_result {
                 Ok(run_result) => {
                     if dirty_page_tracking == DirtyPageTracking::Track {
@@ -313,14 +308,14 @@ impl WasmExecutor {
             let num_instructions = instance.get_num_instructions();
             let stats = instance.get_stats();
             let mut system_api = instance.into_store_data().system_api;
-            let execution_result = system_api.take_execution_result();
-            let (system_state, stable_memory) = system_api
-                .release_system_state_accessor()
-                .release_system_state();
-            if update_stable_memory {
-                execution_state.stable_memory = stable_memory;
-            }
-            (execution_result, num_instructions, system_state, stats)
+            (
+                system_api.take_execution_result(),
+                num_instructions,
+                system_api
+                    .release_system_state_accessor()
+                    .release_system_state(),
+                stats,
+            )
         };
 
         WasmExecutionOutput {
@@ -348,11 +343,8 @@ impl WasmExecutor {
                 .create_execution_state(wasm_binary, canister_root, &self.config)?;
 
         let canister_id = system_state.canister_id;
-        let system_state_accessor = SystemStateAccessorDirect::new(
-            system_state,
-            cycles_account_manager,
-            &execution_state.stable_memory,
-        );
+        let system_state_accessor =
+            SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api_type = ApiType::start();
         let dirty_page_tracking = get_dirty_page_tracking(&api_type);
         let system_api = SystemApiImpl::new(

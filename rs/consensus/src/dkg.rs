@@ -1225,7 +1225,7 @@ impl DkgGossip for DkgGossipImpl {
             use std::cmp::Ordering;
             match attribute.interval_start_height.cmp(&start_height) {
                 Ordering::Equal => Priority::Fetch,
-                Ordering::Greater => Priority::Later,
+                Ordering::Greater => Priority::Stash,
                 Ordering::Less => Priority::Drop,
             }
         })

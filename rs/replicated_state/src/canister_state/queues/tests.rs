@@ -656,7 +656,7 @@ fn test_stats_induct_message_to_self() {
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
     // No messages to induct.
-    assert!(queues.induct_message_to_self(this).is_none());
+    assert!(queues.induct_message_to_self(this).is_err());
 
     // Push a request to self.
     let request = RequestBuilder::default()
@@ -675,7 +675,7 @@ fn test_stats_induct_message_to_self() {
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
     // Induct request.
-    assert!(queues.induct_message_to_self(this).is_some());
+    assert!(queues.induct_message_to_self(this).is_ok());
 
     // Request is now in the input queue.
     expected_iq_stats += InputQueuesStats {
@@ -718,7 +718,7 @@ fn test_stats_induct_message_to_self() {
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
     // Induct the response.
-    assert!(queues.induct_message_to_self(this).is_some());
+    assert!(queues.induct_message_to_self(this).is_ok());
 
     // Response is now in the input queue.
     expected_iq_stats += InputQueuesStats {

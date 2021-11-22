@@ -222,10 +222,16 @@ impl From<CanonicalErrorCode> for StatusCode {
 
 impl Error for CanonicalError {}
 
-/// Panics if the conversion failed.
+/// Returns 'Unknown' error if downcasting failed.
 impl From<Box<(dyn Error + Send + Sync + 'static)>> for CanonicalError {
     fn from(boxed_error: Box<(dyn Error + Send + Sync + 'static)>) -> Self {
-        *boxed_error.downcast::<CanonicalError>().unwrap()
+        *boxed_error
+            .downcast::<CanonicalError>()
+            .unwrap_or_else(|_| {
+                Box::new(unknown_error(
+                    "Could not convert Box<(dyn Error ...)> to CanonicalError.",
+                ))
+            })
     }
 }
 

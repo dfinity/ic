@@ -53,5 +53,10 @@ pub fn run_canister_sandbox(socket: std::os::unix::net::UnixStream) {
     });
 
     // Run RPC operations on the stream socket.
-    transport::socket_read_demux::<_, _, _>(frame_handler, socket);
+    transport::socket_read_messages::<_, _>(
+        move |message| {
+            frame_handler.handle(message);
+        },
+        socket,
+    );
 }

@@ -30,22 +30,11 @@ use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_system_api::NonReplicatedQueryKind;
-use ic_types::{
-    canonical_error::{
-        deadline_exceeded_error, internal_error, resource_exhausted_error, CanonicalError,
-    },
-    ingress::MAX_INGRESS_TTL,
-    messages::CallContextId,
-    SubnetId,
-};
+use ic_types::{messages::CallContextId, SubnetId};
 use ingress_filter::IngressFilter;
-use query_handler::{HttpQueryHandlerImpl, InternalHttpQueryHandlerImpl};
+use query_handler::{HttpQueryHandler, InternalHttpQueryHandler};
 use scheduler::SchedulerImpl;
 use std::sync::{Arc, Mutex};
-use tower::{
-    load_shed::error::Overloaded, timeout::error::Elapsed, util::BoxService, BoxError,
-    ServiceBuilder, ServiceExt,
-};
 
 const QUERY_EXECUTION_THREADS: usize = 2;
 const QUERY_EXECUTION_MAX_BUFFERED_QUERIES: usize = 2000;
@@ -70,21 +59,6 @@ pub enum QueryExecutionType {
         routing_table: Arc<RoutingTable>,
         query_kind: NonReplicatedQueryKind,
     },
-}
-
-fn box_error_to_canonical_error(value: BoxError) -> CanonicalError {
-    if value.is::<CanonicalError>() {
-        return *value
-            .downcast::<CanonicalError>()
-            .expect("Downcasting must succeed.");
-    }
-    if value.is::<Overloaded>() {
-        return resource_exhausted_error("The service is overloaded.");
-    }
-    if value.is::<Elapsed>() {
-        return deadline_exceeded_error("The request timed out while waiting for the service.");
-    }
-    internal_error(&format!("Could not convert {:?} to CanonicalError", value))
 }
 
 /// Helper function to constructs the public facing components that the
@@ -133,7 +107,7 @@ pub fn setup_execution(
         config.clone(),
         Arc::clone(&cycles_account_manager),
     ));
-    let sync_query_handler = Arc::new(InternalHttpQueryHandlerImpl::new(
+    let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
         logger.clone(),
         hypervisor,
         own_subnet_id,
@@ -150,36 +124,20 @@ pub fn setup_execution(
 
     let threadpool = Arc::new(Mutex::new(threadpool));
 
-    let async_query_handler = HttpQueryHandlerImpl::new(
+    let async_query_handler = HttpQueryHandler::new_service(
+        QUERY_EXECUTION_MAX_BUFFERED_QUERIES,
+        QUERY_EXECUTION_THREADS,
         Arc::clone(&sync_query_handler) as Arc<_>,
         Arc::clone(&threadpool),
         Arc::clone(&state_reader),
     );
 
-    let async_query_handler = BoxService::new(
-        ServiceBuilder::new()
-            // If the buffer is full shed load (reject queries with 429 Too Many Requests).
-            .load_shed()
-            // Use a bounded buffer for incoming requests.
-            .buffer(QUERY_EXECUTION_MAX_BUFFERED_QUERIES)
-            .concurrency_limit(QUERY_EXECUTION_THREADS)
-            .service(async_query_handler)
-            .map_err(|err| box_error_to_canonical_error(err)),
-    );
-
-    let ingress_filter =
-        IngressFilter::new(threadpool, Arc::clone(&state_reader), Arc::clone(&exec_env));
-
-    let ingress_filter = BoxService::new(
-        ServiceBuilder::new()
-            // If the buffer is full shed load (reject queries with 429 Too Many Requests).
-            .load_shed()
-            // Use a bounded buffer for incoming requests.
-            .buffer(QUERY_EXECUTION_MAX_BUFFERED_QUERIES)
-            .timeout(MAX_INGRESS_TTL)
-            .concurrency_limit(QUERY_EXECUTION_THREADS)
-            .service(ingress_filter)
-            .map_err(|err| box_error_to_canonical_error(err)),
+    let ingress_filter = IngressFilter::new_service(
+        QUERY_EXECUTION_MAX_BUFFERED_QUERIES,
+        QUERY_EXECUTION_THREADS,
+        threadpool,
+        Arc::clone(&state_reader),
+        Arc::clone(&exec_env),
     );
 
     let scheduler = Box::new(SchedulerImpl::new(

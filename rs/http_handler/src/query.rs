@@ -1,6 +1,6 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
-use crate::{common, ReplicaHealthStatus};
+use crate::{common, map_box_error_to_canonical_error, ReplicaHealthStatus};
 use hyper::{Body, Response};
 use ic_interfaces::{
     crypto::IngressSigVerifier, execution_environment::QueryExecutionService,
@@ -21,7 +21,6 @@ use ic_types::{
 use ic_validator::get_authorized_canisters;
 use std::convert::TryFrom;
 use std::sync::{Arc, RwLock};
-use tokio::sync::Mutex;
 use tower::{Service, ServiceExt};
 
 /// Handles a call to /api/v2/canister/.../query
@@ -30,7 +29,7 @@ pub(crate) async fn handle(
     log: &ReplicaLogger,
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    query_handler: Arc<Mutex<QueryExecutionService>>,
+    mut query_handler: QueryExecutionService,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     body: Vec<u8>,
@@ -90,13 +89,12 @@ pub(crate) async fn handle(
     // Here we want to hold the mutex only for the duration of the non-blocking
     // call, and not for duration until the query completes. Hence the await on
     // the callback is after the mutex was released.
-    let callback = query_handler
-        .lock()
-        .await
+    let query_result = query_handler
         .ready()
         .await
         .expect("The service must always be able to process requests")
-        .call((query.clone(), delegation_from_nns));
-    let query_result = callback.await?;
+        .call((query.clone(), delegation_from_nns))
+        .await
+        .map_err(|err| map_box_error_to_canonical_error(err))?;
     Ok(common::cbor_response(&query_result))
 }

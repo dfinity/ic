@@ -16,7 +16,8 @@ use tokio::net::TcpStream;
 use tokio_rustls::rustls::ciphersuite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use tokio_rustls::rustls::sign::CertifiedKey;
 use tokio_rustls::rustls::{
-    ProtocolVersion, ResolvesServerCert, ServerConfig, Session, SignatureScheme,
+    ClientCertVerifier, NoClientAuth, ProtocolVersion, ResolvesServerCert, ServerConfig, Session,
+    SignatureScheme,
 };
 use tokio_rustls::TlsAcceptor;
 
@@ -34,15 +35,10 @@ pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
         Arc::clone(registry_client),
         registry_version,
     );
-
-    let mut config = ServerConfig::new(Arc::new(client_cert_verifier));
-    config.versions = vec![ProtocolVersion::TLSv1_3];
-    config.ciphersuites = vec![&TLS13_AES_256_GCM_SHA384, &TLS13_AES_128_GCM_SHA256];
-    let ed25519_signing_key =
-        CspServerEd25519SigningKey::new(&self_tls_cert, signer_provider.handshake_signer());
-    config.cert_resolver = static_cert_resolver(
-        certified_key(self_tls_cert, ed25519_signing_key),
-        SignatureScheme::ED25519,
+    let config = server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
+        Arc::new(client_cert_verifier),
+        self_tls_cert,
+        signer_provider,
     );
 
     let rustls_stream = accept_connection(tcp_stream, config).await?;
@@ -52,6 +48,47 @@ pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
     let tls_stream = TlsStream::new_rustls(tokio_rustls::TlsStream::from(rustls_stream));
 
     Ok((tls_stream, AuthenticatedPeer::Node(authenticated_peer)))
+}
+
+pub async fn perform_tls_server_handshake_without_client_auth<P: CspTlsHandshakeSignerProvider>(
+    signer_provider: &P,
+    self_node_id: NodeId,
+    registry_client: &Arc<dyn RegistryClient>,
+    tcp_stream: TcpStream,
+    registry_version: RegistryVersion,
+) -> Result<TlsStream, TlsServerHandshakeError> {
+    let self_tls_cert = tls_cert_from_registry(registry_client, self_node_id, registry_version)?;
+    let config = server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
+        NoClientAuth::new(),
+        self_tls_cert,
+        signer_provider,
+    );
+
+    let rustls_stream = accept_connection(tcp_stream, config).await?;
+
+    Ok(TlsStream::new_rustls(tokio_rustls::TlsStream::from(
+        rustls_stream,
+    )))
+}
+
+fn server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key<
+    P: CspTlsHandshakeSignerProvider,
+>(
+    client_cert_verifier: Arc<dyn ClientCertVerifier>,
+    self_tls_cert: TlsPublicKeyCert,
+    signer_provider: &P,
+) -> ServerConfig {
+    let mut config = ServerConfig::new(client_cert_verifier);
+    config.versions = vec![ProtocolVersion::TLSv1_3];
+    config.ciphersuites = vec![&TLS13_AES_256_GCM_SHA384, &TLS13_AES_128_GCM_SHA256];
+
+    let ed25519_signing_key =
+        CspServerEd25519SigningKey::new(&self_tls_cert, signer_provider.handshake_signer());
+    config.cert_resolver = static_cert_resolver(
+        certified_key(self_tls_cert, ed25519_signing_key),
+        SignatureScheme::ED25519,
+    );
+    config
 }
 
 async fn accept_connection(

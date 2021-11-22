@@ -360,7 +360,7 @@ impl EccScalar {
         }
     }
 
-    /// Generate a random scalar
+    /// Generate a random scalar in [0,p)
     pub fn random<R: CryptoRng + RngCore>(
         curve: EccCurveType,
         rng: &mut R,
@@ -421,9 +421,17 @@ impl EccScalar {
             EccCurveType::P256 => Self::P256(p256::Scalar::one()),
         }
     }
+
+    /// Return a small scalar value
+    pub fn from_u64(curve: EccCurveType, n: u64) -> Self {
+        match curve {
+            EccCurveType::K256 => Self::K256(k256::Scalar::from(n)),
+            EccCurveType::P256 => Self::P256(p256::Scalar::from(n)),
+        }
+    }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum EccPoint {
     K256(k256::ProjectivePoint),
     P256(p256::ProjectivePoint),

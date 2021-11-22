@@ -1,3 +1,4 @@
+use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
 use ic_replicated_state::{Global, NumWasmPages};
 use serde::{Deserialize, Serialize};
@@ -166,6 +167,13 @@ pub enum Request {
     CloseState(CloseStateRequest),
     OpenExecution(OpenExecutionRequest),
     CloseExecution(CloseExecutionRequest),
+}
+
+impl EnumerateInnerFileDescriptors for Request {
+    fn enumerate_fds<'a>(&'a mut self, _fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
+        // TODO: discriminate on type of request, for those that can
+        // carry a file descriptor recurse into them.
+    }
 }
 
 /// All ack replies by the sandboxed process to the controller.

@@ -103,6 +103,20 @@ impl AccountIdentifier {
         hex::encode(self.to_vec())
     }
 
+    /// Converts this account identifier into a binary "address".
+    /// The address is CRC32(identifier) . identifier.
+    pub fn to_address(&self) -> [u8; 32] {
+        let mut result = [0u8; 32];
+        result[0..4].copy_from_slice(&self.generate_checksum());
+        result[4..32].copy_from_slice(&self.hash);
+        result
+    }
+
+    /// Tries to parse an account identifier from a binary address.
+    pub fn from_address(blob: [u8; 32]) -> Result<Self, ChecksumError> {
+        check_sum(blob)
+    }
+
     pub fn to_vec(&self) -> Vec<u8> {
         [&self.generate_checksum()[..], &self.hash[..]].concat()
     }

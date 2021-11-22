@@ -246,7 +246,7 @@ async fn should_return_error_if_server_does_not_use_ed25519_cert() {
 }
 
 #[tokio::test]
-async fn should_return_error_if_server_uses_expired_cert() {
+async fn should_return_error_if_server_cert_notafter_date_is_not_99991231235959z() {
     let (client_cert, client_private_key) = generate_tls_keys(COMMON_NAME, NOT_AFTER);
     let server = CustomServer::builder()
         .expect_error("sslv3 alert certificate expired")

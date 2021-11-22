@@ -1048,6 +1048,14 @@ message ProposalData {
   //
   // This field matches field day_after_genesis in RewardEvent.
   uint64 reward_event_round = 14;
+
+  // Wait-for-quiet state that needs to be saved in stable memory.
+  WaitForQuietState wait_for_quiet_state = 16;
+}
+
+// Stores data relevant to the "wait for quiet" implementation.
+message WaitForQuietState {
+  uint64 current_deadline_timestamp_seconds = 1;
 }
 
 // This is a view of the ProposalData returned by API queries and is NOT used
@@ -1099,6 +1107,8 @@ message ProposalInfo {
 
   // Derived - see [ProposalRewardStatus] for more information
   ProposalRewardStatus reward_status = 17;
+
+  optional uint64 deadline_timestamp_seconds = 19;
 }
 
 // Network economics contains the parameters for several operations related

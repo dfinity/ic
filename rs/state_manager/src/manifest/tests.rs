@@ -17,6 +17,8 @@ use ic_logger::replica_logger::no_op_logger;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 
+const NUM_THREADS: u32 = 3;
+
 macro_rules! hash_concat {
     ($( $x:expr ),*) => {
         {
@@ -194,20 +196,28 @@ fn test_simple_manifest_computation() {
     fs::write(subdir.join("queue"), vec![0u8; 0]).expect("failed to create file 'queue'");
     fs::write(subdir.join("metadata"), vec![2u8; 1050]).expect("failed to create file 'queue'");
 
-    let manifest = compute_manifest(
-        &manifest_metrics,
-        &no_op_logger(),
-        STATE_SYNC_V1,
-        root,
-        1024,
-        None,
-    )
-    .expect("failed to compute manifest");
+    let test_computation_with_num_threads = |num_threads: u32| {
+        let mut thread_pool = scoped_threadpool::Pool::new(num_threads);
+        let manifest = compute_manifest(
+            &mut thread_pool,
+            &manifest_metrics,
+            &no_op_logger(),
+            STATE_SYNC_V1,
+            root,
+            1024,
+            None,
+        )
+        .expect("failed to compute manifest");
 
-    let (expected_hash, expected_manifest) = simple_manifest();
+        let (expected_hash, expected_manifest) = simple_manifest();
 
-    assert_eq!(manifest, expected_manifest);
-    assert_eq!(expected_hash, manifest_hash(&manifest));
+        assert_eq!(manifest, expected_manifest);
+        assert_eq!(expected_hash, manifest_hash(&manifest));
+    };
+
+    for num_threads in 1..32u32 {
+        test_computation_with_num_threads(num_threads)
+    }
 }
 
 #[test]
@@ -400,7 +410,9 @@ fn test_diff_manifest() {
         .expect("failed to create file 'metadata'");
     fs::write(subdir.join("queue"), vec![0u8; 0]).expect("failed to create file 'queue'");
 
+    let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
     let manifest_old = compute_manifest(
+        &mut thread_pool,
         &manifest_metrics,
         &no_op_logger(),
         STATE_SYNC_V1,
@@ -416,6 +428,7 @@ fn test_diff_manifest() {
     // The files in the manifest is sorted by relative path. The index of file
     // 'metadata' is 2. The indices of its chunks are 3 and 4.
     let manifest_new = compute_manifest(
+        &mut thread_pool,
         &manifest_metrics,
         &no_op_logger(),
         STATE_SYNC_V1,
@@ -465,7 +478,9 @@ fn test_filter_all_zero_chunks() {
         .expect("failed to create file 'metadata'");
     fs::write(subdir.join("queue"), vec![0u8; 1050 * 1024]).expect("failed to create file 'queue'");
 
+    let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
     let manifest = compute_manifest(
+        &mut thread_pool,
         &manifest_metrics,
         &no_op_logger(),
         STATE_SYNC_V1,
@@ -552,7 +567,7 @@ fn test_simple_manifest_encoding_roundtrip() {
 
 #[test]
 fn test_hash_plan() {
-    use crate::manifest::{build_chunk_table, files_with_sizes, hash_plan, ChunkAction};
+    use crate::manifest::{build_chunk_table_parallel, files_with_sizes, hash_plan, ChunkAction};
     use bit_vec::BitVec;
     use maplit::btreemap;
     use std::path::PathBuf;
@@ -576,7 +591,9 @@ fn test_hash_plan() {
 
     let max_chunk_size = 1024 * 1024;
 
+    let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
     let manifest_old = compute_manifest(
+        &mut thread_pool,
         &manifest_metrics,
         &no_op_logger(),
         STATE_SYNC_V1,
@@ -593,6 +610,7 @@ fn test_hash_plan() {
 
     // Compute the manifest from scratch.
     let manifest_new = compute_manifest(
+        &mut thread_pool,
         &manifest_metrics,
         &no_op_logger(),
         CURRENT_STATE_SYNC_VERSION,
@@ -632,7 +650,9 @@ fn test_hash_plan() {
         ]
     );
 
-    let (file_table, chunk_table) = build_chunk_table(
+    let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
+    let (file_table, chunk_table) = build_chunk_table_parallel(
+        &mut thread_pool,
         &manifest_metrics,
         &no_op_logger(),
         root,
@@ -654,7 +674,7 @@ fn test_hash_plan() {
 fn test_file_chunk_range() {
     let manifest = simple_manifest().1;
     for file_index in 0..manifest.file_table.len() {
-        let range = file_chunk_range(&manifest, file_index);
+        let range = file_chunk_range(&manifest.chunk_table, file_index);
 
         // Size of file == sum of size of chunks
         assert_eq!(

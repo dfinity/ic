@@ -77,8 +77,7 @@ pub enum CspTlsSignError {
     SecretKeyNotFound { key_id: KeyId },
     WrongSecretKeyType { algorithm: AlgorithmId },
     MalformedSecretKey { error: String },
-    // TODO (CRP-1174): Remove this variant once ring is no longer used to sign
-    InvalidRingSignatureLength { length: usize },
+    SigningFailed { error: String },
 }
 
 /// `CspServer` offers a selection of operations that involve

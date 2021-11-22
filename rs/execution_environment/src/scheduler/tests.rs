@@ -15,7 +15,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_replicated_state::canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE};
 use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CallOrigin, ExportedFunctions,
+    CallOrigin, ExportedFunctions, NumWasmPages64,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -2151,6 +2151,33 @@ fn can_record_metrics_for_a_round() {
                     .count,
                 1
             );
+            assert!(
+                fetch_histogram_stats(
+                    registry,
+                    "execution_round_inner_preparation_duration_seconds"
+                )
+                .unwrap()
+                .count
+                    >= 1
+            );
+            assert!(
+                fetch_histogram_stats(
+                    registry,
+                    "execution_round_inner_finalization_duration_seconds"
+                )
+                .unwrap()
+                .count
+                    >= 1
+            );
+            assert!(
+                fetch_histogram_stats(
+                    registry,
+                    "execution_round_inner_finalization_message_induction_duration_seconds"
+                )
+                .unwrap()
+                .count
+                    >= 1
+            );
             assert_eq!(
                 fetch_histogram_stats(registry, "execution_round_finalization_duration_seconds")
                     .unwrap()
@@ -3134,6 +3161,11 @@ fn test_uninstall_canister() {
         mock_time(),
     );
 
+    // Stable memory and execution state are dropped.
+    assert_eq!(
+        canister.system_state.stable_memory.size,
+        NumWasmPages64::new(0)
+    );
     assert_eq!(canister.execution_state, None);
 }
 

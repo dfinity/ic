@@ -68,5 +68,10 @@ fn main() {
     );
 
     // Just start handling stdin.
-    transport::socket_read_demux::<_, _, _>(demux, socket);
+    transport::socket_read_messages::<_, _>(
+        move |message| {
+            demux.handle(message);
+        },
+        socket,
+    );
 }

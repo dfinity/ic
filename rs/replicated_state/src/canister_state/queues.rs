@@ -323,16 +323,17 @@ impl CanisterQueues {
     }
 
     /// Tries to induct a message from the output queue to `own_canister_id`
-    /// into the input queue from `own_canister_id`. Returns a clone of the
-    /// inducted message on success, `None` if there is no message in the
-    /// output queue or the input queue is full.
-    pub(super) fn induct_message_to_self(
-        &mut self,
-        own_canister_id: CanisterId,
-    ) -> Option<RequestOrResponse> {
-        let (_, msg) = self.output_queues.get(&own_canister_id)?.peek()?;
+    /// into the input queue from `own_canister_id`. Returns `Err(())` if there
+    /// was no message to induct or the input queue was full.
+    pub(super) fn induct_message_to_self(&mut self, own_canister_id: CanisterId) -> Result<(), ()> {
+        let (_, msg) = self
+            .output_queues
+            .get(&own_canister_id)
+            .and_then(OutputQueue::peek)
+            .ok_or(())?;
 
-        self.push_input(QUEUE_INDEX_NONE, (*msg).clone()).ok()?;
+        self.push_input(QUEUE_INDEX_NONE, (*msg).clone())
+            .map_err(|_| ())?;
 
         let msg = self
             .output_queues
@@ -343,7 +344,7 @@ impl CanisterQueues {
             .1;
         self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
 
-        Some(msg)
+        Ok(())
     }
 
     /// Returns the number of enqueued ingress messages.

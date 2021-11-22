@@ -2,7 +2,7 @@ use crate::{
     canister_manager::{CanisterManager, CanisterMgrConfig},
     canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
-    IngressHistoryWriterImpl, InternalHttpQueryHandlerImpl,
+    IngressHistoryWriterImpl, InternalHttpQueryHandler,
 };
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::Config;
@@ -36,7 +36,7 @@ const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 
 fn with_setup<F>(subnet_type: SubnetType, f: F)
 where
-    F: FnOnce(InternalHttpQueryHandlerImpl, CanisterManager, ReplicatedState),
+    F: FnOnce(InternalHttpQueryHandler, CanisterManager, ReplicatedState),
 {
     fn canister_manager_config(subnet_id: SubnetId) -> CanisterMgrConfig {
         CanisterMgrConfig::new(
@@ -87,7 +87,7 @@ where
         );
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         let state = initial_state(tmpdir.path(), subnet_id, subnet_type);
-        let query_handler = InternalHttpQueryHandlerImpl::new(
+        let query_handler = InternalHttpQueryHandler::new(
             log,
             hypervisor,
             subnet_id,

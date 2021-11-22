@@ -326,8 +326,9 @@ impl SchedulerImpl {
         let mut state = loop {
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_inner_iteration, &measurement_scope);
-            let mut loop_config = self.config.clone();
+            let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
 
+            let mut loop_config = self.config.clone();
             loop_config.max_instructions_per_round -= total_instructions_consumed;
 
             // We execute heartbeat methods only in the first iteration.
@@ -366,6 +367,7 @@ impl SchedulerImpl {
                     }
                 }
             }
+            drop(preparation_timer);
 
             let (
                 executed_canisters,
@@ -383,6 +385,8 @@ impl SchedulerImpl {
                 heartbeat_handling,
                 &measurement_scope,
             );
+
+            let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
             total_heap_delta += heap_delta;
             state.metadata.heap_delta_estimate += heap_delta;
             state.put_canister_states(
@@ -443,8 +447,12 @@ impl SchedulerImpl {
             if total_heap_delta >= self.config.max_heap_delta_per_iteration {
                 break state;
             }
-            self.induct_messages_on_same_subnet(&mut state);
+            {
+                let _induction_timer = self.metrics.round_inner_iteration_fin_induct.start_timer();
+                self.induct_messages_on_same_subnet(&mut state);
+            }
             is_first_iteration = false;
+            drop(finalization_timer);
         };
 
         for (message_id, status) in ingress_execution_results {

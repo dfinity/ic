@@ -143,14 +143,7 @@ pub fn construct_ic_stack(
     let self_validating_payload_builder = NoOpSelfValidatingPayloadBuilder {};
     let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
 
-    let mut artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool);
-    match subnet_type {
-        SubnetType::System => {}
-        // Disable the backup for non-NNS subnets.
-        SubnetType::Application | SubnetType::VerifiedApplication => {
-            artifact_pool_config.backup_config = None
-        }
-    };
+    let artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool);
 
     let catch_up_package = catch_up_package.unwrap_or_else(|| {
         CUPWithOriginalProtobuf::from_cup(ic_consensus_message::make_genesis(

@@ -2,7 +2,6 @@ use super::*;
 use crate::SystemStateAccessorDirect;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::CanisterIdRange;
-use ic_replicated_state::Memory;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, state::SystemStateBuilder,
     types::ids::subnet_test_id,
@@ -164,7 +163,6 @@ fn payloads_larger_than_inter_limit_rejected() {
         &SystemStateAccessorDirect::new(
             SystemStateBuilder::default().build(),
             cycles_account_manager,
-            &Memory::default(),
         ),
         &no_op_logger(),
     )
@@ -238,7 +236,6 @@ fn application_subnet_cannot_send_cycles_to_verified_subnet() {
         &SystemStateAccessorDirect::new(
             SystemStateBuilder::default().build(),
             cycles_account_manager,
-            &Memory::default(),
         ),
         &no_op_logger(),
     )

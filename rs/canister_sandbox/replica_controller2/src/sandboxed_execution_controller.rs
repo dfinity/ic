@@ -124,11 +124,7 @@ impl SandboxedExecutionController {
         // pass the system state accessor as well as the completion
         // function that gets our result back in the end.
         let id = sandbox_process.execution_states.register_execution(
-            SystemStateAccessorDirect::new(
-                system_state,
-                cycles_account_manager,
-                &execution_state.stable_memory,
-            ),
+            SystemStateAccessorDirect::new(system_state, cycles_account_manager),
             move |_id, exec_output| {
                 tx.send(exec_output).unwrap();
             },
@@ -199,7 +195,7 @@ impl SandboxedExecutionController {
             .on_completion(|_| {});
 
         // Release the system state (we need to return it to the caller).
-        let (system_state, stable_memory) = sandbox_process
+        let system_state = sandbox_process
             .execution_states
             .unregister_execution(&id)
             .unwrap()
@@ -215,7 +211,6 @@ impl SandboxedExecutionController {
             execution_state.wasm_memory.page_map.update(&page_refs[..]);
             execution_state.exported_globals = exec_output.globals;
             execution_state.wasm_memory.size = exec_output.heap_size;
-            execution_state.stable_memory = stable_memory;
         }
 
         WasmExecutionOutput {

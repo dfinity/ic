@@ -1241,6 +1241,18 @@ dependencies = [
 
 [[package]]
 name = "der-oid-macro"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4cccf60bb98c0fca115a581f894aed0e43fa55bf289fdac5599bec440bb4fd6"
+dependencies = [
+ "nom 6.1.2",
+ "num-bigint 0.4.2",
+ "num-traits",
+ "syn 1.0.80",
+]
+
+[[package]]
+name = "der-oid-macro"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c73af209b6a5dc8ca7cbaba720732304792cddc933cfea3d74509c2b1ef2f436"
@@ -1252,15 +1264,28 @@ dependencies = [
 
 [[package]]
 name = "der-parser"
+version = "5.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d7ededb7525bb4114bc209685ce7894edc2965f4914312a1ea578a645a237f0"
+dependencies = [
+ "der-oid-macro 0.4.0",
+ "nom 6.1.2",
+ "num-bigint 0.4.2",
+ "num-traits",
+ "rusticata-macros 3.2.0",
+]
+
+[[package]]
+name = "der-parser"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9807efb310ce4ea172924f3a69d82f9fd6c9c3a19336344591153e665b31c43e"
 dependencies = [
- "der-oid-macro",
+ "der-oid-macro 0.5.0",
  "nom 7.0.0",
  "num-bigint 0.4.2",
  "num-traits",
- "rusticata-macros",
+ "rusticata-macros 4.0.0",
 ]
 
 [[package]]
@@ -2591,6 +2616,7 @@ dependencies = [
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-multi-sigs",
  "ic-crypto-test-utils-threshold-sigs",
+ "ic-crypto-tls-cert-validation",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
  "ic-interfaces",
@@ -2859,7 +2885,6 @@ dependencies = [
  "rand 0.7.3",
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
- "ring",
  "serde",
  "serde_cbor",
  "simple_asn1 0.5.4",
@@ -3027,9 +3052,7 @@ dependencies = [
 name = "ic-crypto-node-key-validation"
 version = "0.8.0"
 dependencies = [
- "chrono",
  "curve25519-dalek",
- "dfn_core",
  "hex",
  "ic-base-types",
  "ic-crypto",
@@ -3038,12 +3061,11 @@ dependencies = [
  "ic-crypto-internal-multi-sig-bls12381",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
- "ic-crypto-test-utils",
+ "ic-crypto-tls-cert-validation",
  "ic-protobuf",
  "ic-test-utilities",
  "ic-types 0.8.0",
- "openssl",
- "x509-parser",
+ "x509-parser 0.12.0",
 ]
 
 [[package]]
@@ -3126,6 +3148,26 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-openssl",
+]
+
+[[package]]
+name = "ic-crypto-tls-cert-validation"
+version = "0.8.0"
+dependencies = [
+ "chrono",
+ "curve25519-dalek",
+ "dfn_core",
+ "hex",
+ "ic-base-types",
+ "ic-crypto",
+ "ic-crypto-internal-basic-sig-ed25519",
+ "ic-crypto-internal-types",
+ "ic-crypto-test-utils",
+ "ic-protobuf",
+ "ic-test-utilities",
+ "ic-types 0.8.0",
+ "openssl",
+ "x509-parser 0.9.2",
 ]
 
 [[package]]
@@ -3484,7 +3526,6 @@ dependencies = [
  "serde_bytes",
  "thiserror",
  "tower",
- "tower-util",
 ]
 
 [[package]]
@@ -4031,7 +4072,6 @@ dependencies = [
  "slog",
  "tokio",
  "tower",
- "tower-util",
 ]
 
 [[package]]
@@ -4744,6 +4784,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
+ "tempfile",
  "yansi",
 ]
 
@@ -5532,11 +5573,20 @@ dependencies = [
 
 [[package]]
 name = "oid-registry"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6aae73e474f83beacd8ae2179e328e03d63d9223949d97e1b7c108059a34715"
+dependencies = [
+ "der-parser 5.1.2",
+]
+
+[[package]]
+name = "oid-registry"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe554cb2393bc784fd678c82c84cc0599c31ceadc7f03a594911f822cb8d1815"
 dependencies = [
- "der-parser",
+ "der-parser 6.0.0",
 ]
 
 [[package]]
@@ -5574,9 +5624,9 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "openssl"
-version = "0.10.36"
+version = "0.10.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d9facdb76fec0b73c406f125d44d86fdad818d66fef0531eec9233ca425ff4a"
+checksum = "0c7ae222234c30df141154f159066c5093ff73b63204dcda7121eb082fc56a95"
 dependencies = [
  "bitflags",
  "cfg-if 1.0.0",
@@ -5594,9 +5644,9 @@ checksum = "77af24da69f9d9341038eba93a073b1fdaaa1b788221b00a69bce9e762cb32de"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.67"
+version = "0.9.70"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69df2d8dfc6ce3aaf44b40dec6f487d5a886516cf6879c49e98e0710f310a058"
+checksum = "c6517987b3f8226b5da3661dad65ff7f300cc59fb5ea8333ca191fc65fde3edf"
 dependencies = [
  "autocfg 1.0.0",
  "cc",
@@ -6824,6 +6874,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 dependencies = [
  "semver",
+]
+
+[[package]]
+name = "rusticata-macros"
+version = "3.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbbee512c633ecabd4481c40111b6ded03ddd9ab10ba6caa5a74e14c889921ad"
+dependencies = [
+ "nom 6.1.2",
 ]
 
 [[package]]
@@ -8575,6 +8634,24 @@ checksum = "85e60b0d1b5f99db2556934e21937020776a5d31520bf169e851ac44e6420214"
 
 [[package]]
 name = "x509-parser"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64abca276c58f8341ddc13fd4bd6ae75993cc669043f5b34813c90f7dff04771"
+dependencies = [
+ "base64 0.13.0",
+ "chrono",
+ "data-encoding",
+ "der-parser 5.1.2",
+ "lazy_static",
+ "nom 6.1.2",
+ "oid-registry 0.1.5",
+ "rusticata-macros 3.2.0",
+ "rustversion",
+ "thiserror",
+]
+
+[[package]]
+name = "x509-parser"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffc90836a84cb72e6934137b1504d0cae304ef5d83904beb0c8d773bbfe256ed"
@@ -8582,11 +8659,11 @@ dependencies = [
  "base64 0.13.0",
  "chrono",
  "data-encoding",
- "der-parser",
+ "der-parser 6.0.0",
  "lazy_static",
  "nom 7.0.0",
- "oid-registry",
- "rusticata-macros",
+ "oid-registry 0.2.0",
+ "rusticata-macros 4.0.0",
  "thiserror",
 ]
 

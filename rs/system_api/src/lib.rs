@@ -733,10 +733,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
         }
     }
 
-    fn ic0_canister_cycles_balance_helper(
-        &self,
-        method_name: &str,
-    ) -> HypervisorResult<(u64, u64)> {
+    fn ic0_canister_cycles_balance_helper(&self, method_name: &str) -> HypervisorResult<Cycles> {
         match &self.api_type {
             ApiType::Start {} => Err(self.error_for(method_name)),
             ApiType::Init { .. }
@@ -749,16 +746,13 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                let res = self
-                    .system_state_accessor
-                    .canister_cycles_balance()
-                    .into_parts();
+                let res = self.system_state_accessor.canister_cycles_balance();
                 Ok(res)
             }
         }
     }
 
-    fn ic0_msg_cycles_available_helper(&self, method_name: &str) -> HypervisorResult<(u64, u64)> {
+    fn ic0_msg_cycles_available_helper(&self, method_name: &str) -> HypervisorResult<Cycles> {
         match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -778,12 +772,11 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
                 call_context_id, ..
             } => self
                 .system_state_accessor
-                .msg_cycles_available(call_context_id)
-                .map(|cycles| cycles.into_parts()),
+                .msg_cycles_available(call_context_id),
         }
     }
 
-    fn ic0_msg_cycles_refunded_helper(&self, method_name: &str) -> HypervisorResult<(u64, u64)> {
+    fn ic0_msg_cycles_refunded_helper(&self, method_name: &str) -> HypervisorResult<Cycles> {
         match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -799,7 +792,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
             }
             | ApiType::RejectCallback {
                 incoming_cycles, ..
-            } => Ok((*incoming_cycles).into_parts()),
+            } => Ok(*incoming_cycles),
         }
     }
 
@@ -807,7 +800,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
         &mut self,
         method_name: &str,
         max_amount: Cycles,
-    ) -> HypervisorResult<(u64, u64)> {
+    ) -> HypervisorResult<Cycles> {
         match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -827,8 +820,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
                 call_context_id, ..
             } => Ok(self
                 .system_state_accessor
-                .msg_cycles_accept(call_context_id, max_amount)
-                .into_parts()),
+                .msg_cycles_accept(call_context_id, max_amount)),
         }
     }
 
@@ -1937,48 +1929,61 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
     }
 
     fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64> {
-        let (high_amount, low_amount) =
-            self.ic0_canister_cycles_balance_helper("ic0_canister_cycles_balance")?;
+        let (high_amount, low_amount) = self
+            .ic0_canister_cycles_balance_helper("ic0_canister_cycles_balance")?
+            .into_parts();
         if high_amount != 0 {
             return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
         }
         Ok(low_amount)
     }
 
-    fn ic0_canister_cycles_balance128(&self) -> HypervisorResult<(u64, u64)> {
-        self.ic0_canister_cycles_balance_helper("ic0_canister_cycles_balance128")
+    fn ic0_canister_cycles_balance128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
+        let method_name = "ic0_canister_cycles_balance128";
+        let cycles = self.ic0_canister_cycles_balance_helper(method_name)?;
+        copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+        Ok(())
     }
 
     fn ic0_msg_cycles_available(&self) -> HypervisorResult<u64> {
-        let (high_amount, low_amount) =
-            self.ic0_msg_cycles_available_helper("ic0_msg_cycles_available")?;
+        let (high_amount, low_amount) = self
+            .ic0_msg_cycles_available_helper("ic0_msg_cycles_available")?
+            .into_parts();
         if high_amount != 0 {
             return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
         }
         Ok(low_amount)
     }
 
-    fn ic0_msg_cycles_available128(&self) -> HypervisorResult<(u64, u64)> {
-        self.ic0_msg_cycles_available_helper("ic0_msg_cycles_available128")
+    fn ic0_msg_cycles_available128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
+        let method_name = "ic0_msg_cycles_available128";
+        let cycles = self.ic0_msg_cycles_available_helper(method_name)?;
+        copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+        Ok(())
     }
 
     fn ic0_msg_cycles_refunded(&self) -> HypervisorResult<u64> {
-        let (high_amount, low_amount) =
-            self.ic0_msg_cycles_refunded_helper("ic0_msg_cycles_refunded")?;
+        let (high_amount, low_amount) = self
+            .ic0_msg_cycles_refunded_helper("ic0_msg_cycles_refunded")?
+            .into_parts();
         if high_amount != 0 {
             return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
         }
         Ok(low_amount)
     }
 
-    fn ic0_msg_cycles_refunded128(&self) -> HypervisorResult<(u64, u64)> {
-        self.ic0_msg_cycles_refunded_helper("ic0_msg_cycles_refunded128")
+    fn ic0_msg_cycles_refunded128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
+        let method_name = "ic0_msg_cycles_refunded128";
+        let cycles = self.ic0_msg_cycles_refunded_helper(method_name)?;
+        copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+        Ok(())
     }
 
     fn ic0_msg_cycles_accept(&mut self, max_amount: u64) -> HypervisorResult<u64> {
         // Cannot accept more than max_amount.
-        let (high_amount, low_amount) =
-            self.ic0_msg_cycles_accept_helper("ic0_msg_cycles_accept", Cycles::from(max_amount))?;
+        let (high_amount, low_amount) = self
+            .ic0_msg_cycles_accept_helper("ic0_msg_cycles_accept", Cycles::from(max_amount))?
+            .into_parts();
         if high_amount != 0 {
             error!(
                 self.log,
@@ -1990,8 +1995,16 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         Ok(low_amount)
     }
 
-    fn ic0_msg_cycles_accept128(&mut self, max_amount: Cycles) -> HypervisorResult<(u64, u64)> {
-        self.ic0_msg_cycles_accept_helper("ic0_msg_cycles_accept128", max_amount)
+    fn ic0_msg_cycles_accept128(
+        &mut self,
+        max_amount: Cycles,
+        dst: u32,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let method_name = "ic0_msg_cycles_accept128";
+        let cycles = self.ic0_msg_cycles_accept_helper(method_name, max_amount)?;
+        copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+        Ok(())
     }
 
     fn ic0_data_certificate_present(&self) -> HypervisorResult<i32> {
@@ -2206,6 +2219,33 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
         CalledTrap(msg)
     }
+}
+
+pub(crate) fn copy_cycles_to_heap(
+    cycles: Cycles,
+    dst: u32,
+    heap: &mut [u8],
+    method_name: &str,
+) -> HypervisorResult<()> {
+    // Copy a 128-bit value to the canister memory.
+    let bytes = cycles.get().to_le_bytes();
+    let size = bytes.len();
+    assert_eq!(size, 16);
+
+    let dst = dst as usize;
+    let (upper_bound, overflow) = dst.overflowing_add(size);
+    if overflow || upper_bound > heap.len() {
+        return Err(ContractViolation(format!(
+            "{} failed because dst + size is out of bounds.\
+                Found dst = {} and size = {} while must be <= {}",
+            method_name,
+            dst,
+            size,
+            heap.len(),
+        )));
+    }
+    heap[dst..dst + size].copy_from_slice(&bytes);
+    Ok(())
 }
 
 pub(crate) fn valid_subslice<'a>(

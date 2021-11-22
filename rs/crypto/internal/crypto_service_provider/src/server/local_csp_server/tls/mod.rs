@@ -7,10 +7,12 @@ use crate::types::{CspSecretKey, CspSignature};
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
 use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
+use ic_crypto_secrets_containers::{SecretArray, SecretVec};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::KeyId;
 use ic_types::NodeId;
 use openssl::asn1::Asn1Time;
+use openssl::pkey::PKey;
 use rand::{CryptoRng, Rng};
 
 #[cfg(test)]
@@ -40,16 +42,60 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
 
         match secret_key {
             CspSecretKey::TlsEd25519(secret_key_der) => {
-                // TODO (CRP-1174): Use internal Ed25519 library as ring keypair is not zeroized
-                let ring_keypair = ring_keypair_from_secret_key_pkcs8(&secret_key_der.bytes)?;
-                let ring_signature = ring_keypair.sign(message);
-                Ok(ed25519_csp_signature_from_ring_signature(ring_signature)?)
+                let secret_key_bytes = ed25519_secret_key_bytes_from_der(&secret_key_der)?;
+
+                let signature_bytes =
+                    ic_crypto_internal_basic_sig_ed25519::sign(message, &secret_key_bytes)
+                        .map_err(|e| CspTlsSignError::SigningFailed {
+                            error: format!("{}", e),
+                        })?;
+
+                Ok(CspSignature::Ed25519(signature_bytes))
             }
             _ => Err(CspTlsSignError::WrongSecretKeyType {
                 algorithm: secret_key.algorithm_id(),
             }),
         }
     }
+}
+
+fn ed25519_secret_key_bytes_from_der(
+    secret_key_der: &TlsEd25519SecretKeyDerBytes,
+) -> Result<ed25519_types::SecretKeyBytes, CspTlsSignError> {
+    // TODO (CRP-1229): Ensure proper zeroization of TLS secret key bytes
+    let raw_private_key = SecretVec::new_and_zeroize_argument(
+        &mut PKey::private_key_from_der(&secret_key_der.bytes)
+            .map_err(
+                |_ignore_error_to_prevent_key_leakage| CspTlsSignError::MalformedSecretKey {
+                    error:
+                        "Failed to convert TLS secret key DER from key store to OpenSSL private key"
+                            .to_string(),
+                },
+            )?
+            .raw_private_key()
+            .map_err(|_ignore_error_to_prevent_key_leakage| {
+                CspTlsSignError::MalformedSecretKey {
+                    error: "Failed to get OpenSSL private key in raw form".to_string(),
+                }
+            })?,
+    );
+
+    const SECRET_KEY_LEN: usize = ed25519_types::SecretKeyBytes::SIZE;
+    if raw_private_key.expose_secret().len() != SECRET_KEY_LEN {
+        return Err(CspTlsSignError::MalformedSecretKey {
+            error: format!(
+                "Invalid length of raw OpenSSL private key: expected {} bytes, but got {}",
+                SECRET_KEY_LEN,
+                raw_private_key.expose_secret().len(),
+            ),
+        });
+    }
+    let mut sk_bytes_array: [u8; SECRET_KEY_LEN] = [0; SECRET_KEY_LEN];
+    sk_bytes_array.copy_from_slice(raw_private_key.expose_secret());
+
+    Ok(ed25519_types::SecretKeyBytes(
+        SecretArray::new_and_zeroize_argument(&mut sk_bytes_array),
+    ))
 }
 
 impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspServer<R, S, C> {
@@ -62,29 +108,4 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspServer<R,
         self.store_secret_key_or_panic(CspSecretKey::TlsEd25519(secret_key), key_id);
         key_id
     }
-}
-
-fn ring_keypair_from_secret_key_pkcs8(
-    secret_key_pkcs8: &[u8],
-) -> Result<ring::signature::Ed25519KeyPair, CspTlsSignError> {
-    ring::signature::Ed25519KeyPair::from_pkcs8_maybe_unchecked(secret_key_pkcs8).map_err(|_e| {
-        // `_e` is unused so the secret key cannot be leaked in the error message
-        CspTlsSignError::MalformedSecretKey {
-            error: "Failed to convert TLS secret key from key store to ring key pair".to_string(),
-        }
-    })
-}
-
-fn ed25519_csp_signature_from_ring_signature(
-    ring_signature: ring::signature::Signature,
-) -> Result<CspSignature, CspTlsSignError> {
-    const SIGNATURE_LEN: usize = ed25519_types::SignatureBytes::SIZE;
-    if ring_signature.as_ref().len() != SIGNATURE_LEN {
-        return Err(CspTlsSignError::InvalidRingSignatureLength {
-            length: ring_signature.as_ref().len(),
-        });
-    }
-    let mut bytes: [u8; SIGNATURE_LEN] = [0; SIGNATURE_LEN];
-    bytes.copy_from_slice(ring_signature.as_ref());
-    Ok(CspSignature::Ed25519(ed25519_types::SignatureBytes(bytes)))
 }

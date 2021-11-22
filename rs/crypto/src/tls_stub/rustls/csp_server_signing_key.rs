@@ -4,20 +4,25 @@ use ic_crypto_internal_csp::TlsHandshakeCspServer;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::KeyId;
 use std::sync::Arc;
+use tokio_rustls::rustls;
 use tokio_rustls::rustls::internal::msgs::enums::SignatureAlgorithm;
-use tokio_rustls::rustls::sign::{Signer, SigningKey};
 use tokio_rustls::rustls::{SignatureScheme, TLSError};
 
 #[cfg(test)]
 mod tests;
 
-#[allow(unused)]
+/// An implementation of Rustls' `rustls::sign::SigningKey` that returns a
+/// `CspServerEd25519Signer` in `choose_scheme`. The signing operation is
+/// delegated to the `TlsHandshakeCspServer` which may perform the signing
+/// operation in a separate process or remotely on an HSM.
 pub struct CspServerEd25519SigningKey {
     signer: CspServerEd25519Signer,
 }
 
-#[allow(unused)]
 impl CspServerEd25519SigningKey {
+    /// Creates a `CspServerEd25519SigningKey` that uses `tls_csp_server` to
+    /// create signatures. The `self_cert` is used to derive the key ID of the
+    /// private key.
     pub fn new(
         self_cert: &TlsPublicKeyCert,
         tls_csp_server: Arc<dyn TlsHandshakeCspServer>,
@@ -31,8 +36,8 @@ impl CspServerEd25519SigningKey {
     }
 }
 
-impl SigningKey for CspServerEd25519SigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+impl rustls::sign::SigningKey for CspServerEd25519SigningKey {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn rustls::sign::Signer>> {
         if !offered.contains(&SignatureScheme::ED25519) {
             return None;
         }
@@ -45,14 +50,17 @@ impl SigningKey for CspServerEd25519SigningKey {
     }
 }
 
-#[allow(unused)]
+/// An implementation of Rustls' `rustls::sign::Signer` that delegates the
+/// `sign` operation to a `TlsHandshakeCspServer` which may perform the signing
+/// operation in a separate process or remotely on an HSM. Currently, the only
+/// scheme that is supported is Ed25519.
 #[derive(Clone)]
 struct CspServerEd25519Signer {
     key_id: KeyId,
     tls_csp_server: Arc<dyn TlsHandshakeCspServer>,
 }
 
-impl Signer for CspServerEd25519Signer {
+impl rustls::sign::Signer for CspServerEd25519Signer {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TLSError> {
         let csp_signature = self
             .tls_csp_server

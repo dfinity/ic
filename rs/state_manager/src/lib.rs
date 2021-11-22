@@ -667,9 +667,13 @@ pub fn get_dirty_pages(state: &ReplicatedState) -> DirtyPages {
 /// incrementally after every round.
 fn strip_page_map_deltas(state: &mut ReplicatedState) {
     for canister in state.canisters_iter_mut() {
+        canister
+            .system_state
+            .stable_memory
+            .page_map
+            .strip_all_deltas();
         if let Some(execution_state) = &mut canister.execution_state {
             execution_state.wasm_memory.page_map.strip_all_deltas();
-            execution_state.stable_memory.page_map.strip_all_deltas();
         }
     }
 }
@@ -693,12 +697,12 @@ fn copy_page_maps(dst: &mut ReplicatedState, src: &ReplicatedState) {
             "execution state of canister {} unexpectedly (dis)appeared after creating a checkpoint",
             dst_canister.system_state.canister_id
         );
+        dst_canister.system_state.stable_memory = src_canister.system_state.stable_memory.clone();
         if let (Some(dst_state), Some(src_state)) = (
             &mut dst_canister.execution_state,
             &src_canister.execution_state,
         ) {
             dst_state.wasm_memory = src_state.wasm_memory.clone();
-            dst_state.stable_memory = src_state.stable_memory.clone();
         }
     }
 }
@@ -853,6 +857,10 @@ impl StateManagerImpl {
             tip: Some(height_and_state),
         }));
 
+        let checkpoint_thread_pool = Arc::new(Mutex::new(scoped_threadpool::Pool::new(
+            NUMBER_OF_CHECKPOINT_THREADS,
+        )));
+
         let (compute_manifest_request_sender, compute_manifest_request_receiver) = unbounded();
 
         let _state_hasher_handle = JoinOnDrop::new(
@@ -862,9 +870,15 @@ impl StateManagerImpl {
                     let log = log.clone();
                     let states = Arc::clone(&states);
                     let metrics = metrics.clone();
+                    let checkpoint_thread_pool = Arc::clone(&checkpoint_thread_pool);
                     move || {
                         while let Ok(req) = compute_manifest_request_receiver.recv() {
+                            // NB. we should lock the pool for the duration of only a single
+                            // request. If we didn't release it until the next request, State
+                            // Manager wouldn't be able to commit new states.
+                            let mut thread_pool = checkpoint_thread_pool.lock().unwrap();
                             Self::handle_compute_manifest_request(
+                                &mut thread_pool,
                                 &metrics,
                                 &log,
                                 &states,
@@ -915,9 +929,7 @@ impl StateManagerImpl {
             latest_certified_height,
             requested_to_remove_states_below: AtomicU64::new(oldest_required_state.get()),
             state_sync_refs: StateSyncRefs::new(log),
-            checkpoint_thread_pool: Arc::new(Mutex::new(scoped_threadpool::Pool::new(
-                NUMBER_OF_CHECKPOINT_THREADS,
-            ))),
+            checkpoint_thread_pool,
             _state_hasher_handle,
             _deallocation_handle,
         }
@@ -1076,6 +1088,7 @@ impl StateManagerImpl {
     }
 
     fn handle_compute_manifest_request(
+        thread_pool: &mut scoped_threadpool::Pool,
         metrics: &StateManagerMetrics,
         log: &ReplicaLogger,
         states: &Arc<parking_lot::RwLock<SharedState>>,
@@ -1108,6 +1121,7 @@ impl StateManagerImpl {
 
         let start = Instant::now();
         let manifest = crate::manifest::compute_manifest(
+            thread_pool,
             &metrics.manifest_metrics,
             log,
             system_metadata.state_sync_version,
@@ -1367,6 +1381,26 @@ impl StateManagerImpl {
                     err
                 )
             });
+            let stable_memory_path = &canister_layout.stable_memory_blob();
+            canister
+                .system_state
+                .stable_memory
+                .page_map
+                .persist_round_delta(stable_memory_path)
+                .unwrap_or_else(|err| {
+                    fatal!(
+                        self.log,
+                        "Failed to persist stable page delta of canister {} to file {}: {}",
+                        canister_id,
+                        stable_memory_path.display(),
+                        err
+                    )
+                });
+            canister
+                .system_state
+                .stable_memory
+                .page_map
+                .strip_round_delta();
             if let Some(execution_state) = &mut canister.execution_state {
                 let memory_path = &canister_layout.vmemory_0();
                 execution_state
@@ -1383,22 +1417,6 @@ impl StateManagerImpl {
                         )
                     });
                 execution_state.wasm_memory.page_map.strip_round_delta();
-
-                let stable_memory_path = &canister_layout.stable_memory_blob();
-                execution_state
-                    .stable_memory
-                    .page_map
-                    .persist_round_delta(stable_memory_path)
-                    .unwrap_or_else(|err| {
-                        fatal!(
-                            self.log,
-                            "Failed to persist stable page delta of canister {} to file {}: {}",
-                            canister_id,
-                            stable_memory_path.display(),
-                            err
-                        )
-                    });
-                execution_state.stable_memory.page_map.strip_round_delta();
             }
         }
     }

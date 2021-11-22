@@ -111,6 +111,34 @@ where
         result
     }
 
+    async fn perform_tls_server_handshake_without_client_auth_with_rustls(
+        &self,
+        tcp_stream: TcpStream,
+        registry_version: RegistryVersion,
+    ) -> Result<TlsStream, TlsServerHandshakeError> {
+        let logger = new_logger!(&self.logger;
+            crypto.trait_name => "TlsHandshake",
+            crypto.method_name => "perform_tls_server_handshake_without_client_auth_with_rustls",
+            crypto.registry_version => registry_version.get(),
+            crypto.allowed_tls_clients => "all clients allowed",
+        );
+        debug!(logger; crypto.description => "start",);
+        let result = rustls::server_handshake::perform_tls_server_handshake_without_client_auth(
+            &self.csp,
+            self.node_id,
+            &self.registry_client,
+            tcp_stream,
+            registry_version,
+        )
+        .await;
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
+
     async fn perform_tls_client_handshake(
         &self,
         tcp_stream: TcpStream,

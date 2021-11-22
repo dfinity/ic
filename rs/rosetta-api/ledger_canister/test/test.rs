@@ -4,15 +4,16 @@ use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, ArchiveOptions, Block, BlockArg, BlockHeight, BlockRes,
-    EncodedBlock, GetBlocksArgs, GetBlocksRes, ICPTs, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation, SendArgs, Subaccount,
-    TimeStamp, TotalSupplyArgs, Transaction, MIN_BURN_AMOUNT, TRANSACTION_FEE,
+    AccountBalanceArgs, AccountIdentifier, ArchiveOptions, BinaryAccountBalanceArgs, Block,
+    BlockArg, BlockHeight, BlockRes, EncodedBlock, GetBlocksArgs, GetBlocksRes, ICPTs,
+    IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation,
+    SendArgs, Subaccount, TimeStamp, TotalSupplyArgs, Transaction, TransferArgs, TransferError,
+    MIN_BURN_AMOUNT, TRANSACTION_FEE,
 };
 use on_wire::IntoWire;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 fn create_sender(i: u64) -> ic_canister_client::Sender {
     use rand_chacha::ChaChaRng;
@@ -71,6 +72,30 @@ async fn query_balance(ledger: &Canister<'_>, acc: &Sender) -> Result<ICPTs, Str
             },
         )
         .await
+}
+
+async fn account_balance_candid(ledger: &Canister<'_>, acc: &AccountIdentifier) -> ICPTs {
+    ledger
+        .query_(
+            "account_balance",
+            candid_one,
+            BinaryAccountBalanceArgs {
+                account: acc.to_address(),
+            },
+        )
+        .await
+        .expect("failed to query balance")
+}
+
+async fn transfer_candid(
+    ledger: &Canister<'_>,
+    from: &Sender,
+    args: TransferArgs,
+) -> Result<BlockHeight, TransferError> {
+    ledger
+        .update_from_sender("transfer", candid_one, args, from)
+        .await
+        .expect("transfer call trapped")
 }
 
 fn make_accounts(num_accounts: u64, num_subaccounts: u8) -> HashMap<AccountIdentifier, ICPTs> {
@@ -369,8 +394,11 @@ fn notify_timeout_test() {
     local_test_e(|r| async move {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
         let mut accounts = HashMap::new();
-        let us = PrincipalId::new_anonymous();
-        accounts.insert(us.into(), ICPTs::from_icpts(100).unwrap());
+        let sender = create_sender(100);
+        accounts.insert(
+            sender.get_principal_id().into(),
+            ICPTs::from_icpts(100).unwrap(),
+        );
 
         let test_canister = proj
             .cargo_bin("test-notified")
@@ -380,7 +408,6 @@ fn notify_timeout_test() {
         let minting_account = create_sender(0);
 
         let mut send_whitelist = HashSet::new();
-        send_whitelist.insert(CanisterId::new(us).unwrap());
         send_whitelist.insert(test_canister.canister_id());
 
         let ledger_canister = proj
@@ -402,7 +429,7 @@ fn notify_timeout_test() {
             .await?;
 
         let block_height: BlockHeight = ledger_canister
-            .update_(
+            .update_from_sender(
                 "send_pb",
                 protobuf,
                 SendArgs {
@@ -413,6 +440,7 @@ fn notify_timeout_test() {
                     memo: Memo(0),
                     created_at_time: None,
                 },
+                &sender,
             )
             .await?;
 
@@ -425,7 +453,7 @@ fn notify_timeout_test() {
         };
 
         let r1: Result<(), String> = ledger_canister
-            .update_("notify_pb", protobuf, notify.clone())
+            .update_from_sender("notify_pb", protobuf, notify.clone(), &sender)
             .await;
 
         assert!(
@@ -442,8 +470,11 @@ fn notify_test() {
     local_test_e(|r| async move {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
         let mut accounts = HashMap::new();
-        let us = PrincipalId::new_anonymous();
-        accounts.insert(us.into(), ICPTs::from_icpts(100).unwrap());
+        let sender = create_sender(100);
+        accounts.insert(
+            sender.get_principal_id().into(),
+            ICPTs::from_icpts(100).unwrap(),
+        );
 
         let test_canister = proj
             .cargo_bin("test-notified")
@@ -458,7 +489,6 @@ fn notify_test() {
         let minting_account = create_sender(0);
 
         let mut send_whitelist = HashSet::new();
-        send_whitelist.insert(CanisterId::new(us).unwrap());
         send_whitelist.insert(test_canister.canister_id());
 
         let (node_max_memory_size_bytes, max_message_size_bytes): (usize, usize) = {
@@ -500,7 +530,7 @@ fn notify_test() {
             .await?;
 
         let block_height: BlockHeight = ledger_canister
-            .update_(
+            .update_from_sender(
                 "send_pb",
                 protobuf,
                 SendArgs {
@@ -511,12 +541,13 @@ fn notify_test() {
                     memo: Memo(0),
                     created_at_time: None,
                 },
+                &sender,
             )
             .await?;
 
         for i in 1..10 {
             let _: BlockHeight = ledger_canister
-                .update_(
+                .update_from_sender(
                     "send_pb",
                     protobuf,
                     SendArgs {
@@ -527,6 +558,7 @@ fn notify_test() {
                         memo: Memo(i),
                         created_at_time: None,
                     },
+                    &sender,
                 )
                 .await?;
         }
@@ -540,15 +572,15 @@ fn notify_test() {
         };
 
         let r1: Result<(), String> = ledger_canister
-            .update_("notify_pb", protobuf, notify.clone())
+            .update_from_sender("notify_pb", protobuf, notify.clone(), &sender)
             .await;
 
         let r2: Result<(), String> = ledger_canister
-            .update_("notify_dfx", candid_one, notify.clone())
+            .update_from_sender("notify_dfx", candid_one, notify.clone(), &sender)
             .await;
 
         let r3: Result<(), String> = ledger_canister
-            .update_("notify_pb", protobuf, notify.clone())
+            .update_from_sender("notify_pb", protobuf, notify.clone(), &sender)
             .await;
 
         let count: u32 = test_canister.query_("check_counter", candid, ()).await?;
@@ -573,7 +605,7 @@ fn notify_test() {
 
         // Notification of non whitelisted target should fail
         let block_height: BlockHeight = ledger_canister
-            .update_(
+            .update_from_sender(
                 "send_pb",
                 protobuf,
                 SendArgs {
@@ -584,6 +616,7 @@ fn notify_test() {
                     memo: Memo(0),
                     created_at_time: None,
                 },
+                &sender,
             )
             .await?;
 
@@ -596,7 +629,7 @@ fn notify_test() {
         };
 
         let r4: Result<(), String> = ledger_canister
-            .update_("notify_pb", protobuf, notify_not_whitelisted)
+            .update_from_sender("notify_pb", protobuf, notify_not_whitelisted, &sender)
             .await;
 
         assert!(r4
@@ -616,16 +649,15 @@ fn sub_account_test() {
 
         let sub_account = |x| Some(Subaccount([x; 32]));
 
-        // The principal ID of the test runner
-        let us = PrincipalId::new_anonymous();
+        let sender = create_sender(100);
 
         initial_values.insert(
-            AccountIdentifier::new(us, sub_account(1)),
+            AccountIdentifier::new(sender.get_principal_id(), sub_account(1)),
             ICPTs::from_icpts(10).unwrap(),
         );
         let from_subaccount = sub_account(1);
         let mut send_whitelist = HashSet::new();
-        send_whitelist.insert(CanisterId::new(us).unwrap());
+        send_whitelist.insert(CanisterId::new(sender.get_principal_id()).unwrap());
         let ledger_canister = proj
             .cargo_bin("ledger-canister")
             .install_(
@@ -643,37 +675,40 @@ fn sub_account_test() {
 
         // Send a payment to yourself on a different sub_account
         let _: BlockHeight = ledger_canister
-            .update_(
+            .update_from_sender(
                 "send_pb",
                 protobuf,
                 SendArgs {
                     from_subaccount,
-                    to: AccountIdentifier::new(us, sub_account(2)),
+                    to: AccountIdentifier::new(sender.get_principal_id(), sub_account(2)),
                     amount: ICPTs::from_icpts(1).unwrap(),
                     fee: TRANSACTION_FEE,
                     memo: Memo(0),
                     created_at_time: None,
                 },
+                &sender,
             )
             .await?;
 
         let balance_1 = ledger_canister
-            .query_(
+            .query_from_sender(
                 "account_balance_pb",
                 protobuf,
                 AccountBalanceArgs {
-                    account: AccountIdentifier::new(us, sub_account(1)),
+                    account: AccountIdentifier::new(sender.get_principal_id(), sub_account(1)),
                 },
+                &sender,
             )
             .await?;
 
         let balance_2 = ledger_canister
-            .query_(
+            .query_from_sender(
                 "account_balance_pb",
                 protobuf,
                 AccountBalanceArgs {
-                    account: AccountIdentifier::new(us, sub_account(2)),
+                    account: AccountIdentifier::new(sender.get_principal_id(), sub_account(2)),
                 },
+                &sender,
             )
             .await?;
 
@@ -693,8 +728,8 @@ fn sub_account_test() {
 }
 
 #[test]
-#[should_panic]
-fn non_whitelisted_send_test() {
+#[should_panic(expected = "Sending from 2vxsx-fae is not allowed")]
+fn check_anonymous_cannot_send() {
     local_test_e(|r| async move {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
         let sub_account = |x| Some(Subaccount([x; 32]));
@@ -705,6 +740,7 @@ fn non_whitelisted_send_test() {
             AccountIdentifier::new(us, sub_account(1)),
             ICPTs::from_icpts(10).unwrap(),
         );
+
         let ledger_canister = proj
             .cargo_bin("ledger-canister")
             .install_(
@@ -720,7 +756,7 @@ fn non_whitelisted_send_test() {
             )
             .await?;
 
-        // Send a payment from non-whitelisted canister,should fail
+        // Send a payment from an anonymous user, should fail
         let _: BlockHeight = ledger_canister
             .update_(
                 "send_pb",
@@ -1354,6 +1390,187 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
 
         Ok(())
     })
+}
+
+#[test]
+fn test_transfer_candid() {
+    local_test_e(|r| async move {
+        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+
+        let minting_account = create_sender(0);
+        let acc1 = create_sender(1);
+        let acc2 = create_sender(2);
+        let acc3 = create_sender(3);
+
+        let acc1_address: AccountIdentifier = acc1.get_principal_id().into();
+        let acc2_address: AccountIdentifier = acc2.get_principal_id().into();
+        let acc3_address: AccountIdentifier = acc3.get_principal_id().into();
+
+        let mut accounts = HashMap::new();
+        accounts.insert(acc1_address, ICPTs::from_e8s(1_000_000_000));
+        accounts.insert(acc2_address, ICPTs::from_e8s(1_000_000_000));
+
+        let ledger = proj
+            .cargo_bin("ledger-canister")
+            .install_(
+                &r,
+                CandidOne(LedgerCanisterInitPayload::new(
+                    CanisterId::try_from(minting_account.get_principal_id())
+                        .unwrap()
+                        .into(),
+                    accounts,
+                    None,
+                    None,
+                    None,
+                    HashSet::new(),
+                )),
+            )
+            .await?;
+
+        assert_eq!(
+            account_balance_candid(&ledger, &acc1_address).await,
+            ICPTs::from_e8s(1_000_000_000)
+        );
+        assert_eq!(
+            account_balance_candid(&ledger, &acc2_address).await,
+            ICPTs::from_e8s(1_000_000_000)
+        );
+        assert_eq!(
+            account_balance_candid(&ledger, &acc3_address).await,
+            ICPTs::ZERO
+        );
+
+        let timestamp_nanos = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+
+        const NANOS_PER_YEAR: u64 = 365 * 24 * 3600 * 1_000_000_000;
+
+        let transfer_block = transfer_candid(
+            &ledger,
+            &acc1,
+            TransferArgs {
+                memo: Memo(0),
+                amount: ICPTs::from_e8s(10_000_000),
+                fee: ICPTs::from_e8s(10_000),
+                from_subaccount: None,
+                to: acc2_address.to_address(),
+                created_at_time: Some(TimeStamp { timestamp_nanos }),
+            },
+        )
+        .await
+        .expect("failed to transfer funds");
+
+        assert_eq!(
+            account_balance_candid(&ledger, &acc1_address).await,
+            ICPTs::from_e8s(989_990_000)
+        );
+        assert_eq!(
+            account_balance_candid(&ledger, &acc2_address).await,
+            ICPTs::from_e8s(1_010_000_000)
+        );
+
+        // Test error cases
+        assert_eq!(
+            transfer_candid(
+                &ledger,
+                &acc1,
+                TransferArgs {
+                    memo: Memo(0),
+                    amount: ICPTs::from_e8s(10_000_000),
+                    fee: ICPTs::from_e8s(10_000),
+                    from_subaccount: None,
+                    to: acc2_address.to_address(),
+                    created_at_time: Some(TimeStamp { timestamp_nanos }),
+                },
+            )
+            .await,
+            Err(TransferError::TxDuplicate {
+                duplicate_of: transfer_block
+            })
+        );
+
+        assert_eq!(
+            transfer_candid(
+                &ledger,
+                &acc3,
+                TransferArgs {
+                    memo: Memo(0),
+                    amount: ICPTs::from_e8s(10_000_000),
+                    fee: ICPTs::from_e8s(10_000),
+                    from_subaccount: None,
+                    to: acc2_address.to_address(),
+                    created_at_time: None,
+                },
+            )
+            .await,
+            Err(TransferError::InsufficientFunds {
+                balance: ICPTs::ZERO
+            })
+        );
+
+        assert_eq!(
+            transfer_candid(
+                &ledger,
+                &acc3,
+                TransferArgs {
+                    memo: Memo(0),
+                    amount: ICPTs::from_e8s(10_000_000),
+                    fee: ICPTs::from_e8s(10),
+                    from_subaccount: None,
+                    to: acc1_address.to_address(),
+                    created_at_time: None,
+                },
+            )
+            .await,
+            Err(TransferError::BadFee {
+                expected_fee: ICPTs::from_e8s(10_000),
+            })
+        );
+
+        assert_eq!(
+            transfer_candid(
+                &ledger,
+                &acc1,
+                TransferArgs {
+                    memo: Memo(0),
+                    amount: ICPTs::from_e8s(10_000_000),
+                    fee: ICPTs::from_e8s(10_000),
+                    from_subaccount: None,
+                    to: acc2_address.to_address(),
+                    created_at_time: Some(TimeStamp {
+                        timestamp_nanos: timestamp_nanos.saturating_sub(NANOS_PER_YEAR)
+                    }),
+                },
+            )
+            .await,
+            Err(TransferError::TxTooOld {
+                allowed_window_nanos: Duration::from_secs(24 * 3600).as_nanos() as u64,
+            })
+        );
+
+        assert_eq!(
+            transfer_candid(
+                &ledger,
+                &acc1,
+                TransferArgs {
+                    memo: Memo(0),
+                    amount: ICPTs::from_e8s(10_000_000),
+                    fee: ICPTs::from_e8s(10_000),
+                    from_subaccount: None,
+                    to: acc2_address.to_address(),
+                    created_at_time: Some(TimeStamp {
+                        timestamp_nanos: timestamp_nanos.saturating_add(NANOS_PER_YEAR)
+                    }),
+                },
+            )
+            .await,
+            Err(TransferError::TxCreatedInFuture)
+        );
+
+        Ok(())
+    });
 }
 
 async fn ledger_assert_num_blocks(ledger: &Canister<'_>, num_expected: usize) {

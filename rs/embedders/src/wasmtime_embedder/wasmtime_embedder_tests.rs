@@ -2,7 +2,7 @@ use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
 use crate::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
-use ic_replicated_state::{Memory, SystemState};
+use ic_replicated_state::SystemState;
 use ic_system_api::{ApiType, SystemApiImpl, SystemStateAccessor};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, types::ids::canister_test_id,
@@ -27,11 +27,8 @@ fn test_wasmtime_system_api() {
     let canister_id = canister_test_id(53);
     let system_state = SystemState::new_for_start(canister_id);
     let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-    let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
-        system_state,
-        cycles_account_manager,
-        &Memory::default(),
-    );
+    let system_state_accessor =
+        ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
     let system_api = SystemApiImpl::new(

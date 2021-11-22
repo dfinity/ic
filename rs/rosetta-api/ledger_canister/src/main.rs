@@ -1,8 +1,9 @@
+use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{
     api::{
         call_bytes_with_cleanup, call_with_cleanup, caller, data_certificate, set_certified_data,
-        Funds,
+        trap_with, Funds,
     },
     endpoint::over_async_may_reject_explicit,
     over, over_async, over_init, printer, setup, stable, BytesS,
@@ -124,14 +125,11 @@ async fn send(
     from_subaccount: Option<Subaccount>,
     to: AccountIdentifier,
     created_at_time: Option<TimeStamp>,
-) -> BlockHeight {
+) -> Result<BlockHeight, TransferError> {
     let caller_principal_id = caller();
 
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
-        panic!(
-            "Sending from non-self-authenticating principal or non-whitelisted canister is not allowed: {}",
-            caller_principal_id
-        );
+        panic!("Sending from {} is not allowed", caller_principal_id);
     }
 
     let from = AccountIdentifier::new(caller_principal_id, from_subaccount);
@@ -156,7 +154,9 @@ async fn send(
         Operation::Burn { from, amount }
     } else {
         if fee != TRANSACTION_FEE {
-            panic!("Transaction fee should be {}", TRANSACTION_FEE);
+            return Err(TransferError::BadFee {
+                expected_fee: TRANSACTION_FEE,
+            });
         }
         Operation::Transfer {
             from,
@@ -165,12 +165,17 @@ async fn send(
             fee,
         }
     };
-    let (height, _) = add_payment(memo, transfer, created_at_time);
+    let (height, hash) = LEDGER
+        .write()
+        .unwrap()
+        .add_payment(memo, transfer, created_at_time)?;
+    set_certified_data(&hash.into_bytes());
+
     // Don't put anything that could ever trap after this call or people using this
     // endpoint. If something did panic the payment would appear to fail, but would
     // actually succeed on chain.
     archive_blocks().await;
-    height
+    Ok(height)
 }
 
 /// You can notify a canister that you have made a payment to it. The
@@ -196,10 +201,7 @@ pub async fn notify(
     let caller_principal_id = caller();
 
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
-        panic!(
-            "Notifying from non-self-authenticating principal or non-whitelisted canister is not allowed: {}",
-            caller_principal_id
-        );
+        panic!("Notifying from {} is not allowed", caller_principal_id);
     }
 
     if !LEDGER.read().unwrap().can_be_notified(&to_canister) {
@@ -386,28 +388,21 @@ fn total_supply() -> ICPTs {
     LEDGER.read().unwrap().balances.total_supply()
 }
 
-/// Start and upgrade methods
+#[candid_method(init)]
+fn canister_init(arg: LedgerCanisterInitPayload) {
+    init(
+        arg.minting_account,
+        arg.initial_values,
+        arg.max_message_size_bytes,
+        arg.transaction_window,
+        arg.archive_options,
+        arg.send_whitelist,
+    )
+}
+
 #[export_name = "canister_init"]
 fn main() {
-    over_init(
-        |CandidOne(LedgerCanisterInitPayload {
-             minting_account,
-             initial_values,
-             max_message_size_bytes,
-             transaction_window,
-             archive_options,
-             send_whitelist,
-         })| {
-            init(
-                minting_account,
-                initial_values,
-                max_message_size_bytes,
-                transaction_window,
-                archive_options,
-                send_whitelist,
-            )
-        },
-    )
+    over_init(|CandidOne(arg)| canister_init(arg))
 }
 
 #[export_name = "canister_post_upgrade"]
@@ -507,8 +502,20 @@ fn send_() {
              from_subaccount,
              to,
              created_at_time,
-         }| { send(memo, amount, fee, from_subaccount, to, created_at_time) },
+         }| async move {
+            send(memo, amount, fee, from_subaccount, to, created_at_time)
+                .await
+                .unwrap_or_else(|e| {
+                    trap_with(&e.to_string());
+                    unreachable!()
+                })
+        },
     );
+}
+
+#[candid_method(update, rename = "send_dfx")]
+async fn send_dfx(arg: SendArgs) -> BlockHeight {
+    transfer_candid(arg.into()).await.unwrap()
 }
 
 /// Do not use call this from code, this is only here so dfx has something to
@@ -518,17 +525,7 @@ fn send_() {
 /// I STRONGLY recommend that you use "send_pb" instead.
 #[export_name = "canister_update send_dfx"]
 fn send_dfx_() {
-    over_async(
-        candid_one,
-        |SendArgs {
-             memo,
-             amount,
-             fee,
-             from_subaccount,
-             to,
-             created_at_time,
-         }| { send(memo, amount, fee, from_subaccount, to, created_at_time) },
-    );
+    over_async(candid_one, send_dfx);
 }
 
 #[export_name = "canister_update notify_pb"]
@@ -542,7 +539,7 @@ fn notify_() {
              from_subaccount,
              to_canister,
              to_subaccount,
-         })| {
+         })| async move {
             notify(
                 block_height,
                 max_fee,
@@ -551,8 +548,31 @@ fn notify_() {
                 to_subaccount,
                 true,
             )
+            .await
         },
     );
+}
+
+#[candid_method(update, rename = "transfer")]
+async fn transfer_candid(arg: TransferArgs) -> Result<BlockHeight, TransferError> {
+    let to_account = AccountIdentifier::from_address(arg.to).unwrap_or_else(|e| {
+        trap_with(&format!("Invalid account identifier: {}", e));
+        unreachable!()
+    });
+    send(
+        arg.memo,
+        arg.amount,
+        arg.fee,
+        arg.from_subaccount,
+        to_account,
+        arg.created_at_time,
+    )
+    .await
+}
+
+#[export_name = "canister_update transfer"]
+fn transfer() {
+    over_async(candid_one, transfer_candid)
 }
 
 /// See caveats of use on send_dfx
@@ -625,12 +645,29 @@ fn account_balance_() {
     })
 }
 
+#[candid_method(query, rename = "account_balance")]
+fn account_balance_candid_(arg: BinaryAccountBalanceArgs) -> ICPTs {
+    let account = AccountIdentifier::from_address(arg.account).unwrap_or_else(|e| {
+        trap_with(&format!("Invalid account identifier: {}", e));
+        unreachable!()
+    });
+    account_balance(account)
+}
+
+#[export_name = "canister_query account_balance"]
+fn account_balance_candid() {
+    over(candid_one, account_balance_candid_)
+}
+
+#[candid_method(query, rename = "account_balance_dfx")]
+fn account_balance_dfx_(args: AccountBalanceArgs) -> ICPTs {
+    account_balance(args.account)
+}
+
 /// See caveats of use on send_dfx
 #[export_name = "canister_query account_balance_dfx"]
-fn account_balance_dfx_() {
-    over(candid_one, |AccountBalanceArgs { account }| {
-        account_balance(account)
-    })
+fn account_balance_dfx() {
+    over(protobuf, account_balance_dfx_);
 }
 
 #[export_name = "canister_query total_supply_pb"]
@@ -744,4 +781,36 @@ fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::
 #[export_name = "canister_query http_request"]
 fn http_request() {
     ledger_canister::http_request::serve_metrics(encode_metrics);
+}
+
+#[test]
+fn check_candid_interface_compatibility() {
+    use candid::types::subtype::{subtype, Gamma};
+    use candid::types::Type;
+    use std::io::Write;
+    use std::path::PathBuf;
+
+    candid::export_service!();
+
+    let actual_interface = __export_service();
+    println!("Generated DID:\n {}", actual_interface);
+    let mut tmp = tempfile::NamedTempFile::new().expect("failed to create a temporary file");
+    write!(tmp, "{}", actual_interface).expect("failed to write interface to a temporary file");
+    let (mut env1, t1) =
+        candid::pretty_check_file(tmp.path()).expect("failed to check generated candid file");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ledger.did");
+    let (env2, t2) =
+        candid::pretty_check_file(path.as_path()).expect("failed to open ledger.did file");
+
+    let (t1_ref, t2) = match (t1.as_ref().unwrap(), t2.unwrap()) {
+        (Type::Class(_, s1), Type::Class(_, s2)) => (s1.as_ref(), *s2),
+        (Type::Class(_, s1), s2 @ Type::Service(_)) => (s1.as_ref(), s2),
+        (s1 @ Type::Service(_), Type::Class(_, s2)) => (s1, *s2),
+        (t1, t2) => (t1, t2),
+    };
+
+    let mut gamma = Gamma::new();
+    let t2 = env1.merge_type(env2, t2);
+    subtype(&mut gamma, &env1, t1_ref, &t2)
+        .expect("ledger canister interface is not compatible with the ledger.did file");
 }

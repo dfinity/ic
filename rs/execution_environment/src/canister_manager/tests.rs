@@ -1335,28 +1335,13 @@ fn reinstall_clears_stable_memory() {
         // Write something into the canister's stable memory.
         let mut canister = state.take_canister_state(&canister_id).unwrap();
         assert_eq!(
-            canister
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .size,
+            canister.system_state.stable_memory.size,
             NumWasmPages64::new(0)
         );
-        canister
-            .execution_state
-            .as_mut()
-            .unwrap()
-            .stable_memory
-            .size = NumWasmPages64::new(1);
+        canister.system_state.stable_memory.size = NumWasmPages64::new(1);
         let mut buf = page_map::Buffer::new(PageMap::default());
         buf.write(&[1; 10], 0);
-        canister
-            .execution_state
-            .as_mut()
-            .unwrap()
-            .stable_memory
-            .page_map = buf.into_page_map();
+        canister.system_state.stable_memory.page_map = buf.into_page_map();
 
         state.put_canister_state(canister);
 
@@ -1377,12 +1362,7 @@ fn reinstall_clears_stable_memory() {
         // Stable memory should now be empty.
         let canister = state.take_canister_state(&canister_id).unwrap();
         assert_eq!(
-            canister
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .size,
+            canister.system_state.stable_memory.size,
             NumWasmPages64::new(0)
         );
     });

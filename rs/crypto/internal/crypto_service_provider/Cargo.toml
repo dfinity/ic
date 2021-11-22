@@ -35,13 +35,12 @@ ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
 ic-utils = { path = "../../../utils" }
 lazy_static = "1.4.0"
-openssl = "0.10.36"
+openssl = "0.10.38"
 parking_lot = "0.11.1"
 prost = "0.9.0"
 rand = "0.7.3"
 rand_chacha = "0.2.2"
 rand_core = "0.5.1"
-ring = "0.16.20"
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_cbor = "0.11.1"
 simple_asn1 = "0.5.4"

@@ -250,30 +250,8 @@ mod client_cert_verifier_tests {
     }
 
     #[test]
-    fn should_set_client_auth_to_optional_in_new_with_optional_client_auth() {
-        let verifier = NodeClientCertVerifier::new_with_optional_client_auth(
-            SomeOrAllNodes::All,
-            TlsRegistry::new().get(),
-            REG_V1,
-        );
-
-        assert_eq!(verifier.client_auth_mandatory(None), Some(false));
-    }
-
-    #[test]
     fn should_offer_client_auth_if_client_auth_mandatory() {
         let verifier = NodeClientCertVerifier::new_with_mandatory_client_auth(
-            SomeOrAllNodes::All,
-            TlsRegistry::new().get(),
-            REG_V1,
-        );
-
-        assert!(verifier.offer_client_auth());
-    }
-
-    #[test]
-    fn should_offer_client_auth_if_client_auth_optional() {
-        let verifier = NodeClientCertVerifier::new_with_optional_client_auth(
             SomeOrAllNodes::All,
             TlsRegistry::new().get(),
             REG_V1,

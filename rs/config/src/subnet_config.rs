@@ -127,7 +127,7 @@ impl SchedulerConfig {
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
             only_track_system_heartbeat_errors: true,
-            heap_delta_rate_limit: NumBytes::from(200 * 1024 * 1024),
+            heap_delta_rate_limit: NumBytes::from(100 * 1024 * 1024),
         }
     }
 
@@ -160,7 +160,7 @@ impl SchedulerConfig {
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
             only_track_system_heartbeat_errors: true,
-            heap_delta_rate_limit: NumBytes::from(200 * 1024 * 1024),
+            heap_delta_rate_limit: NumBytes::from(100 * 1024 * 1024),
         }
     }
 

@@ -14,7 +14,7 @@ const DEFAULT_SERIAL: [u8; 19] = [42u8; 19];
 const DEFAULT_X509_VERSION: i32 = 3;
 const DEFAULT_CN: &str = "Spock";
 const DEFAULT_NOT_BEFORE_DAYS_FROM_NOW: u32 = 0;
-const DEFAULT_VALIDITY_DAYS: u32 = 365;
+const RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE: &str = "99991231235959Z";
 
 /// Generates an ed25519 key pair.
 pub fn ed25519_key_pair() -> PKey<Private> {
@@ -266,11 +266,14 @@ impl CertBuilder {
     }
 
     fn not_after_asn_1_time(&self) -> Asn1Time {
-        if let Some(not_after) = &self.not_after {
-            return Asn1Time::from_str_x509(not_after).expect("unable to create 'not after'");
+        if let Some(validity_days) = self.validity_days {
+            return Asn1Time::days_from_now(validity_days).expect("unable to create 'not after'");
         }
-        let validity_days = self.validity_days.unwrap_or(DEFAULT_VALIDITY_DAYS);
-        Asn1Time::days_from_now(validity_days).expect("unable to create 'not after'")
+        let not_after = self
+            .not_after
+            .clone()
+            .unwrap_or_else(|| RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE.to_string());
+        Asn1Time::from_str_x509(&not_after).expect("unable to create 'not after'")
     }
 }
 

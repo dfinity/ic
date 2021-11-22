@@ -184,7 +184,6 @@ mod tests {
                 session_nonce: None,
                 wasm_binary,
                 wasm_memory,
-                stable_memory: Memory::default(),
                 exported_globals: vec![Global::I32(1)],
                 exports: ExportedFunctions::new(BTreeSet::new()),
                 last_executed_round: ExecutionRound::from(0),

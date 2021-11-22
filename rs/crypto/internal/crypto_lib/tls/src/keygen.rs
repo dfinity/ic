@@ -40,6 +40,7 @@ pub enum TlsEd25519CertificateDerBytesParseError {
 
 /// The raw bytes of a DER-encoded Ed25519 secret key.
 #[derive(Clone, Eq, PartialEq, Zeroize, Deserialize, Serialize)]
+#[zeroize(drop)] // TODO (CRP-1251) Use SecretVec in TlsEd25519CertificateDerBytes instead of Vec
 pub struct TlsEd25519SecretKeyDerBytes {
     #[serde(with = "serde_bytes")]
     pub bytes: Vec<u8>,

@@ -1,6 +1,6 @@
 //! Module that deals with requests to /api/v2/canister/.../call
 
-use crate::{common, IngressFilterService};
+use crate::{common, map_box_error_to_canonical_error, IngressFilterService};
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces::crypto::IngressSigVerifier;
 use ic_interfaces::{p2p::IngressIngestionService, registry::RegistryClient};
@@ -20,7 +20,6 @@ use ic_types::{
 use ic_validator::validate_request;
 use std::convert::TryInto;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tower::{Service, ServiceExt};
 
 fn get_registry_data(
@@ -72,8 +71,8 @@ pub(crate) async fn handle(
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
-    ingress_sender: Arc<Mutex<IngressIngestionService>>,
-    ingress_filter: Arc<Mutex<IngressFilterService>>,
+    mut ingress_sender: IngressIngestionService,
+    mut ingress_filter: IngressFilterService,
     malicious_flags: MaliciousFlags,
     body: Vec<u8>,
 ) -> Result<Response<Body>, CanonicalError> {
@@ -114,25 +113,22 @@ pub(crate) async fn handle(
         ));
     }
 
-    let ingress_filter_callback = ingress_filter
-        .lock()
-        .await
+    ingress_filter
         .ready()
         .await
         .expect("The service must always be able to process requests")
-        .call((provisional_whitelist, msg.content().clone()));
+        .call((provisional_whitelist, msg.content().clone()))
+        .await
+        .map_err(|err| map_box_error_to_canonical_error(err))?;
 
-    ingress_filter_callback.await?;
     let ingress_log_entry = msg.log_entry();
-    let ingress_sender_callback = ingress_sender
-        .lock()
-        .await
+    ingress_sender
         .ready()
         .await
         .expect("The service must always be able to process requests")
-        .call(msg);
+        .call(msg)
+        .await?;
 
-    ingress_sender_callback.await?;
     // We're pretty much done, just need to send the message to ingress and
     // make_response to the client
     info_sample!(

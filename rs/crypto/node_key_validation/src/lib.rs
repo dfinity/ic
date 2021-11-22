@@ -23,28 +23,9 @@
 //! * the public key's proof of possession (PoP) is valid
 //! * the public key is a point on the curve and in the right subgroup
 //!
-//! Validation of a *node's TLS certificate* includes verifying that
-//! * the certificate is present and well-formed, i.e., formatted in X.509
-//!   version 3 and DER-encoded
-//! * the certificate has a single subject common name (CN) that matches the
-//!   `node_id`
-//! * the certificate has a single issuer common name (CN) that matches the
-//!   subject CN (indicating that the certificate is self-signed)
-//! * the certificate is NOT for a certificate authority. This means either 1)
-//!   there are no BasicConstraints extensions, or 2) if there are
-//!   BasicConstraints then one is `CA` and it's set to `False`.
-//! * the certificate's notBefore date is latest in two minutes from now. This
-//!   is to ensure that the certificate is already valid or becomes valid
-//!   shortly. The grace period is to account for potential clock differences.
-//! * the certificate's notAfter date indicates according to [RFC 5280 (section
-//!   4.1.2.5)] that the certificate has no well-defined expiration date.
-//! * the certificate's signature algorithm is Ed25519 (OID 1.3.101.112)
-//! * the certificate's public key is valid, which includes checking that the
-//!   key is a point on the curve and in the right subgroup
-//! * the certificate's signature is valid w.r.t. the certificate's public key,
-//!   that is, the certificate is correctly self-signed
-//!
-//! [RFC 5280 (section 4.1.2.5)]: https://tools.ietf.org/html/rfc5280#section-4.1.2.5
+//! How a *node's TLS certificate* is validated is described in the Rust doc of
+//! `ic_crypto_tls_cert_validation::validate_tls_certificate`. Note that the
+//! certificate is required to be present.
 
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
@@ -54,18 +35,17 @@ use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd25519PublicKeyBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PopBytes as MultiSigBls12381PopBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PublicKeyBytes as MultiSigBls12381PublicKeyBytes;
+use ic_crypto_tls_cert_validation::TlsCertValidationError;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use std::convert::TryFrom;
 use std::fmt;
-use tls_cert_validation::validate_tls_certificate;
 
 #[cfg(test)]
 mod tests;
 
 mod proto_conversions;
-mod tls_cert_validation;
 
 /// Validated public key material of a node.
 ///
@@ -234,6 +214,19 @@ fn validate_dkg_dealing_encryption_key(
     Ok(())
 }
 
+pub fn validate_tls_certificate(
+    tls_certificate: &Option<X509PublicKeyCert>,
+    node_id: NodeId,
+) -> Result<(), TlsCertValidationError> {
+    let cert = tls_certificate
+        .as_ref()
+        .ok_or_else(|| TlsCertValidationError {
+            error: "invalid TLS certificate: certificate is missing".to_string(),
+        })?;
+
+    ic_crypto_tls_cert_validation::validate_tls_certificate(cert, node_id)
+}
+
 fn derive_node_id(pk_bytes: BasicSigEd25519PublicKeyBytes) -> NodeId {
     let pubkey_der = ic_crypto_internal_basic_sig_ed25519::public_key_to_der(pk_bytes);
     NodeId::from(PrincipalId::new_self_authenticating(&pubkey_der))
@@ -257,5 +250,12 @@ fn invalid_dkg_dealing_enc_pubkey_error<S: Into<String>>(internal_error: S) -> K
             "invalid DKG dealing encryption key: {}",
             internal_error.into()
         ),
+    }
+}
+
+impl From<TlsCertValidationError> for KeyValidationError {
+    fn from(e: TlsCertValidationError) -> Self {
+        let TlsCertValidationError { error } = e;
+        KeyValidationError { error }
     }
 }

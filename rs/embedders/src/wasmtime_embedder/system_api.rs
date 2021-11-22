@@ -717,11 +717,10 @@ pub(crate) fn syscalls<S: SystemApi>(
 
     linker
         .func_wrap("ic0", "canister_cycles_balance128", {
-            move |mut caller: Caller<'_, StoreData<S>>| match with_system_api(&mut caller, |s| {
-                s.ic0_canister_cycles_balance128()
-            }) {
-                Ok((high, low)) => Ok((high as i64, low as i64)),
-                Err(err) => Err(process_err(caller, err)),
+            move |caller: Caller<'_, StoreData<S>>, dst: u32| {
+                with_memory_and_system_api(caller, |system_api, memory| {
+                    system_api.ic0_canister_cycles_balance128(dst, memory)
+                })
             }
         })
         .unwrap();
@@ -742,11 +741,10 @@ pub(crate) fn syscalls<S: SystemApi>(
 
     linker
         .func_wrap("ic0", "msg_cycles_available128", {
-            move |mut caller: Caller<'_, StoreData<S>>| match with_system_api(&mut caller, |s| {
-                s.ic0_msg_cycles_available128()
-            }) {
-                Ok((high, low)) => Ok((high as i64, low as i64)),
-                Err(err) => Err(process_err(caller, err)),
+            move |caller: Caller<'_, StoreData<S>>, dst: u32| {
+                with_memory_and_system_api(caller, |system_api, memory| {
+                    system_api.ic0_msg_cycles_available128(dst, memory)
+                })
             }
         })
         .unwrap();
@@ -767,11 +765,10 @@ pub(crate) fn syscalls<S: SystemApi>(
 
     linker
         .func_wrap("ic0", "msg_cycles_refunded128", {
-            move |mut caller: Caller<'_, StoreData<S>>| match with_system_api(&mut caller, |s| {
-                s.ic0_msg_cycles_refunded128()
-            }) {
-                Ok((high, low)) => Ok((high as i64, low as i64)),
-                Err(err) => Err(process_err(caller, err)),
+            move |caller: Caller<'_, StoreData<S>>, dst: u32| {
+                with_memory_and_system_api(caller, |system_api, memory| {
+                    system_api.ic0_msg_cycles_refunded128(dst, memory)
+                })
             }
         })
         .unwrap();
@@ -787,16 +784,14 @@ pub(crate) fn syscalls<S: SystemApi>(
 
     linker
         .func_wrap("ic0", "msg_cycles_accept128", {
-            move |mut caller: Caller<'_, StoreData<S>>, amount_high: i64, amount_low: i64| {
-                match with_system_api(&mut caller, |s| {
-                    s.ic0_msg_cycles_accept128(Cycles::from_parts(
-                        amount_high as u64,
-                        amount_low as u64,
-                    ))
-                }) {
-                    Ok((high, low)) => Ok((high as i64, low as i64)),
-                    Err(err) => Err(process_err(caller, err)),
-                }
+            move |caller: Caller<'_, StoreData<S>>, amount_high: i64, amount_low: i64, dst: u32| {
+                with_memory_and_system_api(caller, |system_api, memory| {
+                    system_api.ic0_msg_cycles_accept128(
+                        Cycles::from_parts(amount_high as u64, amount_low as u64),
+                        dst,
+                        memory,
+                    )
+                })
             }
         })
         .unwrap();

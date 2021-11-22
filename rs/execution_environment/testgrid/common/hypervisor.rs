@@ -3823,7 +3823,7 @@ where
 
         // Stable memory should remain empty since the call failed.
         assert_eq!(
-            canister.execution_state.unwrap().stable_memory.size,
+            canister.system_state.stable_memory.size,
             NumWasmPages64::new(0)
         );
     });

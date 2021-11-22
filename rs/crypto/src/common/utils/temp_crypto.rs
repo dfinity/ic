@@ -509,6 +509,19 @@ impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponen
             .await
     }
 
+    async fn perform_tls_server_handshake_without_client_auth_with_rustls(
+        &self,
+        tcp_stream: TcpStream,
+        registry_version: RegistryVersion,
+    ) -> Result<TlsStream, TlsServerHandshakeError> {
+        self.crypto_component
+            .perform_tls_server_handshake_without_client_auth_with_rustls(
+                tcp_stream,
+                registry_version,
+            )
+            .await
+    }
+
     async fn perform_tls_client_handshake(
         &self,
         tcp_stream: TcpStream,

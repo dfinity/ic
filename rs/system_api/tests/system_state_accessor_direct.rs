@@ -1,7 +1,7 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, SystemApi};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, StateError, SystemState};
+use ic_replicated_state::{StateError, SystemState};
 use ic_system_api::{SystemStateAccessor, SystemStateAccessorDirect};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -54,7 +54,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
     );
 
     let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, cycles_account_manager, &Memory::default());
+        SystemStateAccessorDirect::new(system_state, cycles_account_manager);
 
     assert_eq!(
         system_state_accessor.push_output_request(
@@ -106,7 +106,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
     );
 
     let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, cycles_account_manager, &Memory::default());
+        SystemStateAccessorDirect::new(system_state, cycles_account_manager);
 
     assert_eq!(
         system_state_accessor.push_output_request(
@@ -141,11 +141,8 @@ fn push_output_request_succeeds_with_enough_cycles() {
         NumSeconds::from(100_000),
     );
 
-    let system_state_accessor = SystemStateAccessorDirect::new(
-        system_state,
-        Arc::clone(&cycles_account_manager),
-        &Memory::default(),
-    );
+    let system_state_accessor =
+        SystemStateAccessorDirect::new(system_state, Arc::clone(&cycles_account_manager));
 
     assert_eq!(
         system_state_accessor.push_output_request(
@@ -177,11 +174,8 @@ fn correct_charging_source_canister_for_a_request() {
 
     let initial_cycles_balance = system_state.cycles_balance;
 
-    let system_state_accessor = SystemStateAccessorDirect::new(
-        system_state,
-        Arc::clone(&cycles_account_manager),
-        &Memory::default(),
-    );
+    let system_state_accessor =
+        SystemStateAccessorDirect::new(system_state, Arc::clone(&cycles_account_manager));
 
     let request = RequestBuilder::default()
         .sender(canister_test_id(0))
@@ -214,7 +208,7 @@ fn correct_charging_source_canister_for_a_request() {
     // ExecutionEnvironmentImpl::execute_canister_response()
     // => Mock the response_cycles_refund() invocation from the
     // execute_canister_response()
-    let mut system_state = system_state_accessor.release_system_state().0;
+    let mut system_state = system_state_accessor.release_system_state();
     cycles_account_manager.response_cycles_refund(&mut system_state, &mut response);
 
     // MAX_NUM_INSTRUCTIONS also gets partially refunded in the real

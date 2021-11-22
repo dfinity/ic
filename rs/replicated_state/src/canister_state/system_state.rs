@@ -2,7 +2,7 @@ mod call_context_manager;
 
 pub use super::queues::memory_required_to_push_request;
 use super::{queues::can_push, ENFORCE_MESSAGE_MEMORY_USAGE};
-use crate::{CanisterQueues, StateError};
+use crate::{CanisterQueues, Memory, NumWasmPages64, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
 use ic_interfaces::messages::CanisterInputMessage;
@@ -55,6 +55,7 @@ pub struct SystemState {
     // This must remain private, in order to properly enforce system states (running, stopping,
     // stopped) when enqueuing inputs; and to ensure message memory reservations are accurate.
     queues: CanisterQueues,
+    pub stable_memory: Memory<NumWasmPages64>,
     /// The canister's memory allocation.
     pub memory_allocation: MemoryAllocation,
     pub freeze_threshold: NumSeconds,
@@ -229,6 +230,7 @@ impl SystemState {
             canister_id,
             controllers: btreeset! {controller},
             queues: CanisterQueues::default(),
+            stable_memory: Memory::default(),
             cycles_balance: initial_cycles,
             memory_allocation: MemoryAllocation::BestEffort,
             freeze_threshold,
@@ -259,6 +261,7 @@ impl SystemState {
         controllers: BTreeSet<PrincipalId>,
         canister_id: CanisterId,
         queues: CanisterQueues,
+        stable_memory: Memory<NumWasmPages64>,
         memory_allocation: MemoryAllocation,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
@@ -270,6 +273,7 @@ impl SystemState {
             controllers,
             canister_id,
             queues,
+            stable_memory,
             memory_allocation,
             freeze_threshold,
             status,
@@ -510,11 +514,14 @@ impl SystemState {
 
     /// Returns the memory that is currently used by the `SystemState`.
     pub fn memory_usage(&self) -> NumBytes {
+        let mut memory_usage = crate::num_bytes_try_from64(self.stable_memory.size)
+            .expect("could not convert from wasm pages to bytes");
+
         if ENFORCE_MESSAGE_MEMORY_USAGE {
-            ((self.queues.memory_usage()) as u64).into()
-        } else {
-            NumBytes::from(0)
+            memory_usage += (self.queues.memory_usage() as u64).into();
         }
+
+        memory_usage
     }
 
     /// Sets the (transient) size in bytes of responses from this canister
@@ -530,6 +537,11 @@ impl SystemState {
             }
             CanisterStatus::Stopping { stop_contexts, .. } => stop_contexts.push(stop_context),
         }
+    }
+
+    /// Clears stable memory of this canister.
+    pub fn clear_stable_memory(&mut self) {
+        self.stable_memory = Memory::default();
     }
 
     /// Method used only by the dashboard.
@@ -559,37 +571,38 @@ impl SystemState {
         }
 
         if !ENFORCE_MESSAGE_MEMORY_USAGE {
-            while self
-                .queues
-                .induct_message_to_self(self.canister_id)
-                .is_some()
-            {}
+            while self.queues.induct_message_to_self(self.canister_id).is_ok() {}
+            return;
         }
 
         let mut available_memory = canister_available_memory.min(*subnet_available_memory);
         let mut memory_usage = self.queues.memory_usage() as i64;
-        // Adjust `subnet_available_memory` by `memory_usage_before -
-        // memory_usage_after`. Defer the accounting to `CanisterQueues`, to
-        // avoid duplication (and the possibility of divergence).
-        *subnet_available_memory += memory_usage;
 
         while let Some(msg) = self.queues.peek_output(&self.canister_id) {
+            // Ensure that enough memory is available for inducting `msg`.
             if can_push(&*msg, available_memory).is_err() {
-                break;
+                // Bail out if not enough memory available for message.
+                return;
             }
 
-            // Adjust `available_memory` by `memory_usage_before - memory_usage_after`.
-            // Defer the accounting to `CanisterQueues`, to avoid duplication (and the
-            // possibility of divergence).
+            // Attempt inducting `msg`. May fail if the input queue is full.
+            if self
+                .queues
+                .induct_message_to_self(self.canister_id)
+                .is_err()
+            {
+                return;
+            }
+
+            // Adjust both `available_memory` and `subnet_available_memory` by
+            // `memory_usage_before - memory_usage_after`. Defer the accounting
+            // to `CanisterQueues`, to avoid duplication or divergence.
             available_memory += memory_usage;
-
-            self.queues.induct_message_to_self(self.canister_id);
-
+            *subnet_available_memory += memory_usage;
             memory_usage = self.queues.memory_usage() as i64;
             available_memory -= memory_usage;
+            *subnet_available_memory -= memory_usage;
         }
-
-        *subnet_available_memory -= memory_usage;
     }
 }
 

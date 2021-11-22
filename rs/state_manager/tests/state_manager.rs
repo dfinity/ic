@@ -47,6 +47,8 @@ pub mod common;
 use common::*;
 use ic_registry_subnet_type::SubnetType;
 
+const NUM_THREADS: u32 = 3;
+
 fn make_mutable(path: &Path) -> std::io::Result<()> {
     let mut perms = std::fs::metadata(path)?.permissions();
     perms.set_readonly(false);
@@ -171,39 +173,19 @@ fn stable_memory_is_persisted() {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        canister_state
-            .execution_state
-            .as_mut()
-            .unwrap()
-            .stable_memory
-            .size = NumWasmPages64::new(2);
-        canister_state
-            .execution_state
-            .as_mut()
-            .unwrap()
-            .stable_memory
-            .page_map = PageMap::from(&[1; 100][..]);
+        canister_state.system_state.stable_memory.size = NumWasmPages64::new(2);
+        canister_state.system_state.stable_memory.page_map = PageMap::from(&[1; 100][..]);
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
         let (_height, state) = state_manager.take_tip();
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
         assert_eq!(
             NumWasmPages64::new(2),
-            canister_state
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .size
+            canister_state.system_state.stable_memory.size
         );
         assert_eq!(
             PageMap::from(&[1; 100][..]),
-            canister_state
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .page_map
+            canister_state.system_state.stable_memory.page_map
         );
 
         let state_manager = restart_fn(state_manager);
@@ -214,21 +196,11 @@ fn stable_memory_is_persisted() {
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
         assert_eq!(
             NumWasmPages64::new(2),
-            canister_state
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .size
+            canister_state.system_state.stable_memory.size
         );
         assert_eq!(
             PageMap::from(&[1; 100][..]),
-            canister_state
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .page_map
+            canister_state.system_state.stable_memory.page_map
         );
     });
 }
@@ -239,12 +211,21 @@ fn missing_stable_memory_file_is_handled() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        canister_state.execution_state = None;
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
-        // Since the canister has no execution state, there should be no stable memory
-        // file.
+        let (_height, state) = state_manager.take_tip();
+        let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
+        assert_eq!(
+            NumWasmPages64::new(0),
+            canister_state.system_state.stable_memory.size
+        );
+        assert_eq!(
+            PageMap::from(&[][..]),
+            canister_state.system_state.stable_memory.page_map
+        );
+
+        // Since the canister had no stable memory, it should be fine to delete
+        // the stable memory blob.
         let state_layout = state_manager.state_layout();
         let mutable_cp_layout = CheckpointLayout::<RwPolicy>::new(
             state_layout
@@ -258,7 +239,7 @@ fn missing_stable_memory_file_is_handled() {
 
         let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
         let canister_stable_memory = canister_layout.stable_memory_blob();
-        assert!(!canister_stable_memory.exists());
+        std::fs::remove_file(canister_stable_memory).unwrap();
 
         let state_manager = restart_fn(state_manager);
 
@@ -266,7 +247,14 @@ fn missing_stable_memory_file_is_handled() {
         assert_eq!(height(1), recovered.height());
         let state = recovered.take();
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
-        assert!(canister_state.execution_state.is_none());
+        assert_eq!(
+            NumWasmPages64::new(0),
+            canister_state.system_state.stable_memory.size
+        );
+        assert_eq!(
+            PageMap::from(&[][..]),
+            canister_state.system_state.stable_memory.page_map
+        );
     });
 }
 
@@ -1412,9 +1400,7 @@ fn can_recover_from_corruption_on_state_sync() {
 
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
         canister_state
-            .execution_state
-            .as_mut()
-            .unwrap()
+            .system_state
             .stable_memory
             .page_map
             .update(&[(PageIndex::new(0), &[255u8; PAGE_SIZE])]);
@@ -1710,7 +1696,10 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
             .raw_path()
             .to_path_buf();
 
+        let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
+
         let manifest = compute_manifest(
+            &mut thread_pool,
             &ManifestMetrics::new(&MetricsRegistry::new()),
             &no_op_logger(),
             CURRENT_STATE_SYNC_VERSION,

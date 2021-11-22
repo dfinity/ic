@@ -6,7 +6,7 @@ use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableM
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, SystemState};
+use ic_replicated_state::SystemState;
 use ic_system_api::{ApiType, SystemApiImpl, SystemStateAccessor, SystemStateAccessorDirect};
 use ic_test_utilities::{
     mock_time,
@@ -60,16 +60,13 @@ pub fn get_update_api_type() -> ApiType {
     )
 }
 
-pub fn get_system_api(
+pub fn get_system_api_with_max_cycles_per_canister(
     api_type: ApiType,
     system_state: SystemState,
     cycles_account_manager: CyclesAccountManager,
 ) -> SystemApiImpl<SystemStateAccessorDirect> {
-    let system_state_accessor = SystemStateAccessorDirect::new(
-        system_state,
-        Arc::new(cycles_account_manager),
-        &Memory::default(),
-    );
+    let system_state_accessor =
+        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
     SystemApiImpl::new(
         system_state_accessor.canister_id(),
         api_type,
@@ -78,4 +75,12 @@ pub fn get_system_api(
         execution_parameters(),
         no_op_logger(),
     )
+}
+
+pub fn get_system_api(
+    api_type: ApiType,
+    system_state: SystemState,
+    cycles_account_manager: CyclesAccountManager,
+) -> SystemApiImpl<SystemStateAccessorDirect> {
+    get_system_api_with_max_cycles_per_canister(api_type, system_state, cycles_account_manager)
 }

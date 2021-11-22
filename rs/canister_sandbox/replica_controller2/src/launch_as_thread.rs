@@ -61,7 +61,12 @@ fn attach_ipc_service_to_socket(
             )),
             reply_handler,
         );
-        transport::socket_read_demux::<_, _, _>(demux, socket);
+        transport::socket_read_messages::<_, _>(
+            move |message| {
+                demux.handle(message);
+            },
+            socket,
+        );
     });
 
     svc

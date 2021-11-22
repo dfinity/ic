@@ -20,6 +20,7 @@ ic-crypto-internal-basic-sig-iccsa = { path = "internal/crypto_lib/basic_sig/icc
 ic-crypto-internal-test-vectors = { path = "internal/test_vectors" }
 ic-crypto-internal-types = { path = "internal/crypto_lib/types" }
 ic-crypto-sha = { path = "sha" }
+ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validation" }
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
 ic-interfaces = { path = "../interfaces" }

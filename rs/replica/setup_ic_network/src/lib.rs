@@ -47,7 +47,6 @@ use ic_state_manager::StateManagerImpl;
 use ic_transport::transport::create_transport;
 use ic_types::{
     artifact::{Advert, ArtifactKind, ArtifactTag, FileTreeSyncAttribute},
-    canonical_error::{internal_error, resource_exhausted_error, CanonicalError},
     consensus::catchup::CUPWithOriginalProtobuf,
     crypto::CryptoHash,
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
@@ -62,8 +61,7 @@ use std::sync::{
 };
 use std::time::Duration;
 use tokio::task::JoinHandle;
-use tower::{load_shed::error::Overloaded, ServiceBuilder, ServiceExt};
-use tower_util::BoxService;
+use tower::{util::BoxService, ServiceBuilder};
 
 /// Periodic timer duration in milliseconds between polling calls to the P2P
 /// component.
@@ -248,24 +246,14 @@ pub fn create_networking_stack(
     ));
     let ingress_ingestion_service = BoxService::new(
         ServiceBuilder::new()
-            .load_shed()
-            .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
             .concurrency_limit(MAX_INFLIGHT_INGRESS_MESSAGES)
             .rate_limit(MAX_INGRESS_MESSAGES_PER_SECOND, Duration::from_secs(1))
-            .service(ingress_event_handler)
-            .map_err(|err| {
-                if err.is::<CanonicalError>() {
-                    return *err
-                        .downcast::<CanonicalError>()
-                        .expect("Downcasting must succeed.");
-                }
-                if err.is::<Overloaded>() {
-                    return resource_exhausted_error("The service is overloaded.");
-                }
-                internal_error(&format!("Could not convert {:?} to CanonicalError", err))
-            }),
+            .service(ingress_event_handler),
     );
-
+    let ingress_ingestion_service = ServiceBuilder::new()
+        .load_shed()
+        .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
+        .service(ingress_ingestion_service);
     Ok((
         ingress_ingestion_service,
         Box::new(p2p),

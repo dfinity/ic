@@ -530,10 +530,10 @@ fn can_validate_module_cycles_u128_related_imports() {
     let wasm = wat2wasm(
         r#"(module
         (import "ic0" "call_cycles_add128" (func $ic0_call_cycles_add128 (param i64 i64)))
-        (import "ic0" "canister_cycles_balance128" (func $ic0_canister_cycles_balance128 (result i64 i64)))
-        (import "ic0" "msg_cycles_available128" (func $ic0_msg_cycles_available128 (result i64 i64)))
-        (import "ic0" "msg_cycles_refunded128" (func $ic0_msg_cycles_refunded128 (result i64 i64)))
-        (import "ic0" "msg_cycles_accept128" (func $ic0_msg_cycles_accept128 (param i64 i64) (result i64 i64)))
+        (import "ic0" "canister_cycles_balance128" (func $ic0_canister_cycles_balance128 (param i32)))
+        (import "ic0" "msg_cycles_available128" (func $ic0_msg_cycles_available128 (param i32)))
+        (import "ic0" "msg_cycles_refunded128" (func $ic0_msg_cycles_refunded128 (param i32)))
+        (import "ic0" "msg_cycles_accept128" (func $ic0_msg_cycles_accept128 (param i64 i64 i32)))
     )"#,
     )
         .unwrap();

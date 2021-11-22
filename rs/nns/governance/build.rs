@@ -534,6 +534,14 @@ fn main() {
         .join(" "),
     );
     config.type_attribute(
+        "ic_nns_governance.pb.v1.WaitForQuietState",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.ProposalInfo",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",

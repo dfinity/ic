@@ -14,6 +14,7 @@ pub mod protocol {
     pub mod syscall;
     pub mod transport;
 }
+pub mod fdenum;
 
 // Declare how messages are multiplexed on controller->sandbox channel.
 

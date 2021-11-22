@@ -18,8 +18,9 @@ use ic_interfaces::{
     },
     time_source::{SysTimeSource, TimeSource},
 };
-use ic_logger::{debug, warn, ReplicaLogger};
+use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_types::consensus::HasRank;
 use ic_types::{
     artifact::*,
     consensus::{certification::CertificationMessage, dkg, ConsensusMessage},
@@ -380,12 +381,22 @@ impl<
                         to_add,
                         self.advert_class(to_add, AdvertSource::Produced),
                     ));
+                    if let ConsensusMessage::BlockProposal(p) = to_add {
+                        let rank = p.clone().content.decompose().1.rank();
+                        info!(tag => "consensus_proposals", self.log,
+                                "Added proposal {:?} of rank {:?} to artifact pool", p, rank);
+                    }
                 }
                 ConsensusAction::MoveToValidated(to_move) => {
                     adverts.push(ConsensusArtifact::message_to_advert_send_request(
                         to_move,
                         self.advert_class(to_move, AdvertSource::Relayed),
                     ));
+                    if let ConsensusMessage::BlockProposal(p) = to_move {
+                        let rank = p.clone().content.decompose().1.rank();
+                        info!(tag => "consensus_proposals", self.log,
+                                "Moved proposal {:?} of rank {:?} to artifact pool", p, rank);
+                    }
                 }
                 ConsensusAction::RemoveFromValidated(_) => {}
                 ConsensusAction::RemoveFromUnvalidated(_) => {}

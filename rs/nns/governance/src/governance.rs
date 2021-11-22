@@ -48,6 +48,7 @@ use registry_canister::mutations::do_update_icp_xdr_conversion_rate::UpdateIcpXd
 use crate::pb::v1::governance::GovernanceCachedMetrics;
 use crate::pb::v1::manage_neuron_response::MergeMaturityResponse;
 use crate::pb::v1::proposal::Action;
+use crate::pb::v1::WaitForQuietState;
 use dfn_core::api::spawn;
 use ledger_canister::{ICPTs, ICP_SUBDIVIDABLE_BY};
 
@@ -65,6 +66,17 @@ const PROPOSAL_SUMMARY_BYTES_MAX: usize = 15000;
 const PROPOSAL_URL_CHAR_MAX: usize = 2048;
 // 70 KB (for executing NNS functions that are not canister upgrades)
 const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
+
+// When wait for quiet is used, a proposal does not need to reach absolute
+// majority to be accepted. However there is a minimum amount of votes needed
+// for a simple majority to be enough. This minimum is expressed as a ratio of
+// the total possible votes for the proposal.
+const MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO: f64 = 0.03;
+
+// Parameter of the wait for quiet algorithm. This is the maximum amount the
+// deadline can be delayed on each vote.
+pub const WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS: u64 = ONE_DAY_SECONDS / 2;
+
 // 1 KB - maximum payload size of NNS function calls to keep in listing of
 // proposals
 pub const EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX: usize = 1000;
@@ -1063,11 +1075,7 @@ impl ProposalData {
     pub fn status(&self) -> ProposalStatus {
         if self.decided_timestamp_seconds == 0 {
             ProposalStatus::Open
-        } else if self
-            .latest_tally
-            .as_ref()
-            .map_or(false, |x| x.is_absolute_majority_for_yes())
-        {
+        } else if self.is_accepted() {
             if self.executed_timestamp_seconds > 0 {
                 ProposalStatus::Executed
             } else if self.failed_timestamp_seconds > 0 {
@@ -1108,6 +1116,15 @@ impl ProposalData {
         }
     }
 
+    pub fn get_deadline_timestamp_seconds(&self, voting_period_seconds: u64) -> u64 {
+        if let Some(wait_for_quiet_state) = &self.wait_for_quiet_state {
+            wait_for_quiet_state.current_deadline_timestamp_seconds
+        } else {
+            self.proposal_timestamp_seconds
+                .saturating_add(voting_period_seconds)
+        }
+    }
+
     /// Returns true if votes are still accepted for this proposal and
     /// false otherwise.
     ///
@@ -1128,12 +1145,73 @@ impl ProposalData {
         //
         // If the wait for quit threshold is unset (0), then proposals can
         // accept votes forever.
-        voting_period_seconds == 0
-            || (now_seconds < self.proposal_timestamp_seconds + voting_period_seconds)
+        let deadline_timestamp_seconds = self.get_deadline_timestamp_seconds(voting_period_seconds);
+        // If voting_period_seconds is zero, always accept votes. This only happens in
+        // tests.
+        voting_period_seconds == 0 || (now_seconds < deadline_timestamp_seconds)
+    }
+
+    pub fn evaluate_wait_for_quiet(
+        &mut self,
+        now_seconds: u64,
+        voting_period_seconds: u64,
+        old_tally: &Tally,
+        new_tally: &Tally,
+    ) {
+        let wait_for_quiet_state = match self.wait_for_quiet_state.as_mut() {
+            Some(wait_for_quiet_state) => wait_for_quiet_state,
+            None => return,
+        };
+
+        // Dont evaluate wait for quiet if there is already a decision, or the deadline
+        // is met.
+        if new_tally.yes > new_tally.total / 2 + 1
+            || new_tally.no > new_tally.total / 2 + 1
+            || now_seconds > wait_for_quiet_state.current_deadline_timestamp_seconds
+        {
+            return;
+        }
+
+        // Returns whether the vote has turned, i.e. if the vote is now yes, when it was
+        // previously no, or if the vote is now no if it was previsouly yes.
+        fn vote_has_turned(old_tally: &Tally, new_tally: &Tally) -> bool {
+            (old_tally.yes > old_tally.no && new_tally.yes <= new_tally.no)
+                || (old_tally.yes <= old_tally.no && new_tally.yes > new_tally.no)
+        }
+
+        if !vote_has_turned(old_tally, new_tally) {
+            return;
+        }
+
+        let original_deadline_timestamp_seconds =
+            self.proposal_timestamp_seconds + voting_period_seconds;
+
+        let required_margin = WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS
+            .saturating_add(original_deadline_timestamp_seconds / 2)
+            .saturating_sub(now_seconds / 2);
+        let remaining_time = wait_for_quiet_state
+            .current_deadline_timestamp_seconds
+            .saturating_sub(now_seconds);
+
+        if remaining_time >= required_margin {
+            return;
+        }
+
+        let extension = required_margin.saturating_sub(remaining_time);
+        let old_deadline = wait_for_quiet_state.current_deadline_timestamp_seconds;
+        let new_deadline = wait_for_quiet_state.current_deadline_timestamp_seconds + extension;
+        println!(
+            "{}Updating WFQ deadline for proposal: {:?}. Old: {}, New: {}",
+            LOG_PREFIX,
+            self.id.unwrap(),
+            old_deadline,
+            new_deadline
+        );
+        wait_for_quiet_state.current_deadline_timestamp_seconds = new_deadline;
     }
 
     /// This is an expensive operation.
-    pub fn recompute_tally(&mut self, now_seconds: u64) {
+    pub fn recompute_tally(&mut self, now_seconds: u64, voting_period_seconds: u64) {
         // Tally proposal
         let mut yes = 0;
         let mut no = 0;
@@ -1150,21 +1228,53 @@ impl ProposalData {
             };
             *lhs = (*lhs).saturating_add(ballot.voting_power)
         }
+
         // It is validated in `make_proposal` that the total does not
         // exceed u64::MAX: the `saturating_add` is just a precaution.
         let total = yes.saturating_add(no).saturating_add(undecided);
-        // Only update timestamp if the tally actually changes.
-        if let Some(old_tally) = &self.latest_tally {
-            if yes == old_tally.yes && no == old_tally.no && total == old_tally.total {
-                return;
-            }
-        }
-        self.latest_tally = Some(Tally {
+
+        let new_tally = Tally {
             timestamp_seconds: now_seconds,
             yes,
             no,
             total,
-        });
+        };
+
+        // Only update timestamp if the tally actually changes.
+        if let Some(old_tally) = self.latest_tally.clone() {
+            if new_tally.yes == old_tally.yes
+                && new_tally.no == old_tally.no
+                && new_tally.total == old_tally.total
+            {
+                return;
+            }
+            self.evaluate_wait_for_quiet(
+                now_seconds,
+                voting_period_seconds,
+                &old_tally,
+                &new_tally,
+            );
+        }
+
+        self.latest_tally = Some(new_tally);
+    }
+
+    /// Returns true if a proposal meets the conditions to be accepted. The
+    /// result is only meaningful if the deadline has passed.
+    pub fn is_accepted(&self) -> bool {
+        let latest_tally = &self.latest_tally;
+        if self.wait_for_quiet_state.is_some() {
+            if let Some(tally) = latest_tally {
+                (tally.yes as f64 >= MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO * (tally.total as f64))
+                    && tally.yes > tally.no
+            } else {
+                false
+            }
+        } else {
+            latest_tally
+                .as_ref()
+                .map_or(false, |x| x.is_absolute_majority_for_yes())
+        }
     }
 
     /// Returns true if a decision may be made right now to adopt or
@@ -3273,6 +3383,8 @@ impl Governance {
             ballots
         }
 
+        let deadline_timestamp_seconds = data.get_deadline_timestamp_seconds(voting_period_seconds);
+
         ProposalInfo {
             id: data.id,
             proposer: data.proposer.clone(),
@@ -3289,6 +3401,7 @@ impl Governance {
             topic: topic as i32,
             status: status as i32,
             reward_status: reward_status as i32,
+            deadline_timestamp_seconds: Some(deadline_timestamp_seconds),
         }
     }
 
@@ -3464,14 +3577,11 @@ impl Governance {
             // arrive after a decision has been made: such votes count
             // for voting rewards, but shall not make it into the
             // tally.
-            p.recompute_tally(now_seconds);
+            p.recompute_tally(now_seconds, voting_period_seconds);
             if p.can_make_decision(now_seconds, voting_period_seconds) {
                 // This marks the proposal as no longer open.
                 p.decided_timestamp_seconds = now_seconds;
-                if p.latest_tally
-                    .as_ref()
-                    .map_or(false, |x| x.is_absolute_majority_for_yes())
-                {
+                if p.is_accepted() {
                     // The proposal was adopted, return the rejection fee for non-ManageNeuron
                     // proposals.
                     if !p
@@ -4447,6 +4557,11 @@ impl Governance {
             ballots: electoral_roll,
             ..Default::default()
         };
+
+        info.wait_for_quiet_state = Some(WaitForQuietState {
+            current_deadline_timestamp_seconds: now_seconds
+                .saturating_add(self.voting_period_seconds()(topic)),
+        });
 
         // Charge the cost of rejection upfront.
         // This will protect from DOS in couple of ways:

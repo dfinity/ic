@@ -1,6 +1,7 @@
 use crate::tls_stub::{node_id_from_cert_subject_common_name, tls_cert_from_registry};
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsPublicKeyCert};
 use ic_interfaces::registry::RegistryClient;
+use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::{NodeId, RegistryVersion};
 use std::sync::Arc;
 use tokio_rustls::rustls::{
@@ -38,7 +39,6 @@ impl NodeServerCertVerifier {
     /// Creates a verifier that considers only certificates for the
     /// `allowed_nodes` fetched from the `registry_client` at registry version
     /// `registry_version` as trusted.
-    #[allow(unused)]
     pub fn new(
         allowed_nodes: SomeOrAllNodes,
         registry_client: Arc<dyn RegistryClient>,
@@ -73,7 +73,6 @@ pub struct NodeClientCertVerifier {
     allowed_nodes: SomeOrAllNodes,
     registry_client: Arc<dyn RegistryClient>,
     registry_version: RegistryVersion,
-    client_auth_mandatory: bool,
 }
 
 impl NodeClientCertVerifier {
@@ -81,8 +80,7 @@ impl NodeClientCertVerifier {
     /// `allowed_nodes` fetched from the `registry_client` at registry version
     /// `registry_version` as trusted.
     ///
-    /// As a secure default, client authentication is set to mandatory.
-    #[allow(unused)]
+    /// Client authentication is mandatory.
     pub fn new_with_mandatory_client_auth(
         allowed_nodes: SomeOrAllNodes,
         registry_client: Arc<dyn RegistryClient>,
@@ -92,23 +90,6 @@ impl NodeClientCertVerifier {
             allowed_nodes,
             registry_client,
             registry_version,
-            client_auth_mandatory: true,
-        }
-    }
-
-    /// Creates a verifier like `new_with_mandatory_client_auth`, but sets
-    /// client authentication to optional.
-    #[allow(unused)]
-    pub fn new_with_optional_client_auth(
-        allowed_nodes: SomeOrAllNodes,
-        registry_client: Arc<dyn RegistryClient>,
-        registry_version: RegistryVersion,
-    ) -> Self {
-        Self {
-            allowed_nodes,
-            registry_client,
-            registry_version,
-            client_auth_mandatory: false,
         }
     }
 }
@@ -137,7 +118,7 @@ impl ClientCertVerifier for NodeClientCertVerifier {
     }
 
     fn client_auth_mandatory(&self, _sni: Option<&webpki::DNSName>) -> Option<bool> {
-        Some(self.client_auth_mandatory)
+        Some(true)
     }
 
     fn client_auth_root_subjects(
@@ -170,10 +151,9 @@ fn verify_node_cert(
     registry_client: &Arc<dyn RegistryClient>,
     registry_version: RegistryVersion,
 ) -> Result<(), TLSError> {
-    // TODO (CRP-1192): implement further validations on the certificate (signature
-    // check, expiry, etc.)
     ensure_exactly_one_presented_cert(presented_certs)?;
-    let presented_cert = cert_from_der(presented_certs[0].0.clone())?;
+    let presented_cert_der = presented_certs[0].0.clone();
+    let presented_cert = cert_from_der(presented_cert_der.clone())?;
     let presented_cert_node_id = node_id_from_subject_cn(&presented_cert)?;
     ensure_node_id_in_allowed_nodes(presented_cert_node_id, allowed_nodes)?;
     let node_cert_from_registry =
@@ -182,7 +162,14 @@ fn verify_node_cert(
         presented_cert,
         presented_cert_node_id,
         node_cert_from_registry,
-    )
+    )?;
+    // It's important to do the validity check after checking equality to the
+    // registry cert because the cert validation uses a different parser
+    // (`x509_parser` as opposed to OpenSSL that is used above) and it is safer
+    // to not just pass any untrusted data to it. We consider the DER here trusted
+    // because it is equal to the certificate DER stored in the registry, as checked
+    // above.
+    ensure_node_certificate_is_valid(presented_cert_der, presented_cert_node_id)
 }
 
 fn ensure_exactly_one_presented_cert(presented_certs: &[Certificate]) -> Result<(), TLSError> {
@@ -250,4 +237,15 @@ fn ensure_certificates_equal(
         ));
     }
     Ok(())
+}
+
+fn ensure_node_certificate_is_valid(
+    certificate_der: Vec<u8>,
+    cert_node_id: NodeId,
+) -> Result<(), TLSError> {
+    ic_crypto_tls_cert_validation::validate_tls_certificate(
+        &X509PublicKeyCert { certificate_der },
+        cert_node_id,
+    )
+    .map_err(|e| TLSError::General(format!("The peer certificate is invalid: {}", e)))
 }

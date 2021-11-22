@@ -239,8 +239,10 @@ impl IncompleteState {
                 });
                 let src_data = src_map.as_slice();
 
-                let old_chunk_range = crate::manifest::file_chunk_range(manifest_old, *old_index);
-                let new_chunk_range = crate::manifest::file_chunk_range(manifest_new, *new_index);
+                let old_chunk_range =
+                    crate::manifest::file_chunk_range(&manifest_old.chunk_table, *old_index);
+                let new_chunk_range =
+                    crate::manifest::file_chunk_range(&manifest_new.chunk_table, *new_index);
 
                 // bad_chunks contains ids of chunks from the old checkpoint that
                 // didn't pass validation or refer to non-existing portions of

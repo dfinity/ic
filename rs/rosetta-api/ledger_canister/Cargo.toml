@@ -10,7 +10,7 @@ dfn_core = {path = "../../rust_canisters/dfn_core"}
 dfn_candid = {path = "../../rust_canisters/dfn_candid"}
 dfn_http = {path = "../../rust_canisters/dfn_http"}
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
-candid = "0.7.4"
+candid = "0.7.8"
 lazy_static = "1.4.0"
 serde = "1.0"
 ic-crypto-sha = {path = "../../crypto/sha/"}
@@ -44,6 +44,7 @@ ed25519-dalek = "1.0.1"
 ic-canister-client = {path = "../../canister_client/"}
 rand_chacha = "0.2.2"
 rand_core = "0.5.1"
+tempfile = "3.1.0"
 
 [[test]]
 name = "test"

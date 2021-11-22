@@ -116,7 +116,12 @@ pub fn spawn_canister_sandbox_process(
             )),
             reply_handler,
         );
-        transport::socket_read_demux::<_, _, _>(demux, socket);
+        transport::socket_read_messages::<_, _>(
+            move |message| {
+                demux.handle(message);
+            },
+            socket,
+        );
     });
 
     Ok((svc, Pid::from_raw(pid), thread_handle))

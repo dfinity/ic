@@ -137,16 +137,20 @@ impl Server {
         Ok(authenticated_node)
     }
 
-    pub async fn run_with_optional_client_auth(self) -> Result<Peer, TlsServerHandshakeError> {
-        // TODO (CRP-1195): introduce
-        // `perform_tls_server_handshake_temp_with_optional_client_auth` for rustls and
-        // use it here.
-        todo!("The rustls implementation does not support optional client auth.")
-    }
-
     pub async fn run_without_client_auth(self) -> Result<(), TlsServerHandshakeError> {
-        // TODO (CRP-1195): consider removing this method and the corresponding tests.
-        todo!("The rustls implementation does not support disabling client auth.")
+        let tcp_stream = self.accept_connection_on_listener().await;
+
+        let tls_stream = self
+            .crypto
+            .perform_tls_server_handshake_without_client_auth_with_rustls(tcp_stream, REG_V1)
+            .await?;
+        let (mut rh, mut wh) = tls_stream.split();
+
+        self.send_msg_to_client_if_configured(&mut wh, &mut rh)
+            .await;
+        self.expect_msg_from_client_if_configured(&mut rh, &mut wh)
+            .await;
+        Ok(())
     }
 
     async fn accept_connection_on_listener(&self) -> TcpStream {

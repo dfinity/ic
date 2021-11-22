@@ -26,5 +26,9 @@ name = "field_ops"
 harness = false
 
 [[bench]]
+name = "poly"
+harness = false
+
+[[bench]]
 name = "hash2curve"
 harness = false

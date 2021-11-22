@@ -282,7 +282,8 @@ impl Environment for FakeDriver {
         _proposal_id: u64,
         _update: &ExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
-        panic!("unexpected call")
+        Ok(())
+        //panic!("unexpected call")
     }
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {

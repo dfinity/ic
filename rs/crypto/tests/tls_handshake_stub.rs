@@ -4,8 +4,7 @@ use crate::tls_utils::test_client::{Client, ClientBuilder};
 use crate::tls_utils::test_server::{Server, ServerBuilder};
 use ic_crypto_test_utils::tls::registry::TlsRegistry;
 use ic_crypto_tls_interfaces::{
-    AuthenticatedPeer, MalformedPeerCertificateError, TlsClientHandshakeError, TlsPublicKeyCert,
-    TlsServerHandshakeError,
+    AuthenticatedPeer, TlsClientHandshakeError, TlsServerHandshakeError,
 };
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client::fake::FakeRegistryClient;
@@ -67,194 +66,6 @@ mod handshakes {
 
         assert!(client_result.is_ok());
         assert_peer_node_eq(authenticated_client.unwrap(), CLIENT_ID_2);
-    }
-}
-
-mod server_with_certs {
-    use super::*;
-    use ic_crypto_test_utils::tls::custom_client::CustomClient;
-    use ic_crypto_test_utils::tls::x509_certificates::{
-        ed25519_key_pair, x509_public_key_cert, CertWithPrivateKey,
-    };
-    use openssl::hash::MessageDigest;
-
-    #[tokio::test]
-    // TODO (CRP-1109): remove this ignore and make this test succeed by implementing the TLS
-    // handshakes with rustls.
-    #[ignore]
-    async fn should_perform_tls_handshake_with_cert() {
-        let registry = TlsRegistry::new();
-        let allowed_cert = CertWithPrivateKey::builder().build_ed25519();
-        let allowed_cert_proto = x509_public_key_cert(&allowed_cert.x509());
-        let server = Server::builder(SERVER_ID_1)
-            .add_allowed_client_cert(allowed_cert_proto.clone())
-            .build(registry.get());
-        let client = CustomClient::builder()
-            .with_client_auth(allowed_cert)
-            .build(server.cert());
-        registry.add_cert(SERVER_ID_1, server.cert()).update();
-
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
-
-        assert_peer_cert_eq(server_result.unwrap(), allowed_cert_proto);
-    }
-
-    #[tokio::test]
-    // TODO (CRP-1109): remove this ignore and make this test succeed by implementing the TLS
-    // handshakes with rustls.
-    #[ignore]
-    async fn should_perform_tls_handshake_with_ca_cert() {
-        const CLIENT_CA_CN: &str = "certificate authority";
-        const CLIENT_LEAF_CN: &str = "client certificate";
-
-        let ca_cert_key_pair = ed25519_key_pair();
-        let leaf_cert_key_pair = ed25519_key_pair();
-        let leaf_cert = CertWithPrivateKey::builder()
-            .cn(CLIENT_LEAF_CN.to_string())
-            .with_ca_signing(ca_cert_key_pair.clone(), CLIENT_CA_CN.to_string())
-            .build(leaf_cert_key_pair.clone(), MessageDigest::null());
-        let leaf_cert_proto = x509_public_key_cert(&leaf_cert.x509());
-        let ca_cert = CertWithPrivateKey::builder()
-            .cn(CLIENT_CA_CN.to_string())
-            .set_ca_key_usage_extension()
-            .build(ca_cert_key_pair, MessageDigest::null())
-            .x509();
-        let ca_cert_proto = x509_public_key_cert(&ca_cert);
-
-        let registry = TlsRegistry::new();
-        let server = Server::builder(SERVER_ID_1)
-            .add_allowed_client_cert(ca_cert_proto.clone())
-            .build(registry.get());
-        let client = CustomClient::builder()
-            .with_client_auth(leaf_cert)
-            .with_extra_chain_certs(vec![ca_cert])
-            .build(server.cert());
-        registry.add_cert(SERVER_ID_1, server.cert()).update();
-
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
-
-        assert_peer_cert_eq(server_result.unwrap(), leaf_cert_proto);
-    }
-
-    #[tokio::test]
-    // TODO (CRP-1109): remove this ignore and make this test succeed by implementing the TLS
-    // handshakes with rustls.
-    #[ignore]
-    async fn should_perform_tls_handshake_with_ca_and_intermediate_cert() {
-        const CLIENT_CA_CN: &str = "certificate authority";
-        const CLIENT_INTERMEDIATE_CA_CN: &str = "intermediate certificate authority";
-        const CLIENT_LEAF_CN: &str = "client certificate";
-
-        let ca_cert_key_pair = ed25519_key_pair();
-        let intermediate_ca_cert_key_pair = ed25519_key_pair();
-        let leaf_cert_key_pair = ed25519_key_pair();
-        let leaf_cert = CertWithPrivateKey::builder()
-            .cn(CLIENT_LEAF_CN.to_string())
-            .with_ca_signing(
-                intermediate_ca_cert_key_pair.clone(),
-                CLIENT_INTERMEDIATE_CA_CN.to_string(),
-            )
-            .build(leaf_cert_key_pair.clone(), MessageDigest::null());
-        let leaf_cert_proto = x509_public_key_cert(&leaf_cert.x509());
-        let intermediate_ca_cert = CertWithPrivateKey::builder()
-            .cn(CLIENT_INTERMEDIATE_CA_CN.to_string())
-            .set_ca_key_usage_extension()
-            .with_ca_signing(ca_cert_key_pair.clone(), CLIENT_CA_CN.to_string())
-            .build(intermediate_ca_cert_key_pair.clone(), MessageDigest::null())
-            .x509();
-        let ca_cert = CertWithPrivateKey::builder()
-            .cn(CLIENT_CA_CN.to_string())
-            .set_ca_key_usage_extension()
-            .build(ca_cert_key_pair, MessageDigest::null())
-            .x509();
-        let ca_cert_proto = x509_public_key_cert(&ca_cert);
-
-        let registry = TlsRegistry::new();
-        let server = Server::builder(SERVER_ID_1)
-            .add_allowed_client_cert(ca_cert_proto.clone())
-            .build(registry.get());
-        let client = CustomClient::builder()
-            .with_client_auth(leaf_cert)
-            .with_extra_chain_certs(vec![intermediate_ca_cert, ca_cert])
-            .build(server.cert());
-        registry.add_cert(SERVER_ID_1, server.cert()).update();
-
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
-
-        assert_peer_cert_eq(server_result.unwrap(), leaf_cert_proto);
-    }
-
-    #[tokio::test]
-    // TODO (CRP-1109): remove this ignore and make this test succeed by implementing the TLS
-    // handshakes with rustls.
-    #[ignore]
-    async fn should_perform_tls_handshake_with_cert_if_both_node_and_cert_are_allowed() {
-        let registry = TlsRegistry::new();
-        let allowed_cert = CertWithPrivateKey::builder().build_ed25519();
-        let allowed_cert_proto = x509_public_key_cert(&allowed_cert.x509());
-        let server = Server::builder(SERVER_ID_1)
-            .add_allowed_client(CLIENT_ID_1)
-            .add_allowed_client_cert(allowed_cert_proto.clone())
-            .build(registry.get());
-        let client = CustomClient::builder()
-            .with_client_auth(allowed_cert)
-            .build(server.cert());
-        registry
-            .add_cert(SERVER_ID_1, server.cert())
-            .add_cert(CLIENT_ID_1, generate_cert_using_temp_crypto(CLIENT_ID_1))
-            .update();
-
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
-
-        assert_peer_cert_eq(server_result.unwrap(), allowed_cert_proto);
-    }
-
-    #[tokio::test]
-    // TODO (CRP-1109): remove this ignore and make this test succeed by implementing the TLS
-    // handshakes with rustls.
-    #[ignore]
-    async fn should_perform_tls_handshake_with_node_if_both_node_and_cert_are_allowed() {
-        let registry = TlsRegistry::new();
-        let allowed_cert = CertWithPrivateKey::builder().build_ed25519();
-        let allowed_cert_proto = x509_public_key_cert(&allowed_cert.x509());
-        let server = Server::builder(SERVER_ID_1)
-            .add_allowed_client(CLIENT_ID_1)
-            .add_allowed_client_cert(allowed_cert_proto)
-            .build(registry.get());
-        let client = CustomClient::builder()
-            .with_default_client_auth(CLIENT_ID_1)
-            .build(server.cert());
-        registry
-            .add_cert(SERVER_ID_1, server.cert())
-            .add_cert(CLIENT_ID_1, client.client_auth_cert())
-            .update();
-
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
-
-        assert_peer_node_eq(server_result.unwrap(), CLIENT_ID_1);
-    }
-
-    #[tokio::test]
-    // TODO (CRP-1109): remove this ignore and make this test succeed by implementing the TLS
-    // handshakes with rustls.
-    #[ignore]
-    async fn should_return_error_if_allowed_client_cert_has_bad_sig() {
-        let registry = TlsRegistry::new();
-        let allowed_cert = CertWithPrivateKey::builder()
-            .self_sign_with_wrong_secret_key()
-            .build_ed25519();
-        let allowed_cert_proto = x509_public_key_cert(&allowed_cert.x509());
-        let server = Server::builder(SERVER_ID_1)
-            .add_allowed_client_cert(allowed_cert_proto.clone())
-            .build(registry.get());
-        let client = CustomClient::builder()
-            .with_client_auth(allowed_cert)
-            .build(server.cert());
-        registry.add_cert(SERVER_ID_1, server.cert()).update();
-
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
-
-        assert_handshake_server_error_containing(&server_result, "certificate verify failed");
     }
 }
 
@@ -828,8 +639,6 @@ mod server {
     }
 
     #[tokio::test]
-    // TODO (CRP-1192): check TLS certificate validity and remove the #[ignore]
-    #[ignore]
     async fn should_return_error_if_client_uses_expired_cert() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
@@ -850,12 +659,13 @@ mod server {
 
         let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_server_error_containing(&server_result, "certificate verify failed");
+        assert_handshake_server_error_containing(
+            &server_result,
+            "invalid TLS certificate: notAfter date is not RFC 5280 value 99991231235959Z",
+        );
     }
 
     #[tokio::test]
-    // TODO (CRP-1192): check TLS certificate validity and remove the #[ignore]
-    #[ignore]
     async fn should_return_error_if_client_cert_not_yet_valid() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
@@ -876,131 +686,10 @@ mod server {
 
         let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_server_error_containing(&server_result, "certificate verify failed");
-    }
-}
-
-mod server_with_optional_client_auth {
-    use super::*;
-    use crate::tls_utils::test_server::Server;
-    use crate::{
-        matching_server_and_client, matching_server_and_client_builders, CLIENT_ID_1, SERVER_ID_1,
-    };
-    use ic_crypto_test_utils::tls::custom_client::CustomClient;
-    use ic_crypto_test_utils::tls::x509_certificates::{x509_public_key_cert, CertWithPrivateKey};
-    use ic_crypto_tls_interfaces::{AuthenticatedPeer, Peer};
-
-    #[tokio::test]
-    // TODO (CRP-1109): remove this ignore and make this test succeed by implementing the TLS
-    // handshakes with rustls.
-    #[ignore]
-    async fn should_perform_tls_handshake_with_client_auth() {
-        let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
-        registry
-            .add_cert(SERVER_ID_1, server.cert())
-            .add_cert(CLIENT_ID_1, client.cert())
-            .update();
-
-        let (client_result, peer) = tokio::join!(
-            client.run(server.port()),
-            server.run_with_optional_client_auth()
+        assert_handshake_server_error_containing(
+            &server_result,
+            "is later than two minutes from now",
         );
-
-        assert!(client_result.is_ok());
-        assert_eq!(
-            peer.unwrap(),
-            Peer::Authenticated(AuthenticatedPeer::Node(CLIENT_ID_1))
-        );
-    }
-
-    #[tokio::test]
-    // TODO (CRP-1109): remove this ignore and make this test succeed by implementing the TLS
-    // handshakes with rustls.
-    #[ignore]
-    async fn should_send_message_from_server_to_client_with_client_auth() {
-        let registry = TlsRegistry::new();
-        let (server_builder, client_builder) =
-            matching_server_and_client_builders(SERVER_ID_1, CLIENT_ID_1);
-        let msg = "hello from server";
-        let server = server_builder
-            .with_msg_for_client(msg)
-            .build(registry.get());
-        let client = client_builder
-            .expect_msg_from_server(msg)
-            .build(registry.get());
-        registry
-            .add_cert(SERVER_ID_1, server.cert())
-            .add_cert(CLIENT_ID_1, client.cert())
-            .update();
-
-        let (_client_result, peer) = tokio::join!(
-            client.run(server.port()),
-            server.run_with_optional_client_auth()
-        );
-
-        assert_eq!(
-            peer.unwrap(),
-            Peer::Authenticated(AuthenticatedPeer::Node(CLIENT_ID_1))
-        );
-    }
-
-    #[tokio::test]
-    // TODO (CRP-1109): remove this ignore and make this test succeed by implementing the TLS
-    // handshakes with rustls.
-    #[ignore]
-    async fn should_perform_tls_handshake_without_client_sending_cert() {
-        let registry = TlsRegistry::new();
-        let server = Server::builder(SERVER_ID_1)
-            .add_allowed_client(CLIENT_ID_1)
-            .build(registry.get());
-        let client = CustomClient::builder()
-            .without_client_auth()
-            .build(server.cert());
-        let client_cert = CertWithPrivateKey::builder()
-            .cn(CLIENT_ID_1.to_string())
-            .build_ed25519();
-        registry
-            .add_cert(SERVER_ID_1, server.cert())
-            .add_cert(CLIENT_ID_1, x509_public_key_cert(&client_cert.x509()))
-            .update();
-
-        let (_, peer) = tokio::join!(
-            client.run(server.port()),
-            server.run_with_optional_client_auth()
-        );
-
-        assert_eq!(peer.unwrap(), Peer::Unauthenticated);
-    }
-
-    #[tokio::test]
-    // TODO (CRP-1109): remove this ignore and make this test succeed by implementing the TLS
-    // handshakes with rustls.
-    #[ignore]
-    async fn should_send_message_from_server_to_client_without_client_auth() {
-        let registry = TlsRegistry::new();
-        let msg = "hello from server";
-        let server = Server::builder(SERVER_ID_1)
-            .with_msg_for_client(msg)
-            .add_allowed_client(CLIENT_ID_1)
-            .build(registry.get());
-        let client = CustomClient::builder()
-            .expect_msg_from_server(msg)
-            .without_client_auth()
-            .build(server.cert());
-        let client_cert = CertWithPrivateKey::builder()
-            .cn(CLIENT_ID_1.to_string())
-            .build_ed25519();
-        registry
-            .add_cert(SERVER_ID_1, server.cert())
-            .add_cert(CLIENT_ID_1, x509_public_key_cert(&client_cert.x509()))
-            .update();
-
-        let (_, peer) = tokio::join!(
-            client.run(server.port()),
-            server.run_with_optional_client_auth()
-        );
-
-        assert_eq!(peer.unwrap(), Peer::Unauthenticated);
     }
 }
 
@@ -1011,9 +700,6 @@ mod server_without_client_auth {
     use ic_crypto_test_utils::tls::custom_client::CustomClient;
 
     #[tokio::test]
-    // TODO (CRP-1109): remove this ignore and make this test succeed by implementing the TLS
-    // handshakes with rustls.
-    #[ignore]
     async fn should_perform_tls_handshake_without_server_asking_for_cert() {
         let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
         registry
@@ -1029,9 +715,6 @@ mod server_without_client_auth {
     }
 
     #[tokio::test]
-    // TODO (CRP-1109): remove this ignore and make this test succeed by implementing the TLS
-    // handshakes with rustls.
-    #[ignore]
     async fn should_perform_tls_handshake_without_client_cert_and_without_server_asking_for_cert() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
@@ -1051,12 +734,10 @@ mod server_without_client_auth {
 
 mod client {
     use super::*;
-    use crate::tls_utils::REG_V1;
     use ic_crypto_test_utils::tls::custom_server::CustomServer;
     use ic_crypto_test_utils::tls::x509_certificates::{
         ed25519_key_pair, x509_public_key_cert, CertWithPrivateKey,
     };
-    use ic_crypto_tls_interfaces::TlsClientHandshakeError;
     use openssl::hash::MessageDigest;
     use openssl::ssl::SslVersion;
 
@@ -1078,47 +759,48 @@ mod client {
     }
 
     #[tokio::test]
-    // TODO (CRP-1203): remove this ignore and make this test succeed when the server handshake
-    // has been implemented with rustls.
-    // Note that this is necessary since, unlike before, the server cert is fetched from the
-    // registry during the handshake. So the test will have to be adapted to also start the server.
-    #[ignore]
     async fn should_return_error_if_server_cert_in_registry_is_malformed() {
-        // the server is only required so the client can connect somewhere
-        let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
+        let registry = TlsRegistry::new();
+        let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
+        let server = CustomServer::builder()
+            .expect_error("sslv3 alert bad certificate")
+            .build_with_default_server_cert(SERVER_ID_1, vec![client.cert()]);
         registry
             .add_cert(SERVER_ID_1, malformed_cert())
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let result = client.run(server.port()).await;
+        let (client_result, _server_result) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_malformed_server_cert_client_error_containing(
-            &result,
-            "asn1 encoding routines:ASN1_get_object:too long",
+        assert_handshake_client_error_containing(
+            &client_result,
+            "Failed to retrieve TLS certificate for node ID 3jo2y-lqbaa-aaaaa-aaaap-2ai",
+        );
+        assert_handshake_client_error_containing(
+            &client_result,
+            "CertificateMalformed { internal_error: \"Error parsing DER",
         );
     }
 
     #[tokio::test]
-    // TODO (CRP-1203): remove this ignore and make this test succeed when the server handshake
-    // has been implemented with rustls.
-    // Note that this is necessary since, unlike before, the server cert is fetched from the
-    // registry during the handshake. So the test will have to be adapted to also start the server.
-    #[ignore]
     async fn should_return_error_if_server_cert_not_in_registry() {
-        // the server is only required so the client can connect somewhere
-        let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
-        registry.add_cert(CLIENT_ID_1, client.cert()).update();
+        let registry = TlsRegistry::new();
+        let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
+        let server = CustomServer::builder()
+            .expect_error("sslv3 alert bad certificate")
+            .build_with_default_server_cert(SERVER_ID_1, vec![client.cert()]);
+        registry
+            // deliberately not adding server.cert() to the registry
+            .add_cert(CLIENT_ID_1, client.cert())
+            .update();
 
-        let result = client.run(server.port()).await;
+        let (client_result, _server_result) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_eq!(
-            result.unwrap_err(),
-            TlsClientHandshakeError::CertificateNotInRegistry {
-                node_id: SERVER_ID_1,
-                registry_version: REG_V1
-            }
-        )
+        assert_handshake_client_error_containing(
+            &client_result,
+            "Failed to retrieve TLS certificate for node ID 3jo2y-lqbaa-aaaaa-aaaap-2ai",
+        );
+        assert_handshake_client_error_containing(&client_result, "CertificateNotInRegistry");
     }
 
     /// It is surprising that the handshake on the client side succeeds in this
@@ -1127,9 +809,6 @@ mod client {
     /// certificate. From the client's perspective, things look fine as the
     /// server is successfully authenticated.
     #[tokio::test]
-    // TODO (CRP-1203): remove this ignore and make this test succeed when the server handshake
-    // has been implemented with rustls
-    #[ignore]
     async fn should_connect_even_if_server_rejects_client_cert_but_get_error_on_read() {
         const NOT_ALLOWED_CLIENT: NodeId = CLIENT_ID_3;
         let registry = TlsRegistry::new();
@@ -1139,7 +818,7 @@ mod client {
             .build(registry.get());
         assert!(!server.allowed_clients().contains(&NOT_ALLOWED_CLIENT));
         let client = Client::builder(NOT_ALLOWED_CLIENT, SERVER_ID_1)
-            .expect_error_when_reading_stream_contains("tlsv1 alert unknown ca")
+            .expect_error_when_reading_stream_contains("received fatal alert: HandshakeFailure")
             .build(registry.get());
         registry
             .add_cert(SERVER_ID_1, server.cert())
@@ -1154,11 +833,7 @@ mod client {
     }
 
     #[tokio::test]
-    // TODO (CRP-1203): remove this ignore and make this test succeed when the server handshake
-    // has been implemented with rustls
-    #[ignore]
-    #[should_panic(expected = "TLS client handshake error: The secret key was not found")]
-    async fn should_panic_if_secret_key_not_found() {
+    async fn should_return_error_if_secret_key_not_found() {
         let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
         let wrong_client_cert = generate_cert_using_temp_crypto(CLIENT_ID_1);
         registry
@@ -1166,7 +841,13 @@ mod client {
             .add_cert(CLIENT_ID_1, wrong_client_cert)
             .update();
 
-        let _panic = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _server_result) = tokio::join!(client.run(server.port()), server.run());
+
+        assert_handshake_client_error_containing(
+            &client_result,
+            "Failed to create signature during TLS handshake by \
+            means of the CspServerEd25519Signer: SecretKeyNotFound",
+        );
     }
 
     #[tokio::test]
@@ -1308,15 +989,12 @@ mod client {
     }
 
     #[tokio::test]
-    // TODO (CRP-1192): remove this ignore and make this test succeed once additional certificate
-    // validation has been implemented.
-    #[ignore]
     async fn should_return_error_if_server_does_not_use_ed25519_cert() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
             .with_allowed_signature_algorithms("ECDSA+SHA256:RSA+SHA256:ed25519")
-            .expect_error("no suitable signature algorithm")
+            .expect_error("sslv3 alert bad certificate")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
@@ -1330,7 +1008,10 @@ mod client {
 
         let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_client_error_containing(&client_result, "sslv3 alert handshake failure")
+        assert_handshake_client_error_containing(
+            &client_result,
+            "signature algorithm is not Ed25519 (OID 1.3.101.112)",
+        )
     }
 
     #[tokio::test]
@@ -1458,14 +1139,11 @@ mod client {
     }
 
     #[tokio::test]
-    // TODO (CRP-1192): remove this ignore and make this test succeed once additional certificate
-    // validation has been implemented.
-    #[ignore]
     async fn should_return_error_if_server_uses_expired_cert() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert certificate expired")
+            .expect_error("sslv3 alert bad certificate")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
@@ -1480,13 +1158,13 @@ mod client {
 
         let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_client_error_containing(&client_result, "certificate verify failed");
+        assert_handshake_client_error_containing(
+            &client_result,
+            "notAfter date is not RFC 5280 value 99991231235959Z",
+        );
     }
 
     #[tokio::test]
-    // TODO (CRP-1192): remove this ignore and make this test succeed once additional certificate
-    // validation has been implemented.
-    #[ignore]
     async fn should_return_error_if_server_cert_not_yet_valid() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
@@ -1506,20 +1184,21 @@ mod client {
 
         let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_client_error_containing(&client_result, "certificate verify failed");
+        assert_handshake_client_error_containing(
+            &client_result,
+            "is later than two minutes from now",
+        );
     }
 
     #[tokio::test]
-    // TODO (CRP-1192): remove this ignore and make this test succeed once additional certificate
-    // validation has been implemented.
-    #[ignore]
     async fn should_return_error_if_allowed_server_cert_has_bad_sig() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("tlsv1 alert decrypt error")
+            .expect_error("alert bad certificate")
             .build(
                 CertWithPrivateKey::builder()
+                    .cn(SERVER_ID_1.to_string())
                     .self_sign_with_wrong_secret_key()
                     .build_ed25519(),
                 vec![client.cert()],
@@ -1531,7 +1210,10 @@ mod client {
 
         let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
 
-        assert_handshake_client_error_containing(&client_result, "certificate verify failed");
+        assert_handshake_client_error_containing(
+            &client_result,
+            "Ed25519 signature could not be verified",
+        );
     }
 }
 
@@ -1645,21 +1327,6 @@ fn assert_malformed_self_cert_client_error_containing(
     }
 }
 
-fn assert_malformed_server_cert_client_error_containing(
-    client_result: &Result<(), TlsClientHandshakeError>,
-    error_substring: &str,
-) {
-    let error = client_result.clone().unwrap_err();
-    if let TlsClientHandshakeError::MalformedServerCertificate(MalformedPeerCertificateError {
-        internal_error,
-    }) = error
-    {
-        assert_string_contains(internal_error, error_substring);
-    } else {
-        panic!("expected MalformedServerCertificate error, got {}", error)
-    }
-}
-
 fn assert_handshake_client_error_containing(
     client_result: &Result<(), TlsClientHandshakeError>,
     error_substring: &str,
@@ -1697,16 +1364,5 @@ fn assert_peer_node_eq(peer: AuthenticatedPeer, node_id: NodeId) {
     match peer {
         AuthenticatedPeer::Node(n) => assert_eq!(n, node_id),
         AuthenticatedPeer::Cert(_) => panic!("expected peer to be a node not a cert"),
-    }
-}
-
-fn assert_peer_cert_eq(peer: AuthenticatedPeer, cert: X509PublicKeyCert) {
-    match peer {
-        AuthenticatedPeer::Cert(c) => assert_eq!(
-            c,
-            TlsPublicKeyCert::new_from_der(cert.certificate_der)
-                .expect("failed to convert DER to TlsPublicKeyCert")
-        ),
-        AuthenticatedPeer::Node(_) => panic!("expected peer to be a cert not a node"),
     }
 }

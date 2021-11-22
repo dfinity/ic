@@ -17,7 +17,7 @@ use ic_types::{
     MemoryAllocation, NumBytes, PrincipalId, QueueIndex,
 };
 use phantom_newtype::AmountOf;
-pub use queues::{CanisterQueues, QUEUE_INDEX_NONE};
+pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY, QUEUE_INDEX_NONE};
 use std::collections::BTreeSet;
 use std::convert::From;
 

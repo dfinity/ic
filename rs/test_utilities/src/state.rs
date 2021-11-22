@@ -12,7 +12,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{execution_state::WasmBinary, QUEUE_INDEX_NONE},
     metadata_state::Stream,
-    page_map::{self, PageMap},
+    page_map,
     testing::SystemStateTesting,
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
     Memory, NumWasmPages64, ReplicatedState, SchedulerState, SystemState,
@@ -208,6 +208,14 @@ impl CanisterStateBuilder {
 
         system_state.memory_allocation = self.memory_allocation;
 
+        if let Some(data) = self.stable_memory {
+            system_state.stable_memory.size =
+                NumWasmPages64::new((data.len() / WASM_PAGE_SIZE_BYTES) as u64 + 1);
+            let mut buf = page_map::Buffer::new(system_state.stable_memory.page_map);
+            buf.write(&data[..], 0);
+            system_state.stable_memory.page_map = buf.into_page_map();
+        }
+
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {
             system_state.queues_mut().push_ingress(ingress)
@@ -242,22 +250,10 @@ impl CanisterStateBuilder {
                 .unwrap();
         }
 
-        let stable_memory = if let Some(data) = self.stable_memory {
-            let mut buf = page_map::Buffer::new(PageMap::default());
-            buf.write(&data[..], 0);
-            Memory::new(
-                buf.into_page_map(),
-                NumWasmPages64::new((data.len() / WASM_PAGE_SIZE_BYTES) as u64 + 1),
-            )
-        } else {
-            Memory::default()
-        };
-
         let execution_state = match self.wasm {
             Some(wasm_binary) => {
                 let mut ee = initial_execution_state(None);
                 ee.wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(wasm_binary));
-                ee.stable_memory = stable_memory;
                 Some(ee)
             }
             None => None,
@@ -393,7 +389,6 @@ pub fn initial_execution_state(p: Option<std::path::PathBuf>) -> ExecutionState 
         session_nonce: None,
         wasm_binary: WasmBinary::new(BinaryEncodedWasm::new(vec![])),
         wasm_memory: Memory::default(),
-        stable_memory: Memory::default(),
         exported_globals: vec![],
         exports: ExportedFunctions::new(BTreeSet::new()),
         last_executed_round: ExecutionRound::from(0),
