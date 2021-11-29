@@ -48,7 +48,8 @@ include:
     # Print backtrace if a test panics
     RUST_BACKTRACE: 1
     CARGO_TEST_FLAGS_EXTRA: "" # Allows passing any extra flags, such as "--release"
-    CARGO_TEST_TIMEOUT: 2400 # Test build or run will be forcefully terminated after this many secs
+    # TODO(valeryz): revert back to 2400 after we get builder performance under control.
+    CARGO_TEST_TIMEOUT: 4800 # Test build or run will be forcefully terminated after this many secs
   script:
     - |
       set -eExuo pipefail
