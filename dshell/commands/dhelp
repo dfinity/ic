@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# vim: set ft=bash
+#
+# @@ Help about any command
+#
+# @ Run `dhelp` to get a list of commands, or
+# @     `dhelp <command>`
+# @ to get information about a particular commands
+
+echo
+echo
+echo
+
+if [ -z "${DFN_COMMANDS_DIR:-}" ]; then
+    echo "ERROR: DFN_COMMANDS_DIR not set"
+    echo "Please report this as a bug."
+    exit
+fi
+
+# there are two modes:
+#   `dtest <cmd_name>`: prints info about the command
+#   `dtest`: prints the list of commands
+
+if [ $# == 1 ]; then
+
+    # mode: `dtest <cmd_name>`
+    # we read the command file, parse the header and description, and
+    # print them.
+    # XXX: if $1 == --help, then cmd_name is "dhelp"
+
+    if [ "$1" == "--help" ]; then
+        cmd_name="dhelp"
+    else
+        cmd_name="$1"
+    fi
+
+    cmd_file="$DFN_COMMANDS_DIR/$cmd_name"
+    if ! [ -f "$cmd_file" ]; then
+        echo "No such command: $cmd_name (couldn't read file $cmd_file)"
+    else
+        # Print the header
+        # (prints any line starting with `# @@` and indents)
+        header=$(grep -oP '^# @@\K.*' <"$cmd_file")
+        echo -e "$(tput bold)$cmd_name: $header$(tput sgr0)" \
+            | sed 's/^/    /'
+
+        echo # some nice spacing
+
+        # Print the description
+        # (prints any line starting with `# @` and indents)
+        grep -oP '^# @ \K.*' <"$cmd_file" \
+            | sed 's/^/    /'
+
+        echo
+        echo
+        echo '    For more information, run:'
+        echo "    > type ${cmd_name}_impl"
+
+    fi
+else
+
+    # mode: `dtest`
+    # we iterate through all commands files, and print their names and
+    # header.
+
+    echo "    Available commands:"
+    echo
+    for cmd_file in "$DFN_COMMANDS_DIR"/*; do
+        # (prints any line starting with `# @@`)
+        header=$(grep -oP '^# @@ \K.*' <"$cmd_file")
+        cmd_name=$(basename "$cmd_file")
+        echo -e "$(tput bold)$cmd_name$(tput sgr0)\t$header"
+    done | sed 's/^/    /' | column -ts $'\t'
+fi
+
+echo
+echo
+echo

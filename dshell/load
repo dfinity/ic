@@ -1,0 +1,31 @@
+# The dshell loader. This file is meant to be sourced. Works in bash and zsh.
+# vim: set ft=bash
+
+# Figure out the path to this file
+
+this_file="$PWD/dshell/load"
+if [ -n "$ZSH_VERSION" ]; then
+    this_file="${(%):-%x}"
+elif [ -n "$BASH_VERSION" ]; then
+    this_file="${BASH_SOURCE[0]}"
+else
+    echo "dshell: note: shell $SHELL not supported, please set DFN_ROOT before loading"
+fi
+
+# Setup DFN_ROOT based on the path to this file
+
+this_dir=$(dirname "$this_file")
+dfn_root="$this_dir/.."
+export DFN_ROOT=$(realpath "$dfn_root")
+
+# Setup all other variables in terms of DFN_ROOT
+
+export DFN_COMMANDS_DIR="$DFN_ROOT/dshell/commands"
+export DFN_TEST_BASEDIR="$DFN_ROOT/tests/integration"
+export DFN_RS_DIR="$DFN_ROOT/rs"
+
+# check if DFN_COMMANDS_DIR is in PATH, otherwise prepend it
+
+if [ "${PATH#*$DFN_COMMANDS_DIR}" = "$PATH" ]; then
+    PATH="$DFN_COMMANDS_DIR:$PATH"
+fi

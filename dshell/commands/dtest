@@ -1,0 +1,267 @@
+#!/usr/bin/env bash
+# vim: set ft=bash
+#
+# @@ Run unit and integration tests
+#
+# @ This command runs both unit and integration tests.
+# @ Usage:
+# @
+# @   dtest [-l|--logs] [[-u|--unit] | [-i|--integration]] [--release] [regex]
+# @
+# @ where <regex> is passed to `cargo test`, and is checked for a match against
+# @ integration test scenarios. By default, both unit and integration tests are
+# @ run.
+# @
+# @ By default logs are only printed in case of failure. This can be changed
+# @ with `--logs`, in which case the logs are shown as they are output by the
+# @ tests.
+
+set -euo pipefail
+
+if [ "${1:-}" == "--help" ]; then
+    "$DFN_COMMANDS_DIR"/dhelp dtest
+    exit 0
+fi
+
+# When "yes", run build with --release
+release_build=""
+
+# When "yes", run unit tests
+run_unit="yes"
+
+# When "yes", run integration tests
+run_integration="yes"
+
+# When "yes", show logs as the tests run
+follow_logs=""
+
+# We allow the user to pass a regex. If no regex is passed, we run `cargo
+# test` and set the regex to `.*` (match all). If a regex is passed we run
+# `cargo test <regex>` and store the regex for use in the integration
+# tests.
+scenario_regex=""
+
+while [[ $# -gt 0 ]]; do
+    first_arg="$1"
+    case "$first_arg" in
+        -u | --unit)
+            run_unit="yes"
+            run_integration=""
+            shift
+            ;;
+        -i | --integration)
+            run_unit=""
+            run_integration="yes"
+            shift
+            ;;
+        -r | --release)
+            release_build="yes"
+            shift
+            ;;
+        -d | --debug)
+            release_build=""
+            shift
+            ;;
+        -l | --logs)
+            follow_logs="yes"
+            shift
+            ;;
+        *)
+            if [ -n "$scenario_regex" ]; then
+                echo 1>&2 "WARNING: Test was already set: '$scenario_regex'"
+                echo 1>&2 "         replacing with:       '$first_arg'"
+            fi
+            scenario_regex="$first_arg"
+            shift
+            ;;
+    esac
+done
+
+DFN_TEST_BASEDIR=${DFN_TEST_BASEDIR:-}
+if [ -z "$DFN_TEST_BASEDIR" ]; then
+    echo variable DFN_TEST_BASEDIR is not set
+    exit 1
+fi
+
+DFN_RS_DIR=${DFN_RS_DIR:-}
+if [ -z "$DFN_RS_DIR" ]; then
+    echo variable DFN_TEST_BASEDIR is not set
+    exit 1
+fi
+
+cargo_test_args=(test)
+
+if [ "$release_build" == "yes" ]; then
+    cargo_test_args+=("--release")
+fi
+
+# If a regex is set, use it in unit tests. Otherwise set it to '.*' for the
+# integration tests.
+if [ -n "$scenario_regex" ]; then
+    cargo_test_args+=("$scenario_regex")
+else
+    scenario_regex='.*'
+fi
+
+# Here we check if we're in the rust directory or one of its subdirectory. If
+# so, stay where we are. Otherwise, move to the rust directory.
+# By staying in the subdirectory, cargo test will only run local tests, as the
+# user probably expects.
+cargo_test_dir="$PWD"
+if [ "${PWD##$DFN_RS_DIR}" == "${PWD}" ]; then
+    cargo_test_dir="$DFN_RS_DIR"
+fi
+
+if [ -n "$run_unit" ]; then
+    (
+        pushd "$cargo_test_dir" >/dev/null
+        # First compile without and then run the tests with `RUST_BACKTRACE=1`
+        # to get a stacktrace in case of failures.  We do not need to build with
+        # RUST_BACKTRACE=1` as that could slow down the build and wouldn't
+        # necessarily show any bugs in our code.
+        cargo "${cargo_test_args[@]}" "--no-run"
+        RUST_BACKTRACE=1 cargo "${cargo_test_args[@]}"
+        popd >/dev/null
+    )
+    echo "Tests were run"
+fi
+
+# If we're not running the integration tests, exit early
+if [ -z "$run_integration" ]; then
+    exit
+fi
+
+echo -n "Ensuring targets are up to date ... "
+
+cargo_build_args=(build)
+
+if [ "$release_build" == "yes" ]; then
+    cargo_build_args+=("--release")
+fi
+
+(
+    pushd "$DFN_RS_DIR" >/dev/null
+    cargo "${cargo_build_args[@]}"
+    popd >/dev/null
+)
+
+integration_path="$PATH"
+build_stderr=$(mktemp)
+
+echo -n "    Adding wabt to \$PATH ... "
+wabt_path=$(nix-build --no-link "$DFN_ROOT/nix" -A wabt 2>"$build_stderr")
+rc="$?"
+if [ "$rc" -ne 0 ]; then
+    echo -e "$(tput bold)$(tput setaf 1)Could not prepare PATH:$(tput sgr0)"
+    cat "$build_stderr"
+    exit
+else
+    integration_path="$wabt_path/bin:$integration_path"
+    echo -e "$(tput bold)$(tput setaf 2)Done.$(tput sgr0)"
+fi
+
+pad() {
+    printf "%0.s " $(seq 1 "$1")
+}
+
+for test_dir in "$DFN_TEST_BASEDIR"/*/; do
+
+    test_name=$(basename "$test_dir")
+
+    scenario_dir="$test_dir"/scenarios
+    if [ ! -d "$scenario_dir" ]; then
+        echo -e "$(tput bold)$(tput setaf 1)Integration test $test_dir does not have a 'scenarios' directory"
+        exit
+    fi
+
+    test_runner="$test_dir"/run
+    if [ ! -f "$test_runner" ]; then
+        echo -e "$(tput bold)$(tput setaf 1)Integration test $test_name does not have a 'run' executable in $test_dir"
+        exit
+    fi
+
+    echo -e "    $(tput bold)$test_name$(tput sgr0)"
+
+    # Iterate through all scenarios and run them in a subshell. If the test is
+    # successful, print "SUCCESS". Otherwise print "FAILED".
+    scenario_did_run=""
+    for scenario in "$test_dir"/scenarios/*; do
+
+        scenario_basename=$(basename -- "$scenario")
+
+        scenario_name="${scenario_basename%.*}"
+
+        if [[ "$test_name/$scenario_name" =~ $scenario_regex ]]; then
+            scenario_did_run="yes"
+
+            # do some math to align the "SUCCESS"/"FAILURE" messages
+            scenario_name_padding_left=8
+            scenario_name_padding_right=$((30 - ${#scenario_name}))
+
+            pad "$scenario_name_padding_left"
+            echo -en "$(tput bold)$scenario_name$(tput sgr0)"
+            pad "$scenario_name_padding_right"
+
+            # Temporary files for stdout and stderr, removed in case of
+            # success.
+            stdoutf=$(mktemp)
+            stderrf=$(mktemp)
+
+            # Run in a subshell and indent the output for readability, keeping
+            # track of the status in sub_res.
+            sub_res=0
+            (
+                pushd "$test_dir" >/dev/null
+                set -euo pipefail
+                export PATH=$integration_path
+
+                cargo_build_dir="debug"
+
+                if [ "$release_build" == "yes" ]; then
+                    cargo_build_dir="release"
+                fi
+
+                target_dir=${CARGO_TARGET_DIR:-$DFN_RS_DIR"/target"}
+                new_path="$target_dir/${CARGO_BUILD_TARGET:+$CARGO_BUILD_TARGET/}$cargo_build_dir":$PATH
+                if [ "$follow_logs" == "yes" ]; then
+                    # If -l|--logs is provided, we `tee` to the file in order
+                    # to print the live logs to the user.
+                    # Disable following source files
+                    # shellcheck disable=SC1090
+                    PATH=$new_path RUST_BACKTRACE=1 scenario=$scenario "$test_dir"/run \
+                        > >(tee -a "$stdoutf" | sed 's/^/         > /') \
+                        2> >(tee -a "$stderrf" | sed 's/^/         ! /')
+                else
+                    # If -l|--logs is _not_ provided, we simply dump the output
+                    # to the files.
+                    # Disable following source files
+                    # shellcheck disable=SC1090
+                    PATH=$new_path RUST_BACKTRACE=1 scenario=$scenario "$test_dir"/run \
+                        >"$stdoutf" 2>"$stderrf"
+                fi
+            ) || sub_res="$?"
+
+            # Shellcheck wants us to plug the entire subshell in the "if"
+            # condition, not gonna happen
+            # shellcheck disable=SC2181
+            if [ "$sub_res" == "0" ]; then
+                echo -e "$(tput bold)$(tput setaf 2)SUCCESS$(tput sgr0)"
+                rm "$stdoutf"
+                rm "$stderrf"
+            else
+                echo -e "$(tput bold)$(tput setaf 1)FAILED$(tput sgr0)"
+                pad 10
+                echo -e "$(tput bold)stdout$(tput sgr0) ($stdoutf): "
+                tail "$stdoutf" | sed 's/^/           > /'
+                pad 10
+                echo -e "$(tput bold)stderr$(tput sgr0) ($stderrf): "
+                tail "$stderrf" | sed 's/^/           ! /'
+            fi
+        fi
+    done
+
+    if [ -z "$scenario_did_run" ]; then
+        echo "        (skipped)"
+    fi
+
+done

@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# vim: set ft=bash
+#
+# @@ clippy + fmt
+#
+# @ This command is perfect when developing. Run `dcheck` and any clippy or fmt
+# @ errors will be reported.
+# @ Usage:
+# @
+# @   dcheck [[-c|--clippy] | [-f|--format] | [-a|--audit]]
+# @
+# @ With no options specified, both `clippy` and `fmt --check` are run.
+# @
+# @ NOTE: `dcheck` does not change directories for you. Make sure you are
+# @ either in `./rs` or in a crate directory.
+
+if [ "$1" == "--help" ]; then
+    "$DFN_COMMANDS_DIR"/dhelp dcheck
+    exit 0
+fi
+
+CLIPPY=false
+FMT=false
+AUDIT=false
+
+if [ "$#" -eq 0 ]; then
+    CLIPPY=true
+    FMT=true
+    AUDIT=true
+else
+    while [ "$#" -ne 0 ]; do
+        case "$1" in
+            -f | --fmt)
+                FMT=true
+                shift
+                ;;
+            -a | --audit)
+                AUDIT=true
+                shift
+                ;;
+            -c | --clippy)
+                CLIPPY=true
+                shift
+                ;;
+            *)
+                echo "  ERROR: Unknown argument: $1"
+                dcheck --help
+                exit 1
+                ;;
+        esac
+    done
+fi
+
+echo_and_run() {
+    echo "$*"
+    "$@"
+}
+
+# Here we check if we're in the rust directory or one of its subdirectory. If
+# so, stay where we are. Otherwise, move to the rust directory.  By staying in
+# the subdirectory, cargo test will only run checks on the current crate, as
+# the user probably expects.
+cargo_check_dir="$PWD"
+if [ "${PWD##$DFN_RS_DIR}" == "${PWD}" ]; then
+    cargo_check_dir="$DFN_RS_DIR"
+fi
+
+(
+    pushd "$cargo_check_dir" >/dev/null || exit
+    $CLIPPY && echo_and_run cargo clippy --tests --benches -- -D clippy::all
+    $FMT && (echo_and_run cargo fmt --all -- --check || echo "Formatting issue, please run cargo fmt")
+    $AUDIT \
+        && (
+            ignores=()
+            for ignore in $(nix eval --json "(import ${DFN_RS_DIR}/ignored-vulnerabilities.nix)" | jq -cMr '.[]'); do
+                ignores+=("--ignore" "$ignore")
+            done
+            echo_and_run cargo audit "${ignores[@]}" --file "$DFN_RS_DIR/Cargo.lock"
+        )
+    popd >/dev/null || exit
+)

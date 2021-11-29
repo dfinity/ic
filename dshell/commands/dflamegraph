@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# vim: set ft=bash
+
+# @@ Generate flamegraphs
+#
+# @ Starts the client in a way that generates flamegraphs when it terminates.
+# @ Executes a program and workload from dfx with it, which is specified as
+# @ arguments to this script
+# @
+# @ Usage:
+# @
+# @   dflamegraph canister-install-command canister-workload-command
+# @
+# @ canister-intall-command and canister-workload-command are shell scripts
+# @ containing the commands that should be executed after the client has been
+# @ started.
+# @
+# @ Example content for canister-install-command file:
+# @   | cd ~/projects/hello && dfx canister install hello
+# @
+# @ Example content for canister-workload-command file:
+# @   | for i in `seq 0 50`; do
+# @   |   (dfx canister call hello greet "there" --type string) > /dev/null
+# @   | done
+# @
+# @ NOTE: `dflamegraph` does not change directories for you. Make sure you are
+# @ in the `./rs` directory.
+
+function error() {
+    "$DFN_COMMANDS_DIR"/dhelp dflamegraph
+    exit 1
+}
+
+if [ "$1" == "--help" ]; then
+    error
+fi
+
+[ "$#" -eq 2 ] || error
+
+command_file="$1"
+workload_file="$2"
+
+echo "Commands are read from file: ${command_file} and workload from ${workload_file}"
+
+# Requirements:
+#
+# apt-get install linux-tools-common linux-cloud-tools-generic linux-tools-generic
+#
+# To allow running perf:
+# sudo sysctl -w kernel.perf_event_paranoid=1
+
+set -euo pipefail
+
+config_json5=$(mktemp)
+
+echo "Using tmpdir: $TMPDIR"
+
+echo >>"$config_json5" '{ http_handler: { port = 8000 } }'
+
+client_pid_file=$(mktemp)
+readonly client_pid_file
+
+[ -e "$command_file" ] || error
+[ -e "$workload_file" ] || error
+
+SVG_OUT="flamegraph-$(date +%Y-%m-%d_%H:%M:%S).svg"
+
+function kill_client() {
+    # As the actual client is started from within the flamegraph program, simply sending a kill signal to the PID here
+    # is insufficient. Instead, we determine the group PID of the process group and kill that.
+    # https://unix.stackexchange.com/questions/14815/process-descendants
+    if [[ -f "$client_pid_file" ]]; then
+
+        echo "Quitting client (flamegraph is generated in the background to $SVG_OUT, takes a few seconds)"
+
+        local PID
+        PID=$(cat "$client_pid_file")
+        readonly PID
+
+        if [[ -n "$PID" ]]; then
+            # "cargo flamegraph" spawns perf as a child, which in turn spawns the client.
+            # When killing the client, we have to be careful NOT to kill "cargo flamegraph",
+            # as otherwise, the svg output file is not generated.
+            # So here, we find the PID of the child of "cargo flamegraph" (perf) and kill that
+            local CHILD_PID
+            CHILD_PID=$(ps -h -o pid --ppid "$PID")
+            readonly CHILD_PID
+
+            # We don't print anything here because this function is called
+            # on PIPE signal, so trying to output anything might cause an
+            # infinite loop.
+            [[ -n "$CHILD_PID" ]] && kill "$CHILD_PID"
+            unlink "$client_pid_file"
+        fi
+    fi
+}
+
+function start_client() {
+    echo "Building in release mode"
+    cargo build --releasen
+
+    echo "Writing flamegraph to: $SVG_OUT"
+    cargo flamegraph -o "$SVG_OUT" --bin client -- "$config_json5" &>/dev/null &
+    local -ir client_pid=$!
+
+    echo $client_pid >"$client_pid_file"
+    echo "Started client $(command -v client) with PID $client_pid"
+
+    client_port=8000
+
+    local -i retries=0
+    local -i max=60
+    while ! nc -z 127.0.0.1 $client_port; do
+        if [[ $retries -lt $max ]]; then
+            retries=$((retries + 1))
+            if [[ $((retries % 10)) -eq 0 ]]; then
+                echo "waiting for server to accept connections"
+            fi
+            sleep 1
+        else
+            echo "Server did not accept connection after $retries retries."
+            kill $client_pid
+            exit 1
+        fi
+    done
+
+    client_address="127.0.0.1:$client_port"
+    echo "✔️  client is up an running on port $client_address"
+}
+
+# Check that cargo flamegraph is installed
+if ! cargo flamegraph --help >/dev/null; then
+    RED=$(tput setaf 1)
+    RESET=$(tput sgr0)
+    echo -e "${RED}cargo flamegraph does not seem to be installed.${RESET}"
+    echo "Call \"cargo install flamegraph\" to instal and execute \"echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid\" to enable perf for non-root users."
+    echo "See https://github.com/flamegraph-rs/flamegraph for more details"
+    error
+fi
+
+trap kill_client EXIT PIPE
+start_client
+
+(
+    echo "✔️  Installing canister from $command_file"
+    (
+        dirname=$(dirname "$command_file")
+        basename=$(basename "$command_file")
+
+        cd "$dirname"
+        # shellcheck source=/dev/null
+        source "$basename"
+    )
+
+    echo "✔️  Running workload from $workload_file"
+    (
+        dirname=$(dirname "$workload_file")
+        basename=$(basename "$workload_file")
+
+        cd "$dirname"
+        # shellcheck source=/dev/null
+        source "$basename"
+    )
+)

@@ -1,0 +1,24 @@
+= DEV ENV
+
+A few helper commands that form the "dshell".
+
+All commands are living in link:./commands[./commands]. A command `cmd_name`
+lives in a file `./commands/<cmd_name>`. The file should contain the following:
+
+[source,bash]
+....
+
+# @@ Command header, single line.
+#
+# @ A description of the command, potentially spanning multiple lines. This
+# @ includes the usage.
+
+
+# The actual command
+
+echo "Hello!"
+....
+
+All commands in `./commands` will be loaded by when sourcing `./load`. The
+header will be listed in `dhelp`. The description will be shown with both
+`<cmd_name> --help` and `dhelp <cmd_name>`.

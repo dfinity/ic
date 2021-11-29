@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# vim: set ft=bash
+#
+# @@ Fix clippy + fmt
+#
+# @ This command fixes issues reported by `cargo clippy` and `cargo fmt`. To be
+# @ used without moderation after a hard-core coding session.
+# @ Usage:
+# @
+# @   dfix [[-c|--clippy] | [-f|--format]]
+# @
+# @ With no options specified, both `clippy` and `fmt` are fixed.
+
+if [ "$1" == "--help" ]; then
+    "$DFN_COMMANDS_DIR"/dhelp dfix
+    exit 0
+fi
+
+CLIPPY=false
+FMT=false
+
+if [ "$#" -eq 0 ]; then
+    CLIPPY=true
+    FMT=true
+else
+    while [ "$#" -ne 0 ]; do
+        case "$1" in
+            -f | --fmt)
+                FMT=true
+                shift
+                ;;
+            -c | --clippy)
+                CLIPPY=true
+                shift
+                ;;
+            *)
+                echo "  ERROR: Unknown argument: $1"
+                dfix --help
+                exit 1
+                ;;
+        esac
+    done
+fi
+
+echo_and_run() {
+    echo "$*"
+    "$@"
+}
+
+# Here we check if we're in the rust directory or one of its subdirectory. If
+# so, stay where we are. Otherwise, move to the rust directory. By staying in
+# the subdirectory, cargo {fix,fmt} will only run checks on the current crate,
+# as the user probably expects.
+cargo_check_dir="$PWD"
+if [ "${PWD##$DFN_RS_DIR}" == "${PWD}" ]; then
+    cargo_check_dir="$DFN_RS_DIR"
+fi
+
+(
+    pushd "$cargo_check_dir" >/dev/null || exit
+    $CLIPPY \
+        && echo_and_run cargo clippy --fix -Z unstable-options --allow-dirty \
+        && echo "please note that tests were not checked for linter issues"
+    $FMT && echo_and_run cargo fmt --all
+    popd >/dev/null || exit
+)
