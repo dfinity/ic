@@ -1,0 +1,12 @@
+dependencies-check:
+  extends: .ubuntu-nix-docker
+  needs: []  # don't wait on other jobs
+  stage: test
+  script:
+    - |
+      set -euo pipefail
+      cd gitlab-ci/src
+      $SHELL_WRAPPER nix-shell --run "
+        set -xeuo pipefail
+        python3 dependencies/pre_commit.py
+      "

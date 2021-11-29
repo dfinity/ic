@@ -1,7 +1,11 @@
 #[cfg(test)]
 mod canister_state {
     use ic_base_types::NumBytes;
-    use ic_replicated_state::{testing::SystemStateTesting, StateError};
+    use ic_registry_subnet_type::SubnetType;
+    use ic_replicated_state::{
+        testing::{CanisterQueuesTesting, SystemStateTesting},
+        InputQueueType, StateError,
+    };
     use ic_test_utilities::state::{
         get_running_canister, get_stopped_canister, get_stopping_canister,
     };
@@ -20,7 +24,8 @@ mod canister_state {
         assert_eq!(
             canister.system_state.queues_mut().push_input(
                 QueueIndex::new(0),
-                RequestOrResponse::Request(RequestBuilder::new().build())
+                RequestOrResponse::Request(RequestBuilder::new().build()),
+                InputQueueType::RemoteSubnet,
             ),
             Ok(())
         );
@@ -48,7 +53,8 @@ mod canister_state {
                         .originator(canister_test_id(0))
                         .respondent(canister_test_id(1))
                         .build()
-                )
+                ),
+                InputQueueType::RemoteSubnet,
             ),
             Ok(())
         );
@@ -65,6 +71,8 @@ mod canister_state {
                 request.clone(),
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut SUBNET_AVAILABLE_MEMORY.clone(),
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
             ),
             Err((StateError::CanisterStopping(canister_test_id(0)), request))
         );
@@ -91,10 +99,11 @@ mod canister_state {
                 .build(),
         );
         assert_eq!(
-            canister
-                .system_state
-                .queues_mut()
-                .push_input(QueueIndex::new(0), response),
+            canister.system_state.queues_mut().push_input(
+                QueueIndex::new(0),
+                response,
+                InputQueueType::RemoteSubnet,
+            ),
             Ok(())
         );
     }
@@ -110,6 +119,8 @@ mod canister_state {
                 request.clone(),
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut SUBNET_AVAILABLE_MEMORY.clone(),
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
             ),
             Err((StateError::CanisterStopped(canister_test_id(0)), request))
         );
@@ -141,6 +152,8 @@ mod canister_state {
                 response.clone(),
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut SUBNET_AVAILABLE_MEMORY.clone(),
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
             ),
             Err((StateError::CanisterStopped(canister_test_id(0)), response))
         );

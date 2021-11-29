@@ -1,0 +1,31 @@
+---
+- hosts: localhost
+  any_errors_fatal: yes
+  gather_facts: false
+  become: false
+
+  vars_prompt:
+    - name: "yes_i_confirm"
+      prompt: "REALLY DEPLOY SERVICE DISCOVERY? [yes/NO]"
+      private: no
+
+  tasks:
+    - name: Check Confirmation
+      fail: msg="Playbook run confirmation failed"
+      when: yes_i_confirm != "yes"
+
+- hosts: prometheus
+  gather_facts: false
+  become: true
+
+  vars_prompt:
+    - name: "jira_api_token"
+      prompt: "Jira API token for sa-ics@dfinity.org"
+      private: yes
+
+  vars_files:
+    - "{{ inventory_file | dirname }}/versions.json"
+    - "ansible/config/common.yml"
+
+  roles:
+    - role: jiralert_install

@@ -1,4 +1,3 @@
-#![cfg_attr(nightly_compiler, feature(set_stdio))]
 pub mod api;
 pub mod endpoint;
 pub mod printer;

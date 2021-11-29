@@ -10,7 +10,7 @@ ic-crypto-internal-test-vectors = { path = "../test_vectors" }
 ic-crypto-internal-types = { path = "../crypto_lib/types" }
 ic-types = { path = "../../../types/types" } # Would like to get rid of this but as long as the CSP depends on ic-types we can't really.
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
-serde = { version = "1.0.99", features = ["derive", "rc"] }
+serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
 # No other ic-dependencies are allowed.
 

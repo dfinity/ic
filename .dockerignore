@@ -1,0 +1,13 @@
+artifacts/
+**/target/
+**/build/
+
+**/bin/canister_sandbox
+**/bin/ic-regedit
+**/bin/vsock_agent
+**/bin/nodemanager
+**/bin/ic-consensus-pool-util
+**/bin/replica
+**/bin/ic-crypto-csp
+**/bin/state-tool
+**/disk.img

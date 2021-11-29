@@ -390,18 +390,25 @@ impl IDkgProtocol for CryptoReturningOk {
 
     fn create_transcript(
         &self,
-        _params: &IDkgTranscriptParams,
+        params: &IDkgTranscriptParams,
         verified_dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
         let mut receivers = BTreeSet::new();
         receivers.insert(node_test_id(0));
+
+        let dealings_by_index = verified_dealings
+            .iter()
+            .map(|(id, d)| (params.dealers.position(*id).expect("mock"), d.clone()))
+            .collect();
+
         Ok(IDkgTranscript {
             transcript_id: IDkgTranscriptId(0),
             receivers: IDkgReceivers::new(receivers).unwrap(),
             registry_version: RegistryVersion::from(1),
-            verified_dealings: verified_dealings.clone(),
+            verified_dealings: dealings_by_index,
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: AlgorithmId::Placeholder,
+            internal_transcript_raw: vec![],
         })
     }
 

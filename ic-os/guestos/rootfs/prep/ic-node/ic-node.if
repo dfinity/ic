@@ -1,0 +1,41 @@
+# Configuration for various services is generated below /run/...
+# Services need to be able to read their specific config file below
+# that hierarchy.
+interface(`ic_read_generated_config', `
+	gen_require(`
+		type var_run_t, ic_var_run_t;
+	')
+
+	search_dirs_pattern($1, var_run_t, ic_var_run_t)
+	search_dirs_pattern($1, ic_var_run_t, $2)
+	read_files_pattern($1, $2, $2)
+')
+
+interface(`ic_read_replica_config',`
+	gen_require(`
+		type ic_replica_conffile_t;
+	')
+
+    ic_read_generated_config($1, ic_replica_conffile_t)
+')
+
+interface(`ic_rw_data',`
+	gen_require(`
+		type var_lib_t, ic_data_t;
+	')
+
+	search_dirs_pattern($1, var_lib_t, ic_data_t)
+	manage_dirs_pattern($1, ic_data_t, ic_data_t)
+	manage_files_pattern($1, ic_data_t, ic_data_t)
+	mmap_read_files_pattern($1, ic_data_t, ic_data_t)
+')
+
+interface(`ic_rw_crypto_store',`
+	gen_require(`
+		type var_lib_t, ic_crypto_store_t;
+	')
+
+	search_dirs_pattern($1, var_lib_t, ic_crypto_store_t)
+	manage_dirs_pattern($1, ic_crypto_store_t, ic_crypto_store_t)
+	manage_files_pattern($1, ic_crypto_store_t, ic_crypto_store_t)
+')

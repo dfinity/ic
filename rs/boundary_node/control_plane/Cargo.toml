@@ -1,0 +1,40 @@
+[package]
+name = "boundary-node-control-plane"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.31"
+gflags = "0.3.7"
+hyper = { version = "0.14.5", features = ["server", "http1", "http2"] }
+hyper-tls = "0.5.0"
+native-tls = "0.2.7"
+ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
+ic-crypto-utils-threshold-sig = { path = "../../crypto/utils/threshold_sig" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-registry-client = { path = "../../registry/client" }
+ic-types = { path = "../../types/types" }
+lazy_static = "1.4.0"
+openssl = "0.10.0"
+prometheus = { version = "0.12.0", features = [ "process" ] }
+serde = { version = "1.0.115", features = ["derive"] }
+serde_cbor = "0.11.1"
+serde_json = "1.0.54"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog-scope = "4.1.2"
+slog-term = "2.6.0"
+tokio = { version = "1.9.0", features = ["full"] }
+tokio-openssl = "0.6.0"
+url = { version = "2.1.1", features = ["serde"] }
+futures = "0.3.17"
+async-trait = "0.1.51"
+fix-hidden-lifetime-bug = "0.2.4"
+
+[dev-dependencies]
+ic-test-utilities = { path = "../../test_utilities"}
+ic-crypto = { path = "../../crypto" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-config = { path = "../../config"}
+ic-crypto-tls =  {path = "../../crypto/tls"}
+ic-registry-routing-table = { path = "../../registry/routing_table" }

@@ -1,0 +1,20 @@
+---
+
+- set_fact: elasticsearch_hosts=elasticsearch.testnet.dfinity.systems:443
+  when: elasticsearch_hosts is undefined
+
+- name: import tasks assert
+  import_tasks: "assert.yml"
+  tags:
+    - boundary_node
+
+- name: import tasks install
+  import_tasks: "install.yml"
+  tags:
+    - boundary_node
+
+
+- name: import tasks monitoring
+  import_tasks: "monitor.yml"
+  tags:
+    - boundary_node

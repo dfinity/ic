@@ -1,0 +1,8 @@
+[scheduler]
+# The max number of cores to use for canister code execution.
+# scheduler_cores = 1
+# Maximum amount of cycles execution of a single round can consume.
+round_cycles_max = 2684354560000
+# Maximum amount of cycles execution of a single message can consume.
+#
+exec_cycles = 2684354550000

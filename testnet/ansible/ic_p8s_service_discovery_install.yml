@@ -1,0 +1,21 @@
+---
+- hosts: localhost
+  any_errors_fatal: yes
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Check action
+      fail: msg="'ic_git_revision' not given."
+      when: ic_git_revision is not defined
+
+- hosts: prometheus
+  gather_facts: false
+  become: true
+
+  vars_files:
+    - "{{ inventory_file | dirname }}/versions.json"
+    - "config/common.yml"
+
+  roles:
+    - role: ic_p8s_service_discovery_install

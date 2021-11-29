@@ -3,7 +3,7 @@ use ic_replicated_state::{canister_state::system_state::CanisterStatus, StateErr
 use ic_types::{
     messages::{CallContextId, CallbackId},
     methods::Callback,
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
+    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +26,8 @@ pub struct ControllerReply {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MintCyclesRequest {
     pub amount: Cycles,
+    // TODO: EXC-678 NNS subnet id should be removed from the sandbox request
+    pub nns_subnet_id: SubnetId,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -196,19 +198,9 @@ pub struct CanisterStatusReply {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Request {
-    CanisterId(CanisterIdRequest),
-    Controller(ControllerRequest),
     MintCycles(MintCyclesRequest),
     MsgCyclesAccept(MsgCyclesAcceptRequest),
     MsgCyclesAvailable(MsgCyclesAvailableRequest),
-    GetNumInstructionsFromBytes(GetNumInstructionsFromBytesRequest),
-    StableSize(StableSizeRequest),
-    StableGrow(StableGrowRequest),
-    StableGrow64(StableGrow64Request),
-    StableRead(StableReadRequest),
-    StableRead64(StableRead64Request),
-    StableWrite(StableWriteRequest),
-    StableWrite64(StableWrite64Request),
     CanisterCyclesBalance(CanisterCyclesBalanceRequest),
     CanisterCyclesWithdraw(CanisterCyclesWithdrawRequest),
     CanisterCyclesRefund(CanisterCyclesRefundRequest),
@@ -216,22 +208,12 @@ pub enum Request {
     RegisterCallback(RegisterCallbackRequest),
     UnregisterCallback(UnregisterCallbackRequest),
     PushOutputMessage(PushOutputMessageRequest),
-    CanisterStatus(CanisterStatusRequest),
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Reply {
-    CanisterId(CanisterIdReply),
-    Controller(ControllerReply),
     MintCycles(MintCyclesReply),
     MsgCyclesAccept(MsgCyclesAcceptReply),
     MsgCyclesAvailable(MsgCyclesAvailableReply),
-    GetNumInstructionsFromBytes(GetNumInstructionsFromBytesReply),
-    StableSize(StableSizeReply),
-    StableSize64(StableSize64Reply),
-    StableGrow(StableGrowReply),
-    StableGrow64(StableGrow64Reply),
-    StableRead(StableReadReply),
-    StableWrite(StableWriteReply),
     CanisterCyclesBalance(CanisterCyclesBalanceReply),
     CanisterCyclesWithdraw(CanisterCyclesWithdrawReply),
     CanisterCyclesRefund(CanisterCyclesRefundReply),
@@ -239,5 +221,4 @@ pub enum Reply {
     RegisterCallback(RegisterCallbackReply),
     UnregisterCallback(UnregisterCallbackReply),
     PushOutputMessage(PushOutputMessageReply),
-    CanisterStatus(CanisterStatusReply),
 }

@@ -1,0 +1,12 @@
+[
+    {
+	"targets": [
+	    {% for boundary_node in groups['boundary_nodes'] -%}
+	    "{{ hostvars[boundary_node]['control_plane_metrics_addr']}}"{{ "," if not loop.last else ""}}
+	    {% endfor %}
+	],
+	"labels": {
+	    "ic": "{{ ic }}"
+	}
+    }
+]

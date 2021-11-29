@@ -3,9 +3,13 @@ pub mod int_map;
 mod page_allocator;
 
 use checkpoint::Checkpoint;
+pub use checkpoint::{CheckpointSerialization, MappingSerialization};
 use ic_sys::PageBytes;
 pub use ic_sys::{PageIndex, PAGE_SIZE};
-pub use page_allocator::allocated_pages_count;
+pub use page_allocator::{
+    allocated_pages_count, PageAllocatorDelta, PageAllocatorSerialization, PageDeltaSerialization,
+    PageSerialization,
+};
 // Exported publicly for benchmarking.
 pub use page_allocator::{DefaultPageAllocatorImpl, HeapBasedPageAllocator, PageAllocatorInner};
 // NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
@@ -13,7 +17,9 @@ pub use page_allocator::{DefaultPageAllocatorImpl, HeapBasedPageAllocator, PageA
 // simply have a copy of the whole PageMap in every canister snapshot.
 use ic_types::Height;
 use int_map::IntMap;
+use libc::off_t;
 use page_allocator::{Page, PageAllocator};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::ops::Range;
@@ -38,6 +44,11 @@ impl PageDelta {
         self.0
             .get(page_index.get())
             .map(|p| p.contents(page_allocator))
+    }
+
+    /// Returns a reference to the page at the specified index.
+    fn get_page_ref(&self, page_index: PageIndex) -> Option<&Page> {
+        self.0.get(page_index.get())
     }
 
     /// Gets an inclusive range of pages that contains the given page.
@@ -140,6 +151,15 @@ impl PageDelta {
     }
 }
 
+impl<I> From<I> for PageDelta
+where
+    I: IntoIterator<Item = (PageIndex, Page)>,
+{
+    fn from(delta: I) -> Self {
+        Self(delta.into_iter().map(|(i, p)| (i.get(), p)).collect())
+    }
+}
+
 /// Errors that can happen when one saves or loads a PageMap.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PersistenceError {
@@ -206,9 +226,14 @@ impl std::fmt::Display for PersistenceError {
 
 /// A wrapper around the raw file descriptor to be used for memory mapping the
 /// file into the Wasm heap while executing a canister.
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FileDescriptor {
     pub fd: RawFd,
 }
+
+/// A type alias for a raw offset within a file. It is not wrapped in a struct
+/// to simplify arithmetic operations.
+pub type FileOffset = off_t;
 
 /// The result of the `get_memory_region(page_index)` function. It specifies the
 /// largest contiguous page range that contains the given page such that all
@@ -286,10 +311,78 @@ impl PageMap {
         })
     }
 
+    /// Returns a serialization-friendly representation of the page-map.
+    pub fn serialize(&self) -> PageMapSerialization {
+        PageMapSerialization {
+            checkpoint: self.checkpoint.serialize(),
+            base_height: self.base_height,
+            page_delta: self
+                .page_allocator
+                .serialize_page_delta(self.page_delta.iter()),
+            round_delta: self
+                .page_allocator
+                .serialize_page_delta(self.round_delta.iter()),
+            page_allocator: self.page_allocator.serialize(),
+        }
+    }
+
+    /// Creates a page-map from the given serialization-friendly representation.
+    pub fn deserialize(page_map: PageMapSerialization) -> Result<Self, PersistenceError> {
+        let checkpoint = Checkpoint::deserialize(page_map.checkpoint)?;
+        let page_allocator = PageAllocator::deserialize(page_map.page_allocator);
+        let page_delta =
+            PageDelta::from(page_allocator.deserialize_page_delta(page_map.page_delta));
+        let round_delta =
+            PageDelta::from(page_allocator.deserialize_page_delta(page_map.round_delta));
+        Ok(Self {
+            checkpoint,
+            base_height: page_map.base_height,
+            page_delta,
+            round_delta,
+            page_allocator,
+        })
+    }
+
+    /// Returns a serialization-friendly representation of the page allocator.
+    pub fn serialize_allocator(&self) -> PageAllocatorSerialization {
+        self.page_allocator.serialize()
+    }
+
+    /// Creates and sets the page allocator from the given
+    /// serialization-friendly representation.
+    pub fn deserialize_allocator(&mut self, page_allocator: PageAllocatorSerialization) {
+        self.page_allocator = PageAllocator::deserialize(page_allocator);
+    }
+
+    /// Returns a serialization-friendly representation of the page delta.
+    pub fn serialize_delta(&self, pages: &[PageIndex]) -> PageDeltaSerialization {
+        self.page_allocator.serialize_page_delta(
+            pages
+                .iter()
+                .map(|index| (*index, self.page_delta.get_page_ref(*index).unwrap())),
+        )
+    }
+
+    /// Creates and applies the page delta from the given serialization-friendly
+    /// representation.
+    pub fn deserialize_delta(&mut self, page_delta: PageDeltaSerialization) {
+        let page_delta = self.page_allocator.deserialize_page_delta(page_delta);
+        self.page_delta.update(PageDelta::from(page_delta));
+    }
+
     /// Modifies this page map by adding the given dirty pages to it.
-    pub fn update(&mut self, pages: &[(PageIndex, &PageBytes)]) {
-        let page_delta = self.page_allocator.allocate(pages);
+    /// Returns a list of dirty page indicies and an indication of whether the
+    /// page allocator was created or not, which is used for synchronization
+    /// with the sandbox process.
+    pub fn update(
+        &mut self,
+        pages: &[(PageIndex, &PageBytes)],
+    ) -> (Vec<PageIndex>, PageAllocatorDelta) {
+        let (initialized, allocator_delta) = self.page_allocator.ensure_initialized();
+        let page_delta = self.page_allocator.allocate(initialized, pages);
         self.apply(page_delta);
+        let page_indices = pages.iter().map(|(index, _)| *index).collect();
+        (page_indices, allocator_delta)
     }
 
     /// Persists the heap delta contained in this page map to the specified
@@ -410,21 +503,10 @@ impl PageMap {
     where
         I: IntoIterator<Item = (PageIndex, Page)>,
     {
-        let delta = PageDelta(delta.into_iter().map(|(i, p)| (i.get(), p)).collect());
+        let delta = PageDelta::from(delta);
         // Delta is a persistent data structure and is cheap to clone.
         self.page_delta.update(delta.clone());
         self.round_delta.update(delta)
-    }
-
-    // Copies the page with the given index. This is used by `Buffer`.
-    fn copy_page(&mut self, page_index: PageIndex) -> Page {
-        let initialized = self.page_allocator.ensure_initialized();
-        let contents = self.get_page(page_index);
-        self.page_allocator
-            .allocate_initialized(initialized, &[(page_index, contents)])
-            .pop()
-            .unwrap()
-            .1
     }
 }
 
@@ -432,7 +514,9 @@ impl From<&[u8]> for PageMap {
     fn from(bytes: &[u8]) -> Self {
         let mut buf = Buffer::new(PageMap::default());
         buf.write(bytes, 0);
-        buf.into_page_map()
+        let mut page_map = PageMap::default();
+        page_map.update(&buf.dirty_pages().collect::<Vec<_>>());
+        page_map
     }
 }
 
@@ -446,7 +530,7 @@ pub struct Buffer {
     /// affect determinism because the state machine has no way of observing the
     /// order of the keys in this map (or even inside of PageDelta for that
     /// matter).
-    dirty_pages: HashMap<PageIndex, Page>,
+    dirty_pages: HashMap<PageIndex, PageBytes>,
 }
 
 impl Buffer {
@@ -469,7 +553,7 @@ impl Buffer {
             let page_len = dst.len().min(page_size - offset_into_page);
 
             let page_contents = match self.dirty_pages.get(&page) {
-                Some(p) => p.contents(&self.page_map.page_allocator),
+                Some(bytes) => bytes,
                 None => self.page_map.get_page(page),
             };
             dst[0..page_len]
@@ -484,8 +568,6 @@ impl Buffer {
     /// Overwrites the contents of this buffer at the specified offset with the
     /// contents of the source buffer.
     pub fn write(&mut self, mut src: &[u8], mut offset: usize) {
-        use std::collections::hash_map::Entry;
-
         let page_size = PAGE_SIZE;
 
         while !src.is_empty() {
@@ -493,35 +575,20 @@ impl Buffer {
             let offset_into_page = offset % page_size;
             let page_len = src.len().min(page_size - offset_into_page);
 
-            match self.dirty_pages.entry(page) {
-                Entry::Occupied(mut dirty_page) => {
-                    dirty_page.get_mut().copy_from_slice(
-                        offset_into_page,
-                        &src[0..page_len],
-                        &self.page_map.page_allocator,
-                    );
-                }
-                Entry::Vacant(page_slot) => {
-                    let new_page = page_slot.insert(self.page_map.copy_page(page));
-                    new_page.copy_from_slice(
-                        offset_into_page,
-                        &src[0..page_len],
-                        &self.page_map.page_allocator,
-                    );
-                }
-            }
+            let dirty_page = self
+                .dirty_pages
+                .entry(page)
+                .or_insert(*self.page_map.get_page(page));
+            dirty_page[offset_into_page..offset_into_page + page_len]
+                .copy_from_slice(&src[0..page_len]);
 
             offset += page_len;
             src = &src[page_len..src.len()];
         }
     }
 
-    /// Consumes this buffer and converts it back into a page map.
-    ///
-    /// Complexity: O(dirtied pages)
-    pub fn into_page_map(mut self) -> PageMap {
-        self.page_map.apply(self.dirty_pages.into_iter());
-        self.page_map
+    pub fn dirty_pages(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> {
+        self.dirty_pages.iter().map(|(i, p)| (*i, p))
     }
 }
 
@@ -556,6 +623,20 @@ impl std::fmt::Debug for PageMap {
             .try_for_each(|s| write!(f, "[{:?}]", s))?;
         write!(f, "}}")
     }
+}
+
+/// Serialization-friendly representation of `PageMap`.
+///
+/// It contains sufficient information to reconstruct `PageMap`
+/// in another process. Note that canister sandboxing does not
+/// need `round_delta`, but the field is kept for consistency here.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PageMapSerialization {
+    pub checkpoint: CheckpointSerialization,
+    pub base_height: Option<Height>,
+    pub page_delta: PageDeltaSerialization,
+    pub round_delta: PageDeltaSerialization,
+    pub page_allocator: PageAllocatorSerialization,
 }
 
 #[cfg(test)]

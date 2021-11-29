@@ -1,6 +1,6 @@
 use crate::api::tls_stub::tls_errors::{CspTlsClientHandshakeError, CspTlsServerHandshakeError};
 use crate::tls_stub::cert_chain::CspCertificateChain;
-use crate::TlsHandshakeCspServer;
+use crate::TlsHandshakeCspVault;
 use async_trait::async_trait;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::TlsStream;
@@ -13,7 +13,7 @@ pub mod tls_errors;
 /// Provides an `Arc` to an implementation of a trait that can generate the
 /// signature needed for performing a TLS handshake.
 pub trait CspTlsHandshakeSignerProvider: Send + Sync {
-    fn handshake_signer(&self) -> Arc<dyn TlsHandshakeCspServer>;
+    fn handshake_signer(&self) -> Arc<dyn TlsHandshakeCspVault>;
 }
 
 /// A trait that exposes TLS server-side handshaking

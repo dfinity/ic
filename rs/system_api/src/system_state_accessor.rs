@@ -1,10 +1,10 @@
 use ic_base_types::NumBytes;
 use ic_interfaces::execution_environment::HypervisorResult;
-use ic_replicated_state::{canister_state::system_state::CanisterStatus, StateError};
+use ic_replicated_state::StateError;
 use ic_types::{
     messages::{CallContextId, CallbackId, Request},
     methods::Callback,
-    CanisterId, ComputeAllocation, Cycles, NumInstructions, PrincipalId,
+    ComputeAllocation, Cycles, SubnetId,
 };
 
 /// The abstract interface through which canister user code can
@@ -13,64 +13,14 @@ use ic_types::{
 /// that system call code has already resolved/demarshalled raw syscall
 /// arguments.
 pub trait SystemStateAccessor {
-    /// Obtains the canister ID.
-    fn canister_id(&self) -> CanisterId;
-
-    /// Obtains the controller of this canister.
-    fn controller(&self) -> PrincipalId;
-
     /// Increases the balance of the canister by `amount`
-    fn mint_cycles(&self, amount: Cycles) -> HypervisorResult<()>;
+    fn mint_cycles(&self, amount: Cycles, nns_subnet_id: SubnetId) -> HypervisorResult<()>;
 
     /// Accepts cycles from given call context.
     fn msg_cycles_accept(&self, call_context_id: &CallContextId, max_amount: Cycles) -> Cycles;
 
     /// Determines cycles given in call context.
     fn msg_cycles_available(&self, call_context_id: &CallContextId) -> HypervisorResult<Cycles>;
-
-    /// Determines size of stable memory in Web assembly pages.
-    fn stable_size(&self) -> HypervisorResult<u32>;
-
-    /// Grows stable memory by specified amount.
-    fn stable_grow(&self, additional_pages: u32) -> HypervisorResult<i32>;
-
-    /// Returns the number of instructions needed to copy `num_bytes`.
-    fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions;
-
-    /// Reads from stable memory back to heap.
-    fn stable_read(
-        &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()>;
-
-    /// Writes from heap to stable memory.
-    fn stable_write(&self, offset: u32, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
-
-    /// Determines size of stable memory in Web assembly pages.
-    fn stable64_size(&self) -> HypervisorResult<u64>;
-
-    /// Grows stable memory by specified amount.
-    fn stable64_grow(&self, additional_pages: u64) -> HypervisorResult<i64>;
-
-    /// Reads from stable memory back to heap.
-    ///
-    /// Supports bigger stable memory indexed by 64 bit pointers.
-    fn stable64_read(
-        &self,
-        dst: u64,
-        offset: u64,
-        size: u64,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()>;
-
-    /// Writes from heap to stable memory.
-    ///
-    /// Supports bigger stable memory indexed by 64 bit pointers.
-    fn stable64_write(&self, offset: u64, src: u64, size: u64, heap: &[u8])
-        -> HypervisorResult<()>;
 
     /// Current cycles balance of the canister.
     fn canister_cycles_balance(&self) -> Cycles;
@@ -103,7 +53,4 @@ pub trait SystemStateAccessor {
         canister_compute_allocation: ComputeAllocation,
         msg: Request,
     ) -> Result<(), (StateError, Request)>;
-
-    /// Current status of canister.
-    fn canister_status(&self) -> CanisterStatus;
 }

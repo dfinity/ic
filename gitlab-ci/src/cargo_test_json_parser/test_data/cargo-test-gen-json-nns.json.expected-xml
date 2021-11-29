@@ -1,0 +1,38 @@
+<?xml version="1.0" ?>
+<testsuites disabled="0" errors="0" failures="1" tests="4" time="0.0">
+	<testsuite disabled="0" errors="0" failures="1" name="cargo test" skipped="0" tests="4" time="0">
+		<testcase name="handler::get_nns_subnet_id_tests::works_with_multi_node_subnets" classname="handler"/>
+		<testcase name="reverse_proxy::tests::empty_1" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::empty_2" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::cpr_strip_connection_headers" classname="reverse_proxy">
+			<failure type="failure">thread 'reverse_proxy::tests::cpr_strip_connection_headers' panicked at 'assertion failed: `(left == right)`
+
+[1mDiff[0m [31m&lt; left[0m / [32mright &gt;[0m :
+[31m&lt;[0m[1;48;5;52;31m0[0m
+[32m&gt;[0m[1;48;5;22;32m2[0m
+
+', ic_fe/src/reverse_proxy.rs:554:9
+stack backtrace:
+   0: &lt;std::sys_common::backtrace::_print::DisplayBacktrace as core::fmt::Display&gt;::fmt
+   1: core::fmt::write
+   2: std::io::Write::write_fmt
+   3: std::io::impls::&lt;impl std::io::Write for alloc::boxed::Box&lt;W&gt;&gt;::write_fmt
+   4: std::panicking::default_hook::{{closure}}
+   5: std::panicking::default_hook
+   6: std::panicking::rust_panic_with_hook
+   7: rust_begin_unwind
+   8: std::panicking::begin_panic_fmt
+   9: ic_fe::reverse_proxy::tests::cpr_strip_connection_headers
+             at ic_fe/src/reverse_proxy.rs:554
+  10: ic_fe::reverse_proxy::tests::cpr_strip_connection_headers::{{closure}}
+             at ic_fe/src/reverse_proxy.rs:553
+  11: core::ops::function::FnOnce::call_once
+             at /build/rustc-1.45.2-src/src/libcore/ops/function.rs:232
+  12: test::run_test_in_process
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+</failure>
+		</testcase>
+	</testsuite>
+</testsuites>
+

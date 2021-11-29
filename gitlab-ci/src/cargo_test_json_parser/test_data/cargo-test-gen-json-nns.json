@@ -1,0 +1,16 @@
+{ "type": "suite", "event": "started", "test_count": 1 }
+{ "type": "test", "event": "started", "name": "handler::get_nns_subnet_id_tests::works_with_multi_node_subnets" }
+{ "type": "test", "name": "handler::get_nns_subnet_id_tests::works_with_multi_node_subnets", "event": "ok" }
+{ "type": "suite", "event": "ok", "passed": 1, "failed": 0, "allowed_fail": 0, "ignored": 0, "measured": 0, "filtered_out": 0 }
+{ "type": "suite", "event": "started", "test_count": 1 }
+{ "type": "suite", "event": "started", "test_count": 1 }
+{ "type": "test", "event": "started", "name": "reverse_proxy::tests::empty_1" }
+{ "type": "test", "name": "reverse_proxy::tests::empty_1", "event": "ok" }
+{ "type": "test", "event": "started", "name": "reverse_proxy::tests::empty_2" }
+{ "type": "test", "name": "reverse_proxy::tests::empty_2", "event": "ok" }
+{ "type": "suite", "event": "ok", "passed": 1, "failed": 0, "allowed_fail": 0, "ignored": 0, "measured": 0, "filtered_out": 0 }
+{ "type": "suite", "event": "ok", "passed": 1, "failed": 0, "allowed_fail": 0, "ignored": 0, "measured": 0, "filtered_out": 0 }
+{ "type": "test", "event": "started", "name": "reverse_proxy::tests::cpr_strip_connection_headers" }
+{ "type": "test", "name": "reverse_proxy::tests::cpr_strip_connection_headers", "event": "failed", "stdout": "thread 'reverse_proxy::tests::cpr_strip_connection_headers' panicked at 'assertion failed: `(left == right)`\n\n\u001b[1mDiff\u001b[0m \u001b[31m< left\u001b[0m / \u001b[32mright >\u001b[0m :\n\u001b[31m<\u001b[0m\u001b[1;48;5;52;31m0\u001b[0m\n\u001b[32m>\u001b[0m\u001b[1;48;5;22;32m2\u001b[0m\n\n', ic_fe/src/reverse_proxy.rs:554:9\nstack backtrace:\n   0: <std::sys_common::backtrace::_print::DisplayBacktrace as core::fmt::Display>::fmt\n   1: core::fmt::write\n   2: std::io::Write::write_fmt\n   3: std::io::impls::<impl std::io::Write for alloc::boxed::Box<W>>::write_fmt\n   4: std::panicking::default_hook::{{closure}}\n   5: std::panicking::default_hook\n   6: std::panicking::rust_panic_with_hook\n   7: rust_begin_unwind\n   8: std::panicking::begin_panic_fmt\n   9: ic_fe::reverse_proxy::tests::cpr_strip_connection_headers\n             at ic_fe/src/reverse_proxy.rs:554\n  10: ic_fe::reverse_proxy::tests::cpr_strip_connection_headers::{{closure}}\n             at ic_fe/src/reverse_proxy.rs:553\n  11: core::ops::function::FnOnce::call_once\n             at /build/rustc-1.45.2-src/src/libcore/ops/function.rs:232\n  12: test::run_test_in_process\nnote: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.\n" }
+{ "type": "suite", "event": "failed", "passed": 0, "failed": 1, "allowed_fail": 0, "ignored": 0, "measured": 0, "filtered_out": 0 }
+

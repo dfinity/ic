@@ -1,0 +1,27 @@
+:url-execution-dashboard: https://grafana.dfinity.systems/d/GWlsOrn7z/execution-metrics-2-0?orgId=1&from=now-30m&to=now&var-ic=mercury&var-ic_subnet=All&var-instance=All&var-period=$__auto_interval_period
+
+= IC_Execution_IngressMessages_ExpirationRateTooHigh
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+More than 5% of ingress messages expire before they get picked up for execution over the last hour.
+
+== Impact
+
+Too many ingress messages expiring can lead to bad user experience as they will have to retry their messages.
+
+== Possible causes (non-exhaustive)
+
+- Execution is slowed down leading to messages waiting longer in the queues eventually expiring.
+
+- Bug in the code could result in messages staying longer in their queue without getting picked up.
+
+== Troubleshooting and remediation
+
+- Check the {url-execution-dashboard}[execution dashboard] for increased round duration and/or message execution duration. If things have become slower it could lead to messages expiring while waiting in the queue to be picked up.
+
+- If round/message execution times look reasonable, check whether there has been a recent replica upgrade that could have introduced a bug.
+
+- Escalate to the execution team.

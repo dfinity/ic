@@ -16,7 +16,7 @@ use hex_literal::hex;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal_canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("f20ac98a760e68650fd84ed73ccf9387ff8f8868da079b46c1325ca25b9c1864");
+    hex!("784ec56225e38eff76c3a7ab804c60862efd8f3b93ecc29f86c2362e7610f6aa");
 
 /// Operands used in encoding UC payloads.
 enum Ops {
@@ -58,6 +58,7 @@ enum Ops {
     StableRead64 = 48,
     StableWrite64 = 49,
     Int64ToBlob = 50,
+    AcceptCycles128 = 54,
 }
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
@@ -368,6 +369,13 @@ impl PayloadBuilder {
     pub fn accept_cycles(mut self, num_cycles: u64) -> Self {
         self = self.push_int64(num_cycles);
         self.0.push(Ops::AcceptCycles as u8);
+        self
+    }
+
+    pub fn accept_cycles128(mut self, amount_high: u64, amount_low: u64) -> Self {
+        self = self.push_int64(amount_high);
+        self = self.push_int64(amount_low);
+        self.0.push(Ops::AcceptCycles128 as u8);
         self
     }
 

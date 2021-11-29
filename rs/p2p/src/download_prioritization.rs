@@ -619,7 +619,17 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
         let mut peer = peer.write().unwrap();
         peer[priority]
             .entry(integrity_hash_peer_index)
-            .or_insert_with(|| advert_tracker.clone());
+            .or_insert_with(|| {
+                self.metrics
+                    .advert_queue_add
+                    .with_label_values(&[&peer_id.to_string(), &format!("{:?}", priority)])
+                    .inc();
+                self.metrics
+                    .advert_queue_size
+                    .with_label_values(&[&peer_id.to_string(), &format!("{:?}", priority)])
+                    .inc();
+                advert_tracker.clone()
+            });
 
         // Track the peer in the advert
         let mut advert_tracker = advert_tracker.write().unwrap();
@@ -767,6 +777,20 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
                 let mut peer_advert_map = peer_advert_map.write().unwrap();
                 peer_advert_map[advert_tracker.priority]
                     .remove(&advert_tracker.advert.integrity_hash);
+                self.metrics
+                    .advert_queue_remove
+                    .with_label_values(&[
+                        &peer_id.to_string(),
+                        &format!("{:?}", advert_tracker.priority),
+                    ])
+                    .inc();
+                self.metrics
+                    .advert_queue_size
+                    .with_label_values(&[
+                        &peer_id.to_string(),
+                        &format!("{:?}", advert_tracker.priority),
+                    ])
+                    .dec();
             }
             advert_tracker.remove_peer(peer_id);
             advert_tracker.peers.len()
@@ -803,6 +827,20 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
                 let priority_map = &mut peer_advert_map[p];
                 while let Some((integrity_hash, advert_tracker)) = priority_map.pop_front() {
                     let mut advert_tracker = advert_tracker.write().unwrap();
+                    self.metrics
+                        .advert_queue_remove
+                        .with_label_values(&[
+                            &peer_id.to_string(),
+                            &format!("{:?}", advert_tracker.priority),
+                        ])
+                        .inc();
+                    self.metrics
+                        .advert_queue_size
+                        .with_label_values(&[
+                            &peer_id.to_string(),
+                            &format!("{:?}", advert_tracker.priority),
+                        ])
+                        .dec();
                     advert_tracker.remove_peer(peer_id);
                     if advert_tracker.peers.is_empty() {
                         client_advert_map[&advert_tracker.advert.artifact_id]
@@ -883,11 +921,27 @@ impl DownloadPrioritizerImpl {
             if let Some(peer_advert_map) = peer_map.get_mut(peer_id) {
                 let mut peer_advert_map = peer_advert_map.write().unwrap();
                 peer_advert_map[old_priority].remove(&advert_tracker.advert.integrity_hash);
+                self.metrics
+                    .advert_queue_remove
+                    .with_label_values(&[&peer_id.to_string(), &format!("{:?}", old_priority)])
+                    .inc();
+                self.metrics
+                    .advert_queue_size
+                    .with_label_values(&[&peer_id.to_string(), &format!("{:?}", old_priority)])
+                    .dec();
                 if new_priority != Priority::Drop {
                     peer_advert_map[new_priority].insert(
                         advert_tracker.advert.integrity_hash.clone(),
                         advert_tracker_ref.clone(),
                     );
+                    self.metrics
+                        .advert_queue_add
+                        .with_label_values(&[&peer_id.to_string(), &format!("{:?}", new_priority)])
+                        .inc();
+                    self.metrics
+                        .advert_queue_size
+                        .with_label_values(&[&peer_id.to_string(), &format!("{:?}", new_priority)])
+                        .inc();
                 }
             }
         })

@@ -1,0 +1,8 @@
+{"type": "suite", "event": "started", "test_count": 3}
+{"type": "test", "event": "started", "name": "system_tests::request_signature_test"}
+{"type": "test", "event": "ok", "name": "system_tests::request_signature_test", "exec_time": "26.0314s", "stderr": "Feb 15 10:19:30.860 INFO Running 'request_signature_test' with seed 42\nDEBG Using..."}
+{"type": "test", "event": "started", "name": "system_tests::request_signature_test::malicious_input_test"}
+{"type": "test", "event": "ok", "name": "system_tests::request_signature_test::malicious_input_test", "exec_time": "24.4760s"}
+{"type": "test", "event": "started", "name": "system_tests::request_signature_test::request_signature_test"}
+{"type": "test", "event": "ok", "name": "system_tests::request_signature_test::request_signature_test", "exec_time": "1.4863s"}
+{"type": "suite", "event": "ok", "passed": 3, "failed": 0, "allowed_fail": 0, "ignored": 0, "measured": 0, "filtered_out": 0}

@@ -145,7 +145,6 @@ pub const SUBNET_42: SubnetId = SubnetId::new(PrincipalId::new(
 
 /// Returns a [`CanisterId`] that can be used in tests.
 ///
-/// See also c.f comments of PrincipalId::new_test_id.
 /// Cannot be CanisterId::new_test(), because CanisterId is a type alias.
 pub fn canister_test_id(i: u64) -> CanisterId {
     CanisterId::from(i)

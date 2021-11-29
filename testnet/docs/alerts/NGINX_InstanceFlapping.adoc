@@ -1,0 +1,31 @@
+= NGINX_InstanceFlapping
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+One more more NGINX instances is restarting continuously.
+
+== Impact
+
+Connections to the IC may be broken, return errors or fail to connect, degrading the user experience or making the IC unavailable.
+
+== Possible causes (non-exhaustive)
+
+- Bad NGINX configuration
+
+- Bad OS/package configuration
+
+- Bad hardware
+
+== Troubleshooting and remediation
+
+- Check Kibana (kibana.mercury.dfinity.systems with index pattern boundary-journal-*) for boundary node logs to determine the possible cause.
+
+- Contact PFOPS oncall.
+
+- For deployed software issues, e.g. NGINX configuration, roll back to a known working version following the instructions on the Notions page for Boundary Nodes (https://www.notion.so/c7f2865830944efa9f0abba8bfe20bee).
+
+- For failure of a subset of boundary nodes, take the failed nodes out of the load balancer.
+
+- For complete failure when rollback fails and oncalls are stumped, escalate to the full Networking team via slack then phone.

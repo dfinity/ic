@@ -1,0 +1,30 @@
+= IC_Subnet_ConsensusMembershipRegistryVersionSplit
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+The version of the registry that is being used by Consensus across multiple
+replicas on a single subnet has not converged on a single value.
+
+== Impact
+
+The Consensus component across multiple replicas on a single subnet is
+operating with different registry versions.
+
+This is to be expected for short periods of time - the replicas do not all
+switch to the same version of the registry at the same instant. So far,
+they normally all switch within 30 seconds.
+
+But if this persists for a longer period of time then there is a risk of
+divergence.
+
+== Possible causes (non-exhaustive)
+
+- Software bug
+- Network connectivity to the NNS has been lost
+- The NNS replicas do not agree on the registry version
+
+== Troubleshooting and remediation
+
+Unknown.

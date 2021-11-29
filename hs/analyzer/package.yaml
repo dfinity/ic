@@ -1,0 +1,57 @@
+name:       analyzer
+version:    0.0.1
+synopsis:   Event analyzer
+git:        https://gitlab.com/dfinity-lab/core/ic.git
+category:   System, Data, Nix
+license:    BSD3
+
+dependencies:
+  - base                        >= 4.9 && < 5
+  - aeson
+  - arrows
+  - bytestring
+  - candid
+  - constraints
+  - containers
+  - cryptohash
+  - deepseq
+  - ed25519
+  - hedgehog
+  - HUnit
+  - lens
+  - listsafe
+  - monad-par
+  - mtl
+  - multiset
+  - pcre-heavy
+  - pretty-show
+  - pipes
+  - simple-ltl
+  - tasty-hunit
+  - text
+  - time
+  - transformers
+  - unordered-containers
+
+library:
+  source-dirs: src
+  ghc-options:
+    - -Wall
+
+executables:
+  analyze:
+    main: Analyze.hs
+    source-dirs: bin
+    dependencies:
+      - base                        >= 4.9 && < 5
+      - analyzer
+
+tests:
+  analyzer-tests:
+    main: Main.hs
+    source-dirs: test
+    dependencies:
+      - analyzer
+      - base                        >= 4.9 && < 5
+      - tasty
+      - tasty-hedgehog

@@ -1,0 +1,226 @@
+{
+    "advisory-db": {
+        "branch": "master",
+        "builtin": false,
+        "description": "Security advisory database for Rust crates published through crates.io",
+        "homepage": "https://rustsec.org",
+        "owner": "RustSec",
+        "repo": "advisory-db",
+        "rev": "e0fda3fe9bf3e33d13fe0da6d6eaf109e86f51d7",
+        "sha256": "1xb2nmyaa4fdyyly3vb83abvpn558yf9kr5yjvf5jq9fcdymcsqr",
+        "type": "tarball",
+        "url": "https://github.com/RustSec/advisory-db/archive/e0fda3fe9bf3e33d13fe0da6d6eaf109e86f51d7.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "ansible": {
+        "branch": "devel",
+        "builtin": false,
+        "description": "Ansible is a radically simple IT automation platform that makes your applications and systems easier to deploy and maintain. Automate everything from code deployment to network configuration to cloud management, in a language that approaches plain English, using SSH, with no agents to install on remote systems. https://docs.ansible.com.",
+        "homepage": "https://www.ansible.com/",
+        "owner": "ansible",
+        "repo": "ansible",
+        "rev": "v2.10.7",
+        "sha256": "1c6crfc40fg7wi7m1ik9xplh2rw096hprhk40d3nc6pcdgg1qdd8",
+        "type": "tarball",
+        "url": "https://github.com/ansible/ansible/archive/v2.10.7.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz",
+        "version": "2.10.7"
+    },
+    "buf": {
+        "branch": "v0.35.1",
+        "builtin": false,
+        "description": "A new way of working with Protocol Buffers.",
+        "homepage": "https://buf.build",
+        "owner": "bufbuild",
+        "repo": "buf",
+        "rev": "67f4a0ce414f588e25f21375adba12a0b49ad264",
+        "sha256": "0vq1niwxpgkc0sqmy84lxq7hyscmmszd4a97h2bh6spal6k3fp6q",
+        "type": "tarball",
+        "url": "https://github.com/bufbuild/buf/archive/67f4a0ce414f588e25f21375adba12a0b49ad264.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz",
+        "version": "0.35.1"
+    },
+    "cargo-expand": {
+        "branch": "master",
+        "builtin": false,
+        "description": "Subcommand to show result of macro expansion",
+        "homepage": "",
+        "owner": "dtolnay",
+        "repo": "cargo-expand",
+        "rev": "852f1c4b1cffba1454e691518a7caf30f7e49296",
+        "sha256": "0w4hh290aj7ryg6fjlva5fp640p5y8kxlb8kn0fj6m52r8p7a5qa",
+        "type": "tarball",
+        "url": "https://github.com/dtolnay/cargo-expand/archive/852f1c4b1cffba1454e691518a7caf30f7e49296.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "cargo-flamegraph": {
+        "branch": "master",
+        "repo": "ssh://git@github.com/dfinity-lab/flamegraph",
+        "rev": "99cf0a7ca8a695f5da474e245d5d46c9367d9e80",
+        "type": "git"
+    },
+    "cargo-graph": {
+        "branch": "master",
+        "builtin": false,
+        "description": "A cargo subcommand for creating GraphViz DOT files and dependency graphs",
+        "homepage": null,
+        "owner": "kbknapp",
+        "repo": "cargo-graph",
+        "rev": "d895af1b7840c7ae8eddaf4e990bfa594c22ba01",
+        "sha256": "0myg26cssmbakz53dl61lswsbaqnjqlbc30c2571pq8f7gvz2qv5",
+        "type": "tarball",
+        "url": "https://github.com/kbknapp/cargo-graph/archive/d895af1b7840c7ae8eddaf4e990bfa594c22ba01.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "clipboard": {
+        "branch": "v0.1.2",
+        "builtin": false,
+        "description": "clipboard for golang",
+        "homepage": null,
+        "owner": "atotto",
+        "repo": "clipboard",
+        "rev": "579379fa8ff8a6d3fa979cec107f8f6d7f8fde90",
+        "sha256": "0rsz70hqk8abk8isidvm7in9smhiazywjvx4f1q91annl2glav2g",
+        "type": "tarball",
+        "url": "https://github.com/atotto/clipboard/archive/579379fa8ff8a6d3fa979cec107f8f6d7f8fde90.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz",
+        "version": "0.1.2"
+    },
+    "common": {
+        "branch": "master",
+        "repo": "ssh://git@github.com/dfinity-lab/common",
+        "rev": "d865c0cfd64d765a8daf6a31c76dca21a5d4d203",
+        "type": "git"
+    },
+    "dfx-x86_64-darwin": {
+        "builtin": false,
+        "name": "dfx",
+        "sha256": "1b1zxc5prjgs0drvwpfnpy5nxaw1rkn37f168y0w8ihl23rf3879",
+        "type": "file",
+        "url": "https://download.dfinity.systems/sdk/dfx/0.7.0-beta.3/x86_64-darwin/dfx-0.7.0-beta.3.tar.gz",
+        "url_template": "https://download.dfinity.systems/sdk/dfx/<version>/x86_64-darwin/<name>-<version>.tar.gz",
+        "version": "0.7.0-beta.3"
+    },
+    "dfx-x86_64-linux": {
+        "builtin": false,
+        "name": "dfx",
+        "sha256": "0vwlq1jhswriz6rzifb9cnd4jgw17da4qkjpymwjb4bczi6gslw4",
+        "type": "file",
+        "url": "https://download.dfinity.systems/sdk/dfx/0.7.0-beta.3/x86_64-linux/dfx-0.7.0-beta.3.tar.gz",
+        "url_template": "https://download.dfinity.systems/sdk/dfx/<version>/x86_64-linux/<name>-<version>.tar.gz",
+        "version": "0.7.0-beta.3"
+    },
+    "fondue": {
+        "branch": "master",
+        "repo": "ssh://git@github.com/dfinity/fondue",
+        "rev": "4da2684cc89b6ac413ed9da13e790a480bc25b88",
+        "type": "git"
+    },
+    "haskell-candid": {
+        "branch": "master",
+        "builtin": false,
+        "description": "A candid library for Haskell",
+        "homepage": null,
+        "owner": "nomeata",
+        "repo": "haskell-candid",
+        "rev": "26b6aacbe04fa59b977a0e8e3038e9ddb8f5196c",
+        "sha256": "0fx11q57q90f20akx5r3mizd0n326p293km69vr9kd43ab9vbxqv",
+        "type": "tarball",
+        "url": "https://github.com/nomeata/haskell-candid/archive/26b6aacbe04fa59b977a0e8e3038e9ddb8f5196c.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "ic-cdk-optimizer": {
+        "builtin": false,
+        "sha256": "0c74l6sy9xx73h7pm5rayvrkxgp1p7izzngdhvdg6w32r8cqx2v8",
+        "type": "file",
+        "url": "https://static.crates.io/crates/ic-cdk-optimizer/ic-cdk-optimizer-0.1.0.crate",
+        "url_template": "https://static.crates.io/crates/ic-cdk-optimizer/ic-cdk-optimizer-<version>.crate",
+        "version": "0.1.0"
+    },
+    "ic-ref-0_16": {
+        "branch": "release-0.16",
+        "repo": "ssh://git@github.com/dfinity-lab/ic-ref",
+        "rev": "23c214042fab3e91aa45e5e91650495fdc554acd",
+        "type": "git"
+    },
+    "ic-ref-0_17": {
+        "branch": "release-0.17",
+        "repo": "ssh://git@github.com/dfinity-lab/ic-ref",
+        "rev": "a858395300d67685545e945dd4afd4b6af26c1a6",
+        "type": "git"
+    },
+    "ic-ref-0_18": {
+        "branch": "release-0.18",
+        "repo": "ssh://git@github.com/dfinity-lab/ic-ref",
+        "rev": "35b920af8100153db9b81e26c217238d6bd3d46f",
+        "type": "git"
+    },
+    "idl2json": {
+        "branch": "main",
+        "repo": "ssh://git@github.com/dfinity-lab/idl2json",
+        "rev": "bcb27ac567eba7a7c14c9d70aedd3fb777af281b",
+        "type": "git"
+    },
+    "leb128-cereal": {
+        "branch": "master",
+        "builtin": false,
+        "description": "LEB128 encoding for Haskell",
+        "homepage": null,
+        "owner": "nomeata",
+        "repo": "haskell-leb128-cereal",
+        "rev": "2c6646e8aea97e3b9a1e801188650ed2ede85d07",
+        "sha256": "1xc3sj1ly3xx65l0h27bd8p367a7jqzx4nfhp4mbbdibys3fbh9n",
+        "type": "tarball",
+        "url": "https://github.com/nomeata/haskell-leb128-cereal/archive/2c6646e8aea97e3b9a1e801188650ed2ede85d07.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "mitogen": {
+        "branch": "master",
+        "builtin": false,
+        "description": "Distributed self-replicating programs in Python",
+        "homepage": "https://mitogen.networkgenomics.com/",
+        "owner": "dw",
+        "repo": "mitogen",
+        "rev": "60fbea4b59cb558ffc3c8cfe9d1531367fc4be71",
+        "sha256": "01vzcw1mhpsk2v29xmsv078v0px5vm3j4fl52b46y7jqkipvafyv",
+        "type": "tarball",
+        "url": "https://github.com/dw/mitogen/archive/60fbea4b59cb558ffc3c8cfe9d1531367fc4be71.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "motoko": {
+        "branch": "release",
+        "repo": "ssh://git@github.com/dfinity/motoko",
+        "rev": "43f3547ccbf7d48e5d25e1bf5222f11df8df2940",
+        "tag": "0.5.10",
+        "type": "git"
+    },
+    "rosetta-cli-x86_64-darwin": {
+        "builtin": false,
+        "sha256": "0478rqi4iydbf4ad5v740vhnfmyhc5xd7rdp306qn3ync5rj4m2m",
+        "type": "file",
+        "url": "https://github.com/coinbase/rosetta-cli/releases/download/v0.6.7/rosetta-cli-0.6.7-darwin-amd64.tar.gz",
+        "url_template": "https://github.com/coinbase/rosetta-cli/releases/download/v<version>/rosetta-cli-<version>-darwin-amd64.tar.gz",
+        "version": "0.6.7"
+    },
+    "rosetta-cli-x86_64-linux": {
+        "builtin": false,
+        "sha256": "0pv4nvg2mg41pzhh91davwb2rsadhf5p4xd05z73qjzh117ns70i",
+        "type": "file",
+        "url": "https://github.com/coinbase/rosetta-cli/releases/download/v0.6.7/rosetta-cli-0.6.7-linux-amd64.tar.gz",
+        "url_template": "https://github.com/coinbase/rosetta-cli/releases/download/v<version>/rosetta-cli-<version>-linux-amd64.tar.gz",
+        "version": "0.6.7"
+    },
+    "tarpaulin": {
+        "branch": "0.17.0",
+        "builtin": false,
+        "description": "A code coverage tool for Rust projects",
+        "homepage": "https://crates.io/crates/cargo-tarpaulin",
+        "owner": "xd009642",
+        "repo": "tarpaulin",
+        "rev": "3fde6cec2562ed4faa9966d7f1154f32372d0647",
+        "sha256": "1z104cd3wg718x1d89znppx4h6f0c6icgmpcllyrd0d19lb71a2b",
+        "type": "tarball",
+        "url": "https://github.com/xd009642/tarpaulin/archive/3fde6cec2562ed4faa9966d7f1154f32372d0647.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    }
+}

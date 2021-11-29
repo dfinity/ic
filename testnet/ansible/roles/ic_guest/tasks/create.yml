@@ -1,0 +1,141 @@
+---
+
+- name: copy file media.img
+  shell: |
+    set -eExuo pipefail
+
+    MEDIA_DIR="/var/local/ic/media/{{ ic_deployment_name }}/{{ ic_git_revision }}"
+    ITEMS=({{ hostvars[inventory_hostname].ic_guests | join(' ') }})
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty cp -v --reflink=auto --sparse=always $MEDIA_DIR/'{}.img' /var/lib/libvirt/media/'{}.img'
+    chown libvirt-qemu:kvm /var/lib/libvirt/media/*.img
+    chmod 0664 /var/lib/libvirt/media/*.img
+  register: script_res
+  changed_when: "script_res.stdout | default('')"
+  args:
+    executable: /bin/bash
+  tags: [ "ic_guest" ]
+
+- name: copy file disk.img for replica
+  vars:
+    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary  | default([]) }}"
+    aux_nodes: "{{ hostvars[inventory_hostname].groups.aux  | default([]) }}"
+    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | difference(boundary_nodes) | difference(aux_nodes) | join(' ') }}"
+    ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
+  shell: |
+    set -eExuo pipefail
+
+    # Deploy replica images
+    IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
+    ITEMS=({{ replica_nodes }})
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
+
+    chown libvirt-qemu:kvm /var/lib/libvirt/images/*.img
+    chmod 0664 /var/lib/libvirt/images/*.img
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty truncate --size {{ ic_disk_size_bytes }} /var/lib/libvirt/images/'{}.img'
+  register: script_res
+  changed_when: "'stdout' in script_res and script_res.stdout"
+  args:
+    executable: /bin/bash
+  tags: [ "ic_guest" ]
+
+- name: copy file disk.img for boundary nodes
+  vars:
+    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary  | default([]) | join(' ') }}"
+    ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
+  shell: |
+    set -eExuo pipefail
+
+    # Deploy replica images
+    IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic"
+    ITEMS=({{ boundary_nodes }})
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
+
+    chown libvirt-qemu:kvm /var/lib/libvirt/images/*.img
+    chmod 0664 /var/lib/libvirt/images/*.img
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty truncate --size {{ ic_disk_size_bytes }} /var/lib/libvirt/images/'{}.img'
+  register: script_res
+  changed_when: "script_res.stdout | default('')"
+  args:
+    executable: /bin/bash
+  when: boundary_nodes | length > 0
+  tags: [ "ic_guest" ]
+
+- name: copy file disk.img for aux nodes
+  vars:
+    aux_nodes: "{{ hostvars[inventory_hostname].groups.aux  | default([]) | join(' ') }}"
+    ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
+  shell: |
+    set -eExuo pipefail
+
+    # Deploy replica images
+    IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic"
+    ITEMS=({{ aux_nodes }})
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
+
+    chown libvirt-qemu:kvm /var/lib/libvirt/images/*.img
+    chmod 0664 /var/lib/libvirt/images/*.img
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty truncate --size {{ ic_disk_size_bytes }} /var/lib/libvirt/images/'{}.img'
+  register: script_res
+  changed_when: "script_res.stdout | default('')"
+  args:
+    executable: /bin/bash
+  when: aux_nodes | length > 0
+  tags: [ "ic_guest" ]
+
+- name: Prepare the Guest template file
+  vars:
+    ic_memory_kb: "{{ ic_memory_gb | int * (1024 | pow(2)) }}"
+    mac_address: "{{ hostvars[item].mac_address }}"
+  template:
+    src: "../ic_guest/templates/guest.xml"
+    dest: "/var/local/ic/disk/{{ ic_deployment_name }}/{{ item }}.xml"
+    owner: root
+    group: root
+    mode: 0644
+  loop: "{{ hostvars[inventory_hostname].ic_guests }}"
+  loop_control:
+    label:
+  tags: [ "ic_guest" ]
+
+- name: Define (create) a guest
+  shell: |
+    set -eExuo pipefail
+    virsh define "/var/local/ic/disk/{{ ic_deployment_name }}/{{ item }}.xml"
+    virsh dominfo "{{ item }}"
+  loop: "{{ hostvars[inventory_hostname].ic_guests }}"
+  loop_control:
+    label:
+  args:
+    executable: /bin/bash
+  tags: [ "ic_guest" ]
+
+- name: Stop the dfinity-hsm-agent.service
+  systemd:
+    state: stopped
+    name: dfinity-hsm-agent
+  tags: [ "ic_guest" ]
+
+- name: Ensure potentially conflicting kernel modules are not loaded
+  shell: |
+    if lsmod | grep -q vhost_vsock; then exit 0; fi  # the required kernel module is already loaded
+    get_depends() { lsmod | awk -vmod="$1" '($1==mod){gsub(",", "\n", $4); print $4}' ; }
+    recursive_get_depends() { while read line ; do echo $line; get_depends $line ; done | grep . ; }
+    # We call recursive_get_depends twice, to get two levels of module dependencies.
+    # This was enough so far to remove all dependent modules.
+    modprobe -vr $(echo vsock | recursive_get_depends | recursive_get_depends | sort | uniq) || true
+  register: script_res
+  changed_when: "'rmmod' in (script_res.stdout | default(''))"
+  ignore_errors: true
+  tags: [ "ic_guest" ]
+
+- name: Load the vhost_vsock kernel module
+  modprobe:
+    name: vhost_vsock
+    state: present
+  tags: [ "ic_guest" ]
+
+- name: Start the dfinity-hsm-agent.service
+  systemd:
+    state: started
+    name: dfinity-hsm-agent
+  tags: [ "ic_guest" ]

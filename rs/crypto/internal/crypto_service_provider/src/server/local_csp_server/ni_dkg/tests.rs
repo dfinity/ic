@@ -4,7 +4,8 @@ mod test_create_dealing;
 mod test_retention;
 
 use super::*;
-use crate::server::local_csp_server::threshold_sig::tests::util::test_threshold_signatures;
+use crate::server::api::CspVault;
+use crate::server::test_util;
 use crate::types as csp_types;
 use fixtures::*;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg as internal_types;
@@ -15,6 +16,7 @@ use proptest::prelude::*;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use std::sync::Arc;
 
 proptest! {
     #![proptest_config(ProptestConfig {
@@ -87,7 +89,7 @@ fn threshold_signatures_should_work(
         coefficients: transcript.public_coefficients.coefficients.clone(),
     };
     let public_coefficients = csp_types::CspPublicCoefficients::Bls12_381(public_coefficients);
-    let signatories: Vec<(&LocalCspServer<_, _, _>, KeyId)> = {
+    let signatories: Vec<(Arc<dyn CspVault>, KeyId)> = {
         let key_id = key_id_from_csp_pub_coeffs(&public_coefficients);
         config
             .receivers
@@ -98,12 +100,16 @@ fn threshold_signatures_should_work(
                     .nodes_by_node_id
                     .get(node_id)
                     .expect("Test error - could not find node listed in configuration");
-                let csp = &node.csp_server;
-                (csp, key_id)
+                (Arc::clone(&node.csp_vault), key_id)
             })
             .collect()
     };
     let seed = Randomness::from(rng.gen::<[u8; 32]>());
     let message = b"Tinker tailor soldier spy";
-    test_threshold_signatures(&public_coefficients, &signatories[..], seed, &message[..]);
+    test_util::test_threshold_signatures(
+        &public_coefficients,
+        &signatories[..],
+        seed,
+        &message[..],
+    );
 }

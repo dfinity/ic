@@ -1,0 +1,63 @@
+policy_module(setup-var, 1.0.0)
+
+# This policy module allows the fsadm_t type read everything below /var.
+# This is not terribly great, but it is done this way in order to allow
+# mkfs to be called using existing /var as a "template" and populating the
+# "real" /var contents using the correct contexts already.
+#
+# A better strategy would "probably" be:
+# - store a /var template filesystem somewhere else, but without "correct"
+#   labels, but rather a "generic" label suitable for reading by fsadm_t
+# - create filesystem and use labeset with fakeroot or debugfs to initialize
+#   fs image
+#
+# However, this policy module provides an easy way to allow the current
+# implementation to be carried forward for a while, and also does not
+# raise "security eyebrows" for now.
+
+require {
+    type fsadm_t;
+}
+
+require_fsadm_read_all(apt_var_cache_t)
+require_fsadm_read_all(apt_var_lib_t)
+require_fsadm_read_all(apt_var_log_t)
+require_fsadm_read_all(backup_store_t)
+require_fsadm_read_all(cgroup_t)
+require_fsadm_read_all(chronyd_var_lib_t)
+require_fsadm_read_all(chronyd_var_log_t)
+require_fsadm_read_all(dhcp_state_t)
+require_fsadm_read_all(dmidecode_exec_t)
+require_fsadm_read_all(dpkg_lock_t)
+require_fsadm_read_all(dpkg_var_lib_t)
+require_fsadm_read_all(faillog_t)
+require_fsadm_read_all(file_context_t)
+require_fsadm_read_all(fonts_cache_t)
+require_fsadm_read_all(hwdata_t)
+require_fsadm_read_all(init_t)
+require_fsadm_read_all(init_var_lib_t)
+require_fsadm_read_all(kernel_t)
+require_fsadm_read_all(lastlog_t)
+require_fsadm_read_all(ldconfig_cache_t)
+require_fsadm_read_all(mail_spool_t)
+require_fsadm_read_all(mail_spool_t)
+require_fsadm_read_all(pam_var_run_t)
+require_fsadm_read_all(policykit_var_lib_t)
+require_fsadm_read_all(policykit_var_lib_t)
+require_fsadm_read_all(semanage_read_lock_t)
+require_fsadm_read_all(semanage_store_t)
+require_fsadm_read_all(semanage_trans_lock_t)
+require_fsadm_read_all(system_dbusd_var_lib_t)
+require_fsadm_read_all(systemd_coredump_var_lib_t)
+require_fsadm_read_all(systemd_journal_t)
+require_fsadm_read_all(tmpfs_t)
+require_fsadm_read_all(udev_exec_t)
+require_fsadm_read_all(udev_t)
+require_fsadm_read_all(udev_var_run_t)
+require_fsadm_read_all(var_lib_t)
+require_fsadm_read_all(var_lock_t)
+require_fsadm_read_all(var_log_t)
+require_fsadm_read_all(var_spool_t)
+require_fsadm_read_all(var_t)
+require_fsadm_read_all(wtmp_t)
+require_fsadm_read_all(journalbeat_var_lib_t)

@@ -4,7 +4,7 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_nns_governance::pb::v1::Neuron;
-use ledger_canister::ICPTs;
+use ledger_canister::Tokens;
 use rand::rngs::StdRng;
 use rand_core::{RngCore, SeedableRng};
 use std::collections::HashMap;
@@ -33,7 +33,7 @@ impl From<&Vec<Neuron>> for AccountState {
             .map(|neuron| neuron.cached_neuron_stake_e8s)
             .sum();
 
-        let icpts = ICPTs::from_e8s(e8s).get_icpts() as u32;
+        let icpts = Tokens::from_e8s(e8s).get_tokens() as u32;
 
         AccountState {
             neuron_ids,
@@ -79,7 +79,7 @@ impl GenesisTokenCanisterInitPayloadBuilder {
 
         for (address, icpts) in sr_accounts.iter() {
             self.total_alloc += *icpts;
-            let icpts = ICPTs::from_icpts(*icpts as u64).unwrap();
+            let icpts = Tokens::from_tokens(*icpts as u64).unwrap();
             let sr_stakes = evenly_split_e8s(icpts.get_e8s(), sr_months_to_release);
             let aging_since_timestamp_seconds = self.aging_since_timestamp_seconds;
             let mut sr_neurons = make_neurons(
@@ -104,7 +104,7 @@ impl GenesisTokenCanisterInitPayloadBuilder {
 
         for (address, icpts) in ect_accounts.iter() {
             self.total_alloc += *icpts;
-            let icpts = ICPTs::from_icpts(*icpts as u64).unwrap();
+            let icpts = Tokens::from_tokens(*icpts as u64).unwrap();
             let ect_stakes = evenly_split_e8s(icpts.get_e8s(), ect_months_to_release);
             let aging_since_timestamp_seconds = self.aging_since_timestamp_seconds;
             let mut ect_neurons = make_neurons(
@@ -286,7 +286,7 @@ mod tests {
 
     #[test]
     fn test_evenly_split_e8s_over_12_months() {
-        let e8s = ICPTs::from_icpts(1000).unwrap().get_e8s();
+        let e8s = Tokens::from_tokens(1000).unwrap().get_e8s();
         let e8s1 = 8_333_333_333;
         let e8s2 = 8_333_333_337;
 
@@ -299,7 +299,7 @@ mod tests {
 
     #[test]
     fn test_evenly_split_e8s_over_48_months() {
-        let e8s = ICPTs::from_icpts(1000).unwrap().get_e8s();
+        let e8s = Tokens::from_tokens(1000).unwrap().get_e8s();
         let e8s1 = 2_083_333_333;
         let e8s2 = 2_083_333_349;
 

@@ -16,7 +16,10 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::NodeId;
 use std::collections::BTreeMap;
 
+mod dealing;
 mod mocks;
+mod transcript;
+mod utils;
 
 /// Currently, these are implemented with noop stubs,
 /// while the true implementation is in progress.
@@ -28,11 +31,14 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "create_dealing",
+            crypto.registry_version => params.registry_version.get(),
+            crypto.dkg_config => format!("{:?}", params),
         );
         debug!(logger;
             crypto.description => "start",
         );
-        let result = mocks::create_dealing(params);
+        let result =
+            dealing::create_dealing(&self.csp, &self.node_id, &self.registry_client, params);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
@@ -91,11 +97,14 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "create_transcript",
+            crypto.registry_version => params.registry_version.get(),
+            crypto.dkg_config => format!("{:?}", params),
         );
         debug!(logger;
             crypto.description => "start",
         );
-        let result = mocks::create_transcript(params, dealings);
+        let result =
+            transcript::create_transcript(&self.csp, &self.registry_client, params, dealings);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
@@ -136,7 +145,12 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         debug!(logger;
             crypto.description => "start",
         );
-        let result = mocks::load_transcript(transcript);
+        let result = transcript::load_transcript(
+            &self.csp,
+            &self.node_id,
+            &self.registry_client,
+            transcript,
+        );
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

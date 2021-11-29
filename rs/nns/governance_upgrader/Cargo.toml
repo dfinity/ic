@@ -1,0 +1,26 @@
+[package]
+name = "governance_upgrader"
+version = "0.1.0"
+edition = "2018"
+
+[[bin]]
+name = "governance_upgrader"
+
+[dependencies]
+bytes = "1.0.1"
+clap = "3.0.0-beta.2"
+garcon = "0.2"
+ic-nns-init = { path="../../nns/init" }
+ic-base-types = { path="../../types/base_types" }
+ic-types = { path = "../../types/types" }
+ic-nns-constants = { path = "../../nns/constants" }
+on_wire = { path = "../../rust_canisters/on_wire" }
+canister-test = { path = "../../rust_canisters/canister_test" }
+dfn_candid={path="../../rust_canisters/dfn_candid"}
+tokio = { version = "1.9.0", features = ["full"] }
+candid = "0.7.4"
+url = { version = "2.1.1", features = ["serde"] }
+
+ic-identity-hsm = "=0.3.3"
+ic-agent = "=0.6.0"
+ic-utils = "=0.4.0"

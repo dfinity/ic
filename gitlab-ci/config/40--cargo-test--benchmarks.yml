@@ -1,0 +1,60 @@
+benchmarks:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-benchmarks-schedule
+  stage: cargo-test
+  needs: []
+  artifacts:
+    paths:
+      - report
+  timeout: 5h
+  variables:
+    RUST_BACKTRACE: 1
+    CARGO_BENCH_TIMEOUT: 18000 # 5h
+  # Benchmarks should run on a dedicated machine, otherwise benchmark results are meaningless
+  tags:
+    - dfinity-benchmarks
+    - docker
+    - ubuntu
+  script:
+    - cd "${CI_PROJECT_DIR}/rs"
+    - |
+      ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" nix-shell -- timeout -k 10 "${CARGO_BENCH_TIMEOUT}" nix-shell --run "
+        buildevents cmd ${ROOT_PIPELINE_ID} ${CI_JOB_ID} cargo-build -- cargo bench --no-run
+      "
+    - |
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" nix-shell -- timeout -k 10 "${CARGO_BENCH_TIMEOUT}" nix-shell --run "
+        set -euo pipefail
+        buildevents cmd ${ROOT_PIPELINE_ID} ${CI_JOB_ID} cargo-test -- cargo bench --no-fail-fast
+      "
+  after_script:
+    - |
+      echo -e "\e[0Ksection_start:$(date +%s):after_script[collapsed=true]\r\e[0KClick here to see the after_script section. It does not affect the job success status"
+
+      # Export all the environmental variables so that the GITLAB configured variables are available to after_script.sh
+      export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" after-script -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
+
+      # Finish and collapse the after_script section
+      echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
+    - |
+      while IFS= read -r bench_dir; do
+        echo '{}' | jq -cMr \
+          --slurpfile benchmark "$bench_dir/benchmark.json" \
+          --slurpfile estimates "$bench_dir/estimates.json" \
+          --arg system x86_64-linux \
+          --arg timestamp "$(date --utc --iso-8601=seconds)" \
+          --arg rev "$CI_COMMIT_SHA" \
+          '.benchmark = $benchmark[] |
+          .estimates = $estimates[] |
+          .package = "replica-benchmarks" |
+          .system = $system |
+          .timestamp = $timestamp |
+          .rev = $rev |
+          .revCount = 1' \
+          > report.json
+        curl -sS -o /dev/null -H 'Content-Type: application/json' --data @report.json \
+          "http://elasticsearch.dfinity.systems:9200/ci-performance-test/properties?pretty"
+      done < <(find -L "${CARGO_TARGET_DIR}/criterion" -type d -path '*/new')
+

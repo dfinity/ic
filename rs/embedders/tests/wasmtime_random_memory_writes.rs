@@ -5,9 +5,9 @@ use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableM
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NumWasmPages;
+use ic_replicated_state::{Memory, NumWasmPages};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::{ApiType, SystemApiImpl, SystemStateAccessor};
+use ic_system_api::{ApiType, StaticSystemState, SystemApiImpl};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     mock_time,
@@ -53,13 +53,14 @@ fn test_api_for_update(
             .with_subnet_type(subnet_type)
             .build(),
     );
+    let static_system_state =
+        StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
 
     let system_state_accessor =
         ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
     SystemApiImpl::new(
-        system_state_accessor.canister_id(),
         ApiType::update(
             mock_time(),
             payload,
@@ -68,17 +69,25 @@ fn test_api_for_update(
             call_context_test_id(13),
             subnet_id,
             subnet_type,
+            if subnet_type == SubnetType::System {
+                subnet_id
+            } else {
+                subnet_test_id(0x101)
+            },
             routing_table,
             subnet_records,
         ),
         system_state_accessor,
+        static_system_state,
         canister_current_memory_usage,
         ExecutionParameters {
             instruction_limit: MAX_NUM_INSTRUCTIONS,
             canister_memory_limit,
             subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             compute_allocation: ComputeAllocation::default(),
+            subnet_type: SubnetType::Application,
         },
+        Memory::default(),
         log,
     )
 }
@@ -188,11 +197,14 @@ mod tests {
     use ic_interfaces::execution_environment::HypervisorError;
     use ic_logger::ReplicaLogger;
     use ic_replicated_state::{PageIndex, PageMap};
+    use ic_system_api::ModificationTracking;
     use ic_test_utilities::types::ids::canister_test_id;
-    use memory_tracker::DirtyPageTracking;
     use proptest::strategy::ValueTree;
 
-    fn apply_writes_and_check_heap(writes: Vec<Write>, dirty_page_tracking: DirtyPageTracking) {
+    fn apply_writes_and_check_heap(
+        writes: Vec<Write>,
+        modification_tracking: ModificationTracking,
+    ) {
         with_test_replica_logger(|log| {
             let wat = make_module_wat(TEST_NUM_PAGES);
             let wasm = wat2wasm(&wat).unwrap();
@@ -228,7 +240,7 @@ mod tests {
                         NumWasmPages::from(0),
                         None,
                         Some(page_map.clone()),
-                        dirty_page_tracking,
+                        modification_tracking,
                         api,
                     )
                     .map_err(|r| r.0)
@@ -261,7 +273,7 @@ mod tests {
                 let end = start + write.bytes.len();
                 assert_eq!(wasm_heap[start..end], test_heap[start..end]);
 
-                if dirty_page_tracking == DirtyPageTracking::Track {
+                if modification_tracking == ModificationTracking::Track {
                     dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
 
                     // Verify that wasm heap and test buffer are the same.
@@ -285,7 +297,7 @@ mod tests {
                 }
             }
 
-            if dirty_page_tracking == DirtyPageTracking::Track {
+            if modification_tracking == ModificationTracking::Track {
                 for i in 0..TEST_NUM_PAGES {
                     let wasm_page = page_map.get_page(PageIndex::new(i as u64));
                     let test_page = &test_heap[i * PAGE_SIZE..(i + 1) * PAGE_SIZE];
@@ -535,7 +547,7 @@ mod tests {
                 NumWasmPages::from(0),
                 None,
                 Some(PageMap::default()),
-                DirtyPageTracking::Track,
+                ModificationTracking::Track,
                 api,
             )
             .map_err(|r| r.0)
@@ -562,7 +574,7 @@ mod tests {
             .filter(|w| !w.bytes.is_empty())
             .cloned()
             .collect();
-        apply_writes_and_check_heap(writes, DirtyPageTracking::Track);
+        apply_writes_and_check_heap(writes, ModificationTracking::Track);
     }
 
     #[test]
@@ -579,6 +591,6 @@ mod tests {
             .filter(|w| !w.bytes.is_empty())
             .cloned()
             .collect();
-        apply_writes_and_check_heap(writes, DirtyPageTracking::Ignore);
+        apply_writes_and_check_heap(writes, ModificationTracking::Ignore);
     }
 }

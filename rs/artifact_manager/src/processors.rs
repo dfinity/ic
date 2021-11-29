@@ -10,7 +10,7 @@ use ic_interfaces::{
     consensus::{Consensus, ConsensusGossip},
     consensus_pool::{ChangeAction as ConsensusAction, ConsensusPoolCache, MutableConsensusPool},
     dkg::{ChangeAction as DkgChangeAction, Dkg, DkgGossip, MutableDkgPool},
-    ecdsa::{Ecdsa, EcdsaGossip, MutableEcdsaPool},
+    ecdsa::{Ecdsa, EcdsaChangeAction, EcdsaGossip, MutableEcdsaPool},
     ingress_manager::IngressHandler,
     ingress_pool::{
         ChangeAction as IngressAction, IngressPoolObject, IngressPoolSelect, MutableIngressPool,
@@ -383,8 +383,10 @@ impl<
                     ));
                     if let ConsensusMessage::BlockProposal(p) = to_add {
                         let rank = p.clone().content.decompose().1.rank();
-                        info!(tag => "consensus_proposals", self.log,
-                                "Added proposal {:?} of rank {:?} to artifact pool", p, rank);
+                        info!(
+                            self.log,
+                            "Added proposal {:?} of rank {:?} to artifact pool", p, rank
+                        );
                     }
                 }
                 ConsensusAction::MoveToValidated(to_move) => {
@@ -394,8 +396,10 @@ impl<
                     ));
                     if let ConsensusMessage::BlockProposal(p) = to_move {
                         let rank = p.clone().content.decompose().1.rank();
-                        info!(tag => "consensus_proposals", self.log,
-                                "Moved proposal {:?} of rank {:?} to artifact pool", p, rank);
+                        info!(
+                            self.log,
+                            "Moved proposal {:?} of rank {:?} to artifact pool", p, rank
+                        );
                     }
                 }
                 ConsensusAction::RemoveFromValidated(_) => {}
@@ -786,6 +790,7 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> ArtifactProcessor<DkgArtif
 pub struct EcdsaProcessor<PoolEcdsa> {
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
     client: Box<dyn Ecdsa>,
+    log: ReplicaLogger,
 }
 
 impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcdsa> {
@@ -801,6 +806,7 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
         time_source: Arc<SysTimeSource>,
         ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
         metrics_registry: MetricsRegistry,
+        log: ReplicaLogger,
     ) -> (
         clients::EcdsaClient<PoolEcdsa>,
         ArtifactProcessorManager<EcdsaArtifact>,
@@ -809,6 +815,7 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
         let client = Self {
             ecdsa_pool: ecdsa_pool.clone(),
             client: Box::new(ecdsa),
+            log,
         };
         let manager = ArtifactProcessorManager::new(
             time_source,
@@ -835,10 +842,38 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<Ecds
             }
         }
 
+        let mut adverts = Vec::new();
         let change_set = {
             let ecdsa_pool = self.ecdsa_pool.read().unwrap();
-            self.client.on_state_change(&*ecdsa_pool)
+            let change_set = self.client.on_state_change(&*ecdsa_pool);
+
+            for change_action in change_set.iter() {
+                match change_action {
+                    EcdsaChangeAction::AddToValidated(msg) => adverts.push(
+                        EcdsaArtifact::message_to_advert_send_request(msg, AdvertClass::Critical),
+                    ),
+                    EcdsaChangeAction::MoveToValidated(msg_id) => {
+                        if let Some(msg) = ecdsa_pool.unvalidated().get(msg_id) {
+                            adverts.push(EcdsaArtifact::message_to_advert_send_request(
+                                &msg,
+                                AdvertClass::Critical,
+                            ))
+                        } else {
+                            warn!(
+                                self.log,
+                                "EcdsaProcessor::MoveToValidated(): artifact not found: {:?}",
+                                msg_id
+                            );
+                        }
+                    }
+                    EcdsaChangeAction::RemoveValidated(_) => {}
+                    EcdsaChangeAction::RemoveUnvalidated(_) => {}
+                    EcdsaChangeAction::HandleInvalid(_, _) => {}
+                }
+            }
+            change_set
         };
+
         let changed = if !change_set.is_empty() {
             ProcessingResult::StateChanged
         } else {
@@ -846,6 +881,6 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<Ecds
         };
 
         self.ecdsa_pool.write().unwrap().apply_changes(change_set);
-        (vec![], changed)
+        (adverts, changed)
     }
 }

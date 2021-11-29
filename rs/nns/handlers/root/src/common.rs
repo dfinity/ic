@@ -110,6 +110,7 @@ pub struct ChangeNnsCanisterProposalPayload {
     pub query_allocation: Option<candid::Nat>,
 
     /// A list of authz changes to enact, in addition to changing new canister.
+    /// DEPRECATED: Canisters no longer use dynamic authz.
     pub authz_changes: Vec<MethodAuthzChange>,
 }
 

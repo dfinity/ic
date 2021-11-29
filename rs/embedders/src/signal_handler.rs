@@ -7,7 +7,7 @@ use std::sync::{atomic::Ordering, Arc, Mutex};
 /// Helper function to create a memory tracking SIGSEGV handler function.
 pub(crate) fn sigsegv_memory_tracker_handler(
     sigsegv_memory_tracker: Arc<Mutex<SigsegvMemoryTracker>>,
-    current_page_size: MemoryPageSize,
+    current_memory_size_in_pages: MemoryPageSize,
 ) -> impl Fn(i32, *const libc::siginfo_t, *const libc::c_void) -> bool + Send + Sync {
     move |signum: i32, siginfo_ptr: *const libc::siginfo_t, ucontext_ptr: *const libc::c_void| {
         use nix::sys::signal::Signal;
@@ -60,8 +60,8 @@ pub(crate) fn sigsegv_memory_tracker_handler(
         let sigsegv_memory_tracker = sigsegv_memory_tracker.lock().unwrap();
 
         let check_if_expanded = || unsafe {
-            let page_count = current_page_size.load(Ordering::SeqCst);
-            let heap_size = (page_count * wasmtime_environ::WASM_PAGE_SIZE) as usize;
+            let page_count = current_memory_size_in_pages.load(Ordering::SeqCst) as usize;
+            let heap_size = page_count * (wasmtime_environ::WASM_PAGE_SIZE as usize);
             let heap_start = sigsegv_memory_tracker.area().addr() as *mut libc::c_void;
             if (heap_start <= si_addr) && (si_addr < { heap_start.add(heap_size) }) {
                 Some(heap_size)

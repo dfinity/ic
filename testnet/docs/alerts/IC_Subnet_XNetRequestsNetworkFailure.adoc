@@ -1,0 +1,32 @@
+= IC_Subnet_XNetRequestsNetworkFailure
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+More than 10% of the XNet pull attempts on the subnet indicated in the alert
+resulted in a network error.
+
+== Impact
+
+Depending on the error rate we see, XNet throughput may be reduced or even go
+down to 0 if we have no successful requests.
+
+== Possible causes (non-exhaustive)
+
+- Bug in a recent binary or configuration update
+
+- Network misconfiguration
+
+- Firewall misconfiguration
+
+== Troubleshooting and remediation
+
+- Check whether only one or multiple subnets are affected
+
+- Search the logs for `"module xnet_payload_builder" and "<subnet_id>"`. They
+  should contain more details on the error; and likely point to the root cause
+  (e.g. in the case of an invalid Registry entry). Do note that only a sample
+  of these events is logged (currently 5%), so it is likely their count will
+  not match the metrics.
+

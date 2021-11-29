@@ -1,0 +1,9 @@
+[package]
+name = "ic-fake2"
+version = "0.1.0"
+
+[dependencies]
+futures = "0.3.6"
+
+[dev-dependencies]
+rand = "0.7.3"

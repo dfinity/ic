@@ -1,57 +1,353 @@
-use ic_crypto::crypto_hash;
-use ic_types::{
-    batch::ValidationContext,
-    consensus::{
-        dkg, Block, CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon, Payload,
-        RandomBeaconContent, Rank, ThresholdSignature,
-    },
-    crypto::{
-        threshold_sig::ni_dkg::NiDkgTag, CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash,
-        Signed,
-    },
-    time::UNIX_EPOCH,
-    Height,
-};
-use phantom_newtype::Id;
+use ic_types::{artifact::ConsensusMessageId, consensus::*};
 
-mod hashable;
-pub use hashable::ConsensusMessageHashable;
+pub trait ConsensusMessageHashable: Clone {
+    fn get_id(&self) -> ConsensusMessageId;
+    fn get_cm_hash(&self) -> ConsensusMessageHash;
+    fn assert(msg: &ConsensusMessage) -> Option<&Self>;
+    fn into_message(self) -> ConsensusMessage;
 
-/// Return the genesis BlockProposal and RandomBeacon made for the given height.
-pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
-    // Use the registry version and height, from which the summary package was
-    // created.
-    let registry_version = summary.registry_version;
-    let height = summary.height;
-    let low_dkg_id = summary.current_transcript(&NiDkgTag::LowThreshold).dkg_id;
-    let high_dkg_id = summary.current_transcript(&NiDkgTag::HighThreshold).dkg_id;
-    let block = Block::new(
-        Id::from(CryptoHash(Vec::new())),
-        Payload::new(crypto_hash, summary.into()),
-        height,
-        Rank(0),
-        ValidationContext {
-            certified_height: Height::from(0),
-            registry_version,
-            time: UNIX_EPOCH,
-        },
-    );
-    let random_beacon = Signed {
-        content: RandomBeaconContent::new(height, Id::from(CryptoHash(Vec::new()))),
-        signature: ThresholdSignature {
-            signer: low_dkg_id,
-            signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-        },
-    };
-    CatchUpPackage {
-        content: CatchUpContent::new(
-            HashedBlock::new(crypto_hash, block),
-            HashedRandomBeacon::new(crypto_hash, random_beacon),
-            Id::from(CryptoHash(Vec::new())),
-        ),
-        signature: ThresholdSignature {
-            signer: high_dkg_id,
-            signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-        },
+    /// Check integrity of a message. Default is true.
+    /// This should be implemented for those that have `Hashed<H, V>`.
+    /// Note that if lazy loading is also used, it will force evaluation.
+    fn check_integrity(&self) -> bool {
+        true
+    }
+}
+
+impl ConsensusMessageHashable for Finalization {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.content.height,
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        ConsensusMessageHash::Finalization(ic_crypto::crypto_hash(self))
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        if let ConsensusMessage::Finalization(value) = msg {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        ConsensusMessage::Finalization(self)
+    }
+}
+
+impl ConsensusMessageHashable for FinalizationShare {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.content.height,
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        ConsensusMessageHash::FinalizationShare(ic_crypto::crypto_hash(self))
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        if let ConsensusMessage::FinalizationShare(value) = msg {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        ConsensusMessage::FinalizationShare(self)
+    }
+}
+
+impl ConsensusMessageHashable for Notarization {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.content.height,
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        ConsensusMessageHash::Notarization(ic_crypto::crypto_hash(self))
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        if let ConsensusMessage::Notarization(value) = msg {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        ConsensusMessage::Notarization(self)
+    }
+}
+
+impl ConsensusMessageHashable for NotarizationShare {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.content.height,
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        ConsensusMessageHash::NotarizationShare(ic_crypto::crypto_hash(self))
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        if let ConsensusMessage::NotarizationShare(value) = msg {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        ConsensusMessage::NotarizationShare(self)
+    }
+}
+
+impl ConsensusMessageHashable for RandomBeacon {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.content.height,
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        ConsensusMessageHash::RandomBeacon(ic_crypto::crypto_hash(self))
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        if let ConsensusMessage::RandomBeacon(value) = msg {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        ConsensusMessage::RandomBeacon(self)
+    }
+}
+
+impl ConsensusMessageHashable for RandomBeaconShare {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.content.height,
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        ConsensusMessageHash::RandomBeaconShare(ic_crypto::crypto_hash(self))
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        if let ConsensusMessage::RandomBeaconShare(value) = msg {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        ConsensusMessage::RandomBeaconShare(self)
+    }
+}
+
+impl ConsensusMessageHashable for BlockProposal {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.height(),
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        ConsensusMessageHash::BlockProposal(ic_crypto::crypto_hash(self))
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        if let ConsensusMessage::BlockProposal(value) = msg {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        ConsensusMessage::BlockProposal(self)
+    }
+
+    fn check_integrity(&self) -> bool {
+        let block_hash = self.content.get_hash();
+        let block = self.as_ref();
+        let payload_hash = block.payload.get_hash();
+        let block_payload = block.payload.as_ref();
+        block.payload.is_summary() == block_payload.is_summary()
+            && &ic_crypto::crypto_hash(block_payload) == payload_hash
+            && &ic_crypto::crypto_hash(block) == block_hash
+    }
+}
+
+impl ConsensusMessageHashable for RandomTape {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.content.height,
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        ConsensusMessageHash::RandomTape(ic_crypto::crypto_hash(self))
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        if let ConsensusMessage::RandomTape(value) = msg {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        ConsensusMessage::RandomTape(self)
+    }
+}
+
+impl ConsensusMessageHashable for RandomTapeShare {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.content.height,
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        ConsensusMessageHash::RandomTapeShare(ic_crypto::crypto_hash(self))
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        if let ConsensusMessage::RandomTapeShare(value) = msg {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        ConsensusMessage::RandomTapeShare(self)
+    }
+}
+
+impl ConsensusMessageHashable for CatchUpPackage {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.height(),
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        ConsensusMessageHash::CatchUpPackage(ic_crypto::crypto_hash(self))
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        if let ConsensusMessage::CatchUpPackage(value) = msg {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        ConsensusMessage::CatchUpPackage(self)
+    }
+
+    fn check_integrity(&self) -> bool {
+        let content = &self.content;
+        let block_hash = content.block.get_hash();
+        let block = content.block.as_ref();
+        let random_beacon_hash = content.random_beacon.get_hash();
+        let random_beacon = content.random_beacon.as_ref();
+        let payload_hash = block.payload.get_hash();
+        let block_payload = block.payload.as_ref();
+        block.payload.is_summary() == block_payload.is_summary()
+            && &ic_crypto::crypto_hash(random_beacon) == random_beacon_hash
+            && &ic_crypto::crypto_hash(block) == block_hash
+            && &ic_crypto::crypto_hash(block_payload) == payload_hash
+    }
+}
+
+impl ConsensusMessageHashable for CatchUpPackageShare {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.height(),
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        ConsensusMessageHash::CatchUpPackageShare(ic_crypto::crypto_hash(self))
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        if let ConsensusMessage::CatchUpPackageShare(value) = msg {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        ConsensusMessage::CatchUpPackageShare(self)
+    }
+
+    fn check_integrity(&self) -> bool {
+        let content = &self.content;
+        let random_beacon_hash = content.random_beacon.get_hash();
+        &ic_crypto::crypto_hash(content.random_beacon.as_ref()) == random_beacon_hash
+    }
+}
+
+impl ConsensusMessageHashable for ConsensusMessage {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.height(),
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        match self {
+            ConsensusMessage::RandomBeacon(value) => value.get_cm_hash(),
+            ConsensusMessage::Finalization(value) => value.get_cm_hash(),
+            ConsensusMessage::Notarization(value) => value.get_cm_hash(),
+            ConsensusMessage::BlockProposal(value) => value.get_cm_hash(),
+            ConsensusMessage::RandomBeaconShare(value) => value.get_cm_hash(),
+            ConsensusMessage::NotarizationShare(value) => value.get_cm_hash(),
+            ConsensusMessage::FinalizationShare(value) => value.get_cm_hash(),
+            ConsensusMessage::RandomTape(value) => value.get_cm_hash(),
+            ConsensusMessage::RandomTapeShare(value) => value.get_cm_hash(),
+            ConsensusMessage::CatchUpPackage(value) => value.get_cm_hash(),
+            ConsensusMessage::CatchUpPackageShare(value) => value.get_cm_hash(),
+        }
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        Some(msg)
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        self
     }
 }

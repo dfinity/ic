@@ -5,6 +5,7 @@
 //! Interface for the cryptographic service provider
 
 pub mod api;
+pub mod canister_threshold;
 pub mod imported_test_utils;
 pub mod imported_utilities;
 pub mod public_key_store;
@@ -15,13 +16,14 @@ pub mod threshold;
 pub mod tls_stub;
 pub mod types;
 
-pub use crate::server::api::TlsHandshakeCspServer;
-pub use crate::server::local_csp_server::LocalCspServer;
+pub use crate::server::api::TlsHandshakeCspVault;
+pub use crate::server::local_csp_server::LocalCspVault;
+pub use crate::server::remote_csp_server::run_csp_vault_server;
 
 use crate::api::{
     CspKeyGenerator, CspSecretKeyStoreChecker, CspSigner, CspTlsClientHandshake,
-    CspTlsHandshakeSignerProvider, CspTlsServerHandshake, NiDkgCspClient, NodePublicKeyData,
-    ThresholdSignatureCspClient,
+    CspTlsHandshakeSignerProvider, CspTlsServerHandshake, IDkgProtocolCspClient, NiDkgCspClient,
+    NodePublicKeyData, ThresholdSignatureCspClient,
 };
 use crate::keygen::{forward_secure_key_id, public_key_hash_as_key_id};
 use crate::public_key_store::read_node_public_keys;
@@ -52,6 +54,7 @@ pub trait CryptoServiceProvider:
     + CspKeyGenerator
     + ThresholdSignatureCspClient
     + NiDkgCspClient
+    + IDkgProtocolCspClient
     + CspSecretKeyStoreChecker
     + CspTlsServerHandshake
     + CspTlsClientHandshake
@@ -64,6 +67,7 @@ impl<T> CryptoServiceProvider for T where
     T: CspSigner
         + CspKeyGenerator
         + ThresholdSignatureCspClient
+        + IDkgProtocolCspClient
         + NiDkgCspClient
         + CspSecretKeyStoreChecker
         + CspTlsServerHandshake
@@ -120,7 +124,7 @@ impl PublicKeyData {
 pub struct Csp<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> {
     // CSPRNG stands for cryptographically secure random number generator.
     csprng: CspRwLock<R>,
-    csp_server: Arc<LocalCspServer<R, S, C>>,
+    csp_vault: Arc<LocalCspVault<R, S, C>>,
     public_key_data: PublicKeyData,
     logger: ReplicaLogger,
 }
@@ -178,20 +182,18 @@ impl<T> CspRwLock<T> {
     }
 }
 
+// CRP-1248: inline the following methods
 impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
     fn rng_write_lock(&self) -> RwLockWriteGuard<'_, R> {
-        // TODO (CRP-696): inline this method
         self.csprng.write()
     }
 
     fn sks_write_lock(&self) -> RwLockWriteGuard<'_, S> {
-        // TODO (CRP-696): inline this method
-        self.csp_server.sks_write_lock()
+        self.csp_vault.sks_write_lock()
     }
 
     fn sks_read_lock(&self) -> RwLockReadGuard<'_, S> {
-        // TODO (CRP-696): inline this method
-        self.csp_server.sks_read_lock()
+        self.csp_vault.sks_read_lock()
     }
 }
 
@@ -222,7 +224,7 @@ impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
         Csp {
             csprng: CspRwLock::new_for_rng(OsRng::default(), Arc::clone(&metrics)),
             public_key_data,
-            csp_server: Arc::new(LocalCspServer::new(
+            csp_vault: Arc::new(LocalCspVault::new(
                 secret_key_store,
                 canister_key_store,
                 metrics,
@@ -247,7 +249,7 @@ impl<R: Rng + CryptoRng + Clone> Csp<R, ProtoSecretKeyStore, VolatileSecretKeySt
         Csp {
             csprng: CspRwLock::new_for_rng(csprng.clone(), Arc::new(CryptoMetrics::none())),
             public_key_data,
-            csp_server: Arc::new(LocalCspServer::new_for_test(
+            csp_vault: Arc::new(LocalCspVault::new_for_test(
                 csprng,
                 ProtoSecretKeyStore::open(&config.crypto_root, SKS_DATA_FILENAME, None),
             )),
@@ -299,7 +301,7 @@ impl<R: Rng + CryptoRng + Clone, S: SecretKeyStore> Csp<R, S, VolatileSecretKeyS
         Csp {
             csprng: CspRwLock::new_for_rng(csprng.clone(), metrics),
             public_key_data,
-            csp_server: Arc::new(LocalCspServer::new_for_test(csprng, secret_key_store)),
+            csp_vault: Arc::new(LocalCspVault::new_for_test(csprng, secret_key_store)),
             logger: no_op_logger(),
         }
     }

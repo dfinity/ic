@@ -1,0 +1,11 @@
+[workspace]
+
+members = [
+  # "libsigsegv",
+  # "libsigsegv-sys",
+  "memory_area",
+  "test-wasmtime-orthogonal-persistence",
+  "test-wasmtime-table-call",
+  # "wasm-api",
+  # "wasm-api-sys",
+]

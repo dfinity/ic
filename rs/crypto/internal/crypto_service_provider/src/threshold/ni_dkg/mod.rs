@@ -6,7 +6,7 @@
 
 use crate::api::{NiDkgCspClient, NodePublicKeyData};
 use crate::secret_key_store::SecretKeyStore;
-use crate::server::api::NiDkgCspServer;
+use crate::server::api::NiDkgCspVault;
 use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::Csp;
@@ -47,7 +47,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspClient fo
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>
     {
         debug!(self.logger; crypto.method_name => "create_forward_secure_key_pair");
-        self.csp_server
+        self.csp_vault
             .gen_forward_secure_key_pair(node_id, algorithm_id)
     }
 
@@ -60,7 +60,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspClient fo
         debug!(self.logger; crypto.method_name => "update_forward_secure_epoch", crypto.dkg_epoch => epoch.get());
 
         let key_id = self.dkg_dealing_encryption_key_id();
-        self.csp_server
+        self.csp_vault
             .update_forward_secure_epoch(algorithm_id, key_id, epoch)
     }
 
@@ -75,7 +75,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspClient fo
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateDealingError> {
         debug!(self.logger; crypto.method_name => "create_dealing", crypto.dkg_epoch => epoch.get());
-        Ok(self.csp_server.create_dealing(
+        Ok(self.csp_vault.create_dealing(
             algorithm_id,
             dealer_index,
             threshold,
@@ -98,7 +98,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspClient fo
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
         debug!(self.logger; crypto.method_name => "create_resharing_dealing", crypto.dkg_epoch => epoch.get());
         let key_id = key_id_from_csp_pub_coeffs(&resharing_public_coefficients);
-        self.csp_server.create_dealing(
+        self.csp_vault.create_dealing(
             algorithm_id,
             dealer_resharing_index,
             threshold,
@@ -195,7 +195,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspClient fo
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError> {
         debug!(self.logger; crypto.method_name => "load_threshold_signing_key", crypto.dkg_epoch => epoch.get());
         let fs_key_id = self.dkg_dealing_encryption_key_id();
-        self.csp_server.load_threshold_signing_key(
+        self.csp_vault.load_threshold_signing_key(
             algorithm_id,
             epoch,
             csp_transcript,
@@ -208,7 +208,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspClient fo
         debug!(self.logger; crypto.method_name => "retain_threshold_keys_if_present");
         let active_key_ids: BTreeSet<KeyId> =
             active_keys.iter().map(key_id_from_csp_pub_coeffs).collect();
-        self.csp_server
+        self.csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
     }
 }

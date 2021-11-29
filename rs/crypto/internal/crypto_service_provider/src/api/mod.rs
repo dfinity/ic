@@ -1,10 +1,12 @@
 //! Top level traits for interacting with the crypto service provider
 
+mod canister_threshold;
 mod keygen;
 mod sign;
 mod threshold;
 mod tls_stub;
 
+pub use canister_threshold::{CspCreateMEGaKeyError, IDkgProtocolCspClient};
 pub use keygen::{CspKeyGenerator, CspSecretKeyStoreChecker, NodePublicKeyData};
 pub use sign::CspSigner;
 pub use threshold::{

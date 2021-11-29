@@ -2,12 +2,11 @@ use crate::{CheckpointError, CheckpointMetrics};
 use ic_base_types::CanisterId;
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::SandboxExecutionState;
 use ic_replicated_state::Memory;
 use ic_replicated_state::{
-    canister_state::execution_state::WasmBinary,
-    page_map::{PageMap, PersistenceError},
-    CanisterMetrics, CanisterState, ExecutionState, NumWasmPages64, ReplicatedState,
-    SchedulerState, SystemState,
+    canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
+    ExecutionState, NumWasmPages64, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{
     CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadPolicy, ReadWritePolicy, RwPolicy,
@@ -16,12 +15,9 @@ use ic_state_layout::{
 use ic_types::Height;
 use ic_utils::ic_features::*;
 use ic_utils::thread::parallel_map;
+use std::collections::BTreeMap;
+use std::convert::{From, TryFrom};
 use std::sync::Arc;
-use std::{collections::BTreeMap, path::Path};
-use std::{
-    convert::{From, TryFrom},
-    io,
-};
 
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent the to given one
@@ -99,12 +95,6 @@ fn serialize_canister_to_tip(
         .queues()
         .serialize(canister_state.system_state.queues().into())?;
 
-    canister_state
-        .system_state
-        .stable_memory
-        .page_map
-        .persist_and_sync_delta(&canister_layout.stable_memory_blob())?;
-
     let execution_state_bits = match &canister_state.execution_state {
         Some(execution_state) => {
             canister_layout
@@ -114,6 +104,10 @@ fn serialize_canister_to_tip(
                 .wasm_memory
                 .page_map
                 .persist_and_sync_delta(&canister_layout.vmemory_0())?;
+            execution_state
+                .stable_memory
+                .page_map
+                .persist_and_sync_delta(&canister_layout.stable_memory_blob())?;
 
             execution_state.cow_mem_mgr.checkpoint();
 
@@ -158,7 +152,11 @@ fn serialize_canister_to_tip(
                     .system_state
                     .canister_metrics
                     .consumed_cycles_since_replica_started,
-                stable_memory_size: canister_state.system_state.stable_memory.size,
+                stable_memory_size: canister_state
+                    .execution_state
+                    .as_ref()
+                    .map(|es| es.stable_memory.size)
+                    .unwrap_or_else(|| NumWasmPages64::from(0)),
                 heap_delta_debit: canister_state.scheduler_state.heap_delta_debit,
             }
             .into(),
@@ -254,6 +252,13 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
                 )?,
                 execution_state_bits.heap_size,
             );
+            let stable_memory = Memory::new(
+                PageMap::open(
+                    &canister_layout.stable_memory_blob(),
+                    Some(checkpoint_layout.height()),
+                )?,
+                canister_state_bits.stable_memory_size,
+            );
             let wasm_binary = WasmBinary::new(canister_layout.wasm().deserialize()?);
             let canister_root = canister_layout.raw_path();
             Some(ExecutionState {
@@ -261,6 +266,7 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
                 session_nonce,
                 wasm_binary,
                 wasm_memory,
+                stable_memory,
                 exported_globals: execution_state_bits.exported_globals,
                 exports: execution_state_bits.exports,
                 last_executed_round: execution_state_bits.last_executed_round,
@@ -268,37 +274,10 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
                     canister_layout.raw_path(),
                 )),
                 mapped_state: None,
+                sandbox_state: SandboxExecutionState::new(),
             })
         }
         None => None,
-    };
-
-    let stable_memory_bin_file = canister_layout.stable_memory_blob();
-    // Handle a possibly missing stable_memory file during the transition to having
-    // stable_memory in `ExecutionState` because a roll back might cause the file to
-    // be missing for canisters which had no `ExecutionState`. After the transition
-    // we can assume the file always exists when `execution_state_bits` is `Some`.
-    let stable_memory = match Path::metadata(&stable_memory_bin_file) {
-        Ok(_) => Memory::new(
-            PageMap::open(&stable_memory_bin_file, Some(checkpoint_layout.height()))?,
-            canister_state_bits.stable_memory_size,
-        ),
-        Err(err) => match err.kind() {
-            io::ErrorKind::NotFound
-                if canister_state_bits.stable_memory_size == NumWasmPages64::from(0) =>
-            {
-                Memory::new(PageMap::default(), NumWasmPages64::from(0))
-            }
-            _ => {
-                return Err(CheckpointError::Persistence(
-                    PersistenceError::FileSystemError {
-                        path: stable_memory_bin_file.display().to_string(),
-                        context: "Failed to open file".to_string(),
-                        internal_error: err.to_string(),
-                    },
-                ));
-            }
-        },
     };
 
     let queues =
@@ -321,7 +300,6 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
         canister_state_bits.controllers,
         *canister_id,
         queues,
-        stable_memory,
         canister_state_bits.memory_allocation,
         canister_state_bits.freeze_threshold,
         canister_state_bits.status,
@@ -608,7 +586,7 @@ mod tests {
             let can_layout = tip.canister(&canister_id);
 
             let wasm = empty_wasm();
-            let page_map = one_page_of(1);
+            let wasm_memory = one_page_of(1);
 
             let mut canister_state = new_canister_state(
                 canister_id,
@@ -616,11 +594,14 @@ mod tests {
                 INITIAL_CYCLES,
                 NumSeconds::from(100_000),
             );
+            let page_map = PageMap::from(&[1, 2, 3, 4][..]);
+            let stable_memory = Memory::new(page_map, NumWasmPages64::new(1));
             let execution_state = ExecutionState {
                 canister_root: root.clone(),
                 session_nonce: None,
                 wasm_binary: WasmBinary::new(wasm.clone()),
-                wasm_memory: page_map.clone(),
+                wasm_memory: wasm_memory.clone(),
+                stable_memory,
                 exported_globals: vec![],
                 exports: ExportedFunctions::new(BTreeSet::new()),
                 last_executed_round: ExecutionRound::from(0),
@@ -628,13 +609,9 @@ mod tests {
                     can_layout.unwrap().raw_path(),
                 )),
                 mapped_state: None,
+                sandbox_state: SandboxExecutionState::new(),
             };
             canister_state.execution_state = Some(execution_state);
-            canister_state.system_state.stable_memory.size = NumWasmPages64::new(1);
-
-            let mut buf = page_map::Buffer::new(canister_state.system_state.stable_memory.page_map);
-            buf.write(&[1, 2, 3, 4][..], 0);
-            canister_state.system_state.stable_memory.page_map = buf.into_page_map();
 
             let own_subnet_type = SubnetType::Application;
             let mut state =
@@ -664,16 +641,29 @@ mod tests {
             );
             assert_eq!(
                 canister.execution_state.as_ref().unwrap().wasm_memory,
-                page_map
+                wasm_memory
             );
             assert_eq!(
-                canister.system_state.stable_memory.size,
+                canister
+                    .execution_state
+                    .as_ref()
+                    .unwrap()
+                    .stable_memory
+                    .size,
                 NumWasmPages64::new(1)
             );
 
             // Verify that the deserialized stable memory is correctly retrieved.
             let mut data = vec![0, 0, 0, 0];
-            let buf = page_map::Buffer::new(canister.system_state.stable_memory.page_map.clone());
+            let buf = page_map::Buffer::new(
+                canister
+                    .execution_state
+                    .as_ref()
+                    .unwrap()
+                    .stable_memory
+                    .page_map
+                    .clone(),
+            );
             buf.read(&mut data[..], 0);
             assert_eq!(data, vec![1, 2, 3, 4]);
         });

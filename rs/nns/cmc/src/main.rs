@@ -19,11 +19,12 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::ic00::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, Method, IC_00};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ledger_canister::{
-    AccountIdentifier, BlockHeight, CyclesResponse, ICPTs, Memo, SendArgs, TransactionNotification,
-    TRANSACTION_FEE,
+    AccountIdentifier, BlockHeight, CyclesResponse, Memo, SendArgs, Tokens,
+    TransactionNotification, TRANSACTION_FEE,
 };
 use on_wire::{FromWire, IntoWire, NewType};
 
+use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use lazy_static::lazy_static;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -245,7 +246,11 @@ fn get_icp_xdr_conversion_rate_() {
     let state = STATE.read().unwrap();
 
     let witness_generator = convert_data_to_mixed_hash_tree(&state);
-    let icp_xdr_conversion_rate = state.icp_xdr_conversion_rate.as_ref().unwrap();
+    let icp_xdr_conversion_rate = state
+        .icp_xdr_conversion_rate
+        .as_ref()
+        .expect("icp_xdr_conversion_rate is not set");
+
     let payload = convert_conversion_rate_to_payload(icp_xdr_conversion_rate, witness_generator);
 
     over(
@@ -254,7 +259,7 @@ fn get_icp_xdr_conversion_rate_() {
             IcpXdrConversionRateCertifiedResponse {
                 data: icp_xdr_conversion_rate.clone(),
                 hash_tree: payload,
-                certificate: dfn_core::api::data_certificate().unwrap(),
+                certificate: dfn_core::api::data_certificate().unwrap_or_default(),
             }
         },
     )
@@ -273,12 +278,12 @@ fn set_icp_xdr_conversion_rate_() {
     );
 
     let mut state = STATE.write().unwrap();
-
     over(
         candid_one,
-        |proposed_conversion_rate: IcpXdrConversionRate| -> Result<(), String> {
-            update_recent_icp_xdr_rates(&proposed_conversion_rate, &mut state);
-            set_icp_xdr_conversion_rate(proposed_conversion_rate, &mut state)
+        |proposed_conversion_rate: UpdateIcpXdrConversionRatePayload| -> Result<(), String> {
+            let rate: IcpXdrConversionRate = proposed_conversion_rate.into();
+            update_recent_icp_xdr_rates(&rate, &mut state);
+            set_icp_xdr_conversion_rate(rate, &mut state)
         },
     );
 }
@@ -288,7 +293,11 @@ fn get_average_icp_xdr_conversion_rate_() {
     let state = STATE.read().unwrap();
 
     let witness_generator = convert_data_to_mixed_hash_tree(&state);
-    let average_icp_xdr_conversion_rate = state.average_icp_xdr_conversion_rate.as_ref().unwrap();
+    let average_icp_xdr_conversion_rate = state
+        .average_icp_xdr_conversion_rate
+        .as_ref()
+        .expect("average_icp_xdr_conversion_rate is not set");
+
     let payload =
         convert_conversion_rate_to_payload(average_icp_xdr_conversion_rate, witness_generator);
 
@@ -298,7 +307,7 @@ fn get_average_icp_xdr_conversion_rate_() {
             IcpXdrConversionRateCertifiedResponse {
                 data: average_icp_xdr_conversion_rate.clone(),
                 hash_tree: payload,
-                certificate: dfn_core::api::data_certificate().unwrap(),
+                certificate: dfn_core::api::data_certificate().unwrap_or_default(),
             }
         },
     )
@@ -432,13 +441,6 @@ where
     dfn_core::over_async_may_reject(w, f)
 }
 
-async fn get_icp_xdr_conversion_rate_from_registry() -> u64 {
-    match ic_nns_common::registry::get_icp_xdr_conversion_rate_record().await {
-        None => panic!("ICP/XDR conversion rate is not available."),
-        Some((rate_record, _)) => rate_record.xdr_permyriad_per_icp,
-    }
-}
-
 #[export_name = "canister_update transaction_notification_pb"]
 fn transaction_notification_pb_() {
     over_async_may_reject(protobuf, transaction_notification)
@@ -466,20 +468,43 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
         ));
     }
 
+    // Cloning is required here because of the asynchronous function call in the
+    // 'else' branch below.
+    let conversion_rate_option = STATE.read().unwrap().icp_xdr_conversion_rate.clone();
+
+    // Get the conversion rate from the registry if no value is set locally. If
+    // retrieval from the Registry fails then refund the transaction and log.
+    let xdr_permyriad_per_icp = if let Some(rate) = conversion_rate_option {
+        rate.xdr_permyriad_per_icp
+    } else {
+        match ic_nns_common::registry::get_icp_xdr_conversion_rate_record().await {
+            None => {
+                print(format!(
+                    "[cycles] No conversion rate found in CMC or Registry, transaction {:?} by {} refunded",
+                    tn, caller
+                ));
+                let refund_block = refund(&tn, &ledger_canister_id, Tokens::ZERO).await?;
+                return Ok(CyclesResponse::Refunded(
+                    "No conversion rate found in CMC or Registry, amount refunded".to_string(),
+                    refund_block,
+                ));
+            }
+            Some((rate_record, _)) => rate_record.xdr_permyriad_per_icp,
+        }
+    };
+
+    let cycles = TokensToCycles {
+        xdr_permyriad_per_icp,
+        cycles_per_xdr: STATE.read().unwrap().cycles_per_xdr,
+    }
+    .to_cycles(tn.amount);
+
     if tn.memo == MEMO_CREATE_CANISTER {
         let controller = (&tn
             .to_subaccount
             .ok_or_else(|| "Reserving requires a principal.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-
-        let xdr_permyriad_per_icp = get_icp_xdr_conversion_rate_from_registry().await;
-
-        let cycles = IcptsToCycles {
-            xdr_permyriad_per_icp,
-            cycles_per_xdr: STATE.read().unwrap().cycles_per_xdr,
-        }
-        .to_cycles(tn.amount);
 
         print(format!(
             "Creating canister with controller {} in block {} with {} cycles.",
@@ -510,14 +535,6 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
 
-        let xdr_permyriad_per_icp = get_icp_xdr_conversion_rate_from_registry().await;
-
-        let cycles = IcptsToCycles {
-            xdr_permyriad_per_icp,
-            cycles_per_xdr: STATE.read().unwrap().cycles_per_xdr,
-        }
-        .to_cycles(tn.amount);
-
         print(format!(
             "Topping up canister {} by {} cycles.",
             canister_id, cycles
@@ -547,7 +564,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
 
 async fn burn_or_refund(
     is_ok: bool,
-    extra_fee: ICPTs,
+    extra_fee: Tokens,
     tn: &TransactionNotification,
     ledger_canister_id: &CanisterId,
 ) -> Result<Option<BlockHeight>, String> {
@@ -566,7 +583,7 @@ async fn burn_or_refund(
 /// notification because then it could be retried.
 async fn burn_and_log(
     tn: &TransactionNotification,
-    amount: ICPTs,
+    amount: Tokens,
     ledger_canister_id: &CanisterId,
 ) {
     if let Err(err) = burn(tn, amount, ledger_canister_id).await {
@@ -578,7 +595,7 @@ async fn burn_and_log(
 /// accumulating a lot of dead accounts on the ledger.
 async fn burn(
     tn: &TransactionNotification,
-    amount: ICPTs,
+    amount: Tokens,
     ledger_canister_id: &CanisterId,
 ) -> Result<(), String> {
     let minting_account_id = STATE.read().unwrap().minting_account_id;
@@ -587,7 +604,7 @@ async fn burn(
         let send_args = SendArgs {
             memo: Memo::default(),
             amount,
-            fee: ICPTs::ZERO,
+            fee: Tokens::ZERO,
             from_subaccount: tn.to_subaccount,
             to: minting_account_id,
             created_at_time: None,
@@ -627,7 +644,7 @@ async fn burn(
 async fn refund(
     tn: &TransactionNotification,
     ledger_canister_id: &CanisterId,
-    extra_fee: ICPTs,
+    extra_fee: Tokens,
 ) -> Result<Option<BlockHeight>, String> {
     let mut refund_block_index = None;
 
@@ -641,12 +658,12 @@ async fn refund(
     let (refunded, burned) = if let Ok(amount) = amount_minus_fee - extra_fee {
         (amount, extra_fee)
     } else {
-        (ICPTs::ZERO, amount_minus_fee)
+        (Tokens::ZERO, amount_minus_fee)
     };
 
     assert_eq!(Ok(amount_minus_fee), refunded + burned);
 
-    if refunded != ICPTs::ZERO {
+    if refunded != Tokens::ZERO {
         let send_args = SendArgs {
             memo: Memo::default(),
             amount: refunded,
@@ -681,7 +698,7 @@ async fn refund(
         refund_block_index = Some(block);
     }
 
-    if burned != ICPTs::ZERO {
+    if burned != Tokens::ZERO {
         burn_and_log(tn, burned, ledger_canister_id).await;
     }
 

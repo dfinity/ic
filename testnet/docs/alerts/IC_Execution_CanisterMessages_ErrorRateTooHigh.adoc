@@ -1,0 +1,25 @@
+= IC_Execution_CanisterMessages_ErrorRateTooHigh
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+More than 0.1% of canister messages (includes ingress, xnet and heartbeat) result in a system error for 15 minutes.
+
+== Impact
+
+Too many canister messages are failing which can result in bad user experience.
+
+== Possible causes (non-exhaustive)
+
+- Errors instantiating the Wasmtime runtime could result in canister messages failing.
+
+- Bug in the code could result in canister messages failing.
+
+== Troubleshooting and remediation
+
+- Check the replica logs (focus on logs from the `execution_environment`, `embedders` and `system_api` crate) to see if there's something useful that would help explain the system errors.
+
+- Check if there was a recent replica upgrade that could have introduced a bug.
+
+- Escalate to the execution team.

@@ -1,0 +1,12 @@
+namespace EncodingBench.Ingress;
+
+table Ingress {
+    source: ulong;
+    receiver: ulong;
+    method_name: string;
+    method_payload: [ubyte];
+    message_id: ulong;
+    message_time_ns: ulong;
+}
+
+root_type Ingress;

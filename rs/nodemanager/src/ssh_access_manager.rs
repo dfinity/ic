@@ -1,6 +1,8 @@
-use crate::metrics::NodeManagerMetrics;
-use crate::registry_helper::RegistryHelper;
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use crate::{metrics::NodeManagerMetrics, registry_helper::RegistryHelper};
+use ic_logger::{debug, warn, ReplicaLogger};
+use ic_types::RegistryVersion;
+use std::io::Write;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -13,9 +15,7 @@ pub(crate) struct SshAccessManager {
     registry: Arc<RegistryHelper>,
     metrics: Arc<NodeManagerMetrics>,
     logger: ReplicaLogger,
-    current_readonly_keys: Vec<String>,
-    current_backup_keys: Vec<String>,
-
+    last_seen_registry_version: RegistryVersion,
     // If false, do not start or terminate the background task
     enabled: Arc<std::sync::atomic::AtomicBool>,
 }
@@ -31,8 +31,7 @@ impl SshAccessManager {
             registry,
             metrics,
             logger,
-            current_readonly_keys: vec![],
-            current_backup_keys: vec![],
+            last_seen_registry_version: RegistryVersion::new(0),
             enabled,
         }
     }
@@ -46,6 +45,9 @@ impl SshAccessManager {
     /// Checks for changes in the keysets, and updates the node accordingly.
     pub(crate) async fn check_for_keyset_changes(&mut self) {
         let registry_version = self.registry.get_latest_version();
+        if self.last_seen_registry_version == registry_version {
+            return;
+        }
         debug!(
             self.logger,
             "Checking for the access keys in the registry version: {}", registry_version
@@ -57,6 +59,7 @@ impl SshAccessManager {
         {
             Err(error) => {
                 warn!(
+                    every_n_seconds => 300,
                     self.logger,
                     "Cannot retrieve the readonly & backup keysets from the registry {}", error
                 );
@@ -65,43 +68,63 @@ impl SshAccessManager {
             Ok(keys) => keys,
         };
 
-        // If keys are not changed, there is nothing to do.
-        if (self.current_readonly_keys == new_readonly_keys)
-            && (self.current_backup_keys == new_backup_keys)
-        {
-            return;
-        }
-
-        info!(
-            self.logger,
-            "New keysets are found at registry version {}, updating the access rights.",
-            registry_version
-        );
-
-        // If successful, update the readonly & backup keys.
-        // If not, log why.
-        match self.update_access_keys(&new_readonly_keys, &new_backup_keys) {
-            Err(error) => warn!(
-                self.logger,
-                "Could not update the access key due to a script failure: {}", error
-            ),
-            Ok(()) => {
-                self.current_readonly_keys = new_readonly_keys;
-                self.current_backup_keys = new_backup_keys;
-                self.metrics
-                    .ssh_access_registry_version
-                    .set(registry_version.get() as i64);
-            }
+        // Update the readonly & backup keys. If it fails, log why.
+        if self.update_access_keys(&new_readonly_keys, &new_backup_keys) {
+            self.last_seen_registry_version = registry_version;
+            self.metrics
+                .ssh_access_registry_version
+                .set(registry_version.get() as i64);
         }
     }
 
-    fn update_access_keys(
+    fn update_access_keys(&mut self, readonly_keys: &[String], backup_keys: &[String]) -> bool {
+        let mut both_keys_are_successfully_updated: bool = true;
+        if let Err(e) = self.update_access_to_one_account("readonly", readonly_keys) {
+            warn!(
+                every_n_seconds => 300,
+                self.logger,
+                "Could not update the readonly keys due to a script failure: {}", e
+            );
+            both_keys_are_successfully_updated = false;
+        };
+        if let Err(e) = self.update_access_to_one_account("backup", backup_keys) {
+            warn!(
+                every_n_seconds => 300,
+                self.logger,
+                "Could not update the backup keys due to a script failure: {}", e
+            );
+            both_keys_are_successfully_updated = false;
+        }
+        both_keys_are_successfully_updated
+    }
+
+    fn update_access_to_one_account(
         &mut self,
-        _readonly_keys: &[String],
-        _backup_keys: &[String],
+        account: &str,
+        keys: &[String],
     ) -> Result<(), String> {
-        // CON-621: Call the script to update the keys
-        Ok(())
+        let mut cmd = Command::new("sudo")
+            .arg("/opt/ic/bin/provision-ssh-keys.sh")
+            .arg(account)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to spawn child process: {}", e))?;
+
+        let mut stdin = cmd
+            .stdin
+            .take()
+            .ok_or_else(|| "Failed to open stdin".to_string())?;
+        let key_list = keys.join("\n");
+        stdin
+            .write_all(key_list.as_bytes())
+            .map_err(|e| format!("Failed to write to stdin: {}", e))?;
+        drop(stdin);
+
+        match cmd.wait_with_output() {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("{}", e)),
+        }
     }
 }
 

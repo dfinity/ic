@@ -1,0 +1,22 @@
+= IC_SubnetTypeRequesttype_ErrorRateTooHigh.adoc
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+Estimated requests error rate (unsuccessful requests / all requests) is below the SLO limit for 60m.
+Please note we count only 5xx and 429 error codes as failures. 
+
+== Impact
+
+Users observe high rate of failed requests do to problems in the IC.
+
+== Possible causes (non-exhaustive)
+
+1. This is most likely due to a code bug. 
+
+== Troubleshooting and remediation
+
+1. Find a replica instance that returns a lot of 5xx or 429 error codes.
+
+2. Check the logs for of that instance for possible causes.

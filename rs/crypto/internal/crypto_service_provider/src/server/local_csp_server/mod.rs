@@ -1,7 +1,10 @@
 mod basic_sig;
+mod idkg;
 mod multi_sig;
 mod ni_dkg;
 mod secret_key_store;
+#[cfg(test)]
+mod test_utils;
 #[cfg(test)]
 mod tests;
 mod threshold_sig;
@@ -21,9 +24,9 @@ use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
 use std::sync::Arc;
 
-/// An implementation of `CspServer`-trait that runs in-process
+/// An implementation of `CspVault`-trait that runs in-process
 /// and uses local secret key stores.
-pub struct LocalCspServer<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> {
+pub struct LocalCspVault<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> {
     // CSPRNG stands for cryptographically secure random number generator.
     csprng: CspRwLock<R>,
     node_secret_key_store: CspRwLock<S>,
@@ -32,8 +35,8 @@ pub struct LocalCspServer<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeySto
     logger: ReplicaLogger,
 }
 
-impl LocalCspServer<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
-    /// Creates a production-grade local CSP server.
+impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
+    /// Creates a production-grade local CSP vault.
     ///
     /// The `node_secret_key_store` and the `canister_secret_key_store`
     /// must be ProtoSecretKeyStore using distinct protobuf files.
@@ -46,7 +49,7 @@ impl LocalCspServer<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
         if node_secret_key_store.proto_file_path() == canister_secret_key_store.proto_file_path() {
             panic!("The node secret-key-store and the canister secret-key-store must use different files")
         }
-        LocalCspServer::new_with_os_rng(
+        LocalCspVault::new_with_os_rng(
             node_secret_key_store,
             canister_secret_key_store,
             metrics,
@@ -55,8 +58,8 @@ impl LocalCspServer<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
     }
 }
 
-impl<S: SecretKeyStore, C: SecretKeyStore> LocalCspServer<OsRng, S, C> {
-    /// Creates a local csp server setting the `csprng` to use the OS Rng.
+impl<S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<OsRng, S, C> {
+    /// Creates a local CSP vault setting the `csprng` to use the OS Rng.
     pub fn new_with_os_rng(
         node_secret_key_store: S,
         canister_secret_key_store: C,
@@ -65,7 +68,7 @@ impl<S: SecretKeyStore, C: SecretKeyStore> LocalCspServer<OsRng, S, C> {
     ) -> Self {
         let csprng = OsRng::default();
         let csprng = CspRwLock::new_for_rng(csprng, Arc::clone(&metrics));
-        LocalCspServer {
+        LocalCspVault {
             csprng,
             node_secret_key_store: CspRwLock::new_for_sks(
                 node_secret_key_store,
@@ -77,14 +80,14 @@ impl<S: SecretKeyStore, C: SecretKeyStore> LocalCspServer<OsRng, S, C> {
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> LocalCspServer<R, S, VolatileSecretKeyStore> {
-    /// Creates a local CSP server for testing.
+impl<R: Rng + CryptoRng, S: SecretKeyStore> LocalCspVault<R, S, VolatileSecretKeyStore> {
+    /// Creates a local CSP vault for testing.
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the secret
     /// key store is not guaranteed.
     pub fn new_for_test(csprng: R, node_secret_key_store: S) -> Self {
         let metrics = Arc::new(CryptoMetrics::none());
-        LocalCspServer {
+        LocalCspVault {
             csprng: CspRwLock::new_for_rng(csprng, Arc::clone(&metrics)),
             node_secret_key_store: CspRwLock::new_for_sks(
                 node_secret_key_store,
@@ -99,20 +102,26 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> LocalCspServer<R, S, VolatileSecretK
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspServer<R, S, C> {
+// CRP-1248: inline the following methods
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
     fn rng_write_lock(&self) -> RwLockWriteGuard<'_, R> {
-        // TODO (CRP-696): inline this method
         self.csprng.write()
     }
 
     pub fn sks_write_lock(&self) -> RwLockWriteGuard<'_, S> {
-        // TODO (CRP-696): inline this method
         self.node_secret_key_store.write()
     }
 
     pub fn sks_read_lock(&self) -> RwLockReadGuard<'_, S> {
-        // TODO (CRP-696): inline this method
         self.node_secret_key_store.read()
+    }
+
+    pub fn canister_sks_write_lock(&self) -> RwLockWriteGuard<'_, C> {
+        self.canister_secret_key_store.write()
+    }
+
+    pub fn canister_sks_read_lock(&self) -> RwLockReadGuard<'_, C> {
+        self.canister_secret_key_store.read()
     }
 
     fn store_secret_key_or_panic(&self, csp_secret_key: CspSecretKey, key_id: KeyId) {
@@ -120,6 +129,21 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspServer<R,
             Ok(()) => {}
             Err(SecretKeyStoreError::DuplicateKeyId(key_id)) => {
                 panic!("A key with ID {} has already been inserted", key_id);
+            }
+        };
+    }
+
+    fn store_canister_secret_key_or_panic(&self, csp_secret_key: CspSecretKey, key_id: KeyId) {
+        match &self
+            .canister_sks_write_lock()
+            .insert(key_id, csp_secret_key, None)
+        {
+            Ok(()) => {}
+            Err(SecretKeyStoreError::DuplicateKeyId(key_id)) => {
+                panic!(
+                    "A canister secret share with ID {} has already been inserted",
+                    key_id
+                );
             }
         };
     }

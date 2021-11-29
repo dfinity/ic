@@ -263,7 +263,6 @@ impl BlockMaker {
         .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
         .ok()?;
 
-        // TODO: Once CountBytes is implemented for Summary and DKG, use these values
         let payload = Payload::new(
             ic_crypto::crypto_hash,
             match dkg_payload {
@@ -276,6 +275,7 @@ impl BlockMaker {
                     let batch_payload = match self.build_batch_payload(
                         pool,
                         ingress_pool,
+                        height,
                         certified_height,
                         &context,
                         &parent,
@@ -324,6 +324,7 @@ impl BlockMaker {
         &self,
         pool: &PoolReader<'_>,
         ingress_pool: &dyn IngressPoolSelect,
+        height: Height,
         certified_height: Height,
         context: &ValidationContext,
         parent: &Block,
@@ -351,14 +352,22 @@ impl BlockMaker {
         } else {
             let past_payloads =
                 pool.get_payloads_from_height(certified_height.increment(), parent.clone());
-            let payload = self
-                .payload_builder
-                .get_payload(ingress_pool, &past_payloads, context);
+            let payload = match self.payload_builder.get_payload(
+                height,
+                ingress_pool,
+                &past_payloads,
+                context,
+            ) {
+                Ok(payload) => Some(payload),
+                Err(_) => None,
+            };
+
             self.metrics
                 .get_payload_calls
                 .with_label_values(&["success"])
                 .inc();
-            Some(payload)
+
+            payload
         }
     }
 
@@ -718,10 +727,10 @@ mod tests {
 
             payload_builder
                 .expect_get_payload()
-                .withf(move |_, payloads, context| {
+                .withf(move |_, _, payloads, context| {
                     matches_expected_payloads(payloads) && context == &expected_context
                 })
-                .return_const(BatchPayload::default());
+                .return_const(Ok(BatchPayload::default()));
 
             let pool_reader = PoolReader::new(&pool);
             let replica_config = ReplicaConfig {
@@ -850,7 +859,7 @@ mod tests {
             let mut payload_builder = MockPayloadBuilder::new();
             payload_builder
                 .expect_get_payload()
-                .return_const(BatchPayload::default());
+                .return_const(Ok(BatchPayload::default()));
             let membership =
                 Membership::new(pool.get_cache(), registry.clone(), replica_config.subnet_id);
             let membership = Arc::new(membership);
@@ -896,7 +905,7 @@ mod tests {
             let mut payload_builder = MockPayloadBuilder::new();
             payload_builder
                 .expect_get_payload()
-                .return_const(BatchPayload::default());
+                .return_const(Ok(BatchPayload::default()));
 
             let block_maker = BlockMaker::new(
                 Arc::clone(&time_source) as Arc<_>,
@@ -973,7 +982,7 @@ mod tests {
             let mut payload_builder = MockPayloadBuilder::new();
             payload_builder
                 .expect_get_payload()
-                .return_const(BatchPayload::default());
+                .return_const(Ok(BatchPayload::default()));
             let membership = Arc::new(Membership::new(
                 pool.get_cache(),
                 registry.clone(),

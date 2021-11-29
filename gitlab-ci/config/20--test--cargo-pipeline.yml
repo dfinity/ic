@@ -1,0 +1,32 @@
+gen-cargo-pipeline:
+  extends:
+    - .ubuntu-nix-docker
+    - .cargo-rules-autorun-on-trigger
+  # Child pipeline must be generated in a stage prior to the one where it runs
+  stage: init
+  script:
+    - |
+      set -euo pipefail
+      ssh-add -L
+      cd gitlab-ci/src/gen_gitlab_cargo_pipeline
+      $SHELL_WRAPPER nix-shell --run "
+        python gen_gitlab_cargo_pipeline.py ../../../rs/ ../../../ic-os -v --out=../../../child-pipeline.yml
+      " ../shell.nix
+  artifacts:
+    paths:
+      - child-pipeline.yml
+
+cargo-pipeline:
+  extends: .cargo-rules-autorun-on-trigger
+  stage: test
+  needs:
+    - job: gen-cargo-pipeline
+    - job: docker-autobuild-protected
+      optional: true
+  variables:
+    CI_PARENT_PIPELINE_SOURCE: "${CI_PIPELINE_SOURCE}"
+  trigger:
+    include:
+      - artifact: child-pipeline.yml
+        job: gen-cargo-pipeline
+    strategy: depend

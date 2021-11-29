@@ -1,0 +1,126 @@
+policy_module(systemd-fixes, 1.0.0)
+
+###############################################################################
+# systemd-journal
+
+# systemd allows service units to use NoNewPrivileges. While this is not
+# necessarily sensible under selinux (which enforces much broader behavior
+# bounds), allowing this silences warnings. Maybe a dontaudit rule would
+# also be adequate, but it does not hurt allowing it.
+require { type init_t, initrc_t; }
+allow init_t initrc_t : process2 { nnp_transition };
+
+###############################################################################
+# systemd-journal
+
+# not clear why, but harmless
+require_read_efivarfs_files(syslogd_t)
+# read /run/systemd for dynamic configuration
+require_read_run_systemd(syslogd_t)
+
+# XXX: not clear
+allow syslogd_t syslogd_t : netlink_generic_socket { create };
+
+###############################################################################
+# systemd-networkd
+
+# not clear why, but harmless
+require_read_efivarfs_files(systemd_networkd_t)
+# read dynamically generated network config files
+require_read_run_systemd(systemd_networkd_t)
+# communicate completion & state to other init scripts
+init_dbus_send_script(systemd_networkd_t)
+# netlink socket to actually monitor network interfaces
+allow systemd_networkd_t systemd_networkd_t : netlink_generic_socket { bind create getattr getopt setopt };
+
+###############################################################################
+# systemd-detect-virt
+
+# This wants to probe various places of the system for information whether we are
+# running under virtualization, and what kind of virtualization.
+
+# not clear why, but harmless
+require_read_efivarfs_files(systemd_detect_virt_t)
+# reads /proc/1/environ to determine things from the init process
+read_files_pattern(systemd_detect_virt_t, init_t, init_t)
+# reads /run/systemd for static information
+require_read_run_systemd(systemd_detect_virt_t)
+# reads /proc/cmdline
+require { type proc_t; }
+read_files_pattern(systemd_detect_virt_t, proc_t, proc_t)
+# reads /proc/sys/kernel/osrelease
+require_read_proc_sys_kernel(systemd_detect_virt_t)
+
+###############################################################################
+# systemd-resolved
+
+# not clear why, but harmless
+require_read_efivarfs_files(systemd_resolved_t)
+# it wants to read certificates
+miscfiles_read_generic_certs(systemd_resolved_t)
+
+###############################################################################
+# systemd-cryptsetup
+
+# this actually transitively calls into various other things that then probe
+# efivars
+
+require_read_efivarfs_files(lvm_t)
+require_read_efivarfs_files(fsadm_t)
+
+###############################################################################
+# systemd-user-sessions
+
+# not clear why, but harmless
+require_read_efivarfs_files(systemd_sessions_t)
+# reads /proc/sys/kernel/osrelease
+require_read_proc_sys_kernel(systemd_sessions_t)
+
+###############################################################################
+# systemd-tmpfiles
+
+# not clear why, but harmless
+require_read_efivarfs_files(systemd_tmpfiles_t)
+
+# read /run/systemd for dynamic configuration
+require_read_run_systemd(systemd_tmpfiles_t)
+
+# manage symlink in (temporary) dbus directory
+require { type system_dbusd_var_lib_t; }
+manage_lnk_files_pattern(systemd_tmpfiles_t, system_dbusd_var_lib_t, system_dbusd_var_lib_t)
+
+# interact with early lvm
+require { type lvm_lock_t; }
+list_dirs_pattern(systemd_tmpfiles_t, lvm_lock_t, lvm_lock_t)
+
+# associate correct labels to early unlabeled files
+require { type tmpfs_t, unlabeled_t; }
+relabelfrom_dirs_pattern(systemd_tmpfiles_t, { tmpfs_t unlabeled_t }, { tmpfs_t unlabeled_t })
+list_dirs_pattern(systemd_tmpfiles_t, unlabeled_t, unlabeled_t)
+
+###############################################################################
+# udev
+
+# not clear why, but harmless
+require_read_efivarfs_files(udev_t)
+
+# read /run/systemd for dynamic configuration
+require_read_run_systemd(udev_t)
+
+###############################################################################
+# systemd-logind & userdb
+
+require { type systemd_logind_t; }
+
+systemd_connect_userdb(systemd_logind_t)
+
+# tries to read /etc/shadow, but should not and does not need to: deny, but
+# suppress audit message to avoid spamming logs
+# See https://github.com/systemd/systemd/issues/15105
+auth_dontaudit_read_shadow(systemd_logind_t)
+
+# local login parts
+systemd_connect_userdb(local_login_t)
+
+# ssh also needs access to userdb
+systemd_connect_userdb(sshd_t)

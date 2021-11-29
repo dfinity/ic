@@ -15,6 +15,9 @@ pub enum CspThresholdSignError {
     MalformedSecretKey {
         algorithm: AlgorithmId,
     },
+    InternalError {
+        internal_error: String,
+    },
 }
 
 impl From<ClibThresholdSignError> for CspThresholdSignError {
@@ -60,6 +63,9 @@ impl fmt::Display for CspThresholdSignError {
                 "Unable to parse the secret key with algorithm id {:?}",
                 algorithm
             ),
+            CspThresholdSignError::InternalError { internal_error } => {
+                write!(f, "Internal error: {}", internal_error)
+            }
         }
     }
 }

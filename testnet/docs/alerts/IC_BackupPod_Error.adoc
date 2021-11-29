@@ -1,0 +1,36 @@
+= IC_BackupPod_Error
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+One of the backup pods syncing artifacts from the NNS and recovering the state run into a problem.
+
+== Impact
+
+The corresponding backup pod failed to recover the next NNS state.
+
+If all backup pods failed simultaneously, we need to keep in mind that in 24h after the last successful backup (which will most probably not coincide with this alert but lie 8h in the past), the NNS nodes start deleting the backup artifacts, so we need to react quickly.
+
+The immediate functionality of the IC is not affected. There will be no user facing effects.
+
+NOTE: At the moment, we only keep backups of the NNS subnet.
+If the affected nodes do not belong to the NNS, this is not a production incident.
+
+== Possible causes (non-exhaustive)
+
+- The NNS nodes were not reachable while syncing the artifacts.
+
+- The NNS upgrade was detected, but the binary tools of the new version could not be downloaded.
+
+- Unexpected state height after the recovery (e.g. when it did not change).
+
+- Backup pod errors: I/O, OS, script errors, etc.
+
+== Troubleshooting and remediation
+
+There is not much an on call engineer can do except for immediately notifying the backup pod operators in channel #backup-ops and/or by phone.
+Alert owners are members of @dfinity-lab/teams/consensus-owners.
+
+If none of the operators were reachable and the backups are not replayed anymore, the time starts to run out: the replicas delete all artifacts older than 24h.
+In this case, please start regularly pulling (at least once every 12h) the content of the folder `/var/lib/ic/backup` from at least 5 NNS replicas, e.g. using `rsync`.

@@ -1,0 +1,26 @@
+# DO NOT put any configurations in this file! Common configurations must go in 00--common.yml
+# or 00--common-rules.yml. The child pipeline [e.g. cargo pipeline] will not inherit any
+# configurations from this file.
+#
+# This file should only include other YAML files used to create the root parent pipeline.
+
+include:
+  - local: /gitlab-ci/config/00--common.yml
+  - local: /gitlab-ci/config/10--init--github-integration.yml
+  - local: /gitlab-ci/config/20--build-nix-shell.yml
+  - local: /gitlab-ci/config/20--test--cargo-pipeline.yml
+  - local: /gitlab-ci/config/20--test--pre-commit.yml
+  - local: /gitlab-ci/config/20--test--cargo-generate.yml
+  - local: /gitlab-ci/config/20--test--fast-path.yml
+  - local: /gitlab-ci/config/20--test--gitlab-runners.yml
+  - local: /gitlab-ci/config/20--test--python.yml
+  - local: /gitlab-ci/config/20--test--docker-autobuild.yml
+  - local: /gitlab-ci/config/20--test--docker-build-all.yml
+  - local: /gitlab-ci/config/20--test--crash-safety.yml
+  - local: /gitlab-ci/config/20--test--dependencies.yml
+  - local: /gitlab-ci/config/20--test--shellcheck.yml
+  - local: /gitlab-ci/config/40--cargo-test--benchmarks.yml
+  - local: /gitlab-ci/config/60--prod-test--spawn-test-pipeline.yml
+  - local: /gitlab-ci/config/75--push-branches--push.yml
+  - local: /gitlab-ci/config/100--finalize--notify.yml
+  - local: /testnet/tests/pipeline/pipeline.yml

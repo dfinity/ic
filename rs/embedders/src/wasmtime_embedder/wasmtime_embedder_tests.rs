@@ -2,8 +2,9 @@ use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
 use crate::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
-use ic_replicated_state::SystemState;
-use ic_system_api::{ApiType, SystemApiImpl, SystemStateAccessor};
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::{Memory, SystemState};
+use ic_system_api::{ApiType, StaticSystemState, SystemApiImpl};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, types::ids::canister_test_id,
 };
@@ -26,22 +27,25 @@ fn test_wasmtime_system_api() {
     let engine = Engine::new(&config).expect("Failed to initialize Wasmtime engine");
     let canister_id = canister_test_id(53);
     let system_state = SystemState::new_for_start(canister_id);
+    let static_system_state = StaticSystemState::new(&system_state, SubnetType::Application);
     let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
     let system_state_accessor =
         ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
     let system_api = SystemApiImpl::new(
-        system_state_accessor.canister_id(),
         ApiType::start(),
         system_state_accessor,
+        static_system_state,
         canister_current_memory_usage,
         ExecutionParameters {
             instruction_limit: MAX_NUM_INSTRUCTIONS,
             canister_memory_limit,
             subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             compute_allocation: ComputeAllocation::default(),
+            subnet_type: SubnetType::Application,
         },
+        Memory::default(),
         no_op_logger(),
     );
     let mut store = Store::new(

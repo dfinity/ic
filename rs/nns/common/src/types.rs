@@ -14,6 +14,7 @@ use ic_base_types::PrincipalId;
 use crate::pb::v1::{
     CanisterId as CanisterIdProto, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto,
 };
+use ic_protobuf::registry::conversion_rate::v1::IcpXdrConversionRateRecord;
 
 impl From<CanisterId> for CanisterIdProto {
     fn from(id: CanisterId) -> Self {
@@ -108,4 +109,26 @@ pub enum AuthzChangeOp {
     /// 'canister' must remove 'principal' from the authorized list of
     /// 'method_name'. 'principal' must always be Some.
     Deauthorize,
+}
+
+/// The payload of a proposal to update the ICP/XDR conversion rate.
+///
+/// See /rs/protobuf/def/registry/conversion_rate/v1/conversion_rate.proto for
+/// the explanation of the fields for the IcpXdrConversionRateRecord.
+/// The fields will be used by the subnet canister to create an
+/// IcpXdrConversionRateRecord.
+#[derive(CandidType, Default, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct UpdateIcpXdrConversionRatePayload {
+    pub data_source: String,
+    pub timestamp_seconds: u64,
+    pub xdr_permyriad_per_icp: u64,
+}
+
+impl From<UpdateIcpXdrConversionRatePayload> for IcpXdrConversionRateRecord {
+    fn from(val: UpdateIcpXdrConversionRatePayload) -> Self {
+        IcpXdrConversionRateRecord {
+            timestamp_seconds: val.timestamp_seconds,
+            xdr_permyriad_per_icp: val.xdr_permyriad_per_icp,
+        }
+    }
 }

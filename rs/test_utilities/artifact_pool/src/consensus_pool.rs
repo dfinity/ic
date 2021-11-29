@@ -2,7 +2,7 @@ use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::pool_reader::PoolReader;
-use ic_consensus_message::{make_genesis, ConsensusMessageHashable};
+use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::state_manager::StateManager;
 use ic_interfaces::{
     consensus_pool::{
@@ -171,7 +171,7 @@ impl TestConsensusPool {
         let summary = ic_consensus::dkg::make_genesis_summary(&*registry_client, subnet_id, None);
         let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
             subnet_id,
-            make_genesis(summary),
+            ic_test_utilities::consensus::make_genesis(summary),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),

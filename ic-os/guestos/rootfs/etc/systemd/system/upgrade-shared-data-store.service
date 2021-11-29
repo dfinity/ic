@@ -1,0 +1,14 @@
+[Unit]
+Description=Initialize node data storage
+DefaultDependencies=no
+Requires=var-lib-ic-data.mount
+After=var-lib-ic-data.mount
+
+[Install]
+WantedBy=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/upgrade-shared-data-store.sh
+

@@ -1,5 +1,8 @@
 use super::SessionNonce;
-use crate::{num_bytes_from, NumWasmPages, NumWasmPages64, PageIndex, PageMap};
+use crate::{
+    num_bytes_from, num_bytes_try_from64, page_map::PageAllocatorDelta, NumWasmPages,
+    NumWasmPages64, PageIndex, PageMap,
+};
 use ic_config::embedders::PersistenceType;
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState, MappedStateImpl};
 use ic_interfaces::execution_environment::HypervisorResult;
@@ -12,7 +15,13 @@ use ic_types::{methods::WasmMethod, ExecutionRound, NumBytes};
 use ic_utils::ic_features::cow_state_feature;
 use ic_wasm_types::BinaryEncodedWasm;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, convert::TryFrom, iter::FromIterator, path::PathBuf, sync::Arc};
+use std::{
+    collections::BTreeSet,
+    convert::TryFrom,
+    iter::FromIterator,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 /// An arbitrary piece of data that an embedder can store between module
 /// instantiations.
@@ -100,7 +109,13 @@ impl TryFrom<pb::Global> for Global {
 ///
 /// Arc is used to make cheap clones of this during snapshots.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExportedFunctions(Arc<BTreeSet<WasmMethod>>);
+pub struct ExportedFunctions(
+    /// Since the value is only shared when taking a snapshot, there is no
+    /// problem with serializing this field.
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    Arc<BTreeSet<WasmMethod>>,
+);
 
 impl ExportedFunctions {
     pub fn new(exported_functions: BTreeSet<WasmMethod>) -> Self {
@@ -202,6 +217,90 @@ impl Default for Memory<NumWasmPages64> {
     }
 }
 
+/// Describes how to synchronize a local execution state in the replica process
+/// with the remote state in the sandbox process. `Full` means that the whole
+/// state needs to be sent to the sandbox process. `Delta` means that the state
+/// can be derived from the given parent state by applying dirty pages and
+/// possibly constructing a new page allocator (if it was empty before).
+/// Note that the dirty pages are represented by their indicies for efficiency.
+/// Their contents will be fetched during the actual synchronization.
+#[derive(Debug)]
+pub enum SandboxExecutionStateSynchronization {
+    Full,
+    Delta {
+        parent_state_handle: SandboxExecutionStateHandle,
+        wasm_memory_pages: Vec<PageIndex>,
+        wasm_memory_page_allocator: PageAllocatorDelta,
+        stable_memory_pages: Vec<PageIndex>,
+        stable_memory_page_allocator: PageAllocatorDelta,
+    },
+}
+
+/// Represents the synchronisation status of the local execution state
+/// in the replica process and the remote execution state in the sandbox
+/// process. If the states are in sync, then it stores the id of the
+/// state in the sandbox process. Otherwise, it stores information on
+/// how to synchronize the states.
+#[derive(Debug)]
+pub enum SandboxExecutionState {
+    Synced(SandboxExecutionStateHandle),
+    Unsynced(SandboxExecutionStateSynchronization),
+}
+
+impl SandboxExecutionState {
+    pub fn new() -> Arc<Mutex<Self>> {
+        Arc::new(Mutex::new(SandboxExecutionState::Unsynced(
+            SandboxExecutionStateSynchronization::Full,
+        )))
+    }
+
+    pub fn delta(
+        parent_state_handle: SandboxExecutionStateHandle,
+        wasm_memory_delta: (Vec<PageIndex>, PageAllocatorDelta),
+        stable_memory_delta: (Vec<PageIndex>, PageAllocatorDelta),
+    ) -> Arc<Mutex<Self>> {
+        Arc::new(Mutex::new(SandboxExecutionState::Unsynced(
+            SandboxExecutionStateSynchronization::Delta {
+                parent_state_handle,
+                wasm_memory_pages: wasm_memory_delta.0,
+                wasm_memory_page_allocator: wasm_memory_delta.1,
+                stable_memory_pages: stable_memory_delta.0,
+                stable_memory_page_allocator: stable_memory_delta.1,
+            },
+        )))
+    }
+}
+
+/// The owner of the sandbox execution state. It's destructor must close
+/// the corresponding execution state in the sandbox process.
+pub trait SandboxExecutionStateOwner: std::fmt::Debug + Send + Sync {
+    fn get_id(&self) -> usize;
+}
+
+/// A handle to the sandbox execution state that keeps the corresponding
+/// execution state in the sandbox process open. It is cloneable and may be
+/// shared between multiple execution states.
+#[derive(Debug)]
+pub struct SandboxExecutionStateHandle(Arc<dyn SandboxExecutionStateOwner>);
+
+impl Clone for SandboxExecutionStateHandle {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
+}
+
+impl SandboxExecutionStateHandle {
+    pub fn new(id: Arc<dyn SandboxExecutionStateOwner>) -> Self {
+        Self(id)
+    }
+
+    /// Returns a raw id of the execution state in the sandbox process,
+    /// which can be converted to sandbox `StateId` using `StateId::from()`.
+    pub fn get_id(&self) -> usize {
+        self.0.get_id()
+    }
+}
+
 /// The part of the canister state that can be accessed during execution
 ///
 /// Note that execution state is used to track ephemeral information.
@@ -242,6 +341,9 @@ pub struct ExecutionState {
     #[debug_stub = "PageMap"]
     pub wasm_memory: Memory,
 
+    /// The canister stable memory which is persisted across canister upgrades.
+    pub stable_memory: Memory<NumWasmPages64>,
+
     /// The state of exported globals. Internal globals are not accessible.
     pub exported_globals: Vec<Global>,
 
@@ -257,6 +359,10 @@ pub struct ExecutionState {
 
     /// Mapped state of the current execution
     pub mapped_state: Option<Arc<MappedStateImpl>>,
+
+    /// Contains either a handle to the execution state in the sandbox process
+    /// or information that is necessary to constructs the state remotely.
+    pub sandbox_state: Arc<Mutex<SandboxExecutionState>>,
 }
 
 // We have to implement it by hand as embedder_cache can not be compared for
@@ -279,15 +385,17 @@ impl PartialEq for ExecutionState {
 
 impl ExecutionState {
     /// Initializes a new execution state for a canister.
+    /// The state will be created with empty stable memory, but may have wasm
+    /// memory from data sections in the wasm module.
     pub fn new(
         wasm_binary: BinaryEncodedWasm,
         canister_root: PathBuf,
         exports: ExportedFunctions,
-        pages: &[(PageIndex, Box<PageBytes>)],
+        wasm_memory_pages: &[(PageIndex, Box<PageBytes>)],
     ) -> HypervisorResult<Self> {
         let mut wasm_memory = Memory::default();
         wasm_memory.page_map.update(
-            &pages
+            &wasm_memory_pages
                 .iter()
                 .map(|(index, bytes)| (*index, bytes as &PageBytes))
                 .collect::<Vec<(PageIndex, &PageBytes)>>(),
@@ -321,10 +429,12 @@ impl ExecutionState {
             wasm_binary,
             exports,
             wasm_memory,
+            stable_memory: Memory::default(),
             exported_globals: vec![],
             last_executed_round: ExecutionRound::from(0),
             cow_mem_mgr,
             mapped_state,
+            sandbox_state: SandboxExecutionState::new(),
         };
 
         Ok(execution_state)
@@ -341,6 +451,8 @@ impl ExecutionState {
         let globals_size_bytes = 8 * self.exported_globals.len() as u64;
         let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
         num_bytes_from(self.wasm_memory.size)
+            + num_bytes_try_from64(self.stable_memory.size)
+                .expect("could not convert from wasm pages to bytes")
             + NumBytes::from(globals_size_bytes)
             + NumBytes::from(wasm_binary_size_bytes)
     }

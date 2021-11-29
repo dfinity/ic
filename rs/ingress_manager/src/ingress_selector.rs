@@ -20,7 +20,7 @@ use ic_types::{
     batch::{IngressPayload, ValidationContext},
     ingress::{IngressStatus, MAX_INGRESS_TTL},
     messages::{MessageId, SignedIngress},
-    CanisterId, CountBytes, Cycles, Height, Time,
+    CanisterId, CountBytes, Cycles, Height, NumBytes, Time,
 };
 use ic_validator::{validate_request, RequestValidationError};
 use std::collections::BTreeMap;
@@ -31,6 +31,7 @@ impl<'a> IngressSelector for IngressManager {
         ingress_pool: &dyn IngressPoolSelect,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
+        byte_limit: NumBytes,
     ) -> IngressPayload {
         let _timer = self.metrics.ingress_selector_get_payload_time.start_timer();
         let certified_height = context.certified_height;
@@ -72,7 +73,7 @@ impl<'a> IngressSelector for IngressManager {
             .expect("Couldn't fetch ingress message parameters from the registry.");
 
         // Select valid ingress messages and stop once the total size
-        // becomes greater than ingress_bytes_per_block_soft_cap.
+        // becomes greater than byte_limit.
         let mut accumulated_size = 0;
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
         let mut num_messages = 0;
@@ -88,13 +89,17 @@ impl<'a> IngressSelector for IngressManager {
                     &settings,
                     &past_ingress_set,
                     num_messages,
-                    accumulated_size,
                     &mut cycles_needed,
                 );
                 match result {
                     Ok(()) => {
                         num_messages += 1;
+                        // Calculate the size and abort once we have hit the limit
                         accumulated_size += ingress_obj.signed_ingress.count_bytes();
+                        if accumulated_size > byte_limit.get() as usize {
+                            return SelectResult::Abort;
+                        }
+
                         SelectResult::Selected(ingress_obj.signed_ingress.clone())
                     }
                     Err(ValidationError::Permanent(
@@ -109,6 +114,7 @@ impl<'a> IngressSelector for IngressManager {
         );
 
         let payload = IngressPayload::from(messages_in_payload);
+        debug_assert!(payload.count_bytes() <= byte_limit.get() as usize);
 
         // A last step is to validate the payload we just created. It will be
         // an error if this fails, in which case we log the error, and return
@@ -134,10 +140,9 @@ impl<'a> IngressSelector for IngressManager {
             .start_timer();
 
         let certified_height = context.certified_height;
-
         let settings = self
             .get_ingress_message_settings(context.registry_version)
-            .expect("Couldn't get ingress_bytes_per_block_soft_cap from the registry.");
+            .expect("Couldn't get IngressMessageSettings from the registry.");
 
         let past_ingress = match IngressSetChain::new(context.time, past_ingress, || {
             IngressHistorySet::new(self.ingress_hist_reader.as_ref(), certified_height)
@@ -176,8 +181,6 @@ impl<'a> IngressSelector for IngressManager {
             ));
         }
 
-        // Tracks the sum of the size of all ingress messages checked so far.
-        let mut accumulated_size = 0;
         // Tracks the sum of cycles needed per canister.
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
         for i in 0..payload.message_count() {
@@ -193,11 +196,8 @@ impl<'a> IngressSelector for IngressManager {
                 &settings,
                 &past_ingress,
                 0, // message count is checked above.
-                accumulated_size,
                 &mut cycles_needed,
             )?;
-
-            accumulated_size += ingress.count_bytes();
         }
 
         Ok(())
@@ -219,7 +219,6 @@ impl IngressManager {
         settings: &IngressMessageSettings,
         past_ingress_set: &IngressSetChain<IngressHistorySet>,
         num_messages: usize,
-        accumulated_size: usize,
         cycles_needed: &mut BTreeMap<CanisterId, Cycles>,
     ) -> ValidationResult<IngressPayloadValidationError> {
         let ingress_message_size = signed_ingress.count_bytes();
@@ -229,16 +228,6 @@ impl IngressManager {
                 IngressPermanentError::IngressMessageTooBig(
                     ingress_message_size,
                     settings.max_ingress_bytes_per_message,
-                ),
-            ));
-        }
-
-        if accumulated_size > settings.ingress_bytes_per_block_soft_cap {
-            // Once the threshold value is passed, we are done.
-            return Err(ValidationError::Permanent(
-                IngressPermanentError::IngressPayloadTooBig(
-                    accumulated_size,
-                    settings.ingress_bytes_per_block_soft_cap,
                 ),
             ));
         }
@@ -274,7 +263,7 @@ impl IngressManager {
                     if let Err(err) = self.cycles_account_manager.can_withdraw_cycles(
                         &canister.system_state,
                         *cumulative_ingress_cost + ingress_cost,
-                        canister.memory_usage(),
+                        canister.memory_usage(state.metadata.own_subnet_type),
                         canister.scheduler_state.compute_allocation,
                     ) {
                         return Err(ValidationError::Permanent(
@@ -406,22 +395,29 @@ impl<'a, T: IngressSetQuery> IngressSetQuery for IngressSetChain<'a, T> {
 
 #[cfg(test)]
 mod tests {
+    // NOTE: These tests need to be run in a tokio runtime, because they internally
+    // use the `RegistryClient` which spawns tokio tasks. Without tokio, the tests
+    // would compile but panic at runtime.
     use super::*;
     use crate::tests::{setup, setup_registry, setup_with_params};
     use assert_matches::assert_matches;
     use ic_crypto::crypto_hash;
-    use ic_interfaces::artifact_pool::UnvalidatedArtifact;
-    use ic_interfaces::execution_environment::IngressHistoryError;
-    use ic_interfaces::gossip_pool::GossipPool;
-    use ic_interfaces::ingress_pool::{ChangeAction, MutableIngressPool};
-    use ic_interfaces::time_source::TimeSource;
+    use ic_interfaces::{
+        artifact_pool::UnvalidatedArtifact,
+        execution_environment::IngressHistoryError,
+        gossip_pool::GossipPool,
+        ingress_pool::{ChangeAction, MutableIngressPool},
+        time_source::TimeSource,
+    };
     use ic_test_utilities::{
         cycles_account_manager::CyclesAccountManagerBuilder,
         history::MockIngressHistory,
         mock_time,
         state::{CanisterStateBuilder, ReplicatedStateBuilder},
-        types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
-        types::messages::SignedIngressBuilder,
+        types::{
+            ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
+            messages::SignedIngressBuilder,
+        },
         FastForwardTimeSource,
     };
     use ic_types::{
@@ -432,11 +428,10 @@ mod tests {
         time::current_time_and_expiry_time,
         Height, RegistryVersion,
     };
-    use std::collections::HashSet;
-    use std::convert::TryInto;
-    use std::time::Duration;
+    use std::{collections::HashSet, convert::TryInto, time::Duration};
 
     const MAX_SIZE: usize = 1000;
+    const MAX_SIZE_AS_NUM_BYTES: NumBytes = NumBytes::new(MAX_SIZE as u64);
 
     #[tokio::test]
     async fn test_get_empty_ingress_payload() {
@@ -449,6 +444,7 @@ mod tests {
                     registry_version: RegistryVersion::from(1),
                     certified_height: Height::from(0),
                 },
+                MAX_SIZE_AS_NUM_BYTES,
             );
             assert_eq!(ingress_msgs.message_count(), 0);
         })
@@ -573,6 +569,7 @@ mod tests {
                     &ingress_pool,
                     &HashSet::new(),
                     &validation_context,
+                    MAX_SIZE_AS_NUM_BYTES,
                 );
                 assert_eq!(payload.message_count(), 1);
                 let msgs: Vec<SignedIngress> = payload.try_into().unwrap();
@@ -756,6 +753,7 @@ mod tests {
                     &ingress_pool,
                     &HashSet::new(),
                     &validation_context,
+                    MAX_SIZE_AS_NUM_BYTES,
                 );
                 assert_eq!(first_ingress_payload.message_count(), 1);
             },
@@ -811,6 +809,7 @@ mod tests {
                     &ingress_pool,
                     &HashSet::new(),
                     &validation_context,
+                    MAX_SIZE_AS_NUM_BYTES,
                 );
                 assert_eq!(first_ingress_payload.message_count(), 1);
 
@@ -824,6 +823,7 @@ mod tests {
                     &ingress_pool,
                     &hash_set,
                     &validation_context,
+                    MAX_SIZE_AS_NUM_BYTES,
                 );
                 assert_eq!(second_ingress_payload.message_count(), 0);
             },
@@ -902,6 +902,7 @@ mod tests {
                     &ingress_pool,
                     &HashSet::new(),
                     &validation_context,
+                    MAX_SIZE_AS_NUM_BYTES,
                 );
                 assert_eq!(ingress_payload.message_count(), 2);
             },
@@ -912,7 +913,7 @@ mod tests {
     // Select only one out of two big messages in the artifact pool
     async fn test_get_payload_large_size_accumulation() {
         let subnet_id = subnet_test_id(0);
-        let registry = setup_registry(subnet_id, MAX_SIZE / 2, MAX_SIZE);
+        let registry = setup_registry(subnet_id, MAX_SIZE);
         setup_with_params(
             None,
             Some((registry, subnet_id)),
@@ -984,6 +985,7 @@ mod tests {
                     &ingress_pool,
                     &HashSet::new(),
                     &validation_context,
+                    NumBytes::new(MAX_SIZE as u64),
                 );
                 assert_eq!(ingress_payload.message_count(), 1);
             },
@@ -1159,6 +1161,7 @@ mod tests {
                     &ingress_pool,
                     &HashSet::new(),
                     &validation_context,
+                    MAX_SIZE_AS_NUM_BYTES,
                 );
 
                 assert_eq!(ingress_payload.message_count(), 1);
@@ -1166,86 +1169,6 @@ mod tests {
                 assert!(messages.contains(&ingress_msg2));
             },
         )
-    }
-
-    #[tokio::test]
-    // Validation should fail if the ingress payload is too large
-    async fn test_validate_oversized_payload_error() {
-        let subnet_id = subnet_test_id(0);
-        let registry = setup_registry(subnet_id, MAX_SIZE, MAX_SIZE);
-        setup_with_params(
-            None,
-            Some((registry, subnet_id)),
-            None,
-            Some(
-                ReplicatedStateBuilder::default()
-                    .with_canister(
-                        CanisterStateBuilder::default()
-                            .with_canister_id(canister_test_id(0))
-                            .build(),
-                    )
-                    .build(),
-            ),
-            |ingress_manager, _| {
-                // create two large messages (one of them would fit)
-                let ingress_msg1 = SignedIngressBuilder::new()
-                    .canister_id(canister_test_id(0))
-                    .nonce(2)
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
-                    .method_payload(vec![0; MAX_SIZE / 2 + 2])
-                    .sign_for_randomly_generated_sender()
-                    .build();
-                let ingress_msg2 = SignedIngressBuilder::new()
-                    .canister_id(canister_test_id(0))
-                    .nonce(2)
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
-                    .method_payload(vec![0; MAX_SIZE / 2 + 2])
-                    .sign_for_randomly_generated_sender()
-                    .build();
-                let ingress_msg3 = SignedIngressBuilder::new()
-                    .canister_id(canister_test_id(0))
-                    .nonce(2)
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
-                    .method_payload(vec![0; MAX_SIZE / 2 + 2])
-                    .sign_for_randomly_generated_sender()
-                    .build();
-                let payload = IngressPayload::from(vec![
-                    ingress_msg1.clone(),
-                    ingress_msg2.clone(),
-                    ingress_msg3,
-                ]);
-                let ingress_validation = ingress_manager.validate_ingress_payload(
-                    &payload,
-                    &HashSet::new(),
-                    &ValidationContext {
-                        time: mock_time(),
-                        registry_version: RegistryVersion::from(1),
-                        certified_height: Height::from(0),
-                    },
-                );
-                assert_matches!(
-                    ingress_validation,
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::IngressPayloadTooBig(_, _),
-                    ),)
-                );
-
-                // Check if soft cap on block size works as expected
-                let payload = IngressPayload::from(vec![ingress_msg1, ingress_msg2]);
-                assert!(payload.count_bytes() > MAX_SIZE);
-                let ingress_validation = ingress_manager.validate_ingress_payload(
-                    &payload,
-                    &HashSet::new(),
-                    &ValidationContext {
-                        time: mock_time(),
-                        registry_version: RegistryVersion::from(1),
-                        certified_height: Height::from(0),
-                    },
-                );
-
-                assert_matches!(ingress_validation, Ok(_));
-            },
-        );
     }
 
     #[tokio::test]
@@ -1317,7 +1240,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_payload_canister_has_sufficient_cycles() {
         let subnet_id = subnet_test_id(0);
-        let registry = setup_registry(subnet_id, MAX_SIZE, MAX_SIZE);
+        let registry = setup_registry(subnet_id, MAX_SIZE);
         let time = mock_time();
         // Canister 0 has enough to induct this message...
         let m1 = SignedIngressBuilder::new()
@@ -1410,6 +1333,7 @@ mod tests {
                     &ingress_pool,
                     &HashSet::new(),
                     &validation_context,
+                    MAX_SIZE_AS_NUM_BYTES,
                 );
                 assert_eq!(payload.message_count(), 1);
                 let msgs: Vec<SignedIngress> = payload.try_into().unwrap();
@@ -1422,7 +1346,7 @@ mod tests {
     // Validation should fail if receiving canisters has insufficient balance.
     async fn test_validate_canister_has_insufficient_balance() {
         let subnet_id = subnet_test_id(0);
-        let registry = setup_registry(subnet_id, MAX_SIZE, MAX_SIZE);
+        let registry = setup_registry(subnet_id, MAX_SIZE);
         setup_with_params(
             None,
             Some((registry, subnet_id)),
@@ -1476,7 +1400,7 @@ mod tests {
     // Validation should fail if receiving canister doesn't exist.
     async fn test_validate_canister_not_found() {
         let subnet_id = subnet_test_id(0);
-        let registry = setup_registry(subnet_id, MAX_SIZE, MAX_SIZE);
+        let registry = setup_registry(subnet_id, MAX_SIZE);
         setup_with_params(
             None,
             Some((registry, subnet_id)),
@@ -1514,7 +1438,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_management_message_to_non_existing_canister() {
         let subnet_id = subnet_test_id(0);
-        let registry = setup_registry(subnet_id, MAX_SIZE, MAX_SIZE);
+        let registry = setup_registry(subnet_id, MAX_SIZE);
         setup_with_params(
             None,
             Some((registry, subnet_id)),
@@ -1560,7 +1484,7 @@ mod tests {
     // Validation should succeed if receiving canister is subnet or IC00
     async fn test_validate_management_message_to_existing_canister_with_sufficient_cycles() {
         let subnet_id = subnet_test_id(0);
-        let registry = setup_registry(subnet_id, MAX_SIZE, MAX_SIZE);
+        let registry = setup_registry(subnet_id, MAX_SIZE);
         setup_with_params(
             None,
             Some((registry, subnet_id)),
@@ -1609,7 +1533,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_management_message_to_existing_canister_with_insufficient_cycles() {
         let subnet_id = subnet_test_id(0);
-        let registry = setup_registry(subnet_id, MAX_SIZE, MAX_SIZE);
+        let registry = setup_registry(subnet_id, MAX_SIZE);
         setup_with_params(
             None,
             Some((registry, subnet_id)),
@@ -1662,7 +1586,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_invalid_management_message() {
         let subnet_id = subnet_test_id(0);
-        let registry = setup_registry(subnet_id, MAX_SIZE, MAX_SIZE);
+        let registry = setup_registry(subnet_id, MAX_SIZE);
         setup_with_params(
             None,
             Some((registry, subnet_id)),

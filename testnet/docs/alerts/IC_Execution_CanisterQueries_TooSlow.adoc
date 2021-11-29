@@ -1,0 +1,25 @@
+= IC_Execution_CanisterQueries_TooSlow
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+Canister queries take longer than 10 seconds to complete for 15 minutes.
+
+== Impact
+
+Longer execution time of canister queries can slow down processing and result in bad user experience.
+
+== Possible causes (non-exhaustive)
+
+- Canister queries do a lot of heavy computation that is not reflected by the instructions limit set.
+
+- Bug in the code could result in queries taking longer.
+
+== Troubleshooting and remediation
+
+- Check whether the slower queries are happening on all replicas of the subnet or only a few.
+
+- If this affects many (or all replicas), check whether a recent replica upgrade introduced a bug.
+
+- If the problem is contained to only one or two replicas escalate to the execution team.

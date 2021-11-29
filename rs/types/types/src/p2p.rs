@@ -54,7 +54,7 @@ pub const MAX_CHUNK_SIZE: u32 = 4096;
 pub const RECEIVE_CHECK_PEER_SET_SIZE: u32 = 5000;
 
 /// Period for priority function evaluation in milliseconds
-pub const PFN_EVALUATION_PERIOD_MS: u32 = 3_000;
+pub const PFN_EVALUATION_PERIOD_MS: u32 = 1000;
 
 /// Period for polling the registry for changes in milliseconds
 pub const REGISTRY_POLL_PERIOD_MS: u32 = 3_000;

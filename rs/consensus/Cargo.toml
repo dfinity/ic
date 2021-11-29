@@ -35,6 +35,7 @@ assert_matches = "1.3.0"
 criterion = "0.3"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
+ic-ecdsa-object = { path = "./ecdsa_object" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-messaging = { path = "../messaging" }

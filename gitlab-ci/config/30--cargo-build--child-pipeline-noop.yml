@@ -1,0 +1,21 @@
+#
+# Note:
+# this file will be included in the child pipeline if there are NO changes in the /rs folder
+#
+
+include:
+  - local: /gitlab-ci/config/00--common.yml
+
+# A GitLab pipeline must have at least one job defined, or GitLab's linter throws an error.
+# When generating the cargo test pipeline, this is a problem when there's nothing to test.
+# Therefore, use this template to generate a no-op config.
+#
+# https://gitlab.com/gitlab-org/gitlab/-/issues/30396
+noop-job:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline
+  stage: cargo-build
+  needs: []  # don't wait on other jobs
+  script:
+    - echo "No tests need to be run"

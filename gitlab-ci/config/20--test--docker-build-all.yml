@@ -1,0 +1,13 @@
+docker-build-all:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-docker-build-all
+  needs: []
+  stage: test
+  artifacts:
+    paths:
+      - build
+  script:
+    - |
+      set -euo pipefail
+      ./gitlab-ci/tools/docker-build-all

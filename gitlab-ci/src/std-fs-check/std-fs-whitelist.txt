@@ -1,0 +1,99 @@
+artifact_pool/src/backup.rs:    fs,
+artifact_pool/src/backup.rs:use std::{
+artifact_pool/src/lib.rs:use std::fs;
+boundary_node/control_plane/src/main.rs:    collections::{HashMap, HashSet},
+boundary_node/control_plane/src/main.rs:    fs::{read_dir, remove_file, File},
+boundary_node/control_plane/src/main.rs:use std::{
+config/src/config_parser.rs:use std::fs;
+config/src/crypto.rs:use std::fs;
+config/src/crypto.rs:use std::os::unix::fs::PermissionsExt;
+cow_state/src/lib.rs:    collections::HashMap,
+cow_state/src/lib.rs:    fmt,
+cow_state/src/lib.rs:    fs::{File, OpenOptions},
+cow_state/src/lib.rs:use std::{
+crypto/internal/crypto_lib/basic_sig/ecdsa_secp256_wycheproof_tests/src/tests.rs:use std::fs::File;
+crypto/internal/crypto_service_provider/src/public_key_store/mod.rs:use std::fs;
+crypto/internal/crypto_service_provider/src/secret_key_store/proto_store.rs:use std::fs;
+crypto/internal/crypto_service_provider/src/secret_key_store/proto_store.rs:use std::os::unix::fs::PermissionsExt;
+crypto/internal/csp_test_utils/src/files.rs:use std::fs;
+crypto/internal/csp_test_utils/src/files.rs:use std::os::unix::fs::PermissionsExt;
+crypto/src/common/utils/temp_crypto/tests.rs:use std::os::unix::fs::PermissionsExt;
+drun/src/lib.rs:use std::fs::OpenOptions;
+drun/src/message.rs:    convert::TryFrom,
+drun/src/message.rs:    fmt,
+drun/src/message.rs:    fs::File,
+drun/src/message.rs:use std::{
+embedders/tests/instrumentation.rs:use std::fs;
+guestos_vsock_agent/src/agent.rs:use std::fs::File;
+http_handler/build.rs:use std::fs::File;
+http_utils/src/file_downloader.rs:use std::fs::{self, File};
+ic_p8s_service_discovery/log/src/lib.rs:use std::fs::{File, OpenOptions};
+ic_p8s_service_discovery/src/config/mod.rs:    fs::File,
+ic_p8s_service_discovery/src/config/mod.rs:use std::{
+ic_p8s_service_discovery/src/service_discovery.rs:    collections::BTreeMap,
+ic_p8s_service_discovery/src/service_discovery.rs:    convert::TryFrom,
+ic_p8s_service_discovery/src/service_discovery.rs:    fs,
+ic_p8s_service_discovery/src/service_discovery.rs:    future::Future,
+ic_p8s_service_discovery/src/service_discovery.rs:    net::SocketAddr,
+ic_p8s_service_discovery/src/service_discovery.rs:    os::unix::fs::PermissionsExt,
+ic_p8s_service_discovery/src/service_discovery.rs:use std::{
+identity/src/main.rs:use std::fs;
+log_analyzer/examples/logscan.rs:use std::fs;
+nns/governance_upgrader/src/main.rs:    fs::{metadata, File},
+nns/governance_upgrader/src/main.rs:use std::{
+nns/handlers/lifeline/build.rs:use std::fs;
+nns/init/src/get_neuron_ids.rs:use std::fs;
+nns/init/src/main.rs:use std::fs;
+nns/inspector/src/main.rs:use std::fs::File;
+nodemanager/src/args.rs:    fs,
+nodemanager/src/args.rs:use std::{
+nodemanager/src/catch_up_package_provider.rs:use std::{fs::File, path::PathBuf};
+nodemanager/src/release_package_provider.rs:use std::fs;
+nodemanager/src/utils.rs:use std::fs;
+p2p/tests/framework/setup.rs:use std::{fs, fs::File, sync::Arc, thread::sleep, time::Duration};
+prep/src/bin/prep.rs:    collections::{BTreeMap, BTreeSet},
+prep/src/bin/prep.rs:    convert::TryFrom,
+prep/src/bin/prep.rs:    fmt::Display,
+prep/src/bin/prep.rs:    fs,
+prep/src/bin/prep.rs:use std::{
+prep/src/bin/principal_id.rs:    env,
+prep/src/bin/principal_id.rs:    fs::File,
+prep/src/bin/principal_id.rs:use std::{
+prep/src/internet_computer.rs:    collections::BTreeMap,
+prep/src/internet_computer.rs:    convert::TryInto,
+prep/src/internet_computer.rs:    fmt,
+prep/src/internet_computer.rs:    fs::{self, File},
+prep/src/internet_computer.rs:use std::{
+registry/admin/src/main.rs:    convert::TryFrom,
+registry/admin/src/main.rs:    fs::{metadata, read_to_string, File},
+registry/admin/src/main.rs:use std::{
+registry/regedit/src/args.rs:use std::{collections::HashSet, fs::File, io::BufReader, path::PathBuf};
+release/src/release.rs:use std::fs::{self, File};
+release/src/release.rs:use std::os::unix::fs::PermissionsExt;
+replay/src/backup.rs:    collections::{BTreeMap, BTreeSet},
+replay/src/backup.rs:    convert::TryFrom,
+replay/src/backup.rs:    fs,
+replay/src/backup.rs:use std::{
+replica/src/main.rs:use std::fs::File;
+replicated_state/src/page_map.rs:use std::fs::{File, OpenOptions};
+replicated_state/src/page_map/checkpoint.rs:use std::fs::{File, OpenOptions};
+replicated_state/src/page_map/tests.rs:use std::fs::OpenOptions;
+rust_canisters/canister_test/src/canister.rs:use std::{convert::AsRef, fs::File, io::Read, path::Path};
+state_layout/src/basic_cpmgr.rs:    fs, io,
+state_layout/src/basic_cpmgr.rs:use std::{
+state_layout/src/state_layout.rs:use std::fs::OpenOptions;
+state_manager/src/lib.rs:use std::fs::OpenOptions;
+state_manager/src/manifest/tests.rs:use std::fs;
+state_manager/src/state_sync/chunkable.rs:use std::os::unix::fs::FileExt;
+state_tool/src/commands/import_state.rs:use std::fs;
+sys/src/utility_command.rs:use std::os::unix::fs::PermissionsExt;
+test_utilities/src/p2p.rs:use std::{fs, fs::File, sync::Arc, thread::sleep, time::Duration};
+transport/src/tests/test_utils/mod.rs:use std::fs;
+utils/src/fs.rs:use std::{fs, fs::File, io, io::Error, io::Write, path::Path, path::PathBuf};
+workload_generator/src/canister.rs:use std::{fs::File, io::Read, path::Path, time::Duration};
+workload_generator/src/engine.rs:    collections::HashMap,
+workload_generator/src/engine.rs:    convert::TryFrom,
+workload_generator/src/engine.rs:    env, fs,
+workload_generator/src/engine.rs:use std::{
+workload_generator/src/main.rs:    fs, io,
+workload_generator/src/main.rs:use std::{

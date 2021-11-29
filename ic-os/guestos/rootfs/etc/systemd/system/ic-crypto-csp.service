@@ -1,0 +1,13 @@
+[Unit]
+Description=IC Crypto Service Provider
+Requires=ic-crypto-csp.socket
+
+[Service]
+User=ic-replica
+ExecStartPre=+sudo /opt/ic/bin/setup-permissions.sh
+ExecStart=/opt/ic/bin/ic-crypto-csp --socket /run/ic-node/crypto-csp/socket
+NotifyAccess=main
+
+[Install]
+RequiredBy=ic-replica.service
+Also=ic-crypto-csp.socket

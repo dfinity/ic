@@ -1,5 +1,5 @@
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 
 /// The *Gossip* metrics.
 #[derive(Debug, Clone)]
@@ -300,6 +300,13 @@ pub struct DownloadPrioritizerMetrics {
     /// The times required to update the priorities using the priority
     /// functions.
     pub priority_fn_timer: Histogram,
+
+    /// Number of adverts added to each peer's queue
+    pub advert_queue_add: IntCounterVec,
+    /// Number of adverts removed from each peer's queue
+    pub advert_queue_remove: IntCounterVec,
+    /// Size of each peer's queue
+    pub advert_queue_size: IntGaugeVec,
 }
 
 impl DownloadPrioritizerMetrics {
@@ -321,6 +328,21 @@ impl DownloadPrioritizerMetrics {
                 "The time it took to update priorities with priority functions, in seconds",
                 // 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0
                 decimal_buckets(-1, 1),
+            ),
+            advert_queue_add: metrics_registry.int_counter_vec(
+                "advert_queue_add",
+                "Adverts added to the gossip advert map",
+                &["peer", "priority"],
+            ),
+            advert_queue_remove: metrics_registry.int_counter_vec(
+                "advert_queue_remove",
+                "Adverts removed from the gossip advert map",
+                &["peer", "priority"],
+            ),
+            advert_queue_size: metrics_registry.int_gauge_vec(
+                "advert_queue_size",
+                "Size of the gossip advert map",
+                &["peer", "priority"],
             ),
         }
     }

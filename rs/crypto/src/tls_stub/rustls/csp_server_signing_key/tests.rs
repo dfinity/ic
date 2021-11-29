@@ -1,8 +1,8 @@
 use crate::tls_stub::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use ic_crypto_internal_csp::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use ic_crypto_internal_csp::types::CspSignature;
-use ic_crypto_internal_csp::LocalCspServer;
-use ic_crypto_internal_csp::TlsHandshakeCspServer;
+use ic_crypto_internal_csp::LocalCspVault;
+use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_tlscert;
 use ic_logger::replica_logger::no_op_logger;
@@ -101,8 +101,8 @@ fn should_return_error_from_csp() {
     ));
 }
 
-fn local_csp_server() -> LocalCspServer<OsRng, VolatileSecretKeyStore, VolatileSecretKeyStore> {
-    LocalCspServer::new_with_os_rng(
+fn local_csp_server() -> LocalCspVault<OsRng, VolatileSecretKeyStore, VolatileSecretKeyStore> {
+    LocalCspVault::new_with_os_rng(
         VolatileSecretKeyStore::new(),
         VolatileSecretKeyStore::new(),
         Arc::new(CryptoMetrics::none()),

@@ -1,0 +1,43 @@
+# The actual logic for Honeycomb metrics export happens in the after script of these jobs.
+# We export the Honeycomb API metrics in the after script, not in the job script. Because `buildevents build`
+# must be run after `buildevents step` of the common after script.
+
+notify-gitlab-success:
+  extends: 
+    - .ubuntu-nix-docker
+    - .on-success-rules
+  stage: finalize
+  dependencies: []  # don't copy artifacts from other jobs
+  script:
+    - |
+      echo "notify gitlab success"
+
+      # Send a slack notification on rc--* pipeline succees.
+      # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
+      # scheduled pipelines that developers may create off the rc branch.
+      if [[ "$CI_PIPELINE_SOURCE" == "push" ]] && [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.* ]]; then
+          cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
+          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" notify-slack -- notify_slack/notify_slack.py \
+              "✅ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🎉🎉🎉" \
+              --channel "release-management-alerts"
+      fi
+
+notify-gitlab-failure:
+  extends:
+    - .ubuntu-nix-docker
+    - .on-failure-rules
+  stage: finalize
+  dependencies: []  # don't copy artifacts from other jobs
+  script:
+    - |
+      echo "notify gitlab failure"
+
+      # Send a slack alert on rc--* pipeline failures.
+      # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
+      # scheduled pipelines that developers may create off the rc branch.
+      if [[ "$CI_PIPELINE_SOURCE" == "push" ]] && [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.* ]]; then
+          cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
+          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" notify-slack -- notify_slack/notify_slack.py \
+              "❌ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> failed. 😭😭😭" \
+              --channel "release-management-alerts"
+      fi

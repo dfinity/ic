@@ -1,0 +1,68 @@
+policy_module(misc-fixes, 1.0.0)
+
+# Miscellaneous small fixes for policy (everything not related to systemd
+# policy)
+
+###############################################################################
+# lvm / device mapper
+
+require { type lvm_t; }
+
+# Note that "cryptsetup" is also running as lvm_t.
+
+# cryptsetup needs to create /run/cryptsetup: This is its lockfile directory to
+# track which devices, which is the lockfile directory tracking devices on
+# which operations are in progress
+require { type var_run_t; }
+create_dirs_pattern(lvm_t, var_run_t, var_run_t)
+
+# lvm cryptsetup needs to manage its own cryptographic keys
+allow lvm_t lvm_t : key manage_key_perms;
+
+# cryptsetup tries to search in the session key ring which is owned by init_t
+# it is not clear whether this is really needed -- might want to forbid in.
+require { type init_t; }
+dontaudit lvm_t init_t : key { search };
+
+# lvm cryptsetup needs to read /boot/config/store.keyfile to access our encrypted
+# store. The path to it is labeled "boot_t", but the contents of /boot/config
+# are presently labeled as "unlabeled_t". Needs to be fixed with proper policy.
+require { type unlabeled_t, boot_t; }
+read_files_pattern(lvm_t, boot_t, unlabeled_t)
+read_files_pattern(lvm_t, unlabeled_t, unlabeled_t)
+
+###############################################################################
+# mount
+
+# We are dealing with vfat filesystem for the configuration injection.
+require { type mount_t, dosfs_t; }
+allow mount_t dosfs_t : filesystem { getattr };
+
+###############################################################################
+# partprobe
+
+require { type fsadm_t, dmidecode_exec_t, kernel_t, udev_exec_t; }
+
+# It wants to do something dmidecode -- no good reason, however. Seems to work without.
+dontaudit fsadm_t dmidecode_exec_t : file { execute };
+# Also wants to retrieve IPC info from kernel. No good reason, and works without.
+dontaudit fsadm_t kernel_t : system { ipc_info };
+# Also wants udevadm. Again, no good reason, and works without.
+dontaudit fsadm_t udev_exec_t : file { execute };
+
+###############################################################################
+# ssh-keygen
+
+require { type ssh_keygen_t, locale_t, tmp_t, initrc_tmp_t; }
+
+# Wants to read /etc/ssl/openssl.cnf
+miscfiles_read_generic_certs(ssh_keygen_t)
+
+# For some reason wants locale. Harmless enough.
+search_dirs_pattern(ssh_keygen_t, locale_t, locale_t)
+
+# We are creating our keys in /tmp first
+# TODO: this policy is actually specific to our boot scripts. Maybe should
+# go to a different policy module.
+search_dirs_pattern(ssh_keygen_t, tmp_t, tmp_t)
+manage_files_pattern(ssh_keygen_t, initrc_tmp_t, initrc_tmp_t)

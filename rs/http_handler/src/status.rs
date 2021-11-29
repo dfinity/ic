@@ -6,7 +6,6 @@ use ic_interfaces::state_manager::StateReader;
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    canonical_error::CanonicalError,
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     replica_version::REPLICA_BINARY_HASH,
     ReplicaVersion, SubnetId,
@@ -15,7 +14,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
-use tower::{limit::ConcurrencyLimit, load_shed::LoadShed, Service, ServiceBuilder};
+use tower::{limit::ConcurrencyLimit, BoxError, Service, ServiceBuilder};
 
 // Max number of inflight /api/v2/status requests across all connections.
 const MAX_CONCURRENT_STATUS_REQUESTS: usize = 1000;
@@ -40,7 +39,7 @@ impl StatusService {
         nns_subnet_id: SubnetId,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         replica_health_status: Arc<RwLock<ReplicaHealthStatus>>,
-    ) -> LoadShed<ConcurrencyLimit<StatusService>> {
+    ) -> ConcurrencyLimit<StatusService> {
         let base_service = Self {
             log,
             config,
@@ -50,7 +49,6 @@ impl StatusService {
         };
 
         ServiceBuilder::new()
-            .load_shed()
             .layer(tower::limit::GlobalConcurrencyLimitLayer::new(
                 MAX_CONCURRENT_STATUS_REQUESTS,
             ))
@@ -58,9 +56,9 @@ impl StatusService {
     }
 }
 
-impl Service<()> for StatusService {
+impl Service<Body> for StatusService {
     type Response = Response<Body>;
-    type Error = CanonicalError;
+    type Error = BoxError;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
 
@@ -68,7 +66,7 @@ impl Service<()> for StatusService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, _empty: ()) -> Self::Future {
+    fn call(&mut self, _unused: Body) -> Self::Future {
         trace!(self.log, "in handle status");
 
         // The root key is the public key of this Internet Computer instance,

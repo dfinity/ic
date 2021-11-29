@@ -5,6 +5,8 @@ use crate::state_manager::StateManagerError;
 pub use errors::{CanisterHeartbeatError, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_subnet_type::SubnetType;
+use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
     canonical_error::CanonicalError,
     ingress::{IngressStatus, WasmResult},
@@ -16,7 +18,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
-use tower::{buffer::Buffer, load_shed::LoadShed, util::BoxService};
+use tower::{buffer::Buffer, util::BoxService};
 
 /// Instance execution statistics. The stats are cumulative and
 /// contain measurements from the point in time when the instance was
@@ -38,16 +40,15 @@ pub enum SubnetAvailableMemoryError {
     InsufficientMemory { requested: NumBytes, available: i64 },
 }
 
-/// This struct is used to manage the view of the current amount of memory
-/// available on the subnet between multiple canisters executing in parallel.
-///
-/// The problem is that when canisters with no memory reservations want to
-/// expand their memory consumption, we need to ensure that they do not go over
-/// subnet's capacity. As we execute canisters in parallel, we need to
-/// provide them with a way to view the latest state of memory available in a
-/// thread safe way. Hence, we use `Arc<RwLock<>>` here.
+/// This struct is used to manage the current amount of memory available on the
+/// subnet.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct SubnetAvailableMemory(Arc<RwLock<i64>>);
+pub struct SubnetAvailableMemory(
+    /// TODO(EXC-677): Make this just an `i64`.
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    Arc<RwLock<i64>>,
+);
 
 impl SubnetAvailableMemory {
     pub fn new(amount: i64) -> Self {
@@ -76,6 +77,10 @@ impl SubnetAvailableMemory {
     pub fn get(&self) -> i64 {
         *self.0.read().unwrap()
     }
+
+    pub fn set(&self, val: i64) {
+        *self.0.write().unwrap() = val
+    }
 }
 
 // Canister and subnet configuration parameters required for execution.
@@ -85,6 +90,7 @@ pub struct ExecutionParameters {
     pub canister_memory_limit: NumBytes,
     pub subnet_available_memory: SubnetAvailableMemory,
     pub compute_allocation: ComputeAllocation,
+    pub subnet_type: SubnetType,
 }
 
 /// The data structure returned by
@@ -111,11 +117,9 @@ pub type HypervisorResult<T> = Result<T, HypervisorError>;
 // https://docs.rs/tower/0.4.10/tower/buffer/index.html
 // The buffer also dampens usage by reducing the risk of
 // spiky traffic when users retry in case failed requests.
-pub type IngressFilterService = LoadShed<
-    Buffer<
-        BoxService<(ProvisionalWhitelist, SignedIngressContent), (), CanonicalError>,
-        (ProvisionalWhitelist, SignedIngressContent),
-    >,
+pub type IngressFilterService = Buffer<
+    BoxService<(ProvisionalWhitelist, SignedIngressContent), (), CanonicalError>,
+    (ProvisionalWhitelist, SignedIngressContent),
 >;
 
 // Since this service will be shared across many connections we must
@@ -123,11 +127,9 @@ pub type IngressFilterService = LoadShed<
 // https://docs.rs/tower/0.4.10/tower/buffer/index.html
 // The buffer also dampens usage by reducing the risk of
 // spiky traffic when users retry in case failed requests.
-pub type QueryExecutionService = LoadShed<
-    Buffer<
-        BoxService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, CanonicalError>,
-        (UserQuery, Option<CertificateDelegation>),
-    >,
+pub type QueryExecutionService = Buffer<
+    BoxService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, CanonicalError>,
+    (UserQuery, Option<CertificateDelegation>),
 >;
 
 /// Interface for the component to execute queries on canisters.  It can be used
@@ -205,11 +207,14 @@ pub trait SystemApi {
     /// Returns the reference to the execution error.
     fn get_execution_error(&self) -> Option<&HypervisorError>;
 
-    /// Returns the stable memory delta that the canister produced
-    fn get_stable_memory_delta_pages(&self) -> usize;
-
     /// Returns the amount of instructions needed to copy `num_bytes`.
     fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions;
+
+    /// Returns the indexes of all dirty pages in stable memory.
+    fn stable_memory_dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)>;
+
+    /// Returns the current size of the stable memory in wasm pages.
+    fn stable_memory_size(&self) -> u64;
 
     /// Copies `size` bytes starting from `offset` inside the opaque caller blob
     /// and copies them to heap[dst..dst+size]. The caller is the canister

@@ -1,6 +1,6 @@
 //! Static crypto utility methods.
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::{CspKeyGenerator, NiDkgCspClient};
+use ic_crypto_internal_csp::api::{CspKeyGenerator, IDkgProtocolCspClient, NiDkgCspClient};
 use ic_crypto_internal_csp::keygen::public_key_hash_as_key_id;
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
@@ -44,6 +44,28 @@ pub fn generate_dkg_dealing_encryption_keys(crypto_root: &Path, node_id: NodeId)
         .create_forward_secure_key_pair(AlgorithmId::NiDkg_Groth20_Bls12_381, node_id)
         .expect("Failed to generate DKG dealing encryption keys");
     ic_crypto_internal_csp::keygen::utils::dkg_dealing_encryption_pk_to_proto(pubkey, pop)
+}
+
+/// Generates (MEGa) I-DKG dealing encryption key material.
+///
+/// Stores the secret key in the key store at `crypto_root` and returns the
+/// corresponding public key.
+///
+/// If the `crypto_root` directory does not exist, it is created with the
+/// required permissions. If there exists no key store in `crypto_root`, a new
+/// one is created.
+pub fn generate_idkg_dealing_encryption_keys(crypto_root: &Path) -> PublicKeyProto {
+    let mut csp = csp_at_root(crypto_root);
+    let pubkey = csp
+        .idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1)
+        .expect("Failed to generate IDkg dealing encryption keys");
+
+    PublicKeyProto {
+        version: 0,
+        algorithm: AlgorithmIdProto::MegaSecp256k1 as i32,
+        key_value: pubkey.serialize(),
+        proof_data: None,
+    }
 }
 
 // TODO (CRP-994): Extend check_keys_locally to check consistency for all keys.

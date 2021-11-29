@@ -19,7 +19,6 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-ipc-channel = "0.14.1"
 lazy_static = "1.4.0"
 libc = "0.2.91"
 memory_tracker = { path = "../memory_tracker" }

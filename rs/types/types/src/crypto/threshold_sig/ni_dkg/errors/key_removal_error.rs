@@ -1,5 +1,5 @@
 //! Errors related to key removal.
-use crate::crypto::error::KeyNotFoundError;
+use crate::crypto::error::{InternalError, KeyNotFoundError};
 use crate::crypto::threshold_sig::ni_dkg::errors::transcripts_to_retain_validation_error::TranscriptsToRetainValidationError;
 use crate::crypto::threshold_sig::ni_dkg::errors::{
     FsEncryptionPublicKeyNotInRegistryError, MalformedFsEncryptionPublicKeyError,
@@ -16,6 +16,7 @@ pub enum DkgKeyRemovalError {
     MalformedFsEncryptionPublicKey(MalformedFsEncryptionPublicKeyError),
     Registry(RegistryClientError),
     FsKeyNotInSecretKeyStoreError(KeyNotFoundError),
+    InternalError(InternalError),
 }
 
 impl fmt::Display for DkgKeyRemovalError {

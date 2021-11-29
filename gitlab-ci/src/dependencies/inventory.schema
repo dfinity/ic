@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dfinity.org/dependencies.schema.json",
+  "title": "Dependencies",
+  "description": "Dependency inventory",
+  "type": "object",
+  "patternProperties": {
+    "^.*$": {
+      "type": "object",
+      "properties": {
+        "owners": {
+          "description": "List of dependency owners",
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "description": "Owner's email",
+                "type": "string",
+                "format": "email",
+              },
+              "versions": {
+                "description": "Versions owned by the owners, required iff different versions are in use",
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                },
+              },
+            },
+            "required": ["email"],
+            "additionalProperties": false,
+          },
+        },
+        "keywords": {
+          "description": "List of keywords describing the dependency",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+          },
+        },
+        "description": {
+          "description": "Short description of the dependency",
+          "type": "string",
+          "minLength": 1,
+        },
+      },
+      "required": ["owners", "keywords", "description"],
+      "additionalProperties": false,
+    },
+  },
+  "additionalProperties": false,
+}

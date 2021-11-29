@@ -1,0 +1,21 @@
+- name: Copy admin ssh keys to ~admin/.ssh/authorized_keys
+  ansible.builtin.copy:
+    src: ../../../../env/mercury/ssh_keys_dfinity_nodes/admin
+    dest: /var/lib/admin/.ssh/authorized_keys
+    owner: admin
+    group: nogroup
+    mode: '0644'
+  when: node_type == "dfinity"
+  tags:
+  - ssh_keys_dfinity_nodes
+
+- name: Copy admin ssh keys to /boot/config/accounts_ssh_authorized_keys/admin
+  ansible.builtin.copy:
+    src: ../../../../env/mercury/ssh_keys_dfinity_nodes/admin
+    dest: /boot/config/accounts_ssh_authorized_keys/admin
+    owner: root
+    group: root
+    mode: '0644'
+  when: node_type == "dfinity"
+  tags:
+  - ssh_keys_dfinity_nodes

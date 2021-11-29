@@ -3,12 +3,12 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
-use ic_consensus_message::{make_genesis, ConsensusMessageHashable};
+use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, MutableConsensusPool};
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities::{
-    consensus::fake::*,
+    consensus::{fake::*, make_genesis},
     types::ids::{node_test_id, subnet_test_id},
     types::messages::SignedIngressBuilder,
 };

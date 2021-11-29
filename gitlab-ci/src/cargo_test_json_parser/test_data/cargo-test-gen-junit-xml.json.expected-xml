@@ -1,0 +1,345 @@
+<?xml version="1.0" ?>
+<testsuites disabled="0" errors="0" failures="2" tests="25" time="1477.4119">
+	<testsuite disabled="0" errors="0" failures="2" name="cargo test" skipped="0" tests="25" time="1477.4119">
+		<testcase name="system_tests::request_signature_test" time="41.520600" classname="system_tests">
+			<system-err>Feb 25 11:42:16.528 INFO Running 'request_signature_test' with seed 42
+Feb 25 11:42:17.408 DEBG Using initial replica: InitialReplica { url: Url { scheme: &quot;file&quot;, host: None, port: None, path: &quot;/builds/dfinity-lab/dfinity/rs/local-bin/replica&quot;, query: None, fragment: None }, version_id: ReplicaVersion { version_id: &quot;0.1.0&quot; }, hash: None }, where: ic_manager
+Feb 25 11:42:17.408 DEBG ic_config.initialize, where: ic_manager
+Feb 25 11:42:18.395 DEBG Synthesizing commands for subnet igdxp-dooet-ra4rr-owbrf-sc5mg-ghks5-c6gy5-bop2p-czqin-bwut4-xae, where: ic_manager
+Feb 25 11:42:18.406 DEBG Spawning child process (pid: 48108), where: process_pool, where: ic_manager
+Feb 25 11:42:18.406 INFO Waiting 600s for Manager::ready()
+Feb 25 11:42:18.407 INFO Polling 1 node /status endpoints, where: ic_manager
+Feb 25 11:42:45.427 INFO All benign nodes emitted `Ready for interaction.`, where: ic_manager
+Feb 25 11:42:45.427 INFO Starting test setup
+Feb 25 11:42:45.427 DEBG Registering ekg::finalized_hashes_agree
+Feb 25 11:42:45.427 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:42:45.427 DEBG Registering ekg::no_error_log_messages
+Feb 25 11:42:45.427 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:42:45.427 DEBG Registering ekg::finalized_height_progress_within 20s/fb
+Feb 25 11:42:45.427 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:42:45.427 INFO Finished test setup
+Feb 25 11:42:45.427 INFO Running test body for 'malicious_input_test'
+Feb 25 11:42:45.476 INFO Finished test body with true
+Feb 25 11:42:45.476 INFO ComposableTest 'malicious_input_test' status Success
+Feb 25 11:42:45.476 INFO Running test body for 'request_signature_test'
+Feb 25 11:42:45.476 DEBG Selected replica, url: http://127.0.0.1:44795/
+Feb 25 11:42:50.576 DEBG Installed Universal Canister, canister_id: Principal(OpaqueId([0, 0, 0, 0, 0, 0, 0, 0, 1, 1]))
+Feb 25 11:42:50.576 INFO Testing valid requests from the anonymous user. Should succeed.
+Feb 25 11:42:52.108 INFO Testing valid requests from an ECDSA identity. Should succeed.
+Feb 25 11:42:53.419 INFO Status endpoints of all benign nodes responsive, where: ic_manager
+Feb 25 11:42:53.419 DEBG ReadyResult: Receiver was dropped: &quot;SendError(..)&quot;, where: ic_manager
+Feb 25 11:42:55.685 INFO Testing valid requests from an Ed25519 identity. Should succeed.
+Feb 25 11:42:57.726 INFO Testing request from an ECDSA identity but with missing signature. Should fail.
+Feb 25 11:42:57.744 INFO Testing request from an ed25519 identity but with missing signature. Should fail.
+Feb 25 11:42:57.768 INFO Testing request from an ECDSA identity signed by an ed25519 identity. Should fail.
+Feb 25 11:42:57.783 INFO Testing request from an ed25519 identity signed by an ECDSA identity. Should fail.
+Feb 25 11:42:57.798 INFO Testing request from an ed25519 identity signed by another ed25519 identity. Should fail.
+Feb 25 11:42:57.813 INFO Testing request from an ECDSA identity signed by another ECDSA identity. Should fail.
+Feb 25 11:42:57.834 INFO Testing request from an ECDSA identity but with an ed25519 sender. Should fail.
+Feb 25 11:42:57.851 INFO Testing request from an ed25519 identity but with wrong (ECDSA) identity. Should fail.
+Feb 25 11:42:57.866 INFO Testing request from an ed25519 identity but with wrong (ed25519) identity. Should fail.
+Feb 25 11:42:57.880 INFO Testing request from an ECDSA identity but with wrong (ECDSA) identity. Should fail.
+Feb 25 11:42:57.896 INFO Finished test body with true
+Feb 25 11:42:57.896 INFO ComposableTest 'request_signature_test' status Success
+Feb 25 11:42:57.896 INFO Stopped with 0 failures, where: endpoint_pipeline
+Feb 25 11:42:57.896 DEBG Sending SIGKILL to 48108, kill-pgid: false, where: process_pool, where: ic_manager
+</system-err>
+		</testcase>
+		<testcase name="system_tests::request_signature_test::malicious_input_test" time="28.949000" classname="system_tests"/>
+		<testcase name="system_tests::request_signature_test::request_signature_test" time="12.419900" classname="system_tests"/>
+		<testcase name="system_tests::canister_lifecycle_basic_test" time="41.798200" classname="system_tests">
+			<system-err>Feb 25 11:42:58.049 INFO Running 'canister_lifecycle_basic_test' with seed 42
+Feb 25 11:42:58.904 DEBG Using initial replica: InitialReplica { url: Url { scheme: &quot;file&quot;, host: None, port: None, path: &quot;/builds/dfinity-lab/dfinity/rs/local-bin/replica&quot;, query: None, fragment: None }, version_id: ReplicaVersion { version_id: &quot;0.1.0&quot; }, hash: None }, where: ic_manager
+Feb 25 11:42:58.904 DEBG ic_config.initialize, where: ic_manager
+Feb 25 11:42:59.789 DEBG Synthesizing commands for subnet vcx72-pk5zw-ll4tm-s6krf-mkyup-qjvpz-4ve4g-zhcme-jcayi-epwlg-yae, where: ic_manager
+Feb 25 11:42:59.791 DEBG Spawning child process (pid: 48661), where: process_pool, where: ic_manager
+Feb 25 11:42:59.792 INFO Waiting 600s for Manager::ready()
+Feb 25 11:42:59.792 INFO Polling 1 node /status endpoints, where: ic_manager
+Feb 25 11:43:28.210 INFO All benign nodes emitted `Ready for interaction.`, where: ic_manager
+Feb 25 11:43:28.210 INFO Starting test setup
+Feb 25 11:43:28.210 DEBG Registering ekg::finalized_hashes_agree
+Feb 25 11:43:28.210 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:43:28.210 DEBG Registering ekg::no_error_log_messages
+Feb 25 11:43:28.210 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:43:28.210 DEBG Registering ekg::finalized_height_progress_within 20s/fb
+Feb 25 11:43:28.210 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:43:28.210 INFO Finished test setup
+Feb 25 11:43:28.210 INFO Running test body for 'delete_stopped_canister_succeeds'
+Feb 25 11:43:32.331 INFO Finished test body with true
+Feb 25 11:43:32.332 INFO ComposableTest 'delete_stopped_canister_succeeds' status Success
+Feb 25 11:43:32.341 INFO Running test body for 'create_canister_via_canister_succeeds'
+Feb 25 11:43:34.805 INFO Status endpoints of all benign nodes responsive, where: ic_manager
+Feb 25 11:43:34.805 DEBG ReadyResult: Receiver was dropped: &quot;SendError(..)&quot;, where: ic_manager
+Feb 25 11:43:35.469 INFO Finished test body with true
+Feb 25 11:43:35.472 INFO ComposableTest 'create_canister_via_canister_succeeds' status Success
+Feb 25 11:43:35.472 INFO Running test body for 'create_canister_via_ingress_fails'
+Feb 25 11:43:35.489 INFO Finished test body with true
+Feb 25 11:43:35.489 INFO ComposableTest 'create_canister_via_ingress_fails' status Success
+Feb 25 11:43:35.489 INFO Running test body for 'managing_a_canister_with_wrong_controller_fails'
+Feb 25 11:43:37.072 INFO Finished test body with true
+Feb 25 11:43:37.074 INFO ComposableTest 'managing_a_canister_with_wrong_controller_fails' status Success
+Feb 25 11:43:37.074 INFO Running test body for 'delete_running_canister_fails'
+Feb 25 11:43:39.682 INFO Finished test body with true
+Feb 25 11:43:39.689 INFO ComposableTest 'delete_running_canister_fails' status Success
+Feb 25 11:43:39.689 INFO Stopped with 0 failures, where: endpoint_pipeline
+Feb 25 11:43:39.689 DEBG Sending SIGKILL to 48661, kill-pgid: false, where: process_pool, where: ic_manager
+</system-err>
+		</testcase>
+		<testcase name="system_tests::canister_lifecycle_basic_test::delete_stopped_canister_succeeds" time="34.283100" classname="system_tests"/>
+		<testcase name="system_tests::canister_lifecycle_basic_test::create_canister_via_canister_succeeds" time="3.140600" classname="system_tests"/>
+		<testcase name="system_tests::canister_lifecycle_basic_test::create_canister_via_ingress_fails" time="0.015700" classname="system_tests"/>
+		<testcase name="system_tests::canister_lifecycle_basic_test::managing_a_canister_with_wrong_controller_fails" time="1.586300" classname="system_tests"/>
+		<testcase name="system_tests::canister_lifecycle_basic_test::delete_running_canister_fails" time="2.614500" classname="system_tests"/>
+		<testcase name="system_tests::ingress_rate_limiting_test" time="48.930400" classname="system_tests">
+			<system-err>Feb 25 11:43:39.848 INFO Running 'ingress_rate_limiting_test' with seed 42
+Feb 25 11:43:40.791 DEBG Using initial replica: InitialReplica { url: Url { scheme: &quot;file&quot;, host: None, port: None, path: &quot;/builds/dfinity-lab/dfinity/rs/local-bin/replica&quot;, query: None, fragment: None }, version_id: ReplicaVersion { version_id: &quot;0.1.0&quot; }, hash: None }, where: ic_manager
+Feb 25 11:43:40.791 DEBG ic_config.initialize, where: ic_manager
+Feb 25 11:43:41.939 DEBG Synthesizing commands for subnet a4fsx-ew3oo-dscaz-vtwpi-yfo2l-shhun-64law-gge6s-hl42u-q5bev-qqe, where: ic_manager
+Feb 25 11:43:41.942 DEBG Spawning child process (pid: 49465), where: process_pool, where: ic_manager
+Feb 25 11:43:41.942 INFO Waiting 600s for Manager::ready()
+Feb 25 11:43:41.945 INFO Polling 1 node /status endpoints, where: ic_manager
+Feb 25 11:44:05.144 INFO All benign nodes emitted `Ready for interaction.`, where: ic_manager
+Feb 25 11:44:05.144 INFO Starting test setup
+Feb 25 11:44:05.144 DEBG Registering ekg::finalized_hashes_agree
+Feb 25 11:44:05.144 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:44:05.144 DEBG Registering ekg::no_error_log_messages
+Feb 25 11:44:05.144 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:44:05.144 DEBG Registering ekg::finalized_height_progress_within 20s/fb
+Feb 25 11:44:05.144 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:44:05.144 INFO Finished test setup
+Feb 25 11:44:05.144 INFO Running test body for 'empty_canister_inspect_rejects_all_messages'
+Feb 25 11:44:07.291 INFO Finished test body with true
+Feb 25 11:44:07.301 INFO ComposableTest 'empty_canister_inspect_rejects_all_messages' status Success
+Feb 25 11:44:07.302 INFO Running test body for 'canister_accepts_ingress_by_default'
+Feb 25 11:44:10.016 INFO Finished test body with true
+Feb 25 11:44:10.016 INFO ComposableTest 'canister_accepts_ingress_by_default' status Success
+Feb 25 11:44:10.016 INFO Running test body for 'canister_can_accept_ingress'
+Feb 25 11:44:11.973 INFO Status endpoints of all benign nodes responsive, where: ic_manager
+Feb 25 11:44:11.973 DEBG ReadyResult: Receiver was dropped: &quot;SendError(..)&quot;, where: ic_manager
+Feb 25 11:44:18.828 INFO Finished test body with true
+Feb 25 11:44:18.828 INFO ComposableTest 'canister_can_accept_ingress' status Success
+Feb 25 11:44:18.828 INFO Running test body for 'canister_only_accepts_ingress_with_payload'
+Feb 25 11:44:28.605 INFO Finished test body with true
+Feb 25 11:44:28.605 INFO ComposableTest 'canister_only_accepts_ingress_with_payload' status Success
+Feb 25 11:44:28.605 INFO Stopped with 0 failures, where: endpoint_pipeline
+Feb 25 11:44:28.605 DEBG Sending SIGKILL to 49465, kill-pgid: false, where: process_pool, where: ic_manager
+</system-err>
+		</testcase>
+		<testcase name="system_tests::ingress_rate_limiting_test::empty_canister_inspect_rejects_all_messages" time="27.454200" classname="system_tests"/>
+		<testcase name="system_tests::ingress_rate_limiting_test::canister_accepts_ingress_by_default" time="2.710100" classname="system_tests"/>
+		<testcase name="system_tests::ingress_rate_limiting_test::canister_can_accept_ingress" time="8.816000" classname="system_tests"/>
+		<testcase name="system_tests::ingress_rate_limiting_test::canister_only_accepts_ingress_with_payload" time="9.777500" classname="system_tests"/>
+		<testcase name="system_tests::canister_heartbeat_test" time="64.495500" classname="system_tests">
+			<failure type="failure" message="killed by signal SIGSEGV">
+Feb 25 11:44:28.779 INFO Running 'canister_heartbeat_test' with seed 42
+Feb 25 11:44:29.699 DEBG Using initial replica: InitialReplica { url: Url { scheme: &quot;file&quot;, host: None, port: None, path: &quot;/builds/dfinity-lab/dfinity/rs/local-bin/replica&quot;, query: None, fragment: None }, version_id: ReplicaVersion { version_id: &quot;0.1.0&quot; }, hash: None }, where: ic_manager
+Feb 25 11:44:29.699 DEBG ic_config.initialize, where: ic_manager
+Feb 25 11:44:32.320 DEBG Synthesizing commands for subnet p36uf-26cdg-qq2g2-oon6a-soswq-2blq4-2etc2-3fb3c-3qqri-vpudm-vae, where: ic_manager
+Feb 25 11:44:32.320 DEBG Synthesizing commands for subnet mb7lf-67qq5-vtqdr-d2hxb-hxhqq-o2k7b-lek4k-2ar67-i4iok-vrh7r-jae, where: ic_manager
+Feb 25 11:44:32.320 DEBG Spawning child process (pid: 50205), where: process_pool, where: ic_manager
+Feb 25 11:44:32.327 DEBG Spawning child process (pid: 50206), where: process_pool, where: ic_manager
+Feb 25 11:44:32.328 INFO Waiting 600s for Manager::ready()
+Feb 25 11:44:32.328 INFO Polling 2 node /status endpoints, where: ic_manager
+Feb 25 11:45:09.088 INFO All benign nodes emitted `Ready for interaction.`, where: ic_manager
+Feb 25 11:45:09.092 INFO Starting test setup
+Feb 25 11:45:09.092 DEBG Registering ekg::finalized_hashes_agree
+Feb 25 11:45:09.092 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:45:09.092 DEBG Registering ekg::no_error_log_messages
+Feb 25 11:45:09.092 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:45:09.092 DEBG Registering ekg::finalized_height_progress_within 20s/fb
+Feb 25 11:45:09.092 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:45:09.092 INFO Finished test setup
+Feb 25 11:45:09.092 INFO Running test body for 'canister_heartbeat_can_call_multiple_canisters_xnet'
+Feb 25 11:45:22.366 INFO Status endpoints of all benign nodes responsive, where: ic_manager
+Feb 25 11:45:22.366 DEBG ReadyResult: Receiver was dropped: &quot;SendError(..)&quot;, where: ic_manager
+
+killed by signal SIGSEGV</failure>
+		</testcase>
+		<testcase name="system_tests::nns_shielding_test" time="67.786800" classname="system_tests">
+			<system-err>Feb 25 11:45:33.275 INFO Running 'nns_shielding_test' with seed 42
+Feb 25 11:45:34.228 DEBG Using initial replica: InitialReplica { url: Url { scheme: &quot;file&quot;, host: None, port: None, path: &quot;/builds/dfinity-lab/dfinity/rs/local-bin/replica&quot;, query: None, fragment: None }, version_id: ReplicaVersion { version_id: &quot;0.1.0&quot; }, hash: None }, where: ic_manager
+Feb 25 11:45:34.228 DEBG ic_config.initialize, where: ic_manager
+Feb 25 11:45:36.647 DEBG Synthesizing commands for subnet t5add-c7ip4-if6s7-sxoqb-2n2r2-qxwkd-ekkcp-ngg7u-wvw4c-uoqyt-cae, where: ic_manager
+Feb 25 11:45:36.648 DEBG Synthesizing commands for subnet q6vyi-kiaks-7o6q6-cltcv-js3ad-xetvu-t2rol-ctx5d-3c2jo-f4l72-sae, where: ic_manager
+Feb 25 11:45:36.652 DEBG Spawning child process (pid: 51230), where: process_pool, where: ic_manager
+Feb 25 11:45:36.652 DEBG Spawning child process (pid: 51231), where: process_pool, where: ic_manager
+Feb 25 11:45:36.656 INFO Waiting 600s for Manager::ready()
+Feb 25 11:45:36.660 INFO Polling 2 node /status endpoints, where: ic_manager
+Feb 25 11:46:16.669 INFO All benign nodes emitted `Ready for interaction.`, where: ic_manager
+Feb 25 11:46:16.669 INFO Starting test setup
+Feb 25 11:46:16.669 DEBG Registering ekg::finalized_hashes_agree
+Feb 25 11:46:16.669 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:46:16.669 DEBG Registering ekg::no_error_log_messages
+Feb 25 11:46:16.669 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:46:16.669 DEBG Registering ekg::finalized_height_progress_within 20s/fb
+Feb 25 11:46:16.669 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:46:16.669 INFO Finished test setup
+Feb 25 11:46:16.669 INFO Running test body for 'no_cycle_balance_limit_on_nns_subnet'
+Feb 25 11:46:21.704 INFO Status endpoints of all benign nodes responsive, where: ic_manager
+Feb 25 11:46:21.704 DEBG ReadyResult: Receiver was dropped: &quot;SendError(..)&quot;, where: ic_manager
+Feb 25 11:46:26.897 INFO Finished test body with true
+Feb 25 11:46:26.898 INFO ComposableTest 'no_cycle_balance_limit_on_nns_subnet' status Success
+Feb 25 11:46:26.898 INFO Running test body for 'mint_cycles_not_supported_on_application_subnet'
+Feb 25 11:46:34.193 INFO Finished test body with true
+Feb 25 11:46:34.193 INFO ComposableTest 'mint_cycles_not_supported_on_application_subnet' status Success
+Feb 25 11:46:34.193 INFO Running test body for 'mint_cycles_supported_on_nns'
+Feb 25 11:46:40.938 INFO Finished test body with true
+Feb 25 11:46:40.938 INFO ComposableTest 'mint_cycles_supported_on_nns' status Success
+Feb 25 11:46:40.938 INFO Stopped with 0 failures, where: endpoint_pipeline
+Feb 25 11:46:40.938 DEBG Sending SIGKILL to 51230, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:46:40.941 DEBG Sending SIGKILL to 51231, kill-pgid: false, where: process_pool, where: ic_manager
+</system-err>
+		</testcase>
+		<testcase name="system_tests::nns_shielding_test::no_cycle_balance_limit_on_nns_subnet" time="53.623200" classname="system_tests"/>
+		<testcase name="system_tests::nns_shielding_test::mint_cycles_not_supported_on_application_subnet" time="7.295100" classname="system_tests"/>
+		<testcase name="system_tests::nns_shielding_test::mint_cycles_supported_on_nns" time="6.745100" classname="system_tests"/>
+		<testcase name="system_tests::node_restart_test" time="56.615000" classname="system_tests">
+			<system-err>Feb 25 11:46:41.062 INFO Running 'node_restart_test' with seed 42
+Feb 25 11:46:41.938 DEBG Using initial replica: InitialReplica { url: Url { scheme: &quot;file&quot;, host: None, port: None, path: &quot;/builds/dfinity-lab/dfinity/rs/local-bin/replica&quot;, query: None, fragment: None }, version_id: ReplicaVersion { version_id: &quot;0.1.0&quot; }, hash: None }, where: ic_manager
+Feb 25 11:46:41.938 DEBG ic_config.initialize, where: ic_manager
+Feb 25 11:46:44.138 DEBG Synthesizing commands for subnet uumfv-yihwf-6gxn4-e6gpd-lrfvi-vsdzl-zpfju-kaoyx-py2zj-hzbhy-wqe, where: ic_manager
+Feb 25 11:46:44.141 DEBG Spawning child process (pid: 52382), where: process_pool, where: ic_manager
+Feb 25 11:46:44.143 DEBG Spawning child process (pid: 52383), where: process_pool, where: ic_manager
+Feb 25 11:46:44.145 DEBG Spawning child process (pid: 52385), where: process_pool, where: ic_manager
+Feb 25 11:46:44.147 DEBG Spawning child process (pid: 52407), where: process_pool, where: ic_manager
+Feb 25 11:46:44.148 INFO Waiting 600s for Manager::ready()
+Feb 25 11:46:44.148 INFO Polling 4 node /status endpoints, where: ic_manager
+Feb 25 11:47:17.313 INFO All benign nodes emitted `Ready for interaction.`, where: ic_manager
+Feb 25 11:47:17.313 DEBG Registering ekg::finalized_hashes_agree
+Feb 25 11:47:17.313 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:47:17.313 DEBG Registering ekg::no_error_log_messages
+Feb 25 11:47:17.313 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:47:17.313 DEBG Registering ekg::finalized_height_progress_within 20s/fb
+Feb 25 11:47:17.313 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:47:17.313 DEBG Attempting to restart process 52383, where: ic_manager
+Feb 25 11:47:17.313 DEBG Sending SIGKILL to 52383, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:47:17.316 DEBG Spawning child process (pid: 54289), where: process_pool, where: ic_manager
+Feb 25 11:47:17.316 DEBG Successful restart. New pid is 54289, where: ic_manager
+Feb 25 11:47:37.518 INFO Stopped with 0 failures, where: endpoint_pipeline
+Feb 25 11:47:37.518 DEBG Sending SIGKILL to 52382, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:47:37.523 DEBG Sending SIGKILL to 52385, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:47:37.523 DEBG Sending SIGKILL to 52407, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:47:37.523 DEBG Sending SIGKILL to 54289, kill-pgid: false, where: process_pool, where: ic_manager
+</system-err>
+		</testcase>
+		<testcase name="system_tests::basic_health_test" time="107.442100" classname="system_tests">
+			<system-err>Feb 25 11:47:37.678 INFO Running 'basic_health_test' with seed 42
+Feb 25 11:47:38.530 DEBG Using initial replica: InitialReplica { url: Url { scheme: &quot;file&quot;, host: None, port: None, path: &quot;/builds/dfinity-lab/dfinity/rs/local-bin/replica&quot;, query: None, fragment: None }, version_id: ReplicaVersion { version_id: &quot;0.1.0&quot; }, hash: None }, where: ic_manager
+Feb 25 11:47:38.530 DEBG ic_config.initialize, where: ic_manager
+Feb 25 11:47:41.969 DEBG Synthesizing commands for subnet bcvyo-ozgbm-ft3sb-yagjd-4tm32-iuwcp-75h5f-geupq-6opn6-xal6h-4ae, where: ic_manager
+Feb 25 11:47:41.970 DEBG Synthesizing commands for subnet fu6yd-f2eeo-x3wy5-hpgdr-bhq5z-rruiq-ekb62-brpv6-l5sfq-b7q56-6qe, where: ic_manager
+Feb 25 11:47:41.972 DEBG Spawning child process (pid: 54766), where: process_pool, where: ic_manager
+Feb 25 11:47:41.975 DEBG Spawning child process (pid: 54767), where: process_pool, where: ic_manager
+Feb 25 11:47:41.977 DEBG Spawning child process (pid: 54769), where: process_pool, where: ic_manager
+Feb 25 11:47:41.978 DEBG Spawning child process (pid: 54805), where: process_pool, where: ic_manager
+Feb 25 11:47:41.980 DEBG Spawning child process (pid: 54842), where: process_pool, where: ic_manager
+Feb 25 11:47:41.983 DEBG Spawning child process (pid: 54919), where: process_pool, where: ic_manager
+Feb 25 11:47:41.985 DEBG Spawning child process (pid: 55026), where: process_pool, where: ic_manager
+Feb 25 11:47:41.988 DEBG Spawning child process (pid: 55059), where: process_pool, where: ic_manager
+Feb 25 11:47:41.988 INFO Waiting 600s for Manager::ready()
+Feb 25 11:47:41.989 INFO Polling 8 node /status endpoints, where: ic_manager
+Feb 25 11:48:30.787 INFO All benign nodes emitted `Ready for interaction.`, where: ic_manager
+Feb 25 11:48:30.787 INFO Starting test setup
+Feb 25 11:48:30.787 DEBG Registering ekg::finalized_hashes_agree
+Feb 25 11:48:30.787 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:48:30.787 DEBG Registering ekg::no_error_log_messages
+Feb 25 11:48:30.787 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:48:30.787 DEBG Registering ekg::finalized_height_progress_within 20s/fb
+Feb 25 11:48:30.787 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:48:30.787 INFO Finished test setup
+Feb 25 11:48:30.787 INFO Running test body for 'test'
+Feb 25 11:49:02.015 INFO Status endpoints of all benign nodes responsive, where: ic_manager
+Feb 25 11:49:02.015 DEBG ReadyResult: Receiver was dropped: &quot;SendError(..)&quot;, where: ic_manager
+Feb 25 11:49:25.070 INFO Finished test body with true
+Feb 25 11:49:25.071 INFO ComposableTest 'test' status Success
+Feb 25 11:49:25.071 INFO Stopped with 0 failures, where: endpoint_pipeline
+Feb 25 11:49:25.071 DEBG Sending SIGKILL to 54766, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:49:25.072 DEBG Sending SIGKILL to 54767, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:49:25.073 DEBG Sending SIGKILL to 54769, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:49:25.073 DEBG Sending SIGKILL to 54805, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:49:25.074 DEBG Sending SIGKILL to 54842, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:49:25.076 DEBG Sending SIGKILL to 54919, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:49:25.077 DEBG Sending SIGKILL to 55026, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:49:25.084 DEBG Sending SIGKILL to 55059, kill-pgid: false, where: process_pool, where: ic_manager
+</system-err>
+		</testcase>
+		<testcase name="system_tests::basic_health_test::test" time="107.393300" classname="system_tests"/>
+		<testcase name="system_tests::registry_authentication_test" time="60.734100" classname="system_tests">
+			<system-out>Installed rwlgt-iiaaa-aaaaa-aaaaa-cai with registry-canister
+</system-out>
+			<system-err>Feb 25 11:49:25.120 INFO Running 'registry_authentication_test' with seed 42
+Feb 25 11:49:25.981 DEBG Using initial replica: InitialReplica { url: Url { scheme: &quot;file&quot;, host: None, port: None, path: &quot;/builds/dfinity-lab/dfinity/rs/local-bin/replica&quot;, query: None, fragment: None }, version_id: ReplicaVersion { version_id: &quot;0.1.0&quot; }, hash: None }, where: ic_manager
+Feb 25 11:49:25.981 DEBG ic_config.initialize, where: ic_manager
+Feb 25 11:49:26.773 DEBG Synthesizing commands for subnet dart7-3i7c3-fpfe6-w7d4f-3h3dm-x2qzm-az56h-tuja7-cxcaf-6bfxo-lae, where: ic_manager
+Feb 25 11:49:26.775 DEBG Spawning child process (pid: 58644), where: process_pool, where: ic_manager
+Feb 25 11:49:26.775 INFO Waiting 600s for Manager::ready()
+Feb 25 11:49:26.776 INFO Polling 1 node /status endpoints, where: ic_manager
+Feb 25 11:49:54.276 INFO All benign nodes emitted `Ready for interaction.`, where: ic_manager
+Feb 25 11:49:54.276 INFO Starting test setup
+Feb 25 11:49:54.276 DEBG Registering ekg::finalized_hashes_agree
+Feb 25 11:49:54.276 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:49:54.276 DEBG Registering ekg::no_error_log_messages
+Feb 25 11:49:54.276 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:49:54.276 DEBG Registering ekg::finalized_height_progress_within 20s/fb
+Feb 25 11:49:54.276 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:49:54.276 INFO Finished test setup
+Feb 25 11:49:54.276 INFO Running test body for 'test'
+Feb 25 11:49:54.304 INFO Started a MITM proxy on 127.0.0.1:35553
+Feb 25 11:49:54.351 INFO creating a new registry canister...
+Feb 25 11:50:01.805 INFO Status endpoints of all benign nodes responsive, where: ic_manager
+Feb 25 11:50:01.805 DEBG ReadyResult: Receiver was dropped: &quot;SendError(..)&quot;, where: ic_manager
+Feb 25 11:50:04.520 INFO installing registry canister...
+Compiling registry-canister...
+Compiling registry-canister took 0.6 s
+Feb 25 11:50:15.420 INFO adding a new entry to the registry...
+Feb 25 11:50:25.544 INFO validating registry contents...
+Feb 25 11:50:25.548 INFO fetching certified deltas...
+Feb 25 11:50:25.672 INFO Finished test body with true
+Feb 25 11:50:25.688 INFO ComposableTest 'test' status Success
+Feb 25 11:50:25.688 INFO Stopped with 0 failures, where: endpoint_pipeline
+Feb 25 11:50:25.696 DEBG Sending SIGKILL to 58644, kill-pgid: false, where: process_pool, where: ic_manager
+</system-err>
+		</testcase>
+		<testcase name="system_tests::registry_authentication_test::test" time="60.563800" classname="system_tests"/>
+		<testcase name="system_tests::cow_safety_test" time="620.701800" classname="system_tests">
+			<failure type="failure" message="killed by signal SIGSEGV">
+Feb 25 11:50:25.860 INFO Running 'cow_safety_test' with seed 42
+Feb 25 11:50:26.892 DEBG Using initial replica: InitialReplica { url: Url { scheme: &quot;file&quot;, host: None, port: None, path: &quot;/builds/dfinity-lab/dfinity/rs/local-bin/replica&quot;, query: None, fragment: None }, version_id: ReplicaVersion { version_id: &quot;0.1.0&quot; }, hash: None }, where: ic_manager
+Feb 25 11:50:26.892 DEBG ic_config.initialize, where: ic_manager
+Feb 25 11:50:30.538 DEBG Synthesizing commands for subnet qsxz6-5gyum-nchti-dk3yh-bb56m-zody4-ssfqv-2dkel-q6wm7-i5w4m-iqe, where: ic_manager
+Feb 25 11:50:30.538 DEBG Synthesizing commands for subnet zpphn-6gxtj-m27m2-gqlye-htg3m-i3x4i-vehe4-4je2k-3glvb-vi5e7-oae, where: ic_manager
+Feb 25 11:50:30.549 DEBG Spawning child process (pid: 59192), where: process_pool, where: ic_manager
+Feb 25 11:50:30.564 DEBG Spawning child process (pid: 59214), where: process_pool, where: ic_manager
+Feb 25 11:50:30.577 DEBG Spawning child process (pid: 59260), where: process_pool, where: ic_manager
+Feb 25 11:50:30.608 DEBG Spawning child process (pid: 59262), where: process_pool, where: ic_manager
+Feb 25 11:50:30.624 DEBG Spawning child process (pid: 59264), where: process_pool, where: ic_manager
+Feb 25 11:50:30.624 INFO Waiting 600s for Manager::ready()
+Feb 25 11:50:30.636 INFO Polling 5 node /status endpoints, where: ic_manager
+Feb 25 11:51:16.680 INFO All benign nodes emitted `Ready for interaction.`, where: ic_manager
+Feb 25 11:51:16.680 DEBG Registering ekg::finalized_hashes_agree
+Feb 25 11:51:16.680 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:51:16.680 DEBG Registering ekg::finalized_height_progress_within 120s/fb
+Feb 25 11:51:16.680 WARN The log_analyzer is disabled until we solve VER-612
+Feb 25 11:51:40.708 INFO Status endpoints of all benign nodes responsive, where: ic_manager
+Feb 25 11:51:40.708 DEBG ReadyResult: Receiver was dropped: &quot;SendError(..)&quot;, where: ic_manager
+Feb 25 11:52:48.722 INFO restarting node 59264
+Feb 25 11:52:48.722 DEBG Attempting to restart process 59264, where: ic_manager
+Feb 25 11:52:48.722 DEBG Sending SIGKILL to 59264, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:52:48.735 DEBG Spawning child process (pid: 61712), where: process_pool, where: ic_manager
+Feb 25 11:52:48.757 DEBG Successful restart. New pid is 61712, where: ic_manager
+Feb 25 11:54:06.240 INFO restarting node 59262
+Feb 25 11:54:06.240 DEBG Attempting to restart process 59262, where: ic_manager
+Feb 25 11:54:06.240 DEBG Sending SIGKILL to 59262, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:54:06.245 DEBG Spawning child process (pid: 62223), where: process_pool, where: ic_manager
+Feb 25 11:54:06.245 DEBG Successful restart. New pid is 62223, where: ic_manager
+Feb 25 11:55:24.083 INFO restarting node 59260
+Feb 25 11:55:24.084 DEBG Attempting to restart process 59260, where: ic_manager
+Feb 25 11:55:24.084 DEBG Sending SIGKILL to 59260, kill-pgid: false, where: process_pool, where: ic_manager
+Feb 25 11:55:24.092 DEBG Spawning child process (pid: 62736), where: process_pool, where: ic_manager
+Feb 25 11:55:24.094 DEBG Successful restart. New pid is 62736, where: ic_manager
+
+killed by signal SIGSEGV</failure>
+		</testcase>
+	</testsuite>
+</testsuites>
+

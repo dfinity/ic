@@ -1,0 +1,61 @@
+name:       consensus-model
+version:    0.0.1
+synopsis:   Various Haskell notes
+git:        https://gitlab.com/dfinity-lab/core/ic.git
+author:     John Wiegley
+maintainer: johnw@newartisans.com
+category:   System, Data, Nix
+license:    BSD3
+
+description:
+  Various Haskell notes.
+
+dependencies:
+  - base                        >= 4.9 && < 5
+  - aeson
+  - arrows
+  - bytestring
+  - candid
+  - constraints
+  - containers
+  - cryptohash
+  - deepseq
+  - ed25519
+  - hedgehog
+  - HUnit
+  - lens
+  # - liquidhaskell
+  - listsafe
+  - monad-par
+  - mtl
+  - multiset
+  - pcre-heavy
+  - pretty-show
+  - tasty-hunit
+  - text
+  - time
+  - transformers
+  - unordered-containers
+
+library:
+  source-dirs: src
+  ghc-options:
+    - -Wall
+
+executables:
+  replay:
+    main: Replay.hs
+    source-dirs: bin
+    dependencies:
+      - base                        >= 4.9 && < 5
+      - consensus-model
+
+tests:
+  consensus-model-tests:
+    main: Main.hs
+    source-dirs: test
+    dependencies:
+      - base                        >= 4.9 && < 5
+      - consensus-model
+      - tasty
+      - tasty-hedgehog

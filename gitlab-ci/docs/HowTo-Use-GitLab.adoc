@@ -1,0 +1,3 @@
+# HowTo Use GitLab
+
+See the Notion page: https://www.notion.so/GitLab-CI-Developer-How-To-068401fe38ae410d9d608b7a945788bb

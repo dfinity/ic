@@ -1,0 +1,66 @@
+---
+# Install Jiralert
+
+- name: Create the service discovery binary directory
+  file:
+    path: "/opt/dfinity/jiralert"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Retrieve binary via HTTPS.
+  get_url:
+    url: "https://github.com/dfinity-lab/jiralert/releases/download/nik-2021-5-4/jiralert-ab2eeab"
+    dest: "/opt/dfinity/jiralert/jiralert"
+    owner: root
+    group: root
+    force: yes
+    mode: 0755
+
+- name: Make sure /etc/systemd-mutable/system exists
+  file:
+    path: /etc/systemd-mutable/system
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Install systemd service file.
+  copy:
+    src: "jiralert.service"
+    dest: "/etc/systemd-mutable/system/jiralert.service"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Stop systemd service.
+  service:
+    name: "jiralert.service"
+    state: stopped
+    daemon_reload: yes
+
+# Create the config file
+- name: Generate jiralert.yml
+  template:
+    src: "jiralert.yml.j2"
+    dest: "/opt/dfinity/jiralert/jiralert.yml"
+    owner: root
+    group: root
+    mode: 0600
+
+# Create the issue template file
+- name: Copy jiralert.tmpl
+  copy:
+    src: "jiralert.tmpl"
+    dest: "/opt/dfinity/jiralert/jiralert.tmpl"
+    owner: root
+    group: root
+    mode: 0600
+
+- name: Start systemd service.
+  service:
+    name: "jiralert.service"
+    state: restarted
+    daemon_reload: yes
+    enabled: yes

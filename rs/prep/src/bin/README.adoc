@@ -1,0 +1,98 @@
+= ic-prep
+
+`ic-prep` is a cli tool to generate the secret key store for each node on a
+subnet, along with a common `registry.proto`.
+
+== Usage
+
+[source,shell]
+----
+cargo run -p ic-prep --bin ic-prep -- \
+  --working-dir /tmp/prep/node \
+  --replica_version 0.1.0 \
+  --replica-download-url ... \
+  --nodemanager-download-url ... \
+  --p2p-flows 1234-3 \
+  --node 'idx:1,subnet_idx:1,xnet_api:["http://1.2.3.4:81"],public_api:["http://1.2.3.4:82"],prometheus_metrics:["http://1.2.3.4:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"'
+  --node ...
+----
+
+== --p2p-flows <base-tag>-<count>
+
+Defines the number and tags of the P2P flows.
+
+- `<base-tag>` sets the initial flow tag, e.g., `1234`.
+
+- `<count>` sets the number of flows.
+
+The final flows are constructed by creating `<count>` endpoints, starting with
+the endpoint given by the `--node` flag `p2p_addr` entry. For each subsequent
+endpoint both the `<base-tag>` and port of the endpoint are incremented by one.
+
+So,
+
+[source,shell]
+----
+...
+--p2p-flows 1234-3
+--node '...,p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:10000"'
+...
+----
+
+will create 3 flows, with tags `1234`, `1235`, and `1236`, on ports
+`10000`, `10001`, and `10002`.
+
+
+== --node flag
+
+The `--node` flag is used to provide information about one node.
+
+To provide information about multiple nodes, repeat the flag.
+
+The flag's value is a comma-separated list of key:value pairs, in JSON5
+format, without the `{` and `}` delimiters.
+
+The fields are:
+
+- `idx` - the node's index
+
+- `subnet_idx` - the node's subnet index
+
+- `public_api` - an array of endpoints on which the node will serve the 
+  public API.
+
+- `private_api` - an array of endpoints on which the node will serve the
+  private api.
+
+- `prometheus_metrics` - an array of endpoints on which the node will serve
+  Prometheus-compatible metrics.
+
+- `p2p_addr` - the base endpoint on which the node will serve P2P
+
+- `xnet_api` - an array of endpoints on which the node will handle XNet messages
+
+=== Specifying an endpoint
+
+Each endpoint is given as a URL, in `scheme://ip:port` format.
+
+Valid schemes are:
+
+- `http`
+- `https` (note: implies TLS1.3)
+- `org.internetcomputer.p2p1` (v1 of the P2P protocol, implies TLS1.3)
+
+See https://docs.google.com/document/d/1gr4l1NrVnA2LKbnDXqRPqV5zMNqAu2lhqIhqIing7CE/edit#
+for more details on how this works.
+
+=== Example
+
+This example defines two nodes, with index 1 and 2, on the same subnet,
+with their connection endpoints on the same ports but different IP addresses
+
+[source,shell]
+----
+ic-admin
+  ...
+  --node 'idx:1,subnet_idx:1,xnet_api:"http://1.2.3.4:81",public_api:["http://1.2.3.4:82"],prometheus_metrics:["http://1.2.3.4:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"'
+  --node 'idx:2,subnet_idx:1,xnet_api:"http://4.3.2.1:81",public_api:["http://4.3.2.1:82"],prometheus_metrics:["http://4.3.2.1:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"''
+----

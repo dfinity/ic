@@ -1,0 +1,8 @@
+# Paths relative to rs/ that are excluded from being searched for (new)
+# occurrences of std::fs. All found occurrences that start with a path
+# contained in this file will be ignored. Be sure to append '/' to the
+# path to avoid partial matches.
+
+# testing related code that runs in CI, 
+tests/
+ic_fondue/

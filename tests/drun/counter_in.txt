@@ -1,0 +1,8 @@
+# rwlgt-iiaaa-aaaaa-aaaaa-cai is the name of the first canister created by drun
+create
+install rwlgt-iiaaa-aaaaa-aaaaa-cai counter.wasm ""
+ingress rwlgt-iiaaa-aaaaa-aaaaa-cai write "Hello"
+query rwlgt-iiaaa-aaaaa-aaaaa-cai read "Hello"
+upgrade rwlgt-iiaaa-aaaaa-aaaaa-cai counter.wasm ""
+ingress rwlgt-iiaaa-aaaaa-aaaaa-cai write "Hello"
+query rwlgt-iiaaa-aaaaa-aaaaa-cai read "Hello"

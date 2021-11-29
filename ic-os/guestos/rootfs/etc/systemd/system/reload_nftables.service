@@ -1,0 +1,10 @@
+[Unit]
+Description=Reload nftables when the configuration changes
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/sbin/nft flush ruleset
+ExecStart=systemctl reload nftables.service

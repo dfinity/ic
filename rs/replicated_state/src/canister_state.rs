@@ -4,15 +4,16 @@ pub mod system_state;
 #[cfg(test)]
 mod tests;
 
+use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{CanisterStatus, SystemState};
-use crate::StateError;
+use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_interfaces::messages::CanisterInputMessage;
+use ic_registry_subnet_type::SubnetType;
 use ic_types::methods::SystemMethod;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
     methods::WasmMethod,
-    xnet::QueueId,
     AccumulatedPriority, CanisterId, CanisterStatusType, ComputeAllocation, ExecutionRound,
     MemoryAllocation, NumBytes, PrincipalId, QueueIndex,
 };
@@ -21,7 +22,11 @@ pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY, QUEUE_INDEX_NONE};
 use std::collections::BTreeSet;
 use std::convert::From;
 
-pub const ENFORCE_MESSAGE_MEMORY_USAGE: bool = false;
+/// Feature flag controlling whether in-flight canister messages are counted
+/// against and limited by a canister's available memory.
+///
+/// TODO(MR-83) Remove when the feature is deemed stable.
+pub const ENFORCE_MESSAGE_MEMORY_USAGE: bool = true;
 
 #[derive(Clone, Debug, PartialEq)]
 /// State maintained by the scheduler.
@@ -103,24 +108,34 @@ impl CanisterState {
     /// specific memory limit we compute the canister's available memory and
     /// pass that to `SystemState::push_input()` (which doesn't have all the
     /// data necessary to compute it itself).
+    ///
+    /// The function is public as we push directly to the Canister state in
+    /// `SchedulerImpl::induct_messages_on_same_subnet()`
     pub fn push_input(
         &mut self,
         index: QueueIndex,
         msg: RequestOrResponse,
         max_canister_memory_size: NumBytes,
         subnet_available_memory: &mut i64,
+        own_subnet_type: SubnetType,
+        input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         let canister_available_memory = self.memory_limit(max_canister_memory_size).get() as i64
-            - self.memory_usage().get() as i64;
+            - self.memory_usage(own_subnet_type).get() as i64;
         self.system_state.push_input(
             index,
             msg,
             canister_available_memory,
             subnet_available_memory,
+            own_subnet_type,
+            input_queue_type,
         )
     }
 
     /// See `SystemState::pop_input` for documentation.
+    ///
+    /// The function is public as we pop directly from the Canister state in
+    /// `SchedulerImpl::execute_canisters_on_thread()`
     pub fn pop_input(&mut self) -> Option<CanisterInputMessage> {
         self.system_state.pop_input()
     }
@@ -146,18 +161,17 @@ impl CanisterState {
         self.system_state.push_output_response(msg)
     }
 
+    /// Returns an iterator that loops over the canister's output queues,
+    /// popping one message at a time from each in a round robin fashion. The
+    /// iterator consumes all popped messages.
+    pub fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
+        self.system_state.output_into_iter(self.canister_id())
+    }
+
     /// Unconditionally pushes an ingress message into the ingress pool of the
     /// canister.
     pub fn push_ingress(&mut self, msg: Ingress) {
         self.system_state.push_ingress(msg)
-    }
-
-    /// See `CanisterQueues::output_into_iter` for documentation.
-    pub fn output_into_iter(
-        &mut self,
-    ) -> impl std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)> + '_ {
-        let canister_id = self.system_state.canister_id;
-        self.system_state.output_into_iter(canister_id)
     }
 
     /// Inducts messages from the output queue to `self` into the input queue
@@ -177,11 +191,15 @@ impl CanisterState {
         &mut self,
         max_canister_memory_size: NumBytes,
         subnet_available_memory: &mut i64,
+        own_subnet_type: SubnetType,
     ) {
         let canister_available_memory = self.memory_limit(max_canister_memory_size).get() as i64
-            - self.memory_usage().get() as i64;
-        self.system_state
-            .induct_messages_to_self(canister_available_memory, subnet_available_memory)
+            - self.memory_usage(own_subnet_type).get() as i64;
+        self.system_state.induct_messages_to_self(
+            canister_available_memory,
+            subnet_available_memory,
+            own_subnet_type,
+        )
     }
 
     pub fn into_parts(self) -> (Option<ExecutionState>, SystemState, SchedulerState) {
@@ -205,11 +223,16 @@ impl CanisterState {
     }
 
     /// The amount of memory currently being used by the canister.
-    pub fn memory_usage(&self) -> NumBytes {
+    pub fn memory_usage(&self, own_subnet_type: SubnetType) -> NumBytes {
         self.execution_state
             .as_ref()
             .map_or(NumBytes::from(0), |es| es.memory_usage())
-            + self.system_state.memory_usage()
+            + self.system_state.memory_usage(own_subnet_type)
+    }
+
+    /// Hack to get the dashboard templating working.
+    pub fn memory_usage_ref(&self, own_subnet_type: &SubnetType) -> NumBytes {
+        self.memory_usage(*own_subnet_type)
     }
 
     /// Sets the (transient) size in bytes of responses from this canister
@@ -286,7 +309,7 @@ pub type NumWasmPages = AmountOf<NumWasmPagesTag, u32>;
 /// 64 bit memories.
 pub type NumWasmPages64 = AmountOf<NumWasmPagesTag, u64>;
 
-const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KB
+pub const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KB
 
 /// A session is represented by an array of bytes and a monotonic
 /// offset and is unique for each execution.
@@ -305,9 +328,8 @@ pub fn num_bytes_try_from64(pages: NumWasmPages64) -> Result<NumBytes, String> {
 }
 
 pub mod testing {
+    pub use super::queues::testing::{new_canister_queues_for_test, CanisterQueuesTesting};
     use super::*;
-
-    pub use super::queues::testing::CanisterQueuesTesting;
 
     /// Exposes `CanisterState` internals for use in other crates' unit tests.
     pub trait CanisterStateTesting {
@@ -330,6 +352,8 @@ pub mod testing {
                 msg,
                 (i64::MAX as u64 / 2).into(),
                 &mut (i64::MAX / 2),
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
             )
         }
     }

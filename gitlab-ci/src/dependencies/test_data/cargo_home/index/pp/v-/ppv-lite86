@@ -1,0 +1,1 @@
+{"name":"ppv-lite86","vers":"0.2.10","deps":[],"cksum":"ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857","features":{"default":["std"],"no_simd":[],"simd":[],"std":[]},"yanked":false}

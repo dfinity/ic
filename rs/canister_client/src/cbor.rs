@@ -1,14 +1,11 @@
-use crate::{
-    agent::{sign_read, Agent},
-    sign_submit,
-};
+use crate::agent::{sign_query, sign_read_state, sign_submit, Agent};
 use ic_crypto_tree_hash::{LabeledTree, Path};
 use ic_types::Time;
 use ic_types::{
     messages::{
-        Blob, Certificate, HttpCanisterUpdate, HttpReadContent, HttpReadState,
-        HttpReadStateResponse, HttpRequestEnvelope, HttpSubmitContent, HttpUserQuery, MessageId,
-        SignedRequestBytes,
+        Blob, Certificate, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
+        HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpSubmitContent,
+        HttpUserQuery, MessageId, SignedRequestBytes,
     },
     time::current_time_and_expiry_time,
     CanisterId,
@@ -189,7 +186,7 @@ impl Agent {
         method: &str,
         arguments: Vec<u8>,
     ) -> Result<Vec<u8>, Box<dyn Error>> {
-        let content = HttpReadContent::Query {
+        let content = HttpQueryContent::Query {
             query: HttpUserQuery {
                 canister_id: to_blob(canister_id),
                 method_name: method.to_string(),
@@ -200,13 +197,13 @@ impl Agent {
             },
         };
 
-        let request = sign_read(content, &self.sender)?;
+        let request = sign_query(content, &self.sender)?;
         Ok(SignedRequestBytes::try_from(request)?.into())
     }
 
     /// Prepares and serializes a CBOR read_state request, with the given paths
     pub fn prepare_read_state(&self, paths: &[Path]) -> Result<Vec<u8>, Box<dyn Error>> {
-        let content = HttpReadContent::ReadState {
+        let content = HttpReadStateContent::ReadState {
             read_state: HttpReadState {
                 sender: self.sender_field.clone(),
                 paths: paths.to_vec(),
@@ -215,7 +212,7 @@ impl Agent {
             },
         };
 
-        let request = sign_read(content, &self.sender)?;
+        let request = sign_read_state(content, &self.sender)?;
         Ok(SignedRequestBytes::try_from(request)?.into())
     }
 }

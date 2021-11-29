@@ -1,0 +1,101 @@
+# Crates added to this file will be allowed to tests on GitLab but
+# not cause the pipeline [or CI] to fail. This is useful for broken
+# or flakey crate tests
+#
+# Precede every crate with a tracking bug.
+
+crates_allowed_to_fail:
+  # https://gitlab.com/dfinity-lab/core/dfinity/-/issues/1
+  - ic-cow-state
+
+# Crates for which the tests should be built in release mode.
+# The total job time is build + test execution time, and if a test runs
+# in release mode, then build time is too long and the total job
+# time becomes longer than if we build and run in debug mode.
+# https://docs.google.com/spreadsheets/d/1Nwxp33kJ2YhkLOkDJDRrC6KN917Z2P9m8QjLZfFDy3Y/edit?usp=sharing
+# That's why we selectively pick crates to run tests in release mode.
+crates_tested_with_release_build:
+  - ic-crypto
+  # https://www.notion.so/SIGSEGV-when-running-NNS-integration-tests-in-debug-mode-88f57d5453f44d679774d682b70e529a
+  - ic-nns-integration-tests
+  - ic-nns-neurons
+  - ic-nns-proposals
+  - ic-replica
+  - registry-canister
+  - ic-rosetta-api
+  - rust-canisters-hooks
+  - ic-messaging
+  - ic-consensus
+  - ic-ingress-manager
+
+# Crates that should their test target overridden.
+# e.g. run `cargo test -p ic-types:0.8.0`
+crate_test_name_override:
+  ic-types:
+    ic-types:0.8.0
+
+# Crates with config override.
+crates_config_override:
+  ic-nns-integration-tests:
+    extends: .cargo-crate-tests-process-per-test
+  ic-nns-handler-root:
+    extends: .cargo-crate-tests-process-per-test
+  ic-nns-handler-subnet:
+    extends: .cargo-crate-tests-process-per-test
+  registry-canister:
+    extends: .cargo-crate-tests-process-per-test
+  ic-transport:
+    extends: .cargo-crate-test
+    timeout: 15 minutes
+    retry: 1
+  ic-execution-environment:
+    extends: .cargo-crate-test
+    retry: 2
+
+# Jobs which must be present in the CI config for the config to be accepted as valid.
+# If a job from from this list isn't present in the CI config, the CI config validation will fail.
+# Serves as the safety net, so that someone does not accidentally delete jobs from the CI config.
+# The new job list can be generated with:
+# nix-shell --run "python3 ../gitlab-ci/src/gitlab_config/main.py --job-list" ../gitlab-ci/src/shell.nix
+ci_jobs_required:
+  - no-interrupt
+  - cargo-audit
+  - gen-cargo-pipeline
+  - pre-commit
+  - python-tests
+  - dependencies-check
+  - crash-safe-io
+  # prod tests
+  - generic-hourly
+  - subnet-update-workload-nightly
+  - global-reboot-nightly
+  - node-assign-test-nightly
+  - subnet-threshold-test-nightly
+  - nns-workload-nightly
+  - xnet-slo-nightly
+  - xnet-slo-nightly-many-single-node-subnets
+  - network-reliability-test
+  - rejoin-nightly
+  - nns-registry-changes-test
+  - maximum-capacity-subnet-update-nightly
+  - maximum-capacity-subnet-query-nightly
+  - maximum-capacity-xnet-slo-nightly
+  - firewall-test-nightly
+  - subnet-update-workload-slo-100-1kb
+  - large-subnet-update-workload-slo-200-1kb
+  - subnet-update-workload-slo-5-100kb
+  - network-reliability-test-slo
+  - subnet-query-workload-slo-300-1kb
+  - xnet-slo-test-slo
+  - xnet-slo-test-slo-29-subnets
+  - rejoin-test-slo
+  - nns-workload-test-slo
+  - maximum-capacity-rejoin-script
+  - maximum-capacity-xnet-script
+  - maximum-capacity-large-subnet-update
+  - maximum-capacity-large-subnet-query
+  - wasm-generator-nightly
+  - wasm-generator-slo
+  # finalize stage
+  - notify-gitlab-success
+  - notify-gitlab-failure

@@ -1,0 +1,69 @@
+---
+- hosts: prometheus
+  gather_facts: false
+  become: true
+
+  vars_files:
+    - "{{ inventory_file | dirname }}/versions.json"
+    - "config/common.yml"
+
+  tasks:
+    # Bring down the Prometheus Service Discovery service.
+
+    - name: Check if service exists.
+      vars:
+        ic: "{{ inventory_file | dirname | basename }}"
+      stat: path="/etc/systemd-mutable/system/dfinity-p8s-service-discovery-{{ ic }}.service"
+      register: service_status
+
+    # Do this before bringing the service down, to remove any chance that it might
+    # generate an alert.
+    - name: Remove the scrape configuration for this service
+      vars:
+        ic: "{{ inventory_file | dirname | basename }}"
+      file:
+        path: "/var/lib/p8s-scrape/ic_networks/ic_p8s_service_discovery/{{ ic }}_ic_p8s_service_discovery_scrape_config.json"
+        state: absent
+
+    - name: "Stop dfinity-p8s-service-discovery-{{ ic }} service"
+      vars:
+        ic: "{{ inventory_file | dirname | basename }}"
+      service:
+        name: "dfinity-p8s-service-discovery-{{ ic }}.service"
+        state: stopped
+        enabled: no
+      when: service_status.stat.exists
+
+    - name: "Disable dfinity-p8s-service-discovery-{{ ic }} service"
+      vars:
+        ic: "{{ inventory_file | dirname | basename }}"
+      service:
+        name: "dfinity-p8s-service-discovery-{{ ic }}.service"
+        state: absent
+        enabled: no
+      when: service_status.stat.exists
+
+    - name: Remove stale replica scrape config for {{ ic }}
+      vars:
+        ic: "{{ inventory_file | dirname | basename }}"
+      file:
+        path: /var/lib/p8s-scrape/ic_networks/replica/{{ ic }}_replica_scrape_config.json
+        state: absent
+
+    - name: Remove the service discovery binary directory
+      vars:
+        ic: "{{ inventory_file | dirname | basename }}"
+      file:
+        path: "/opt/dfinity/ic-p8s-service-discovery-{{ ic }}"
+        state: absent
+
+    - name: Purge the systemd service file.
+      vars:
+        ic: "{{ inventory_file | dirname | basename }}"
+      file:
+        path: "/etc/systemd-mutable/system/dfinity-p8s-service-discovery-{{ ic }}.service"
+        state: absent
+
+    - name: Systemd daemon reload.
+      systemd:
+        daemon_reload: yes

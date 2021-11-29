@@ -1,0 +1,12 @@
+[
+    {
+	"targets": [
+	    {% for prometheus in groups['prometheus'] -%}
+	    "{{ hostvars[prometheus]['ic_p8s_service_discovery_metrics_addr']}}"{{ "," if not loop.last else ""}}
+	    {%- endfor %}
+	],
+	"labels": {
+	    "ic": "{{ ic }}"
+	}
+    }
+]

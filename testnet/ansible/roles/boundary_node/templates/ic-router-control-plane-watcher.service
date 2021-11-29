@@ -1,0 +1,17 @@
+[Unit]
+Description=Boundary Node Control Plane
+After=syslog.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/etc/nginx/ic_networks/{{ ic }}
+ExecStart=/etc/nginx/ic_networks/{{ ic }}/ic_router_control_plane_watcher.sh
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+StartLimitBurst=5
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target

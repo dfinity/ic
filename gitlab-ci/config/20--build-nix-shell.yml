@@ -1,0 +1,44 @@
+nix-shell:
+  extends:
+    - .nix-build-env-base
+    - .ubuntu-nix-docker
+  needs: []
+  stage: test
+  script:
+    - |
+      shellfiles=(gitlab-ci/src/shell.nix gitlab-ci/shell.nix hs/analyzer/shell.nix hs/consensus-model/shell.nix hs/simple-ltl/shell.nix outsource/shell.nix testnet/shell.nix testnet/disaster_recovery_shell.nix rs/shell.nix tests/shell.nix shell.nix)
+      echo "Using these files for the build: ${shellfiles[*]}"
+
+      join() {
+        local IFS=",";
+        echo "$*"
+      }
+
+      echo '{}' | jq '{origin: $origin, rev: $rev, paths: $paths}' \
+        --arg origin "git@gitlab.com:dfinity-lab/core/ic.git" \
+        --arg rev "$CI_COMMIT_SHA" \
+        --arg paths "$(join "${shellfiles[@]}")" > request.json
+      cat request.json
+
+      build_id="$(curl --fail -X PUT -H 'Content-Type: application/json' -d @request.json https://starfish.dfinity.systems/api/build | jq '.id')"
+      echo "Waiting for Starfish to finish building. You can check the build status at https://starfish.dfinity.systems/build/$build_id."
+
+      set +x
+
+      while true; do
+        status=$(curl --fail -sS -H 'Accept: application/json' "https://starfish.dfinity.systems/api/build/$build_id" | jq -r .build.status)
+        case $status in
+          queued|building|uploading)
+            sleep 10
+            ;;
+          succeeded)
+            echo "All done."
+            break
+            ;;
+          *)
+            echo "Build failed. Last 50 lines of log:"
+            curl "https://starfish.dfinity.systems/build/$build_id/raw" | tail -n 50
+            exit 1
+            ;;
+        esac
+      done

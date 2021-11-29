@@ -1,0 +1,2 @@
+install ic:00 target/wasm32-unknown-unknown/release/main.wasm 0x
+ingress ic:00 benchmark_seq_write "0 0x40000000 1"

@@ -1,0 +1,257 @@
+include:
+  - local: /gitlab-ci/config/00--common--rules.yml
+
+stages:             # Files from the given stage should be prefixed with:
+  - automation          # temp
+  - init                # 10--
+  - test                # 20--
+  - deploy              # only required for gitlab pages (job "pages" needs to be in "deploy" stage)
+  - cargo-build         # 30--
+  - cargo-test          # 40--
+  - guest-os-build      # 46--
+  - guest-os-test       # 47--
+  - e2e-tests           # 50--
+  - prod-tests          # 60--
+    # Shard prod tests into 5 groups, because there are 5 'cdnightly' testnet environments.
+    # The stages are purely for visual convenience when rendering the pipeline in the GitLab UI.
+  - prod-tests-01
+  - prod-tests-02
+  - prod-tests-03
+  - prod-tests-04
+  - prod-tests-05
+  - push-branches       # 75--
+  - finalize            # 100--
+
+default:
+  # Retry config copied from:
+  # https://gitlab.com/gitlab-org/gitlab/blob/master/.gitlab/ci/global.gitlab-ci.yml#L1-9
+  # Complete description available at:
+  # https://docs.gitlab.com/ee/ci/yaml/#retry
+  retry:
+    max: 2  # This is confusing but this means "3 runs at max".
+    when:
+      - unknown_failure
+      - api_failure
+      - runner_system_failure
+
+variables:
+  # # Once the verified runners are updated to have
+  # #   [runners.custom_build_dir]
+  # #      enabled = true
+  # # these variables should be enabled
+  # GIT_CLONE_PATH: "/builds/dfinity/ic"
+  # CI_BUILDS_DIR: "/builds/dfinity"
+  # CI_PROJECT_DIR: "/builds/dfinity/ic"
+  # CI_PROJECT_PATH: "dfinity/ic"
+  # CI_DEBUG_TRACE: "true"  # Make the GitLab CI runner execution verbose
+  CI_PRE_CLONE_SCRIPT: |
+    # This script prepares the docker container for running the job
+    # The most important thing done here is pre-seeding the repo in the $CI_PROJECT_DIR so that
+    # the docker gitlab runner doesn't have to re-clone the repo for every job
+    # Example of the (official gitlab) CI_PRE_CLONE_SCRIPT:
+    # https://docs.gitlab.com/ee/development/pipelines.html#pre-clone-step
+    # MacOS note: the gitlab runner will ignore this var on MacOS since config does not have
+    # pre_clone_script set in the runner config
+
+    echo -e "\e[0Ksection_start:$(date +%s):pre_clone_script[collapsed=true]\r\e[0KClick here to see the pre_clone_script"
+    set -eExuo pipefail
+
+    # Fail the git clone/pull if too slow
+    export GIT_HTTP_LOW_SPEED_LIMIT=10000 GIT_HTTP_LOW_SPEED_TIME=10 GIT_SSH_COMMAND='timeout 300 ssh -T'
+
+    # WARNING: We use @ instead of $ because GitLab has some issues with variable expansion and sometimes eats $VAR
+    # WARNING: The @ signs will be replaced with $ before executing the script
+    rm -rf "@{CI_PROJECT_DIR}"
+    mkdir -p "@{CI_PROJECT_DIR}"
+    chown 1000:1000 -R "@{CI_PROJECT_DIR}"
+    if [[ -d "/cache/git/@{CI_PROJECT_PATH}/@CI_CONCURRENT_ID" ]]; then
+      # Concurrent jobs are separated into different git repo cache folders
+      echo "Copying the git repo from /cache/git/@{CI_PROJECT_PATH}/@{CI_CONCURRENT_ID} to @{CI_PROJECT_DIR}"
+      /usr/bin/time cp -a "/cache/git/@{CI_PROJECT_PATH}/@CI_CONCURRENT_ID" "@{CI_PROJECT_DIR}"/.git
+
+      if [[ -n "@{GIT_CLONE_PATH:-}" && "@{GIT_CLONE_PATH:-}" != "@{CI_PROJECT_DIR}" ]]; then
+        # @GIT_CLONE_PATH is set to a value different from @{CI_PROJECT_DIR}
+        # In general the two should be the same so this code path should never be exercised
+        rm -rf "@GIT_CLONE_PATH"
+        mkdir -p "@GIT_CLONE_PATH"
+        chown 1000:1000 -R "@GIT_CLONE_PATH"
+        /usr/bin/time cp -a "/cache/git/@{CI_PROJECT_PATH}/@CI_CONCURRENT_ID" "@GIT_CLONE_PATH"/.git
+      fi
+
+      # Ensure the git repo is clean and up to date with the upstream
+      cd "@{CI_PROJECT_DIR}"
+      # Disable all background git operations
+      git config gc.auto 0
+      git config gc.autodetach false
+      # Ensure that there are not background git operations running and remove all lock files if they exist
+      if ! {
+        set -e
+        pkill git || true
+        find .git -name '*.lock' -delete
+        # Delete all branches for which a reference (sha) does not exist
+        set +x
+        git for-each-ref --format="%(refname)" | while read ref; do
+          git show-ref --quiet --verify @ref 2>/dev/null || git update-ref -d @ref
+        done
+        set -x
+        if ! git remote add origin "@{CI_REPOSITORY_URL}"; then
+          git remote set-url origin "@{CI_REPOSITORY_URL}"
+        fi
+        git fetch --prune --prune-tags
+        # Run a GC on the repo
+        git gc --prune=now --force
+        git reflog expire --expire=0 --all
+      }; then
+        rm -rf .git
+      fi
+    fi
+
+before_script:
+  - |
+    # Execute the before_script section
+    echo -e "\e[0Ksection_end:$(date +%s):pre_clone_script\r\e[0K"  # first close pre_clone_script section, if open
+
+    # Start the (collapsed) before_script section
+    set -eExuo pipefail
+    echo -e "\e[0Ksection_start:$(date +%s):before_script[collapsed=true]\r\e[0KClick here to see the before_script section"
+
+    date +%s > "/tmp/job_start_date_${CI_JOB_ID:-}"
+    # date -Iseconds is not supported by BSD date (macOS)
+    date +"%Y-%m-%dT%H:%M:%S%z" > "/tmp/job_start_iso_date_${CI_JOB_ID:-}"
+    date
+    command -v ssh-agent > /dev/null
+    test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY}"; }
+    mkdir -p ~/.ssh
+    chmod 0700 ~/.ssh
+
+    echo -e "Host *\nUser gitlab-runner\n" > ~/.ssh/config
+    ulimit -n 8192
+    date
+
+    export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
+
+    # forget original timestamp/timestamp when compressing ~ important for reproducibility
+    export GZIP=-n
+
+    if [ "${CI_DISPOSABLE_ENVIRONMENT:-false}" = "true" ]; then
+      # Linux + docker builds
+
+      sudo chown ubuntu:ubuntu -R "${CI_PROJECT_DIR}"
+      sudo find "${CI_PROJECT_DIR}" -type d -exec chmod 0755 '{}' \;
+      # Update the git repo cache at /cache/git/${CI_PROJECT_PATH}/$CI_CONCURRENT_ID
+      mkdir -p "/cache/git/${CI_PROJECT_PATH}/$CI_CONCURRENT_ID/"
+      /usr/bin/time rsync -a --force --delete "$CI_PROJECT_DIR"/.git/ "/cache/git/${CI_PROJECT_PATH}/$CI_CONCURRENT_ID/"
+    else
+      # MacOS + shell builds
+      export CARGO_TARGET_DIR="$CI_PROJECT_DIR/target"
+    fi
+
+    cd "${CI_PROJECT_DIR}"
+    # Ensure file permissions in the repo are what git expects them to be
+    git config core.fileMode true
+    git reset --hard HEAD
+
+    # Make sure Capsule writes to the correct Honeycomb dataset.
+    export CAPSULE_ARGS="-c ${CI_JOB_NAME} -b honeycomb --honeycomb_dataset=${CAPSULE_HONEYCOMB_DATASET} --honeycomb_token=${CAPSULE_HONEYCOMB_TOKEN} --honeycomb_trace_id=${ROOT_PIPELINE_ID} --honeycomb_kv=branch=${CI_COMMIT_BRANCH:-} -t ${CI_JOB_IMAGE:-docker}"
+  - echo -e "\e[0Ksection_end:$(date +%s):before_script\r\e[0K"
+
+
+# TESTING NOTE:
+# $SHELL_WRAPPER allows us to emulate CI runs without actually executing the complicated and
+#                time-consuming operations.
+#                In normal execution, "$SHELL_WRAPPER" will be substituted with "/usr/bin/time"
+#                In CI validation, "$SHELL_WRAPPER" will be substituted with "echo"
+
+after_script:
+  - |
+    # Start the after_script section
+    echo -e "\e[0Ksection_start:$(date +%s):after_script[collapsed=true]\r\e[0KClick here to see the after_script section. It does not affect the job success status"
+
+    # Export all the environmental variables so that the GITLAB configured variables are available to after_script.sh
+    export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
+    buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" after-script -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
+
+    # Finish and collapse the after_script section
+    echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
+
+.nix-build-env-base:
+  extends: .cargo-rules
+  # Generally only the last push to a branch matters and older jobs can be cancelled
+  # https://docs.gitlab.com/ee/ci/yaml/#interruptible
+  # Jobs can override this by setting `interruptible: false`
+  interruptible: true
+  artifacts:
+    paths:
+      - "junit_data/*"
+      - "coredumps/*.txt"
+      - "coredumps/*.gz"
+    when: always
+  variables:
+    GET_SOURCES_ATTEMPTS: 5
+    GIT_DEPTH: 0  # Pull the complete repo initially
+    GIT_STRATEGY: "fetch"  # And then pull only new commits
+    # Disable cargo incremental - it's incompatible with sccache.
+    CARGO_INCREMENTAL: "0"
+    CARGO_BUILD_INCREMENTAL: "false"
+    SCCACHE_CACHE_SIZE: "500G"
+    # The default sccache idle timeout is 600, which is too short and leads to intermittent build errors.
+    # https://github.com/mozilla/sccache/issues/256
+    SCCACHE_IDLE_TIMEOUT: "7200"
+    SCCACHE_STARTUP_TIMEOUT_MS: "30000"
+    BUILD_COMMAND_PRE: ""
+    BUILD_COMMAND: "echo Replace this with a build command"
+    BUILD_COMMAND_POST: ""
+    SHELL_WRAPPER: "/usr/bin/time"
+  script:
+    - |
+      set -eExuo pipefail
+      cd "${CI_PROJECT_DIR}/rs"
+
+      bash -c "$BUILD_COMMAND_PRE"
+
+      # failures will contain a counter of failed commands
+      # this way nix-shell will exit with non-zero value if any of the commands fails in it
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" nix-shell -- \
+      "$SHELL_WRAPPER" nix-shell --run "
+        set -eExuo pipefail
+
+        buildevents cmd \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" build-command -- \
+        bash -c \"set -eExuo pipefail; $BUILD_COMMAND\"
+
+        echo \"$BUILD_COMMAND_POST\"
+        bash -c \"$BUILD_COMMAND_POST\"
+        set +x
+      "
+
+      set +x
+      echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
+      "$RUSTC_WRAPPER" --show-stats
+      echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
+
+.ubuntu-nix-docker:
+  extends: .nix-build-env-base
+  # Here is how docker builds work:
+  # - The $CI_COMMIT_SHA is checked out at: /builds/dfinity/ic
+  # - The repo is built with $BUILD_COMMAND
+  # - Build results are stored in non-persisted /cargo_target
+  # - The container is destroyed and all non-persisted data is dropped, including /cargo_target
+  image:
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:2021-11-26-127f59f59b-c570ccaa792c9dbc3366345b2223fcbb00b4c1c5"
+  tags:
+    # Build on runners that have following tags
+    - dfinity
+    - docker
+    - ubuntu
+  variables:
+    SCCACHE_DIR: /cache/sccache
+    RUSTC_WRAPPER: "/usr/bin/sccache-run"
+    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/builds/dfinity/ic"
+
+.macos-nix-native:
+  extends:
+     - .nix-build-env-base
+  tags:
+    - dfinity
+    - macos
+  variables:
+    RUSTC_WRAPPER: "/usr/local/bin/sccache"

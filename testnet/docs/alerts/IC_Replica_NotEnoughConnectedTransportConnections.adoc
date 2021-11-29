@@ -1,0 +1,40 @@
+= IC_Replica_NotEnoughConnectedTransportConnections
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+The number of active connections between a replica and its peers drops
+below 80% of the expected number of connections.
+
+The replica is supposed to have active TCP connections for P2P traffic
+between all its peers on the same subnet.
+
+For example, on a subnet with 7 replicas each replica should have 
+connections to its 6 peers.
+
+6 x 80% = 4.8, so if the number of active connections between a replica
+and its peers drops to 4 or fewer on a 7 replica subnet this will fire.
+
+== Impact
+
+TODO: This was suggested by Hassen, it's unclear what the impact is.
+
+== Possible causes (non-exhaustive)
+
+- Bug in a recent binary or configuration deployment
+
+- Network misconfiguration
+
+- Firewall misconfiguration
+
+Note that the problem may not be with the replica associated with the alert.
+It may be that the replicas it is trying to connect to have problems.
+
+== Troubleshooting and remediation
+
+- Is this a one-way or a two-way problem? I.e,. can other replicas connect
+  to this peer, or is networking broken more widely?
+
+- Logging in to the affected machines, can you replicate the problem using
+  e.g., netcat?

@@ -1,0 +1,43 @@
+= IC_Subnet_OnlyOneSpare
+
+== Triggered by
+
+The number of running replicas in a subnet is only one over the 2/3 + 1
+threshold required for the subnet to make progress.
+
+== Impact
+
+No immediate impact -- the subnet is still operating as normal.
+
+However, finalization rate is affected (as the number of running replicas
+drops the finalization rate goes down).
+
+If another two replicas fail the subnet will stop.
+
+== Possible causes (non-exhaustive)
+
+- Is there a rollout that has coincided with another outage, taking too many
+  replicas down?
+
+- Have one or more datacenters lost connectivity, power, or another resource
+  that affects too many replicas?
+
+- Has planned maintenance work taken out more machines than expected?
+
+- Have a collection of replicas just crashed simultaneously because of a bug
+  processing a given input?
+
+== Troubleshooting and remediation
+
+If this appears to be a hardware issue you may be able to start additional
+replicas on other machines and have them join the same subnet.
+
+If this is a software issue (i.e., replicas are crashing and not restarting,
+or crash-looping) you will need to understand the problem.
+
+If it is a bug introduced in the most recent release of the replica you may be
+able to roll back to the previous release. Consider whether this will be a
+destructive operation or not.
+
+If it is a latent bug that has only just been triggered (i.e., it is present
+in past releases) then a fix will need to be developed and deployed.

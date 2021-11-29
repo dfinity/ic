@@ -62,6 +62,7 @@ tower = { version = "0.4.8", features = ["util"] }
 
 [dev-dependencies]
 assert_cmd = "0.12"
+canister-test = { path = "../rust_canisters/canister_test" }
 criterion = "0.3"
 ic-test-utilities = { path = "../test_utilities" }
 predicates = "1.0.1"

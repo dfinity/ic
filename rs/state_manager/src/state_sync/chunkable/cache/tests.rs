@@ -3,6 +3,8 @@ use ic_metrics::MetricsRegistry;
 use ic_test_utilities::with_test_replica_logger;
 use tempfile::TempDir;
 
+const NUM_THREADS: u32 = 3;
+
 /// Helper struct to hold all objects that live beyond a single
 /// `IncompleteState`
 struct TestEnvironment {
@@ -83,6 +85,7 @@ fn incomplete_state_for_tests(
         None,
         env.metrics.clone(),
         SubnetType::Application,
+        Arc::new(Mutex::new(scoped_threadpool::Pool::new(NUM_THREADS))),
         state_sync_refs,
     );
 
@@ -295,6 +298,32 @@ fn completed_sync() {
         // Can delete cache with completed sync at higher height
         let sync = incomplete_state_for_tests(&env, Height::new(6), complete);
         drop(sync);
+        assert!(env.cache.read().get().is_none());
+    })
+}
+
+// If the cache is written, but the target folder already exists, then we have
+// to make sure the existing folder is not being referenced as a valid cache.
+// Current behavior is to not write to the cache in these cases.
+#[test]
+fn existing_folder() {
+    with_test_replica_logger(|log| {
+        let env = TestEnvironment::new(log);
+        let (state, _, _) = fake_loading(1);
+
+        let height = Height::new(5);
+        let sync = incomplete_state_for_tests(&env, height, state);
+
+        let cache_dir = env.state_layout.state_sync_cache(height).unwrap();
+
+        // create a non-empty folder where the cache should be
+        std::fs::create_dir(&cache_dir).unwrap();
+        let file_path = cache_dir.join("empty_file");
+        let mut _file = std::fs::File::create(&file_path).unwrap();
+
+        drop(sync);
+
+        assert!(!file_path.exists());
         assert!(env.cache.read().get().is_none());
     })
 }

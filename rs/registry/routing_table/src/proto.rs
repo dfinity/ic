@@ -53,12 +53,18 @@ impl TryFrom<pb::CanisterIdRanges> for CanisterIdRanges {
 
 impl From<RoutingTable> for pb::RoutingTable {
     fn from(src: RoutingTable) -> Self {
+        Self::from(&src)
+    }
+}
+
+impl From<&RoutingTable> for pb::RoutingTable {
+    fn from(src: &RoutingTable) -> Self {
         let entries = src
             .0
-            .into_iter()
+            .iter()
             .map(|(range, subnet_id)| pb::routing_table::Entry {
-                range: Some(pb::CanisterIdRange::from(range)),
-                subnet_id: Some(subnet_id_into_protobuf(subnet_id)),
+                range: Some(pb::CanisterIdRange::from(*range)),
+                subnet_id: Some(subnet_id_into_protobuf(*subnet_id)),
             })
             .collect();
         Self { entries }

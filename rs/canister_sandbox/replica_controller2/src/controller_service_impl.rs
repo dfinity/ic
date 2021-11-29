@@ -13,7 +13,6 @@
 use ic_canister_sandbox_common::controller_service::ControllerService;
 use ic_canister_sandbox_common::protocol;
 use ic_canister_sandbox_common::rpc;
-use ic_interfaces::execution_environment::{HypervisorError, TrapCode::StableMemoryOutOfBounds};
 use ic_logger::{debug, error, info, trace, ReplicaLogger};
 use ic_system_api::SystemStateAccessor;
 
@@ -49,7 +48,7 @@ impl ControllerService for ControllerServiceImpl {
         // such calls (but log them).
         // Maybe we also want to deal with this in more radical ways
         // (e.g. forcibly terminate the sandbox process).
-        let reply = self.registry.extract_completion(&exec_id).map_or_else(
+        let reply = self.registry.extract_completion(exec_id).map_or_else(
             || {
                 // Should we log the entire erroneous request? It
                 // could both be large and hold canister-sensitive
@@ -61,7 +60,7 @@ impl ControllerService for ControllerServiceImpl {
                 Err(rpc::Error::ServerError)
             },
             |completion| {
-                completion(&exec_id, Some(exec_output));
+                completion(exec_id, Some(exec_output));
                 Ok(protocol::ctlsvc::ExecFinishedReply {})
             },
         );
@@ -96,7 +95,7 @@ impl ControllerService for ControllerServiceImpl {
         // (e.g. forcibly terminate the sandbox process).
         let reply = self
             .registry
-            .borrow_system_state_accessor(&exec_id)
+            .borrow_system_state_accessor(exec_id)
             .map_or_else(
                 || {
                     // Should we log the entire erroneous request? It
@@ -104,7 +103,7 @@ impl ControllerService for ControllerServiceImpl {
                     // data, so maybe this is not advisable.
                     error!(
                         self.log,
-                        "Wasm sandbox process sent syscall for non-existent execution {}", &exec_id
+                        "Wasm sandbox process sent syscall for non-existent execution {}", exec_id
                     );
                     Err(rpc::Error::ServerError)
                 },
@@ -112,14 +111,9 @@ impl ControllerService for ControllerServiceImpl {
                     let system_state_accessor = borrow.access();
                     use protocol::syscall::*;
                     let reply = match request {
-                        Request::CanisterId(_req) => Reply::CanisterId(CanisterIdReply {
-                            canister_id: system_state_accessor.canister_id(),
-                        }),
-                        Request::Controller(_req) => Reply::Controller(ControllerReply {
-                            controller: system_state_accessor.controller(),
-                        }),
                         Request::MintCycles(req) => {
-                            let result = system_state_accessor.mint_cycles(req.amount);
+                            let result =
+                                system_state_accessor.mint_cycles(req.amount, req.nns_subnet_id);
                             Reply::MintCycles(MintCyclesReply { result })
                         }
                         Request::MsgCyclesAccept(req) => {
@@ -131,67 +125,6 @@ impl ControllerService for ControllerServiceImpl {
                             let result =
                                 system_state_accessor.msg_cycles_available(&req.call_context_id);
                             Reply::MsgCyclesAvailable(MsgCyclesAvailableReply { result })
-                        }
-                        Request::StableSize(_req) => {
-                            let result = system_state_accessor.stable_size();
-                            Reply::StableSize(StableSizeReply { result })
-                        }
-                        Request::StableGrow(req) => {
-                            let result = system_state_accessor.stable_grow(req.additional_pages);
-                            Reply::StableGrow(StableGrowReply { result })
-                        }
-                        Request::StableGrow64(req) => {
-                            let result = system_state_accessor.stable64_grow(req.additional_pages);
-                            Reply::StableGrow64(StableGrow64Reply { result })
-                        }
-                        Request::GetNumInstructionsFromBytes(req) => {
-                            let result = system_state_accessor
-                                .get_num_instructions_from_bytes(req.num_bytes);
-                            Reply::GetNumInstructionsFromBytes(GetNumInstructionsFromBytesReply {
-                                result,
-                            })
-                        }
-                        Request::StableRead(req) => {
-                            let mut buf = Vec::<u8>::new();
-                            buf.resize(req.size as usize, 0);
-                            let result = system_state_accessor
-                                .stable_read(0, req.offset, req.size, &mut buf);
-                            let result = result.map_or_else(Err, |_| Ok(buf));
-                            Reply::StableRead(StableReadReply { result })
-                        }
-                        Request::StableRead64(req) => {
-                            let mut buf = Vec::<u8>::new();
-                            buf.resize(req.size as usize, 0);
-                            let result = system_state_accessor
-                                .stable64_read(0, req.offset, req.size, &mut buf);
-                            let result = result.map_or_else(Err, |_| Ok(buf));
-                            Reply::StableRead(StableReadReply { result })
-                        }
-                        Request::StableWrite(req) => {
-                            let result = if req.data.len() <= (u32::MAX as usize) {
-                                system_state_accessor.stable_write(
-                                    req.offset,
-                                    0,
-                                    req.data.len() as u32,
-                                    &req.data,
-                                )
-                            } else {
-                                Err(HypervisorError::Trapped(StableMemoryOutOfBounds))
-                            };
-                            Reply::StableWrite(StableWriteReply { result })
-                        }
-                        Request::StableWrite64(req) => {
-                            let result = if req.data.len() <= (u64::MAX as usize) {
-                                system_state_accessor.stable64_write(
-                                    req.offset,
-                                    0,
-                                    req.data.len() as u64,
-                                    &req.data,
-                                )
-                            } else {
-                                Err(HypervisorError::Trapped(StableMemoryOutOfBounds))
-                            };
-                            Reply::StableWrite(StableWriteReply { result })
                         }
                         Request::CanisterCyclesBalance(_req) => {
                             let amount = system_state_accessor.canister_cycles_balance();
@@ -228,10 +161,6 @@ impl ControllerService for ControllerServiceImpl {
                                 req.msg,
                             );
                             Reply::PushOutputMessage(PushOutputMessageReply { result })
-                        }
-                        Request::CanisterStatus(_req) => {
-                            let status = system_state_accessor.canister_status();
-                            Reply::CanisterStatus(CanisterStatusReply { status })
                         }
                     };
 

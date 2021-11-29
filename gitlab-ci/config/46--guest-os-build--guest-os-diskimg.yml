@@ -1,0 +1,59 @@
+guest-os-diskimg:
+  extends:
+    - .ubuntu-nix-docker-protected
+    - .rules-parent-pipeline-autorun-on-trigger
+  stage: guest-os-build
+  needs:
+    - cargo-build-release-linux-native
+    - cargo-build-release-linux-native-malicious
+  dependencies:
+    - cargo-build-release-linux-native
+    - cargo-build-release-linux-native-malicious
+  variables:
+      BUILD_EXTRA_ARGS: ""
+      BUILD_EXTRA_SUFFIX: ""
+  script:
+    - |
+      set -xeuo pipefail
+
+      BUILD_OUT="build-out/disk-img${BUILD_EXTRA_SUFFIX}"
+      BUILD_TMP="build-tmp${BUILD_EXTRA_SUFFIX}"
+      UPLOAD_TARGET="guest-os/disk-img${BUILD_EXTRA_SUFFIX}"
+      VERSION=$(git rev-parse --verify HEAD)
+
+      # artifacts/release dir with binaries come from cargo-build-release-linux-native
+      # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
+      placebo -v -t "$(openssl sha256 <<<${BUILD_EXTRA_ARGS})" -t "${CI_JOB_IMAGE:-docker}" -i "artifacts/release/**/*" -i "ic-os/guestos/scripts/**/*" -i "gitlab-ci/src/job_scripts/*" -i "ic-os/guestos/rootfs/**/*" -- \
+      "${CI_PROJECT_DIR}"/gitlab-ci/src/job_scripts/guest-os-diskimg.sh \
+        "$BUILD_OUT" "$BUILD_TMP" "$UPLOAD_TARGET" "$VERSION" "$CDPRNET"
+
+      # This is an extra placebo that logs as its inputs the outputs of the previous step,
+      # so that we can catch non-determinism in honeycomb.
+      placebo -v -c "${CI_JOB_NAME}--check" -i "ic-os/guestos/build-out/disk-img${BUILD_EXTRA_SUFFIX}/*" -- /bin/echo "Logged hashes of outputs to honeycomb via placebo."
+
+  artifacts:
+    paths:
+      - ic-os/guestos/build-out/disk-img${BUILD_EXTRA_SUFFIX}/*
+    expire_in: 2 days
+
+# Build dev image.
+#
+# This is the same as the prod image with the following differences:
+# - it has password "root" set for root to allow console login
+guest-os-diskimg-dev:
+  extends:
+    - guest-os-diskimg
+  variables:
+      BUILD_EXTRA_ARGS: "-p root"
+      BUILD_EXTRA_SUFFIX: "-dev"
+
+# Build malicious dev image.
+#
+# This is the same as the dev image with the following differences:
+# - the replica binary is built with the malicious_code profile
+guest-os-diskimg-dev-malicious:
+  extends:
+    - guest-os-diskimg
+  variables:
+      BUILD_EXTRA_ARGS: "-p root"
+      BUILD_EXTRA_SUFFIX: "-dev-malicious"

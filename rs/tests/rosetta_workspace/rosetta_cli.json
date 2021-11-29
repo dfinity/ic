@@ -1,0 +1,131 @@
+{
+ "network": {
+  "blockchain": "Internet Computer",
+  "network": "PUT_LEDGER_ADDRESS_HERE"
+ },
+ "online_url": "http://PUT_ROSETTA_API_URL_HERE",
+ "http_timeout": 10,
+ "max_retries": 5,
+ "retry_elapsed_time": 0,
+ "max_online_connections": 120,
+ "max_sync_concurrency": 64,
+ "tip_delay": 9999999999,
+ "max_reorg_depth": 100,
+ "log_configuration": false,
+ "compression_disabled": false,
+ "memory_limit_disabled": false,
+ "construction": {
+  "offline_url": "http://PUT_ROSETTA_API_URL_HERE",
+  "prefunded_accounts": [
+   {
+    "account_identifier": {
+      "address": "35548ec29e9d85305850e87a2d2642fe7214ff4bb36334070deafc3345c3b127"
+    },
+    "privkey": "f9d6233c84708030355bd24a7c4b0dbda52e95ad24940d2e913427fe2af041cc",
+    "curve_type": "edwards25519",
+    "currency": {
+     "symbol": "ICP",
+     "decimals": 8
+    }
+   },
+   {
+    "account_identifier": {
+     "address": "42a3eb61d549dc9fe6429ce2361ec60a569b8befe43eb15a3fc5c88516711bc5"
+    },
+    "privkey": "fe44a9c31776d1f965bf1476a6ec8929afcf72cb66406f34922b3615a15aae10",
+    "curve_type": "edwards25519",
+    "currency": {
+     "symbol": "ICP",
+     "decimals": 8
+    }
+   },
+   {
+    "account_identifier": {
+     "address": "eaf407f7fa3770edb621ce920f6c83cefb63df333044d1cdcd2a300ceb85cb1c"
+    },
+    "privkey": "05bed48ea7cc00798d51eafb8e1035d799a5f6cfc7eb085dbba527a50bed5222",
+    "curve_type": "edwards25519",
+    "currency": {
+     "symbol": "ICP",
+     "decimals": 8
+    }
+   },
+   {
+    "account_identifier": {
+     "address": "ba5b33d11f93033ba45b0a0136d4f7f6310ee482cfb1cfebdb4cea55f4aeda17"
+    },
+    "privkey": "8bd988a0749d36b58b95ea66172cfd2cfa32cadc7ab5a8e7f27991e6f687749c",
+    "curve_type": "edwards25519",
+    "currency": {
+     "symbol": "ICP",
+     "decimals": 8
+    }
+   },
+   {
+    "account_identifier": {
+     "address": "776ab0ef12a63f5b1bd605f202b1b5cefeaf5791c0241c773fc8e76a6c4a8b40"
+    },
+    "privkey": "515ce77f51159d7d0197769f54cbab90a575e0d681cacf54ab94c28828c5798a",
+    "curve_type": "edwards25519",
+    "currency": {
+     "symbol": "ICP",
+     "decimals": 8
+    }
+   },
+   {
+    "account_identifier": {
+     "address": "88bf52d6380bf2ed7b5fd4010afd145dc351cbf386def9b9be017bbeb640a919"
+    },
+    "privkey": "33fe625d869dba2f7f147953014e8c65be2f205ebe8f2c13028df7295d333a58",
+    "curve_type": "edwards25519",
+    "currency": {
+     "symbol": "ICP",
+     "decimals": 8
+    }
+   },
+   {
+    "account_identifier": {
+        "address": "92c9c807da64528240f65ec29b58c839bf2374e9c1c38b7661da65fd8710124e"
+    },
+    "privkey": "1496b7d6fccfdcb63d56a20c8f915aa6e19f438302edf2a8d780de9f99913a26",
+    "curve_type": "edwards25519",
+    "currency": {
+     "symbol": "ICP",
+     "decimals": 8
+    }
+   }
+  ],
+  "constructor_dsl_file": "ros_workflows.ros",
+  "end_conditions": {
+   "create_account": 10,
+   "transfer": 10
+  }
+ },
+ "data": {
+  "active_reconciliation_concurrency": 16,
+  "inactive_reconciliation_concurrency": 4,
+  "inactive_reconciliation_frequency": 250,
+  "log_blocks": false,
+  "log_transactions": false,
+  "log_balance_changes": false,
+  "log_reconciliations": false,
+  "ignore_reconciliation_error": false,
+  "exempt_accounts": "",
+  "bootstrap_balances": "",
+  "interesting_accounts": "",
+  "reconciliation_disabled": false,
+  "reconciliation_drain_disabled": false,
+  "inactive_discrepency_search_disabled": false,
+  "balance_tracking_disabled": false,
+  "coin_tracking_disabled": false,
+  "status_port": 9099,
+  "results_output_file": "",
+  "pruning_disabled": false,
+  "initial_balance_fetch_disabled": false,
+  "end_conditions": {
+   "reconciliation_coverage": {
+    "coverage": 1.0
+   }
+  }
+ }
+}

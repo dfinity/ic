@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# This is a wrapper to invoke /gitlab-ci/src/artifacts/gitlab_artifacts_download.py
+# in an environment with python-gitlab module
+#
+#
+# Example usage:
+# ./gitlab-ci/tools/gitlab-artifacts-download --git-rev ca96048584deecf88498cde482d79562f75c9911 \
+#   --job-name cargo-build-release-linux-native --out replica.tar.gz  --artifact-path=artifacts/nix-release/replica.tar.gz
+#
+
+BASEDIR=$(dirname "$0")
+nix-shell -I nixpkgs="${BASH_SOURCE[0]}/../../../nix" -p python3 python3Packages.python-gitlab \
+    python3Packages.GitPython \
+    --run "python3 \"$BASEDIR/../src/artifacts/gitlab_artifacts_download.py\" $*"

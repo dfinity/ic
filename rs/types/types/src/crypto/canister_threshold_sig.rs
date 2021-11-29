@@ -7,8 +7,6 @@ use crate::Randomness;
 use ic_base_types::PrincipalId;
 use serde::{Deserialize, Serialize};
 
-use ic_crypto_internal_types::sign::canister_threshold_sig::CspThresholdEcdsaSigShare;
-
 pub mod error;
 pub mod idkg;
 
@@ -146,5 +144,5 @@ impl ThresholdEcdsaSigInputs {
 /// A single threshold ECDSA signature share.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdEcdsaSigShare {
-    pub internal_msg: CspThresholdEcdsaSigShare,
+    pub sig_share_raw: Vec<u8>,
 }

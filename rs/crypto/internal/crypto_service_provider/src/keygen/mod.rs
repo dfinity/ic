@@ -12,12 +12,11 @@ use ic_types::NodeId;
 use openssl::asn1::Asn1Time;
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
+use tecdsa::{EccCurveType, MEGaPublicKey};
 
 const KEY_ID_DOMAIN: &str = "ic-key-id";
 
-use crate::server::api::{
-    BasicSignatureCspServer, MultiSignatureCspServer, SecretKeyStoreCspServer,
-};
+use crate::server::api::{BasicSignatureCspVault, MultiSignatureCspVault, SecretKeyStoreCspVault};
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_sha::Sha256;
 pub use tls_keygen::tls_cert_hash_as_key_id;
@@ -29,17 +28,17 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> CspKeyGenerator f
     fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<(KeyId, CspPublicKey), CryptoError> {
         match alg_id {
             AlgorithmId::MultiBls12_381 => {
-                let (key_id, csp_pk, _pop) = self.csp_server.gen_key_pair_with_pop(alg_id)?;
+                let (key_id, csp_pk, _pop) = self.csp_vault.gen_key_pair_with_pop(alg_id)?;
                 Ok((key_id, csp_pk))
             }
-            _ => Ok(self.csp_server.gen_key_pair(alg_id)?),
+            _ => Ok(self.csp_vault.gen_key_pair(alg_id)?),
         }
     }
     fn gen_key_pair_with_pop(
         &self,
         algorithm_id: AlgorithmId,
     ) -> Result<(KeyId, CspPublicKey, CspPop), CryptoError> {
-        Ok(self.csp_server.gen_key_pair_with_pop(algorithm_id)?)
+        Ok(self.csp_vault.gen_key_pair_with_pop(algorithm_id)?)
     }
 
     fn gen_tls_key_pair(&mut self, node: NodeId, not_after: &str) -> TlsPublicKeyCert {
@@ -60,7 +59,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> CspSecretKeyStore
     for Csp<R, S, C>
 {
     fn sks_contains(&self, key_id: &KeyId) -> bool {
-        self.csp_server.sks_contains(key_id)
+        self.csp_vault.sks_contains(key_id)
     }
 
     fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> bool {
@@ -114,6 +113,17 @@ pub fn forward_secure_key_id(public_key: &CspFsEncryptionPublicKey) -> KeyId {
         }
     }
     KeyId::from(hash.finish())
+}
+
+/// Compute the key identifier for a MEGa encryption public key
+pub fn mega_key_id(public_key: &MEGaPublicKey) -> KeyId {
+    match public_key.curve_type() {
+        EccCurveType::K256 => bytes_hash_as_key_id(
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &public_key.serialize(),
+        ),
+        c => panic!("unsupported curve: {:?}", c),
+    }
 }
 
 mod tls_keygen {

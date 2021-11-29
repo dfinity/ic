@@ -1,0 +1,28 @@
+# How-To Contribute
+
+## GitLab YML Configs
+
+### File structure
+
+All GitLab YML config files should live inside `gitlab-ci/config` directory; with the exception of the root `.gitlab-ci.yml` at the root of the repository
+
+The file name structure follows:
+```
+${stage-number}--${stage name}--${logical_group}.yml
+```
+
+stage-number: A number that corresponds to the position of the stage in the GitLab pipeline. The common templates shared across all files are in stage-number 00.
+
+stage-name: The name of the stage on the GitLab pipeline where the jobs will run.
+
+logical_group: A name that corresponds to logical grouping of the jobs or templates in the file.
+
+### Explanation
+
+When a developer visually inspects the GitLab pipeline on the UI, they should have the ability to quickly map the jobs to their relevant configuration file.
+
+The numbers prefixing the configuration files help IDE file-list consistently order the files in the order of their stages.
+
+### GitLab Rules
+
+All rules should be defined in `00--common--rules.yml` and applied to jobs via inheritance.

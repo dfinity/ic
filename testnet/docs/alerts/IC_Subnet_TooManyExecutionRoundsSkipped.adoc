@@ -1,0 +1,23 @@
+= IC_Subnet_TooManyExecutionRoundsSkipped
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+Execution skipped too many rounds because the heap delta was too high,
+and has missed at least 50 rounds in the past 15 minutes.
+
+== Impact
+
+The subnet is over capacity, and work is not getting done.
+
+== Possible causes (non-exhaustive)
+
+- Recent binary or config rollout that has a bug.
+
+- Increase in requests to canisters on this subnet, or the work the
+  canisters are doing to process the requests has increased.
+
+== Troubleshooting and remediation
+
+- ?

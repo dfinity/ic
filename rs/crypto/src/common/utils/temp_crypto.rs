@@ -1,7 +1,7 @@
 use crate::common::utils::generate_tls_keys;
 use crate::common::utils::{
     generate_committee_signing_keys, generate_dkg_dealing_encryption_keys,
-    generate_node_signing_keys,
+    generate_idkg_dealing_encryption_keys, generate_node_signing_keys,
 };
 use crate::{CryptoComponent, CryptoComponentFatClient};
 use async_trait::async_trait;
@@ -131,6 +131,50 @@ impl TempCryptoComponent {
     // method. This is because the key generation method will create
     // its own CSP, which will lead to synchronization/consistency issues
     // in the secret key store.
+    pub fn new_with_idkg_dealing_encryption_key_generation(
+        registry_client: Arc<dyn RegistryClient>,
+        node_id: NodeId,
+    ) -> (Self, PublicKeyProto) {
+        let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
+        let crypto_root = temp_dir.path().to_path_buf();
+        let idkg_dealing_encryption_pubkey = generate_idkg_dealing_encryption_keys(&crypto_root);
+        let temp_crypto =
+            TempCryptoComponent::new_with(registry_client, node_id, &config, temp_dir);
+        (temp_crypto, idkg_dealing_encryption_pubkey)
+    }
+
+    // Note that in this method we cannot simply use Self::new and then
+    // pass the path of the returned crypto component to the key generation
+    // method. This is because the key generation method will create
+    // its own CSP, which will lead to synchronization/consistency issues
+    // in the secret key store.
+    // TODO (CRP-1275): Remove this once MEGa key is in NodePublicKeys
+    pub fn new_with_idkg_dealing_encryption_and_multisigning_keys_generation(
+        registry_client: Arc<dyn RegistryClient>,
+        node_id: NodeId,
+    ) -> (Self, IDkgMEGaAndMultisignPublicKeys) {
+        let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
+        let crypto_root = temp_dir.path().to_path_buf();
+
+        let mega_pubkey = generate_idkg_dealing_encryption_keys(&crypto_root);
+        let multisign_pubkey = generate_committee_signing_keys(&crypto_root);
+
+        let temp_crypto =
+            TempCryptoComponent::new_with(registry_client, node_id, &config, temp_dir);
+        (
+            temp_crypto,
+            IDkgMEGaAndMultisignPublicKeys {
+                mega_pubkey,
+                multisign_pubkey,
+            },
+        )
+    }
+
+    // Note that in this method we cannot simply use Self::new and then
+    // pass the path of the returned crypto component to the key generation
+    // method. This is because the key generation method will create
+    // its own CSP, which will lead to synchronization/consistency issues
+    // in the secret key store.
     pub fn new_with_tls_key_generation(
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
@@ -229,6 +273,13 @@ impl TempCryptoComponent {
     pub fn temp_dir_path(&self) -> &std::path::Path {
         self.temp_dir.path()
     }
+}
+
+/// Bundles the public keys needed for canister threshold signature protocol
+// TODO (CRP-1275): Remove this once MEGa key is in NodePublicKeys
+pub struct IDkgMEGaAndMultisignPublicKeys {
+    pub mega_pubkey: PublicKeyProto,
+    pub multisign_pubkey: PublicKeyProto,
 }
 
 /// Selects which keys should be generated for a `TempCryptoComponent`.

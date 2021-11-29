@@ -1,7 +1,11 @@
 use crate::group::*;
 use crate::seed::Seed;
 use crate::*;
+use paste::paste;
 use rand_core::{CryptoRng, RngCore};
+use serde::{Deserialize, Serialize};
+use std::convert::{TryFrom, TryInto};
+use zeroize::Zeroize;
 
 const MEGA_SINGLE_ENC_DOMAIN_SEPARATOR: &str = "ic-crypto-tecdsa-mega-encryption-single-encrypt";
 const MEGA_SINGLE_SEED_DOMAIN_SEPARATOR: &str = "ic-crypto-tecdsa-mega-encryption-single-seed";
@@ -9,7 +13,7 @@ const MEGA_SINGLE_SEED_DOMAIN_SEPARATOR: &str = "ic-crypto-tecdsa-mega-encryptio
 const MEGA_PAIR_ENC_DOMAIN_SEPARATOR: &str = "ic-crypto-tecdsa-mega-encryption-pair-encrypt";
 const MEGA_PAIR_SEED_DOMAIN_SEPARATOR: &str = "ic-crypto-tecdsa-mega-encryption-pair-seed";
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct MEGaPublicKey {
     point: EccPoint,
 }
@@ -19,8 +23,18 @@ impl MEGaPublicKey {
         self.point.curve()
     }
 
+    pub fn curve_type(&self) -> EccCurveType {
+        self.point.curve_type()
+    }
+
     pub fn new(point: EccPoint) -> Self {
         Self { point }
+    }
+
+    pub fn deserialize(curve: EccCurveType, value: &[u8]) -> ThresholdEcdsaResult<Self> {
+        let point = EccPoint::deserialize(curve, value)
+            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{:?}", e)))?;
+        Ok(Self { point })
     }
 
     pub fn serialize(&self) -> Vec<u8> {
@@ -28,7 +42,8 @@ impl MEGaPublicKey {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Zeroize)]
+#[zeroize(drop)]
 pub struct MEGaPrivateKey {
     secret: EccScalar,
 }
@@ -36,6 +51,10 @@ pub struct MEGaPrivateKey {
 impl MEGaPrivateKey {
     pub fn curve(&self) -> EccCurve {
         self.secret.curve()
+    }
+
+    pub fn curve_type(&self) -> EccCurveType {
+        self.secret.curve_type()
     }
 
     pub fn public_key(&self) -> ThresholdEcdsaResult<MEGaPublicKey> {
@@ -46,15 +65,16 @@ impl MEGaPrivateKey {
     }
 
     pub fn generate<R: RngCore + CryptoRng>(
-        group: EccCurve,
+        curve: EccCurveType,
         rng: &mut R,
     ) -> ThresholdEcdsaResult<Self> {
-        let secret = group.random_scalar(rng)?;
+        let secret = EccScalar::random(curve, rng)?;
         Ok(Self { secret })
     }
 
-    pub fn deserialize(group: EccCurve, value: &[u8]) -> ThresholdEcdsaResult<Self> {
-        let secret = group.deserialize_scalar(value)?;
+    pub fn deserialize(curve: EccCurveType, value: &[u8]) -> ThresholdEcdsaResult<Self> {
+        let secret = EccScalar::deserialize(curve, value)
+            .map_err(|_| ThresholdEcdsaError::SerializationError("REDACTED".to_string()))?;
         Ok(Self { secret })
     }
 
@@ -63,6 +83,7 @@ impl MEGaPrivateKey {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MEGaCiphertextSingle {
     pub ephemeral_key: EccPoint, // "v" in the paper
     pub ctexts: Vec<EccScalar>,
@@ -77,6 +98,7 @@ impl MEGaCiphertextSingle {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MEGaCiphertextPair {
     pub ephemeral_key: EccPoint, // "v" in the paper
     pub ctexts: Vec<(EccScalar, EccScalar)>,
@@ -88,6 +110,25 @@ impl MEGaCiphertextPair {
             ephemeral_key,
             ctexts,
         }
+    }
+}
+
+/// Some type of MEGa ciphertext
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MEGaCiphertext {
+    Single(MEGaCiphertextSingle),
+    Pairs(MEGaCiphertextPair),
+}
+
+impl From<MEGaCiphertextSingle> for MEGaCiphertext {
+    fn from(c: MEGaCiphertextSingle) -> Self {
+        Self::Single(c)
+    }
+}
+
+impl From<MEGaCiphertextPair> for MEGaCiphertext {
+    fn from(c: MEGaCiphertextPair) -> Self {
+        Self::Pairs(c)
     }
 }
 
@@ -158,8 +199,9 @@ fn check_plaintexts_pair(
 }
 
 fn format_hash_to_scalar_inputs(
+    dealer_index: usize,
+    recipient_index: usize,
     associated_data: &[u8],
-    recipient_index: u64,
     public_key: &[u8],
     v_bytes: &[u8],
     ubeta_bytes: &[u8],
@@ -171,13 +213,15 @@ fn format_hash_to_scalar_inputs(
 
     let point_len = public_key.len();
 
-    // 8 byte recipient_index
+    // 8 byte dealer index
+    // 8 byte recipient index
     // 3 points each of point_len bytes
     // 8 byte length prefix for associated_data
     // associated_data
-    let mut output = Vec::with_capacity(8 + 3 * point_len + 8 + associated_data.len());
+    let mut output = Vec::with_capacity(8 + 8 + 3 * point_len + 8 + associated_data.len());
 
-    output.extend_from_slice(&recipient_index.to_be_bytes());
+    output.extend_from_slice(&(dealer_index as u64).to_be_bytes());
+    output.extend_from_slice(&(recipient_index as u64).to_be_bytes());
 
     output.extend_from_slice(public_key);
     output.extend_from_slice(v_bytes);
@@ -193,6 +237,7 @@ pub fn mega_encrypt_single(
     seed: Seed,
     plaintexts: &[EccScalar],
     recipients: &[MEGaPublicKey],
+    dealer_index: usize,
     associated_data: &[u8],
 ) -> ThresholdEcdsaResult<MEGaCiphertextSingle> {
     let curve = check_plaintexts(plaintexts, recipients)?;
@@ -210,8 +255,9 @@ pub fn mega_encrypt_single(
         let ubeta = pubkey.point.scalar_mul(&beta)?;
 
         let hash_to_scalar_input = format_hash_to_scalar_inputs(
+            dealer_index,
+            index,
             associated_data,
-            index as u64,
             &pubkey.serialize(),
             &v_bytes,
             &ubeta.serialize(),
@@ -234,6 +280,7 @@ pub fn mega_encrypt_pair(
     seed: Seed,
     plaintexts: &[(EccScalar, EccScalar)],
     recipients: &[MEGaPublicKey],
+    dealer_index: usize,
     associated_data: &[u8],
 ) -> ThresholdEcdsaResult<MEGaCiphertextPair> {
     let curve = check_plaintexts_pair(plaintexts, recipients)?;
@@ -251,8 +298,9 @@ pub fn mega_encrypt_pair(
         let ubeta = pubkey.point.scalar_mul(&beta)?;
 
         let hash_to_scalar_input = format_hash_to_scalar_inputs(
+            dealer_index,
+            index,
             associated_data,
-            index as u64,
             &pubkey.serialize(),
             &v_bytes,
             &ubeta.serialize(),
@@ -276,6 +324,7 @@ pub fn mega_encrypt_pair(
 pub fn mega_decrypt_single(
     ctext: &MEGaCiphertextSingle,
     associated_data: &[u8],
+    dealer_index: usize,
     our_index: usize,
     our_private_key: &MEGaPrivateKey,
     our_public_key: &MEGaPublicKey,
@@ -291,8 +340,9 @@ pub fn mega_decrypt_single(
     let v_bytes = ctext.ephemeral_key.serialize();
 
     let hash_to_scalar_input = format_hash_to_scalar_inputs(
+        dealer_index,
+        our_index,
         associated_data,
-        our_index as u64,
         &our_public_key.serialize(),
         &v_bytes,
         &ubeta.serialize(),
@@ -309,6 +359,7 @@ pub fn mega_decrypt_single(
 pub fn mega_decrypt_pair(
     ctext: &MEGaCiphertextPair,
     associated_data: &[u8],
+    dealer_index: usize,
     our_index: usize,
     our_private_key: &MEGaPrivateKey,
     our_public_key: &MEGaPublicKey,
@@ -324,8 +375,9 @@ pub fn mega_decrypt_pair(
     let v_bytes = ctext.ephemeral_key.serialize();
 
     let hash_to_scalar_input = format_hash_to_scalar_inputs(
+        dealer_index,
+        our_index,
         associated_data,
-        our_index as u64,
         &our_public_key.serialize(),
         &v_bytes,
         &ubeta.serialize(),
@@ -342,3 +394,137 @@ pub fn mega_decrypt_pair(
 
     Ok((ptext0, ptext1))
 }
+
+// Decrypt a MEGa ciphertext and return the encrypted commitment opening
+pub(crate) fn decrypt_and_check(
+    ciphertext: &MEGaCiphertext,
+    commitment: &PolynomialCommitment,
+    associated_data: &[u8],
+    dealer_index: usize,
+    receiver_index: usize,
+    secret_key: &MEGaPrivateKey,
+    public_key: &MEGaPublicKey,
+) -> ThresholdEcdsaResult<CommitmentOpening> {
+    let opening = match ciphertext {
+        MEGaCiphertext::Single(ciphertext) => {
+            let opening = mega_decrypt_single(
+                ciphertext,
+                associated_data,
+                dealer_index,
+                receiver_index,
+                secret_key,
+                public_key,
+            )?;
+            CommitmentOpening::Simple(opening)
+        }
+
+        MEGaCiphertext::Pairs(ciphertext) => {
+            let opening = mega_decrypt_pair(
+                ciphertext,
+                associated_data,
+                dealer_index,
+                receiver_index,
+                secret_key,
+                public_key,
+            )?;
+            CommitmentOpening::Pedersen(opening.0, opening.1)
+        }
+    };
+
+    let commitment_eval_point =
+        EccScalar::from_u64(secret_key.curve().curve_type(), (receiver_index as u64) + 1);
+    if commitment.check_opening(&commitment_eval_point, &opening)? {
+        Ok(opening)
+    } else {
+        Err(ThresholdEcdsaError::InconsistentCommitments)
+    }
+}
+
+/// Generate serializable public and private keys, and keyset struct.
+///
+/// # Arguments:
+/// - curve: Curve type variant (cf. `EccCurveType`)
+/// - pub_size: Serialized size of a public key (in bytes)
+/// - priv_size: Serialized size of a private key (in bytes)
+macro_rules! generate_serializable_keyset {
+    ($curve:ident, $pub_size:expr, $priv_size:expr) => {
+        paste! {
+            impl TryFrom<&[<MEGaPublicKey $curve Bytes>]> for MEGaPublicKey {
+                type Error = ThresholdEcdsaError;
+
+                fn try_from(raw: &[<MEGaPublicKey $curve Bytes>]) -> ThresholdEcdsaResult<Self> {
+                    Self::deserialize(EccCurveType::$curve, &raw.0)
+                }
+            }
+
+            #[derive(Clone, Debug, Eq, PartialEq, Zeroize)]
+            #[zeroize(drop)]
+            pub struct [<MEGaPublicKey $curve Bytes>]([u8; Self::SIZE]);
+            ic_crypto_internal_types::derive_serde!([<MEGaPublicKey $curve Bytes>], [<MEGaPublicKey $curve Bytes>]::SIZE);
+
+            impl [<MEGaPublicKey $curve Bytes>] {
+                pub const SIZE: usize = $pub_size;
+            }
+
+            impl TryFrom<&MEGaPublicKey> for [<MEGaPublicKey $curve Bytes>] {
+                type Error = ThresholdEcdsaError;
+
+                fn try_from(key: &MEGaPublicKey) -> ThresholdEcdsaResult<Self> {
+                    match key.curve_type() {
+                        EccCurveType::$curve => {
+                            Ok(Self(key.serialize().try_into().map_err(|e| {
+                                ThresholdEcdsaError::SerializationError(format!("{:?}", e))
+                            })?))
+                        }
+                        _ => Err(ThresholdEcdsaError::SerializationError(
+                            "Wrong curve".to_string(),
+                        )),
+                    }
+                }
+            }
+
+            impl TryFrom<&[<MEGaPrivateKey $curve Bytes>]> for MEGaPrivateKey {
+                type Error = ThresholdEcdsaError;
+
+                fn try_from(raw: &[<MEGaPrivateKey $curve Bytes>]) -> ThresholdEcdsaResult<Self> {
+                    Self::deserialize(EccCurveType::$curve, &raw.0)
+                }
+            }
+
+            #[derive(Clone, Debug, Eq, PartialEq, Zeroize)]
+            #[zeroize(drop)]
+            pub struct [<MEGaPrivateKey $curve Bytes>]([u8; Self::SIZE]);
+            ic_crypto_internal_types::derive_serde!([<MEGaPrivateKey $curve Bytes>], [<MEGaPrivateKey $curve Bytes>]::SIZE);
+
+            impl [<MEGaPrivateKey $curve Bytes>] {
+                pub const SIZE: usize = $priv_size;
+            }
+
+            impl TryFrom<&MEGaPrivateKey> for [<MEGaPrivateKey $curve Bytes>] {
+                type Error = ThresholdEcdsaError;
+
+                fn try_from(key: &MEGaPrivateKey) -> ThresholdEcdsaResult<Self> {
+                    match key.curve_type() {
+                        EccCurveType::$curve => {
+                            Ok(Self(key.serialize().try_into().map_err(|e| {
+                                ThresholdEcdsaError::SerializationError(format!("{:?}", e))
+                            })?))
+                        }
+                        _ => Err(ThresholdEcdsaError::SerializationError(
+                            "Wrong curve".to_string(),
+                        )),
+                    }
+                }
+            }
+
+            #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Zeroize)]
+            #[zeroize(drop)]
+            pub struct [<MEGaKeySet $curve Bytes>] {
+                pub public_key: [<MEGaPublicKey $curve Bytes>],
+                pub private_key: [<MEGaPrivateKey $curve Bytes>],
+            }
+        }
+    };
+}
+
+generate_serializable_keyset!(K256, 33, 32);

@@ -1,7 +1,12 @@
-use super::{Page, PageAllocatorInner, PageInner, ALLOCATED_PAGES};
+use crate::page_map::{FileDescriptor, FileOffset};
+
+use super::{
+    Page, PageAllocatorInner, PageAllocatorSerialization, PageDeltaSerialization, PageInner,
+    ALLOCATED_PAGES,
+};
 use cvt::cvt_r;
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
-use libc::{c_void, close, ftruncate64, off_t};
+use libc::{c_void, close, ftruncate64};
 use nix::sys::memfd::{memfd_create, MemFdCreateFlag};
 use nix::sys::mman::{mmap, munmap, MapFlags, ProtFlags};
 use std::ffi::CString;
@@ -21,6 +26,7 @@ use std::sync::{Arc, Mutex};
 #[derive(Clone, Debug)]
 pub struct MmapBasedPage {
     ptr: *mut u8,
+    offset: FileOffset,
 }
 
 // SAFETY: All shared pages are immutable.
@@ -75,8 +81,7 @@ impl Default for MmapBasedPageAllocator {
 impl PageAllocatorInner for MmapBasedPageAllocator {
     type PageInner = MmapBasedPage;
 
-    /// Takes a lock, updates page counters, and delegates to the core
-    /// allocator.
+    // See the comments of the corresponding method in `PageAllocator`.
     fn allocate(
         &self,
         pages: &[(PageIndex, &PageBytes)],
@@ -96,11 +101,79 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
             })
             .collect()
     }
+
+    // See the comments of the corresponding method in `PageAllocator`.
+    fn serialize(&self) -> PageAllocatorSerialization {
+        let core = self.0.lock().unwrap();
+        PageAllocatorSerialization::Mmap(FileDescriptor {
+            fd: core.file_descriptor,
+        })
+    }
+
+    // See the comments of the corresponding method in `PageAllocator`.
+    fn deserialize(serialized_page_allocator: PageAllocatorSerialization) -> Self {
+        match serialized_page_allocator {
+            PageAllocatorSerialization::Mmap(file_descriptor) => Self::open(file_descriptor),
+            PageAllocatorSerialization::Heap | PageAllocatorSerialization::Empty => {
+                // This is really unreachable. See `serialize()`.
+                unreachable!("Unexpected serialization of MmapBasedPageAllocator");
+            }
+        }
+    }
+
+    // See the comments of the corresponding method in `PageAllocator`.
+    fn serialize_page_delta<'a, I>(&'a self, page_delta: I) -> PageDeltaSerialization
+    where
+        I: IntoIterator<Item = (PageIndex, &'a Page<Self::PageInner>)>,
+    {
+        let pages: Vec<(PageIndex, FileOffset)> = page_delta
+            .into_iter()
+            .map(|(page_index, page)| (page_index, page.0.offset))
+            .collect();
+        let core = self.0.lock().unwrap();
+        PageDeltaSerialization::Mmap {
+            file_len: core.file_len,
+            pages,
+        }
+    }
+
+    // See the comments of the corresponding method in `PageAllocator`.
+    fn deserialize_page_delta(
+        &self,
+        page_delta: PageDeltaSerialization,
+    ) -> Vec<(PageIndex, Page<Self::PageInner>)> {
+        match page_delta {
+            PageDeltaSerialization::Mmap { file_len, pages } => {
+                let mut core = self.0.lock().unwrap();
+                core.grow_for_deserialization(file_len);
+                // File offsets of all pages are smaller than `file_len`, which means
+                // that the precondition of `deserialize_page()` is fulfilled after
+                // the call to `grow_for_deserialization(file_len)`.
+                pages
+                    .into_iter()
+                    .map(|(page_index, file_offset)| {
+                        let page = core.deserialize_page(file_offset);
+                        (page_index, Page(Arc::new(page)))
+                    })
+                    .collect()
+            }
+            PageDeltaSerialization::Empty | PageDeltaSerialization::Heap(_) => {
+                // This is really unreachable. See `serialize_page_delta()`.
+                unreachable!("Unexpected serialization of page-delta in MmapBasedPageAllocator");
+            }
+        }
+    }
 }
 
 impl MmapBasedPageAllocator {
-    fn new() -> MmapBasedPageAllocator {
-        MmapBasedPageAllocator(Mutex::new(MmapBasedPageAllocatorCore::new()))
+    fn new() -> Self {
+        Self(Mutex::new(MmapBasedPageAllocatorCore::new()))
+    }
+
+    fn open(file_descriptor: FileDescriptor) -> Self {
+        Self(Mutex::new(MmapBasedPageAllocatorCore::open(
+            file_descriptor,
+        )))
     }
 }
 
@@ -109,6 +182,7 @@ impl MmapBasedPageAllocator {
 struct Chunk {
     ptr: *mut u8,
     size: usize,
+    offset: FileOffset,
 }
 
 /// SAFETY: Shared pages are immutable .
@@ -121,6 +195,7 @@ unsafe impl Send for Chunk {}
 struct AllocationArea {
     start: *mut u8,
     end: *mut u8,
+    offset: FileOffset,
 }
 
 /// SAFETY: Shared pages are immutable.
@@ -131,6 +206,7 @@ impl Default for AllocationArea {
         Self {
             start: std::ptr::null_mut(),
             end: std::ptr::null_mut(),
+            offset: 0,
         }
     }
 }
@@ -145,12 +221,12 @@ impl AllocationArea {
     unsafe fn allocate_page(&mut self) -> MmapBasedPage {
         assert!(!self.is_empty());
         let ptr = self.start;
+        let offset = self.offset;
         self.start = self.start.add(PAGE_SIZE);
-        MmapBasedPage { ptr }
+        self.offset += PAGE_SIZE as FileOffset;
+        MmapBasedPage { ptr, offset }
     }
 }
-
-type FileOffset = off_t;
 
 /// The actual allocator implementation. It starts with an empty file, an
 /// emty set of memory-mapped `Chunk`s, and an empty allocation area.
@@ -204,12 +280,16 @@ impl Drop for MmapBasedPageAllocatorCore {
 
 impl MmapBasedPageAllocatorCore {
     fn new() -> Self {
-        let file_descriptor = memfd_create(&CString::default(), MemFdCreateFlag::empty())
+        let fd = memfd_create(&CString::default(), MemFdCreateFlag::empty())
             .expect("MmapPageAllocatorCore failed to create a memory file");
+        Self::open(FileDescriptor { fd })
+    }
+
+    fn open(file_descriptor: FileDescriptor) -> Self {
         Self {
             allocation_area: Default::default(),
             allocated_pages: 0,
-            file_descriptor,
+            file_descriptor: file_descriptor.fd,
             file_len: 0,
             chunks: vec![],
         }
@@ -274,12 +354,91 @@ impl MmapBasedPageAllocatorCore {
         self.chunks.push(Chunk {
             ptr: mmap_ptr,
             size: mmap_size,
+            offset: mmap_file_offset,
         });
 
         let start = mmap_ptr;
         // SAFETY: We memory-mapped exactly `mmap_size` bytes, so `end` points one byte
         // after the last byte of the chunk.
         let end = unsafe { mmap_ptr.add(mmap_size) };
-        AllocationArea { start, end }
+        AllocationArea {
+            start,
+            end,
+            offset: mmap_file_offset,
+        }
+    }
+
+    // Ensures that that last chunk of the file up to the given length is
+    // memory-mapped to allow deserialization of pages.
+    fn grow_for_deserialization(&mut self, file_len: FileOffset) {
+        if file_len <= self.file_len {
+            return;
+        }
+
+        let mmap_size = (file_len - self.file_len) as usize;
+        let mmap_file_offset = self.file_len;
+        self.file_len = file_len;
+
+        // The mapping is read-only because all pages are already initialized in the
+        // file and are immutable.
+        // SAFETY: The parameters are valid.
+        let mmap_ptr = unsafe {
+            mmap(
+                std::ptr::null_mut(),
+                mmap_size,
+                ProtFlags::PROT_READ,
+                MapFlags::MAP_SHARED,
+                self.file_descriptor,
+                mmap_file_offset,
+            )
+        }
+        .unwrap_or_else(|_| {
+            panic!(
+                "MmapPageAllocator failed to mmap {} bytes to memory file #{} \
+                         at offset {} for deserialization",
+                mmap_size, self.file_descriptor, mmap_file_offset,
+            )
+        }) as *mut u8;
+
+        self.chunks.push(Chunk {
+            ptr: mmap_ptr,
+            size: mmap_size,
+            offset: mmap_file_offset,
+        });
+    }
+
+    // Returns a page that starts at the given file offset.
+    // Precondition: the chunk containing the file offset must be already
+    // memory-mapped in `grow_for_deserialization()`.
+    fn deserialize_page(&self, file_offset: FileOffset) -> MmapBasedPage {
+        // Find the memory-mapped chunk that contains the given file offset.
+        // For a file of length N bytes, there will be O(lg(N)) chunks because
+        // allocation ensures that the chunk size increases exponentially.
+        // New pages are likely to be in the last chunk, that's why we iterate
+        // the chunks in the reverse order. The expected run-time is O(1).
+        for chunk in self.chunks.iter().rev() {
+            if chunk.offset <= file_offset && file_offset < chunk.offset + chunk.size as FileOffset
+            {
+                // If the start of the page is in the chunk, then the entire page must be in the
+                // chunk.
+                assert!(
+                    file_offset + PAGE_SIZE as FileOffset
+                        <= chunk.offset + chunk.size as FileOffset
+                );
+                // SAFETY: The chunk is memory-mapped, so the address range from `chunk.ptr` to
+                // `chunk.ptr + chunk.size` is valid. The page is fully contained in that
+                // address range.
+                let page_start = unsafe { chunk.ptr.add((file_offset - chunk.offset) as usize) };
+                return MmapBasedPage {
+                    ptr: page_start,
+                    offset: file_offset,
+                };
+            }
+        }
+        // Unreachable based on the precondition.
+        unreachable!(
+            "Couldn't deserialize a page at offset {}. Current file length {}.",
+            file_offset, self.file_len
+        );
     }
 }

@@ -160,12 +160,10 @@ mod tests {
 
     pub(crate) fn setup_registry(
         subnet_id: SubnetId,
-        ingress_bytes_per_block_soft_cap: usize,
         max_ingress_bytes_per_message: usize,
     ) -> Arc<dyn RegistryClient> {
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let mut subnet_record = test_subnet_record();
-        subnet_record.ingress_bytes_per_block_soft_cap = ingress_bytes_per_block_soft_cap as u64;
         subnet_record.max_ingress_bytes_per_message = max_ingress_bytes_per_message as u64;
 
         registry_data_provider
@@ -199,10 +197,7 @@ mod tests {
         });
         let (registry, subnet_id) = registry_and_subnet_id.unwrap_or_else(|| {
             let subnet_id = subnet_test_id(0);
-            (
-                setup_registry(subnet_id, 1024 * 1024, 60 * 1024 * 1024),
-                subnet_id,
-            )
+            (setup_registry(subnet_id, 60 * 1024 * 1024), subnet_id)
         });
         let consensus_pool_cache =
             consensus_pool_cache.unwrap_or_else(|| Arc::new(MockConsensusCache::new()));

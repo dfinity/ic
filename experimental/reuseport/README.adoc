@@ -1,0 +1,104 @@
+# Port allocation
+
+I was thinking maybe people hadn't realised that it is possible for two
+processes to share an address and port, using `SO_REUSEADDR` and `SO_REUSEPORT`.
+
+This is relevant for the port allocation problem.
+
+Instead of trying to implement something that involves pre-allocating ports,
+or writing port numbers to files for other processes to pick up and hope that
+you don't get hit by a race condition (hint: you will) it's better to have
+a parent process that allocates the port, and then starts a child process
+passing the port number to use as a piece of configuration information.
+
+This parent process can then coordinate starting multiple child processes that
+need to communicate over different ports.
+
+As long as parent and child both use the `SO_*` options (and only one of them
+tries to actually listen on the port) you're good to go.
+
+You can't do this with Rust's `TcpListener`
+
+```
+let listener = TcpListener::bind("127.0.0.1:0")?;
+```
+
+because that creates the socket and binds to it in one call. You can either
+use the `nix` (nothing to do with the package management system) or the `net2`
+crates to do this.
+
+So that's what this code does.
+
+The two `allocator_*.rs` files both do the same thing -- start, create a socket,
+set the necessary options, bind, discover the allocated port number, and then
+call `./client $port`.
+
+The `client_*.rs` files pick up the port number from the command line, create
+a socket for that IP address and port, set the options, bind, listen for
+incoming connections, accept the connection, and print a message to confirm.
+
+## Usage
+
+```
+% cargo build
+```
+
+to create the binaries.
+
+Then go to `target/debug` and run one of the `allocator_*` binaries:
+
+```
+% cd target/debug
+% ./allocator_nix
+```
+
+You should see:
+
+```
+% ./allocator_nix
+Allocator: 127.0.0.1:49475
+Client listening to: 127.0.0.1:49475
+```
+
+Obviously, the port numbers will vary.
+
+Now, in another shell, use NetCat to open a connection to that port.
+
+```
+% nc 127.0.0.1 49475
+```
+
+(change the port number to match whatever was printed by the client)
+
+Every time you run this you should see the client print
+
+```
+Client received a connection
+```
+
+## In a real implementation...
+
+It's important the socket opened by the parent is not dropped until the child
+has started and bound the port.
+
+If the parent's socket is dropped before the child can bind the race condition
+where another process could be allocated the same port still exists.
+
+`peer_manager.rs` and `peer.rs` show one way of doing this.
+
+`peer.rs` takes N command line args; the first is the port to listen on, the
+remainder are ports to connect to. At startup it listens on the given port and
+periodically connects to one of the other ports.
+
+`peer_manager.rs` starts N copies of `peer`, allocating ports as necessary and
+passing them as command line parameters.
+
+To run, `cargo build` as before and in `target/debug` run `./peer_manager 3`
+to start a manager that will launch 3 clients.
+
+See the comments in the `peer_manager.rs`, especially around line 70, for
+details, and for how you can see the difference with and without the race
+condition.
+
+Since the parent can't know when the child process has bound the port it should
+only unbind it (i.e., drop the socket) when the child process has exited.

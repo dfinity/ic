@@ -21,7 +21,7 @@ pub enum Protocol {
     Http1,
     #[strum(serialize = "https")]
     Http1Tls13,
-    #[strum(serialize = "org.dfinity.p2p1")]
+    #[strum(serialize = "org.internetcomputer.p2p1")]
     P2p1Tls13,
 }
 
@@ -59,13 +59,13 @@ impl From<&pbProtocol> for Protocol {
 ///
 /// For example:
 /// ```text
-///     org.dfinity.p2p1://w.x.y.z:port
+///     org.internetcomputer.p2p1://w.x.y.z:port
 /// ```
 ///
 /// Any additional parameters required by the endpoint can be passed
 /// in as URI parameters after the "?", e.g.
 /// ```text
-///    org.dfinity.p2p1://w.x.y.z:port?flow_tag=1234
+///    org.internetcomputer.p2p1://w.x.y.z:port?flow_tag=1234
 /// ```
 //
 // Note: "org.dfinity" can be changed once the Internet Computer has its own domain or set of
@@ -136,7 +136,7 @@ impl From<&ConnectionEndpoint> for Protocol {
         match connection_endpoint.url.scheme() {
             "http" => Protocol::Http1,
             "https" => Protocol::Http1Tls13,
-            "org.dfinity.p2p1" => Protocol::P2p1Tls13,
+            "org.internetcomputer.p2p1" => Protocol::P2p1Tls13,
             // Unreachable because everything that constructs a ConnectionEndpoint
             // checks for valid protocols
             _ => unreachable!(),
@@ -154,7 +154,7 @@ impl TryFrom<Url> for ConnectionEndpoint {
             // Using 'org.dfinity' as the protocol domain as per https://tools.ietf.org/html/rfc7595#section-3.8.
             // This can be changed once the Internet Computer has its own domain or set of
             // domains.
-            "org.dfinity.p2p1" => Ok(pbProtocol::P2p1Tls13),
+            "org.internetcomputer.p2p1" => Ok(pbProtocol::P2p1Tls13),
             scheme => Err(ConnectionEndpointTryFromError::InvalidScheme {
                 scheme: scheme.to_string(),
             }),
@@ -169,7 +169,7 @@ impl TryFrom<Url> for ConnectionEndpoint {
         // can check this, but this only works for "special" URI schemes (see
         // https://url.spec.whatwg.org/#special-scheme).
         //
-        // org.dfinity.p2p1 is *not* a special scheme, so the host portion
+        // org.internetcomputer.p2p1 is *not* a special scheme, so the host portion
         // will parse as a domain, not an IP address, but only if it's an IPv4
         // address. If it's an IPv6 address it parses just fine. We need to
         // check it's an IPv4 address ourselves. See also https://github.com/servo/rust-url/issues/606
@@ -231,7 +231,7 @@ impl TryFrom<pbConnectionEndpoint> for ConnectionEndpoint {
         let protocol: &str = match pb.protocol() {
             pbProtocol::Http1 => Ok("http"),
             pbProtocol::Http1Tls13 => Ok("https"),
-            pbProtocol::P2p1Tls13 => Ok("org.dfinity.p2p1"),
+            pbProtocol::P2p1Tls13 => Ok("org.internetcomputer.p2p1"),
             // TODO(OR4-49): This should actually return
             // Err(Self::Error::InvalidScheme { scheme: "unspecified".to_string()})
             // if the protocol is unspecified. Assume http until other code that
@@ -287,7 +287,7 @@ impl FromStr for ConnectionEndpoint {
                 match url.scheme() {
                     "http" => Ok(pbProtocol::Http1),
                     "https" => Ok(pbProtocol::Http1Tls13),
-                    "org.dfinity.p2p1" => Ok(pbProtocol::P2p1Tls13),
+                    "org.internetcomputer.p2p1" => Ok(pbProtocol::P2p1Tls13),
                     scheme => Err(ConnectionEndpointTryFromStringError::InvalidScheme {
                         scheme: scheme.to_string(),
                     }),
@@ -363,7 +363,7 @@ impl From<&ConnectionEndpoint> for pbConnectionEndpoint {
         let protocol = match ce.url.scheme() {
             "http" => pbProtocol::Http1,
             "https" => pbProtocol::Http1Tls13,
-            "org.dfinity.p2p1" => pbProtocol::P2p1Tls13,
+            "org.internetcomputer.p2p1" => pbProtocol::P2p1Tls13,
             _ => panic!("can't fail, protocol is checked when the struct was created"),
         };
 
@@ -443,8 +443,10 @@ mod connection_endpoint_test {
     /// protocol
     #[test]
     fn from_url_p2p1_ok() {
-        let want = "org.dfinity.p2p1://1.2.3.4:1234";
-        let url = "org.dfinity.p2p1://1.2.3.4:1234".parse::<Url>().unwrap();
+        let want = "org.internetcomputer.p2p1://1.2.3.4:1234";
+        let url = "org.internetcomputer.p2p1://1.2.3.4:1234"
+            .parse::<Url>()
+            .unwrap();
         let ce = ConnectionEndpoint::try_from(url).unwrap();
         assert_eq!(ce.to_string(), want);
     }
@@ -453,8 +455,8 @@ mod connection_endpoint_test {
     /// the path should be retained.
     #[test]
     fn from_url_p2p1_path_ok() {
-        let want = "org.dfinity.p2p1://1.2.3.4:1234/can_be_anything";
-        let url = "org.dfinity.p2p1://1.2.3.4:1234/can_be_anything"
+        let want = "org.internetcomputer.p2p1://1.2.3.4:1234/can_be_anything";
+        let url = "org.internetcomputer.p2p1://1.2.3.4:1234/can_be_anything"
             .parse::<Url>()
             .unwrap();
         let ce = ConnectionEndpoint::try_from(url).unwrap();
@@ -464,8 +466,8 @@ mod connection_endpoint_test {
     /// Converting from a p2p1 Url with an IPv6 address should work.
     #[test]
     fn from_url_p2p1_addr_v6_ok() {
-        let want = "org.dfinity.p2p1://[2607:fb58:9005:42:5054:ffff:fe0c:1d05]:4100";
-        let url = "org.dfinity.p2p1://[2607:fb58:9005:42:5054:ffff:fe0c:1d05]:4100"
+        let want = "org.internetcomputer.p2p1://[2607:fb58:9005:42:5054:ffff:fe0c:1d05]:4100";
+        let url = "org.internetcomputer.p2p1://[2607:fb58:9005:42:5054:ffff:fe0c:1d05]:4100"
             .parse::<Url>()
             .unwrap();
         let ce = ConnectionEndpoint::try_from(url).unwrap();
@@ -475,7 +477,9 @@ mod connection_endpoint_test {
     /// p2p1 URLs *must* include a port number as there is no default port
     #[test]
     fn from_url_p2p1_no_port_fail() {
-        let url = "org.dfinity.p2p1://1.2.3.4".parse::<Url>().unwrap();
+        let url = "org.internetcomputer.p2p1://1.2.3.4"
+            .parse::<Url>()
+            .unwrap();
         assert_matches!(
             ConnectionEndpoint::try_from(url),
             Err(ConnectionEndpointTryFromError::MissingPort { .. })
@@ -487,7 +491,9 @@ mod connection_endpoint_test {
     fn from_url_domain_fail() {
         let urls: Vec<Url> = vec![
             "http://example.com".parse().unwrap(),
-            "org.dfinity.p2p1://example.com:1234".parse().unwrap(),
+            "org.internetcomputer.p2p1://example.com:1234"
+                .parse()
+                .unwrap(),
         ];
 
         for url in urls.iter() {
@@ -579,7 +585,7 @@ mod pb_connection_endpoint_test {
             },
             TestData {
                 // p2p, ipv4
-                source: "org.dfinity.p2p1://1.2.3.4:4100",
+                source: "org.internetcomputer.p2p1://1.2.3.4:4100",
                 pb_connection_endpoint: pbConnectionEndpoint {
                     protocol: Protocol::P2p1Tls13 as i32,
                     ip_addr: "1.2.3.4".to_string(),
@@ -589,7 +595,7 @@ mod pb_connection_endpoint_test {
             TestData {
                 // p2p, ipv6. Note that `ip_addr` *is not* expected to be enclosed in
                 // `[` and `]`, per https://tools.ietf.org/html/rfc5952#section-4
-                source: "org.dfinity.p2p1://[2607:fb58:9005:42:5054:ffff:fe0c:1d05]:4100",
+                source: "org.internetcomputer.p2p1://[2607:fb58:9005:42:5054:ffff:fe0c:1d05]:4100",
                 pb_connection_endpoint: pbConnectionEndpoint {
                     protocol: Protocol::P2p1Tls13 as i32,
                     ip_addr: "2607:fb58:9005:42:5054:ffff:fe0c:1d05".to_string(),

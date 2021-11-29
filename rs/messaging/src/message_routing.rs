@@ -334,7 +334,7 @@ impl BatchProcessorImpl {
     fn observe_canisters_memory_usage(&self, state: &ReplicatedState) {
         let mut memory_usage = NumBytes::from(0);
         for canister in state.canister_states.values() {
-            memory_usage += canister.memory_usage();
+            memory_usage += canister.memory_usage(state.metadata.own_subnet_type);
         }
         self.metrics
             .canisters_memory_usage_bytes
@@ -479,7 +479,7 @@ impl BatchProcessorImpl {
 
         Ok(NetworkTopology {
             subnets,
-            routing_table,
+            routing_table: Arc::new(routing_table),
             nns_subnet_id,
         })
     }

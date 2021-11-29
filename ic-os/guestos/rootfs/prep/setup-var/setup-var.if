@@ -1,0 +1,23 @@
+# This policy module allows the fsadm_t type read everything below /var.
+# This is not terribly great, but it is done this way in order to allow
+# mkfs to be called using existing /var as a "template" and populating the
+# "real" /var contents using the correct contexts already.
+#
+# A better strategy would "probably" be:
+# - store a /var template filesystem somewhere else, but without "correct"
+#   labels, but rather a "generic" label suitable for reading by fsadm_t
+# - create filesystem and use labeset with fakeroot or debugfs to initialize
+#   fs image
+#
+# However, this policy module provides an easy way to allow the current
+# implementation to be carried forward for a while, and also does not
+# raise "security eyebrows" for now.
+
+interface(`require_fsadm_read_all',`
+	gen_require(`
+		type $1;
+	')
+	list_dirs_pattern(fsadm_t, $1, $1)
+	read_files_pattern(fsadm_t, $1, $1)
+	read_lnk_files_pattern(fsadm_t, $1, $1)
+')

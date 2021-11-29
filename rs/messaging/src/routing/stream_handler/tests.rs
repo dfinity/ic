@@ -13,7 +13,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
     replicated_state::{LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_OUT_OF_MEMORY},
-    testing::{ReplicatedStateTesting, SystemStateTesting},
+    testing::ReplicatedStateTesting,
     ReplicatedState, Stream,
 };
 use ic_test_utilities::{
@@ -100,6 +100,7 @@ fn induct_loopback_stream_empty_loopback_stream() {
             *INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
+        initial_state.put_canister_state(initial_canister_state);
 
         // An empty loopback stream.
         let loopback_stream = generate_loopback_stream(StreamConfig {
@@ -107,8 +108,6 @@ fn induct_loopback_stream_empty_loopback_stream() {
             message_count: 0,
             signals_end: 21,
         });
-
-        initial_state.put_canister_state(initial_canister_state);
         initial_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
 
         let expected_state = initial_state.clone();
@@ -135,6 +134,7 @@ fn induct_loopback_stream_reject_response() {
             *INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
+        initial_state.put_canister_state(initial_canister_state);
 
         // A loopback stream with 1 message addressed to an unknown canister.
         let loopback_stream = generate_stream(
@@ -147,8 +147,6 @@ fn induct_loopback_stream_reject_response() {
             SignalConfig { end: 21 },
         );
         let msg = loopback_stream.messages().iter().next().unwrap().1.clone();
-
-        initial_state.put_canister_state(initial_canister_state);
         initial_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
 
         // Expecting an unchanged canister state...
@@ -200,6 +198,7 @@ fn induct_loopback_stream_success() {
             *INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
+        initial_state.put_canister_state(initial_canister_state);
 
         // A loopback stream with 2 messages.
         let loopback_stream = generate_loopback_stream(StreamConfig {
@@ -207,24 +206,26 @@ fn induct_loopback_stream_success() {
             message_count: 2,
             signals_end: 21,
         });
-
-        initial_state.put_canister_state(initial_canister_state);
         initial_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream.clone()]);
 
         // Expecting a canister state with the 2 messages inducted...
-        let mut expected_canister_state = new_canister_state(
+        let expected_canister_state = new_canister_state(
             *LOCAL_CANISTER,
             user_test_id(24).get(),
             *INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
+        expected_state.put_canister_state(expected_canister_state);
+
         for (_stream_index, msg) in loopback_stream.messages().iter() {
             assert_eq!(
                 Ok(()),
-                expected_canister_state
-                    .system_state
-                    .queues_mut()
-                    .push_input(QUEUE_INDEX_NONE, msg.clone())
+                expected_state.push_input(
+                    QUEUE_INDEX_NONE,
+                    msg.clone(),
+                    (u64::MAX / 2).into(),
+                    &mut (i64::MAX / 2)
+                )
             );
         }
 
@@ -234,8 +235,6 @@ fn induct_loopback_stream_success() {
             message_count: 0,
             signals_end: 23,
         });
-
-        expected_state.put_canister_state(expected_canister_state);
         expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
 
         let inducted_state = stream_handler.induct_loopback_stream(initial_state);
@@ -560,7 +559,6 @@ fn enqueue_reject_response_canister_not_found() {
 fn induct_stream_slices_partial_success() {
     with_test_replica_logger(|log| {
         let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        let mut expected_state = initial_state.clone();
 
         // Canister with a reservation for one incoming response.
         let mut initial_canister_state = new_canister_state(
@@ -573,18 +571,16 @@ fn induct_stream_slices_partial_success() {
             .push_output_request(test_request(*LOCAL_CANISTER, *REMOTE_CANISTER))
             .unwrap();
         initial_canister_state.output_into_iter().count();
+        initial_state.put_canister_state(initial_canister_state);
 
         let initial_stream = generate_outgoing_stream(StreamConfig {
             messages_begin: 31,
             message_count: 3,
             signals_end: 43,
         });
-
-        let mut expected_canister_state = initial_canister_state.clone();
-
-        initial_state.put_canister_state(initial_canister_state);
         initial_state.with_streams(btreemap![REMOTE_SUBNET => initial_stream]);
 
+        let mut expected_state = initial_state.clone();
         // 2 incoming requests, 2 signals...
         let mut stream_slice = generate_stream_slice(StreamSliceConfig {
             header_begin: 42,
@@ -603,10 +599,12 @@ fn induct_stream_slices_partial_success() {
             for (_stream_index, msg) in messages.iter() {
                 assert_eq!(
                     Ok(()),
-                    expected_canister_state
-                        .system_state
-                        .queues_mut()
-                        .push_input(QUEUE_INDEX_NONE, msg.clone())
+                    expected_state.push_input(
+                        QUEUE_INDEX_NONE,
+                        msg.clone(),
+                        (u64::MAX / 2).into(),
+                        &mut (i64::MAX / 2)
+                    )
                 );
             }
         }
@@ -653,7 +651,6 @@ fn induct_stream_slices_partial_success() {
         // And expect one signal in the output stream.
         expected_stream.increment_signals_end();
 
-        expected_state.put_canister_state(expected_canister_state);
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
         // Act
@@ -798,8 +795,6 @@ fn induct_stream_slices_memory_limits_impl(
         request.into()
     }
 
-    let mut expected_state = initial_state.clone();
-
     // Canister with a reservation for one incoming response.
     let mut initial_canister_state = new_canister_state(
         *LOCAL_CANISTER,
@@ -811,6 +806,8 @@ fn induct_stream_slices_memory_limits_impl(
         .push_output_request(test_request(*LOCAL_CANISTER, *REMOTE_CANISTER))
         .unwrap();
     initial_canister_state.output_into_iter().count();
+    initial_state.put_canister_state(initial_canister_state);
+    let mut expected_state = initial_state.clone();
 
     let initial_stream = generate_outgoing_stream(StreamConfig {
         messages_begin: 31,
@@ -818,10 +815,6 @@ fn induct_stream_slices_memory_limits_impl(
         signals_end: 43,
     });
     let mut expected_stream = initial_stream.clone();
-
-    let mut expected_canister_state = initial_canister_state.clone();
-
-    initial_state.put_canister_state(initial_canister_state);
     initial_state.with_streams(btreemap![REMOTE_SUBNET => initial_stream]);
 
     // Incoming slice: `request1`, response, `request2`.
@@ -843,10 +836,12 @@ fn induct_stream_slices_memory_limits_impl(
         for (_stream_index, msg) in messages.iter().skip(1) {
             assert_eq!(
                 Ok(()),
-                expected_canister_state
-                    .system_state
-                    .queues_mut()
-                    .push_input(QUEUE_INDEX_NONE, msg.clone())
+                expected_state.push_input(
+                    QUEUE_INDEX_NONE,
+                    msg.clone(),
+                    (u64::MAX / 2).into(),
+                    &mut (i64::MAX / 2)
+                )
             );
         }
     }
@@ -866,8 +861,6 @@ fn induct_stream_slices_memory_limits_impl(
             .to_string(),
         ),
     ));
-
-    expected_state.put_canister_state(expected_canister_state);
     expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
     // Act
@@ -935,6 +928,8 @@ fn process_certified_stream_slices_success() {
             *INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
+        initial_state.put_canister_state(initial_canister_state);
+
         // ...a loopback stream containing 3 messages...
         let loopback_stream = generate_loopback_stream(StreamConfig {
             messages_begin: 21,
@@ -948,8 +943,6 @@ fn process_certified_stream_slices_success() {
             message_count: 3,
             signals_end: 43,
         });
-
-        initial_state.put_canister_state(initial_canister_state);
 
         stream_handler
             .time_in_stream_metrics
@@ -972,20 +965,24 @@ fn process_certified_stream_slices_success() {
 
         //
         // The expected `CanisterState` has...
-        let mut expected_canister_state = new_canister_state(
+        let expected_canister_state = new_canister_state(
             *LOCAL_CANISTER,
             user_test_id(24).get(),
             *INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
+        expected_state.put_canister_state(expected_canister_state);
+
         // ...the 3 loopback messages...
         for (_stream_index, msg) in loopback_stream.messages().iter() {
             assert_eq!(
                 Ok(()),
-                expected_canister_state
-                    .system_state
-                    .queues_mut()
-                    .push_input(QUEUE_INDEX_NONE, msg.clone())
+                expected_state.push_input(
+                    QUEUE_INDEX_NONE,
+                    msg.clone(),
+                    (u64::MAX / 2).into(),
+                    &mut (i64::MAX / 2)
+                )
             );
         }
         // ...and the 2 incoming messages inducted.
@@ -993,10 +990,12 @@ fn process_certified_stream_slices_success() {
             for (_stream_index, msg) in messages.iter() {
                 assert_eq!(
                     Ok(()),
-                    expected_canister_state
-                        .system_state
-                        .queues_mut()
-                        .push_input(QUEUE_INDEX_NONE, msg.clone())
+                    expected_state.push_input(
+                        QUEUE_INDEX_NONE,
+                        msg.clone(),
+                        (u64::MAX / 2).into(),
+                        &mut (i64::MAX / 2)
+                    )
                 );
             }
         }
@@ -1017,7 +1016,6 @@ fn process_certified_stream_slices_success() {
             signals_end: 45,
         });
 
-        expected_state.put_canister_state(expected_canister_state);
         expected_state.with_streams(
             btreemap![LOCAL_SUBNET => expected_loopback_stream, REMOTE_SUBNET => expected_stream],
         );
@@ -1099,10 +1097,10 @@ fn new_fixture_with_config(
 
     // Ensure the routing table maps `LOCAL_CANISTER` to `LOCAL_SUBNET`,
     // `REMOTE_CANISTER` to `REMOTE_SUBNET` and `UNKNOWN_CANISTER` to `None`.
-    let routing_table = RoutingTable::new(btreemap! {
+    let routing_table = Arc::new(RoutingTable::new(btreemap! {
         CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => LOCAL_SUBNET,
         CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => REMOTE_SUBNET,
-    });
+    }));
     assert_eq!(
         Some(LOCAL_SUBNET),
         routing_table.route(LOCAL_CANISTER.get())

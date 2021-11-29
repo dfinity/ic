@@ -1,0 +1,29 @@
+[package]
+name = "pmap"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+# add dependencies that only canister uses here
+dfn_core = { path = "../dfn_core" }
+dfn_macro = { path = "../dfn_macro" }
+dfn_json = { path = "../dfn_json" }
+
+[target.'cfg(not(target_os = "unknown"))'.dev-dependencies]
+# add dependencies that only test driver uses
+canister-test = { path = "../../rust_canisters/canister_test" }
+ic-utils = { path = "../../utils" }
+
+
+[[bin]]
+name = "pmap"
+path = "src/main.rs"
+
+[[bin]]
+name = "pmap_canister"
+path = "canister/main.rs"
+
+[[test]]
+name = "test"
+path = "test/main.rs"

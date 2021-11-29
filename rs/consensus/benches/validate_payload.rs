@@ -17,7 +17,7 @@ use ic_consensus::consensus::{
     payload_builder::{PayloadBuilder, PayloadBuilderImpl},
     pool_reader::PoolReader,
 };
-use ic_consensus_message::{make_genesis, ConsensusMessageHashable};
+use ic_consensus_message::ConsensusMessageHashable;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
@@ -32,7 +32,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
-    consensus::{fake::*, MockConsensusCache},
+    consensus::{fake::*, make_genesis, MockConsensusCache},
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     registry::{setup_registry, SubnetRecordBuilder},
@@ -122,14 +122,15 @@ where
             ),
         ));
 
+        let registry_client = setup_registry(
+            subnet_id,
+            vec![(1, SubnetRecordBuilder::from(&committee).build())],
+        );
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let ingress_manager = Arc::new(IngressManager::new(
             Arc::new(MockConsensusCache::new()),
             Box::new(ingress_hist_reader),
-            setup_registry(
-                subnet_id,
-                vec![(1, SubnetRecordBuilder::from(&committee).build())],
-            ),
+            registry_client.clone(),
             ingress_signature_crypto,
             metrics_registry.clone(),
             subnet_id,
@@ -140,10 +141,13 @@ where
         ));
 
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
+            subnet_test_id(0),
+            registry_client,
             ingress_manager,
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             metrics_registry,
+            no_op_logger(),
         ));
 
         test_fn(now, &mut consensus_pool, payload_builder.as_ref());

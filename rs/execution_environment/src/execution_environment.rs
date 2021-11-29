@@ -89,9 +89,11 @@ pub trait ExecutionEnvironment: Sync + Send {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
+        nns_subnet_id: SubnetId,
     ) -> ExecuteMessageResult<CanisterState>;
 
     /// Executes a heartbeat of a given canister.
+    #[allow(clippy::too_many_arguments)]
     fn execute_canister_heartbeat(
         &self,
         canister_state: CanisterState,
@@ -100,6 +102,7 @@ pub trait ExecutionEnvironment: Sync + Send {
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         time: Time,
         subnet_available_memory: SubnetAvailableMemory,
+        nns_subnet_id: SubnetId,
     ) -> (
         CanisterState,
         NumInstructions,
@@ -135,6 +138,7 @@ pub struct ExecutionEnvironmentImpl {
     config: ExecutionConfig,
     cycles_account_manager: Arc<CyclesAccountManager>,
     own_subnet_id: SubnetId,
+    own_subnet_type: SubnetType,
 }
 
 impl ExecutionEnvironment for ExecutionEnvironmentImpl {
@@ -243,6 +247,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                 canister_memory_limit: self.config.max_canister_memory_size,
                                 subnet_available_memory,
                                 compute_allocation: ComputeAllocation::default(),
+                                subnet_type: state.metadata.own_subnet_type,
                             };
 
                             let (instructions_left, result) = self.canister_manager.install_code(
@@ -650,10 +655,11 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
+        nns_subnet_id: SubnetId,
     ) -> ExecuteMessageResult<CanisterState> {
         let (should_refund_remaining_cycles, mut res) = match msg {
             CanisterInputMessage::Request(request) => {
-                let memory_usage = canister.memory_usage();
+                let memory_usage = canister.memory_usage(self.own_subnet_type);
                 let compute_allocation = canister.scheduler_state.compute_allocation;
                 if let Err(err) = self.cycles_account_manager.withdraw_execution_cycles(
                     &mut canister.system_state,
@@ -683,12 +689,13 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         routing_table,
                         subnet_records,
                         subnet_available_memory,
+                        nns_subnet_id,
                     ),
                 )
             }
 
             CanisterInputMessage::Ingress(ingress) => {
-                let memory_usage = canister.memory_usage();
+                let memory_usage = canister.memory_usage(self.own_subnet_type);
                 let compute_allocation = canister.scheduler_state.compute_allocation;
                 if let Err(err) = self.cycles_account_manager.withdraw_execution_cycles(
                     &mut canister.system_state,
@@ -726,6 +733,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         routing_table,
                         subnet_records,
                         subnet_available_memory,
+                        nns_subnet_id,
                     ),
                 )
             }
@@ -738,6 +746,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 routing_table,
                 subnet_records,
                 subnet_available_memory,
+                nns_subnet_id,
             ),
         };
 
@@ -761,6 +770,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         time: Time,
         subnet_available_memory: SubnetAvailableMemory,
+        nns_subnet_id: SubnetId,
     ) -> (
         CanisterState,
         NumInstructions,
@@ -775,7 +785,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             );
         }
 
-        let memory_usage = canister.memory_usage();
+        let memory_usage = canister.memory_usage(self.own_subnet_type);
         let compute_allocation = canister.scheduler_state.compute_allocation;
         if let Err(err) = self.cycles_account_manager.withdraw_execution_cycles(
             &mut canister.system_state,
@@ -800,6 +810,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 subnet_records,
                 time,
                 execution_parameters,
+                nns_subnet_id,
             );
 
         // Clone the `cycles_account_manager` to avoid having to require 'static
@@ -832,6 +843,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             canister_memory_limit: canister.memory_limit(self.config.max_canister_memory_size),
             subnet_available_memory,
             compute_allocation: canister.scheduler_state.compute_allocation,
+            subnet_type: self.own_subnet_type,
         }
     }
 }
@@ -844,6 +856,7 @@ impl ExecutionEnvironmentImpl {
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
+        own_subnet_type: SubnetType,
         num_cores: usize,
         config: ExecutionConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
@@ -854,6 +867,7 @@ impl ExecutionEnvironmentImpl {
             config.default_provisional_cycles_balance,
             config.default_freeze_threshold,
             own_subnet_id,
+            own_subnet_type,
             config.max_controllers,
             num_cores,
         );
@@ -873,6 +887,7 @@ impl ExecutionEnvironmentImpl {
             config,
             cycles_account_manager,
             own_subnet_id,
+            own_subnet_type,
         }
     }
 
@@ -1036,6 +1051,7 @@ impl ExecutionEnvironmentImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
+        nns_subnet_id: SubnetId,
     ) -> (bool, ExecuteMessageResult<CanisterState>) {
         let call_context_manager = match canister.status() {
             CanisterStatusType::Stopped => {
@@ -1185,6 +1201,7 @@ impl ExecutionEnvironmentImpl {
                 routing_table,
                 subnet_records,
                 execution_parameters,
+                nns_subnet_id,
             );
 
             let log = self.log.clone();
@@ -1243,6 +1260,7 @@ impl ExecutionEnvironmentImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
+        nns_subnet_id: SubnetId,
     ) -> ExecuteMessageResult<CanisterState> {
         if CanisterStatusType::Running != canister.status() {
             // Canister isn't running. Reject the request.
@@ -1270,6 +1288,7 @@ impl ExecutionEnvironmentImpl {
                 routing_table,
                 subnet_records,
                 subnet_available_memory,
+                nns_subnet_id,
             )
         }
     }
@@ -1310,6 +1329,7 @@ impl ExecutionEnvironmentImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
+        nns_subnet_id: SubnetId,
     ) -> ExecuteMessageResult<CanisterState> {
         let sender = req.sender;
         let reply_callback = req.sender_reply_callback;
@@ -1324,6 +1344,7 @@ impl ExecutionEnvironmentImpl {
             routing_table,
             subnet_records,
             execution_parameters,
+            nns_subnet_id,
         );
 
         produce_inter_canister_response(&mut canister, action, sender, reply_callback);
@@ -1402,7 +1423,7 @@ impl ExecutionEnvironmentImpl {
                         if let Err(err) = self.cycles_account_manager.can_withdraw_cycles(
                             &canister.system_state,
                             cost,
-                            canister.memory_usage(),
+                            canister.memory_usage(self.own_subnet_type),
                             canister.scheduler_state.compute_allocation,
                         ) {
                             return Err(permission_denied_error(&err.to_string()));
@@ -1465,6 +1486,7 @@ impl ExecutionEnvironmentImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
+        nns_subnet_id: SubnetId,
     ) -> ExecuteMessageResult<CanisterState> {
         let canister_id = canister.canister_id();
         if CanisterStatusType::Running != canister.status() {
@@ -1525,6 +1547,7 @@ impl ExecutionEnvironmentImpl {
                 routing_table,
                 subnet_records,
                 subnet_available_memory,
+                nns_subnet_id,
             )
         }
     }
@@ -1540,6 +1563,7 @@ impl ExecutionEnvironmentImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
+        nns_subnet_id: SubnetId,
     ) -> ExecuteMessageResult<CanisterState> {
         let message_id = ingress.message_id.clone();
         let source = ingress.source;
@@ -1553,6 +1577,7 @@ impl ExecutionEnvironmentImpl {
             routing_table,
             subnet_records,
             execution_parameters,
+            nns_subnet_id,
         );
 
         let ingress_status =

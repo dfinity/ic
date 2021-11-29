@@ -47,7 +47,8 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
             .start_timer();
         self.metrics.observe_insert(artifact.as_ref().count_bytes());
         if let Some(previous) = self.artifacts.insert(message_id, artifact) {
-            self.metrics.observe_remove(previous.as_ref().count_bytes());
+            self.metrics
+                .observe_duplicate(previous.as_ref().count_bytes());
         }
     }
 

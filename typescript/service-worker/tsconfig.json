@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "es2017",
+    // Required for buffer-pipe
+    "esModuleInterop": true,
+    "lib": ["dom", "es2015", "es2017", "ES2020", "DOM", "ScriptHost", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "outDir": "./lib/esm",
+    "rootDir": "."
+  },
+  "files": [],
+  "references": [
+    { "path": "packages/agent" },
+    { "path": "packages/authentication" },
+    { "path": "packages/identity" }
+  ],
+  "include": ["packages/**/types/*"],
+  "resolveJsonModule": true,
+  "exclude": ["**/src/**/*.test.ts"]
+}

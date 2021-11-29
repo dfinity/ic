@@ -1,0 +1,6 @@
+[source.crates-io]
+registry = 'https://github.com/rust-lang/crates.io-index'
+replace-with = 'local-registry'
+
+[source.local-registry]
+local-registry = 'cargo_home'

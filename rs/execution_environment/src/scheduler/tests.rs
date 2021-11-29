@@ -12,10 +12,10 @@ use ic_interfaces::messages::CanisterInputMessage;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_replicated_state::canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE};
 use ic_replicated_state::{
+    canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CallOrigin, ExportedFunctions, NumWasmPages64,
+    CallOrigin, ExportedFunctions,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -480,7 +480,7 @@ fn basic_induct_messages_on_same_subnet_works() {
             state.put_canister_states(canisters);
 
             let (own_subnet_id, routing_table) = setup_routing_table();
-            state.metadata.network_topology.routing_table = routing_table;
+            state.metadata.network_topology.routing_table = Arc::new(routing_table);
             state.metadata.own_subnet_id = own_subnet_id;
             scheduler.induct_messages_on_same_subnet(&mut state);
             let mut canisters = state.take_canister_states();
@@ -536,7 +536,7 @@ fn induct_messages_on_same_subnet_handles_foreign_subnet() {
             state.put_canister_states(canisters);
 
             let (own_subnet_id, routing_table) = setup_routing_table();
-            state.metadata.network_topology.routing_table = routing_table;
+            state.metadata.network_topology.routing_table = Arc::new(routing_table);
             state.metadata.own_subnet_id = own_subnet_id;
 
             scheduler.induct_messages_on_same_subnet(&mut state);
@@ -592,7 +592,7 @@ fn induct_messages_to_self_works() {
             state.put_canister_states(canisters);
 
             let (own_subnet_id, routing_table) = setup_routing_table();
-            state.metadata.network_topology.routing_table = routing_table;
+            state.metadata.network_topology.routing_table = Arc::new(routing_table);
             state.metadata.own_subnet_id = own_subnet_id;
 
             scheduler.induct_messages_on_same_subnet(&mut state);
@@ -672,7 +672,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
             state.put_canister_states(canisters);
 
             let (own_subnet_id, routing_table) = setup_routing_table();
-            state.metadata.network_topology.routing_table = routing_table;
+            state.metadata.network_topology.routing_table = Arc::new(routing_table);
             state.metadata.own_subnet_id = own_subnet_id;
 
             scheduler.induct_messages_on_same_subnet(&mut state);
@@ -722,7 +722,7 @@ fn test_multiple_iterations_of_inner_loop() {
     exec_env
         .expect_execute_canister_message()
         .times(2)
-        .returning(move |mut canister, _, msg, _, _, _, _| {
+        .returning(move |mut canister, _, msg, _, _, _, _, _| {
             let canister0 = canister_test_id(0);
             let canister1 = canister_test_id(1);
             let canister_id = canister.canister_id();
@@ -787,9 +787,9 @@ fn test_multiple_iterations_of_inner_loop() {
                 scheduler_test_fixture.canister_num,
                 scheduler_test_fixture.message_num_per_canister,
             );
-            let routing_table = RoutingTable::new(btreemap! {
+            let routing_table = Arc::new(RoutingTable::new(btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => scheduler.own_subnet_id,
-            });
+            }));
             state.metadata.network_topology.routing_table = routing_table;
 
             let canister_id = canister_test_id(0);
@@ -854,7 +854,7 @@ fn canister_can_run_for_multiple_iterations() {
     exec_env
         .expect_execute_canister_message()
         .times(..)
-        .returning(move |mut canister, _, _, _, _, _, _| {
+        .returning(move |mut canister, _, _, _, _, _, _, _| {
             let canister_id = canister.canister_id();
             canister
                 .push_output_request(
@@ -1669,6 +1669,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
                                 .payment(Cycles::from(cycles))
                                 .build(),
                         ),
+                        InputQueueType::RemoteSubnet,
                     )
                     .unwrap();
             }
@@ -1712,7 +1713,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
     exec_env
         .expect_execute_canister_heartbeat()
         .times(1)
-        .returning(move |canister, instruction_limit, _, _, _, _| {
+        .returning(move |canister, instruction_limit, _, _, _, _, _| {
             (
                 canister,
                 instruction_limit - NumInstructions::from(1),
@@ -1778,7 +1779,7 @@ fn execute_heartbeat_before_messages() {
     exec_env
         .expect_execute_canister_heartbeat()
         .times(1)
-        .returning(move |canister, instruction_limit, _, _, _, _| {
+        .returning(move |canister, instruction_limit, _, _, _, _, _| {
             (
                 canister,
                 instruction_limit - NumInstructions::from(1),
@@ -1846,7 +1847,7 @@ fn execute_multiple_heartbeats() {
     exec_env
         .expect_execute_canister_heartbeat()
         .times(number_of_canisters * number_of_rounds)
-        .returning(move |canister, instruction_limit, _, _, _, _| {
+        .returning(move |canister, instruction_limit, _, _, _, _, _| {
             (
                 canister,
                 instruction_limit - NumInstructions::from(1),
@@ -1911,7 +1912,7 @@ fn can_record_metrics_single_scheduler_thread() {
         exec_env
             .expect_execute_canister_message()
             .times(1)
-            .returning(move |canister, _, _, _, _, _, _| ExecuteMessageResult {
+            .returning(move |canister, _, _, _, _, _, _, _| ExecuteMessageResult {
                 canister,
                 num_instructions_left: NumInstructions::from(0),
                 ingress_status: Some((
@@ -1930,7 +1931,7 @@ fn can_record_metrics_single_scheduler_thread() {
             exec_env
                 .expect_execute_canister_message()
                 .times(1)
-                .returning(move |canister, _, _, _, _, _, _| ExecuteMessageResult {
+                .returning(move |canister, _, _, _, _, _, _, _| ExecuteMessageResult {
                     canister,
                     num_instructions_left: NumInstructions::from(1),
                     ingress_status: Some((
@@ -2014,6 +2015,7 @@ fn can_record_metrics_single_scheduler_thread() {
                 only_track_system_errors: true,
             },
             &measurement_scope,
+            subnet_test_id(0x101), // NNS subnet
         );
 
         let cycles_consumed_per_message_stats = fetch_histogram_stats(
@@ -2654,6 +2656,7 @@ fn execution_round_metrics_are_recorded() {
                                 .payment(Cycles::from(cycles))
                                 .build(),
                         ),
+                        InputQueueType::RemoteSubnet,
                     )
                     .unwrap();
             }
@@ -2879,7 +2882,7 @@ fn heartbeat_metrics_are_recorded() {
     exec_env
         .expect_execute_canister_heartbeat()
         .times(2)
-        .returning(move |canister, _, _, _, _, _| {
+        .returning(move |canister, _, _, _, _, _, _| {
             let canister0 = canister_test_id(0);
             let canister1 = canister_test_id(1);
             if canister.canister_id() == canister0 {
@@ -3161,11 +3164,6 @@ fn test_uninstall_canister() {
         mock_time(),
     );
 
-    // Stable memory and execution state are dropped.
-    assert_eq!(
-        canister.system_state.stable_memory.size,
-        NumWasmPages64::new(0)
-    );
     assert_eq!(canister.execution_state, None);
 }
 
@@ -3519,7 +3517,7 @@ fn default_exec_env_mock(
     exec_env
         .expect_execute_canister_message()
         .times(calls)
-        .returning(move |canister, _, msg, _, _, _, _| {
+        .returning(move |canister, _, msg, _, _, _, _, _| {
             if let CanisterInputMessage::Ingress(msg) = msg {
                 ExecuteMessageResult {
                     canister: canister.clone(),

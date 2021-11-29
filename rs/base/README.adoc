@@ -1,0 +1,24 @@
+== Base directory
+This is a directory containing crates with stable APIs, intended to be used
+throughout the codebase. Base crates can depend only on other base crates and a
+pre-approved public crates.
+
+Note this directory is not to be used for utility functions needed by specific
+internal crates. The crates here implement common programming idioms. They are
+not intended to have APIs specific to the Internet Computer.
+
+Possible examples include:
+
+* Concurrency  
+* String manipulation algorithms.
+* Time specific wrappers.
+
+Not suitable examples:
+
+* Client library for constructing HttpRequest to the Internet Computer.
+
+=== Allowed dependencies
+
+* link:https://docs.rs/prometheus[prometheus]
+* link:https://docs.rs/slog[slog]
+* link:https://docs.rs/tokio[tokio]

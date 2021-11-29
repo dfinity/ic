@@ -1,14 +1,15 @@
 use candid::CandidType;
+use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ledger_canister::{
-    AccountIdentifier, BlockHeight, ICPTs, Memo, SendArgs, Subaccount, TRANSACTION_FEE,
+    AccountIdentifier, BlockHeight, Memo, SendArgs, Subaccount, Tokens, TRANSACTION_FEE,
 };
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
 
-pub const CREATE_CANISTER_REFUND_FEE: ICPTs = ICPTs::from_e8s(TRANSACTION_FEE.get_e8s() * 4);
-pub const TOP_UP_CANISTER_REFUND_FEE: ICPTs = ICPTs::from_e8s(TRANSACTION_FEE.get_e8s() * 2);
+pub const CREATE_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(TRANSACTION_FEE.get_e8s() * 4);
+pub const TOP_UP_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(TRANSACTION_FEE.get_e8s() * 2);
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct CyclesCanisterInitPayload {
@@ -21,7 +22,7 @@ pub const MEMO_CREATE_CANISTER: Memo = Memo(0x41455243); // == 'CREA'
 pub const MEMO_TOP_UP_CANISTER: Memo = Memo(0x50555054); // == 'TPUP'
 
 pub fn create_canister_txn(
-    amount: ICPTs,
+    amount: Tokens,
     from_subaccount: Option<Subaccount>,
     cycles_canister_id: &CanisterId,
     creator_principal_id: &PrincipalId,
@@ -39,7 +40,7 @@ pub fn create_canister_txn(
 }
 
 pub fn top_up_canister_txn(
-    amount: ICPTs,
+    amount: Tokens,
     from_subaccount: Option<Subaccount>,
     cycles_canister_id: &CanisterId,
     target_canister_id: &CanisterId,
@@ -64,20 +65,20 @@ pub type CreateCanisterResult = Result<CanisterId, (String, Option<BlockHeight>)
 /// an error, contains the index of the refund block.
 pub type TopUpCanisterResult = Result<(), (String, Option<BlockHeight>)>;
 
-pub struct IcptsToCycles {
+pub struct TokensToCycles {
     /// Number of 1/10,000ths of XDR that 1 ICP is worth.
     pub xdr_permyriad_per_icp: u64,
     /// Number of cycles that 1 XDR is worth.
     pub cycles_per_xdr: Cycles,
 }
 
-impl IcptsToCycles {
-    pub fn to_cycles(&self, icpts: ICPTs) -> Cycles {
+impl TokensToCycles {
+    pub fn to_cycles(&self, icpts: Tokens) -> Cycles {
         Cycles::new(
             icpts.get_e8s() as u128
                 * self.xdr_permyriad_per_icp as u128
                 * self.cycles_per_xdr.get() as u128
-                / (ledger_canister::ICP_SUBDIVIDABLE_BY as u128 * 10_000),
+                / (ledger_canister::TOKEN_SUBDIVIDABLE_BY as u128 * 10_000),
         )
     }
 }
@@ -106,6 +107,15 @@ pub struct IcpXdrConversionRate {
     pub xdr_permyriad_per_icp: u64,
 }
 
+impl From<UpdateIcpXdrConversionRatePayload> for IcpXdrConversionRate {
+    fn from(val: UpdateIcpXdrConversionRatePayload) -> Self {
+        IcpXdrConversionRate {
+            timestamp_seconds: val.timestamp_seconds,
+            xdr_permyriad_per_icp: val.xdr_permyriad_per_icp,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq)]
 pub struct IcpXdrConversionRateCertifiedResponse {
     pub data: IcpXdrConversionRate,
@@ -118,22 +128,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn icpts_to_cycles() {
+    fn tokens_to_cycles() {
         assert_eq!(
-            (IcptsToCycles {
+            (TokensToCycles {
                 xdr_permyriad_per_icp: 10_000,
                 cycles_per_xdr: 1234.into()
             })
-            .to_cycles(ICPTs::new(1, 0).unwrap()),
+            .to_cycles(Tokens::new(1, 0).unwrap()),
             1234.into()
         );
 
         assert_eq!(
-            (IcptsToCycles {
+            (TokensToCycles {
                 xdr_permyriad_per_icp: 21_042,
                 cycles_per_xdr: 123_456_789_123u128.into()
             })
-            .to_cycles(ICPTs::new(123, 0).unwrap()),
+            .to_cycles(Tokens::new(123, 0).unwrap()),
             31952666407731u128.into()
         );
     }

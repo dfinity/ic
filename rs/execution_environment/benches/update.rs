@@ -106,6 +106,7 @@ where
         canister_memory_limit: canister_state.memory_limit(NumBytes::new(std::u64::MAX)),
         subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         compute_allocation: canister_state.scheduler_state.compute_allocation,
+        subnet_type: SubnetType::Application,
     };
     ExecuteUpdateArgs(
         canister_state,
@@ -143,6 +144,7 @@ where
                     routing_table,
                     subnet_records,
                     execution_parameters,
+                    subnet_test_id(0x101), // NNS subnet != canister subnet
                 );
             });
         }
@@ -166,9 +168,10 @@ where
                                 canister_state.clone(),
                                 request.clone(),
                                 time,
-                                routing_table.clone(),
+                                Arc::clone(&routing_table),
                                 subnet_records.clone(),
                                 execution_parameters.clone(),
+                                subnet_test_id(0x101), // NNS subnet != canister subnet
                             );
                             match action {
                                 CallContextAction::NoResponse { .. } => {}

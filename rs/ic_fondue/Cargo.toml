@@ -1,0 +1,56 @@
+[package]
+name = "ic-fondue"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0"
+bincode = "1.2.1"
+canister-test = { path = "../rust_canisters/canister_test" }
+chrono = "0.4.19"
+crossbeam-channel = "0.5.0"
+either = "1.6"
+fondue = { path = "./fondue" }
+fs_extra = "1.2.0"
+futures = "0.3.6"
+hex = "0.4.2"
+ic-base-types = { path = "../types/base_types" }
+ic-config = { path = "../config" }
+ic-crypto-sha = { path = "../crypto/sha" }
+ic-interfaces = { path = "../interfaces" }
+ic-nns-init = { path = "../nns/init" }
+ic-prep = { path = "../prep" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-common = { path = "../registry/common" }
+ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-registry-transport = { path = "../registry/transport" }
+ic-replica = { path = "../replica" }
+ic-test-identity = { path = "../test_utilities/identity" }
+ic-types = { path = "../types/types" }
+ic-utils = { path = "../utils" }
+lazy_static = "1.4.0"
+mio = { version = "0.7", features = ["os-poll", "os-ext", "pipe"] }
+nix = "0.23.0"
+phantom_newtype = { path = "../phantom_newtype" }
+rand = "0.8.3"
+rand_chacha = "0.3.0"
+regex = "1.5.0"
+reqwest = { version = "0.11.1", features = [ "blocking", "json", "multipart", "native-tls" ] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_cbor = "0.11.1"
+serde_millis = "0.1"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_trace"] }
+slog-async = { version = "2.5", features = ["nested-values"] }
+slog-term = "2.6.0"
+structopt = { version = "0.3", default-features = false }
+tempfile = "3.1"
+thiserror = "1.0"
+tokio = "1.9.0"
+url = "2.1.1"
+zstd = "0.6.1"
+
+[dev-dependencies]
+ic-test-utilities = { path = "../test_utilities" }

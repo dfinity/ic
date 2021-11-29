@@ -2,7 +2,7 @@ FROM ubuntu:20.04
 
 # Make sure the motoko_version corresponds to the same version in nix/sources.json
 ARG motoko_version=0.5.10
-ARG sdk_version=0.8.0
+ARG sdk_version=0.8.4
 ARG rust_version=1.55.0
 
 # The image expects the following volumes mounted from the host:
@@ -20,7 +20,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
     apt -yq update && \
     apt -yqq install --no-install-recommends \
-        build-essential pkg-config libssl-dev llvm-10-dev llvm-dev liblmdb-dev clang-10 cmake libbz2-dev \
+        build-essential pkg-config libssl-dev llvm-10-dev llvm-dev liblmdb-dev clang-10 cmake libbz2-dev gcc-multilib \
         lldb libclang-10-dev liblz4-dev librocksdb-dev libsnappy-dev libzstd-dev vim emacs nano jq \
         zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev \
         qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
@@ -35,19 +35,16 @@ RUN useradd -ms /bin/bash -u 1000 ubuntu && \
     mkdir -p /home/ubuntu && \
     chown -R ubuntu.ubuntu /home/ubuntu && \
     mkdir -p /cargo /cargo_target /builds /builds/dfinity-lab && \
-    chown -R 1000.1000 /cargo /cargo_target /builds /builds/dfinity-lab && \
+    chown -R 1000.1000 /cargo /cargo_target /builds && \
     chmod +s /usr/sbin/gosu
 
 # Sudo is needed to run `ip tun` commands to create a virtual network for e2e tests
 RUN usermod -a -G sudo ubuntu && echo "ubuntu ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # Install sccache in /usr/bin/sccache
-ARG GITLAB_TOKEN=""
-RUN if [ -n "${GITLAB_TOKEN}" ]; then \
-       V=v0.2.18-alpha+dfinity; cd /usr/bin; \
-       curl --fail -L -o /usr/bin/sccache -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "https://gitlab.com/api/v4/projects/30166821/packages/generic/sccache/$V/sccache" && \
-       chmod 0755 /usr/bin/sccache && ln -s /usr/bin/sccache /usr/bin/sccache-run; \
-    fi
+RUN V=v0.2.19-alpha+dfinity; cd /usr/bin; \
+       curl --fail -L -o /usr/bin/sccache "https://gitlab.com/api/v4/projects/30166821/packages/generic/sccache/$V/sccache" && \
+       chmod 0755 /usr/bin/sccache && ln -s /usr/bin/sccache /usr/bin/sccache-run
 
 # Install buildevents in /usr/bin/
 RUN cd /usr/bin; \
@@ -107,8 +104,7 @@ RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1
 RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline junit-xml paramiko python-gitlab libhoney
 
 # Install the latest capsule.
-ARG CAPSULE_TOKEN
-RUN if [ -n "$CAPSULE_TOKEN" ]; then curl -u "gitlab-ci-token:$CAPSULE_TOKEN" --fail -L -o /usr/bin/capsule https://gitlab.com/api/v4/projects/29782482/packages/generic/capsule/0.1.10/capsule && chmod +x /usr/bin/capsule && ln /usr/bin/capsule /usr/bin/placebo; fi
+RUN curl --fail -L -o /usr/bin/capsule https://gitlab.com/api/v4/projects/29782482/packages/generic/capsule/0.1.10/capsule && chmod +x /usr/bin/capsule && ln /usr/bin/capsule /usr/bin/placebo
 
 USER 1000
 

@@ -1,0 +1,183 @@
+= Minimal Encoding Benchmark
+
+The intention of this benchmark is to get a rough handle on how well different
+encoding formats perform.
+
+== Synopsis
+
+The following command will produce the benchmark results:
+
+[source, shell]
+....
+cargo bench
+....
+
+== Experimental Setup
+
+Our intend is to measure the time it takes to serialize and deserialize the
+equivalent of the following Rust-struct:
+
+[source,rust]
+....
+pub struct Ingress {
+    pub source: u64,
+    pub receiver: u64,
+    pub method_name: String,
+    pub method_payload: Vec<u8>,
+    pub message_id: u64,
+    pub message_time: SystemTime,
+}
+....
+
+Because most serialization formats do not support a rich data type like
+`SystemTime`, there is a separate on-the-wire encoding which converts
+the time instant to nanoseconds-since-the-epoch, represented as
+
+[source,rust]
+....
+pub struct IngressWire {
+    pub source: u64,
+    pub receiver: u64,
+    pub method_name: String,
+    pub method_payload: Vec<u8>,
+    pub message_id: u64,
+    pub message_time_ns: u64,
+}
+....
+
+This is very common at the network boundary -- richer types are
+marshalled in to one or more simpler types for transport, and then
+unmarshalled at the other end.
+
+Each iteration tests elapsed time to:
+
+* construct an `IngressWire` struct from an `Ingress` struct
+* copy the data from a pre-populated `Ingress` struct
+* encode the data for transport
+* decode the data in to a new `IngressWire` struct
+* assert that the field values match
+
+In all our tests, all fields except `method_payload` are assigned a fixed
+value.  We report measurements for three different sizes of `method_payload`:
+
+* 16 Bytes,
+* 128 Bytes, and
+* 512 KiBytes.
+
+We report the _mean_ of the throughput for `json`, `cbor`, `protobuf` and
+`capnproto`. The basis for the throughput is the information stored in the
+struct measured in Bytes. I.e., in our case, the `method_name` is initialized
+with `"query test"` and thus the total number of Bytes stores in the struct is:
+
+....
+  3 * 8 (three u64's) + 10 (len of method_name) + len(method_payload)
+= 34 + len(method_payload) Bytes
+....
+
+== Results
+
+.16 Bytes method_payload
+image::plots/payload_16.svg[]
+.128 Bytes method_payload
+image::plots/payload_128.svg[]
+.512 KiBytes method_payload
+image::plots/payload_512k.svg[]
+
+.Length of Serialized Data
+|===
+|Encoding/method_payload size | 16 Bytes | 128 Bytes | 512 KiBytes  
+
+|json
+|194
+|530
+|1573010
+
+|cbor
+|122
+|235
+|524398
+
+|capnproto
+|96
+|208
+|524384
+
+|protobuf
+|55
+|168
+|524329
+
+|bincode
+|74
+|186
+|524346
+
+|thrift
+|96
+|208
+|524384
+
+|avro
+|467
+|581
+|524743
+
+|flatbuffer
+|104
+|216
+|524376
+
+|msgpack
+|52
+|164
+|524327
+|===
+
+== Discussion
+
+`json` and `cbor` use the `serde` framework to serialize/deserialize the
+`struct` as defined above. For `protobuf`, the `prost` crate was used and the
+struct was annotated with corresponding macros from that crate.
+
+`capnproto` on the other hand requires the struct to be defined in a separate
+IDL (see [https://github.com/capnproto/capnproto-rust][github/canpproto-rust]).
+One of the main aims of capnproto is to provide access to individual fields
+without deserializing the entire serialized buffer. Thus, the generated rust
+code follows a builder-pattern where fields are being accessed via getters and
+setters. The setters copy data into some pre-allocated buffer. The measurements
+includes this step: in most realistic scenarios, one would use rust struct
+internally and build the capnproto struct before the data is sent across the
+network, for example.
+
+`thrift` is similar to `capnproto`, requiring an IDL.
+
+`avro` is surprisingly slow. https://github.com/flavray/avro-rs/issues/89
+references this, and describes work in
+https://github.com/ali2992/avro-rs/tree/efficiency-improvements that obtains a
+~30% speedup relative to the Java implementation. This work has not been
+merged into the official crate, and has not been tested.
+
+In all tests `json` is the slowest. This is not surprising as it is a textual
+format. As such, in particular, the encoding of binary data is inefficient.
+
+Both, `capnproto` and `protobuf` are not self-describing. Unsurprisingly, for
+small message sizes, this increases the relative performance.
+
+=== Flatbuffers
+
+Flatbuffers follow a very similar approach to `capnproto`: The struct is defined
+using an IDL external to Rust and is then compiled into native Rust code.
+Unfortunately, the author could not get the flatbuffer example to work.
+
+== Conclusion
+
+TBD
+
+== Generating the plots
+
+Run the benchmark, `cargo bench`.
+
+Copy the reported throughput figures in to the `*.data` files in the
+`plots` directory.
+
+Run `gnuplot *.gplot` in the `plots` directory to regenerate the `.svg` files.

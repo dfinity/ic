@@ -27,6 +27,7 @@ fn execution_parameters() -> ExecutionParameters {
         canister_memory_limit: NumBytes::new(u64::MAX / 2),
         subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2),
         compute_allocation: ComputeAllocation::default(),
+        subnet_type: SubnetType::Application,
     }
 }
 
@@ -89,9 +90,10 @@ impl HypervisorTest {
             self.canister.clone(),
             RequestOrIngress::Ingress(ingress),
             mock_time(),
-            self.routing_table.clone(),
+            Arc::clone(&self.routing_table),
             self.subnet_records.clone(),
             execution_parameters(),
+            subnet_test_id(0x101), // NNS subnet
         );
         self.canister = canister;
         action

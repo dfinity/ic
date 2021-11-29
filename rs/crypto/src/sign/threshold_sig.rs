@@ -99,7 +99,8 @@ fn map_threshold_sign_error_or_panic(
         // Panic, since these would be implementation errors:
         CspThresholdSignError::UnsupportedAlgorithm { .. }
         | CspThresholdSignError::MalformedSecretKey { .. }
-        | CspThresholdSignError::WrongSecretKeyType { .. } => panic!("Illegal state: {}", error),
+        | CspThresholdSignError::WrongSecretKeyType { .. }
+        | CspThresholdSignError::InternalError { .. } => panic!("Illegal state: {}", error),
     }
 }
 

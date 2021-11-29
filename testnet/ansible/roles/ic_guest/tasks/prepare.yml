@@ -1,0 +1,23 @@
+---
+
+- name: create directories
+  shell: |
+    set -eExuo pipefail
+
+    mkdir -v -p /var/local/ic/{disk,media}/{{ ic_deployment_name }}/{{ ic_git_revision }}/
+    chown root:root /var/local/ic/{disk,media}/{{ ic_deployment_name }}/{{ ic_git_revision }}/
+    chmod 0755 /var/local/ic/{disk,media}/{{ ic_deployment_name }}/{{ ic_git_revision }}/
+
+    mkdir -v -p /var/lib/libvirt/{media,images}
+    chown root:root /var/lib/libvirt/{media,images}
+    chmod 0711 /var/lib/libvirt/{media,images}
+  args:
+    executable: /bin/bash
+    warn: false
+  register: script_res
+  changed_when: "script_res.stdout | default('')"
+  tags: [ "ic_guest" ]
+
+- name: Install GNU parallel
+  apt: name=parallel state=present
+  tags: [ "ic_guest" ]

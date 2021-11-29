@@ -9,17 +9,17 @@ use ic_crypto_internal_csp::api::tls_errors::{
     CspTlsClientHandshakeError, CspTlsServerHandshakeError,
 };
 use ic_crypto_internal_csp::api::{
-    CspKeyGenerator, CspSecretKeyStoreChecker, CspSigner, CspThresholdSignError,
-    CspTlsClientHandshake, CspTlsHandshakeSignerProvider, CspTlsServerHandshake,
-    DistributedKeyGenerationCspClient, NiDkgCspClient, NodePublicKeyData,
-    ThresholdSignatureCspClient,
+    CspCreateMEGaKeyError, CspKeyGenerator, CspSecretKeyStoreChecker, CspSigner,
+    CspThresholdSignError, CspTlsClientHandshake, CspTlsHandshakeSignerProvider,
+    CspTlsServerHandshake, DistributedKeyGenerationCspClient, IDkgProtocolCspClient,
+    NiDkgCspClient, NodePublicKeyData, ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::tls_stub::cert_chain::CspCertificateChain;
 use ic_crypto_internal_csp::types::{
     CspDealing, CspDkgTranscript, CspPop, CspPublicCoefficients, CspPublicKey, CspResponse,
     CspSignature,
 };
-use ic_crypto_internal_csp::TlsHandshakeCspServer;
+use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateDealingError, CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError,
@@ -33,6 +33,9 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_tls_interfaces::{TlsPublicKeyCert, TlsStream};
 use ic_protobuf::crypto::v1::NodePublicKeys;
+use ic_types::crypto::canister_threshold_sig::error::{
+    IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
+};
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::KeyId;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
@@ -42,6 +45,10 @@ use mockall::predicate::*;
 use mockall::*;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
+use tecdsa::{
+    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaPublicKey,
+};
 use tokio::net::TcpStream;
 
 mock! {
@@ -351,6 +358,37 @@ mock! {
     }
 
     pub trait CspTlsHandshakeSignerProvider: Send + Sync {
-        fn handshake_signer(&self) -> Arc<dyn TlsHandshakeCspServer>;
+        fn handshake_signer(&self) -> Arc<dyn TlsHandshakeCspVault>;
+    }
+
+    pub trait IDkgProtocolCspClient {
+        fn idkg_create_dealing(
+            &self,
+            algorithm_id: AlgorithmId,
+            context_data: &[u8],
+            dealer_index: NodeIndex,
+            reconstruction_threshold: NumberOfNodes,
+            receiver_keys: &[MEGaPublicKey],
+            transcript_operation: &IDkgTranscriptOperationInternal,
+        ) -> Result<IDkgDealingInternal, IDkgCreateDealingError>;
+
+        fn idkg_create_transcript(
+            &self,
+            algorithm_id: AlgorithmId,
+            reconstruction_threshold: NumberOfNodes,
+            verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+            operation_mode: &IDkgTranscriptOperationInternal,
+        ) -> Result<IDkgTranscriptInternal, IDkgCreateTranscriptError>;
+
+        fn idkg_load_transcript(
+            &self,
+            dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+            context_data: &[u8],
+            receiver_index: NodeIndex,
+            public_key: &MEGaPublicKey,
+            transcript: &IDkgTranscriptInternal,
+        ) -> Result<Vec<IDkgComplaintInternal>, IDkgLoadTranscriptError>;
+
+        fn idkg_create_mega_key_pair(&mut self, algorithm_id: AlgorithmId) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
     }
 }

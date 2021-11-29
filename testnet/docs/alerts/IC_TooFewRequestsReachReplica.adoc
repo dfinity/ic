@@ -1,0 +1,37 @@
+= IC_TooFewRequestsReachReplica
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+For 10 minutes the number of requests over 1 minute at the IC nodes is less than 80% of the requests at the boundary nodes.
+
+== Impact
+
+Request arriving at the boundary nodes are not arriving at IC nodes.
+
+== Possible causes (non-exhaustive)
+
+- Routing problem in the boundary nodes
+
+- Bad requests (e.g. without valid canister ids).
+
+- Bad networking between boundary nodes and IC nodes.
+
+== Troubleshooting and remediation
+
+- Check Kibana (kibana.mercury.dfinity.systems with index pattern boundary-journal-*) for boundary node logs to determine the possible cause.
+
+- Contact PFOPS oncall.
+
+- For deployed software issues, e.g. NGINX configuration, roll back to a known working version following the instructions on the Notions page for Boundary Nodes (https://www.notion.so/c7f2865830944efa9f0abba8bfe20bee).
+
+- For failure of a subset of boundary nodes, take the failed nodes out of the load balancer.
+
+- Check the routing tables on the boundary nodes (ic_router_table.js, nginx_table.conf) to see if they are valid and/or correspond to the expected topology.
+
+- Try restarting the boundary-node-control-plane service.
+
+- Try restarting the NGINX service.
+
+- For complete failure when rollback fails and oncalls are stumped, escalate to the full Networking team via slack then phone.

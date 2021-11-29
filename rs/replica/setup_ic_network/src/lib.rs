@@ -251,7 +251,6 @@ pub fn create_networking_stack(
             .service(ingress_event_handler),
     );
     let ingress_ingestion_service = ServiceBuilder::new()
-        .load_shed()
         .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
         .service(ingress_ingestion_service);
     Ok((

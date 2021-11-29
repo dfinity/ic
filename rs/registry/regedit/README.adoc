@@ -1,0 +1,211 @@
+= ic-regedit: Registry (Local Store) EDitor
+
+(in homage to `ed(1)`).
+
+== Goal(s)
+
+The *primary goal* is to provide a CLI-tool for operators (in testing, disaster
+recovery, etc.) of IC nodes to quickly inspect a given version of the registry
+local store using a human readable format.
+
+The *secondary goal* is to provide the ability to manipulate the registry local
+store.
+
+This document should give an overview of how the tool is supposed to be used.
+Please check the `help`-information printed by the tool itself to get detailled
+(and up-to-date) information
+
+== Snapshot
+
+Using the `snapshot`-command, you can produce a (normalized) snapshot in the
+form of a json object that is printed on stdout. To make the output readable
+while still retaining uniqueness, all binary arrays are abbreviated and/or
+replaced with a human-readable string. For example, a snapshot of the latest
+version of the registry stored at `/path/to/ic_registry_local_store` can be
+produced as follows:
+
+----
+$ ic-regedit snapshot /path/to/ic_registry_local_store
+{
+  "__version": 2,
+  "blessed_replica_versions": {
+    "blessed_version_ids": [
+      "0.8.0"
+    ]
+  },
+  "catch_up_package_contents_bi6cn-uevgq-pnqwc-6bmx7-plgau-qezww-kqnwd-h7eqk-xejb5-fq2t4-eae": {
+    "height": 0,
+    "initial_ni_dkg_transcript_high_threshold": {
+      "committee": [
+        "(principal-id)tzile-f666x-w4k7f-iztlm-euq5q-w4y7w-p4n7i-l4od3-swige-tgunn-pqe"
+      ],
+<< snip >>
+----
+
+The tool lends itself to be used in conjunction with other tools that further
+process the output, such as `jq`.
+
+=== Normalization
+
+As mentioned above, any json-structure that is produced by `ic-regedit` is normalized.
+In particular, any non-empty byte array whose length is equal or less than 29
+bytes is parsed as a principal id and represented as a string. Example:
+`"(principal-id)tzile-f666x-w4k7f-iztlm-euq5q-w4y7w-p4n7i-l4od3-swige-tgunn-pqe"`.
+
+Byte arrays that are larger than 32 bytes are hashed in order to compress the
+output. Example:
+
+`"(binary-data|sha256)B45A2A3A5F72C7618CCB08BEBAF909EB21AD3267327D817558085AED4BA63AAD"`
+
+Empty byte arrays and byte arrays of lengths between 29 and 31 bytes are
+represented as their respective hex value. Example:
+`"(binary-data)8276050F1BE07CDF9F957867C2B48FA7B7358BE0C8A7F9728A66F6A0FE3FD9BA"`
+
+The type of a value is defined by its corresponding key(-prefix). For example,
+at the time of writing, any key starting with `node_record_` corresponds to an
+object of message-type `NodeRecord`.
+
+If `ic-regedit` can't recognize the type of a key, its value is simply interpreted as
+a byte array and normalized as described above.
+
+==== Caveats and current limitations (Read!)
+
+*Protobuf Decoding*: Registry Values are stored as protobuf values. As a result,
+the object structure of each individual value is defined by the _version of
+ic-regedit_. In particular, if the underlying protobuf message definitions changed and
+new fields where added, an outdated version of `ic-regedit` will not display the new
+fields. This is particularly important when applying changes to the registry
+(see below).
+
+*Binary data type mismatch*: The way `ic-regedit` works internally is that the
+protobuf objects are first translated to a universal Json-object tree. In a next
+step, the tree is traversed and the normalization (as described above) is
+applied. As principal ids are currently directly embedded as byte arrays in
+many places, the coarse-grained normalization approach might end up translating
+short arrays to principal ids even though they are not.
+
+At the time of writing, all valid fields of type `bytes` in the registry do
+either contain a principal id, are empty, or do contain data that is longer than
+31 bytes (e.g. a hash, a certificate, a public key, etc.). As a result, as of
+now, this is not a problem. However, in the future, in case short byte arrays
+are added, those will be encoded as principal ids and the resulting snapshot
+cannot be read back in (see below).
+
+== Applying an Update
+
+Using `ic-regedit` it is possible to update the registry by editing the snapshot file.
+A typical workflow would probably look like this:
+
+First dump the current registry version:
+
+----
+$ ic-regedit snapshot /path/to/ic_registry_local_store > snapshot.json
+----
+
+Then edit the snapshot in place.
+
+Binary data can be encoded using the representations discussed above
+(`(dinary-data)...`, etc.). Hash values serve as stand-ins for the actual value,
+i.e., when reading the snapshot back in, `ic-regedit` will replace the hashed value
+with the original value again.
+
+----
+$ vim snapshot.json # or jq, etc.
+----
+
+Before you apply the update, you might want to make sure you know what will
+change. You can do this by calling the `show-diff` command. Let's say e.g. we
+took the example registry from above and the only change that we applied is that
+we added a version `0.9.0` to the list of blessed replica versions. The output
+should look like this:
+
+----
+$ ic-regedit show-diff /path/to/ic_registry_local_store snapshot.json
+{
+  "__version": 3,
+  "blessed_replica_versions": {
+    "blessed_version_ids": [
+      "0.8.0", "0.9.0"
+    ]
+  }
+}
+----
+
+The version in the diff is the version that registry is supposed to be _updated
+to_. For convenience, if the version in the snapshot that is passed in matches
+the latest version of the registry, it is assumed that this constitutes an
+update to latest version and the target version is thus the next version. In the
+example above, the registry would be updated to version 3.
+
+Keys that were removed from the snapshot are marked with a field value of
+`"(deleted)"`. For example:
+
+`"crypto_record_tzile-f666x-w4k7f-iztlm-euq5q-w4y7w-p4n7i-l4od3-swige-tgunn-pqe_1": "(deleted)"`
+
+Note that changes are tracked on the levels of keys. Thus, even if you only
+change a field of a value, the entire value will be shown here (and set in the
+registry).
+
+Actually applying the change is done using the `apply-update` command:
+
+----
+$ ic-regedit apply-update /path/to/ic_registry_local_store snapshot.json
+----
+
+If the command exits successfully, you can check the effect again by diff'ing
+changed snapshot against a newly created one. Since the new snapshot should now
+reflect the changes you made in the first snapshot, the only difference you
+should see is in the version field:
+
+----
+$ ic-regedit snapshot /path/to/ic_registry_local_store > snapshot2.json
+$ diff snapshot.json snapshot2.json
+2c2
+<   "__version": 2,
+---
+>   "__version": 3,
+----
+
+=== Amend
+
+It is also possible to "amend" the latest version, i.e., change the latest
+version in-situ. However, this is *not* recommended as the registry is
+fundamentally an append-only versioned key-value store.
+
+=== Asking for a specific version
+
+Each snapshot carries a field `__version` which contains the registry version at
+which the snapshot was taken. This field is ignored when applying an update, but
+check against the latest version. If the latest version of the local store to be
+updated does not match the version specified in the snapshot, the update will
+fail. While it is not recommended to use `ic-regedit` to make changes on a running
+node, it is thus ensured that no inconsistencies can arries because of
+incompatible versions.
+
+It is possible to ask for a specific version. Just apply the `--version` option
+to the `snapshot` command. For example, the following command produces a
+registry snapshot at version 23, provided it exists:
+
+----
+$ ic-regedit snapshot --version 23 /path/to/ic_registry_local_store
+...
+----
+
+The provided version can also be _negative_. In this case the value is relative
+to the latest version. For example, if you want to show the diff between the
+second latest and the latest version, you could do the following (using the
+example from above): 
+
+----
+$ ic-regedit snapshot /path/to/ic_registry_local_store > latest.json
+$ ic-regedit show-diff --version -1 /path/to/ic_registry_local_store latest.json
+{
+  "__version": 3,
+  "blessed_replica_versions": {
+    "blessed_version_ids": [
+      "0.8.0",
+      "0.9.0"
+    ]
+  }
+}
+----

@@ -1,0 +1,24 @@
+= IC_Subnet_NearingCanisterMemoryLimit
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+The canister memory used on the subnet is predicted to exceed 250GB in
+the next 3 days.
+
+== Impact
+
+Subnets have a maximum canister memory limit of ~ 300GB, after which
+allocation requests will fail, canisters will become stuck, etc.
+
+== Possible causes (non-exhaustive)
+
+The IC is popular.
+
+== Troubleshooting and remediation
+
+You can't troubleshoot, this is expected behaviour.
+
+To mitigate you will need to take action to stop new canisters being
+created on the subnet.

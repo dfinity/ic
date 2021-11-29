@@ -1,0 +1,82 @@
+.prod-test:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-prod-hotfix-tests
+  stage: prod-tests
+  needs: []
+  variables:
+    SHELL_WRAPPER: "/usr/bin/time"
+  artifacts:
+    when: always
+    paths:
+      - $CI_JOB_STAGE/$CI_JOB_NAME
+
+.prod-hotfix-test:
+  extends: .prod-test
+  variables:
+    cd_target_env: "HOTFIX"
+  timeout: 55 minutes
+
+.prod-hotfix-test-group-1:
+  stage: prod-tests-01
+  extends: .prod-hotfix-test
+  variables:
+    TESTNET: $TESTNET1
+  resource_group: $TESTNET1
+
+.prod-hotfix-test-group-2:
+  stage: prod-tests-02
+  extends: .prod-hotfix-test
+  variables:
+    TESTNET: $TESTNET2
+  resource_group: $TESTNET2
+
+.prod-hotfix-test-group-3:
+  stage: prod-tests-03
+  extends: .prod-hotfix-test
+  variables:
+    TESTNET: $TESTNET3
+  resource_group: $TESTNET3
+
+disaster-recovery-nns-test-hotfix:
+  extends: .prod-hotfix-test-group-1
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+      $SHELL_WRAPPER ./testnet/tests/scripts/disaster_recovery_nns_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+nns-workload-hotfix:
+  extends: .prod-hotfix-test-group-2
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/nns_workload.sh "$TESTNET" 180 5 10 normal 0.25 "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+xnet-slo-hotfix:
+  extends: .prod-hotfix-test-group-2
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/xnet_slo_test.sh "$TESTNET" 3 120 10 1024 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+rejoin-hotfix:
+  extends: .prod-hotfix-test-group-3
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 8 8 normal "$CI_JOB_STAGE/$CI_JOB_NAME"

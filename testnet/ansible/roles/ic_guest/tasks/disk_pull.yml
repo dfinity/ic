@@ -1,0 +1,74 @@
+---
+
+- name: Download disk images
+  shell: |
+    set -eExuo pipefail
+    # check if disk image is available on the new or the old location for the given hash
+    CDN_URL="https://download.dfinity.systems"
+
+    disk_types=(generic replica)
+    declare -A image_cdn=(
+      [replica]="${CDN_URL}/ic/{{ ic_git_revision }}/guest-os/disk-img-dev"
+      [generic]="${CDN_URL}/ic/{{ ic_git_revision }}/generic-guest-os/disk-img"
+    )
+
+    declare -A image_dir=(
+      [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
+      [generic]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic"
+    )
+
+    function curl_disk_img() {
+      set -eExuo pipefail
+      disk_type=$1
+      IMAGE_DIR=${image_dir[$disk_type]}
+      mkdir -p "$IMAGE_DIR"
+      cd "$IMAGE_DIR"
+
+      # Check if the disk image has already been downloaded
+      if sha256sum -c SHA256SUMS; then return; fi
+
+      CDN_BASE_URL="${image_cdn[$disk_type]}"
+      curl --retry 10 --fail "$CDN_BASE_URL/disk-img.tar.gz" --output disk-img.tar.gz
+      curl --retry 10 --fail "$CDN_BASE_URL/SHA256SUMS" --output SHA256SUMS
+
+      chmod 0644 "disk-img.tar.gz"
+      chown root:root "disk-img.tar.gz"
+      sha256sum -c SHA256SUMS
+    }
+
+    # download the IC-OS disk images for replica and generic (boundary nodes), in parallel
+    set +x
+    source /usr/bin/env_parallel.bash
+    env_parallel curl_disk_img ::: "${disk_types[@]}"
+  args:
+    executable: /bin/bash
+  register: script_res
+  changed_when: "script_res.stdout | default('')"
+  retries: 10
+  delay: 10
+  until: script_res is not failed
+  tags: [ "ic_guest" ]
+
+- name: unarchive file disk-img.tar.gz # noqa risky-shell-pipe
+  shell: |
+    # if the unpacked file does not exist or if the archive is newer than the unpacked file
+    set -eExuo pipefail
+
+    disk_types=(generic replica)
+
+    declare -A image_dir=(
+      [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
+      [generic]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic"
+    )
+
+    # unarchive each disk type
+    for disk_type in "${disk_types[@]}"; do
+       IMAGE_DIR=${image_dir[$disk_type]}
+       cd "$IMAGE_DIR"
+       tar xvf disk-img.tar.gz --sparse
+    done
+  args:
+    executable: /bin/bash
+  register: script_res
+  changed_when: "script_res.stdout | default('')"
+  tags: [ "ic_guest" ]

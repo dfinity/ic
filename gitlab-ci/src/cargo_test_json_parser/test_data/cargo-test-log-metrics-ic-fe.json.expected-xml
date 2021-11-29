@@ -1,0 +1,84 @@
+<?xml version="1.0" ?>
+<testsuites disabled="0" errors="0" failures="1" tests="50" time="0.0">
+	<testsuite disabled="0" errors="0" failures="1" name="cargo test" skipped="0" tests="50" time="0">
+		<testcase name="handler::get_nns_subnet_id_tests::works_with_multi_node_subnets" classname="handler"/>
+		<testcase name="handler::get_nns_subnet_id_tests::works_with_single_node_subnets" classname="handler"/>
+		<testcase name="handler::ic_event::read_state_request_tests::read_state_request_one_path" classname="handler"/>
+		<testcase name="handler::ic_event::read_state_request_tests::read_state_request_two_paths" classname="handler"/>
+		<testcase name="handler::ic_event::read_state_response_tests::read_state_response_done" classname="handler"/>
+		<testcase name="handler::ic_event::read_state_response_tests::read_state_response_rejected" classname="handler"/>
+		<testcase name="handler::ic_http::tests::validate_request_forbidden_http_verbs" classname="handler"/>
+		<testcase name="handler::ic_http::tests::validate_request_get_other_paths" classname="handler"/>
+		<testcase name="handler::ic_http::tests::validate_request_get_status" classname="handler"/>
+		<testcase name="handler::ic_http::tests::validate_request_options" classname="handler"/>
+		<testcase name="handler::ic_http::tests::validate_request_post_content_type_incorrect" classname="handler"/>
+		<testcase name="handler::ic_http::tests::validate_request_post_content_type_missing" classname="handler"/>
+		<testcase name="handler::ic_http::tests::validate_request_post_other_paths" classname="handler"/>
+		<testcase name="handler::ic_http::tests::validate_request_post_valid_request" classname="handler"/>
+		<testcase name="handler::read::pick_tests::pick_subnet_query_from_canister_id" classname="handler"/>
+		<testcase name="handler::read::pick_tests::pick_subnet_query_missing_canister_id" classname="handler"/>
+		<testcase name="handler::read::pick_tests::pick_subnet_read_state_no_request_status" classname="handler"/>
+		<testcase name="handler::read::pick_tests::pick_subnet_read_state_request_status_cache_hit" classname="handler"/>
+		<testcase name="handler::read::pick_tests::pick_subnet_read_state_request_status_cache_miss" classname="handler"/>
+		<testcase name="handler::read::pick_tests::pick_subnet_read_state_request_status_multiple_different" classname="handler"/>
+		<testcase name="handler::read::pick_tests::pick_subnet_read_state_request_status_multiple_same_cache_hit" classname="handler"/>
+		<testcase name="handler::read::pick_tests::pick_subnet_request_status_cache_hit" classname="handler"/>
+		<testcase name="handler::read::pick_tests::pick_subnet_request_status_cache_miss" classname="handler"/>
+		<testcase name="handler::read::validate_tests::validate_corrupt_cbor" classname="handler"/>
+		<testcase name="handler::read::validate_tests::validate_srr_query" classname="handler"/>
+		<testcase name="handler::read::validate_tests::validate_srr_request_status" classname="handler"/>
+		<testcase name="handler::submit::pick_tests::pick_subnet_ic_00_create_canister" classname="handler"/>
+		<testcase name="handler::submit::pick_tests::pick_subnet_ic_00_other_method" classname="handler"/>
+		<testcase name="handler::submit::pick_tests::pick_subnet_non_mgmt" classname="handler"/>
+		<testcase name="handler::submit::validate_tests::validate_corrupt_cbor" classname="handler"/>
+		<testcase name="handler::submit::validate_tests::validate_signed_ingress" classname="handler"/>
+		<testcase name="reverse_proxy::tests::cpr_for_header_ipv6" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::cpr_minimal_changes" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::cpr_strip_connection_headers" classname="reverse_proxy">
+			<failure type="failure">thread 'reverse_proxy::tests::cpr_strip_connection_headers' panicked at 'assertion failed: `(left == right)`
+
+[1mDiff[0m [31m&lt; left[0m / [32mright &gt;[0m :
+[31m&lt;[0m[1;48;5;52;31m0[0m
+[32m&gt;[0m[1;48;5;22;32m2[0m
+
+', ic_fe/src/reverse_proxy.rs:554:9
+stack backtrace:
+   0: &lt;std::sys_common::backtrace::_print::DisplayBacktrace as core::fmt::Display&gt;::fmt
+   1: core::fmt::write
+   2: std::io::Write::write_fmt
+   3: std::io::impls::&lt;impl std::io::Write for alloc::boxed::Box&lt;W&gt;&gt;::write_fmt
+   4: std::panicking::default_hook::{{closure}}
+   5: std::panicking::default_hook
+   6: std::panicking::rust_panic_with_hook
+   7: rust_begin_unwind
+   8: std::panicking::begin_panic_fmt
+   9: ic_fe::reverse_proxy::tests::cpr_strip_connection_headers
+             at ic_fe/src/reverse_proxy.rs:554
+  10: ic_fe::reverse_proxy::tests::cpr_strip_connection_headers::{{closure}}
+             at ic_fe/src/reverse_proxy.rs:553
+  11: core::ops::function::FnOnce::call_once
+             at /build/rustc-1.45.2-src/src/libcore/ops/function.rs:232
+  12: test::run_test_in_process
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+</failure>
+		</testcase>
+		<testcase name="reverse_proxy::tests::cpr_strip_hop_headers_keep_upgrade" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::cpr_strip_hop_headers_non_upgrade" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::cpr_via_http_10" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::cpr_x_forwarded_for_appends" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::double_1" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::double_2" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::double_3" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::double_4" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::empty_1" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::empty_2" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::empty_3" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::order_1" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::single_1" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::single_2" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::single_3" classname="reverse_proxy"/>
+		<testcase name="reverse_proxy::tests::single_4" classname="reverse_proxy"/>
+	</testsuite>
+</testsuites>
+

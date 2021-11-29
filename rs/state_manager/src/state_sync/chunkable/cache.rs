@@ -94,6 +94,12 @@ impl StateSyncCache {
                 cache_root.display(),
                 err
             );
+
+            // On error, make sure the cache is empty and clean up
+            self.entry = None;
+            delete_folder(&self.log, &cache_root);
+            delete_folder(&self.log, &sync.root);
+            return;
         }
         let entry = StateSyncCacheEntry {
             manifest,

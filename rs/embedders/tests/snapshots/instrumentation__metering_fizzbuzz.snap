@@ -1,5 +1,5 @@
 ---
-source: wasm_utils/tests/instrumentation.rs
+source: embedders/tests/instrumentation.rs
 expression: out
 ---
 (module
@@ -12,7 +12,6 @@ expression: out
   (type (;6;) (func (param i32) (result i32)))
   (import "__" "out_of_instructions" (func (;0;) (type 2)))
   (import "__" "update_available_memory" (func (;1;) (type 3)))
-  (import "js" "memory" (memory (;0;) 1))
   (import "js" "println" (func (;2;) (type 0)))
   (func (;3;) (type 1) (param i32)
     (local i32 i32 i32)
@@ -161,8 +160,10 @@ expression: out
     i64.sub
     global.set 0
     local.get 0)
+  (memory (;0;) 1)
   (global (;0;) (mut i64) (i64.const 0))
   (export "fizzbuzz" (func 3))
+  (export "memory" (memory 0))
   (export "canister counter_set" (func 4))
   (export "canister counter_get" (func 5))
   (export "canister counter_instructions" (global 0)))

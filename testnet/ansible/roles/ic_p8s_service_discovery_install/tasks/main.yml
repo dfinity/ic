@@ -1,0 +1,176 @@
+---
+# Install the Prometheus Service Discovery server
+#
+# This all has to be parameterised by the IC that is being queried, because
+# different ICs might have different variations on the registry.
+#
+# This means you can't run one ic-p8s-service-discovery binary for all the
+# ICs, you need to run one binary per IC.
+
+- name: Create the service discovery binary directory
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  file:
+    path: "/opt/dfinity/ic-p8s-service-discovery-{{ ic }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Calculate the latest p8s service discovery binary URL
+  shell: |
+    set -eExu
+
+    # Note: the ic-p8s-service-discovery binary is not always built on the CI, so take the
+    # binary either from the current branch (if exists) or the latest binary from master.
+
+    p8s_service_discovery_binary_exists() {
+        git_sha=$1
+        curl --output /dev/null --silent --head --fail \
+          "https://download.dfinity.systems/ic/$git_sha/release/ic-p8s-service-discovery.gz"
+    }
+
+    if p8s_service_discovery_binary_exists {{ ic_git_revision }}; then
+      echo "https://download.dfinity.systems/ic/{{ ic_git_revision }}/release/ic-p8s-service-discovery.gz"
+      exit 0
+    fi
+
+    for git_sha in $(git log --format=format:%H "origin/master" --max-count=50); do
+        if p8s_service_discovery_binary_exists $git_sha; then
+            echo "https://download.dfinity.systems/ic/$git_sha/release/ic-p8s-service-discovery.gz"
+            exit 0
+        fi
+    done
+    exit 1  # No ic-p8s-service-discovery binary found
+  delegate_to: localhost
+  run_once: true
+  register: script_res
+  changed_when: "script_res.stdout | default('')"
+
+- name: "Set the p8s service discovery binary URL"
+  set_fact:
+     p8s_service_discovery_url: "{{ script_res.stdout }}"
+  delegate_to: localhost
+  run_once: true
+  become: no
+
+- name: Retrieve p8s service discovery binary.
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  shell: |
+    set -eExu
+
+    mkdir -p "/opt/dfinity/ic-p8s-service-discovery-{{ ic }}/bin"
+    cd "/opt/dfinity/ic-p8s-service-discovery-{{ ic }}/bin"
+
+    # Note: the Nix build of the ic-p8s-service-discovery is not always built on the CI, so the download may fail,
+    # and therefore the task also does not have the `set -e` flag
+    if curl --retry 10 --fail  "{{ p8s_service_discovery_url }}" -o "ic-p8s-service-discovery.gz"; then
+      gunzip -f "ic-p8s-service-discovery.gz"
+      chmod +x "ic-p8s-service-discovery"
+
+      #
+      # Patch the Ubuntu binary to work on NixOS
+      #
+      # Add the openssl package to the Nix store, and get the binary path
+      openssl_bin=$(nix-shell -p openssl --run "which openssl")
+      # Extract the directory name for the libssl.so.1.1 library, from the ldd output
+      libssl_path=$(dirname "$(ldd "$openssl_bin" | grep "libssl.so.1.1" | awk '{print $3}')")
+      # Set the runtime search path of the binary to the directory containing libssl.so.1.1
+      nix-shell -p patchelf --run "patchelf --set-rpath $libssl_path ic-p8s-service-discovery"
+
+      # if the downloaded binary differs from the current one, overwrite it.
+      if ! diff "ic-p8s-service-discovery" "../ic-p8s-service-discovery" >/dev/null; then
+        mv -vf "ic-p8s-service-discovery" "../ic-p8s-service-discovery"
+      fi
+    fi
+  args:
+    warn: false
+  register: script_res
+  changed_when: "'renamed ' in script_res.stdout | default('')"
+
+- name: Make sure /etc/systemd-mutable/system exists
+  file:
+    path: /etc/systemd-mutable/system
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Set nns_public_key_remote_path
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  set_fact:
+    nns_public_key_remote_path: "/var/lib/p8s-scrape/ic_networks/ic_p8s_service_discovery/{{ ic }}_nns_public_key.pem"
+  when: nns_public_key_path|default('') != ''
+
+- name: Upload the NNS public key
+  copy:
+    src: "{{ nns_public_key_path }}"
+    dest: "{{ nns_public_key_remote_path }}"
+    mode: "0644"
+    owner: "root"
+    group: "root"
+  when: nns_public_key_path|default('') != ''
+
+- name: Install systemd service file.
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "{{ ic_config_src }}/ic-p8s-service-discovery/dfinity-p8s-service-discovery.service"
+    dest: "/etc/systemd-mutable/system/dfinity-p8s-service-discovery-{{ ic }}.service"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Stop systemd service.
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  service:
+    name: "dfinity-p8s-service-discovery-{{ ic }}.service"
+    state: stopped
+    daemon_reload: yes
+
+# Create the directory that will contain the scrape configuration for this
+# service (i.e., the file that points at the ic_p8s_service_discovery's
+# monitoring port, *not* the directory that it will write to).
+- name: Create the scrape config directory
+  file:
+    path: /var/lib/p8s-scrape/ic_networks/ic_p8s_service_discovery
+    state: directory
+    group: p8s-scrape
+    mode: 0775
+
+# Create the file that lists this server's monitoring port.
+- name: Generate the scape configuration for this service
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "ic_p8s_service_discovery_scrape_config.tmpl"
+    dest: /var/lib/p8s-scrape/ic_networks/ic_p8s_service_discovery/{{ ic }}_ic_p8s_service_discovery_scrape_config.json
+    group: p8s-scrape
+    mode: 0664
+
+- name: Start systemd service.
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  service:
+    name: "dfinity-p8s-service-discovery-{{ ic }}.service"
+    state: restarted
+    daemon_reload: yes
+    enabled: yes
+
+# Health checking is currently disabled as the firewall on the Prometheus
+# host doesn't let the traffic through.
+#
+# Prometheus monitors the service and will alert if it is down.
+#
+#- name: Health check metrics endpoint
+#  uri:
+#    url: "http://{{ ic_p8s_service_discovery_metrics_addr }}/"
+#  delegate_to: localhost
+#  become: false
+#  register: _result1
+#  until: _result1.status == 200
+#  delay: 5 # Check every 5 seconds
+#  retries: 24 # 24 x 5 = 120 seconds

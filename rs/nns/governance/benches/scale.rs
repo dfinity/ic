@@ -28,7 +28,7 @@ use ic_nns_governance::pb::v1::{
     ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, Motion, NetworkEconomics,
     Neuron, Proposal, Topic,
 };
-use ledger_canister::{AccountIdentifier, ICPTs, Subaccount};
+use ledger_canister::{AccountIdentifier, Subaccount, Tokens};
 
 criterion_group! {
     name = benches;
@@ -84,11 +84,14 @@ impl Ledger for MockLedger {
         unimplemented!()
     }
 
-    async fn total_supply(&self) -> Result<ICPTs, GovernanceError> {
+    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
         unimplemented!()
     }
 
-    async fn account_balance(&self, _account: AccountIdentifier) -> Result<ICPTs, GovernanceError> {
+    async fn account_balance(
+        &self,
+        _account: AccountIdentifier,
+    ) -> Result<Tokens, GovernanceError> {
         unimplemented!()
     }
 }

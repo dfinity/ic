@@ -1,0 +1,11 @@
+= Deployment e2e tests.
+
+This is the e2e Ansible deployment test that can run against an actual testnet.
+
+== Running
+
+[source,shell]
+----
+testnet=p2p_15_28 
+nix run -f default.nix -c deployment-test $testnet
+----

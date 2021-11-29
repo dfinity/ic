@@ -1,0 +1,51 @@
+[package]
+name = "ic-replay"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+candid = "0.7.4"
+clap = "3.0.0-beta.2"
+hex = "0.4.2"
+ic-artifact-pool = { path = "../artifact_pool" }
+ic-canister-client = { path = "../canister_client" }
+ic-config = { path = "../config" }
+ic-consensus = { path = "../consensus" }
+ic-consensus-message = { path = "../consensus/message" }
+ic-crypto = { path = "../crypto" }
+ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
+ic-crypto-sha = {path = "../crypto/sha/"}
+ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-execution-environment = { path = "../execution_environment" }
+ic-http-handler = { path = "../http_handler" }
+ic-interfaces = { path = "../interfaces" }
+ic-logger = { path = "../monitoring/logger" }
+ic-messaging = { path = "../messaging" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-nns-constants = { path = "../nns/constants" }
+ic-nns-common = { path = "../nns/common" }
+ic-nns-init = { path = "../nns/init" }
+ic-nns-governance = { path = "../nns/governance" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-common = { path = "../registry/common" }
+ic-registry-keys = { path = "../registry/keys" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-registry-transport = { path = "../registry/transport" }
+ic-replica = { path = "../replica" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-state-manager = { path = "../state_manager" }
+ic-types = { path = "../types/types" }
+ic-utils = { path = "../utils" }
+ledger-canister = { path = "../rosetta-api/ledger_canister" }
+prost = "0.9.0"
+serde_json = "1.0.40"
+slog = "2.5.2"
+rand = "0.7"
+tempfile = "3.1.0"
+tokio = { version = "1.9.0", features = ["full"] }
+url = { version = "2.1.1", features = ["serde"] }
+
+[[bin]]
+name = "ic-replay"
+path = "src/main.rs"

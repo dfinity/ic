@@ -1,0 +1,177 @@
+/*
+See https://www.notion.so/Dependency-Ownership-76046dcddbf5414e94cd1b209748469a for dependency ownership management.
+
+Each dependency is a dict entry that should contain at least 2 owners, a description, and some keywords:
+{
+  "cat2dog": {
+    "owners": [
+      {"email": "example@example.com"},
+      {"email": "another@example.com"},
+    ],
+    "description": "Cat to dog conversion operations",
+    "keywords": ["cat", "dog", "conversion"],
+  },
+}
+Only add direct dependencies here, i.e. something that is explicitly mentioned in your Cargo.toml.
+If different versions of a dependency is directly referenced in our codebase, each owner has to specify
+a list of versions they own. Each version should still have at least 2 owners:
+{
+  "cat2dog": {
+    "owners": [
+      {"email": "example@example.com", "versions": ["1.1.0", "1.1.1"]},
+      {"email": "another@example.com", "versions": ["1.1.1"]},
+      {"email": "onemore@example.com", "versions": ["1.1.0"]},
+    ],
+    "description": "Cat to dog conversion operations",
+    "keywords": ["cat", "dog", "conversion"],
+  },
+}
+The file is parsed with JSON5, so please use trailing commas. Feel free to add comments as well.
+Validation schema can be found at https://github.com/dfinity-lab/dfinity/blob/master/gitlab-ci/src/dependencies/inventory.schema
+*/
+{
+  "async-trait": {
+    "owners": [
+      {"email": "alin@dfinity.org"},
+      {"email": "roman@dfinity.org"},
+    ],
+    "description": "Async trait methods",
+    "keywords": ["async"]
+  },
+  "curve25519-dalek": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "A pure-Rust implementation of group operations on ristretto255 and Curve25519",
+    "keywords": ["crypto"],
+  },
+  "ed25519-dalek": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "Fast and efficient ed25519 EdDSA key generations, signing, and verification in pure Rust.",
+    "keywords": ["crypto", "signatures"],
+  },
+  "ff": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "Library for building and interfacing with finite fields",
+    "keywords": ["crypto", "finite fields"],
+  },
+  "bls12_381": {
+    "owners": [
+      {"email": "jack.lloyd@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "Elliptic curve pairing library",
+    "keywords": ["crypto"],
+  },
+  "getrandom": {
+    "owners": [
+      {"email": "jack.lloyd@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "Library for retreiving system randomness",
+    "keywords": ["crypto"],
+  },
+  "leb128": {
+    "owners": [
+      {"email": "alin@dfinity.org"},
+      {"email": "roman@dfinity.org"},
+    ],
+    "description": "Read and write DWARF's little endian base 128 encoding",
+    "keywords": ["leb128"]
+  },
+  "libsecp256k1": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "Pure Rust secp256k1 implementation.",
+    "keywords": ["crypto"],
+  },
+  "num-integer": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "Integer traits and functions",
+    "keywords": ["integers"],
+  },
+  "openssl": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "OpenSSL bindings",
+    "keywords": ["crypto", "tls"],
+  },
+  "pairing": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "Pairing-friendly elliptic curve library",
+    "keywords": ["crypto"],
+  },
+  "parking_lot": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "More compact and efficient implementations of the standard synchronization primitives.",
+    "keywords": ["locking"],
+  },
+  "rand": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org", "versions": ["0.4.6", "0.7.3", "0.8.3"]},
+      {"email": "franzstefan@dfinity.org", "versions": ["0.4.6", "0.7.3", "0.8.3"]},
+    ],
+    "description": "Random number generators and other randomness functionality.",
+    "keywords": ["randomness"],
+  },
+  "rand_chacha": {
+    "owners": [
+	{"email": "robin.kunzler@dfinity.org", "versions": ['0.2.2', '0.3.0']},
+      {"email": "franzstefan@dfinity.org", "versions": ['0.2.2', '0.3.0']},
+    ],
+    "description": "ChaCha random number generator",
+    "keywords": ["randomness"],
+  },
+  "rand_core": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org", "versions": ['0.5.1', '0.6.2']},
+      {"email": "franzstefan@dfinity.org", "versions": ['0.5.1', '0.6.2']},
+    ],
+    "description": "Core random number generator traits and tools for implementation.",
+    "keywords": ["randomness"]
+  },
+  "simple_asn1": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "A simple DER/ASN.1 encoding/decoding library.",
+    "keywords": ["asn1", "der"],
+  },
+  "tokio-openssl": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "An implementation of SSL streams for Tokio backed by OpenSSL",
+    "keywords": ["async", "tls"],
+  },
+  "zeroize": {
+    "owners": [
+      {"email": "robin.kunzler@dfinity.org"},
+      {"email": "franzstefan@dfinity.org"},
+    ],
+    "description": "Securely zero memory while avoiding compiler optimizations.",
+    "keywords": ["crypto", "zeroing"],
+  },
+}

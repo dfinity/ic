@@ -9,16 +9,18 @@ use ic_crypto_utils_basic_sig::conversions::Ed25519SecretKeyConversions;
 use ed25519_dalek::PublicKey as OtherPublicKey;
 use ed25519_dalek::SecretKey as OtherSecretKey;
 
+const PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
+
 // get public key from the dedicated whitelisted private key used by the
 // workload generator
-fn get_pub() -> PublicKey {
-    let contents = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
+pub fn get_pub(private_key: Option<&str>) -> PublicKey {
+    let contents = private_key.unwrap_or(PRIVATE_KEY);
     let (_secret_key, public_key) = SecretKey::from_pem(contents).expect("Invalid secret key.");
     public_key
 }
 
-fn get_pair() -> ed25519_dalek::Keypair {
-    let contents = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
+pub fn get_pair(private_key: Option<&str>) -> ed25519_dalek::Keypair {
+    let contents = private_key.unwrap_or(PRIVATE_KEY);
     let (secret_key, public_key) = SecretKey::from_pem(contents).expect("Invalid secret key.");
     let secret_bytes = secret_key.as_bytes();
     let public_bytes = public_key.as_bytes();
@@ -41,7 +43,7 @@ lazy_static! {
     // a dedicated identity for when we use --principal-id in the
     // workload generator
     pub static ref TEST_IDENTITY_KEYPAIR_HARD_CODED: ed25519_dalek::Keypair = {
-        get_pair()
+        get_pair(None)
     };
 
     pub static ref PUBKEY : UserPublicKey = UserPublicKey {
@@ -50,7 +52,7 @@ lazy_static! {
     };
 
     pub static ref PUBKEY_PID : UserPublicKey = UserPublicKey {
-        key: get_pub().as_bytes().to_vec(),
+        key: get_pub(None).as_bytes().to_vec(),
         algorithm_id: AlgorithmId::Ed25519,
     };
 

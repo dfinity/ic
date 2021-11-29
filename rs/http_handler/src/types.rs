@@ -3,25 +3,45 @@
 /// `handle_request`.
 ///
 /// https://sdk.dfinity.org/docs/interface-spec/index.html#request-types
+#[derive(Clone, Copy)]
 pub(crate) enum ApiReqType {
-    /// `read_state`
-    ReadState,
     /// `call`
     Call,
     /// `query`
     Query,
+    /// `read_state`
+    ReadState,
     /// In case an error occurred and the request type is unknown.
-    Unknown,
+    CatchUpPackage,
+    Status,
+    Dashboard,
+    RedirectToDashboard,
+    Options,
+    PprofHome,
+    PprofProfile,
+    PprofFlamegraph,
+    InvalidArgument,
+    // Used as placeholder for the number of http request types.
+    ApiCount,
 }
 
 impl ApiReqType {
     pub(crate) fn as_str(&self) -> &'static str {
         use ApiReqType::*;
         match self {
-            ReadState => "read_state",
             Call => "call",
             Query => "query",
-            Unknown => "unknown",
+            ReadState => "read_state",
+            Status => "status",
+            CatchUpPackage => "catch_up_package",
+            Options => "options",
+            Dashboard => "dashboard",
+            RedirectToDashboard => "redirect_to_dashboard",
+            InvalidArgument => "invalid_argument",
+            PprofHome => "pprof_home",
+            PprofProfile => "pprof_profile",
+            PprofFlamegraph => "pprof_flamegraph",
+            ApiCount => "api_count",
         }
     }
 }
@@ -59,10 +79,12 @@ pub(crate) enum RequestType {
     RedirectToDashboard,
     /// A direct request for the dashboard
     Dashboard,
-    /// A CPU profile request
-    Pprof(PprofPage),
     /// A request for the latest Catch-Up Package (CUP)
     CatchUpPackage,
+    InvalidArgument,
+    PprofHome,
+    PprofProfile,
+    PprofFlamegraph,
 }
 
 impl RequestType {
@@ -76,20 +98,13 @@ impl RequestType {
             Options => "options",
             RedirectToDashboard => "redirect_to_dashboard",
             Dashboard => "dashboard",
-            Pprof(_) => "pprof",
             CatchUpPackage => "catch-up-package",
+            InvalidArgument => "invalid_argument",
+            PprofHome => "pprof_home",
+            PprofProfile => "pprof_profile",
+            PprofFlamegraph => "pprof_flamegraph",
         }
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum PprofPage {
-    /// `pprof` root page.
-    Home,
-    /// CPU profile in pprof proto format.
-    Profile,
-    /// CPU profile as flamegraph.
-    Flamegraph,
 }
 
 pub(crate) enum ConnectionError {

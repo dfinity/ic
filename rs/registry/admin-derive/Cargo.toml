@@ -1,0 +1,11 @@
+[package]
+name = "ic-admin-derive"
+version = "0.8.0"
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = {version="1.0.80", features = ["full"]}
+quote = "1.0"

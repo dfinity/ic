@@ -1,0 +1,6 @@
+---
+
+- name: print information
+  debug:
+    msg: 'CI/CD pipeline for media.img unavailable, use push mode: -e ic_media_path="/home/user/media/"'
+  tags: [ "ic_guest" ]

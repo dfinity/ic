@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#
+# This script will generate the deployment inventory dynamically, based on the contents of:
+# 1. /testnet/env/shared-config.yml
+# 2. /testnet/env/<deployment>/hosts.ini
+#
+# To change the deployment config (inventory), you likely want to edit only
+# /testnet/env/<deployment>/hosts.ini
+#
+# The contents of ../shared-config.yml are common (shared) for all deployments
+# and part of that config may be overridden in /testnet/env/<deployment>/hosts.ini
+#
+# NB: To enable Nix to dynamically generate Ansible inventory (invoke Python with modules)
+#     we had to introduce this wrapper script and set the ANSIBLE_INVENTORY_PREPEND_PATH
+#     environment variable in the Nix environment.
+#     Without Nix, the file ./inventory.py can be used directly instead.
+#
+if [ -n "$ANSIBLE_INVENTORY_PREPEND_PATH" ]; then
+    export PATH="$ANSIBLE_INVENTORY_PREPEND_PATH:$PATH"
+fi
+
+function abspath() {
+    echo "$(
+        cd "$(dirname "$1")"
+        pwd -P
+    )/$(basename "$1")"
+}
+
+function realpath() {
+    # MacOS does not come with readlink which returns an absolute path
+    # https://stackoverflow.com/questions/3572030/bash-script-absolute-path-with-os-x
+    python3 -c "import os, sys; print(os.path.abspath(os.path.realpath('$1')))"
+}
+
+ORIGINAL_INVENTORY_PATH="$(abspath "${BASH_SOURCE[0]}")"
+
+"$(dirname "$(realpath "${BASH_SOURCE[0]}")")/inventory.py" --original-inventory-path "$ORIGINAL_INVENTORY_PATH" "$@"

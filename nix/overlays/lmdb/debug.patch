@@ -1,0 +1,22 @@
+diff --git a/libraries/liblmdb/mdb.c b/libraries/liblmdb/mdb.c
+index f89720db2..5cbba7bf0 100644
+--- a/libraries/liblmdb/mdb.c
++++ b/libraries/liblmdb/mdb.c
+@@ -425,7 +425,7 @@ mdb_sem_wait(mdb_mutexref_t sem)
+ 			*locked = 1;
+ 			break;
+ 		}
+-	} while ((rc = errno) == EINTR);
++	} while (((rc = errno) == EINTR) || ((rc = errno) == EINVAL));
+ 	return rc;
+ }
+ 
+@@ -574,7 +574,7 @@ typedef MDB_ID	txnid_t;
+ #endif
+ 
+ #if MDB_DEBUG
+-static int mdb_debug;
++static int mdb_debug = 1;
+ static txnid_t mdb_debug_start;
+ 
+ 	/**	Print a debug message with printf formatting.

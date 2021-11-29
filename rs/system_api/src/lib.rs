@@ -1,4 +1,5 @@
 mod request_in_prep;
+mod stable_memory;
 mod system_state_accessor;
 mod system_state_accessor_direct;
 
@@ -16,8 +17,9 @@ use ic_replicated_state::{
     canister_state::{system_state::CanisterStatus, ENFORCE_MESSAGE_MEMORY_USAGE},
     memory_required_to_push_request,
     page_map::PAGE_SIZE,
-    NumWasmPages64, StateError,
+    Memory, NumWasmPages64, PageIndex, StateError, SystemState,
 };
+use ic_sys::PageBytes;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
@@ -27,6 +29,7 @@ use ic_types::{
 };
 use request_in_prep::{into_request, RequestInPrep};
 use serde::{Deserialize, Serialize};
+use stable_memory::StableMemory;
 use std::{
     collections::BTreeMap,
     convert::{From, TryFrom},
@@ -35,7 +38,7 @@ use std::{
 pub use system_state_accessor::SystemStateAccessor;
 pub use system_state_accessor_direct::SystemStateAccessorDirect;
 
-const MULTIPLIER_MAX_SIZE_INTRA_SUBNET: u64 = 5;
+const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
 const MAX_NON_REPLICATED_QUERY_REPLY_SIZE: NumBytes = NumBytes::new(3 << 20);
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -60,32 +63,51 @@ pub enum NonReplicatedQueryKind {
     Pure,
 }
 
+/// This enum indicates whether state modifications are important for
+/// an API type or not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModificationTracking {
+    Ignore,
+    Track,
+}
+
+/// Describes the context within which a canister message is executed.
+///
+/// The `Arc` values in this type are safe to serialize because the contain
+/// read-only data that is only shared for cheap cloning. Serializing and
+/// deserializing will result in duplication of the data, but no issues in
+/// correctness.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Serialize, Deserialize)]
 pub enum ApiType {
-    // For executing the `canister_start` method
+    /// For executing the `canister_start` method
     Start,
 
-    // For executing the `canister_init` method
+    /// For executing the `canister_init` method
     Init {
         time: Time,
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
     },
 
-    // For executing canister methods marked as `update`
+    /// For executing canister methods marked as `update`
     Update {
         time: Time,
         incoming_payload: Vec<u8>,
         incoming_cycles: Cycles,
         caller: PrincipalId,
         call_context_id: CallContextId,
-        // Begins as empty and used to accumulate data for sending replies.
+        /// Begins as empty and used to accumulate data for sending replies.
         response_data: Vec<u8>,
         response_status: ResponseStatus,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
+        nns_subnet_id: SubnetId,
+        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         routing_table: Arc<RoutingTable>,
+        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
@@ -111,6 +133,8 @@ pub enum ApiType {
         call_context_id: CallContextId,
         data_certificate: Option<Vec<u8>>,
         own_subnet_id: SubnetId,
+        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         routing_table: Arc<RoutingTable>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
@@ -133,7 +157,12 @@ pub enum ApiType {
         response_status: ResponseStatus,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
+        nns_subnet_id: SubnetId,
+        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         routing_table: Arc<RoutingTable>,
+        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
@@ -152,7 +181,12 @@ pub enum ApiType {
         response_status: ResponseStatus,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
+        nns_subnet_id: SubnetId,
+        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         routing_table: Arc<RoutingTable>,
+        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
@@ -182,7 +216,12 @@ pub enum ApiType {
         call_context_id: CallContextId,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
+        nns_subnet_id: SubnetId,
+        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         routing_table: Arc<RoutingTable>,
+        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
@@ -218,6 +257,7 @@ impl ApiType {
         call_context_id: CallContextId,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
+        nns_subnet_id: SubnetId,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
     ) -> Self {
@@ -226,6 +266,7 @@ impl ApiType {
             call_context_id,
             own_subnet_id,
             own_subnet_type,
+            nns_subnet_id,
             routing_table,
             subnet_records,
             outgoing_request: None,
@@ -241,6 +282,7 @@ impl ApiType {
         call_context_id: CallContextId,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
+        nns_subnet_id: SubnetId,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
     ) -> Self {
@@ -254,6 +296,7 @@ impl ApiType {
             response_status: ResponseStatus::NotRepliedYet,
             own_subnet_id,
             own_subnet_type,
+            nns_subnet_id,
             routing_table,
             subnet_records,
             outgoing_request: None,
@@ -314,6 +357,7 @@ impl ApiType {
         replied: bool,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
+        nns_subnet_id: SubnetId,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
     ) -> Self {
@@ -330,6 +374,7 @@ impl ApiType {
             },
             own_subnet_id,
             own_subnet_type,
+            nns_subnet_id,
             routing_table,
             subnet_records,
             outgoing_request: None,
@@ -346,6 +391,7 @@ impl ApiType {
         replied: bool,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
+        nns_subnet_id: SubnetId,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
     ) -> Self {
@@ -362,6 +408,7 @@ impl ApiType {
             },
             own_subnet_id,
             own_subnet_type,
+            nns_subnet_id,
             routing_table,
             subnet_records,
             outgoing_request: None,
@@ -385,6 +432,31 @@ impl ApiType {
             incoming_payload,
             time,
             message_accepted: false,
+        }
+    }
+
+    /// Indicates whether state modifications are important for this API type or
+    /// not.
+    pub fn modification_tracking(&self) -> ModificationTracking {
+        match self {
+            ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            }
+            | ApiType::InspectMessage { .. } => ModificationTracking::Ignore,
+            ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Stateful,
+                ..
+            }
+            | ApiType::Start
+            | ApiType::Init { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Heartbeat { .. }
+            | ApiType::Cleanup { .. } => ModificationTracking::Track,
         }
     }
 
@@ -515,42 +587,109 @@ impl MemoryUsage {
     }
 }
 
+/// The information that canisters can see about their own status.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum CanisterStatusView {
+    Running,
+    Stopping,
+    Stopped,
+}
+
+impl CanisterStatusView {
+    pub fn from_full_status(full_status: &CanisterStatus) -> Self {
+        match full_status {
+            CanisterStatus::Running { .. } => Self::Running,
+            CanisterStatus::Stopping { .. } => Self::Stopping,
+            CanisterStatus::Stopped => Self::Stopped,
+        }
+    }
+}
+
+/// Contains some fields from the `SystemState` that don't change over the
+/// course of a message execution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StaticSystemState {
+    canister_id: CanisterId,
+    controller: PrincipalId,
+    status: CanisterStatusView,
+    subnet_type: SubnetType,
+}
+
+impl StaticSystemState {
+    /// Only public for use in tests.
+    pub fn new_internal(
+        canister_id: CanisterId,
+        controller: PrincipalId,
+        status: CanisterStatusView,
+        subnet_type: SubnetType,
+    ) -> Self {
+        Self {
+            canister_id,
+            controller,
+            status,
+            subnet_type,
+        }
+    }
+
+    pub fn new(system_state: &SystemState, subnet_type: SubnetType) -> Self {
+        Self::new_internal(
+            system_state.canister_id,
+            *system_state.controller(),
+            CanisterStatusView::from_full_status(&system_state.status),
+            subnet_type,
+        )
+    }
+
+    pub fn canister_id(&self) -> CanisterId {
+        self.canister_id
+    }
+}
+
 /// Struct that implements the SystemApi trait. This trait enables a canister to
 /// have mediated access to its system state.
 pub struct SystemApiImpl<A: SystemStateAccessor> {
-    // An execution error of the current message.
+    /// An execution error of the current message.
     execution_error: Option<HypervisorError>,
 
     log: ReplicaLogger,
 
-    // The variant of ApiType being executed.
+    /// The variant of ApiType being executed.
     api_type: ApiType,
 
-    // Mediate access to system state.
+    /// Mediate access to system state.
     system_state_accessor: A,
 
     memory_usage: MemoryUsage,
 
     execution_parameters: ExecutionParameters,
+
+    stable_memory: StableMemory,
+
+    /// System state information that is cached so that we don't need to go
+    /// through the `SystemStateAccessor` to read it. This saves on IPC
+    /// communication between the sandboxed canister process and the main
+    /// replica process.
+    static_system_state: StaticSystemState,
 }
 
 impl<A: SystemStateAccessor> SystemApiImpl<A> {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        canister_id: CanisterId,
         api_type: ApiType,
         system_state_accessor: A,
+        static_system_state: StaticSystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
+        stable_memory: Memory<NumWasmPages64>,
         log: ReplicaLogger,
     ) -> Self {
         let memory_usage = MemoryUsage::new(
             &log,
-            canister_id,
+            static_system_state.canister_id,
             execution_parameters.canister_memory_limit,
             canister_current_memory_usage,
             execution_parameters.subnet_available_memory.clone(),
         );
+        let stable_memory = StableMemory::new(stable_memory);
 
         Self {
             execution_error: None,
@@ -558,6 +697,8 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
             system_state_accessor,
             memory_usage,
             execution_parameters,
+            stable_memory,
+            static_system_state,
             log,
         }
     }
@@ -852,6 +993,10 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
         self.system_state_accessor
     }
 
+    pub fn stable_memory_size(&self) -> NumWasmPages64 {
+        self.stable_memory.stable_memory_size
+    }
+
     /// Wrapper around `self.system_state_accessor.push_output_request()` that
     /// tries to allocate memory for the `Request` before pushing it.
     ///
@@ -868,7 +1013,9 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
         };
 
         let reservation_bytes = (memory_required_to_push_request(&req) as u64).into();
-        if ENFORCE_MESSAGE_MEMORY_USAGE
+        let enforce_message_memory_usage = ENFORCE_MESSAGE_MEMORY_USAGE
+            && self.execution_parameters.subnet_type != SubnetType::System;
+        if enforce_message_memory_usage
             && self
                 .memory_usage
                 .allocate_memory(reservation_bytes)
@@ -885,7 +1032,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
             Ok(()) => Ok(0),
             Err((StateError::QueueFull { .. }, request))
             | Err((StateError::CanisterOutOfCycles(_), request)) => {
-                if ENFORCE_MESSAGE_MEMORY_USAGE {
+                if enforce_message_memory_usage {
                     self.memory_usage.deallocate_memory(reservation_bytes);
                 }
                 abort(request, &self.system_state_accessor)
@@ -906,13 +1053,24 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         self.execution_error.as_ref()
     }
 
-    fn get_stable_memory_delta_pages(&self) -> usize {
-        self.memory_usage.stable_memory_delta
+    fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions {
+        match self.static_system_state.subnet_type {
+            SubnetType::System => NumInstructions::from(0),
+            SubnetType::VerifiedApplication | SubnetType::Application => {
+                NumInstructions::from(num_bytes.get())
+            }
+        }
     }
 
-    fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions {
-        self.system_state_accessor
-            .get_num_instructions_from_bytes(num_bytes)
+    fn stable_memory_dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
+        self.stable_memory
+            .stable_memory_buffer
+            .dirty_pages()
+            .collect()
+    }
+
+    fn stable_memory_size(&self) -> u64 {
+        self.stable_memory.stable_memory_size.get()
     }
 
     fn ic0_msg_caller_size(&self) -> HypervisorResult<u32> {
@@ -1231,8 +1389,8 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Ok(self
-                .system_state_accessor
-                .canister_id()
+                .static_system_state
+                .canister_id
                 .get_ref()
                 .as_slice()
                 .len()),
@@ -1259,7 +1417,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 valid_subslice("ic0.canister_self_copy heap", dst, size, heap)?;
-                let canister_id = self.system_state_accessor.canister_id();
+                let canister_id = self.static_system_state.canister_id;
                 let id_bytes = canister_id.get_ref().as_slice();
                 let slice = valid_subslice("ic0.canister_self_copy id", offset, size, id_bytes)?;
                 let (dst, size) = (dst as usize, size as usize);
@@ -1282,7 +1440,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                Ok(self.system_state_accessor.controller().as_slice().len())
+                Ok(self.static_system_state.controller.as_slice().len())
             }
         }
     }
@@ -1307,7 +1465,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 valid_subslice("ic0.controller_copy heap", dst, size, heap)?;
-                let controller = self.system_state_accessor.controller();
+                let controller = self.static_system_state.controller;
                 let id_bytes = controller.as_slice();
                 let slice = valid_subslice("ic0.controller_copy id", offset, size, id_bytes)?;
                 let (dst, size) = (dst as usize, size as usize);
@@ -1399,7 +1557,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 let callee = if callee == IC_00.get() {
                     // This is a request to ic:00. Update `callee` to be the appropriate subnet.
                     let callee = resolve_destination(
-                        routing_table.clone(),
+                        Arc::clone(routing_table),
                         method_name.as_str(),
                         payload.as_slice(),
                         *own_subnet_id,
@@ -1410,7 +1568,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                             "Request destination: Couldn't find the right subnet. Send it to the current subnet {},
                             which will handle rejecting the request gracefully: sender id {}, receiver id {}, method_name {}.",
                             own_subnet_id,
-                            self.system_state_accessor.canister_id(), callee, method_name
+                            self.static_system_state.canister_id, callee, method_name
                         );
                         *own_subnet_id
                     });
@@ -1430,7 +1588,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 ));
 
                 let msg = Request {
-                    sender: self.system_state_accessor.canister_id(),
+                    sender: self.static_system_state.canister_id,
                     receiver: callee,
                     method_name,
                     method_payload: payload,
@@ -1488,7 +1646,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 }
 
                 let req = RequestInPrep::new(
-                    self.system_state_accessor.canister_id(),
+                    self.static_system_state.canister_id,
                     callee_src,
                     callee_size,
                     name_src,
@@ -1497,7 +1655,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                     WasmClosure::new(reply_fun, reply_env),
                     WasmClosure::new(reject_fun, reject_env),
                     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-                    MULTIPLIER_MAX_SIZE_INTRA_SUBNET,
+                    MULTIPLIER_MAX_SIZE_LOCAL_SUBNET,
                 )?;
                 *outgoing_request = Some(req);
                 Ok(())
@@ -1651,7 +1809,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 })?;
 
                 let req = into_request(
-                    routing_table.clone(),
+                    Arc::clone(routing_table),
                     subnet_records,
                     req_in_prep,
                     *call_context_id,
@@ -1684,7 +1842,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 subnet_records.insert(*own_subnet_id, own_subnet_type);
 
                 let req = into_request(
-                    routing_table.clone(),
+                    Arc::clone(routing_table),
                     &subnet_records,
                     req_in_prep,
                     *call_context_id,
@@ -1710,7 +1868,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self.system_state_accessor.stable_size(),
+            | ApiType::InspectMessage { .. } => self.stable_memory.stable_size(),
         }
     }
 
@@ -1729,7 +1887,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::InspectMessage { .. } => {
                 match self.memory_usage.allocate_pages(additional_pages as u64) {
                     Ok(()) => {
-                        let res = self.system_state_accessor.stable_grow(additional_pages);
+                        let res = self.stable_memory.stable_grow(additional_pages);
                         match &res {
                             Err(_) | Ok(-1) => {
                                 self.memory_usage.deallocate_pages(additional_pages as u64)
@@ -1762,9 +1920,9 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self
-                .system_state_accessor
-                .stable_read(dst, offset, size, heap),
+            | ApiType::InspectMessage { .. } => {
+                self.stable_memory.stable_read(dst, offset, size, heap)
+            }
         }
     }
 
@@ -1787,7 +1945,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => self
-                .system_state_accessor
+                .stable_memory
                 .stable_write(offset, src, size, heap)
                 .map(|_| {
                     self.memory_usage.stable_memory_delta +=
@@ -1808,7 +1966,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self.system_state_accessor.stable64_size(),
+            | ApiType::InspectMessage { .. } => self.stable_memory.stable64_size(),
         }
     }
 
@@ -1827,7 +1985,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::InspectMessage { .. } => {
                 match self.memory_usage.allocate_pages(additional_pages as u64) {
                     Ok(()) => {
-                        let res = self.system_state_accessor.stable64_grow(additional_pages);
+                        let res = self.stable_memory.stable64_grow(additional_pages);
                         match &res {
                             Err(_) | Ok(-1) => {
                                 self.memory_usage.deallocate_pages(additional_pages as u64)
@@ -1860,9 +2018,9 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self
-                .system_state_accessor
-                .stable64_read(dst, offset, size, heap),
+            | ApiType::InspectMessage { .. } => {
+                self.stable_memory.stable64_read(dst, offset, size, heap)
+            }
         }
     }
 
@@ -1885,7 +2043,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => self
-                .system_state_accessor
+                .stable_memory
                 .stable64_write(offset, src, size, heap)
                 .map(|_| {
                     self.memory_usage.stable_memory_delta +=
@@ -2166,13 +2324,11 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. } => {
-                match self.system_state_accessor.canister_status() {
-                    CanisterStatus::Running { .. } => Ok(1),
-                    CanisterStatus::Stopping { .. } => Ok(2),
-                    CanisterStatus::Stopped { .. } => Ok(3),
-                }
-            }
+            | ApiType::InspectMessage { .. } => match self.static_system_state.status {
+                CanisterStatusView::Running => Ok(1),
+                CanisterStatusView::Stopping => Ok(2),
+                CanisterStatusView::Stopped => Ok(3),
+            },
         }
     }
 
@@ -2185,12 +2341,13 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_mint_cycles")),
-            ApiType::Update { .. }
-            | ApiType::Heartbeat { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. } => {
+
+            ApiType::Update { nns_subnet_id, .. }
+            | ApiType::Heartbeat { nns_subnet_id, .. }
+            | ApiType::ReplyCallback { nns_subnet_id, .. }
+            | ApiType::RejectCallback { nns_subnet_id, .. } => {
                 self.system_state_accessor
-                    .mint_cycles(Cycles::from(amount))?;
+                    .mint_cycles(Cycles::from(amount), nns_subnet_id)?;
                 Ok(amount)
             }
         }
@@ -2208,8 +2365,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         };
         eprintln!(
             "[Canister {}] {}",
-            self.system_state_accessor.canister_id(),
-            msg
+            self.static_system_state.canister_id, msg
         );
     }
 

@@ -44,13 +44,6 @@ pub enum NodeManagerError {
     /// downloaded file
     FileDownloadError(FileDownloadError),
 
-    /// A file's computed hash did not match the expected hash
-    FileHashMismatchError {
-        computed_hash: String,
-        expected_hash: String,
-        file_path: PathBuf,
-    },
-
     /// Failed to exec a new Node Manager binary
     ExecError(PathBuf, exec::Error),
 
@@ -73,17 +66,6 @@ impl NodeManagerError {
         NodeManagerError::IoError(format!("Failed to open file: {:?}", file_path), e)
     }
 
-    pub(crate) fn file_copy_error(src: &Path, dest: &Path, e: io::Error) -> Self {
-        NodeManagerError::IoError(
-            format!("Failed to copy file from {:?} to {:?}", src, dest),
-            e,
-        )
-    }
-
-    pub(crate) fn symlink_error(src: &Path, dest: &Path, e: io::Error) -> Self {
-        NodeManagerError::IoError(format!("Failed to symlink {:?} as {:?}", src, dest), e)
-    }
-
     pub(crate) fn dir_create_error(dir: &Path, e: io::Error) -> Self {
         NodeManagerError::IoError(format!("Failed to create dir: {:?}", dir), e)
     }
@@ -94,18 +76,6 @@ impl NodeManagerError {
 
     pub(crate) fn invalid_configuration_error(msg: impl ToString) -> Self {
         NodeManagerError::InvalidConfigurationError(msg.to_string())
-    }
-
-    pub(crate) fn file_hash_mismatch_error(
-        computed_hash: String,
-        expected_hash: String,
-        file_path: PathBuf,
-    ) -> Self {
-        NodeManagerError::FileHashMismatchError {
-            computed_hash,
-            expected_hash,
-            file_path,
-        }
     }
 
     pub(crate) fn file_command_error(e: io::Error, cmd: &Command) -> Self {
@@ -136,15 +106,6 @@ impl fmt::Display for NodeManagerError {
             NodeManagerError::BinaryHttpError(HttpError::HyperError(e)) => {
                 write!(f, "Encountered error when requesting binary: {:?}", e)
             }
-            NodeManagerError::FileHashMismatchError {
-                computed_hash,
-                expected_hash,
-                file_path,
-            } => write!(
-                f,
-                "File failed hash validation: computed_hash: {}, expected_hash: {}, file: {:?}",
-                computed_hash, expected_hash, file_path
-            ),
             NodeManagerError::ExecError(path, e) => write!(
                 f,
                 "Failed to exec new Node Manager process: {:?}, error: {:?}",

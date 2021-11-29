@@ -9,7 +9,7 @@ use crate::{
     IngressHistoryWriterImpl, QueryExecutionType,
 };
 use assert_matches::assert_matches;
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::execution_environment::Config;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
@@ -74,6 +74,7 @@ lazy_static! {
         canister_memory_limit: NumBytes::new(u64::MAX / 2),
         subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         compute_allocation: ComputeAllocation::default(),
+        subnet_type: SubnetType::Application,
     };
 }
 
@@ -114,7 +115,7 @@ impl CanisterManagerBuilder {
         CanisterManager::new(
             hypervisor,
             no_op_logger(),
-            canister_manager_config(self.subnet_id),
+            canister_manager_config(self.subnet_id, subnet_type),
             cycles_account_manager,
             ingress_history_writer,
         )
@@ -130,22 +131,23 @@ impl Default for CanisterManagerBuilder {
     }
 }
 
-fn canister_manager_config(subnet_id: SubnetId) -> CanisterMgrConfig {
+fn canister_manager_config(subnet_id: SubnetId, subnet_type: SubnetType) -> CanisterMgrConfig {
     CanisterMgrConfig::new(
         MEMORY_CAPACITY,
         Some(CYCLES_LIMIT_PER_CANISTER),
         DEFAULT_PROVISIONAL_BALANCE,
         NumSeconds::from(100_000),
         subnet_id,
+        subnet_type,
         MAX_CONTROLLERS,
         1,
     )
 }
 
 fn initial_state(path: &Path, subnet_id: SubnetId) -> ReplicatedState {
-    let routing_table = RoutingTable::new(btreemap! {
+    let routing_table = Arc::new(RoutingTable::new(btreemap! {
         CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-    });
+    }));
     let mut state =
         ReplicatedState::new_rooted_at(subnet_id, SubnetType::Application, path.to_path_buf());
     state.metadata.network_topology.routing_table = routing_table;
@@ -1101,7 +1103,7 @@ fn reinstall_calls_canister_start_and_canister_init() {
         let canister_manager = CanisterManager::new(
             Arc::clone(&hypervisor) as Arc<_>,
             log,
-            canister_manager_config(subnet_id),
+            canister_manager_config(subnet_id, subnet_type),
             cycles_account_manager,
             ingress_history_writer,
         );
@@ -1198,7 +1200,7 @@ fn install_calls_canister_start_and_canister_init() {
         let canister_manager = CanisterManager::new(
             Arc::clone(&hypervisor) as Arc<_>,
             log,
-            canister_manager_config(subnet_id),
+            canister_manager_config(subnet_id, subnet_type),
             cycles_account_manager,
             ingress_history_writer,
         );
@@ -1335,13 +1337,29 @@ fn reinstall_clears_stable_memory() {
         // Write something into the canister's stable memory.
         let mut canister = state.take_canister_state(&canister_id).unwrap();
         assert_eq!(
-            canister.system_state.stable_memory.size,
+            canister
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .stable_memory
+                .size,
             NumWasmPages64::new(0)
         );
-        canister.system_state.stable_memory.size = NumWasmPages64::new(1);
+        canister
+            .execution_state
+            .as_mut()
+            .unwrap()
+            .stable_memory
+            .size = NumWasmPages64::new(1);
         let mut buf = page_map::Buffer::new(PageMap::default());
         buf.write(&[1; 10], 0);
-        canister.system_state.stable_memory.page_map = buf.into_page_map();
+        canister
+            .execution_state
+            .as_mut()
+            .unwrap()
+            .stable_memory
+            .page_map
+            .update(&buf.dirty_pages().collect::<Vec<_>>());
 
         state.put_canister_state(canister);
 
@@ -1362,7 +1380,12 @@ fn reinstall_clears_stable_memory() {
         // Stable memory should now be empty.
         let canister = state.take_canister_state(&canister_id).unwrap();
         assert_eq!(
-            canister.system_state.stable_memory.size,
+            canister
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .stable_memory
+                .size,
             NumWasmPages64::new(0)
         );
     });
@@ -3300,6 +3323,142 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
             .unwrap();
         assert_eq!(state.num_canisters(), 4);
     })
+}
+
+/// This canister exports a query that returns its controller's length.
+const CONTROLLER_LENGTH: &str = r#"
+    (module
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+        (import "ic0" "controller_size"
+            (func $controller_size (result i32)))
+        (func $controller
+            (i32.store (i32.const 0) (call $controller_size))
+            (call $msg_reply_data_append
+                (i32.const 0) ;; the counter from heap[0]
+                (i32.const 1)) ;; length (assume the i32 actually fits in one byte)
+            (call $msg_reply))
+        (func $canister_init)
+        (memory $memory 1)
+        (export "canister_query controller" (func $controller))
+        (export "canister_init" (func $canister_init))
+    )"#;
+
+/// With sandboxing, we are caching some information about a canister's state
+/// (including the controler) with the sandboxed process. This test verifies
+/// that the canister sees the proper change when the controller is updated.
+#[test]
+fn hypervisor_sends_new_controller_to_canister() {
+    with_test_replica_logger(|log| {
+        // Set up the initial canister.
+        let subnet_id = subnet_test_id(1);
+        let subnet_type = SubnetType::Application;
+        let metrics_registry = MetricsRegistry::new();
+        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+        let hypervisor = Hypervisor::new(
+            Config::default(),
+            1,
+            &metrics_registry,
+            subnet_id,
+            subnet_type,
+            log.clone(),
+            Arc::clone(&cycles_account_manager),
+        );
+
+        let hypervisor = Arc::new(hypervisor);
+        let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
+            log.clone(),
+            &metrics_registry,
+        ));
+        let canister_manager = CanisterManager::new(
+            Arc::clone(&hypervisor) as Arc<_>,
+            log,
+            canister_manager_config(subnet_id, subnet_type),
+            cycles_account_manager,
+            ingress_history_writer,
+        );
+
+        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+        let mut state = initial_state(tmpdir.path(), subnet_id);
+        let controller = canister_test_id(1).get();
+        let sender_subnet_id = subnet_test_id(1);
+        let canister_id = canister_manager
+            .create_canister(
+                controller,
+                sender_subnet_id,
+                *INITIAL_CYCLES,
+                CanisterSettings::default(),
+                MAX_NUMBER_OF_CANISTERS,
+                &mut state,
+            )
+            .0
+            .unwrap();
+
+        canister_manager
+            .install_code(
+                InstallCodeContextBuilder::default()
+                    .sender(controller)
+                    .canister_id(canister_id)
+                    .wasm_module(wabt::wat2wasm(CONTROLLER_LENGTH).unwrap())
+                    .mode(CanisterInstallMode::Reinstall)
+                    .build(),
+                &mut state,
+                EXECUTION_PARAMETERS.clone(),
+            )
+            .1
+            .unwrap();
+
+        // Verify that we read the proper length for the initial controller.
+        let canister = state.take_canister_state(&canister_id).unwrap();
+        let user_id = user_test_id(0);
+        let (mut new_canister, _, result) = hypervisor.execute_query(
+            QueryExecutionType::Replicated,
+            "controller",
+            &[],
+            user_id.get(),
+            canister,
+            None,
+            mock_time(),
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert_eq!(
+            result.unwrap(),
+            Some(WasmResult::Reply(vec![controller.to_vec().len() as u8,]))
+        );
+
+        // Change to a new controller with a different length.
+        let new_controller = PrincipalId::try_from(&[1, 2, 3][..]).unwrap();
+        assert!(controller.to_vec().len() != new_controller.to_vec().len());
+        let new_settings = CanisterSettings::new(Some(new_controller), None, None, None, None);
+        canister_manager
+            .update_settings(
+                controller,
+                new_settings,
+                &mut new_canister,
+                0,
+                NumBytes::from(0),
+            )
+            .unwrap();
+
+        // Verify that the canister reads the length of the new controller.
+        assert_eq!(
+            hypervisor
+                .execute_query(
+                    QueryExecutionType::Replicated,
+                    "controller",
+                    &[],
+                    user_id.get(),
+                    new_canister,
+                    None,
+                    mock_time(),
+                    EXECUTION_PARAMETERS.clone(),
+                )
+                .2
+                .unwrap(),
+            Some(WasmResult::Reply(vec![new_controller.to_vec().len() as u8]))
+        );
+    });
 }
 
 proptest! {

@@ -56,7 +56,7 @@ use dfn_core::api::reject_message;
 use ic_nns_common::access_control::check_caller_is_gtc;
 use ic_nns_governance::governance::HeapGrowthPotential;
 use ledger_canister::{
-    metrics_encoder, AccountBalanceArgs, AccountIdentifier, ICPTs, Memo, SendArgs, Subaccount,
+    metrics_encoder, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
     TotalSupplyArgs,
 };
 
@@ -227,8 +227,8 @@ impl Ledger for LedgerCanister {
             protobuf,
             SendArgs {
                 memo: Memo(memo),
-                amount: ICPTs::from_e8s(amount_e8s),
-                fee: ICPTs::from_e8s(fee_e8s),
+                amount: Tokens::from_e8s(amount_e8s),
+                fee: Tokens::from_e8s(fee_e8s),
                 from_subaccount,
                 to,
                 created_at_time: None,
@@ -247,8 +247,8 @@ impl Ledger for LedgerCanister {
         })
     }
 
-    async fn total_supply(&self) -> Result<ICPTs, GovernanceError> {
-        let result: Result<ICPTs, (Option<i32>, String)> = call(
+    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
+        let result: Result<Tokens, (Option<i32>, String)> = call(
             LEDGER_CANISTER_ID,
             "total_supply_pb",
             protobuf,
@@ -267,8 +267,8 @@ impl Ledger for LedgerCanister {
         })
     }
 
-    async fn account_balance(&self, account: AccountIdentifier) -> Result<ICPTs, GovernanceError> {
-        let result: Result<ICPTs, (Option<i32>, String)> = call(
+    async fn account_balance(&self, account: AccountIdentifier) -> Result<Tokens, GovernanceError> {
+        let result: Result<Tokens, (Option<i32>, String)> = call(
             LEDGER_CANISTER_ID,
             "account_balance_pb",
             protobuf,
@@ -373,7 +373,7 @@ fn canister_post_upgrade() {
     }
     .expect("Couldn't upgrade canister.");
 
-    governance_mut().proto.wait_for_quiet_threshold_seconds = ONE_DAY_SECONDS;
+    governance_mut().proto.wait_for_quiet_threshold_seconds = 2 * ONE_DAY_SECONDS;
 }
 
 #[export_name = "canister_update update_authz"]

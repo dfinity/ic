@@ -1,7 +1,7 @@
 use crate::keygen::forward_secure_key_id;
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
-use crate::server::api::NiDkgCspServer;
-use crate::server::local_csp_server::LocalCspServer;
+use crate::server::api::NiDkgCspVault;
+use crate::server::local_csp_server::LocalCspVault;
 use crate::threshold::ni_dkg::specialise;
 use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
 use crate::types::conversions::key_id_from_csp_pub_coeffs;
@@ -29,8 +29,8 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspServer
-    for LocalCspServer<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspVault
+    for LocalCspVault<R, S, C>
 {
     fn gen_forward_secure_key_pair(
         &self,

@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{
     collections::{HashMap, HashSet},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 pub mod cache;
@@ -66,6 +66,7 @@ pub struct IncompleteState {
     metrics: StateManagerMetrics,
     started_at: Instant,
     own_subnet_type: SubnetType,
+    thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     state_sync_refs: StateSyncRefs,
 }
 
@@ -76,6 +77,16 @@ impl Drop for IncompleteState {
                 self.log,
                 "State sync refs does not contain incomplete state @{}.", self.height,
             );
+        }
+
+        if let DownloadState::Loading {
+            manifest: _,
+            ref fetch_chunks,
+        } = self.state
+        {
+            self.metrics
+                .state_sync_remaining
+                .sub(fetch_chunks.len() as i64);
         }
 
         // We need to record the download state before passing self to the cache, as
@@ -126,6 +137,7 @@ impl IncompleteState {
         manifest_with_checkpoint_ref: Option<(Manifest, CheckpointRef)>,
         metrics: StateManagerMetrics,
         own_subnet_type: SubnetType,
+        thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
         state_sync_refs: StateSyncRefs,
     ) -> Self {
         if state_sync_refs.insert(height, root_hash.clone()).is_some() {
@@ -149,6 +161,7 @@ impl IncompleteState {
             metrics,
             started_at: Instant::now(),
             own_subnet_type,
+            thread_pool,
             state_sync_refs,
         }
     }
@@ -194,8 +207,11 @@ impl IncompleteState {
     }
 
     /// Copy reusable files from previous checkpoint according to diff script.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn copy_files(
         log: &ReplicaLogger,
+        metrics: &StateManagerMetrics,
+        thread_pool: &mut scoped_threadpool::Pool,
         root_old: &Path,
         root_new: &Path,
         manifest_old: &Manifest,
@@ -203,136 +219,157 @@ impl IncompleteState {
         diff_script: &DiffScript,
         fetch_chunks: &mut HashSet<usize>,
     ) {
-        for (new_index, old_index) in diff_script.copy_files.iter() {
-            let src_path = root_old.join(&manifest_old.file_table[*old_index].relative_path);
-            let dst_path = root_new.join(&manifest_new.file_table[*new_index].relative_path);
+        let corrupted_chunks = Arc::new(Mutex::new(Vec::new()));
 
-            if dst_path.ends_with("state_file") {
-                // It is guaranteed by the different domain hash separators.
-                assert!(src_path.ends_with("state_file"));
+        thread_pool.scoped(|scope| {
+            for (new_index, old_index) in diff_script.copy_files.iter() {
+                let src_path = root_old.join(&manifest_old.file_table[*old_index].relative_path);
+                let dst_path = root_new.join(&manifest_new.file_table[*new_index].relative_path);
+                let corrupted_chunks = Arc::clone(&corrupted_chunks);
 
-                let src_cow_base_dir = src_path.parent().expect("paths must have a parent");
-                let dst_cow_base_dir = dst_path.parent().expect("paths must have a parent");
+                scope.execute(move || {
+                    if dst_path.ends_with("state_file") {
+                        // It is guaranteed by the different domain hash separators.
+                        assert!(src_path.ends_with("state_file"));
 
-                let src_cow_mgr =
-                    CowMemoryManagerImpl::open_readonly(src_cow_base_dir.to_path_buf());
-                let src_mapped_state = src_cow_mgr.get_map();
-                src_mapped_state.make_heap_accessible();
-                let src_heap_base = src_mapped_state.get_heap_base();
-                let size_bytes = manifest_old.file_table[*old_index].size_bytes as usize;
-                let data: &[u8] = unsafe { std::slice::from_raw_parts(src_heap_base, size_bytes) };
-                assert_eq!(data.len() % PAGE_SIZE, 0);
+                        let src_cow_base_dir = src_path.parent().expect("paths must have a parent");
+                        let dst_cow_base_dir = dst_path.parent().expect("paths must have a parent");
 
-                let dst_cow_mgr =
-                    CowMemoryManagerImpl::open_readwrite_statesync(dst_cow_base_dir.to_path_buf());
-                let dst_mapped_state = dst_cow_mgr.get_map();
+                        let src_cow_mgr =
+                            CowMemoryManagerImpl::open_readonly(src_cow_base_dir.to_path_buf());
+                        let src_mapped_state = src_cow_mgr.get_map();
+                        src_mapped_state.make_heap_accessible();
+                        let src_heap_base = src_mapped_state.get_heap_base();
+                        let size_bytes = manifest_old.file_table[*old_index].size_bytes as usize;
+                        let data: &[u8] =
+                            unsafe { std::slice::from_raw_parts(src_heap_base, size_bytes) };
+                        assert_eq!(data.len() % PAGE_SIZE, 0);
 
-                let nr_pages = data.len() / PAGE_SIZE;
-                let pages_to_copy: Vec<u64> = (0..nr_pages).map(|page| page as u64).collect();
-                dst_mapped_state.copy_to_heap(0, data);
-                dst_mapped_state.soft_commit(&pages_to_copy);
-            } else {
-                assert!(!src_path.ends_with("state_file"));
-
-                let src_map = ScopedMmap::from_path(&src_path).unwrap_or_else(|err| {
-                    fatal!(log, "Failed to mmap file {}: {}", src_path.display(), err)
-                });
-                let src_data = src_map.as_slice();
-
-                let old_chunk_range =
-                    crate::manifest::file_chunk_range(&manifest_old.chunk_table, *old_index);
-                let new_chunk_range =
-                    crate::manifest::file_chunk_range(&manifest_new.chunk_table, *new_index);
-
-                // bad_chunks contains ids of chunks from the old checkpoint that
-                // didn't pass validation or refer to non-existing portions of
-                // the corresponding file.  The contents of these chunks will be
-                // requested later from peers.
-                let mut bad_chunks = vec![];
-
-                // Go through all the chunks of the local file and validate
-                // each one.  If the validation fails, add the corresponding new
-                // chunk ids to the set of chunks to fetch.
-                for idx in old_chunk_range.clone() {
-                    let chunk = &manifest_old.chunk_table[idx];
-                    let chunk_offset = idx - old_chunk_range.start;
-                    let new_chunk_idx = new_chunk_range.start + chunk_offset;
-                    let byte_range = chunk.byte_range();
-
-                    if src_data.len() < byte_range.end {
-                        warn!(
-                            log,
-                            "Local chunk {} ({}@{}—{}) is out of range (file len = {}), \
-                             will request chunk {} instead",
-                            idx,
-                            src_path.display(),
-                            byte_range.start,
-                            byte_range.end,
-                            src_data.len(),
-                            new_chunk_idx + 1
+                        let dst_cow_mgr = CowMemoryManagerImpl::open_readwrite_statesync(
+                            dst_cow_base_dir.to_path_buf(),
                         );
-                        bad_chunks.push(idx);
-                        fetch_chunks.insert(new_chunk_idx + 1);
-                        continue;
-                    }
+                        let dst_mapped_state = dst_cow_mgr.get_map();
 
-                    if let Err(err) = crate::manifest::validate_chunk(
-                        idx,
-                        &src_data[byte_range.clone()],
-                        manifest_old,
-                    ) {
-                        warn!(
-                            log,
-                            "Local chunk {} ({}@{}–{}) doesn't pass validation: {}, \
-                             will request chunk {} instead",
-                            idx,
-                            src_path.display(),
-                            byte_range.start,
-                            byte_range.end,
-                            err,
-                            new_chunk_idx + 1
-                        );
+                        let nr_pages = data.len() / PAGE_SIZE;
+                        let pages_to_copy: Vec<u64> =
+                            (0..nr_pages).map(|page| page as u64).collect();
+                        dst_mapped_state.copy_to_heap(0, data);
+                        dst_mapped_state.soft_commit(&pages_to_copy);
+                    } else {
+                        assert!(!src_path.ends_with("state_file"));
 
-                        bad_chunks.push(idx);
-                        fetch_chunks.insert(new_chunk_idx + 1);
-                    }
-                }
-
-                if bad_chunks.is_empty()
-                    && src_data.len() == manifest_old.file_table[*old_index].size_bytes as usize
-                {
-                    // All the hash sums and the file size match, so we can
-                    // simply copy the whole file.  That's much faster than
-                    // copying one chunk at a time.
-                    do_copy_overwrite(log, &src_path, &dst_path).unwrap_or_else(|err| {
-                        fatal!(
-                            log,
-                            "Failed to copy file from {} to {}: {}",
-                            src_path.display(),
-                            dst_path.display(),
-                            err
-                        )
-                    });
-                } else {
-                    // Copy the chunks that passed validation to the
-                    // destination, the rest will be fetched and applied later.
-                    let dst = std::fs::OpenOptions::new()
-                        .write(true)
-                        .create(false)
-                        .open(&dst_path)
-                        .unwrap_or_else(|err| {
-                            fatal!(log, "Failed to open file {}: {}", dst_path.display(), err)
+                        let src_map = ScopedMmap::from_path(&src_path).unwrap_or_else(|err| {
+                            fatal!(log, "Failed to mmap file {}: {}", src_path.display(), err)
                         });
-                    for idx in old_chunk_range {
-                        if bad_chunks.contains(&idx) {
-                            continue;
+                        let src_data = src_map.as_slice();
+
+                        let old_chunk_range = crate::manifest::file_chunk_range(
+                            &manifest_old.chunk_table,
+                            *old_index,
+                        );
+                        let new_chunk_range = crate::manifest::file_chunk_range(
+                            &manifest_new.chunk_table,
+                            *new_index,
+                        );
+
+                        // bad_chunks contains ids of chunks from the old checkpoint that
+                        // didn't pass validation or refer to non-existing portions of
+                        // the corresponding file.  The contents of these chunks will be
+                        // requested later from peers.
+                        let mut bad_chunks = vec![];
+
+                        // Go through all the chunks of the local file and validate
+                        // each one.  If the validation fails, add the corresponding new
+                        // chunk ids to the set of chunks to fetch.
+                        for idx in old_chunk_range.clone() {
+                            let chunk = &manifest_old.chunk_table[idx];
+                            let chunk_offset = idx - old_chunk_range.start;
+                            let new_chunk_idx = new_chunk_range.start + chunk_offset;
+                            let byte_range = chunk.byte_range();
+
+                            if src_data.len() < byte_range.end {
+                                warn!(
+                                    log,
+                                    "Local chunk {} ({}@{}—{}) is out of range (file len = {}), \
+                             will request chunk {} instead",
+                                    idx,
+                                    src_path.display(),
+                                    byte_range.start,
+                                    byte_range.end,
+                                    src_data.len(),
+                                    new_chunk_idx + 1
+                                );
+                                bad_chunks.push(idx);
+                                corrupted_chunks.lock().unwrap().push(new_chunk_idx + 1);
+                                continue;
+                            }
+
+                            if let Err(err) = crate::manifest::validate_chunk(
+                                idx,
+                                &src_data[byte_range.clone()],
+                                manifest_old,
+                            ) {
+                                warn!(
+                                    log,
+                                    "Local chunk {} ({}@{}–{}) doesn't pass validation: {}, \
+                             will request chunk {} instead",
+                                    idx,
+                                    src_path.display(),
+                                    byte_range.start,
+                                    byte_range.end,
+                                    err,
+                                    new_chunk_idx + 1
+                                );
+
+                                bad_chunks.push(idx);
+                                corrupted_chunks.lock().unwrap().push(new_chunk_idx + 1);
+                            }
                         }
 
-                        let chunk = &manifest_old.chunk_table[idx];
-                        let data = &src_data[chunk.byte_range()];
+                        if bad_chunks.is_empty()
+                            && src_data.len()
+                                == manifest_old.file_table[*old_index].size_bytes as usize
+                        {
+                            // All the hash sums and the file size match, so we can
+                            // simply copy the whole file.  That's much faster than
+                            // copying one chunk at a time.
+                            do_copy_overwrite(log, &src_path, &dst_path).unwrap_or_else(|err| {
+                                fatal!(
+                                    log,
+                                    "Failed to copy file from {} to {}: {}",
+                                    src_path.display(),
+                                    dst_path.display(),
+                                    err
+                                )
+                            });
+                            metrics
+                                .state_sync_remaining
+                                .sub(new_chunk_range.len() as i64);
+                        } else {
+                            // Copy the chunks that passed validation to the
+                            // destination, the rest will be fetched and applied later.
+                            let dst = std::fs::OpenOptions::new()
+                                .write(true)
+                                .create(false)
+                                .open(&dst_path)
+                                .unwrap_or_else(|err| {
+                                    fatal!(
+                                        log,
+                                        "Failed to open file {}: {}",
+                                        dst_path.display(),
+                                        err
+                                    )
+                                });
+                            for idx in old_chunk_range {
+                                if bad_chunks.contains(&idx) {
+                                    continue;
+                                }
 
-                        dst.write_at(data, chunk.offset).unwrap_or_else(|err| {
-                            fatal!(
+                                let chunk = &manifest_old.chunk_table[idx];
+                                let data = &src_data[chunk.byte_range()];
+
+                                dst.write_at(data, chunk.offset).unwrap_or_else(|err| {
+                                    fatal!(
                                 log,
                                 "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
                                 chunk.offset,
@@ -340,16 +377,25 @@ impl IncompleteState {
                                 dst_path.display(),
                                 err
                             )
-                        });
+                                });
+                                metrics.state_sync_remaining.sub(1);
+                            }
+                        }
                     }
-                }
+                });
             }
+        });
+        for chunk_idx in corrupted_chunks.lock().unwrap().iter() {
+            fetch_chunks.insert(*chunk_idx);
         }
     }
 
     /// Copy reusable chunks from previous checkpoint according to diff script.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn copy_chunks(
         log: &ReplicaLogger,
+        metrics: &StateManagerMetrics,
+        thread_pool: &mut scoped_threadpool::Pool,
         root_old: &Path,
         root_new: &Path,
         manifest_old: &Manifest,
@@ -374,121 +420,139 @@ impl IncompleteState {
             entry.push((*dst_chunk_index, *src_chunk_index));
         }
 
-        for ((dst_file_index, src_file_index), chunk_group) in chunk_groups.iter() {
-            let dst_path = root_new.join(&manifest_new.file_table[*dst_file_index].relative_path);
-            let src_path = root_old.join(&manifest_old.file_table[*src_file_index].relative_path);
-            if dst_path.ends_with("state_file") {
-                let src_cow_base_dir = src_path.parent().expect("paths must have a parent");
-                let dst_cow_base_dir = dst_path.parent().expect("paths must have a parent");
+        let corrupted_chunks = Arc::new(Mutex::new(Vec::new()));
 
-                let src_cow_mgr =
-                    CowMemoryManagerImpl::open_readonly(src_cow_base_dir.to_path_buf());
-                let src_mapped_state = src_cow_mgr.get_map();
-                src_mapped_state.make_heap_accessible();
-                let src_heap_base = src_mapped_state.get_heap_base();
+        thread_pool.scoped(|scope| {
+            for ((dst_file_index, src_file_index), chunk_group) in chunk_groups.iter() {
+                let dst_path =
+                    root_new.join(&manifest_new.file_table[*dst_file_index].relative_path);
+                let src_path =
+                    root_old.join(&manifest_old.file_table[*src_file_index].relative_path);
+                let corrupted_chunks = Arc::clone(&corrupted_chunks);
+                scope.execute(move || {
+                    if dst_path.ends_with("state_file") {
+                        let src_cow_base_dir = src_path.parent().expect("paths must have a parent");
+                        let dst_cow_base_dir = dst_path.parent().expect("paths must have a parent");
 
-                let dst_cow_mgr =
-                    CowMemoryManagerImpl::open_readwrite_statesync(dst_cow_base_dir.to_path_buf());
-                let dst_mapped_state = dst_cow_mgr.get_map();
+                        let src_cow_mgr =
+                            CowMemoryManagerImpl::open_readonly(src_cow_base_dir.to_path_buf());
+                        let src_mapped_state = src_cow_mgr.get_map();
+                        src_mapped_state.make_heap_accessible();
+                        let src_heap_base = src_mapped_state.get_heap_base();
 
-                for (dst_chunk_index, src_chunk_index) in chunk_group {
-                    let dst_chunk = &manifest_new.chunk_table[*dst_chunk_index];
-                    let src_chunk = &manifest_old.chunk_table[*src_chunk_index];
+                        let dst_cow_mgr = CowMemoryManagerImpl::open_readwrite_statesync(
+                            dst_cow_base_dir.to_path_buf(),
+                        );
+                        let dst_mapped_state = dst_cow_mgr.get_map();
 
-                    assert_eq!(src_chunk.size_bytes % PAGE_SIZE as u32, 0);
+                        for (dst_chunk_index, src_chunk_index) in chunk_group {
+                            let dst_chunk = &manifest_new.chunk_table[*dst_chunk_index];
+                            let src_chunk = &manifest_old.chunk_table[*src_chunk_index];
 
-                    let dst_base_page = dst_chunk.offset / PAGE_SIZE as u64;
-                    let nr_pages = src_chunk.size_bytes / PAGE_SIZE as u32;
+                            assert_eq!(src_chunk.size_bytes % PAGE_SIZE as u32, 0);
 
-                    let pages_to_copy: Vec<u64> = (0..nr_pages)
-                        .map(|page| page as u64 + dst_base_page)
-                        .collect();
+                            let dst_base_page = dst_chunk.offset / PAGE_SIZE as u64;
+                            let nr_pages = src_chunk.size_bytes / PAGE_SIZE as u32;
 
-                    let bytes = unsafe {
-                        let base = src_heap_base.add(src_chunk.offset as usize);
-                        std::slice::from_raw_parts(base, src_chunk.size_bytes as usize)
-                    };
-                    dst_mapped_state.copy_to_heap(dst_chunk.offset, bytes);
+                            let pages_to_copy: Vec<u64> = (0..nr_pages)
+                                .map(|page| page as u64 + dst_base_page)
+                                .collect();
 
-                    dst_mapped_state.soft_commit(&pages_to_copy);
-                }
-                continue;
-            }
+                            let bytes = unsafe {
+                                let base = src_heap_base.add(src_chunk.offset as usize);
+                                std::slice::from_raw_parts(base, src_chunk.size_bytes as usize)
+                            };
+                            dst_mapped_state.copy_to_heap(dst_chunk.offset, bytes);
 
-            let dst = std::fs::OpenOptions::new()
-                .write(true)
-                .create(false)
-                .open(&dst_path)
-                .unwrap_or_else(|err| {
-                    fatal!(log, "Failed to open file {}: {}", dst_path.display(), err)
-                });
+                            dst_mapped_state.soft_commit(&pages_to_copy);
+                        }
+                        return;
+                    }
 
-            let src_map = ScopedMmap::from_path(&src_path).unwrap_or_else(|err| {
-                fatal!(log, "Failed to mmap file {}: {}", src_path.display(), err)
-            });
+                    let dst = std::fs::OpenOptions::new()
+                        .write(true)
+                        .create(false)
+                        .open(&dst_path)
+                        .unwrap_or_else(|err| {
+                            fatal!(log, "Failed to open file {}: {}", dst_path.display(), err)
+                        });
 
-            // Validate each chunk that we happen to have locally.  If the
-            // validation pass, copy it to the corresponding location, otherwise
-            // add the destination chunk id to the set of chunks to fetch.
-            for (dst_chunk_index, src_chunk_index) in chunk_group {
-                let dst_chunk = &manifest_new.chunk_table[*dst_chunk_index];
-                let src_chunk = &manifest_old.chunk_table[*src_chunk_index];
-                let byte_range = src_chunk.byte_range();
-
-                if src_map.len() < byte_range.end {
-                    warn!(
-                        log,
-                        "Local chunk {} ({}@{}—{}) is out of range (file len = {}), \
-                         will request chunk {} instead",
-                        *src_chunk_index,
-                        src_path.display(),
-                        byte_range.start,
-                        byte_range.end,
-                        src_map.len(),
-                        *dst_chunk_index + 1
-                    );
-                    fetch_chunks.insert(*dst_chunk_index + 1);
-                    continue;
-                }
-
-                let src_data = &src_map.as_slice()[byte_range];
-                if let Err(err) =
-                    crate::manifest::validate_chunk(*dst_chunk_index, src_data, manifest_new)
-                {
-                    let byte_range = src_chunk.byte_range();
-                    warn!(
-                        log,
-                        "Local chunk {} ({}@{}–{}) doesn't pass validation: {}, \
-                         will request chunk {} instead",
-                        *src_chunk_index,
-                        src_path.display(),
-                        byte_range.start,
-                        byte_range.end,
-                        err,
-                        *dst_chunk_index + 1
-                    );
-
-                    fetch_chunks.insert(*dst_chunk_index + 1);
-                    continue;
-                }
-
-                dst.write_at(src_data, dst_chunk.offset)
-                    .unwrap_or_else(|err| {
-                        fatal!(
-                            log,
-                            "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
-                            dst_chunk.offset,
-                            dst_chunk.size_bytes,
-                            dst_path.display(),
-                            err
-                        )
+                    let src_map = ScopedMmap::from_path(&src_path).unwrap_or_else(|err| {
+                        fatal!(log, "Failed to mmap file {}: {}", src_path.display(), err)
                     });
+
+                    // Validate each chunk that we happen to have locally.  If the
+                    // validation passes, copy it to the corresponding location, otherwise
+                    // add the destination chunk id to the set of chunks to fetch.
+                    for (dst_chunk_index, src_chunk_index) in chunk_group {
+                        let dst_chunk = &manifest_new.chunk_table[*dst_chunk_index];
+                        let src_chunk = &manifest_old.chunk_table[*src_chunk_index];
+                        let byte_range = src_chunk.byte_range();
+
+                        if src_map.len() < byte_range.end {
+                            warn!(
+                                log,
+                                "Local chunk {} ({}@{}—{}) is out of range (file len = {}), \
+                         will request chunk {} instead",
+                                *src_chunk_index,
+                                src_path.display(),
+                                byte_range.start,
+                                byte_range.end,
+                                src_map.len(),
+                                *dst_chunk_index + 1
+                            );
+                            corrupted_chunks.lock().unwrap().push(*dst_chunk_index + 1);
+                            continue;
+                        }
+
+                        let src_data = &src_map.as_slice()[byte_range];
+                        if let Err(err) = crate::manifest::validate_chunk(
+                            *dst_chunk_index,
+                            src_data,
+                            manifest_new,
+                        ) {
+                            let byte_range = src_chunk.byte_range();
+                            warn!(
+                                log,
+                                "Local chunk {} ({}@{}–{}) doesn't pass validation: {}, \
+                         will request chunk {} instead",
+                                *src_chunk_index,
+                                src_path.display(),
+                                byte_range.start,
+                                byte_range.end,
+                                err,
+                                *dst_chunk_index + 1
+                            );
+
+                            corrupted_chunks.lock().unwrap().push(*dst_chunk_index + 1);
+                            continue;
+                        }
+
+                        dst.write_at(src_data, dst_chunk.offset)
+                            .unwrap_or_else(|err| {
+                                fatal!(
+                                    log,
+                                    "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
+                                    dst_chunk.offset,
+                                    dst_chunk.size_bytes,
+                                    dst_path.display(),
+                                    err
+                                )
+                            });
+                        metrics.state_sync_remaining.sub(1);
+                    }
+                });
             }
+        });
+
+        for chunk_idx in corrupted_chunks.lock().unwrap().iter() {
+            fetch_chunks.insert(*chunk_idx);
         }
     }
 
     pub(crate) fn apply_chunk(
         log: &ReplicaLogger,
+        metrics: &StateManagerMetrics,
         root: &Path,
         ix: usize,
         bytes: &[u8],
@@ -535,6 +599,7 @@ impl IncompleteState {
                 err
             )
         });
+        metrics.state_sync_remaining.sub(1);
     }
 
     fn build_artifact(
@@ -673,6 +738,10 @@ impl IncompleteState {
             .with_label_values(&["preallocate"]);
         let total_bytes: u64 = manifest_new.file_table.iter().map(|f| f.size_bytes).sum();
 
+        self.metrics
+            .state_sync_remaining
+            .add(manifest_new.chunk_table.len() as i64);
+
         // Get the cache line. We now own an Arc on that cache line, so we are extending
         // the lifetime of the data on disk as long as we keep this cache line in scope
         let cache = self.state_sync_refs.cache.read().get();
@@ -791,8 +860,11 @@ impl IncompleteState {
             // shifted by 1
             let mut fetch_chunks = diff_script.fetch_chunks.iter().map(|i| *i + 1).collect();
 
+            let mut thread_pool = self.thread_pool.lock().unwrap();
             Self::copy_files(
                 &self.log,
+                &self.metrics,
+                &mut thread_pool,
                 &root_old,
                 &self.root,
                 manifest_old,
@@ -803,6 +875,8 @@ impl IncompleteState {
 
             Self::copy_chunks(
                 &self.log,
+                &self.metrics,
+                &mut thread_pool,
                 &root_old,
                 &self.root,
                 manifest_old,
@@ -990,7 +1064,14 @@ impl Chunkable for IncompleteState {
                     },
                 )?;
 
-                Self::apply_chunk(&self.log, &self.root, chunk_table_index, payload, manifest);
+                Self::apply_chunk(
+                    &self.log,
+                    &self.metrics,
+                    &self.root,
+                    chunk_table_index,
+                    payload,
+                    manifest,
+                );
 
                 fetch_chunks.remove(&ix);
 

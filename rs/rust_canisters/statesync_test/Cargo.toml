@@ -18,6 +18,7 @@ mersenne_twister = "1.1.1"
 rand = "0.4.6"
 
 [dev-dependencies]
+canister-test = { path = "../../rust_canisters/canister_test" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
 

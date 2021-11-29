@@ -1,0 +1,8 @@
+include:
+- local: /gitlab-ci/config/00--child-pipeline-root.yml
+
+.ubuntu-nix-docker-protected:
+  extends:
+    - .ubuntu-nix-docker
+  tags:
+    - dfinity-launch

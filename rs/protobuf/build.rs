@@ -223,6 +223,10 @@ fn build_registry_proto() {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
+        ".registry.subnet.v1.EcdsaConfig",
+        "#[derive(candid::CandidType, Eq)]",
+    );
+    config.type_attribute(
         ".registry.replica_version",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
@@ -235,6 +239,11 @@ fn build_registry_proto() {
     config.type_attribute(
         ".registry.dc",
         "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+
+    config.type_attribute(
+        ".registry.unassigned_nodes_config",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
     );
 
     let registry_files = [
@@ -251,6 +260,7 @@ fn build_registry_proto() {
         "def/registry/node_rewards/v1/node_rewards.proto",
         "def/registry/node_rewards/v2/node_rewards.proto",
         "def/registry/dc/v1/dc.proto",
+        "def/registry/unassigned_nodes_config/v1/unassigned_nodes_config.proto",
     ];
 
     compile_protos(config, &registry_files);

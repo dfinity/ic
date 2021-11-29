@@ -10,22 +10,26 @@ use ic_base_types::NumSeconds;
 use ic_cow_state::CowMemoryManagerImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{execution_state::WasmBinary, QUEUE_INDEX_NONE},
+    canister_state::{
+        execution_state::{SandboxExecutionState, WasmBinary},
+        testing::new_canister_queues_for_test,
+        QUEUE_INDEX_NONE,
+    },
     metadata_state::Stream,
-    page_map,
-    testing::SystemStateTesting,
+    page_map::PageMap,
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
-    Memory, NumWasmPages64, ReplicatedState, SchedulerState, SystemState,
+    InputQueueType, Memory, NumWasmPages64, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse},
-    xnet::{StreamIndex, StreamIndexedQueue},
+    xnet::{QueueId, StreamIndex, StreamIndexedQueue},
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation,
-    NumBytes, PrincipalId, SubnetId, Time,
+    NumBytes, PrincipalId, QueueIndex, SubnetId, Time,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 use proptest::prelude::*;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::TryFrom;
 use std::sync::Arc;
 
@@ -208,14 +212,6 @@ impl CanisterStateBuilder {
 
         system_state.memory_allocation = self.memory_allocation;
 
-        if let Some(data) = self.stable_memory {
-            system_state.stable_memory.size =
-                NumWasmPages64::new((data.len() / WASM_PAGE_SIZE_BYTES) as u64 + 1);
-            let mut buf = page_map::Buffer::new(system_state.stable_memory.page_map);
-            buf.write(&data[..], 0);
-            system_state.stable_memory.page_map = buf.into_page_map();
-        }
-
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {
             system_state.queues_mut().push_ingress(ingress)
@@ -246,14 +242,24 @@ impl CanisterStateBuilder {
         for input in self.inputs {
             system_state
                 .queues_mut()
-                .push_input(QUEUE_INDEX_NONE, input)
+                .push_input(QUEUE_INDEX_NONE, input, InputQueueType::RemoteSubnet)
                 .unwrap();
         }
+
+        let stable_memory = if let Some(data) = self.stable_memory {
+            Memory::new(
+                PageMap::from(&data[..]),
+                NumWasmPages64::new((data.len() / WASM_PAGE_SIZE_BYTES) as u64 + 1),
+            )
+        } else {
+            Memory::default()
+        };
 
         let execution_state = match self.wasm {
             Some(wasm_binary) => {
                 let mut ee = initial_execution_state(None);
                 ee.wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(wasm_binary));
+                ee.stable_memory = stable_memory;
                 Some(ee)
             }
             None => None,
@@ -389,11 +395,13 @@ pub fn initial_execution_state(p: Option<std::path::PathBuf>) -> ExecutionState 
         session_nonce: None,
         wasm_binary: WasmBinary::new(BinaryEncodedWasm::new(vec![])),
         wasm_memory: Memory::default(),
+        stable_memory: Memory::default(),
         exported_globals: vec![],
         exports: ExportedFunctions::new(BTreeSet::new()),
         last_executed_round: ExecutionRound::from(0),
         cow_mem_mgr: Arc::new(cow_mem_mgr),
         mapped_state: None,
+        sandbox_state: SandboxExecutionState::new(),
     }
 }
 
@@ -687,4 +695,99 @@ prop_compose! {
 
         (stream, from, msg_count)
     }
+}
+
+prop_compose! {
+    /// Strategy that generates an arbitrary number (of receivers) between 1 and the
+    /// provided value, if `Some`; or else `usize::MAX` (standing for unlimited
+    /// receivers).
+    pub fn arb_num_receivers(max_receivers: Option<usize>) (
+            random in 0..usize::MAX,
+        ) -> usize {
+        match max_receivers {
+            Some(max_receivers) if max_receivers <= 1 => 1,
+            Some(max_receivers) => 1 + random % (max_receivers - 1),
+            None => usize::MAX,
+        }
+    }
+}
+
+/// Produces a `ReplicatedState` with the given subnet ID and the given output
+/// requests. First group of requests are enqueud into the subnet queues; a
+/// canister is created for each following group. Each group's requests are
+/// routed round-robin to one of `num_receivers`.
+///
+/// Returns the generated `ReplicatedState`; the requests grouped by canister,
+/// in expected iteration order; and the total number of requests.
+fn new_replicated_state_for_test(
+    own_subnet_id: SubnetId,
+    mut output_requests: Vec<Vec<Request>>,
+    num_receivers: usize,
+) -> (
+    ReplicatedState,
+    VecDeque<VecDeque<RequestOrResponse>>,
+    usize,
+) {
+    let mut total_requests = 0;
+    let mut requests = VecDeque::new();
+
+    let subnet_queues = if let Some(reqs) = output_requests.pop() {
+        let (queues, raw_requests) =
+            new_canister_queues_for_test(reqs, CanisterId::from(own_subnet_id), num_receivers);
+        total_requests += raw_requests.len();
+        requests.push_back(raw_requests);
+        Some(queues)
+    } else {
+        None
+    };
+
+    let canister_states: BTreeMap<_, _> = output_requests
+        .into_iter()
+        .enumerate()
+        .map(|(i, reqs)| {
+            let canister_id = CanisterId::from_u64(i as u64);
+            let mut canister = CanisterStateBuilder::new()
+                .with_canister_id(canister_id)
+                .build();
+            let (queues, raw_requests) =
+                new_canister_queues_for_test(reqs, canister_test_id(i as u64), num_receivers);
+            canister.system_state.put_queues(queues);
+            total_requests += raw_requests.len();
+            requests.push_back(raw_requests);
+            (canister_id, canister)
+        })
+        .collect();
+
+    let mut replicated_state = ReplicatedStateBuilder::new().build();
+    replicated_state.put_canister_states(canister_states);
+    if let Some(subnet_queues) = subnet_queues {
+        replicated_state.put_subnet_queues(subnet_queues);
+    }
+
+    (replicated_state, requests, total_requests)
+}
+
+prop_compose! {
+     pub fn arb_replicated_state_with_queues(
+        own_subnet_id: SubnetId,
+        max_canisters: usize,
+        max_requests_per_canister: usize,
+        max_receivers: Option<usize>,
+    ) (
+        request_queues in prop::collection::vec(prop::collection::vec(arbitrary::request(), 0..=max_requests_per_canister), 0..=max_canisters),
+        num_receivers in arb_num_receivers(max_receivers)
+    ) -> (ReplicatedState, VecDeque<VecDeque<RequestOrResponse>>, usize) {
+        new_replicated_state_for_test(own_subnet_id, request_queues, num_receivers)
+    }
+}
+
+/// Asserts that the values returned by `next()` match the ones returned by
+/// `peek()` before.
+pub fn assert_next_eq(
+    peek: (QueueId, QueueIndex, Arc<RequestOrResponse>),
+    next: Option<(QueueId, QueueIndex, RequestOrResponse)>,
+) {
+    let next =
+        next.unwrap_or_else(|| panic!("Peek returned a message {:?}, while pop didn't", peek));
+    assert_eq!((peek.0, peek.1, peek.2.as_ref()), (next.0, next.1, &next.2));
 }

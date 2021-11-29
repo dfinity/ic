@@ -9,14 +9,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
-pub(crate) const REPLICA_BINARY_NAME: &str = "replica";
-pub(crate) const NODE_MANAGER_BINARY_NAME: &str = "nodemanager";
-
-/// Convert `PathBuf` to `String`
-pub(crate) fn path_to_string(path: PathBuf) -> String {
-    path.into_os_string().into_string().unwrap()
-}
-
 /// Re-execute the current process, exactly as it was originally called.
 pub(crate) fn reexec_current_process(logger: &ReplicaLogger) -> NodeManagerError {
     let args: Vec<String> = env::args().collect();
@@ -27,28 +19,6 @@ pub(crate) fn reexec_current_process(logger: &ReplicaLogger) -> NodeManagerError
     );
     let error = exec::Command::new(&args[0]).args(&args[1..]).exec();
     NodeManagerError::ExecError(PathBuf::new(), error)
-}
-
-/// `exec` the given node manager binary with the same args that the current
-/// node manager process was invoked with
-pub(crate) fn exec_node_manager(
-    node_manager_binary: &Path,
-    logger: &ReplicaLogger,
-) -> NodeManagerError {
-    let args: Vec<String> = env::args().collect();
-
-    info!(
-        logger,
-        "exec'ing new Node Manager binary: {:?} {:?}",
-        node_manager_binary,
-        &args[1..]
-    );
-
-    let error = exec::Command::new(node_manager_binary)
-        .args(&args[1..])
-        .exec();
-
-    NodeManagerError::ExecError(node_manager_binary.to_path_buf(), error)
 }
 
 /// Delete old files/directories in the given dir, keeping the
@@ -128,21 +98,6 @@ pub(crate) fn compute_sha256_hex(path: &Path) -> NodeManagerResult<String> {
         .map_err(|e| NodeManagerError::compute_hash_error(path, e))?;
 
     Ok(hex::encode(hasher.finish()))
-}
-
-/// Assert that the given file has the given hash
-pub(crate) fn check_file_hash(path: &Path, expected_sha256_hex: &str) -> NodeManagerResult<()> {
-    let computed_sha256_hex = compute_sha256_hex(path)?;
-
-    if computed_sha256_hex != expected_sha256_hex {
-        Err(NodeManagerError::file_hash_mismatch_error(
-            computed_sha256_hex,
-            expected_sha256_hex.into(),
-            path.to_path_buf(),
-        ))
-    } else {
-        Ok(())
-    }
 }
 
 #[cfg(test)]

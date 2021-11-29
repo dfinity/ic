@@ -1,0 +1,35 @@
+---
+
+- name: remove existing disk-img.tar.gz
+  file:
+    state: absent
+    path: "{{ ic_disk_path }}/disk-img.tar.gz"
+  run_once: true
+  tags: [ "ic_guest" ]
+
+- name: archive disk.img
+  command:
+    cmd: "tar --directory={{ ic_disk_path }} --create --sparse --use-compress-program='gzip --fast' --file='{{ ic_disk_path }}/disk-img.tar.gz' disk.img"
+    creates: "{{ ic_disk_path }}/disk-img.tar.gz"
+  run_once: true
+  delegate_to: localhost
+  args:
+    warn: false
+  tags: [ "ic_guest" ]
+
+- name: synchronize disk-img.tar.gz
+  synchronize:
+    mode: push
+    src: "{{ ic_disk_path }}/disk-img.tar.gz"
+    dest: "/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic/disk-img.tar.gz"
+  tags: [ "ic_guest" ]
+
+- name: unarchive file disk-img.tar.gz
+  unarchive:
+    src: "/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic_disk-img.tar.gz"
+    dest: "/var/local/ic/disk"
+    owner: "root"
+    group: "root"
+    creates: "/var/local/ic/disk.img"
+    remote_src: yes
+  tags: [ "ic_guest" ]

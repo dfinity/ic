@@ -16,6 +16,7 @@ const SUBNET_LIST_KEY: &str = "subnet_list";
 pub const ROOT_SUBNET_ID_KEY: &str = "nns_subnet_id";
 const XDR_PER_ICP_KEY: &str = "xdr_per_icp";
 pub const NODE_REWARDS_TABLE_KEY: &str = "node_rewards_table";
+const UNASSIGNED_NODES_CONFIG_RECORD_KEY: &str = "unassigned_nodes_config";
 
 pub const NODE_RECORD_KEY_PREFIX: &str = "node_record_";
 pub const NODE_OPERATOR_RECORD_KEY_PREFIX: &str = "node_operator_record_";
@@ -34,6 +35,10 @@ pub fn make_icp_xdr_conversion_rate_record_key() -> String {
 /// Returns the only key whose payload is the list of subnets.
 pub fn make_subnet_list_record_key() -> String {
     SUBNET_LIST_KEY.to_string()
+}
+
+pub fn make_unassigned_nodes_config_record_key() -> String {
+    UNASSIGNED_NODES_CONFIG_RECORD_KEY.to_string()
 }
 
 /// Makes a key for a ReplicaVersion registry entry.

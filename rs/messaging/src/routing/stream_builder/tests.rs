@@ -28,7 +28,7 @@ use ic_types::{
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 const LOCAL_SUBNET: SubnetId = SUBNET_27;
 const REMOTE_SUBNET: SubnetId = SUBNET_42;
@@ -67,10 +67,8 @@ fn reject_local_request() {
             .queues_mut()
             .pop_canister_output(&msg.receiver)
             .unwrap();
-
-        let mut expected_canister_state = canister_state.clone();
-
         state.put_canister_state(canister_state);
+        let mut expected_state = state.clone();
 
         // Reject the message.
         let reject_message = "Reject response";
@@ -82,9 +80,7 @@ fn reject_local_request() {
         );
 
         // Which should result in a reject Response being enqueued onto the input queue.
-        expected_canister_state
-            .system_state
-            .queues_mut()
+        expected_state
             .push_input(
                 QUEUE_INDEX_NONE,
                 Response {
@@ -98,11 +94,13 @@ fn reject_local_request() {
                     }),
                 }
                 .into(),
+                (u64::MAX / 2).into(),
+                &mut (i64::MAX / 2),
             )
             .unwrap();
 
         assert_eq!(
-            &expected_canister_state,
+            expected_state.canister_state(&canister_id).unwrap(),
             state.canister_state(&canister_id).unwrap()
         );
     });
@@ -133,7 +131,7 @@ fn reject_local_request_for_subnet() {
             .pop_canister_output(&msg.receiver)
             .unwrap();
 
-        let mut expected_subnet_queues = state.subnet_queues().clone();
+        let mut expected_state = state.clone();
 
         // Reject the message.
         let reject_message = "Reject response";
@@ -146,7 +144,7 @@ fn reject_local_request_for_subnet() {
 
         // Which should result in a reject Response being enqueued onto the subnet
         // queue.
-        expected_subnet_queues
+        expected_state
             .push_input(
                 QUEUE_INDEX_NONE,
                 Response {
@@ -160,10 +158,12 @@ fn reject_local_request_for_subnet() {
                     }),
                 }
                 .into(),
+                (u64::MAX / 2).into(),
+                &mut (i64::MAX / 2),
             )
             .unwrap();
 
-        assert_eq!(&expected_subnet_queues, state.subnet_queues());
+        assert_eq!(expected_state.subnet_queues(), state.subnet_queues());
     });
 }
 
@@ -172,16 +172,18 @@ fn reject_local_request_for_subnet() {
 fn build_streams_success() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
-        provided_state.metadata.network_topology.routing_table = RoutingTable::new(btreemap! {
-            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
-        });
+        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::new(
+            btreemap! {
+                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
+            },
+        ));
         let mut expected_state = provided_state.clone();
 
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
 
         // Set up the expected Stream from the messages.
         let expected_stream = Stream::new(
-            requests_into_queue(StreamIndex::from(0), msgs.clone()),
+            requests_into_queue_round_robin(StreamIndex::from(0), msgs.clone(), None),
             Default::default(),
         );
         let expected_stream_bytes = expected_stream.count_bytes() as u64;
@@ -272,14 +274,14 @@ fn build_streams_local_canisters() {
         provided_state.put_canister_states(provided_canister_states);
 
         // Ensure the routing table knows about the `LOCAL_SUBNET`.
-        let routing_table = RoutingTable::new(btreemap! {
+        let routing_table = Arc::new(RoutingTable::new(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => LOCAL_SUBNET,
-        });
-        provided_state.metadata.network_topology.routing_table = routing_table.clone();
+        }));
+        provided_state.metadata.network_topology.routing_table = Arc::clone(&routing_table);
 
         // Set up the expected Stream from the messages.
         let expected_stream = Stream::new(
-            requests_into_queue(StreamIndex::from(0), msgs.clone()),
+            requests_into_queue_round_robin(StreamIndex::from(0), msgs.clone(), None),
             Default::default(),
         );
         let expected_stream_bytes = expected_stream.count_bytes() as u64;
@@ -340,6 +342,156 @@ fn build_streams_local_canisters() {
     });
 }
 
+#[test]
+fn build_streams_impl_at_limit_leaves_state_untouched() {
+    with_test_replica_logger(|log| {
+        let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::new(
+            btreemap! {
+                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
+            },
+        ));
+
+        // Set up the provided_canister_states.
+        let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
+        let provided_canister_states = generate_provided_canister_states(msgs);
+        provided_state.put_canister_states(provided_canister_states);
+
+        let expected_state = provided_state.clone();
+
+        // Act.
+        let result_state = stream_builder.build_streams_impl(provided_state, 0);
+
+        assert_eq!(result_state, expected_state);
+
+        assert_eq!(
+            btreemap! {},
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BEGIN),
+        );
+        assert_eq!(
+            btreemap! {},
+            nonzero_values(fetch_int_counter_vec(
+                &metrics_registry,
+                METRIC_ROUTED_MESSAGES
+            ))
+        );
+        assert_eq!(0, fetch_routed_payload_count(&metrics_registry));
+        assert_eq!(
+            btreemap! {},
+            nonzero_values(fetch_int_gauge_vec(
+                &metrics_registry,
+                METRIC_STREAM_MESSAGES
+            ))
+        );
+        assert_eq!(
+            btreemap! {},
+            nonzero_values(fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES))
+        );
+        assert_eq!(
+            btreemap! {},
+            nonzero_values(fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BEGIN))
+        );
+    });
+}
+
+#[test]
+fn build_streams_impl_respects_limit() {
+    with_test_replica_logger(|log| {
+        let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::new(
+            btreemap! {
+                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
+            },
+        ));
+        let mut expected_state = provided_state.clone();
+
+        let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
+        let msg_count = msgs.len();
+        // All messages returned by `generate_messages_for_test` are of the same size
+        let msg_size = msgs.get(0).unwrap().count_bytes() as u64;
+
+        let routed_messages: u64 = 4;
+        assert!(
+            msg_count > routed_messages as usize,
+            "Invalid test setup: msg_count ({}) must be greater than routed_messages ({})",
+            msg_count,
+            routed_messages
+        );
+
+        // Set up the expected Stream from the messages.
+        let expected_stream = Stream::new(
+            requests_into_queue_round_robin(
+                StreamIndex::from(0),
+                msgs.clone(),
+                Some(routed_messages * msg_size),
+            ),
+            Default::default(),
+        );
+
+        // Set up the provided_canister_states and expected_canister_states.
+        let provided_canister_states = generate_provided_canister_states(msgs.clone());
+        let expected_canister_states = generate_provided_canister_states(msgs);
+
+        // Establish the expected ReplicatedState that holds the expected_stream_state
+        // and expected_canister_states
+        expected_state.modify_streams(|streams| {
+            streams.insert(REMOTE_SUBNET, expected_stream);
+        });
+        expected_state.put_canister_states(expected_canister_states);
+        {
+            let mut iter = expected_state.output_into_iter();
+            for _ in 0..routed_messages {
+                iter.next();
+            }
+        }
+
+        // Establish that the provided_state has the provided_canister_states.
+        provided_state.put_canister_states(provided_canister_states);
+
+        // Act.
+        let result_state = stream_builder
+            .build_streams_impl(provided_state, (routed_messages * msg_size) as usize);
+
+        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(result_state.metadata, expected_state.metadata);
+        assert_eq!(result_state, expected_state);
+
+        assert_routed_messages_eq(
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                    (LABEL_STATUS, LABEL_VALUE_STATUS_SUCCESS),
+                ],
+                routed_messages,
+            )]),
+            &metrics_registry,
+        );
+        assert_eq!(
+            routed_messages,
+            fetch_routed_payload_count(&metrics_registry)
+        );
+        assert_eq!(
+            metric_vec(&[(
+                &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
+                routed_messages
+            )]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MESSAGES)
+        );
+        assert_eq!(
+            metric_vec(&[(
+                &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
+                Stream::new(StreamIndexedQueue::default(), Default::default()).count_bytes() as u64
+                    + routed_messages * msg_size
+            )]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)
+        );
+        assert_eq!(
+            metric_vec(&[(&[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())], 0)]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BEGIN)
+        );
+    });
+}
+
 // Tests that messages addressed to canisters not mapped to a known subnet
 // result in reject Responses.
 #[test]
@@ -357,9 +509,8 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
         // Establish that the provided_state has the provided_canister_states.
         provided_state.put_canister_states(provided_canister_states);
 
-        // Establish the expected ReplicatedState that holds the expected_stream_state
-        // and expected_canister_states
-        // expected_state.put_stream_state(expected_stream_state);
+        // Establish the expected ReplicatedState that holds the
+        // expected_canister_states.
         expected_state.put_canister_states(expected_canister_states);
 
         // Build up the expected stream: one reject Response for each request.
@@ -369,7 +520,7 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
                 &mut expected_state,
                 msg,
                 RejectCode::DestinationInvalid,
-                format!("Canister {} does not exist", receiver),
+                format!("No route to canister {}", receiver),
             );
         }
 
@@ -414,14 +565,16 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         // Ensure the routing table knows about the `REMOTE_SUBNET`.
-        provided_state.metadata.network_topology.routing_table = RoutingTable::new(btreemap! {
-            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
-        });
+        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::new(
+            btreemap! {
+                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
+            },
+        ));
         let mut expected_state = provided_state.clone();
 
         // Set up the expected Stream from the messages.
         let expected_stream = Stream::new(
-            requests_into_queue(StreamIndex::from(0), msgs.clone()),
+            requests_into_queue_round_robin(StreamIndex::from(0), msgs.clone(), None),
             Default::default(),
         );
         let expected_stream_bytes = expected_stream.count_bytes() as u64;
@@ -488,14 +641,50 @@ fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, Metr
     (stream_handler, state, metrics_registry)
 }
 
-fn requests_into_queue(
+/// Simulates routing the given requests into a `StreamIndexedQueue` with the
+/// given `start` index, until `byte_limit` is reached or exceeded.
+fn requests_into_queue_round_robin(
     start: StreamIndex,
     requests: Vec<Request>,
+    byte_limit: Option<u64>,
 ) -> StreamIndexedQueue<RequestOrResponse> {
     let mut queue = StreamIndexedQueue::with_begin(start);
+
+    let mut request_map: BTreeMap<CanisterId, BTreeMap<CanisterId, VecDeque<Request>>> =
+        BTreeMap::new();
     for request in requests {
-        queue.push(RequestOrResponse::Request(request))
+        request_map
+            .entry(request.sender)
+            .or_default()
+            .entry(request.receiver)
+            .or_default()
+            .push_back(request);
     }
+
+    type CanistersWithQueues = VecDeque<(CanisterId, VecDeque<Request>)>;
+    let mut request_ring: VecDeque<(CanisterId, CanistersWithQueues)> = request_map
+        .into_iter()
+        .map(|(canister, requests)| (canister, requests.into_iter().collect()))
+        .collect();
+
+    let mut bytes_routed = 0;
+    while let Some((src, mut requests)) = request_ring.pop_front() {
+        if let Some((dst, mut req_queue)) = requests.pop_front() {
+            if let Some(request) = req_queue.pop_front() {
+                if let Some(limit) = byte_limit {
+                    if bytes_routed >= limit {
+                        break;
+                    }
+                }
+                let req = RequestOrResponse::Request(request);
+                bytes_routed += req.count_bytes() as u64;
+                queue.push(req);
+                requests.push_back((dst, req_queue));
+            }
+            request_ring.push_back((src, requests));
+        }
+    }
+
     queue
 }
 

@@ -1,0 +1,3 @@
+# NNS Initialization
+
+A tool to install and initialize NNS canisters on a subnet.

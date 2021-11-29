@@ -1,0 +1,9 @@
+[package]
+name = "ic-ecdsa-object"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-crypto = { path = "../../crypto" }
+ic-interfaces = { path = "../../interfaces" }
+ic-types = { path = "../../types/types" }

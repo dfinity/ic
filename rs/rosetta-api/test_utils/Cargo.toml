@@ -1,0 +1,26 @@
+[package]
+name = "ic-rosetta-test-utils"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+base64 = "0.11"
+ed25519-dalek = "1.0.1"
+hex = "0.4.2"
+ic-canister-client = { path = "../../canister_client" }
+ic-rosetta-api = {path = "../"}
+ic-types = { path = "../../types/types" }
+ledger-canister = {path = "../ledger_canister"}
+log = "0.4.14"
+nix = "0.23.0"
+rand = "0.7"
+rand_distr = "0.3.0"
+serde = { version = "1.0.99", features = ["derive"] }
+serde_json = "1.0"
+serde_cbor = "0.11"
+tempfile = "3.1.0"
+reqwest = "0.11.1"
+tokio = {version = "1.9.0", features = ["full"]}
+url = "2.1.1"
+ic-nns-constants = { path = "../../nns/constants" }

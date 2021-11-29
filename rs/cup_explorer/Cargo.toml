@@ -1,0 +1,17 @@
+[package]
+name = "ic-cup-explorer"
+version = "0.8.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hex = "0.4"
+ic-canister-client = { path = "../canister_client" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-common = { path = "../registry/common" }
+ic-registry-keys = { path = "../registry/keys" }
+ic-types = { path = "../types/types" }
+prost = "0.9.0"
+reqwest = { version = "0.11.1", features = [ "native-tls" ] }
+tokio = { version = "1.9.0", features = [ "full" ] }

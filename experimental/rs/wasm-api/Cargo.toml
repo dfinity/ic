@@ -1,0 +1,11 @@
+[package]
+name = "wasm-api"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[build-dependencies]
+bindgen = "0.49.0"
+
+[dependencies]
+wasm-api-sys = { path = "../wasm-api-sys" }

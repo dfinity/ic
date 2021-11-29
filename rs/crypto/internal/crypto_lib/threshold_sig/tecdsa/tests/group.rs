@@ -48,22 +48,18 @@ fn hash_to_scalar_k256_has_fixed_output() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn p256_generator_h_is_expected_value() -> ThresholdEcdsaResult<()> {
-    let h = EccCurve::new(EccCurveType::P256).generator_h()?;
-    assert_eq!(
-        hex::encode(h.serialize()),
-        "036774e87305efcb97c0ce289d57cd721972845ca33eccb8026c6d7c1c4182e7c1"
-    );
-    Ok(())
-}
+fn generator_h_has_expected_value() -> ThresholdEcdsaResult<()> {
+    for curve_type in EccCurveType::all() {
+        let curve = EccCurve::new(curve_type);
+        let h = curve.generator_h()?;
 
-#[test]
-fn k256_generator_h_is_expected_value() -> ThresholdEcdsaResult<()> {
-    let h = EccCurve::new(EccCurveType::K256).generator_h()?;
-    assert_eq!(
-        hex::encode(h.serialize()),
-        "037bdcfc024cf697a41fd3cda2436c843af5669e50042be3314a532d5b70572f59"
-    );
+        let h2p = curve.hash_to_point(
+            "h".as_bytes(),
+            format!("ic-crypto-tecdsa-{}-generator-h", curve_type).as_bytes(),
+        )?;
+
+        assert_eq!(h, h2p);
+    }
     Ok(())
 }
 
@@ -106,7 +102,7 @@ fn test_scalar_negate() -> ThresholdEcdsaResult<()> {
 
         for _trial in 0..100 {
             let random = EccScalar::random(curve, &mut rng)?;
-            let n_random = random.negate()?;
+            let n_random = random.negate();
             let should_be_zero = random.add(&n_random)?;
             assert_eq!(should_be_zero, zero);
             assert!(should_be_zero.is_zero());

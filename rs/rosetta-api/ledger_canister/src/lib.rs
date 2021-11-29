@@ -25,8 +25,8 @@ use std::time::{Duration, SystemTime};
 
 pub mod account_identifier;
 pub mod http_request;
-pub mod icpts;
 pub mod metrics_encoder;
+pub mod tokens;
 #[path = "../gen/ic_ledger.pb.v1.rs"]
 #[rustfmt::skip]
 pub mod protobuf;
@@ -41,8 +41,8 @@ use dfn_core::api::now;
 
 pub mod spawn;
 pub use account_identifier::{AccountIdentifier, Subaccount};
-pub use icpts::{ICPTs, DECIMAL_PLACES, ICP_SUBDIVIDABLE_BY, MIN_BURN_AMOUNT, TRANSACTION_FEE};
 pub use protobuf::TimeStamp;
+pub use tokens::{Tokens, DECIMAL_PLACES, MIN_BURN_AMOUNT, TOKEN_SUBDIVIDABLE_BY, TRANSACTION_FEE};
 
 // Helper to print messages in magenta
 pub fn print<S: std::convert::AsRef<str>>(s: S)
@@ -202,31 +202,31 @@ pub type BlockHeight = u64;
 
 pub type Certification = Option<Vec<u8>>;
 
-pub type LedgerBalances = Balances<HashMap<AccountIdentifier, ICPTs>>;
+pub type LedgerBalances = Balances<HashMap<AccountIdentifier, Tokens>>;
 
 pub trait BalancesStore {
-    fn get_balance(&self, k: &AccountIdentifier) -> Option<&ICPTs>;
+    fn get_balance(&self, k: &AccountIdentifier) -> Option<&Tokens>;
     // Update balance for an account using function f.
     // Its arg is previous balance or None if not found and
     // return value is the new balance.
-    fn update<F, E>(&mut self, acc: AccountIdentifier, action_on_acc: F) -> Result<ICPTs, E>
+    fn update<F, E>(&mut self, acc: AccountIdentifier, action_on_acc: F) -> Result<Tokens, E>
     where
-        F: FnMut(Option<&ICPTs>) -> Result<ICPTs, E>;
+        F: FnMut(Option<&Tokens>) -> Result<Tokens, E>;
 }
 
-impl BalancesStore for HashMap<AccountIdentifier, ICPTs> {
-    fn get_balance(&self, k: &AccountIdentifier) -> Option<&ICPTs> {
+impl BalancesStore for HashMap<AccountIdentifier, Tokens> {
+    fn get_balance(&self, k: &AccountIdentifier) -> Option<&Tokens> {
         self.get(k)
     }
 
-    fn update<F, E>(&mut self, k: AccountIdentifier, mut f: F) -> Result<ICPTs, E>
+    fn update<F, E>(&mut self, k: AccountIdentifier, mut f: F) -> Result<Tokens, E>
     where
-        F: FnMut(Option<&ICPTs>) -> Result<ICPTs, E>,
+        F: FnMut(Option<&Tokens>) -> Result<Tokens, E>,
     {
         match self.entry(k) {
             Occupied(mut entry) => {
                 let new_v = f(Some(entry.get()))?;
-                if new_v != ICPTs::ZERO {
+                if new_v != Tokens::ZERO {
                     *entry.get_mut() = new_v;
                 } else {
                     entry.remove_entry();
@@ -235,7 +235,7 @@ impl BalancesStore for HashMap<AccountIdentifier, ICPTs> {
             }
             Vacant(entry) => {
                 let new_v = f(None)?;
-                if new_v != ICPTs::ZERO {
+                if new_v != Tokens::ZERO {
                     entry.insert(new_v);
                 }
                 Ok(new_v)
@@ -249,7 +249,7 @@ impl BalancesStore for HashMap<AccountIdentifier, ICPTs> {
 pub enum BalanceError {
     /// An error indicating that the account doesn't hold enough funds for
     /// completing the transaction.
-    InsufficientFunds { balance: ICPTs },
+    InsufficientFunds { balance: Tokens },
 }
 
 /// Describes the state of users accounts at the tip of the chain
@@ -258,7 +258,8 @@ pub struct Balances<S: BalancesStore> {
     // This uses a mutable map because we don't want to risk a space leak and we only require the
     // account balances at the tip of the chain
     pub store: S,
-    pub icpt_pool: ICPTs,
+    #[serde(alias = "icpt_pool")]
+    pub token_pool: Tokens,
 }
 
 impl<S: Default + BalancesStore> Default for Balances<S> {
@@ -271,7 +272,7 @@ impl<S: Default + BalancesStore> Balances<S> {
     pub fn new() -> Self {
         Self {
             store: S::default(),
-            icpt_pool: ICPTs::MAX,
+            token_pool: Tokens::MAX,
         }
     }
 
@@ -286,15 +287,15 @@ impl<S: Default + BalancesStore> Balances<S> {
                 let debit_amount = (*amount + *fee).expect("amount + fee failed");
                 self.debit(from, debit_amount)?;
                 self.credit(to, *amount);
-                self.icpt_pool += *fee;
+                self.token_pool += *fee;
             }
             Operation::Burn { from, amount, .. } => {
                 self.debit(from, *amount)?;
-                self.icpt_pool += *amount;
+                self.token_pool += *amount;
             }
             Operation::Mint { to, amount, .. } => {
                 self.credit(to, *amount);
-                self.icpt_pool -= *amount;
+                self.token_pool -= *amount;
             }
         }
         Ok(())
@@ -305,14 +306,14 @@ impl<S: Default + BalancesStore> Balances<S> {
     pub fn debit(
         &mut self,
         from: &AccountIdentifier,
-        amount: ICPTs,
-    ) -> Result<ICPTs, BalanceError> {
+        amount: Tokens,
+    ) -> Result<Tokens, BalanceError> {
         self.store.update(*from, |prev| {
             let mut balance = match prev {
                 Some(x) => *x,
                 None => {
                     return Err(BalanceError::InsufficientFunds {
-                        balance: ICPTs::ZERO,
+                        balance: Tokens::ZERO,
                     });
                 }
             };
@@ -327,28 +328,28 @@ impl<S: Default + BalancesStore> Balances<S> {
 
     // Crediting an account will automatically add it to the `inner` HashMap if
     // not already present.
-    pub fn credit(&mut self, to: &AccountIdentifier, amount: ICPTs) {
+    pub fn credit(&mut self, to: &AccountIdentifier, amount: Tokens) {
         self.store
-            .update(*to, |prev| -> Result<ICPTs, std::convert::Infallible> {
-                Ok((amount + *prev.unwrap_or(&ICPTs::ZERO)).expect("integer overflow"))
+            .update(*to, |prev| -> Result<Tokens, std::convert::Infallible> {
+                Ok((amount + *prev.unwrap_or(&Tokens::ZERO)).expect("integer overflow"))
             })
             .unwrap();
     }
 
-    pub fn account_balance(&self, account: &AccountIdentifier) -> ICPTs {
+    pub fn account_balance(&self, account: &AccountIdentifier) -> Tokens {
         self.store
             .get_balance(account)
             .cloned()
-            .unwrap_or(ICPTs::ZERO)
+            .unwrap_or(Tokens::ZERO)
     }
 
-    /// Returns the total quantity of ICPs that are "in existence" -- that
-    /// is, excluding un-minted "potential" ICPs.
-    pub fn total_supply(&self) -> ICPTs {
-        (ICPTs::MAX - self.icpt_pool).unwrap_or_else(|e| {
+    /// Returns the total quantity of Tokens that are "in existence" -- that
+    /// is, excluding un-minted "potential" Tokens.
+    pub fn total_supply(&self) -> Tokens {
+        (Tokens::MAX - self.token_pool).unwrap_or_else(|e| {
             panic!(
-                "It is expected that the icpt_pool is always smaller than \
-            or equal to ICPTs::MAX, yet subtracting it lead to the following error: {}",
+                "It is expected that the token_pool is always smaller than \
+            or equal to Tokens::MAX, yet subtracting it lead to the following error: {}",
                 e
             )
         })
@@ -358,8 +359,8 @@ impl<S: Default + BalancesStore> Balances<S> {
 impl LedgerBalances {
     // Find the specified number of accounts with lowest balances so that their
     // balances can be reclaimed.
-    fn select_accounts_to_trim(&mut self, num_accounts: usize) -> Vec<(ICPTs, AccountIdentifier)> {
-        let mut to_trim: std::collections::BinaryHeap<(ICPTs, AccountIdentifier)> =
+    fn select_accounts_to_trim(&mut self, num_accounts: usize) -> Vec<(Tokens, AccountIdentifier)> {
+        let mut to_trim: std::collections::BinaryHeap<(Tokens, AccountIdentifier)> =
             std::collections::BinaryHeap::new();
 
         let mut iter = self.store.iter();
@@ -391,17 +392,17 @@ impl LedgerBalances {
 pub enum Operation {
     Burn {
         from: AccountIdentifier,
-        amount: ICPTs,
+        amount: Tokens,
     },
     Mint {
         to: AccountIdentifier,
-        amount: ICPTs,
+        amount: Tokens,
     },
     Transfer {
         from: AccountIdentifier,
         to: AccountIdentifier,
-        amount: ICPTs,
-        fee: ICPTs,
+        amount: Tokens,
+        fee: Tokens,
     },
 }
 
@@ -421,8 +422,8 @@ impl Transaction {
     pub fn new(
         from: AccountIdentifier,
         to: AccountIdentifier,
-        amount: ICPTs,
-        fee: ICPTs,
+        amount: Tokens,
+        fee: Tokens,
         memo: Memo,
         created_at_time: TimeStamp,
     ) -> Self {
@@ -514,6 +515,11 @@ pub struct Blockchain {
     /// The timestamp of the most recent block. Must be monotonically
     /// non-decreasing.
     pub last_timestamp: TimeStamp,
+
+    /// This `Arc` is safe to (de)serialize because uniqueness is guaranteed
+    /// by the canister upgrade procedure.
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     pub archive: Arc<RwLock<Option<Archive>>>,
 
     /// How many blocks have been sent to the archive
@@ -873,13 +879,13 @@ impl Ledger {
 
     pub fn from_init(
         &mut self,
-        initial_values: HashMap<AccountIdentifier, ICPTs>,
+        initial_values: HashMap<AccountIdentifier, Tokens>,
         minting_account: AccountIdentifier,
         timestamp: TimeStamp,
         transaction_window: Option<Duration>,
         send_whitelist: HashSet<CanisterId>,
     ) {
-        self.balances.icpt_pool = ICPTs::MAX;
+        self.balances.token_pool = Tokens::MAX;
         self.minting_account_id = Some(minting_account);
         if let Some(t) = transaction_window {
             self.transaction_window = t;
@@ -1021,7 +1027,7 @@ pub fn change_notification_state(
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct LedgerCanisterInitPayload {
     pub minting_account: AccountIdentifier,
-    pub initial_values: HashMap<AccountIdentifier, ICPTs>,
+    pub initial_values: HashMap<AccountIdentifier, Tokens>,
     pub max_message_size_bytes: Option<usize>,
     pub transaction_window: Option<Duration>,
     pub archive_options: Option<ArchiveOptions>,
@@ -1031,14 +1037,14 @@ pub struct LedgerCanisterInitPayload {
 impl LedgerCanisterInitPayload {
     pub fn new(
         minting_account: AccountIdentifier,
-        initial_values: HashMap<AccountIdentifier, ICPTs>,
+        initial_values: HashMap<AccountIdentifier, Tokens>,
         archive_options: Option<ArchiveOptions>,
         max_message_size_bytes: Option<usize>,
         transaction_window: Option<Duration>,
         send_whitelist: HashSet<CanisterId>,
     ) -> Self {
         // verify ledger's invariant about the maximum amount
-        let _can_sum = initial_values.values().fold(ICPTs::ZERO, |acc, x| {
+        let _can_sum = initial_values.values().fold(Tokens::ZERO, |acc, x| {
             (acc + *x).expect("Summation overflowing?")
         });
 
@@ -1071,19 +1077,19 @@ mod tests {
             minting_account_id: Some(PrincipalId::new_user_test_id(137).into()),
             ..Default::default()
         };
-        assert_eq!(state.balances.icpt_pool, ICPTs::MAX);
+        assert_eq!(state.balances.token_pool, Tokens::MAX);
         println!(
             "minting canister initial balance: {}",
-            state.balances.icpt_pool
+            state.balances.token_pool
         );
-        let mut credited = ICPTs::ZERO;
+        let mut credited = Tokens::ZERO;
 
         // 11 accounts. The one with 0 will not be added
         // The rest will be added and trigger a trim of 2 once
         // the total number reaches 8 + 2
         // the number of active accounts won't go below 8 after trimming
         for i in 0..11 {
-            let amount = ICPTs::new(i, 0).unwrap();
+            let amount = Tokens::new(i, 0).unwrap();
             state
                 .add_payment(
                     Memo::default(),
@@ -1107,20 +1113,20 @@ mod tests {
             state
                 .balances
                 .account_balance(&PrincipalId::new_user_test_id(0).into()),
-            ICPTs::ZERO
+            Tokens::ZERO
         );
         assert_eq!(
             state
                 .balances
                 .account_balance(&PrincipalId::new_user_test_id(1).into()),
-            ICPTs::ZERO
+            Tokens::ZERO
         );
-        // We have credited 55 ICPTs to various accounts but the three accounts
+        // We have credited 55 Tokens to various accounts but the three accounts
         // with lowest balances, 0, 1 and 2, should have been removed and their
         // balance returned to the minting canister
         let expected_minting_canister_balance =
-            ((ICPTs::MAX - credited).unwrap() + ICPTs::new(1 + 2, 0).unwrap()).unwrap();
-        assert_eq!(state.balances.icpt_pool, expected_minting_canister_balance);
+            ((Tokens::MAX - credited).unwrap() + Tokens::new(1 + 2, 0).unwrap()).unwrap();
+        assert_eq!(state.balances.token_pool, expected_minting_canister_balance);
     }
 
     #[test]
@@ -1130,26 +1136,26 @@ mod tests {
         let target_canister = CanisterId::from_u64(13).into();
         b.add_payment(&Operation::Mint {
             to: canister,
-            amount: ICPTs::from_e8s(1000),
+            amount: Tokens::from_e8s(1000),
         })
         .unwrap();
         // verify that an account entry exists for the `canister`
-        assert_eq!(b.store.get(&canister), Some(&ICPTs::from_e8s(1000)));
+        assert_eq!(b.store.get(&canister), Some(&Tokens::from_e8s(1000)));
         // make 2 transfers that empty the account
         for _ in 0..2 {
             b.add_payment(&Operation::Transfer {
                 from: canister,
                 to: target_canister,
-                amount: ICPTs::from_e8s(400),
-                fee: ICPTs::from_e8s(100),
+                amount: Tokens::from_e8s(400),
+                fee: Tokens::from_e8s(100),
             })
             .unwrap();
         }
         // target canister's balance adds up
-        assert_eq!(b.store.get(&target_canister), Some(&ICPTs::from_e8s(800)));
+        assert_eq!(b.store.get(&target_canister), Some(&Tokens::from_e8s(800)));
         // source canister has been removed
         assert_eq!(b.store.get(&canister), None);
-        assert_eq!(b.account_balance(&canister), ICPTs::ZERO);
+        assert_eq!(b.account_balance(&canister), Tokens::ZERO);
 
         // one account left in the store
         assert_eq!(b.store.len(), 1);
@@ -1157,18 +1163,18 @@ mod tests {
         b.add_payment(&Operation::Transfer {
             from: target_canister,
             to: canister,
-            amount: ICPTs::from_e8s(0),
-            fee: ICPTs::from_e8s(100),
+            amount: Tokens::from_e8s(0),
+            fee: Tokens::from_e8s(100),
         })
         .unwrap();
         // No new account should have been created
         assert_eq!(b.store.len(), 1);
         // and the fee should have been taken from sender
-        assert_eq!(b.store.get(&target_canister), Some(&ICPTs::from_e8s(700)));
+        assert_eq!(b.store.get(&target_canister), Some(&Tokens::from_e8s(700)));
 
         b.add_payment(&Operation::Mint {
             to: canister,
-            amount: ICPTs::from_e8s(0),
+            amount: Tokens::from_e8s(0),
         })
         .unwrap();
 
@@ -1177,7 +1183,7 @@ mod tests {
 
         b.add_payment(&Operation::Burn {
             from: target_canister,
-            amount: ICPTs::from_e8s(700),
+            amount: Tokens::from_e8s(700),
         })
         .unwrap();
 
@@ -1188,7 +1194,7 @@ mod tests {
     #[test]
     fn balances_fee() {
         let mut b = LedgerBalances::new();
-        let pool_start_balance = b.icpt_pool.get_e8s();
+        let pool_start_balance = b.token_pool.get_e8s();
         let uid0 = PrincipalId::new_user_test_id(1000).into();
         let uid1 = PrincipalId::new_user_test_id(1007).into();
         let mint_amount = 1000000;
@@ -1197,22 +1203,22 @@ mod tests {
 
         b.add_payment(&Operation::Mint {
             to: uid0,
-            amount: ICPTs::from_e8s(mint_amount),
+            amount: Tokens::from_e8s(mint_amount),
         })
         .unwrap();
-        assert_eq!(b.icpt_pool.get_e8s(), pool_start_balance - mint_amount);
+        assert_eq!(b.token_pool.get_e8s(), pool_start_balance - mint_amount);
         assert_eq!(b.account_balance(&uid0).get_e8s(), mint_amount);
 
         b.add_payment(&Operation::Transfer {
             from: uid0,
             to: uid1,
-            amount: ICPTs::from_e8s(send_amount),
-            fee: ICPTs::from_e8s(send_fee),
+            amount: Tokens::from_e8s(send_amount),
+            fee: Tokens::from_e8s(send_fee),
         })
         .unwrap();
 
         assert_eq!(
-            b.icpt_pool.get_e8s(),
+            b.token_pool.get_e8s(),
             pool_start_balance - mint_amount + send_fee
         );
         assert_eq!(
@@ -1229,7 +1235,7 @@ mod tests {
         state.from_init(
             vec![(
                 PrincipalId::new_user_test_id(0).into(),
-                ICPTs::new(2000000, 0).unwrap(),
+                Tokens::new(2000000, 0).unwrap(),
             )]
             .into_iter()
             .collect(),
@@ -1242,7 +1248,7 @@ mod tests {
         let txn = Transaction::new(
             PrincipalId::new_user_test_id(0).into(),
             PrincipalId::new_user_test_id(1).into(),
-            ICPTs::new(10000, 50).unwrap(),
+            Tokens::new(10000, 50).unwrap(),
             TRANSACTION_FEE,
             Memo(456),
             TimeStamp::new(1, 0),
@@ -1269,7 +1275,7 @@ mod tests {
         let txn2 = Transaction::new(
             PrincipalId::new_user_test_id(0).into(),
             PrincipalId::new_user_test_id(200).into(),
-            ICPTs::new(30000, 10000).unwrap(),
+            Tokens::new(30000, 10000).unwrap(),
             TRANSACTION_FEE,
             Memo(0),
             TimeStamp::new(1, 100),
@@ -1312,7 +1318,7 @@ mod tests {
 
         let transfer = Operation::Mint {
             to: user1,
-            amount: ICPTs::from_e8s(1000),
+            amount: Tokens::from_e8s(1000),
         };
 
         let now = dfn_core::api::now().into();
@@ -1362,7 +1368,7 @@ mod tests {
 
         let transfer = Operation::Mint {
             to: user1,
-            amount: ICPTs::from_e8s(1000),
+            amount: Tokens::from_e8s(1000),
         };
 
         state.add_payment(Memo(1), transfer.clone(), None).unwrap();
@@ -1398,7 +1404,7 @@ mod tests {
 
         let transfer = Operation::Mint {
             to: user1,
-            amount: ICPTs::from_e8s(1000),
+            amount: Tokens::from_e8s(1000),
         };
 
         let now = dfn_core::api::now().into();
@@ -1486,7 +1492,7 @@ mod tests {
         state.from_init(
             vec![(
                 PrincipalId::new_user_test_id(0).into(),
-                ICPTs::new(1000000, 0).unwrap(),
+                Tokens::new(1000000, 0).unwrap(),
             )]
             .into_iter()
             .collect(),
@@ -1500,7 +1506,7 @@ mod tests {
             let txn = Transaction::new(
                 PrincipalId::new_user_test_id(0).into(),
                 PrincipalId::new_user_test_id(1).into(),
-                ICPTs::new(1, 0).unwrap(),
+                Tokens::new(1, 0).unwrap(),
                 TRANSACTION_FEE,
                 Memo(i),
                 TimeStamp::new(1, 0),
@@ -1538,11 +1544,11 @@ mod tests {
             vec![
                 (
                     PrincipalId::new_user_test_id(0).into(),
-                    ICPTs::new(1, 0).unwrap(),
+                    Tokens::new(1, 0).unwrap(),
                 ),
                 (
                     PrincipalId::new_user_test_id(1).into(),
-                    ICPTs::new(1, 0).unwrap(),
+                    Tokens::new(1, 0).unwrap(),
                 ),
             ]
             .into_iter()
@@ -1598,7 +1604,7 @@ mod tests {
         let transaction = Transaction::new(
             PrincipalId::new_user_test_id(0).into(),
             PrincipalId::new_user_test_id(1).into(),
-            ICPTs::new(1, 0).unwrap(),
+            Tokens::new(1, 0).unwrap(),
             TRANSACTION_FEE,
             Memo(123456),
             TimeStamp::new(1, 0),
@@ -1617,8 +1623,8 @@ mod tests {
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct SendArgs {
     pub memo: Memo,
-    pub amount: ICPTs,
-    pub fee: ICPTs,
+    pub amount: Tokens,
+    pub fee: Tokens,
     pub from_subaccount: Option<Subaccount>,
     pub to: AccountIdentifier,
     pub created_at_time: Option<TimeStamp>,
@@ -1646,23 +1652,23 @@ impl From<SendArgs> for TransferArgs {
     }
 }
 
-pub type Address = [u8; 32];
+pub type AccountIdBlob = [u8; 32];
 
 /// Argument taken by the transfer endpoint
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct TransferArgs {
     pub memo: Memo,
-    pub amount: ICPTs,
-    pub fee: ICPTs,
+    pub amount: Tokens,
+    pub fee: Tokens,
     pub from_subaccount: Option<Subaccount>,
-    pub to: Address,
+    pub to: AccountIdBlob,
     pub created_at_time: Option<TimeStamp>,
 }
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub enum TransferError {
-    BadFee { expected_fee: ICPTs },
-    InsufficientFunds { balance: ICPTs },
+    BadFee { expected_fee: Tokens },
+    InsufficientFunds { balance: Tokens },
     TxTooOld { allowed_window_nanos: u64 },
     TxCreatedInFuture,
     TxDuplicate { duplicate_of: BlockHeight },
@@ -1706,7 +1712,7 @@ pub struct TransactionNotification {
     pub to: CanisterId,
     pub to_subaccount: Option<Subaccount>,
     pub block_height: BlockHeight,
-    pub amount: ICPTs,
+    pub amount: Tokens,
     pub memo: Memo,
 }
 
@@ -1714,7 +1720,7 @@ pub struct TransactionNotification {
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct NotifyCanisterArgs {
     pub block_height: BlockHeight,
-    pub max_fee: ICPTs,
+    pub max_fee: Tokens,
     pub from_subaccount: Option<Subaccount>,
     pub to_canister: CanisterId,
     pub to_subaccount: Option<Subaccount>,
@@ -1747,7 +1753,7 @@ impl NotifyCanisterArgs {
 /// Arguments taken by the account_balance candid endpoint.
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct BinaryAccountBalanceArgs {
-    pub account: Address,
+    pub account: AccountIdBlob,
 }
 
 /// Argument taken by the account_balance_dfx endpoint

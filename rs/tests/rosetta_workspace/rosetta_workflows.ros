@@ -1,0 +1,143 @@
+request_funds(1){
+  find_account{
+    currency = {"symbol":"ICP", "decimals":8};
+    random_account = find_balance({
+      "minimum_balance":{
+        "value": "0",
+        "currency": {{currency}}
+      },
+      "create_limit":1
+    });
+  },
+
+  // Create a separate scenario to request funds so that
+  // the address we are using to request funds does not
+  // get rolled back if funds do not yet exist.
+  request{
+    loaded_account = find_balance({
+      "account_identifier": {{random_account.account_identifier}},
+      "minimum_balance":{
+        "value": "1000000",
+        "currency": {{currency}}
+      },
+      "require_coin":false
+    });
+  }
+}
+
+create_account(1){
+  create{
+    network = {"network": "PUT_LEDGER_ADDRESS_HERE", "blockchain":"Internet Computer"};
+    key = generate_key({"curve_type": "edwards25519"});
+    account = derive({
+      "network_identifier": {{network}},
+      "public_key": {{key.public_key}}
+    });
+
+    // If the account is not saved, the key will be lost!
+    save_account({
+      "account_identifier": {{account.account_identifier}},
+      "keypair": {{key}}
+    });
+  }
+}
+
+transfer(10){
+  transfer_dry_run{
+    transfer_dry_run.network = {"network":"PUT_LEDGER_ADDRESS_HERE", "blockchain":"Internet Computer"};
+    currency = {"symbol":"ICP", "decimals":8};
+    sender = find_balance({
+      "minimum_balance":{
+        "value": "1000000000",
+        "currency": {{currency}}
+      }
+    });
+
+    // Set the recipient_amount as some value <= sender.balance-max_fee
+    max_fee = "8400";
+    available_amount = {{sender.balance.value}} - {{max_fee}};
+    recipient_amount = random_number({"minimum": "1", "maximum": "10000"});
+    print_message({"recipient_amount":{{recipient_amount}}});
+
+    // Find recipient and construct operations
+    sender_amount = 0 - {{recipient_amount}};
+    recipient = find_balance({
+      "not_account_identifier":[{{sender.account_identifier}}],
+      "minimum_balance":{
+        "value": "0",
+        "currency": {{currency}}
+      },
+      "create_limit": 100,
+      "create_probability": 67
+    });
+    transfer_dry_run.confirmation_depth = "1";
+    transfer_dry_run.dry_run = true;
+    transfer_dry_run.operations = [
+      {
+        "operation_identifier":{"index":0},
+        "type":"TRANSACTION",
+        "account":{{sender.account_identifier}},
+        "amount":{
+          "value":{{sender_amount}},
+          "currency":{{currency}}
+        }
+      },
+      {
+        "operation_identifier":{"index":1},
+        "type":"TRANSACTION",
+        "account":{{recipient.account_identifier}},
+        "amount":{
+          "value":{{recipient_amount}},
+          "currency":{{currency}}
+        },
+        "related_operations": [ { "index": 0 } ]
+      }
+    ];
+  },
+  transfer{
+      // The suggested_fee is returned in the /construction/metadata
+      // response and saved to transfer_dry_run.suggested_fee.
+      suggested_fee = find_currency_amount({
+        "currency":{{currency}},
+        "amounts":{{transfer_dry_run.suggested_fee}}
+      });
+
+      transfer.network = {{transfer_dry_run.network}};
+      transfer.confirmation_depth = {{transfer_dry_run.confirmation_depth}};
+
+      fee_amount = 0 - {{suggested_fee.value}};
+      print_message({"suggested fee":{{suggested_fee.value}}});
+
+      transfer.operations = [
+        {
+          "operation_identifier":{"index":0},
+          "type":"TRANSACTION",
+          "account":{{sender.account_identifier}},
+          "amount":{
+            "value":{{sender_amount}},
+            "currency":{{currency}}
+          }
+        },
+        {
+          "operation_identifier":{"index":1},
+          "type":"TRANSACTION",
+          "account":{{recipient.account_identifier}},
+          "amount":{
+            "value":{{recipient_amount}},
+            "currency":{{currency}}
+          },
+          "related_operations": [ { "index": 0 } ]
+        },
+        {
+          "operation_identifier":{"index":2},
+          "type":"FEE",
+          "account":{{sender.account_identifier}},
+          "amount":{
+            "value":{{fee_amount}},
+            "currency":{{currency}}
+          }
+        }
+      ];
+    }
+
+}

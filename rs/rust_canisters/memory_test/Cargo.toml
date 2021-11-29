@@ -1,0 +1,24 @@
+[package]
+name = "memory-test"
+version = "0.1.0"
+edition = "2018"
+
+[[bin]]
+name = "memory-test-canister"
+path = "src/main.rs"
+
+[dependencies]
+dfn_core = { path = "../dfn_core" }
+rand = "0.7.3"
+rand_pcg = "0.2.1"
+serde = "1.0"
+serde_json = "1.0.54"
+
+[dev-dependencies]
+canister-test = { path = "../../rust_canisters/canister_test" }
+ic-test-utilities = { path = "../../test_utilities" }
+ic-types = { path = "../../types/types" }
+
+[[test]]
+name = "test"
+path = "test/test.rs"

@@ -1,10 +1,10 @@
-//! Basic Signature operations provided by the CSP server.
+//! Basic Signature operations provided by the CSP vault.
 use crate::keygen::public_key_hash_as_key_id;
 use crate::secret_key_store::SecretKeyStore;
 use crate::server::api::{
-    BasicSignatureCspServer, CspBasicSignatureError, CspBasicSignatureKeygenError,
+    BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
 };
-use crate::server::local_csp_server::LocalCspServer;
+use crate::server::local_csp_server::LocalCspVault;
 use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -13,8 +13,8 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> BasicSignatureCspServer
-    for LocalCspServer<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> BasicSignatureCspVault
+    for LocalCspVault<R, S, C>
 {
     fn sign(
         &self,

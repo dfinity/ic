@@ -1,0 +1,318 @@
+//! Utilities for testing IDkg and canister threshold signature operations.
+
+use ic_crypto::utils::TempCryptoComponent;
+use ic_interfaces::crypto::{IDkgProtocol, MultiSigVerifier, MultiSigner};
+use ic_registry_client::fake::FakeRegistryClient;
+use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_keys::make_crypto_node_key;
+use ic_types::consensus::ecdsa::EcdsaDealing;
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    IDkgDealers, IDkgDealing, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript,
+    IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+};
+use ic_types::crypto::{AlgorithmId, KeyPurpose};
+use ic_types::{Height, NodeId, PrincipalId, RegistryVersion};
+use rand::prelude::*;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+
+pub fn create_dealing(
+    params: &IDkgTranscriptParams,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    dealer_id: NodeId,
+) -> IDkgDealing {
+    crypto_for(dealer_id, crypto_components)
+        .create_dealing(params)
+        .unwrap_or_else(|error| {
+            panic!(
+                "failed to create IDkg dealing for {:?}: {:?}",
+                dealer_id, error
+            )
+        })
+}
+
+pub fn create_dealings(
+    params: &IDkgTranscriptParams,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+) -> BTreeMap<NodeId, IDkgDealing> {
+    params
+        .dealers
+        .get()
+        .iter()
+        .map(|node| {
+            let dealing = create_dealing(params, crypto_components, *node);
+            (*node, dealing)
+        })
+        .collect()
+}
+
+pub fn multisign_dealing(
+    params: &IDkgTranscriptParams,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    dealer_id: NodeId,
+    dealing: &IDkgDealing,
+) -> IDkgMultiSignedDealing {
+    let ecdsa_dealing = EcdsaDealing {
+        requested_height: Height::from(1),
+        dealer_id,
+        transcript_id: params.transcript_id,
+        dealing: dealing.clone(),
+    };
+
+    let signature = {
+        let signatures: BTreeMap<_, _> = params
+            .receivers
+            .get()
+            .iter()
+            .map(|signer_id| {
+                let signature = crypto_for(*signer_id, crypto_components)
+                    .sign_multi(&ecdsa_dealing, *signer_id, params.registry_version)
+                    .expect("failed to generate multi-signature share");
+
+                (*signer_id, signature)
+            })
+            .collect();
+
+        let combiner_id = **params
+            .receivers
+            .get()
+            .iter()
+            .choose_multiple(&mut thread_rng(), 1)
+            .get(0)
+            .expect("receivers is empty");
+        crypto_for(combiner_id, crypto_components)
+            .combine_multi_sig_individuals(signatures, params.registry_version)
+            .expect("failed to combine individual signatures")
+    };
+
+    IDkgMultiSignedDealing {
+        signature,
+        signers: params.receivers.get().clone(),
+        dealing: ecdsa_dealing,
+    }
+}
+
+pub fn multisign_dealings(
+    params: &IDkgTranscriptParams,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    dealings: &BTreeMap<NodeId, IDkgDealing>,
+) -> BTreeMap<NodeId, IDkgMultiSignedDealing> {
+    dealings
+        .iter()
+        .map(|(dealer_id, dealing)| {
+            let multisigned_dealing =
+                multisign_dealing(params, crypto_components, *dealer_id, dealing);
+
+            (*dealer_id, multisigned_dealing)
+        })
+        .collect()
+}
+
+pub fn create_transcript(
+    params: &IDkgTranscriptParams,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    creator_id: NodeId,
+) -> IDkgTranscript {
+    crypto_for(creator_id, crypto_components)
+        .create_transcript(params, dealings)
+        .unwrap_or_else(|error| {
+            panic!(
+                "failed to create transcript for {:?}: {:?}",
+                creator_id, error
+            )
+        })
+}
+
+pub fn load_transcript(
+    transcript: &IDkgTranscript,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    loader_id: NodeId,
+) {
+    crypto_for(loader_id, crypto_components)
+        .load_transcript(transcript)
+        .unwrap_or_else(|error| {
+            panic!("failed to load transcript for {:?}: {:?}", loader_id, error)
+        });
+}
+
+pub fn load_previous_transcripts_if_needed_and_create_dealing(
+    params: &IDkgTranscriptParams,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    loader_id: NodeId,
+) -> IDkgDealing {
+    match &params.operation_type {
+        IDkgTranscriptOperation::Random => (),
+        IDkgTranscriptOperation::ReshareOfMasked(transcript)
+        | IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
+            load_transcript(transcript, crypto_components, loader_id);
+        }
+        IDkgTranscriptOperation::UnmaskedTimesMasked(transcript_1, transcript_2) => {
+            load_transcript(transcript_1, crypto_components, loader_id);
+            load_transcript(transcript_2, crypto_components, loader_id);
+        }
+    }
+
+    create_dealing(params, crypto_components, loader_id)
+}
+
+pub fn load_previous_transcripts_if_needed_and_create_dealings(
+    params: &IDkgTranscriptParams,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+) -> BTreeMap<NodeId, IDkgDealing> {
+    params
+        .dealers
+        .get()
+        .iter()
+        .map(|node| {
+            let dealing = load_previous_transcripts_if_needed_and_create_dealing(
+                params,
+                crypto_components,
+                *node,
+            );
+            (*node, dealing)
+        })
+        .collect()
+}
+
+/// Load previous transcripts on each node (if resharing or multiplying),
+/// create all dealings, multi-sign them, and build a transcript from those
+/// multi-signed dealings.
+pub fn run_idkg_and_create_transcript(
+    params: &IDkgTranscriptParams,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+) -> IDkgTranscript {
+    let dealings =
+        load_previous_transcripts_if_needed_and_create_dealings(params, crypto_components);
+    let multisigned_dealings = multisign_dealings(params, crypto_components, &dealings);
+    let transcript_creator = params.dealers.get().iter().next().unwrap();
+    create_transcript(
+        params,
+        crypto_components,
+        &multisigned_dealings,
+        *transcript_creator,
+    )
+}
+
+/// Creates a new `IDkgTranscriptParams` with all information copied from a
+/// previous one, except the operation (as given) and the Id
+/// (randomly-generated, to avoid collisions).
+pub fn build_params_from_previous(
+    previous_params: IDkgTranscriptParams,
+    operation_type: IDkgTranscriptOperation,
+) -> IDkgTranscriptParams {
+    IDkgTranscriptParams::new(
+        random_transcript_id(),
+        previous_params.dealers,
+        previous_params.receivers,
+        previous_params.registry_version,
+        previous_params.algorithm_id,
+        operation_type,
+    )
+    .expect("failed to create resharing/multiplication IDkgTranscriptParams")
+}
+
+pub struct CanisterThresholdSigTestEnvironment {
+    pub crypto_components: BTreeMap<NodeId, TempCryptoComponent>,
+    pub registry_data: Arc<ProtoRegistryDataProvider>,
+    pub registry: Arc<FakeRegistryClient>,
+    pub newest_registry_version: RegistryVersion,
+}
+
+impl CanisterThresholdSigTestEnvironment {
+    /// Creates a new test environment with the given number of nodes.
+    pub fn new(num_of_nodes: usize) -> Self {
+        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+        let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+        let registry_version = random_registry_version();
+
+        let mut env = Self {
+            crypto_components: BTreeMap::new(),
+            registry_data,
+            registry,
+            newest_registry_version: registry_version,
+        };
+
+        for node_id in n_random_node_ids(num_of_nodes) {
+            env.create_crypto_component_with_mega_and_multisign_keys_in_registry(
+                node_id,
+                registry_version,
+            );
+        }
+        env.registry.update_to_latest_version();
+
+        env
+    }
+
+    /// Returns an `IDkgTranscriptParams` appropriate for creating a random
+    /// sharing in this environment.
+    pub fn params_for_random_sharing(&self, algorithm_id: AlgorithmId) -> IDkgTranscriptParams {
+        let nodes: BTreeSet<NodeId> = self.crypto_components.keys().cloned().collect();
+
+        IDkgTranscriptParams::new(
+            random_transcript_id(),
+            IDkgDealers::new(nodes.clone()).expect("failed to create IDkgDealers"),
+            IDkgReceivers::new(nodes).expect("failed to create IDkgReceivers"),
+            self.newest_registry_version,
+            algorithm_id,
+            IDkgTranscriptOperation::Random,
+        )
+        .expect("failed to create resharing/multiplication IDkgTranscriptParams")
+    }
+
+    fn create_crypto_component_with_mega_and_multisign_keys_in_registry(
+        &mut self,
+        node_id: NodeId,
+        registry_version: RegistryVersion,
+    ) {
+        if self.crypto_components.contains_key(&node_id) {
+            return;
+        }
+
+        let registry = Arc::clone(&self.registry) as Arc<_>;
+        let (temp_crypto, node_keys) =
+            TempCryptoComponent::new_with_idkg_dealing_encryption_and_multisigning_keys_generation(
+                registry, node_id,
+            );
+        self.crypto_components.insert(node_id, temp_crypto);
+
+        self.registry_data
+            .add(
+                &make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning),
+                registry_version,
+                Some(node_keys.multisign_pubkey),
+            )
+            .expect("failed to add committee public key to registry");
+
+        self.registry_data
+            .add(
+                &make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption),
+                registry_version,
+                Some(node_keys.mega_pubkey),
+            )
+            .expect("Could not add MEGa public key to registry");
+    }
+}
+
+fn random_registry_version() -> RegistryVersion {
+    RegistryVersion::new(thread_rng().gen_range(1, u32::MAX) as u64)
+}
+
+fn random_transcript_id() -> IDkgTranscriptId {
+    IDkgTranscriptId(thread_rng().gen::<usize>())
+}
+
+fn n_random_node_ids(n: usize) -> BTreeSet<NodeId> {
+    let rng = &mut thread_rng();
+    let mut node_ids = BTreeSet::new();
+    while node_ids.len() < n {
+        node_ids.insert(NodeId::from(PrincipalId::new_node_test_id(rng.gen())));
+    }
+    node_ids
+}
+
+fn crypto_for<T>(node_id: NodeId, crypto_components: &BTreeMap<NodeId, T>) -> &T {
+    crypto_components
+        .get(&node_id)
+        .unwrap_or_else(|| panic!("missing crypto component for {:?}", node_id))
+}

@@ -1,0 +1,25 @@
+include:
+  - local: /gitlab-ci/config/00--common.yml
+
+
+{%- for item in items %}
+runner-{{item.id}}:
+  extends: 
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline
+  stage: test
+  interruptible: false
+  timeout: 7 minutes
+  tags:
+  {% for tag in item.tags -%}
+  - {{tag}}
+  {% endfor -%}
+  script:
+  - |
+    # Macs use the shell executor so we need to do this
+    set -euo pipefail
+    [[ $OSTYPE == darwin* ]] && MYCMD="/usr/bin/true" || MYCMD="/bin/true"
+    "$MYCMD"
+    
+
+{% endfor %}

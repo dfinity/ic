@@ -40,6 +40,8 @@ fn canister_state_push_input_request_success() {
                     .into(),
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut SUBNET_AVAILABLE_MEMORY.clone(),
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
             )
             .unwrap();
     })
@@ -60,6 +62,8 @@ fn canister_state_push_input_response_no_reservation() {
                 response,
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut SUBNET_AVAILABLE_MEMORY.clone(),
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
             )
         );
     })
@@ -89,6 +93,8 @@ fn canister_state_push_input_response_success() {
                     .into(),
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut SUBNET_AVAILABLE_MEMORY.clone(),
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
             )
             .unwrap();
     })
@@ -107,6 +113,8 @@ fn canister_state_push_input_request_mismatched_receiver() {
                     .into(),
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut SUBNET_AVAILABLE_MEMORY.clone(),
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
             )
             .unwrap();
     })
@@ -125,6 +133,8 @@ fn canister_state_push_input_response_mismatched_originator() {
                     .into(),
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut SUBNET_AVAILABLE_MEMORY.clone(),
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
             )
             .unwrap();
     })
@@ -145,6 +155,8 @@ fn canister_state_push_input_request_not_enough_subnet_memory() {
             request.clone(),
             MAX_CANISTER_MEMORY_SIZE,
             &mut subnet_available_memory,
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
         );
 
         if ENFORCE_MESSAGE_MEMORY_USAGE {
@@ -180,6 +192,8 @@ fn canister_state_push_input_request_not_enough_canister_memory() {
             request.clone(),
             NumBytes::new(13),
             &mut subnet_available_memory,
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
         );
 
         if ENFORCE_MESSAGE_MEMORY_USAGE {
@@ -227,6 +241,8 @@ fn canister_state_push_input_response_not_enough_subnet_memory() {
                 response.clone(),
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut subnet_available_memory,
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
             )
             .unwrap();
 
@@ -268,6 +284,8 @@ fn canister_state_push_input_response_not_enough_canister_memory() {
                 response.clone(),
                 NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 + 13),
                 &mut subnet_available_memory,
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
             )
             .unwrap();
 

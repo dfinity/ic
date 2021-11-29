@@ -1,5 +1,8 @@
 use crate::*;
 use rand_core::{CryptoRng, RngCore};
+use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
+use zeroize::Zeroize;
 
 /// A Polynomial whose coefficients are scalars in an elliptic curve group
 ///
@@ -231,7 +234,7 @@ impl Polynomial {
         // Constant polynomial interpolating the first sample `(x_0,y_0)`.
         let mut poly = Polynomial::new(curve, vec![samples[0].1])?;
         let mut minus_s0 = samples[0].0;
-        minus_s0 = minus_s0.negate()?;
+        minus_s0 = minus_s0.negate();
         // Is zero on the first `i` samples.
         // Degree 1 polynomial evaluating to 0 in the first evaluation point `x_0`.
         let mut base = Polynomial::new(curve, vec![minus_s0, one])?;
@@ -267,24 +270,70 @@ impl Polynomial {
 
                 // Update `base` to a degree `i+1` polynomial that evaluates to 0 for all points
                 // `x_j` for j in 0..=i: `base(x) = base(x)(x-x_i)`
-                base = base.mul(&Polynomial::new(curve, vec![x.negate()?, one])?)?;
+                base = base.mul(&Polynomial::new(curve, vec![x.negate(), one])?)?;
             }
         }
         Ok(poly)
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum CommitmentOpening {
+    Simple(EccScalar),
+    Pedersen(EccScalar, EccScalar),
+}
+
+#[derive(Clone, Eq, PartialEq, Zeroize, Serialize, Deserialize)]
+#[zeroize(drop)]
+pub enum CommitmentOpeningBytes {
+    Simple(EccScalarBytes),
+    Pedersen(EccScalarBytes, EccScalarBytes),
+}
+
+impl TryFrom<&CommitmentOpening> for CommitmentOpeningBytes {
+    type Error = ThresholdEcdsaError;
+
+    fn try_from(commitment_opening: &CommitmentOpening) -> Result<Self, ThresholdEcdsaError> {
+        match commitment_opening {
+            CommitmentOpening::Simple(scalar) => {
+                Ok(Self::Simple(EccScalarBytes::try_from(scalar)?))
+            }
+            CommitmentOpening::Pedersen(scalar_1, scalar_2) => Ok(Self::Pedersen(
+                EccScalarBytes::try_from(scalar_1)?,
+                EccScalarBytes::try_from(scalar_2)?,
+            )),
+        }
+    }
+}
+
 /// A simple (discrete log) commitment to a polynomial
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SimpleCommitment {
     pub points: Vec<EccPoint>,
 }
 
+fn evaluate_at(points: &[EccPoint], eval_point: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+    let mut acc = EccPoint::identity(eval_point.curve_type());
+    for pt in points.iter().rev() {
+        acc = acc.scalar_mul(eval_point)?;
+        acc = acc.add_points(pt)?;
+    }
+    Ok(acc)
+}
+
 impl SimpleCommitment {
+    pub(crate) fn new(points: Vec<EccPoint>) -> Self {
+        Self { points }
+    }
+
+    pub fn constant_term(&self) -> EccPoint {
+        self.points[0]
+    }
+
     /// Create a new simple commitment
     ///
     /// The polynomial must have at most num_coefficients coefficients
-    pub fn new(poly: &Polynomial, num_coefficients: usize) -> ThresholdEcdsaResult<Self> {
+    pub fn create(poly: &Polynomial, num_coefficients: usize) -> ThresholdEcdsaResult<Self> {
         let curve = EccCurve::new(poly.curve_type());
         let g = curve.generator_g()?;
 
@@ -294,23 +343,42 @@ impl SimpleCommitment {
             points.push(g.scalar_mul(&coeff)?);
         }
 
-        Ok(Self { points })
+        Ok(Self::new(points))
+    }
+
+    pub fn check_opening(
+        &self,
+        eval_point: &EccScalar,
+        value: &EccScalar,
+    ) -> ThresholdEcdsaResult<bool> {
+        let curve = eval_point.curve();
+        let eval = evaluate_at(&self.points, eval_point)?;
+        let g = curve.generator_g()?;
+        Ok(eval == g.scalar_mul(value)?)
     }
 }
 
 /// A Pederson commitment to a polynomial
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PedersenCommitment {
     pub points: Vec<EccPoint>,
 }
 
 impl PedersenCommitment {
-    /// Create a new Pederson commitment
+    pub(crate) fn new(points: Vec<EccPoint>) -> Self {
+        Self { points }
+    }
+
+    pub fn constant_term(&self) -> EccPoint {
+        self.points[0]
+    }
+
+    /// Create a new Pedersen commitment
     ///
     /// Both polynomials must have at most num_coefficients coefficients.
     /// The masking polynomial should be randomly generated with a secure
     /// random number generator.
-    pub fn new(
+    pub fn create(
         p_values: &Polynomial,
         p_masking: &Polynomial,
         num_coefficients: usize,
@@ -334,6 +402,163 @@ impl PedersenCommitment {
             points.push(c);
         }
 
-        Ok(Self { points })
+        Ok(Self::new(points))
     }
+
+    pub fn check_opening(
+        &self,
+        eval_point: &EccScalar,
+        value: &EccScalar,
+        mask: &EccScalar,
+    ) -> ThresholdEcdsaResult<bool> {
+        let curve = eval_point.curve();
+        let eval = evaluate_at(&self.points, eval_point)?;
+        let g = curve.generator_g()?;
+        let h = curve.generator_h()?;
+        Ok(eval == g.mul_points(value, &h, mask)?)
+    }
+}
+
+/// The type of a commitment to a polynomial
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum PolynomialCommitmentType {
+    Simple,
+    Pedersen,
+}
+
+/// Some type of commitment to a polynomial
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PolynomialCommitment {
+    Simple(SimpleCommitment),
+    Pedersen(PedersenCommitment),
+}
+
+impl From<SimpleCommitment> for PolynomialCommitment {
+    fn from(c: SimpleCommitment) -> Self {
+        Self::Simple(c)
+    }
+}
+
+impl From<PedersenCommitment> for PolynomialCommitment {
+    fn from(c: PedersenCommitment) -> Self {
+        Self::Pedersen(c)
+    }
+}
+
+impl PolynomialCommitment {
+    pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
+        serde_cbor::to_vec(self)
+            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    }
+
+    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+        serde_cbor::from_slice::<Self>(bytes)
+            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    }
+
+    pub(crate) fn ctype(&self) -> PolynomialCommitmentType {
+        match self {
+            Self::Simple(_) => PolynomialCommitmentType::Simple,
+            Self::Pedersen(_) => PolynomialCommitmentType::Pedersen,
+        }
+    }
+
+    pub(crate) fn points(&self) -> &[EccPoint] {
+        match self {
+            Self::Simple(c) => &c.points,
+            Self::Pedersen(c) => &c.points,
+        }
+    }
+
+    pub fn constant_term(&self) -> EccPoint {
+        self.points()[0]
+    }
+
+    pub fn check_opening(
+        &self,
+        eval_point: &EccScalar,
+        opening: &CommitmentOpening,
+    ) -> ThresholdEcdsaResult<bool> {
+        match (self, opening) {
+            (PolynomialCommitment::Simple(c), CommitmentOpening::Simple(value)) => {
+                c.check_opening(eval_point, value)
+            }
+
+            (PolynomialCommitment::Pedersen(c), CommitmentOpening::Pedersen(value, mask)) => {
+                c.check_opening(eval_point, value, mask)
+            }
+
+            _ => Err(ThresholdEcdsaError::InvalidOpening),
+        }
+    }
+}
+
+/// Compute the Lagrange coefficients at x=0.
+///
+/// # Arguments
+/// * `samples` is a list of values x_0, x_1, ...x_n.
+/// # Result
+/// * `[lagrange_0, lagrange_1, ..., lagrange_n]` where:
+///    * lagrange_i = numerator_i/denominator_i
+///    * numerator_i = x_0 * x_1 * ... * x_(i-1) * x_(i+1) * ... * x_n
+///    * denominator_i = (x_0 - x_i) * (x_1 - x_i) * ... * (x_(i-1) - x_i) *
+///      (x_(i+1) - x_i) * ... * (x_n - x_i)
+/// # Errors
+/// This will return an error if the denominator is zero.
+pub fn lagrange_coefficients_at_zero(
+    samples: &[EccScalar],
+) -> Result<Vec<EccScalar>, ThresholdEcdsaError> {
+    if samples.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let curve = samples[0].curve_type();
+
+    for sample in samples {
+        if sample.curve_type() != curve {
+            return Err(ThresholdEcdsaError::CurveMismatch);
+        }
+    }
+
+    if samples.len() == 1 {
+        return Ok(vec![EccScalar::one(curve)]);
+    }
+
+    if contains_duplicates(samples) {
+        return Err(ThresholdEcdsaError::InterpolationError);
+    }
+
+    // The j'th numerator is the product of all `x_prod[i]` for `i!=j`.
+    // Note: The usual subtractions can be omitted as we are computing the Lagrange
+    // coefficient at zero.
+    let mut x_prod = Vec::with_capacity(samples.len());
+    let mut tmp = EccScalar::one(curve);
+    x_prod.push(tmp);
+    for x in samples.iter().take(samples.len() - 1) {
+        tmp = tmp.mul(x)?;
+        x_prod.push(tmp);
+    }
+    tmp = EccScalar::one(curve);
+    for (i, x) in samples[1..].iter().enumerate().rev() {
+        tmp = tmp.mul(x)?;
+        x_prod[i] = x_prod[i].mul(&tmp)?;
+    }
+
+    for (lagrange_i, x_i) in x_prod.iter_mut().zip(samples) {
+        // Compute the value at 0 of the i-th Lagrange polynomial that is `0` at the
+        // other data points but `1` at `x_i`.
+        let mut denom = EccScalar::one(curve);
+        for x_j in samples.iter().filter(|x_j| *x_j != x_i) {
+            let diff = x_j.sub(x_i)?;
+            denom = denom.mul(&diff)?;
+        }
+        let inv = denom.invert()?;
+
+        if inv.is_zero() {
+            return Err(ThresholdEcdsaError::InterpolationError);
+        }
+
+        *lagrange_i = lagrange_i.mul(&inv)?;
+    }
+    Ok(x_prod)
 }

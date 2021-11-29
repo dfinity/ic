@@ -1,0 +1,41 @@
+# This macro allows various domains to read efivars. This is required by various systemd services
+# and contained in later reference policies, but missing from the policy shipped by Ubuntu.
+
+interface(`require_read_efivarfs_files',`
+	gen_require(`
+		type $1;
+	')
+
+	fs_read_efivarfs_files($1)
+')
+
+# Allow to read into /run/systemd: These are generated configuration files and similar which various
+# services need to access.
+interface(`require_read_run_systemd',`
+	gen_require(`
+		type $1, init_var_run_t;
+	')
+	read_files_pattern($1, init_var_run_t, init_var_run_t)
+	list_dirs_pattern($1, init_var_run_t, init_var_run_t)
+')
+
+
+# Allow to read into /proc/sys/kernel.
+interface(`require_read_proc_sys_kernel',`
+	gen_require(`
+		type $1, sysctl_t, sysctl_kernel_t;
+	')
+	read_files_pattern($1, {sysctl_t sysctl_kernel_t}, {sysctl_t sysctl_kernel_t})
+')
+
+# Allow to connect to /run/systemd/userdb/io.systemd.DynamicUser
+# and read systemd userdb
+interface(`systemd_connect_userdb',`
+	gen_require(`
+		type $1, init_var_run_t;
+	')
+	list_dirs_pattern($1, init_var_run_t, init_var_run_t)
+	read_files_pattern($1, init_var_run_t, init_var_run_t)
+	init_stream_connect($1)
+	init_write_runtime_socket($1)
+')

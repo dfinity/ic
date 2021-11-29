@@ -1,3 +1,4 @@
+use ic_canister_sandbox_common::protocol::id::ExecId;
 use ic_canister_sandbox_common::protocol::structs;
 /// Execution state registry for sandbox processes.
 ///
@@ -26,7 +27,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
 
 type CompletionFunction =
-    Box<dyn FnOnce(&String, Option<structs::ExecOutput>) + Sync + Send + 'static>;
+    Box<dyn FnOnce(ExecId, Option<structs::ExecOutput>) + Sync + Send + 'static>;
 
 /// Represents an execution in progress on the sandbox process.
 ///
@@ -62,7 +63,7 @@ struct ActiveExecutionState {
 /// Multiple execution states, keyed by the unique ID used to identify
 /// it across processes.
 pub struct ActiveExecutionStateRegistry {
-    states: Mutex<HashMap<String, ActiveExecutionState>>,
+    states: Mutex<HashMap<ExecId, ActiveExecutionState>>,
     state_accessor_cond: Condvar,
 }
 
@@ -85,39 +86,18 @@ impl ActiveExecutionStateRegistry {
         &self,
         system_state_accessor: SystemStateAccessorDirect,
         completion: F,
-        id_hint: &str,
-    ) -> String
+    ) -> ExecId
     where
-        F: FnOnce(&String, Option<structs::ExecOutput>) + Send + Sync + 'static,
+        F: FnOnce(ExecId, Option<structs::ExecOutput>) + Send + Sync + 'static,
     {
+        let exec_id = ExecId::new();
         let completion = Box::new(completion);
         let state = ActiveExecutionState {
             system_state_accessor: Some(system_state_accessor),
             completion: Some(Box::new(completion)),
         };
-
-        // Try to use the given id, but ultimately ensure that the id
-        // is unique by appending a numeric suffix.
-        let exec_id = {
-            let mut suffix: u64 = 0;
-            let mut mut_states = self.states.lock().unwrap();
-            loop {
-                let id: String = {
-                    if suffix == 0 {
-                        id_hint.to_owned()
-                    } else {
-                        id_hint.to_owned() + &suffix.to_string()
-                    }
-                };
-                if mut_states.contains_key(&id) {
-                    suffix += 1;
-                } else {
-                    mut_states.insert(id.to_string(), state);
-                    break id;
-                }
-            }
-        };
-
+        let mut mut_states = self.states.lock().unwrap();
+        mut_states.insert(exec_id, state);
         exec_id
     }
 
@@ -128,15 +108,15 @@ impl ActiveExecutionStateRegistry {
     /// it before, it will then cause the sandboxed execution to
     /// fail eventually. Also, completion of the sandbox execution
     /// will not be triggered.
-    pub fn unregister_execution(&self, exec_id: &str) -> Option<SystemStateAccessorDirect> {
+    pub fn unregister_execution(&self, exec_id: ExecId) -> Option<SystemStateAccessorDirect> {
         let mut mut_states = self.states.lock().unwrap();
         loop {
-            let maybe_state = mut_states.remove(exec_id);
+            let maybe_state = mut_states.remove(&exec_id);
             if let Some(state) = maybe_state {
                 if let Some(system_state_accessor) = state.system_state_accessor {
                     break Some(system_state_accessor);
                 } else {
-                    mut_states.insert(exec_id.to_string(), state);
+                    mut_states.insert(exec_id, state);
                     mut_states = self.state_accessor_cond.wait(mut_states).unwrap();
                 }
             } else {
@@ -146,11 +126,11 @@ impl ActiveExecutionStateRegistry {
     }
     fn internal_borrow_system_state_accessor(
         &self,
-        exec_id: &str,
+        exec_id: ExecId,
     ) -> Option<SystemStateAccessorDirect> {
         let mut mut_states = self.states.lock().unwrap();
         loop {
-            let mut maybe_entry = mut_states.get_mut(exec_id);
+            let mut maybe_entry = mut_states.get_mut(&exec_id);
             if let Some(state) = maybe_entry.as_mut() {
                 let system_state_accessor = state.system_state_accessor.take();
                 if system_state_accessor.is_none() {
@@ -166,11 +146,11 @@ impl ActiveExecutionStateRegistry {
 
     fn internal_return_system_state_accessor(
         &self,
-        exec_id: &str,
+        exec_id: ExecId,
         system_state_accessor: SystemStateAccessorDirect,
     ) {
         let mut mut_states = self.states.lock().unwrap();
-        let mut maybe_entry = mut_states.get_mut(exec_id);
+        let mut maybe_entry = mut_states.get_mut(&exec_id);
         if let Some(state) = maybe_entry.as_mut() {
             state.system_state_accessor = Some(system_state_accessor);
             self.state_accessor_cond.notify_all();
@@ -182,20 +162,20 @@ impl ActiveExecutionStateRegistry {
     /// will wait until it becomes available.
     pub fn borrow_system_state_accessor(
         self: &Arc<Self>,
-        exec_id: &str,
+        exec_id: ExecId,
     ) -> Option<BorrowedSystemStateAccessor> {
         self.internal_borrow_system_state_accessor(exec_id)
             .map(|system_state_accessor| BorrowedSystemStateAccessor {
                 registry: self.clone(),
                 system_state_accessor: Some(system_state_accessor),
-                exec_id: exec_id.to_string(),
+                exec_id,
             })
     }
 
     /// Extracts the completion closure for this execution.
-    pub fn extract_completion(&self, exec_id: &str) -> Option<CompletionFunction> {
+    pub fn extract_completion(&self, exec_id: ExecId) -> Option<CompletionFunction> {
         let mut mut_states = self.states.lock().unwrap();
-        if let Some(entry) = mut_states.get_mut(exec_id) {
+        if let Some(entry) = mut_states.get_mut(&exec_id) {
             entry.completion.take()
         } else {
             None
@@ -223,7 +203,7 @@ pub struct BorrowedSystemStateAccessor {
 
     // Execution ID to which the system state accessor will be returned
     // on drop.
-    exec_id: String,
+    exec_id: ExecId,
 }
 
 impl Drop for BorrowedSystemStateAccessor {
@@ -233,7 +213,7 @@ impl Drop for BorrowedSystemStateAccessor {
         // move due to struct invariants.
         if let Some(system_state_accessor) = self.system_state_accessor.take() {
             self.registry
-                .internal_return_system_state_accessor(&self.exec_id, system_state_accessor);
+                .internal_return_system_state_accessor(self.exec_id, system_state_accessor);
         }
     }
 }
@@ -296,7 +276,7 @@ mod tests {
     fn borrow_unregister_concurrency() {
         let reg = Arc::new(ActiveExecutionStateRegistry::new());
 
-        let exec1_finished = Arc::new(SyncCell::<String>::new());
+        let exec1_finished = Arc::new(SyncCell::<ExecId>::new());
         let exec1_finished_copy = Arc::clone(&exec1_finished);
         let exec1_id = reg.register_execution(
             SystemStateAccessorDirect::new(
@@ -304,12 +284,11 @@ mod tests {
                 Arc::new(CyclesAccountManagerBuilder::new().build()),
             ),
             move |id, _exec_out| {
-                exec1_finished_copy.put(id.to_string());
+                exec1_finished_copy.put(id);
             },
-            "exec",
         );
 
-        let borrow = reg.borrow_system_state_accessor(&exec1_id);
+        let borrow = reg.borrow_system_state_accessor(exec1_id);
 
         // Start another thread that "concurrently" tries to unregister
         // the execution in question. This is forced to wait until the
@@ -317,11 +296,11 @@ mod tests {
         // happens after the system call that it was temporarily
         // borrowed for returns).
         let reg = Arc::clone(&reg);
-        let exec1_id_copy = exec1_id.to_string();
+        let exec1_id_copy = exec1_id;
         let t1 = std::thread::spawn(move || {
-            let completion = reg.extract_completion(&exec1_id_copy);
-            reg.unregister_execution(&exec1_id_copy);
-            completion.unwrap()(&exec1_id_copy, None);
+            let completion = reg.extract_completion(exec1_id_copy);
+            reg.unregister_execution(exec1_id_copy);
+            completion.unwrap()(exec1_id_copy, None);
         });
 
         // Execution cannot have been unregistered yet, so the

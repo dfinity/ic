@@ -1,0 +1,30 @@
+:url-execution-dashboard: https://grafana.dfinity.systems/d/GWlsOrn7z/execution-metrics-2-0?editPanel=81&viewPanel=81&orgId=1&from=now-30m&to=now&var-ic=mercury&var-ic_subnet=All&var-instance=All&var-period=$__auto_interval_period
+
+= IC_Execution_CanisterMessages_TooSlow
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+Canister messages (ingress, xnet and heartbeat) take longer than 5 seconds to complete for 15 minutes.
+
+== Impact
+
+Longer execution time of canister messages can slow down the subnet to an extent that the whole
+execution round takes longer which could eventually result in a drop of the block finalization rate.
+
+== Possible causes (non-exhaustive)
+
+- Canister messages do a lot of heavy computation that is not reflected by the instructions limit set.
+
+- Bug in the code could result in messages taking longer.
+
+== Troubleshooting and remediation
+
+- Check if this is coming from input messages (ingress + xnet) or heartbeat messages in the {url-execution-dashboard}[execution dashboard].
+
+- Check replica logs to figure out which canister is the one executing longer messages.
+
+- If this affects many canisters, check whether a recent replica upgrade introduced a bug.
+
+- Escalate to the execution team.

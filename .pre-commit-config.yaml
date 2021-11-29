@@ -1,0 +1,105 @@
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v2.3.0
+  hooks:
+  - id: no-commit-to-branch
+    stages: [commit]
+- repo: local
+  hooks:
+  # Do not use pygrep, but use a grep shell script.
+  # Otherwise, on OSX the command line argument limit will be exceeded
+  # whenever a user runs `pre-commit run -a`
+  - id: do-not-merge
+    name: Check for "DO NOT MERGE".
+    stages: [manual]  # Only run this on CI --- it's called DO NOT MERGE, not DO NOT COMMIT.
+    entry: gitlab-ci/src/checks/do-not-merge.sh
+    language: system
+    exclude: |
+        (?x)^(
+            .pre-commit-config.yaml|
+            checks.nix
+        )$
+
+  - id: DFINITY-capitalization
+    exclude: |
+        (?x)^(
+            checks\.nix|
+            .github/CODEOWNERS|
+            .pre-commit-config.yaml|
+            .*/user_map.csv
+        )$
+    name: Check for improper capitalization of "DFINITY".
+    stages: [manual]  # Only run this on CI, as it makes no sense to run on commit.
+    entry: gitlab-ci/src/checks/dfinity-capitalization.sh
+    language: system
+
+# The following repo is maintained by us at
+# https://gitlab.com/dfinity-lab/open/pre-commit-tools.
+- repo: https://gitlab.com/dfinity-lab/open/pre-commit-tools.git
+  rev: 65e8990328b0651ab00d5653d26535d4080ca5f3
+  hooks:
+  - id: buf-checks
+    args: ["--config=buf.yaml"]
+  - id: buf-lint
+    args: ["--config=buf.yaml"]
+  - id: shfmt
+    args: ["-w", "-i", "4", "-bn", "-ci"]
+  - id: nixpkgs-fmt
+    exclude: |
+        (?x)^(
+            .*/Cargo\.nix|
+            experimental/.*
+        )$
+  - id: rustfmt
+    exclude: |
+        (?x)(
+            rs/protobuf/gen|
+            experimental/|
+            rust_canisters/|
+            nix/overlays/|
+            gitlab-ci/|
+            crypto/internal/crypto_lib/fs_ni_dkg/miracl_core
+        ) # exclude these directories.
+  - id: ormolu
+
+- repo: https://github.com/ambv/black
+  rev: 20.8b1
+  hooks:
+  - id: black
+    args:
+      - --line-length=120
+
+
+- repo: https://github.com/asottile/reorder_python_imports
+  rev: v2.4.0
+  hooks:
+  - id: reorder-python-imports
+    args:
+      - --application-directories=.:gitlab-ci/src/
+
+- repo: https://gitlab.com/pycqa/flake8
+  rev: '3.8.4'
+  hooks:
+  - id: flake8
+    args: ["--config=gitlab-ci/src/setup.cfg"]
+
+- repo: https://github.com/pycqa/pydocstyle
+  rev: 5.1.1
+  hooks:
+  - id: pydocstyle
+    args:
+      - --ignore=D100,D103,D104,D203,D212
+        # The default for pydocstyle is to match only on files that end in .py,
+        # even if pre-commit specifies other files. This makes it so Python
+        # files will be recognized regardless of extension.
+      - --match=.*
+
+- repo: https://github.com/willthames/ansible-lint.git
+  rev: v4.2.0
+  hooks:
+    - id: ansible-lint
+      files: (^|/)testnet/.+\.(yaml|yml)$
+      exclude: |
+          (?x)^(
+              testnet/tests/.*|.*/docker-compose.yml|testnet/env/shared-config\.yml
+          )$

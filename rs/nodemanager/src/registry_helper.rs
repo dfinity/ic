@@ -11,6 +11,7 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client::client::{create_data_provider, RegistryClientImpl};
 use ic_registry_client::helper::firewall::FirewallRegistry;
 use ic_registry_client::helper::subnet::{SubnetRegistry, SubnetTransportRegistry};
+use ic_registry_client::helper::unassigned_nodes::UnassignedNodeRegistry;
 use ic_types::consensus::CatchUpPackage;
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
@@ -36,6 +37,10 @@ pub(crate) struct RegistryHelper {
 /// The NNS subnetwork is a special case, as many of these are already a-priori
 /// knowledge (and the registry might not be available during upgrades, so
 /// lookups would fail).
+///
+/// Security note: The registry data accessed by the `RegistryHelper` accesses
+/// data stored locally, fetched and verified by the `NnsRegistryReplicator`.
+/// Thus, it does not verify the registry data threshold signature again.
 impl RegistryHelper {
     pub(crate) fn new_with(
         metrics_registry: &MetricsRegistry,
@@ -49,7 +54,9 @@ impl RegistryHelper {
                 .data_provider
                 .as_ref()
                 .expect("No data provider was provided in the registry client configuration"),
-            /* nns_public_key= */ None,
+            // We set the NNS public key to `None` (and thus disable registry data signature
+            // verification). See the Rustdoc of `RegistryHelper` for an explanation.
+            None,
         );
         let registry_client = Arc::new(RegistryClientImpl::new(
             data_provider,
@@ -216,7 +223,24 @@ impl RegistryHelper {
         version: RegistryVersion,
     ) -> NodeManagerResult<(Vec<String>, Vec<String>)> {
         // CON-621: get the keysets from the subnet record
-        let _subnet_record = self.get_own_subnet_record(version);
-        Ok((vec![], vec![]))
+
+        match self.get_own_subnet_record(version) {
+            Ok((_subnet_id, subnet_record)) => Ok((
+                subnet_record.ssh_readonly_access,
+                subnet_record.ssh_backup_access,
+            )),
+            Err(NodeManagerError::NodeUnassignedError(_, _)) => {
+                match self
+                    .registry_client
+                    .get_unassigned_nodes_config(version)
+                    .map_err(NodeManagerError::RegistryClientError)?
+                {
+                    // Unassigned nodes do not need backup keys
+                    Some(record) => Ok((record.ssh_readonly_access, vec![])),
+                    None => Ok((vec![], vec![])),
+                }
+            }
+            Err(e) => Err(e),
+        }
     }
 }

@@ -1,0 +1,17 @@
+after_script_test:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-after-script-test
+  needs: []  # don't wait on other jobs
+  stage: test
+  script:
+    - |
+      set -eExuo pipefail
+      export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
+
+      # Shell check should run in the repo root otherwise it cannot follow shellcheck
+      # source directives
+      cd "${CI_PROJECT_DIR}"
+      shellcheck -x gitlab-ci/src/after_script/*.sh
+
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" after-script -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh

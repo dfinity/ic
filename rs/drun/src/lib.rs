@@ -16,9 +16,13 @@ use ic_protobuf::registry::{
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
     routing_table::v1::RoutingTable as PbRoutingTable,
 };
+use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
+use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
-use ic_registry_keys::{make_provisional_whitelist_record_key, make_routing_table_record_key};
+use ic_registry_keys::{
+    make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -95,11 +99,24 @@ fn setup_logger(log_file: PathBuf) -> Logger {
 fn get_registry(
     metrics_registry: &MetricsRegistry,
     subnet_id: SubnetId,
+    root_subnet_id: SubnetId,
     subnet_type: SubnetType,
     node_ids: &[NodeId],
 ) -> Arc<RegistryClientImpl> {
     let registry_version = RegistryVersion::from(1);
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+    let root_subnet_id_proto = SubnetIdProto {
+        principal_id: Some(PrincipalIdIdProto {
+            raw: root_subnet_id.get_ref().to_vec(),
+        }),
+    };
+    data_provider
+        .add(
+            ROOT_SUBNET_ID_KEY,
+            registry_version,
+            Some(root_subnet_id_proto),
+        )
+        .unwrap();
     let mut routing_table = RoutingTable::new(BTreeMap::new());
     routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
     let pb_routing_table = PbRoutingTable::from(routing_table);
@@ -145,6 +162,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
     let subnet_type = SubnetType::System;
     let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
     let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(0));
+    let root_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
     let replica_config = ReplicaConfig {
         node_id: NodeId::from(PrincipalId::new_node_test_id(27)),
         subnet_id,
@@ -160,6 +178,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
     let registry = get_registry(
         &metrics_registry,
         subnet_id,
+        root_subnet_id,
         subnet_type,
         &[replica_config.node_id],
     );

@@ -1,0 +1,27 @@
+= IC_Subnet_XNetBacklogged
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+The median time XNet messages spent in the backlog of the stream between
+the subnets indicated in the alert was > 1m for 15 minutes.
+
+== Impact
+
+Cross-subnet canister to canister message delivery times are higher than
+1 minute, possibly affecting any ingress messages that triggers such calls
+during its execution.
+
+== Possible causes (non-exhaustive)
+
+- A lot of XNet traffic
+
+- Slow message execution on the remote subnet
+
+== Troubleshooting and remediation
+
+There is currently not much we can do if this alert fires as we have no
+influence on how many requests are sent by the users. The alert is intended
+to make us notice that XNet traffic is increasing in general so that we can
+react early and prioritize implementing mitigation.

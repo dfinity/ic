@@ -1,0 +1,17 @@
+[Unit]
+Description=Set shared-backup storage
+DefaultDependencies=no
+Requires=dev-mapper-store\x2dshared\x2d\x2dbackup.device
+After=dev-mapper-store\x2dshared\x2d\x2dbackup.device
+Before=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2dbackup.service
+Before=var-lib-ic-backup.mount
+
+[Install]
+RequiredBy=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2dbackup.service
+RequiredBy=var-lib-ic-backup.mount
+WantedBy=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-shared-backup.sh

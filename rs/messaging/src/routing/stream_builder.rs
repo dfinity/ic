@@ -2,19 +2,21 @@ use crate::message_routing::LatencyMetrics;
 use ic_base_types::NumBytes;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_replicated_state::replicated_state::PeekableOutputIterator;
+use ic_replicated_state::Stream;
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE, replicated_state::ReplicatedStateMessageRouting,
     ReplicatedState,
 };
+use ic_types::xnet::QueueId;
 use ic_types::{
     messages::{Payload, RejectContext, Request, RequestOrResponse, Response},
     user_error::RejectCode,
-    xnet::QueueId,
     CountBytes, QueueIndex, SubnetId,
 };
 #[cfg(test)]
 use mockall::automock;
-use prometheus::{Histogram, IntCounterVec, IntGaugeVec};
+use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -31,7 +33,13 @@ struct StreamBuilderMetrics {
     pub routed_messages: IntCounterVec,
     /// Successfully routed XNet messages' total payload size.
     pub routed_payload_sizes: Histogram,
+    /// Critical error counter for detected infinite loops while routing.
+    pub error_infinite_loops: IntCounter,
 }
+
+/// Desired byte size of an outgoing stream. Messages are routed to a stream
+/// until its `count_bytes()` is greater than or equal to this amount.
+const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
 
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
@@ -42,6 +50,7 @@ const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
 const LABEL_REMOTE: &str = "remote";
+const LABEL_INFINITE_LOOP: &str = "mr_stream_builder_infinite_loop";
 
 const LABEL_VALUE_TYPE_REQUEST: &str = "request";
 const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
@@ -76,6 +85,7 @@ impl StreamBuilderMetrics {
             // 10 B - 5 MB
             decimal_buckets(1, 6),
         );
+        let error_infinite_loops = metrics_registry.error_counter(LABEL_INFINITE_LOOP);
         // Initialize all `routed_messages` counters with zero, so they are all exported
         // from process start (`IntCounterVec` is really a map).
         for (msg_type, status) in &[
@@ -99,6 +109,7 @@ impl StreamBuilderMetrics {
             stream_begin,
             routed_messages,
             routed_payload_sizes,
+            error_infinite_loops,
         }
     }
 }
@@ -186,62 +197,120 @@ impl StreamBuilderImpl {
             .routed_payload_sizes
             .observe(payload_size as f64);
     }
-}
 
-impl StreamBuilder for StreamBuilderImpl {
-    fn build_streams(&self, mut state: ReplicatedState) -> ReplicatedState {
+    /// Implementation of `StreamBuilder::build_streams()` that takes a
+    /// `target_stream_size_bytes` argument to limit how many messages will be
+    /// routed into each stream.
+    fn build_streams_impl(
+        &self,
+        mut state: ReplicatedState,
+        target_stream_size_bytes: usize,
+    ) -> ReplicatedState {
+        /// Pops the previously peeked message.
+        ///
+        /// Panics:
+        ///  * if there is no message to pop; or
+        ///  * (in debug builds) if the popped message is not the same as the
+        ///    peeked one.
+        fn validated_next(
+            iterator: &mut dyn PeekableOutputIterator,
+            (expected_id, expected_index, expected_message): (
+                QueueId,
+                QueueIndex,
+                Arc<RequestOrResponse>,
+            ),
+        ) -> RequestOrResponse {
+            let (queue_id, queue_index, message) = iterator.next().unwrap();
+            debug_assert_eq!(
+                (queue_id, queue_index, &message),
+                (expected_id, expected_index, expected_message.as_ref())
+            );
+            message
+        }
+
         let mut streams = state.take_streams();
+        let routing_table = state.routing_table();
 
-        // Extract all of the outgoing messages from the output queues into a
-        // collection.
-        let msg_set: Vec<(QueueId, QueueIndex, RequestOrResponse)> =
-            state.output_into_iter().collect();
+        let mut requests_to_reject = Vec::new();
 
-        // Place all messages into the appropriate stream or generate reject Responses
-        // when unable to (canister not found).
-        for (queue_id, _queue_index, msg) in msg_set {
-            let src_canister_id = queue_id.src_canister;
-            let dst_canister_id = queue_id.dst_canister;
+        {
+            let mut output_iter = state.output_into_iter();
+            let mut last_output_size = usize::MAX;
 
-            match state
-                .metadata
-                .network_topology
-                .routing_table
-                .route(dst_canister_id.get())
-            {
-                // Destination subnet found.
-                Some(dst_net_id) => {
-                    // Insert the message into the stream.
-                    self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
-                    self.observe_payload_size(&msg);
-                    streams.push(dst_net_id, msg);
+            // Route all messages into the appropriate stream or generate reject Responses
+            // when unable to (no route to canister). When a stream's byte size reaches or
+            // exceeds `target_stream_size_bytes`, any matching queues are skipped.
+            while let Some((queue_id, queue_index, msg)) = output_iter.peek() {
+                // Safeguard to guarantee that iteration always terminates. Will always loop at
+                // least once, if messages are available.
+                let output_size = output_iter.size_hint().0;
+                debug_assert!(output_size < last_output_size);
+                if output_size == last_output_size {
+                    error!(
+                        self.log,
+                        "Infinite loop detected in StreamBuilder::build_streams @{}.", output_size
+                    );
+                    self.metrics.error_infinite_loops.inc();
+                    break;
                 }
+                last_output_size = output_size;
 
-                // Destination subnet not found.
-                None => {
-                    warn!(self.log, "Canister {} not found", dst_canister_id);
-                    self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
-                    match msg {
-                        // A Request: generate a reject Response.
-                        RequestOrResponse::Request(req) => {
-                            self.reject_local_request(
-                                &mut state,
-                                req,
-                                RejectCode::DestinationInvalid,
-                                format!("Canister {} does not exist", dst_canister_id),
-                            );
+                let src_canister_id = queue_id.src_canister;
+                let dst_canister_id = queue_id.dst_canister;
+
+                match routing_table.route(dst_canister_id.get()) {
+                    // Destination subnet found.
+                    Some(dst_net_id) => {
+                        if streams
+                            .get(&dst_net_id)
+                            .map(Stream::count_bytes)
+                            .unwrap_or_default()
+                            >= target_stream_size_bytes
+                        {
+                            // Stream full, skip all other messagees to this destination.
+                            output_iter.exclude_queue();
+                            continue;
                         }
 
-                        RequestOrResponse::Response(_) => {
-                            // A Response: discard it.
-                            error!(
-                                self.log,
-                                "Discarding response from canister {}.", src_canister_id
-                            );
+                        // Route the message into the stream.
+                        self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
+                        self.observe_payload_size(&msg);
+                        streams.push(
+                            dst_net_id,
+                            validated_next(&mut output_iter, (queue_id, queue_index, msg)),
+                        );
+                    }
+
+                    // Destination subnet not found.
+                    None => {
+                        warn!(self.log, "No route to canister {}", dst_canister_id);
+                        self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
+                        match validated_next(&mut output_iter, (queue_id, queue_index, msg)) {
+                            // A Request: generate a reject Response.
+                            RequestOrResponse::Request(req) => {
+                                requests_to_reject.push(req);
+                            }
+                            RequestOrResponse::Response(_) => {
+                                // A Response: discard it.
+                                error!(
+                                    self.log,
+                                    "Discarding response from canister {}.", src_canister_id
+                                );
+                            }
                         }
                     }
-                }
-            };
+                };
+            }
+        }
+
+        for req in requests_to_reject {
+            let dst_canister_id = req.receiver;
+            self.reject_local_request(
+                &mut state,
+                req,
+                RejectCode::DestinationInvalid,
+                format!("No route to canister {}", dst_canister_id),
+            );
         }
 
         // Export the total number of enqueued messages and byte size, per stream.
@@ -285,5 +354,11 @@ impl StreamBuilder for StreamBuilderImpl {
         // (messages added) into the ReplicatedState to be returned.
         state.put_streams(streams);
         state
+    }
+}
+
+impl StreamBuilder for StreamBuilderImpl {
+    fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
+        self.build_streams_impl(state, TARGET_STREAM_SIZE_BYTES)
     }
 }

@@ -17,6 +17,7 @@ test = false
 doc = false
 
 [dev-dependencies]
+canister-test = { path = "../../rust_canisters/canister_test" }
 
 [[test]]
 name = "test"

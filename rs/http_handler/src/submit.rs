@@ -1,9 +1,18 @@
 //! Module that deals with requests to /api/v2/canister/.../call
 
-use crate::{common, map_box_error_to_canonical_error, IngressFilterService};
+use crate::{
+    common::{
+        get_cors_headers, make_response, make_response_on_validation_error,
+        map_box_error_to_response,
+    },
+    types::{ApiReqType, RequestType},
+    HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
+};
 use hyper::{Body, Response, StatusCode};
-use ic_interfaces::crypto::IngressSigVerifier;
-use ic_interfaces::{p2p::IngressIngestionService, registry::RegistryClient};
+use ic_interfaces::{
+    crypto::IngressSigVerifier,
+    {p2p::IngressIngestionService, registry::RegistryClient},
+};
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
 use ic_registry_client::helper::{
     provisional_whitelist::ProvisionalWhitelistRegistry,
@@ -19,14 +28,54 @@ use ic_types::{
 };
 use ic_validator::validate_request;
 use std::convert::TryInto;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
-use tower::{Service, ServiceExt};
+use std::task::{Context, Poll};
+use tower::{load_shed::LoadShed, BoxError, Service, ServiceBuilder, ServiceExt};
+
+#[derive(Clone)]
+pub(crate) struct CallService {
+    log: ReplicaLogger,
+    metrics: HttpHandlerMetrics,
+    subnet_id: SubnetId,
+    registry_client: Arc<dyn RegistryClient>,
+    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+    ingress_sender: IngressIngestionService,
+    ingress_filter: LoadShed<IngressFilterService>,
+    malicious_flags: MaliciousFlags,
+}
+
+impl CallService {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        log: ReplicaLogger,
+        metrics: HttpHandlerMetrics,
+        subnet_id: SubnetId,
+        registry_client: Arc<dyn RegistryClient>,
+        validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+        ingress_sender: IngressIngestionService,
+        ingress_filter: IngressFilterService,
+        malicious_flags: MaliciousFlags,
+    ) -> Self {
+        Self {
+            log,
+            metrics,
+            subnet_id,
+            registry_client,
+            validator,
+            ingress_sender,
+            ingress_filter: ServiceBuilder::new().load_shed().service(ingress_filter),
+            malicious_flags,
+        }
+    }
+}
 
 fn get_registry_data(
     log: &ReplicaLogger,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
-    registry_client: Arc<dyn RegistryClient>,
+    registry_client: &dyn RegistryClient,
 ) -> Result<(IngressMessageSettings, ProvisionalWhitelist), CanonicalError> {
     let settings = match registry_client.get_ingress_message_settings(subnet_id, registry_version) {
         Ok(Some(settings)) => settings,
@@ -65,83 +114,127 @@ fn get_registry_data(
 }
 
 /// Handles a call to /api/v2/canister/../call
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn handle(
-    log: ReplicaLogger,
-    subnet_id: SubnetId,
-    registry_client: Arc<dyn RegistryClient>,
-    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
-    mut ingress_sender: IngressIngestionService,
-    mut ingress_filter: IngressFilterService,
-    malicious_flags: MaliciousFlags,
-    body: Vec<u8>,
-) -> Result<Response<Body>, CanonicalError> {
-    // Actual parsing.
-    let msg: SignedIngress = match SignedRequestBytes::from(body).try_into() {
-        Ok(msg) => msg,
-        Err(e) => {
-            return Err(invalid_argument_error(
-                format!("Could not parse body as submit message: {}", e).as_str(),
+impl Service<Vec<u8>> for CallService {
+    type Response = Response<Body>;
+    type Error = BoxError;
+    #[allow(clippy::type_complexity)]
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.ingress_sender.poll_ready(cx)
+    }
+
+    fn call(&mut self, body: Vec<u8>) -> Self::Future {
+        // Actual parsing.
+        self.metrics
+            .requests_body_size_bytes
+            .with_label_values(&[
+                RequestType::Submit.as_str(),
+                ApiReqType::Call.as_str(),
+                UNKNOWN_LABEL,
+            ])
+            .observe(body.len() as f64);
+        let msg: SignedIngress = match SignedRequestBytes::from(body).try_into() {
+            Ok(msg) => msg,
+            Err(e) => {
+                let res = make_response(invalid_argument_error(
+                    format!("Could not parse body as submit message: {}", e).as_str(),
+                ));
+                return Box::pin(async move { Ok(res) });
+            }
+        };
+        let message_id = msg.id();
+        let registry_version = self.registry_client.get_latest_version();
+        let (ingress_registry_settings, provisional_whitelist) = match get_registry_data(
+            &self.log,
+            self.subnet_id,
+            registry_version,
+            self.registry_client.as_ref(),
+        ) {
+            Ok((s, p)) => (s, p),
+            Err(err) => {
+                return Box::pin(async move { Ok(make_response(err)) });
+            }
+        };
+        if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
+            let res = make_response(out_of_range_error(
+                format!(
+                    "Request {} is too large. Message bytes {} is bigger than the max allowed {}.",
+                    message_id,
+                    msg.count_bytes(),
+                    ingress_registry_settings.max_ingress_bytes_per_message
+                )
+                .as_str(),
             ));
+            return Box::pin(async move { Ok(res) });
         }
-    };
-    let message_id = msg.id();
-    let registry_version = registry_client.get_latest_version();
-    let (ingress_registry_settings, provisional_whitelist) =
-        get_registry_data(&log, subnet_id, registry_version, registry_client)?;
-    if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
-        return Err(out_of_range_error(
-            format!(
-                "Request {} is too large. Message bytes {} is bigger than the max allowed {}.",
-                message_id,
-                msg.count_bytes(),
-                ingress_registry_settings.max_ingress_bytes_per_message
-            )
-            .as_str(),
-        ));
+
+        if let Err(err) = validate_request(
+            msg.as_ref(),
+            self.validator.as_ref(),
+            current_time(),
+            registry_version,
+            &self.malicious_flags,
+        ) {
+            let res = make_response_on_validation_error(message_id, err, &self.log);
+            return Box::pin(async move { Ok(res) });
+        }
+
+        let ingress_sender = self.ingress_sender.clone();
+
+        // In case the inner service has state that's driven to readiness and
+        // not tracked by clones (such as `Buffer`), pass the version we have
+        // already called `poll_ready` on into the future, and leave its clone
+        // behind.
+        //
+        // The types implementing the Service trait are not necessary thread-safe.
+        // So the unless the caller is sure that the service implementation is
+        // thread-safe we must make sure 'poll_ready' is always called before 'call'
+        // on the same object. Hence if 'poll_ready' is called and not tracked by
+        // the 'Clone' implementation the following sequence of events may panic.
+        //
+        //  s1.call_ready()
+        //  s2 = s1.clone()
+        //  s2.call()
+        let mut ingress_sender = std::mem::replace(&mut self.ingress_sender, ingress_sender);
+
+        let mut ingress_filter = self.ingress_filter.clone();
+        let log = self.log.clone();
+
+        Box::pin(async move {
+            if let Err(err) = ingress_filter
+                .ready()
+                .await
+                .expect("The service must always be able to process requests")
+                .call((provisional_whitelist, msg.content().clone()))
+                .await
+            {
+                return Ok(map_box_error_to_response(err));
+            }
+
+            let ingress_log_entry = msg.log_entry();
+            if let Err(err) = ingress_sender.call(msg).await {
+                return Ok(map_box_error_to_response(err));
+            }
+
+            // We're pretty much done, just need to send the message to ingress and
+            // make_response to the client
+            info_sample!(
+                "message_id" => &message_id,
+                log,
+                "ingress_message_submit";
+                ingress_message => ingress_log_entry
+            );
+            Ok(make_accepted_response())
+        })
     }
+}
 
-    if let Err(err) = validate_request(
-        msg.as_ref(),
-        validator.as_ref(),
-        current_time(),
-        registry_version,
-        &malicious_flags,
-    ) {
-        return Err(common::make_response_on_validation_error(
-            message_id, err, &log,
-        ));
-    }
-
-    ingress_filter
-        .ready()
-        .await
-        .expect("The service must always be able to process requests")
-        .call((provisional_whitelist, msg.content().clone()))
-        .await
-        .map_err(|err| map_box_error_to_canonical_error(err))?;
-
-    let ingress_log_entry = msg.log_entry();
-    ingress_sender
-        .ready()
-        .await
-        .expect("The service must always be able to process requests")
-        .call(msg)
-        .await?;
-
-    // We're pretty much done, just need to send the message to ingress and
-    // make_response to the client
-    info_sample!(
-        "message_id" => &message_id,
-        log,
-        "ingress_message_submit";
-        ingress_message => ingress_log_entry
-    );
-
+fn make_accepted_response() -> Response<Body> {
     let mut response = Response::new(Body::from(""));
     *response.status_mut() = StatusCode::ACCEPTED;
-    *response.headers_mut() = common::get_cors_headers();
-    Ok(response)
+    *response.headers_mut() = get_cors_headers();
+    response
 }
 
 #[cfg(test)]

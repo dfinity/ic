@@ -1,0 +1,18 @@
+---
+#################################################################################
+# This file stores all tarball paths and paths to the runtime config directory. #
+#################################################################################
+
+ic_config_src: "{{ inventory_file | dirname }}/config/{{ ic_config_version }}"
+
+ic_binary_version: "{{ vars['binary_versions'][stage] }}"
+ic_binary_revision: "{{ vars['binary_revisions'][stage] }}"
+ic_config_version: "{{ vars['config_versions'][stage] }}"
+ic_replica_sha256_hex: "{{ vars['replica_sha256_hex'][stage] }}"
+ic_version: "0.8.0"
+
+############################################################
+# PLEASE DO NOT ADD MORE CONFIGURATION FLAGS TO THIS FILE. #
+############################################################
+ic_namespace: "node"
+replica_with_symbols: "no"

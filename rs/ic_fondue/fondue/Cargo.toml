@@ -1,0 +1,28 @@
+[package]
+name = "fondue"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+bincode = "1.2.1"
+crossbeam-channel = "0.5.0"
+mio = { version = "0.7", features = ["os-poll", "os-ext", "pipe"] }
+signal-hook-mio = { version = "0.2.0", features = ["support-v0_7"] }
+signal-hook = { version = "0.3.6", features = ["iterator"] }
+nix = "0.23.0"
+nonblock = "0.1.0"
+rand = "0.8.3"
+rand_chacha = "0.3.0"
+rand_core = "0.6.1"
+either = "1.6"
+libc = "0.2.91"
+log_analyzer = { path = "../../log_analyzer" }
+retain_mut = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_millis =  "0.1"
+slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_trace"] }
+slog-async = { version = "2.5", features = ["nested-values"] }
+slog-term = "2.6.0"
+pico-args = "0.3"
+structopt = { version = "0.3", default-features = false }

@@ -1,0 +1,2 @@
+**This crate is considered deprecated. If you intend to write System Tests, talk to the
+testing team and/or use `ic_fondue`.**

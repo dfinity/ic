@@ -1,0 +1,61 @@
+// Refs
+:url-execution-round-duration: https://grafana.dfinity.systems/d/YL3jINNGk/execution-metrics?viewPanel=24&orgId=1&from=now-30m&to=now&refresh=1m&var-ic=mercury&var-ic_subnet=All&var-instances=All&var-heatmap_period=$__auto_interval_heatmap_period
+
+= IC_Replica_SlowFinalization
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+The rate at which replicas are finalizing blocks has dropped below the
+alerting threshold.
+
+== Impact
+
+*Either*
+
+If the rate has dropped to 0 for < 2/3 + 1 replicas then the subnet is now
+*stopped* and can make no further progress. All user canisters on the subnet
+can make no further progress.
+
+*Or*
+
+If the rate is above 0 but below the threshold then the subnet is proceeding
+slowly.
+
+[NOTE]
+====
+May also be accompanied by `IC_Replica_CallRequests_ResponseTooSlow` if there
+is enough traffic on the network for that alert to fire too.
+====
+
+== Possible causes (non-exhaustive)
+
+- Is this during, or shortly after a replica rollout? CD tests should have caught this
+problem at an earlier stage but double check just in case.
+
+- Is the {url-execution-round-duration}[execution round] consistently taking longer than it should based on the expected finalization rate? Roughly the execution round shouldn't take more than 1 / finalization_rate in seconds on average.
+
+- If this only affects a subset of the replicas, and they are running the
+  same release version then this may be due to the machine differences.
+
+== Troubleshooting and remediation
+
+If it is a bug introduced in the most recent release, coordinate with the release management team to roll back the change.
+
+If the execution round is consistently taking a lot longer than 1 / expected_finalization_rate, then this could point to a misconfiguration of execution limits that result in allowing more work to happen in a round than it should. Confirm what is the expected finalization rate and execution limit. If the execution limit seems to be misconfigured, consult with the execution team on next steps.
+
+If only a subset of replicas are affected then you will need to do more
+troubleshooting. Places to start include:
+
+- Comparing the load average on affected / non-affected machines
+
+- Compare the logs on affected / non-affected machines
+
+- Identify any configuration differences between machines (CPU, networking,
+  memory)
+
+- Is the behaviour of the affected machines different? For example, have they
+  suddenly started swapping to disk?
+
+- Are additional processes running on the affected machines that are using
+  resources that the replica needs?

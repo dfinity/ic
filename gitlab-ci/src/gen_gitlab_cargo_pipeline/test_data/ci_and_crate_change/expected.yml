@@ -1,0 +1,15 @@
+include:
+  - local: /gitlab-ci/config/00--child-pipeline-root-unprotected.yml
+variables:
+  GITLAB_CI_CONFIG_CHANGED: 'true'
+
+foo:
+  extends: .cargo-crate-test
+  variables:
+    CARGO_TEST_FLAGS_EXTRA: "--release"
+
+leaf1:
+  extends: .cargo-crate-test
+
+leaf2:
+  extends: .cargo-crate-test

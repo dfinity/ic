@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Run a docker container similar to the CI, mount the Nix store
+# in the running container and also forwards the user's SSH agent.
+#
+# Example usage:
+# REPO_ROOT $ ./gitlab-ci/docker/docker-run-with-nix-shell
+
+set -eEuo pipefail
+
+REPO_ROOT="$(
+    cd "$(dirname "$0")"
+    git rev-parse --show-toplevel
+)"
+
+source "$REPO_ROOT/gitlab-ci/docker/docker-run-include"
+
+IMAGE_NIX="${IMAGE_NIX:-dfinity/ic-build-nix:$IMAGE_TAG}"
+mkdir -p $HOME/.cache/docker/nix
+
+# nix-shell requires valid ssh credentials in the docker container, to pull dependencies.
+# We will mount the volume with the $SSH_AUTH_SOCK directory from the host
+# to forward the SSH agent, so that the ssh-based authentication
+# also works inside the container.
+
+DOCKER_RUN_ARGS+=(-e SSH_AUTH_SOCK=$SSH_AUTH_SOCK)
+
+if ! uname -s | grep Darwin; then
+    # mount the SSH_AUTH_SOCK directory
+    DOCKER_RUN_ARGS+=(-v $(dirname $SSH_AUTH_SOCK):$(dirname $SSH_AUTH_SOCK))
+fi
+
+if $DEBUG; then set -x; fi
+
+# First run the container once to ensure the nix-shell is properly installed for the current user
+docker run --rm "${DOCKER_RUN_ARGS[@]}" "$IMAGE_NIX" \
+    /usr/bin/env bash -c "if ! command -v nix-shell > /dev/null; then /usr/bin/nix-install; fi"
+
+echo ". $DOCKER_HOME/.nix-profile/etc/profile.d/nix.sh" >$HOME/.cache/docker/home/.bashrc
+
+# Next run the container "for real"
+docker run --rm -it "${DOCKER_RUN_ARGS[@]}" "$IMAGE_NIX" "${@:-bash}"

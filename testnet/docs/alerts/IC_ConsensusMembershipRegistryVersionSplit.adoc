@@ -1,0 +1,44 @@
+= IC_ConsensusMembershipRegistryVersionSplit
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+The version of the registry that is being used by Consensus across different
+subnets is lagging behind; it has taken at least 20 minutes for a subnet to
+update.
+
+== Impact
+
+The Consensus component across multiple subnets is operating with a different
+view of the registry.
+
+This is not IC_Subnet_ConsensusMembershipRegistryVersionSplit -- in that
+case multiple replicas on the *same* subnet have not agreed.
+
+This alert is IC wide -- each subnet is using a single registry version, but
+different subnets are using different registry versions. Some difference is
+expected, as not all subnets will switch at the same time.
+
+If different subnets are using different versions of the registry then they
+may not agree on things like the network topology, replica version to run,
+and so on.
+
+In practice, the age of the consensus membership registry version in use is
+dependent on finalization rate and CUP interval (2 CUP intervals /
+finalization rate). In order for this to not fire before
+`IC_Replica_SlowFinalization`, we use the same finalization rate threshold
+of 0.3 blocks per second, resulting in a maximum offset of 1 hour.
+
+== Possible causes (non-exhaustive)
+
+- Slow finalization rate
+- Software bug
+- Network connectivity to the NNS has been lost
+- The NNS replicas do not agree on the registry version
+
+== Troubleshooting and remediation
+
+Check whether the subnet is suffering from slow finalization rate. If so,
+the old registry version in use is very likely a side-effect of a long CUP
+interval.

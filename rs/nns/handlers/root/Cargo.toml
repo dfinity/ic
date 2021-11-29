@@ -33,11 +33,13 @@ ic-registry-transport = { path = "../../../registry/transport" }
 ic-registry-routing-table = { path = "../../../registry/routing_table" }
 on_wire = { path = "../../../rust_canisters/on_wire"}
 prost = "0.9.0"
-serde = { version = "1.0.99", features = ["derive", "rc"] }
+serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-nns-constants ={path="../../constants"}
+ic-nns-test-utils = { path = "../../../nns/test_utils" }
 ic-types = { path = "../../../types/types" }
 ic-test-utilities = {path="../../../test_utilities"}
 on_wire = { path = "../../../rust_canisters/on_wire" }

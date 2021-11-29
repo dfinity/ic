@@ -1,0 +1,117 @@
+policy_module(journalbeat, 1.0.0)
+
+###############################################################################
+# Types
+
+# Domain for journalbeat process to run under.
+type journalbeat_t;
+domain_type(journalbeat_t)
+
+# The journalbeat binary.
+type journalbeat_exec_t;
+files_type(journalbeat_exec_t)
+
+# The state directory: /var/lib/journalbeat
+type journalbeat_var_lib_t;
+files_type(journalbeat_var_lib_t)
+
+# The log directory: /var/log/journalbeat
+type journalbeat_var_log_t;
+files_type(journalbeat_var_log_t)
+
+# The run-time generated configuration file (and its parent directory):
+# /run/ic-node/etc/journalbeat{/journalbeat.conf)
+type journalbeat_conf_t;
+files_type(journalbeat_conf_t)
+
+###############################################################################
+# System integration bits
+
+# Allow tmpfiles to manage the journalbeat files
+systemd_tmpfilesd_managed(journalbeat_conf_t, dir)
+require { type systemd_tmpfiles_t; }
+list_dirs_pattern(systemd_tmpfiles_t, journalbeat_conf_t, journalbeat_conf_t)
+
+# Allow it to be spawned from init scripts.
+init_daemon_domain(journalbeat_t, journalbeat_exec_t)
+
+###############################################################################
+# Primary rights for operation
+
+# Allow journalbeat to perform its primary function, namely to read
+# the journal files.
+systemd_read_journal_files(journalbeat_t)
+
+# It wants to send the logs to remote host, allow unrestricted TCP for
+# this for now. Maybe this can be reasonably constrainted more tightly.
+allow journalbeat_t self:tcp_socket create_stream_socket_perms;
+corenet_tcp_sendrecv_generic_if(journalbeat_t)
+corenet_tcp_sendrecv_generic_node(journalbeat_t)
+corenet_tcp_sendrecv_all_ports(journalbeat_t)
+corenet_tcp_connect_all_ports(journalbeat_t)
+corenet_all_recvfrom_unlabeled(journalbeat_t)
+
+###############################################################################
+# Other required rights for operation
+
+# Read generic etc files (e.g. nsswitch.conf)
+files_read_etc_files(journalbeat_t)
+
+# Read CA certificate
+miscfiles_read_generic_certs(journalbeat_t)
+
+# Allow using locales
+miscfiles_read_localization(journalbeat_t)
+
+# Read network config files (/etc/resolv.conf & friends)
+sysnet_read_config(journalbeat_t)
+
+# Read generated config file
+ic_read_generated_config(journalbeat_t, journalbeat_conf_t)
+
+# Manage state files in /var/lib/journalbeat
+files_search_var_lib(journalbeat_t)
+manage_files_pattern(journalbeat_t, journalbeat_var_lib_t, journalbeat_var_lib_t)
+
+# Access own log files
+logging_list_logs(journalbeat_t)
+manage_files_pattern(journalbeat_t, journalbeat_var_log_t, journalbeat_var_log_t)
+
+# Wants to get its own scheduling information
+allow journalbeat_t journalbeat_t : process { getsched };
+
+# For some reason it wants to also communicate UDP (DNS?), also allow
+# unrestricted for now.
+allow journalbeat_t self:udp_socket create_socket_perms;
+corenet_udp_sendrecv_generic_if(journalbeat_t)
+corenet_udp_sendrecv_generic_node(journalbeat_t)
+corenet_udp_sendrecv_all_ports(journalbeat_t)
+corenet_all_recvfrom_unlabeled(journalbeat_t)
+
+# Journalbeat wants to access netlink. Not clear why -- this should
+# rather not be allowed, but it might be that it tries a route lookup
+# to determine its own host address (to be determined).
+allow journalbeat_t journalbeat_t : netlink_route_socket { bind create getattr nlmsg_read read write };
+
+# Journalbeat wants to read /proc/stat. That may be justified to get
+# some kernel information.
+require {
+    type proc_t;
+}
+read_files_pattern(journalbeat_t, proc_t, proc_t)
+
+# Journalbeat wants to poke PID 1 (the init process) and read various
+# information from it. There is no justification for needing this,
+# deny and silence resulting audit messages.
+init_dontaudit_read_state(journalbeat_t)
+
+# Journalbeat wants to get filesystem information for various
+# filesystems. There is no reason why it would need to, deny and
+# silence.
+require {
+    type tmpfs_t;
+    type fs_t;
+}
+dontaudit journalbeat_t tmpfs_t : filesystem { getattr };
+dontaudit journalbeat_t fs_t : filesystem { getattr };
+dontaudit journalbeat_t usr_t:file { getattr open read };

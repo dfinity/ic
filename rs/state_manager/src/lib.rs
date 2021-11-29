@@ -32,7 +32,10 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{page_map::PersistenceError, PageIndex, ReplicatedState};
+use ic_replicated_state::{
+    canister_state::execution_state::SandboxExecutionState, page_map::PersistenceError, PageIndex,
+    ReplicatedState,
+};
 use ic_state_layout::{error::LayoutError, StateLayout};
 use ic_types::{
     artifact::StateSyncArtifactId,
@@ -78,6 +81,7 @@ pub struct StateManagerMetrics {
     resident_state_count: IntGauge,
     state_sync_size: IntCounterVec,
     state_sync_duration: HistogramVec,
+    state_sync_remaining: IntGauge,
     state_size: IntGauge,
     checkpoint_metrics: CheckpointMetrics,
     manifest_metrics: ManifestMetrics,
@@ -187,6 +191,11 @@ impl StateManagerMetrics {
             state_sync_size.with_label_values(&[*op]);
         }
 
+        let state_sync_remaining = metrics_registry.int_gauge(
+            "state_sync_remaining_chunks",
+            "Number of chunks not syncronized yet of all active state syncs",
+        );
+
         let state_size = metrics_registry.int_gauge(
             "state_manager_state_size_bytes",
             "Total size of the state on disk in bytes.",
@@ -217,6 +226,7 @@ impl StateManagerMetrics {
             resident_state_count,
             state_sync_size,
             state_sync_duration,
+            state_sync_remaining,
             state_size,
             checkpoint_metrics: CheckpointMetrics::new(metrics_registry),
             manifest_metrics: ManifestMetrics::new(metrics_registry),
@@ -667,13 +677,12 @@ pub fn get_dirty_pages(state: &ReplicatedState) -> DirtyPages {
 /// incrementally after every round.
 fn strip_page_map_deltas(state: &mut ReplicatedState) {
     for canister in state.canisters_iter_mut() {
-        canister
-            .system_state
-            .stable_memory
-            .page_map
-            .strip_all_deltas();
         if let Some(execution_state) = &mut canister.execution_state {
             execution_state.wasm_memory.page_map.strip_all_deltas();
+            execution_state.stable_memory.page_map.strip_all_deltas();
+            // Reset the sandbox state to force full synchronization on the next execution
+            // since the page deltas are out of sync now.
+            execution_state.sandbox_state = SandboxExecutionState::new();
         }
     }
 }
@@ -697,12 +706,13 @@ fn copy_page_maps(dst: &mut ReplicatedState, src: &ReplicatedState) {
             "execution state of canister {} unexpectedly (dis)appeared after creating a checkpoint",
             dst_canister.system_state.canister_id
         );
-        dst_canister.system_state.stable_memory = src_canister.system_state.stable_memory.clone();
         if let (Some(dst_state), Some(src_state)) = (
             &mut dst_canister.execution_state,
             &src_canister.execution_state,
         ) {
             dst_state.wasm_memory = src_state.wasm_memory.clone();
+            dst_state.stable_memory = src_state.stable_memory.clone();
+            dst_state.sandbox_state = Arc::clone(&src_state.sandbox_state);
         }
     }
 }
@@ -738,6 +748,9 @@ impl StateManagerImpl {
             .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
 
         if oldest_required_state > Self::INITIAL_STATE_HEIGHT {
+            // Note [Oldest Required State Recovery]
+            // =====================================
+            //
             // We look at the oldest state height consensus asked us to keep and
             // compare it to the checkpoints we have.  We then "archive" all the
             // checkpoints that are too fresh and can prevent us from recomputing
@@ -956,6 +969,7 @@ impl StateManagerImpl {
             self.latest_manifest(),
             self.metrics.clone(),
             self.own_subnet_type,
+            Arc::clone(&self.checkpoint_thread_pool),
             self.state_sync_refs.clone(),
         ))
     }
@@ -1381,26 +1395,6 @@ impl StateManagerImpl {
                     err
                 )
             });
-            let stable_memory_path = &canister_layout.stable_memory_blob();
-            canister
-                .system_state
-                .stable_memory
-                .page_map
-                .persist_round_delta(stable_memory_path)
-                .unwrap_or_else(|err| {
-                    fatal!(
-                        self.log,
-                        "Failed to persist stable page delta of canister {} to file {}: {}",
-                        canister_id,
-                        stable_memory_path.display(),
-                        err
-                    )
-                });
-            canister
-                .system_state
-                .stable_memory
-                .page_map
-                .strip_round_delta();
             if let Some(execution_state) = &mut canister.execution_state {
                 let memory_path = &canister_layout.vmemory_0();
                 execution_state
@@ -1417,6 +1411,22 @@ impl StateManagerImpl {
                         )
                     });
                 execution_state.wasm_memory.page_map.strip_round_delta();
+
+                let stable_memory_path = &canister_layout.stable_memory_blob();
+                execution_state
+                    .stable_memory
+                    .page_map
+                    .persist_round_delta(stable_memory_path)
+                    .unwrap_or_else(|err| {
+                        fatal!(
+                            self.log,
+                            "Failed to persist stable page delta of canister {} to file {}: {}",
+                            canister_id,
+                            stable_memory_path.display(),
+                            err
+                        )
+                    });
+                execution_state.stable_memory.page_map.strip_round_delta();
             }
         }
     }
@@ -1671,25 +1681,25 @@ impl StateManager for StateManagerImpl {
                 "The hash of requested state {:?} at height {} doesn't match the locally computed hash {:?}",
                 root_hash, height, hash
             ),
-	    Err(StateHashError::Transient(HashNotComputedYet(_))) => {
+            Err(StateHashError::Transient(HashNotComputedYet(_))) => {
                 // The state is already available, but we haven't finished
                 // computing the hash yet.
-	    }
-	    Err(StateHashError::Permanent(StateRemoved(_))) => {
+            }
+            Err(StateHashError::Permanent(StateRemoved(_))) => {
                 // No need to fetch an old state, nothing to do.
                 info!(
                     self.log,
                     "Requested fetch of an old state @{}, hash = {:?}", height, root_hash
                 );
-	    }
-	    Err(StateHashError::Permanent(StateNotFullyCertified(_)))=> {
+            }
+            Err(StateHashError::Permanent(StateNotFullyCertified(_)))=> {
                 // This could trigger if we already have a local state at that height, but that height is not a checkpoint. This could possibly be a fatal log.
                 error!(
-		    self.log,
-		    "Requested fetch of a state @{}, which was committed with `CertificationScope::Metadata`, hash = {:?}", height, root_hash
+                    self.log,
+                    "Requested fetch of a state @{}, which was committed with `CertificationScope::Metadata`, hash = {:?}", height, root_hash
                 );
-	    }
-	    Err(StateHashError::Transient(StateNotCommittedYet(_))) => {
+            }
+            Err(StateHashError::Transient(StateNotCommittedYet(_))) => {
                 // Let's see if we already have this state locally.  This might
                 // be the case if we are in disaster recovery mode and
                 // re-introducing some old state with a new hight.
@@ -1863,6 +1873,50 @@ impl StateManager for StateManagerImpl {
         heights.into_iter().collect()
     }
 
+    /// This method instructs the state manager that Consensus doesn't need
+    /// any states strictly lower than the specified `height`.  The
+    /// implementation purges some of these states using the heuristic
+    /// described below.
+    ///
+    /// # Notation
+    ///
+    ///  * *OCK* stands for "Oldest Checkpoint to Keep". This is the height of
+    ///    the latest checkpoint ≤ H passed to `remove_states_below`.
+    ///  * *LSH* stands for "Latest State Height". This is the latest state that
+    ///    the state manager has.
+    ///  * *LCH* stands for "Latest Checkpoint Height*. This is the height of
+    ///    the latest checkpoint that the state manager created.
+    ///  * *CHS* stands for "CHeckpoint Heights". These are heights of all the
+    ///    checkpoints available.
+    ///
+    /// # Heuristic
+    ///
+    /// We remove all states with heights greater than 0 and smaller than
+    /// `min(LSH, H)` while keeping all the checkpoints more recent or equal
+    /// to OCK together with three most recent checkpoints.
+    ///
+    /// ```text
+    ///   removed_states(H) := (0, min(LSH, H))
+    ///                        \ { ch | ch ∈ CHS ∧ ch >= OCK }
+    ///                        \ { x, y, z | x = max(CH) ∧
+    ///                                      y = max(CH \ { x }) ∧
+    ///                                      z = max(CH \ { x, y })
+    ///                          }
+    ///  ```
+    ///
+    /// # Rationale
+    ///
+    /// * We can only remove states strictly lower than LSH because the replica won't
+    ///   be able to make progress otherwise. It's quite normal for Consensus to be
+    ///   slightly ahead of execution, so we can't blindly remove everything that
+    ///   Consensus doesn't need anymore.
+    ///
+    /// * When state manager restarts, it needs to load the oldest checkpoint to keep,
+    ///   see Note [Oldest Required State Recovery]. Therefore, we keep the
+    ///   oldest checkpoint to keep and more recent checkpoints.
+    ///
+    /// * We keep three most recent checkpoints to increase average checkpoint lifetime.
+    ///   The larger the lifetime, the more time other nodes have to sync states.
     fn remove_states_below(&self, requested_height: Height) {
         let _timer = self
             .metrics
@@ -1880,16 +1934,9 @@ impl StateManager for StateManagerImpl {
                 fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
             });
 
-        let last_checkpoint = checkpoint_heights.last();
-
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
         let mut last_height_to_keep = latest_state_height.min(requested_height);
-
-        // The last checkpoint and higher states will be kept.
-        last_height_to_keep = last_checkpoint
-            .map(|h| (*h).min(last_height_to_keep))
-            .unwrap_or(last_height_to_keep);
 
         if last_height_to_keep == Self::INITIAL_STATE_HEIGHT {
             last_height_to_keep = Height::new(1);
@@ -1910,16 +1957,25 @@ impl StateManager for StateManagerImpl {
             .max()
             .cloned();
 
-        // Keep extra checkpoints for state sync.
+        // The `oldest_checkpoint_to_keep` along with newer checkpoints will be kept.
         let mut checkpoints_to_keep: BTreeSet<Height> = checkpoint_heights
             .iter()
-            .rev()
-            .take(EXTRA_CHECKPOINTS_TO_KEEP + 1)
+            .filter(|x| **x >= requested_height)
             .cloned()
             .collect();
+
         if let Some(h) = oldest_checkpoint_to_keep {
             checkpoints_to_keep.insert(h);
         }
+
+        // Keep extra checkpoints for state sync.
+        checkpoint_heights
+            .iter()
+            .rev()
+            .take(EXTRA_CHECKPOINTS_TO_KEEP + 1)
+            .for_each(|h| {
+                checkpoints_to_keep.insert(*h);
+            });
 
         let mut states = self.states.write();
 
@@ -1953,9 +2009,11 @@ impl StateManager for StateManagerImpl {
         self.latest_state_height
             .store(latest_height.get(), Ordering::Relaxed);
 
-        let min_resident_height = oldest_checkpoint_to_keep
-            .unwrap_or(last_height_to_keep)
-            .min(last_height_to_keep);
+        let min_resident_height = checkpoints_to_keep
+            .iter()
+            .min()
+            .unwrap_or(&last_height_to_keep)
+            .min(&last_height_to_keep);
 
         self.metrics
             .min_resident_height
@@ -2029,6 +2087,25 @@ impl StateManager for StateManagerImpl {
         }
 
         self.persist_metadata_or_die(&states.states_metadata);
+
+        drop(states);
+        #[cfg(debug_assertions)]
+        {
+            use ic_interfaces::state_manager::CERT_ANY;
+            let checkpoint_heights = self
+                .state_layout
+                .checkpoint_heights()
+                .unwrap_or_else(|err| {
+                    fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
+                });
+            let state_heights = self.list_state_heights(CERT_ANY);
+
+            debug_assert!(checkpoints_to_keep
+                .iter()
+                .all(|h| checkpoint_heights.contains(h)));
+
+            debug_assert!(state_heights.contains(&latest_state_height));
+        }
     }
 
     fn commit_and_certify(

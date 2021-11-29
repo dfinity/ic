@@ -1,0 +1,32 @@
+commit 36e9c97a346375202288d928d3b0242a1ae77cea
+Author: Hallvard Furuseth <hallvard@openldap.org>
+Date:   Tue Sep 27 07:03:45 2016 +0200
+
+    Only set me_mfd if needed. Drop unused read access.
+
+diff --git a/libraries/liblmdb/mdb.c b/libraries/liblmdb/mdb.c
+index f89720db2..aae7eef27 100644
+--- a/libraries/liblmdb/mdb.c
++++ b/libraries/liblmdb/mdb.c
+@@ -5631,13 +5631,14 @@ mdb_env_open(MDB_env *env, const char *path, unsigned int flags, mdb_mode_t mode
+ 	}
+ 
+ 	if ((rc = mdb_env_open2(env, flags & MDB_PREVSNAPSHOT)) == MDB_SUCCESS) {
+-		/* Synchronous fd for meta writes. Needed even with
+-		 * MDB_NOSYNC/MDB_NOMETASYNC, in case these get reset.
+-		 */
+-		rc = mdb_fopen(env, &fname, MDB_O_META, mode, &env->me_mfd);
+-		if (rc)
+-			goto leave;
+-
++		if (!(flags & (MDB_RDONLY|MDB_WRITEMAP))) {
++			/* Synchronous fd for meta writes. Needed even with
++			 * MDB_NOSYNC/MDB_NOMETASYNC, in case these get reset.
++			 */
++			rc = mdb_fopen(env, &fname, MDB_O_META, mode, &env->me_mfd);
++			if (rc)
++				goto leave;
++		}
+ 		DPRINTF(("opened dbenv %p", (void *) env));
+ 		if (excl > 0 && !(flags & MDB_PREVSNAPSHOT)) {
+ 			rc = mdb_env_share_locks(env, &excl);

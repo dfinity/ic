@@ -1,0 +1,2 @@
+ic_iface_ipv6: "{% if ansible_facts.default_ipv6 %}{{ ansible_facts.default_ipv6.interface }}{% endif %}"
+ic_iface_ipv4: "{% if ansible_facts.default_ipv4 %}{{ ansible_facts.default_ipv4.interface }}{% endif %}"

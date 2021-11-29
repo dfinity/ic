@@ -4,18 +4,21 @@ use ic_types::{
     xnet::CertifiedStreamSlice,
     NumBytes, SubnetId,
 };
-use std::collections::BTreeMap;
+use std::{
+    collections::{BTreeMap, VecDeque},
+    sync::Mutex,
+};
 
 #[derive(Default)]
-pub struct FakeXNetPayloadBuilder(BTreeMap<SubnetId, CertifiedStreamSlice>);
+pub struct FakeXNetPayloadBuilder(Mutex<VecDeque<BTreeMap<SubnetId, CertifiedStreamSlice>>>);
 
 impl FakeXNetPayloadBuilder {
     pub fn new() -> Self {
         Default::default()
     }
 
-    pub fn make(provided_streams: BTreeMap<SubnetId, CertifiedStreamSlice>) -> Self {
-        Self(provided_streams)
+    pub fn make(provided_streams: VecDeque<BTreeMap<SubnetId, CertifiedStreamSlice>>) -> Self {
+        Self(Mutex::new(provided_streams))
     }
 }
 
@@ -27,16 +30,22 @@ impl XNetPayloadBuilder for FakeXNetPayloadBuilder {
         _byte_limit: NumBytes,
     ) -> XNetPayload {
         XNetPayload {
-            stream_slices: self.0.clone(),
+            stream_slices: self.0.lock().unwrap().pop_front().unwrap_or_default(),
         }
     }
 
     fn validate_xnet_payload(
         &self,
-        _payload: &XNetPayload,
+        payload: &XNetPayload,
         _validation_context: &ValidationContext,
         _past_payloads: &[&XNetPayload],
     ) -> Result<NumBytes, XNetPayloadValidationError> {
-        Ok(0.into())
+        let size: usize = payload
+            .stream_slices
+            .iter()
+            .map(|(_, stream_slice)| stream_slice.payload.len() + stream_slice.merkle_proof.len())
+            .sum();
+
+        Ok(NumBytes::from(size as u64))
     }
 }

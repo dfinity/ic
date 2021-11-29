@@ -148,6 +148,25 @@ pub type EcdsaVerifiedDealing = Signed<EcdsaDealing, MultiSignature<EcdsaDealing
 /// The final output of the transcript creation sequence
 pub type EcdsaTranscript = IDkgTranscript;
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum EcdsaMessageAttribute {
+    EcdsaDealing(Height),
+    EcdsaDealingSupport(Height),
+}
+
+impl From<&EcdsaMessage> for EcdsaMessageAttribute {
+    fn from(msg: &EcdsaMessage) -> EcdsaMessageAttribute {
+        match msg {
+            EcdsaMessage::EcdsaDealing(dealing) => {
+                EcdsaMessageAttribute::EcdsaDealing(dealing.requested_height)
+            }
+            EcdsaMessage::EcdsaDealingSupport(support) => {
+                EcdsaMessageAttribute::EcdsaDealingSupport(support.content.requested_height)
+            }
+        }
+    }
+}
+
 /// This is a helper trait that indicates, that somethings has a transcript
 /// type. This type can of course be queried.
 pub trait HasTranscriptType {

@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "canisters": {
+    "registry": {
+      "type": "custom",
+      "candid": "empty.did",
+      "wasm": "../target/wasm32-unknown-unknown/release/registry-canister.wasm",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p registry-canister"
+    },
+    "tokens": {
+      "type": "custom",
+      "candid": "gtc/canister/gtc.did",
+      "wasm": "../target/wasm32-unknown-unknown/release/genesis-token-canister.wasm",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p ic-nns-gtc"
+    },
+    "governance": {
+      "type": "custom",
+      "candid": "governance/canister/governance.did",
+      "wasm": "../target/wasm32-unknown-unknown/release/governance-canister.wasm",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p ic-nns-governance"
+    },
+    "root": {
+      "type": "custom",
+      "candid": "handlers/root/canister/root.did",
+      "wasm": "../target/wasm32-unknown-unknown/release/root-canister.wasm",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p ic-nns-handler-root"
+    },
+    "lifeline": {
+      "candid": "handlers/lifeline/lifeline.did"
+    }
+  },
+  "networks": {
+    "mercury": {
+      "providers": [
+        "http://[2a00:fb01:400:100:5000:61ff:fe2c:14ac]:8080"
+      ],
+      "type": "persistent"
+    },
+    "nnstestnet": {
+      "providers": [
+        "http://dcs-nns-8.dfinity.systems:8080"
+      ],
+      "type": "persistent"
+    },
+    "local": {
+      "bind": "127.0.0.1:8080"
+    }
+  }
+}

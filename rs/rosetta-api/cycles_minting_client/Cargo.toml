@@ -1,0 +1,19 @@
+[package]
+name = "cycles_minting_client"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+description = "Helper functions for transferring cycles to canisters"
+edition = "2018"
+
+[dependencies]
+dfn_candid = {path = "../../rust_canisters/dfn_candid"}
+dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
+ic-types = {path = "../../types/types"}
+ic-canister-client = { path = "../../canister_client" }
+on_wire = {path = "../../rust_canisters/on_wire"}
+ledger-canister = {path = "../ledger_canister"}
+lazy_static = "1.4.0"
+candid = "0.7.4"
+ed25519-dalek = "1.0.1"
+cycles-minting-canister = {path = "../../nns/cmc"}
+url = "2.2.1"

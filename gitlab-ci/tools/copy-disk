@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+# This is a helper script to rsync (generic) guest os image to target testnet nodes.
+# Used in:
+# * generic-guest-os-diskimg job,
+# * guest-os-diskimg job.
+# It speeds up getting the image in prod-generic-test job.
+
+set -eEuo pipefail
+
+export CDPR="$1"      # testnet name
+export DIR="${2:-''}" # to push generic diskimg to generic subdirectory
+mapfile -t HOSTS < <(ansible physical_hosts -i "$CI_PROJECT_DIR/testnet/env/$CDPR/hosts" --list-hosts | tail -n +2 | tr -d ' ')
+
+function handle_host() {
+    HOST="$1"
+
+    # shellcheck disable=SC2029
+    ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$HOST" \
+        "sudo mkdir -p /var/local/ic/disk/$CDPR/$CI_COMMIT_SHA/generic"
+    rsync -acv -e "ssh -o StrictHostKeyChecking=no" --timeout=10 --rsync-path="sudo rsync" build-out/disk-img/ \
+        "$HOST:/var/local/ic/disk/$CDPR/$CI_COMMIT_SHA/$DIR"
+}
+export -f handle_host
+
+# Ignore the failure of the script as fallback is pulling image from AWS!
+
+timeout 30 parallel --verbose --eta handle_host '{}' ::: "${HOSTS[@]}" || exit 0

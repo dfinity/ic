@@ -173,19 +173,39 @@ fn stable_memory_is_persisted() {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        canister_state.system_state.stable_memory.size = NumWasmPages64::new(2);
-        canister_state.system_state.stable_memory.page_map = PageMap::from(&[1; 100][..]);
+        canister_state
+            .execution_state
+            .as_mut()
+            .unwrap()
+            .stable_memory
+            .size = NumWasmPages64::new(2);
+        canister_state
+            .execution_state
+            .as_mut()
+            .unwrap()
+            .stable_memory
+            .page_map = PageMap::from(&[1; 100][..]);
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
         let (_height, state) = state_manager.take_tip();
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
         assert_eq!(
             NumWasmPages64::new(2),
-            canister_state.system_state.stable_memory.size
+            canister_state
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .stable_memory
+                .size
         );
         assert_eq!(
             PageMap::from(&[1; 100][..]),
-            canister_state.system_state.stable_memory.page_map
+            canister_state
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .stable_memory
+                .page_map
         );
 
         let state_manager = restart_fn(state_manager);
@@ -196,11 +216,21 @@ fn stable_memory_is_persisted() {
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
         assert_eq!(
             NumWasmPages64::new(2),
-            canister_state.system_state.stable_memory.size
+            canister_state
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .stable_memory
+                .size
         );
         assert_eq!(
             PageMap::from(&[1; 100][..]),
-            canister_state.system_state.stable_memory.page_map
+            canister_state
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .stable_memory
+                .page_map
         );
     });
 }
@@ -211,21 +241,12 @@ fn missing_stable_memory_file_is_handled() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        canister_state.execution_state = None;
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
-        let (_height, state) = state_manager.take_tip();
-        let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
-        assert_eq!(
-            NumWasmPages64::new(0),
-            canister_state.system_state.stable_memory.size
-        );
-        assert_eq!(
-            PageMap::from(&[][..]),
-            canister_state.system_state.stable_memory.page_map
-        );
-
-        // Since the canister had no stable memory, it should be fine to delete
-        // the stable memory blob.
+        // Since the canister has no execution state, there should be no stable memory
+        // file.
         let state_layout = state_manager.state_layout();
         let mutable_cp_layout = CheckpointLayout::<RwPolicy>::new(
             state_layout
@@ -239,7 +260,7 @@ fn missing_stable_memory_file_is_handled() {
 
         let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
         let canister_stable_memory = canister_layout.stable_memory_blob();
-        std::fs::remove_file(canister_stable_memory).unwrap();
+        assert!(!canister_stable_memory.exists());
 
         let state_manager = restart_fn(state_manager);
 
@@ -247,14 +268,7 @@ fn missing_stable_memory_file_is_handled() {
         assert_eq!(height(1), recovered.height());
         let state = recovered.take();
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
-        assert_eq!(
-            NumWasmPages64::new(0),
-            canister_state.system_state.stable_memory.size
-        );
-        assert_eq!(
-            PageMap::from(&[][..]),
-            canister_state.system_state.stable_memory.page_map
-        );
+        assert!(canister_state.execution_state.is_none());
     });
 }
 
@@ -846,6 +860,107 @@ fn can_keep_the_latest_snapshot_after_removal() {
     })
 }
 
+/// Test if `remove_states_below` behaves as expected after enabling purging
+/// intermediate snapshots.
+#[test]
+fn can_purge_intermediate_snapshots() {
+    state_manager_test(|_metrics, state_manager| {
+        let mut heights = vec![height(0)];
+        for i in 1..23 {
+            let (_height, state) = state_manager.take_tip();
+            heights.push(height(i));
+
+            let scope = if i % 5 == 0 {
+                CertificationScope::Full
+            } else {
+                CertificationScope::Metadata
+            };
+
+            state_manager.commit_and_certify(state, height(i), scope.clone());
+            if scope == CertificationScope::Full {
+                wait_for_checkpoint(&state_manager, height(i));
+            }
+        }
+        assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
+
+        // Checkpoint @5 is kept because it is the latest checkpoint at or below the
+        // requested height 9.
+        // Intermediate states from @6 to @8 are purged.
+        state_manager.remove_states_below(height(9));
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![
+                height(0),
+                height(5),
+                height(9),
+                height(10),
+                height(11),
+                height(12),
+                height(13),
+                height(14),
+                height(15),
+                height(16),
+                height(17),
+                height(18),
+                height(19),
+                height(20),
+                height(21),
+                height(22)
+            ],
+        );
+
+        // Checkpoints @10, @15 and @20 are kept because they are the three most recent
+        // checkpoints.
+        // Intermediate states from @16 to @18 are purged.
+        state_manager.remove_states_below(height(19));
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![
+                height(0),
+                height(10),
+                height(15),
+                height(19),
+                height(20),
+                height(21),
+                height(22)
+            ],
+        );
+
+        // Test calling `remove_states_below` at the latest checkpoint height.
+        // Intermediate states from @16 to @19 are purged.
+        state_manager.remove_states_below(height(20));
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![
+                height(0),
+                height(10),
+                height(15),
+                height(20),
+                height(21),
+                height(22)
+            ],
+        );
+
+        // Test calling `remove_states_below` at the latest state height.
+        // The intermediate state @21 is purged.
+        state_manager.remove_states_below(height(22));
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(10), height(15), height(20), height(22)],
+        );
+
+        // Test calling `remove_states_below` at a higher height than the latest state
+        // height.
+        // The intermediate state @21 is purged.
+        // The latest state should always be kept.
+        state_manager.remove_states_below(height(25));
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(10), height(15), height(20), height(22)],
+        );
+    })
+}
+
 #[test]
 fn latest_certified_state_is_updated_on_state_removal() {
     state_manager_test(|_metrics, state_manager| {
@@ -1179,7 +1294,7 @@ fn can_do_simple_state_sync_transfer() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
-        state_manager_test(|_metrics, dst_state_manager| {
+        state_manager_test(|metrics, dst_state_manager| {
             let chunkable = dst_state_manager.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
@@ -1196,6 +1311,10 @@ fn can_do_simple_state_sync_transfer() {
             assert_eq!(state, recovered_state);
             assert_eq!(*state.as_ref(), dst_state_manager.take_tip().1);
             assert_eq!(vec![height(1)], heights_to_certify(&dst_state_manager));
+            assert_eq!(
+                0,
+                fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+            );
         })
     })
 }
@@ -1219,7 +1338,7 @@ fn can_state_sync_from_cache() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
-        state_manager_test(|_metrics, dst_state_manager| {
+        state_manager_test(|metrics, dst_state_manager| {
             let omit: HashSet<ChunkId> = maplit::hashset! {ChunkId::new(1)};
 
             // First state sync is destroyed before completion
@@ -1231,6 +1350,10 @@ fn can_state_sync_from_cache() {
                 let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit);
                 assert!(completion.is_none(), "Unexpectedly completed state sync");
             }
+            assert_eq!(
+                0,
+                fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+            );
             // Second state sync continues from first state and successfully finishes
             {
                 // Same state just higher height
@@ -1266,6 +1389,10 @@ fn can_state_sync_from_cache() {
                 );
                 assert_eq!(vec![height(2)], heights_to_certify(&dst_state_manager));
             }
+            assert_eq!(
+                0,
+                fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+            );
             // Third state sync can copy all chunks immediately
             {
                 // Same state just higher height
@@ -1299,6 +1426,10 @@ fn can_state_sync_from_cache() {
                     heights_to_certify(&dst_state_manager)
                 );
             }
+            assert_eq!(
+                0,
+                fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+            );
         })
     })
 }
@@ -1320,7 +1451,7 @@ fn can_state_sync_into_existing_checkpoint() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
-        state_manager_test(|_metrics, dst_state_manager| {
+        state_manager_test(|metrics, dst_state_manager| {
             let chunkable = dst_state_manager.create_chunkable_state(&id);
 
             dst_state_manager.take_tip();
@@ -1334,6 +1465,10 @@ fn can_state_sync_into_existing_checkpoint() {
             dst_state_manager
                 .check_artifact_acceptance(dst_msg, &node_test_id(0))
                 .expect("Failed to process state sync artifact");
+            assert_eq!(
+                0,
+                fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+            );
         })
     })
 }
@@ -1358,7 +1493,7 @@ fn can_state_sync_based_on_old_checkpoint() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync message");
 
-        state_manager_test(|_metrics, dst_state_manager| {
+        state_manager_test(|metrics, dst_state_manager| {
             let (_height, mut state) = dst_state_manager.take_tip();
             insert_dummy_canister(&mut state, canister_test_id(100));
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
@@ -1378,6 +1513,10 @@ fn can_state_sync_based_on_old_checkpoint() {
             assert_eq!(
                 dst_state_manager.take_tip().1,
                 *expected_state.take().as_ref()
+            );
+            assert_eq!(
+                0,
+                fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
             );
         })
     });
@@ -1400,7 +1539,9 @@ fn can_recover_from_corruption_on_state_sync() {
 
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
         canister_state
-            .system_state
+            .execution_state
+            .as_mut()
+            .unwrap()
             .stable_memory
             .page_map
             .update(&[(PageIndex::new(0), &[255u8; PAGE_SIZE])]);

@@ -11,6 +11,8 @@ use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_registry_keys::ROOT_SUBNET_ID_KEY;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
+
+use ic_interfaces::consensus::PayloadBuilderError;
 use ic_test_utilities::{
     crypto::CryptoReturningOk,
     registry::{setup_registry_non_final, SubnetRecordBuilder},
@@ -34,10 +36,11 @@ mock! {
     pub trait PayloadBuilder {
         fn get_payload<'a>(
             &self,
+            height: Height,
             ingress_pool: &'a (dyn IngressPoolSelect + 'a),
             past_payloads: &[(Height, Time, Payload)],
             context: &ValidationContext
-        ) -> BatchPayload;
+        ) -> Result<BatchPayload, PayloadBuilderError>;
         fn validate_payload(
             &self,
             payload: &Payload,

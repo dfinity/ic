@@ -25,6 +25,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) input_queues_size_bytes: IntGaugeVec,
     pub(super) queues_response_bytes: IntGauge,
     pub(super) queues_reservations: IntGauge,
+    pub(super) queues_oversized_requests_extra_bytes: IntGauge,
     pub(super) streams_response_bytes: IntGauge,
     pub(super) canister_messages_where_cycles_were_charged: IntCounter,
     pub(super) current_heap_delta: IntGauge,
@@ -145,6 +146,10 @@ impl SchedulerMetrics {
             queues_reservations: metrics_registry.int_gauge(
                 "execution_queues_reservations",
                 "Total number of reserved slots for responses in input and output queues.",
+            ),
+            queues_oversized_requests_extra_bytes: metrics_registry.int_gauge(
+                "execution_queues_oversized_requests_extra_bytes",
+                "Total bytes above `MAX_RESPONSE_COUNT_BYTES` across oversized local-subnet requests.",
             ),
             streams_response_bytes: metrics_registry.int_gauge(
                 "execution_streams_response_size_bytes",
@@ -434,6 +439,11 @@ impl SchedulerMetrics {
 
     pub(super) fn observe_queues_reservations(&self, reservations: usize) {
         self.queues_reservations.set(reservations as i64);
+    }
+
+    pub(super) fn observe_oversized_requests_extra_bytes(&self, size_bytes: usize) {
+        self.queues_oversized_requests_extra_bytes
+            .set(size_bytes as i64);
     }
 
     pub(super) fn observe_streams_response_bytes(&self, size_bytes: usize) {

@@ -1,0 +1,8 @@
+{
+  "ledger": {
+    "exchanges": "ryjl3-tyaaa-aaaaa-aaaba-cai",
+    "ic": "5h5yf-eiaaa-aaaaa-qaada-cai",
+    "local": "75hes-oqbaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-q",
+    "mainnet-rosetta": "ryjl3-tyaaa-aaaaa-aaaba-cai"
+  }
+}

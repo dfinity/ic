@@ -454,7 +454,7 @@ impl<Pool: IngressPool + IngressGossipPool + Send + Sync> ArtifactClient<Ingress
         let range = start..=start + MAX_INGRESS_TTL;
         Some(Box::new(move |ingress_id, _| {
             if range.contains(&ingress_id.expiry()) {
-                Priority::Fetch
+                Priority::Later
             } else {
                 Priority::Drop
             }

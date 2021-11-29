@@ -1,0 +1,118 @@
+# This file will be included in the child pipeline if there ARE changes in the /rs or /ic-os/guestos folder
+#
+# - all jobs included transitively from this file (keys not starting with dot) will run.
+# - additional `cargo test` jobs will be generated for some crates by `src/gen_gitlab_cargo_pipeline`
+
+include:
+- local: /gitlab-ci/config/00--common.yml
+- local: /gitlab-ci/config/20--test--after-script.yml
+- local: /gitlab-ci/config/30--cargo-build--child-pipeline.yml
+- local: /gitlab-ci/config/40--cargo-test--child-pipeline.yml
+- local: /gitlab-ci/config/41--guest-os-build--generic-guest-os-diskimg.yml
+- local: /gitlab-ci/config/46--guest-os-build--guest-os-diskimg.yml
+- local: /gitlab-ci/config/46--guest-os-build--guest-os-updateimg.yml
+- local: /gitlab-ci/config/47--guest-os-test--guest-os-e2e-test.yml
+- local: /gitlab-ci/config/60--prod-test--spawn-hotfix-pipeline.yml
+
+.cargo-build-docker-protected:
+  needs: []  # don't wait on other jobs by default
+  extends:
+    - .ubuntu-nix-docker-protected
+    - .rules-parent-pipeline
+  stage: cargo-build
+
+.cargo-build-docker:
+  needs: []  # don't wait on other jobs by default
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline
+  stage: cargo-build
+
+.cargo-build-macos:
+  needs: []  # don't wait on other jobs by default
+  extends:
+    - .macos-nix-native
+    - .rules-parent-pipeline-master-only
+  stage: cargo-build
+
+.cargo-crate-test:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline
+  stage: cargo-test
+  needs: []  # don't wait on other jobs by default
+  artifacts:
+    reports:
+      junit: test_report.xml
+  variables:
+    # Print backtrace if a test panics
+    RUST_BACKTRACE: 1
+    CARGO_TEST_FLAGS_EXTRA: "" # Allows passing any extra flags, such as "--release"
+    CARGO_TEST_TIMEOUT: 2400 # Test build or run will be forcefully terminated after this many secs
+  script:
+    - |
+      set -eExuo pipefail
+
+      echo "${CARGO_TEST_FLAGS_EXTRA}"
+
+      # Use the nix-shell from the `rs` folder.
+      cd "${CI_PROJECT_DIR}/rs"
+      # Build the test.
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" nix-shell -- \
+      timeout -k 10 "${CARGO_TEST_TIMEOUT}" nix-shell --run "
+        buildevents cmd ${ROOT_PIPELINE_ID} ${CI_JOB_ID} cargo-build -- cargo test -p ${CI_JOB_NAME} --benches --no-run ${CARGO_TEST_FLAGS_EXTRA}
+      "
+
+      # Run the test.
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" nix-shell -- \
+      timeout -k 10 "${CARGO_TEST_TIMEOUT}" nix-shell --run "
+        set -euo pipefail
+        buildevents cmd ${ROOT_PIPELINE_ID} ${CI_JOB_ID} cargo-test -- cargo test -p ${CI_JOB_NAME} ${CARGO_TEST_FLAGS_EXTRA} -- --report-time -Z unstable-options --format=json | tee ci_output.json
+      "
+    # Test that benchmarks work properly (no stats are recorded)
+    # Not added to ci_output.json because benchmark bins don't support the unstable-options flags
+    - |
+      if [ "$CI_JOB_NAME" != "ic-nns-governance" ]; then
+        buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" nix-shell -- timeout -k 10 "${CARGO_TEST_TIMEOUT}" nix-shell --run "
+          set -euo pipefail
+          buildevents cmd ${ROOT_PIPELINE_ID} ${CI_JOB_ID} cargo-test -- cargo test --benches -p ${CI_JOB_NAME} ${CARGO_TEST_FLAGS_EXTRA}
+        "
+      fi
+
+      set +x
+      echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
+      "$RUSTC_WRAPPER" --show-stats
+      echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
+
+.cargo-crate-tests-process-per-test:
+  # Run each test in the crate in a separate processes, increasing parallelism and reducing contention
+  extends: .cargo-crate-test
+  stage: cargo-test
+  needs:
+    - cargo-build-canisters
+  script:
+    - |
+      set -eExuo pipefail
+
+      cd "${CI_PROJECT_DIR}/rs"
+
+      $SHELL_WRAPPER timeout -k 10 "${CARGO_TEST_TIMEOUT}" nix-shell --run "
+        set -eExuo pipefail
+        # Build the test binary.
+        buildevents cmd \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" cargo-build -- cargo test -p ${CI_JOB_NAME} --no-run --release
+      "
+
+      $SHELL_WRAPPER timeout -k 10 "${CARGO_TEST_TIMEOUT}" nix-shell --run "
+        set -eExuo pipefail
+        source \"$CI_PROJECT_DIR/gitlab-ci/src/canisters/wasm-build-functions.sh\"
+        export_wasm_canister_paths \"${CI_PROJECT_DIR}/artifacts/canisters\"
+
+        # Run each test in a separate process
+        cargo test -p ${CI_JOB_NAME} --release -- --list | grep ': test' | sed 's/: test$//' > /tmp/test-list.txt
+        parallel -a /tmp/test-list.txt --halt now,fail=1 --eta --results ci_output -t --joblog ci_joblog buildevents cmd \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" '{}' -- cargo test -p ${CI_JOB_NAME} --release '{}' -- --report-time -Z unstable-options --format=json
+      "
+
+      set +x
+      echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
+      "$RUSTC_WRAPPER" --show-stats
+      echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"

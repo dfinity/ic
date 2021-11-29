@@ -1,0 +1,26 @@
+---
+- hosts: prometheus
+  gather_facts: false
+  become: true
+
+  vars_files:
+    - "{{ inventory_file | dirname }}/versions.json"
+    - "config/common.yml"
+
+  tasks:
+    # Remove the IC network service discovery files on Prometheus
+
+    # Sub-directories are used to group scrape configs by job, so that the
+    # Prometheus configuration for a given job can load all the files inside
+    # a particular directory, instead of having to glob out a subset of files
+    # from a single directory.
+
+    - name: Remove the scrape configurations for {{ ic }}
+      vars:
+        ic: "{{ inventory_file | dirname | basename }}"
+      file:
+        path: /var/lib/p8s-scrape/ic_networks/{{ item }}/{{ ic }}_{{ item }}_scrape_config.json
+        state: absent
+      loop:
+        - nodemanager
+        - node_exporter

@@ -1,0 +1,41 @@
+= Nix
+
+The first chapter of the https://nixos.org/nixos/nix-pills/[Nix Pills] series
+contains a good motivation for Nix. The following briefly describes why we use
+Nix for IC development.
+
+
+== Reproducible build instructions
+
+We use Nix to compute reproducible build instructions for the packages, tests and CI
+jobs contained in this repo. It's important to have reproducible build
+instructions because this ensures that once a package builds on an engineer's
+machine it will build on a colleague's machine and on CI as well.
+
+Nix accomplishes this by running builds in an empty environment isolated from
+the host system. Only specified dependencies will be made available in this
+environment. So an unspecified but required dependency will cause the build to
+fail. This ensures that a build will only succeed when all required dependencies
+are specified.
+
+Note that Nix doesn't guarantee reproducible builds, i.e. returning the same
+build output on multiple runs of the same build instructions. However, it's a
+great basis from which to reach this Holy Grail of reproducibility.
+
+
+== Security
+
+All URLs in Nix referencing external source code need to be accompanied with a
+SHA-256 cryptographic hash of the downloaded source code. This ensures that
+whenever the downloaded code changes Nix will fail to build the package and
+complain that the computed hash doesn't match the specified expected hash.
+
+This makes it less likely that unreviewed source code ends up in our builds
+increasing security.
+
+
+== Niv
+
+We use the https://github.com/nmattia/niv[niv] tool to manage references to
+external source code. All references to external source code should be specified
+in `sources.json`. `niv` can then be used to add, update or drop dependencies.

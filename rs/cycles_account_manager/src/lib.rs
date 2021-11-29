@@ -67,7 +67,7 @@ pub struct CyclesAccountManager {
     own_subnet_type: SubnetType,
 
     /// The subnet id of this [`CyclesAccountManager`].
-    subnet_id: SubnetId,
+    own_subnet_id: SubnetId,
 
     /// The configuration of this [`CyclesAccountManager`] controlling the fees
     /// that are charged for various operations.
@@ -81,14 +81,14 @@ impl CyclesAccountManager {
         max_num_instructions: NumInstructions,
         max_cycles_per_canister: Option<Cycles>,
         own_subnet_type: SubnetType,
-        subnet_id: SubnetId,
+        own_subnet_id: SubnetId,
         config: CyclesAccountManagerConfig,
     ) -> Self {
         Self {
             max_num_instructions,
             max_cycles_per_canister,
             own_subnet_type,
-            subnet_id,
+            own_subnet_id,
             config,
         }
     }
@@ -96,6 +96,11 @@ impl CyclesAccountManager {
     /// Returns the subnet type of this [`CyclesAccountManager`].
     pub fn subnet_type(&self) -> SubnetType {
         self.own_subnet_type
+    }
+
+    /// Returns the Subnet Id of this [`CyclesAccountManager`].
+    pub fn get_subnet_id(&self) -> SubnetId {
+        self.own_subnet_id
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -297,7 +302,7 @@ impl CyclesAccountManager {
         &self,
         ingress: &SignedIngressContent,
     ) -> Result<IngressInductionCost, IngressInductionCostError> {
-        let paying_canister = if is_subnet_message(ingress, self.subnet_id) {
+        let paying_canister = if is_subnet_message(ingress, self.own_subnet_id) {
             // If a subnet message, inspect the payload to figure out who should pay for the
             // message.
             match Method::from_str(ingress.method_name()) {
@@ -583,23 +588,21 @@ impl CyclesAccountManager {
     /// Mints `amount_to_mint` [`Cycles`].
     ///
     /// # Errors
-    /// Returns a `CyclesAccountManagerError::ContractViolation` if not on a
-    /// system subnet.
+    /// Returns a `CyclesAccountManagerError::ContractViolation` if not on NNS
+    /// subnet.
     pub fn mint_cycles(
         &self,
         system_state: &mut SystemState,
         amount_to_mint: Cycles,
+        nns_subnet_id: SubnetId,
     ) -> Result<(), CyclesAccountManagerError> {
-        match self.own_subnet_type {
-            SubnetType::Application | SubnetType::VerifiedApplication => {
-                let error_str =
-                    "ic0.mint_cycles cannot be executed. Should only be called by a canister on the NNS subnet: {}".to_string();
-                Err(CyclesAccountManagerError::ContractViolation(error_str))
-            }
-            SubnetType::System => {
-                self.add_cycles(system_state, amount_to_mint);
-                Ok(())
-            }
+        if self.own_subnet_id != nns_subnet_id {
+            let error_str =
+                    format!("ic0.mint_cycles cannot be executed. Should only be called by a canister on the NNS subnet: {} != {}", self.own_subnet_id, nns_subnet_id);
+            Err(CyclesAccountManagerError::ContractViolation(error_str))
+        } else {
+            self.add_cycles(system_state, amount_to_mint);
+            Ok(())
         }
     }
 
@@ -628,7 +631,7 @@ impl CyclesAccountManager {
             // based on it accordingly.
             MemoryAllocation::Reserved(bytes) => bytes,
             // The canister uses best-effort memory allocation, so charge based on current usage.
-            MemoryAllocation::BestEffort => canister.memory_usage(),
+            MemoryAllocation::BestEffort => canister.memory_usage(self.own_subnet_type),
         };
         if let Err(err) = self.charge_for_memory(
             &mut canister.system_state,

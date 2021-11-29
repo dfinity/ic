@@ -1,0 +1,17 @@
+prod-hotfix-pipeline:
+  extends: .rules-prod-hotfix-tests
+  # Inherit the PARENT_PIPELINE_ID to associate the Honeycomb span back to the furthest parent pipeline.
+  inherit:
+    variables: [PARENT_PIPELINE_ID]
+  stage: prod-tests
+  needs: ["generic-guest-os-diskimg", "guest-os-diskimg", "guest-os-updateimg-build"]
+  variables:
+    CD_ENV: "HOTFIX"
+    TESTNET1: "cdhotfix01"
+    TESTNET2: "cdhotfix02"
+    TESTNET3: "cdhotfix03"
+    DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
+  trigger:
+    include:
+      - local: gitlab-ci/config/00--prod-test-hotfix-child-pipeline.yml
+    strategy: depend

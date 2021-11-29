@@ -1,0 +1,12 @@
+---
+# This will deploy roles only to the dfinity_owned nodes
+- hosts: dfinity_owned
+  gather_facts: false
+  become: true
+  vars:
+    - ansible_user: admin
+    - ansible_remote_tmp: /tmp
+
+  roles:
+    - role: ssh_keys_dfinity_nodes
+

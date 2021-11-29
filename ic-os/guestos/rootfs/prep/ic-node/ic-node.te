@@ -1,0 +1,232 @@
+policy_module(ic-node, 1.0.0)
+
+# Nodemanager process & executable domain type
+type ic_nodemanager_t;
+type ic_nodemanager_exec_t;
+
+# Replica process & executable domain type
+type ic_replica_t;
+type ic_replica_exec_t;
+
+# On-disk state types.
+type ic_crypto_store_t;
+type ic_data_t;
+
+###############################################################################
+# System integration bits
+
+# These are managed as separate mount points, allow mounting these.
+files_mountpoint(ic_data_t)
+files_mountpoint(ic_crypto_store_t)
+
+# Type for the root volatile data directory at /run/ic-node.
+type ic_var_run_t;
+files_type(ic_var_run_t)
+systemd_tmpfilesd_managed(ic_var_run_t, dir)
+
+# To dynamically create /var, need right to read the template fs tree
+require { type fsadm_t; }
+allow fsadm_t ic_crypto_store_t : dir { read };
+allow fsadm_t ic_data_t : dir { read };
+
+# We need to bind-mount various things in order to support read-only root
+# filesystem.
+require { type mount_t, initrc_var_run_t, net_conf_t, etc_t; }
+# Origin of bind mounts is /run/ic-node/etc, needs to be accessible.
+allow mount_t initrc_var_run_t : file { getattr };
+# Allow /etc/hostname to be bind-mounted
+allow mount_t net_conf_t : file { mounton };
+# Allow /etc/ssh and /etc/node_exporter to be bind-mounted
+allow mount_t etc_t : dir { mounton };
+
+###############################################################################
+# Node manager, basic process stuff
+
+application_domain(ic_nodemanager_t, ic_nodemanager_exec_t)
+
+# Allow it to be spawned from init scripts.
+init_daemon_domain(ic_nodemanager_t, ic_nodemanager_exec_t)
+
+# Allow launching replica
+domain_auto_transition_pattern(ic_nodemanager_t, ic_replica_exec_t, ic_replica_t)
+
+# Allow launching unrestricted sudo (in order to be able to apply upgrades).
+# This is obviously a wide breach in the security policy and will be restricted later.
+sudo_role_template(ic_nodemanager, system_r, ic_nodemanager_t)
+
+# Manage relevant files
+ic_rw_data(ic_nodemanager_t)
+ic_rw_crypto_store(ic_nodemanager_t)
+
+# For some reason, it wants to read this
+kernel_read_vm_overcommit_sysctl(ic_nodemanager_t)
+
+# Needs to read replica config.
+ic_read_replica_config(ic_nodemanager_t)
+
+corenet_tcp_bind_generic_node(ic_nodemanager_t)
+corenet_tcp_bind_all_unreserved_ports(ic_nodemanager_t)
+corenet_tcp_connect_http_cache_port(ic_nodemanager_t)
+allow ic_nodemanager_t self:tcp_socket create_stream_socket_perms;
+allow ic_nodemanager_t self:tcp_socket rw_stream_socket_perms;
+
+# wants to read openssl config and public certs
+miscfiles_read_generic_certs(ic_nodemanager_t)
+
+# Allow using locales
+miscfiles_read_localization(ic_nodemanager_t)
+
+# wants to read /opt/ic/share/version.txt
+read_files_pattern(ic_nodemanager_t, usr_t, usr_t)
+
+# we want to execute other processes (e.g. manageboot.sh to apply an update)
+corecmd_search_bin(ic_nodemanager_t)
+corecmd_exec_bin(ic_nodemanager_t)
+corecmd_exec_shell(ic_nodemanager_t)
+# we want to execute other commands while staying in the domain ic_nodemanager_t
+# this is actually absolutely not ideal: executing something else should trigger
+# a domain transition. However, we are executing shell files and no domain transition
+# is available in this case.
+allow ic_nodemanager_t bin_t : file { entrypoint };
+
+# Wants to read /sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us
+fs_read_cgroup_files(ic_nodemanager_t)
+
+# For writing updates, it needs capability to write to EFI system
+# partition (maybe we should have a specific label for that). The
+# EFI system partition in turn is mounted below /boot.
+require { type boot_t; }
+search_dirs_pattern(ic_nodemanager_t, boot_t, boot_t)
+fs_manage_dos_files(ic_nodemanager_t)
+
+# Wants to set process group
+allow ic_nodemanager_t self : process { getsched setpgid };
+
+# Create a fifo to communicate with updater process.
+allow ic_nodemanager_t self : fifo_file { getattr ioctl read write };
+
+# Allow creating arbitrary temporary files: For some reason the use of /tmp is hard-coded
+# in some places in the binary, so cannot divert this to a safer place.
+require { type tmp_t; }
+rw_dirs_pattern(ic_nodemanager_t, tmp_t, tmp_t)
+create_dirs_pattern(ic_nodemanager_t, tmp_t, tmp_t)
+delete_dirs_pattern(ic_nodemanager_t, tmp_t, tmp_t)
+list_dirs_pattern(ic_nodemanager_t, tmp_t, tmp_t)
+
+###############################################################################
+# Replica, basic process stuff
+
+application_domain(ic_replica_t, ic_replica_exec_t)
+
+# Describe replica_t as daemon domain: Quite similar to what init_daemon_domain does.
+# This would all look a lot simpler if init were to start replica directly
+# (instead of nodemanager being there as an intermediary -- in some sense,
+# nodemanager has the role of "init", so we need similar policy).
+typeattribute ic_replica_t daemon;
+domain_type(ic_replica_t)
+domain_entry_file(ic_replica_t, ic_replica_exec_t)
+role system_r types ic_replica_t;
+init_dontaudit_use_fds(ic_replica_t)
+term_dontaudit_use_console(ic_replica_t)
+init_use_script_ptys(ic_replica_t)
+allow ic_nodemanager_t ic_replica_t : process rlimitinh;
+
+# Use inherited file descriptors.
+allow ic_replica_t ic_nodemanager_t : fd use;
+
+# Manage relevant files
+ic_rw_data(ic_replica_t)
+ic_rw_crypto_store(ic_replica_t)
+
+# wants to read openssl config and public certs
+miscfiles_read_generic_certs(ic_replica_t)
+
+# Allow using locales
+miscfiles_read_localization(ic_replica_t)
+
+# Allow to turn anonymous memory executable (required for the native code
+# compiled from wasm inside the process). This is obviously not desirable
+# from security POV.
+allow ic_replica_t self : process { execmem };
+
+# Wants to set process group
+allow ic_replica_t self : process { getsched setpgid signal };
+
+# For some reason, it wants to read this
+kernel_read_vm_overcommit_sysctl(ic_replica_t)
+
+# Needs to read replica config.
+ic_read_replica_config(ic_replica_t)
+
+# Networking
+corenet_tcp_bind_generic_node(ic_replica_t)
+corenet_tcp_bind_all_unreserved_ports(ic_replica_t)
+corenet_tcp_bind_http_port(ic_replica_t)
+corenet_tcp_bind_websm_port(ic_replica_t)
+corenet_tcp_connect_all_unreserved_ports(ic_replica_t)
+allow ic_replica_t self:tcp_socket create_stream_socket_perms;
+allow ic_replica_t self:tcp_socket rw_stream_socket_perms;
+
+# Rocksdb wants to read /sys/kernel/mm/transparent_hugepage/enabled
+# Maybe deny and dev_dontaudit_read_sysfs(ic_replica_t) instead?
+dev_read_sysfs(ic_replica_t)
+
+# for some reasons, it wants to search /bin
+corecmd_search_bin(ic_replica_t)
+
+# Wants to read /sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us
+fs_read_cgroup_files(ic_replica_t)
+
+# Allow creating arbitrary temporary files: For some reason the use of /tmp is hard-coded
+# in some places in the binary, so cannot divert this to a safer place.
+require { type tmp_t; }
+rw_dirs_pattern(ic_replica_t, tmp_t, tmp_t)
+create_dirs_pattern(ic_replica_t, tmp_t, tmp_t)
+
+# Replica seems to be creating an internal unix socket
+allow ic_replica_t self : unix_stream_socket { create };
+
+# It is not clear why replica needs this.
+allow ic_replica_t fs_t : filesystem { getattr };
+
+# Wants to read /proc/sys/kernel/osrelease
+kernel_read_kernel_sysctls(ic_replica_t)
+
+###############################################################################
+# Config file handling
+
+# The generated ic replica config file at /run/ic-node/config/ic.json5
+type ic_replica_conffile_t;
+files_type(ic_replica_conffile_t)
+
+# Allow tmpfilesd to manage the directory
+systemd_tmpfilesd_managed(ic_replica_conffile_t, dir)
+require { type systemd_tmpfiles_t; }
+list_dirs_pattern(systemd_tmpfiles_t, ic_replica_conffile_t, ic_replica_conffile_t)
+
+###############################################################################
+# Dynamic nftables handling
+
+# Type for the nftables ruleset at /run/ic-node/nftables-ruleset and
+# the nftables.conf file stored there.
+type ic_nftables_ruleset_t;
+files_type(ic_nftables_ruleset_t)
+
+# Allow tmpfiles to set this up for us.
+systemd_tmpfilesd_managed(ic_nftables_ruleset_t, dir)
+systemd_tmpfilesd_managed(ic_nftables_ruleset_t, file)
+require { type systemd_tmpfiles_t; }
+create_files_pattern(systemd_tmpfiles_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
+list_dirs_pattern(systemd_tmpfiles_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
+write_files_pattern(systemd_tmpfiles_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
+
+# Allow nftables to access this. Needs access to all parts of the path.
+require { type iptables_t; }
+search_dirs_pattern(iptables_t, var_run_t, ic_var_run_t)
+search_dirs_pattern(iptables_t, ic_var_run_t, ic_nftables_ruleset_t)
+read_files_pattern(iptables_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
+
+# Allow nodemanager to write nftables ruleset
+manage_files_pattern(ic_nodemanager_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
+
+

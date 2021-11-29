@@ -19,3 +19,4 @@ dfn_candid = {path="../../../rust_canisters/dfn_candid"}
 ic-ic00-types = {path="../../../types/ic00_types"}
 ic-nns-common ={path="../../common"}
 ic-nns-handler-root={path="../root"}
+ic-nns-test-utils = { path = "../../../nns/test_utils" }

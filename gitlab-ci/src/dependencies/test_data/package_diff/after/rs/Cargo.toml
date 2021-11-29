@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+  "ic-fake1",
+  "ic-fake2",
+]
+
+# Modifying root toml file to ensure parsing doesn't break.

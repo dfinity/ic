@@ -1,8 +1,8 @@
 //! States capturing the stages of the non-interactive DKG protocol.
-pub mod cache;
 
 use super::*;
 use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
+use crate::server::api::CspVault;
 use crate::threshold::ni_dkg::static_api as ni_dkg_static_api;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
@@ -50,7 +50,7 @@ pub fn random_algorithm_id(rng: &mut ChaCha20Rng) -> AlgorithmId {
 pub struct MockNode {
     pub node_id: NodeId,
     pub fs_key_id: KeyId,
-    pub csp_server: LocalCspServer<ChaCha20Rng, VolatileSecretKeyStore, VolatileSecretKeyStore>,
+    pub csp_vault: Arc<dyn CspVault>,
 }
 impl MockNode {
     pub fn random(rng: &mut ChaCha20Rng) -> Self {
@@ -59,11 +59,14 @@ impl MockNode {
     }
     pub fn from_node_id(rng: &mut ChaCha20Rng, node_id: NodeId) -> Self {
         let csprng = ChaCha20Rng::from_seed(rng.gen::<[u8; 32]>());
-        let csp_server = LocalCspServer::new_for_test(csprng, VolatileSecretKeyStore::new());
+        let csp_vault: Arc<dyn CspVault> = Arc::new(LocalCspVault::new_for_test(
+            csprng,
+            VolatileSecretKeyStore::new(),
+        ));
         Self {
             node_id,
             fs_key_id: KeyId::from([0; 32]), // dummy value, overwritten during network construction
-            csp_server,
+            csp_vault,
         }
     }
     /// Deal, resharing or not.
@@ -81,7 +84,7 @@ impl MockNode {
             resharing_public_coefficients.map(|resharing_public_coefficients| {
                 key_id_from_csp_pub_coeffs(&resharing_public_coefficients)
             });
-        self.csp_server
+        self.csp_vault
             .create_dealing(
                 algorithm_id,
                 dealer_index,
@@ -118,7 +121,7 @@ impl MockNetwork {
                 println!("Creating fs keys for {}", node_id);
                 let (id, (pubkey, _pop)) = (
                     *node_id,
-                    node.csp_server
+                    node.csp_vault
                         .gen_forward_secure_key_pair(*node_id, AlgorithmId::NiDkg_Groth20_Bls12_381)
                         .unwrap_or_else(|_| {
                             panic!(
@@ -430,7 +433,7 @@ impl StateWithTranscript {
                 .nodes_by_node_id
                 .get_mut(&node_id)
                 .expect("Config refers to a NodeId not in the network");
-            node.csp_server
+            node.csp_vault
                 .load_threshold_signing_key(
                     self.config.algorithm_id,
                     self.config.epoch,

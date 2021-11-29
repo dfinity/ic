@@ -39,6 +39,7 @@ bench = false
 [dev-dependencies]
 assert_matches = "1.3.0"
 criterion = "0.3"
+criterion-time = { path = "../criterion_time" }
 ic-crypto = { path = "../crypto" }
 ic-sys = { path = "../sys" }
 ic-test-utilities = { path = "../test_utilities" }

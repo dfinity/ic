@@ -88,8 +88,6 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
     fn from(item: &SubnetCallContextManager) -> Self {
         Self {
             next_callback_id: item.next_callback_id,
-            // [CON-564] Remove the deprecated SubnetCallContext from the protobuf
-            contexts: vec![],
             setup_initial_dkg_contexts: item
                 .setup_initial_dkg_contexts
                 .iter()
@@ -128,15 +126,6 @@ impl TryFrom<pb_metadata::SubnetCallContextManager> for SubnetCallContextManager
     type Error = ProxyDecodeError;
     fn try_from(item: pb_metadata::SubnetCallContextManager) -> Result<Self, Self::Error> {
         let mut setup_initial_dkg_contexts = BTreeMap::<CallbackId, SetupInitialDkgContext>::new();
-        for entry in item.contexts {
-            if let Some(context) = entry.context {
-                let context: SetupInitialDkgContext = try_from_option_field(
-                    context.setup_initial_dkg_context,
-                    "SystemMetadata::SubnetCallContextManager::SetupInitialDkgContext",
-                )?;
-                setup_initial_dkg_contexts.insert(CallbackId::new(entry.callback_id), context);
-            }
-        }
         for entry in item.setup_initial_dkg_contexts {
             let context: SetupInitialDkgContext =
                 try_from_option_field(entry.context, "SystemMetadata::SetupInitialDkgContext")?;

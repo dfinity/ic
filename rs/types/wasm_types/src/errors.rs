@@ -97,7 +97,14 @@ pub enum WasmInstrumentationError {
     /// Failure in party_wasm when serializing the wasm module
     ParitySerializeError(ParityWasmError),
     /// Incorrect number of memory sections
-    IncorrectNumberMemorySections { expected: usize, got: usize },
+    IncorrectNumberMemorySections {
+        expected: usize,
+        got: usize,
+    },
+    InvalidDataSegment {
+        offset: usize,
+        len: usize,
+    },
 }
 
 impl std::fmt::Display for WasmInstrumentationError {
@@ -113,6 +120,11 @@ impl std::fmt::Display for WasmInstrumentationError {
                 f,
                 "Wasm module has {} memory sections but should have had {}",
                 got, expected
+            ),
+            Self::InvalidDataSegment { offset, len } => write!(
+                f,
+                "Wasm module has invalid data segment of {} bytes at {}",
+                len, offset
             ),
         }
     }

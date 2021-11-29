@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -eux
+PRODUCTION_SERVICE_WORKER_DIR=../../boundary_node/ansible/roles/boundary_node/files/service_worker
+test -e "$PRODUCTION_SERVICE_WORKER_DIR" || {
+    echo "ERROR: Please link ../../boundary_node at the boundary node directory"
+    exit 1
+}
+npm run clean
+npm ic
+npm run build
+rm -fr "$PRODUCTION_SERVICE_WORKER_DIR"
+mv dist/ "$PRODUCTION_SERVICE_WORKER_DIR"
+pushd "$PRODUCTION_SERVICE_WORKER_DIR"
+git add .
+popd

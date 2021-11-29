@@ -1,0 +1,17 @@
+[Unit]
+Description=Set shared-data storage
+DefaultDependencies=no
+Requires=dev-mapper-store\x2dshared\x2d\x2ddata.device
+After=dev-mapper-store\x2dshared\x2d\x2ddata.device
+Before=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2ddata.service
+Before=var-lib-ic-data\x2dnode.mount
+
+[Install]
+RequiredBy=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2ddata.service
+RequiredBy=var-lib-ic-data\x2dnode.mount
+WantedBy=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-shared-data.sh

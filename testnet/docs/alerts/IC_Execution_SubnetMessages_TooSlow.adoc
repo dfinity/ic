@@ -1,0 +1,28 @@
+:url-subnet-message-duration-by-type: https://grafana.dfinity.systems/d/GWlsOrn7z/execution-metrics-2-0?viewPanel=59&orgId=1&from=now-30m&to=now&var-ic=mercury&var-ic_subnet=All&var-instance=All&var-node_instance=All&var-heatmap_period=$__auto_interval_heatmap_period
+
+= IC_Execution_SubnetMessages_TooSlow
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+Subnet messages take longer than 200 seconds to complete over the last hour.
+
+== Impact
+
+Longer execution time of subnet messages can slow down the subnet to an extent that the whole
+execution round takes longer which could eventually result in a drop of the block finalization rate.
+
+== Possible causes (non-exhaustive)
+
+- Subnet messages might be taking longer because user defined hooks (e.g. pre_upgrade, post_upgrade) do a lot of heavy computation that isn't properly reflected by the allowed instructions limit.
+
+- Bug in the code could result in messages taking longer.
+
+== Troubleshooting and remediation
+
+- Check {url-subnet-message-duration-by-type}[this panel] to determine whether only one type of subnet messages is the culprit (most likely suspect would be `install_code`) or all of them are affected. Additionally, you can check the replica logs for `"Finished executing"` messages.
+
+- If all of them are affected, check whether a recent rollout of the replica introduced a bug.
+
+- If a specific type of message is getting slower, check replica logs to find out which canister (if it's the same) is the one running the longer messages. Escalate to the execution team with the canister ID(s).

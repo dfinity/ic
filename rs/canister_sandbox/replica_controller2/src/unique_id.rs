@@ -15,7 +15,7 @@
 //! integer representation.
 
 use std::cmp::Eq;
-use std::fmt;
+use std::fmt::{self, Display};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -35,13 +35,13 @@ impl UniqueId {
     }
 
     pub fn as_usize(&self) -> usize {
-        Arc::<()>::as_ptr(&self.repr) as usize
+        Arc::as_ptr(&self.repr) as usize
     }
 }
 
 impl PartialEq for UniqueId {
     fn eq(&self, other: &Self) -> bool {
-        Arc::<()>::as_ptr(&self.repr) == Arc::<()>::as_ptr(&other.repr)
+        Arc::as_ptr(&self.repr) == Arc::as_ptr(&other.repr)
     }
 }
 
@@ -49,19 +49,19 @@ impl Eq for UniqueId {}
 
 impl Hash for UniqueId {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        Arc::<()>::as_ptr(&self.repr).hash(state);
+        Arc::as_ptr(&self.repr).hash(state);
     }
 }
 
 impl fmt::Debug for UniqueId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Arc::<()>::as_ptr(&self.repr).fmt(f)
+        Arc::as_ptr(&self.repr).fmt(f)
     }
 }
 
-impl ToString for UniqueId {
-    fn to_string(&self) -> String {
-        format!("{:p}", Arc::<()>::as_ptr(&self.repr))
+impl Display for UniqueId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:p}", Arc::as_ptr(&self.repr))
     }
 }
 

@@ -1,0 +1,56 @@
+---
+
+- name: import tasks prepare
+  import_tasks: "prepare.yml"
+  when: ic_state == "create"
+  tags: [ "ic_guest" ]
+
+- name: import tasks disk_pull
+  import_tasks: "disk_pull.yml"
+  when: ic_state == "create" and (ic_disk_path | length == 0)
+  tags: [ "ic_guest" ]
+
+- name: import tasks disk_push
+  import_tasks: "disk_push.yml"
+  when: ic_state == "create" and (ic_disk_path | length > 0)
+  tags: [ "ic_guest" ]
+
+- name: import tasks disk_push
+  import_tasks: "generic_disk_push.yml"
+  when: ic_state == "create" and ic_disk_path
+  tags: [ "ic_guest" ]
+
+- name: import tasks media_pull
+  import_tasks: "media_pull.yml"
+  when: ic_state == "create" and (ic_media_path | length == 0)
+  tags: [ "ic_guest" ]
+
+- name: import tasks media_push
+  import_tasks: "media_push.yml"
+  when: ic_state == "create" and (ic_media_path | length > 0)
+  tags: [ "ic_guest" ]
+
+- name: import tasks
+  import_tasks: "create.yml"
+  when: ic_state == "create"
+  tags: [ "ic_guest" ]
+
+- name: import tasks start
+  import_tasks: "start.yml"
+  when: ic_state == "start"
+  tags: [ "ic_guest" ]
+
+- name: import tasks install
+  import_tasks: "install.yml"
+  when: ic_state == "install"
+  tags: [ "ic_guest" ]
+
+- name: import tasks stop
+  import_tasks: "stop.yml"
+  when: ic_state == "stop"
+  tags: [ "ic_guest" ]
+
+- name: import tasks destroy
+  import_tasks: "destroy.yml"
+  when: ic_state == "destroy"
+  tags: [ "ic_guest" ]

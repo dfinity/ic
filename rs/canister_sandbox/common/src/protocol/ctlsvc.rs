@@ -1,6 +1,8 @@
 use crate::protocol::{logging::LogRequest, structs, syscall};
 use serde::{Deserialize, Serialize};
 
+use super::id::ExecId;
+
 // This defines the RPC service methods offered by the controller process
 // (used by the sandbox) as well as the expected replies.
 
@@ -8,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ExecFinishedRequest {
     // Id for this run, as set up by controller.
-    pub exec_id: String,
+    pub exec_id: ExecId,
 
     pub exec_output: structs::ExecOutput,
 }
@@ -19,7 +21,7 @@ pub struct ExecFinishedReply {}
 #[derive(Serialize, Deserialize, Clone)]
 pub struct CanisterSystemCallRequest {
     // Id for this run, as set up by controller.
-    pub exec_id: String,
+    pub exec_id: ExecId,
 
     // The actual system call and its arguments.
     pub request: syscall::Request,

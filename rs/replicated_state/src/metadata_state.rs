@@ -120,7 +120,7 @@ pub struct SystemMetadata {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NetworkTopology {
     pub subnets: BTreeMap<SubnetId, SubnetTopology>,
-    pub routing_table: RoutingTable,
+    pub routing_table: Arc<RoutingTable>,
     pub nns_subnet_id: SubnetId,
 }
 
@@ -145,7 +145,7 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                     subnet_topology: Some(subnet_topology.into()),
                 })
                 .collect(),
-            routing_table: Some(item.routing_table.clone().into()),
+            routing_table: Some(item.routing_table.as_ref().into()),
             nns_subnet_id: Some(subnet_id_into_protobuf(item.nns_subnet_id)),
         }
     }
@@ -177,7 +177,8 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             routing_table: try_from_option_field(
                 item.routing_table,
                 "NetworkTopology::routing_table",
-            )?,
+            )
+            .map(Arc::new)?,
             nns_subnet_id,
         })
     }

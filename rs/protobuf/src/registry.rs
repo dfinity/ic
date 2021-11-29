@@ -10,3 +10,4 @@ pub mod provisional_whitelist;
 pub mod replica_version;
 pub mod routing_table;
 pub mod subnet;
+pub mod unassigned_nodes_config;

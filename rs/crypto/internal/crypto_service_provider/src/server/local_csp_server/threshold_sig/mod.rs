@@ -1,15 +1,13 @@
 use crate::api::CspThresholdSignError;
 use crate::secret_key_store::SecretKeyStore;
 use crate::server::api::CspThresholdSignatureKeygenError;
-use crate::server::api::ThresholdSignatureCspServer;
-use crate::server::local_csp_server::LocalCspServer;
-#[cfg(test)]
+use crate::server::api::ThresholdSignatureCspVault;
+use crate::server::local_csp_server::LocalCspVault;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::types::{CspSignature, ThresBls12_381_Signature};
 use ic_crypto_internal_threshold_sig_bls12381 as bls12381_clib;
 use ic_types::crypto::CryptoError;
 use ic_types::crypto::{AlgorithmId, KeyId};
-#[cfg(test)]
 use ic_types::Randomness;
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
@@ -17,7 +15,6 @@ use std::convert::TryFrom;
 #[cfg(test)]
 pub(crate) mod tests;
 
-#[cfg(test)]
 impl From<CryptoError> for CspThresholdSignatureKeygenError {
     fn from(crypto_error: CryptoError) -> Self {
         match crypto_error {
@@ -46,18 +43,22 @@ impl From<CspThresholdSignatureKeygenError> for CryptoError {
             CspThresholdSignatureKeygenError::InvalidArgument { message } => {
                 CryptoError::InvalidArgument { message }
             }
+            CspThresholdSignatureKeygenError::InternalError { internal_error } => {
+                CryptoError::InvalidArgument {
+                    message: internal_error,
+                }
+            }
         }
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdSignatureCspServer
-    for LocalCspServer<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdSignatureCspVault
+    for LocalCspVault<R, S, C>
 {
     /// See the trait for documentation.
     ///
     /// Warning: The secret key store has no transactions, so in the event of
     /// a failure it is possible that some but not all keys are written.
-    #[cfg(test)]
     fn threshold_keygen_for_test(
         &self,
         algorithm_id: AlgorithmId,

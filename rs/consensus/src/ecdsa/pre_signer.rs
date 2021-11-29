@@ -14,8 +14,12 @@ use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
     EcdsaBlockReader, EcdsaBlockReaderImpl, EcdsaDealing, EcdsaDealingSupport, EcdsaMessage,
+    EcdsaVerifiedDealing,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgTranscriptId, IDkgTranscriptParams};
+use ic_types::consensus::MultiSignature;
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    IDkgMultiSignedDealing, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptParams,
+};
 use ic_types::{Height, NodeId};
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -25,6 +29,10 @@ use std::sync::Arc;
 pub(crate) trait EcdsaPreSigner: Send {
     /// The on_state_change() called from the main ECDSA path.
     fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet;
+
+    /// Returns the transcripts that can be successfully built from
+    /// the current entries in the ECDSA pool
+    fn get_completed_transcripts(&self, ecdsa_pool: &dyn EcdsaPool) -> Vec<IDkgTranscript>;
 }
 
 pub(crate) struct EcdsaPreSignerImpl {
@@ -329,6 +337,63 @@ impl EcdsaPreSignerImpl {
         ret
     }
 
+    /// Purges the entries no longer needed from the artifact pool
+    fn purge_artifacts(
+        &self,
+        ecdsa_pool: &dyn EcdsaPool,
+        block_reader: &dyn EcdsaBlockReader,
+    ) -> EcdsaChangeSet {
+        let mut in_progress = BTreeSet::new();
+        for transcript_params in block_reader.requested_transcripts() {
+            in_progress.insert(transcript_params.transcript_id);
+        }
+
+        let mut ret = Vec::new();
+        let current_height = block_reader.height();
+
+        // Unvalidated dealings.
+        let mut action = ecdsa_pool
+            .unvalidated()
+            .dealings()
+            .filter(|(_, dealing)| self.should_purge(dealing, current_height, &in_progress))
+            .map(|(id, _)| EcdsaChangeAction::RemoveUnvalidated(id))
+            .collect();
+        ret.append(&mut action);
+
+        // Validated dealings.
+        let mut action = ecdsa_pool
+            .validated()
+            .dealings()
+            .filter(|(_, dealing)| self.should_purge(dealing, current_height, &in_progress))
+            .map(|(id, _)| EcdsaChangeAction::RemoveValidated(id))
+            .collect();
+        ret.append(&mut action);
+
+        // Unvalidated dealing support.
+        let mut action = ecdsa_pool
+            .unvalidated()
+            .dealing_support()
+            .filter(|(_, support)| {
+                self.should_purge(&support.content, current_height, &in_progress)
+            })
+            .map(|(id, _)| EcdsaChangeAction::RemoveUnvalidated(id))
+            .collect();
+        ret.append(&mut action);
+
+        // Validated dealing support.
+        let mut action = ecdsa_pool
+            .validated()
+            .dealing_support()
+            .filter(|(_, support)| {
+                self.should_purge(&support.content, current_height, &in_progress)
+            })
+            .map(|(id, _)| EcdsaChangeAction::RemoveValidated(id))
+            .collect();
+        ret.append(&mut action);
+
+        ret
+    }
+
     /// Helper to create dealing
     fn crypto_create_dealing(
         &self,
@@ -502,6 +567,50 @@ impl EcdsaPreSignerImpl {
             )
     }
 
+    /// Helper to combine the multi sig shares for a dealing
+    fn crypto_aggregate_dealing_support(
+        &self,
+        transcript_params: &IDkgTranscriptParams,
+        support_shares: &[&EcdsaDealingSupport],
+    ) -> Option<MultiSignature<EcdsaDealing>> {
+        // Check if we have enough shares for aggregation
+        if support_shares.len() < (transcript_params.verification_threshold().get() as usize) {
+            return None;
+        }
+
+        let mut signatures = Vec::new();
+        for support_share in support_shares {
+            signatures.push(&support_share.signature);
+        }
+
+        self.crypto
+            .aggregate(signatures, transcript_params.registry_version)
+            .map_or_else(
+                |_| {
+                    self.metrics
+                        .pre_sign_errors_inc("aggregate_dealing_support");
+                    None
+                },
+                Some,
+            )
+    }
+
+    /// Helper to create the transcript from the verified dealings
+    fn crypto_create_transcript(
+        &self,
+        transcript_params: &IDkgTranscriptParams,
+        verified_dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    ) -> Option<IDkgTranscript> {
+        IDkgProtocol::create_transcript(&*self.crypto, transcript_params, verified_dealings)
+            .map_or_else(
+                |_| {
+                    self.metrics.pre_sign_errors_inc("create_transcript");
+                    None
+                },
+                Some,
+            )
+    }
+
     /// Checks if the we have a valid dealing from the dealer for the given
     /// transcript
     fn has_dealer_issued_dealing(
@@ -532,6 +641,16 @@ impl EcdsaPreSignerImpl {
                     && support.content.transcript_id == *transcript_id
                     && support.signature.signer == *node_id
             })
+    }
+
+    /// Checks if the dealing should be purged
+    fn should_purge(
+        &self,
+        dealing: &EcdsaDealing,
+        current_height: Height,
+        in_progress: &BTreeSet<IDkgTranscriptId>,
+    ) -> bool {
+        dealing.requested_height <= current_height && !in_progress.contains(&dealing.transcript_id)
     }
 }
 
@@ -568,14 +687,78 @@ impl EcdsaPreSigner for EcdsaPreSignerImpl {
                 &metrics.on_state_change_duration,
             )
         };
+        let purge_artifacts = || {
+            timed_call(
+                "purge_artifacts",
+                || self.purge_artifacts(ecdsa_pool, &block_reader),
+                &metrics.on_state_change_duration,
+            )
+        };
 
-        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 4] = [
+        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 5] = [
             &send_dealings,
             &validate_dealings,
             &send_dealing_support,
             &validate_dealing_support,
+            &purge_artifacts,
         ];
         self.schedule.call_next(&calls)
+    }
+
+    fn get_completed_transcripts(&self, ecdsa_pool: &dyn EcdsaPool) -> Vec<IDkgTranscript> {
+        // TranscriptId -> TranscriptParams
+        let block_reader = EcdsaBlockReaderImpl::new(self.consensus_cache.finalized_block());
+        let mut trancript_state_map = BTreeMap::new();
+        for transcript_params in block_reader.requested_transcripts() {
+            trancript_state_map.insert(
+                transcript_params.transcript_id,
+                TranscriptState::new(transcript_params),
+            );
+        }
+
+        // Step 1: Build the verified dealings from the support shares
+        for (_, dealing) in ecdsa_pool.validated().dealings() {
+            let transcript_state = match trancript_state_map.get_mut(&dealing.transcript_id) {
+                Some(state) => state,
+                None => continue,
+            };
+
+            // Collect the shares for this dealing and aggregate the shares
+            // TODO: do preprocessing to avoid repeated walking of the
+            // support pool
+            let support_shares: Vec<&EcdsaDealingSupport> = ecdsa_pool
+                .validated()
+                .dealing_support()
+                .filter_map(|(_, support)| {
+                    if support.content.transcript_id == dealing.transcript_id
+                        && support.content.dealer_id == dealing.dealer_id
+                    {
+                        Some(support)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            if let Some(multi_sig) = self.crypto_aggregate_dealing_support(
+                transcript_state.transcript_params,
+                &support_shares,
+            ) {
+                transcript_state.add_completed_dealing(dealing, multi_sig);
+            }
+        }
+
+        // Step 2: Build the transcripts from the verified dealings
+        let mut completed_transcripts = Vec::new();
+        for transcript_state in trancript_state_map.values() {
+            if let Some(transcript) = self.crypto_create_transcript(
+                transcript_state.transcript_params,
+                &transcript_state.completed_dealings,
+            ) {
+                completed_transcripts.push(transcript);
+            }
+        }
+        completed_transcripts
     }
 }
 
@@ -638,13 +821,44 @@ impl<'a> Debug for Action<'a> {
     }
 }
 
+/// Helper to hold the per-transcript state during the transcript
+/// building process
+struct TranscriptState<'a> {
+    transcript_params: &'a IDkgTranscriptParams,
+    completed_dealings: BTreeMap<NodeId, IDkgMultiSignedDealing>,
+}
+
+impl<'a> TranscriptState<'a> {
+    fn new(transcript_params: &'a IDkgTranscriptParams) -> Self {
+        Self {
+            transcript_params,
+            completed_dealings: BTreeMap::new(),
+        }
+    }
+
+    // Adds a completed dealing to the transcript state. The dealing
+    // is stored in the IDkgMultiSignedDealing format
+    fn add_completed_dealing(
+        &mut self,
+        dealing: &'a EcdsaDealing,
+        multi_sig: MultiSignature<EcdsaDealing>,
+    ) {
+        let verified_dealing = EcdsaVerifiedDealing {
+            content: dealing.clone(),
+            signature: multi_sig,
+        };
+        self.completed_dealings
+            .insert(dealing.dealer_id, verified_dealing.into());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::consensus::mocks::{dependencies, Dependencies};
-    use ic_artifact_pool::ecdsa_objects::EcdsaObject;
     use ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
+    use ic_ecdsa_object::EcdsaObject;
     use ic_interfaces::artifact_pool::UnvalidatedArtifact;
     use ic_interfaces::ecdsa::MutableEcdsaPool;
     use ic_interfaces::time_source::TimeSource;
@@ -658,7 +872,7 @@ mod tests {
         IDkgTranscriptParams,
     };
     use ic_types::crypto::AlgorithmId;
-    use ic_types::{Height, NumberOfNodes, RegistryVersion};
+    use ic_types::{Height, RegistryVersion};
     use std::collections::BTreeSet;
 
     // Implementation of EcdsaBlockReader to inject the test transcript params
@@ -725,15 +939,13 @@ mod tests {
         });
         IDkgTranscriptParams::new(
             transcript_id,
-            NumberOfNodes::from(dealers.len() as u32),
             IDkgDealers::new(dealers).unwrap(),
-            NumberOfNodes::from(receivers.len() as u32),
             IDkgReceivers::new(receivers).unwrap(),
-            NumberOfNodes::from(1),
             RegistryVersion::from(0),
-            AlgorithmId::Placeholder,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
             IDkgTranscriptOperation::Random,
         )
+        .unwrap()
     }
 
     // Creates a test dealing
@@ -801,6 +1013,21 @@ mod tests {
     fn is_moved_to_validated(change_set: &[EcdsaChangeAction], msg_id: &EcdsaMessageId) -> bool {
         for action in change_set {
             if let EcdsaChangeAction::MoveToValidated(id) = action {
+                if *id == *msg_id {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    // Checks that artifact is being removed from validated pool
+    fn is_removed_from_validated(
+        change_set: &[EcdsaChangeAction],
+        msg_id: &EcdsaMessageId,
+    ) -> bool {
+        for action in change_set {
+            if let EcdsaChangeAction::RemoveValidated(id) = action {
                 if *id == *msg_id {
                     return true;
                 }
@@ -1456,6 +1683,192 @@ mod tests {
                 let change_set = pre_signer.validate_dealing_support(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_handle_invalid(&change_set, &msg_id));
+            })
+        })
+    }
+
+    // Tests purging of dealings from unvalidated pool
+    #[test]
+    fn test_ecdsa_purge_unvalidated_dealings() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
+                let time_source = FastForwardTimeSource::new();
+                let (id_1, id_2, id_3) = (
+                    IDkgTranscriptId(1),
+                    IDkgTranscriptId(2),
+                    IDkgTranscriptId(3),
+                );
+
+                // Dealing 1: height <= current_height, in_progress (not purged)
+                let mut dealing_1 = create_dealing(id_1, NODE_2);
+                dealing_1.requested_height = Height::from(20);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaDealing(dealing_1),
+                    peer_id: NODE_2,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Dealing 2: height <= current_height, !in_progress (purged)
+                let mut dealing_2 = create_dealing(id_2, NODE_2);
+                dealing_2.requested_height = Height::from(20);
+                let key = dealing_2.key();
+                let msg_id_2 = EcdsaDealing::key_to_outer_hash(&key);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaDealing(dealing_2),
+                    peer_id: NODE_2,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Dealing 3: height > current_height (not purged)
+                let mut dealing_3 = create_dealing(id_3, NODE_2);
+                dealing_3.requested_height = Height::from(200);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaDealing(dealing_3),
+                    peer_id: NODE_2,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                let t = create_transcript_param(id_1, &[NODE_2], &[NODE_4]);
+                let block_reader = TestEcdsaBlockReader::new(Height::from(100), vec![t]);
+                let change_set = pre_signer.purge_artifacts(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+            })
+        })
+    }
+
+    // Tests purging of dealings from validated pool
+    #[test]
+    fn test_ecdsa_purge_validated_dealings() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    IDkgTranscriptId(1),
+                    IDkgTranscriptId(2),
+                    IDkgTranscriptId(3),
+                );
+
+                // Dealing 1: height <= current_height, in_progress (not purged)
+                let mut dealing_1 = create_dealing(id_1, NODE_2);
+                dealing_1.requested_height = Height::from(20);
+
+                // Dealing 2: height <= current_height, !in_progress (purged)
+                let mut dealing_2 = create_dealing(id_2, NODE_2);
+                dealing_2.requested_height = Height::from(20);
+                let key = dealing_2.key();
+                let msg_id_2 = EcdsaDealing::key_to_outer_hash(&key);
+
+                // Dealing 3: height > current_height (not purged)
+                let mut dealing_3 = create_dealing(id_3, NODE_2);
+                dealing_3.requested_height = Height::from(200);
+
+                let change_set = vec![
+                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealing(dealing_1)),
+                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealing(dealing_2)),
+                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealing(dealing_3)),
+                ];
+                ecdsa_pool.apply_changes(change_set);
+
+                let t = create_transcript_param(id_1, &[NODE_2], &[NODE_4]);
+                let block_reader = TestEcdsaBlockReader::new(Height::from(100), vec![t]);
+                let change_set = pre_signer.purge_artifacts(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id_2));
+            })
+        })
+    }
+
+    // Tests purging of dealing support from unvalidated pool
+    #[test]
+    fn test_ecdsa_purge_unvalidated_dealing_support() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
+                let time_source = FastForwardTimeSource::new();
+                let (id_1, id_2, id_3) = (
+                    IDkgTranscriptId(1),
+                    IDkgTranscriptId(2),
+                    IDkgTranscriptId(3),
+                );
+
+                // Support 1: height <= current_height, in_progress (not purged)
+                let mut support_1 = create_support(id_1, NODE_2, NODE_3);
+                support_1.content.requested_height = Height::from(20);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaDealingSupport(support_1),
+                    peer_id: NODE_2,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Dealing 2: height <= current_height, !in_progress (purged)
+                let mut support_2 = create_support(id_2, NODE_2, NODE_3);
+                support_2.content.requested_height = Height::from(20);
+                let key = support_2.key();
+                let msg_id_2 = EcdsaDealingSupport::key_to_outer_hash(&key);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaDealingSupport(support_2),
+                    peer_id: NODE_2,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Dealing 3: height > current_height (not purged)
+                let mut support_3 = create_support(id_3, NODE_2, NODE_3);
+                support_3.content.requested_height = Height::from(200);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaDealingSupport(support_3),
+                    peer_id: NODE_2,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                let t = create_transcript_param(id_1, &[NODE_2], &[NODE_4]);
+                let block_reader = TestEcdsaBlockReader::new(Height::from(100), vec![t]);
+                let change_set = pre_signer.purge_artifacts(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+            })
+        })
+    }
+
+    // Tests purging of dealing support from validated pool
+    #[test]
+    fn test_ecdsa_purge_validated_dealing_support() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    IDkgTranscriptId(1),
+                    IDkgTranscriptId(2),
+                    IDkgTranscriptId(3),
+                );
+
+                // Support 1: height <= current_height, in_progress (not purged)
+                let mut support_1 = create_support(id_1, NODE_2, NODE_3);
+                support_1.content.requested_height = Height::from(20);
+
+                // Dealing 2: height <= current_height, !in_progress (purged)
+                let mut support_2 = create_support(id_2, NODE_2, NODE_3);
+                support_2.content.requested_height = Height::from(20);
+                let key = support_2.key();
+                let msg_id_2 = EcdsaDealingSupport::key_to_outer_hash(&key);
+
+                // Dealing 3: height > current_height (not purged)
+                let mut support_3 = create_support(id_3, NODE_2, NODE_3);
+                support_3.content.requested_height = Height::from(200);
+
+                let change_set = vec![
+                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealingSupport(support_1)),
+                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealingSupport(support_2)),
+                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealingSupport(support_3)),
+                ];
+                ecdsa_pool.apply_changes(change_set);
+
+                let t = create_transcript_param(id_1, &[NODE_2], &[NODE_4]);
+                let block_reader = TestEcdsaBlockReader::new(Height::from(100), vec![t]);
+                let change_set = pre_signer.purge_artifacts(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id_2));
             })
         })
     }

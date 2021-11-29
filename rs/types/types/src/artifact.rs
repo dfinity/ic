@@ -32,7 +32,7 @@ pub use crate::{
     consensus::{
         certification::CertificationMessage,
         dkg::Message as DkgMessage,
-        ecdsa::{EcdsaMessage, EcdsaMessageHash},
+        ecdsa::{EcdsaMessage, EcdsaMessageAttribute, EcdsaMessageHash},
         ConsensusMessage, ConsensusMessageAttribute,
     },
     messages::SignedIngress,
@@ -461,12 +461,6 @@ pub struct DkgMessageAttribute {
 // ECDSA artifacts
 
 pub type EcdsaMessageId = EcdsaMessageHash;
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EcdsaMessageAttribute;
-
-#[derive(Default, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EcdsaMessageFilter;
 
 // ------------------------------------------------------------------------------
 // StateSync artifacts.

@@ -1,0 +1,17 @@
+[Unit]
+Description=Bootstrap the IC node
+After=upgrade-shared-data-store.service
+Requires=var-lib-ic-data.mount
+After=var-lib-ic-data.mount
+Requires=var-lib-ic-crypto.mount
+After=var-lib-ic-crypto.mount
+Requires=var-lib-ic-backup.mount
+After=var-lib-ic-backup.mount
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/bootstrap-ic-node.sh

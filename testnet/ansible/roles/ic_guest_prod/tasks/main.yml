@@ -1,0 +1,69 @@
+---
+
+- name: import tasks prepare
+  import_tasks:
+    # Import local tasks/prepare.yml if exists, otherwise use ic_guest/tasks/prepare.yml
+    file: "{{ lookup('first_found', ['tasks/prepare.yml', '../ic_guest/tasks/prepare.yml']) }}"
+  when: ic_state == "create"
+  tags: [ "ic_guest" ]
+
+- name: import tasks disk_pull
+  import_tasks:
+    file: "{{ lookup('first_found', ['tasks/disk_pull.yml', '../ic_guest/tasks/disk_pull.yml']) }}"
+  when: ic_state == "create" and (ic_disk_path | length == 0)
+  tags: [ "ic_guest" ]
+
+- name: import tasks disk_push
+  import_tasks:
+    file: "{{ lookup('first_found', ['tasks/disk_push.yml', '../ic_guest/tasks/disk_push.yml']) }}"
+  when: ic_state == "create" and (ic_disk_path | length > 0)
+  tags: [ "ic_guest" ]
+
+- name: import tasks media_pull
+  import_tasks:
+    file: "{{ lookup('first_found', ['tasks/media_pull.yml', '../ic_guest/tasks/media_pull.yml']) }}"
+  when: ic_state == "create" and (ic_media_path | length == 0)
+  tags: [ "ic_guest" ]
+
+- name: import tasks media_push
+  import_tasks:
+    file: "{{ lookup('first_found', ['tasks/media_push.yml', '../ic_guest/tasks/media_push.yml']) }}"
+  when: ic_state == "create" and (ic_media_path | length > 0)
+  tags: [ "ic_guest" ]
+
+- name: import tasks
+  import_tasks:
+    file: "{{ lookup('first_found', ['tasks/create.yml', '../ic_guest/tasks/create.yml']) }}"
+  when: ic_state == "create"
+  tags: [ "ic_guest" ]
+
+- name: import tasks
+  import_tasks:
+    file: "{{ lookup('first_found', ['tasks/ssh_keys.yml', '../ic_guest/tasks/ssh_keys.yml']) }}"
+  when: ic_state == "create"
+  tags: [ "ic_guest" ]
+
+- name: import tasks start
+  import_tasks:
+    file: "{{ lookup('first_found', ['tasks/start.yml', '../ic_guest/tasks/start.yml']) }}"
+  when: ic_state == "start"
+  tags:
+    - ic_guest
+
+- name: import tasks install
+  import_tasks:
+    file: "{{ lookup('first_found', ['tasks/install.yml', '../ic_guest/tasks/install.yml']) }}"
+  when: ic_state == "install"
+  tags: [ "ic_guest" ]
+
+- name: import tasks stop
+  import_tasks:
+    file: "{{ lookup('first_found', ['tasks/stop.yml', '../ic_guest/tasks/stop.yml']) }}"
+  when: ic_state == "stop"
+  tags: [ "ic_guest" ]
+
+- name: import tasks destroy
+  import_tasks:
+    file: "{{ lookup('first_found', ['tasks/destroy.yml', '../ic_guest/tasks/destroy.yml']) }}"
+  when: ic_state == "destroy"
+  tags: [ "ic_guest" ]

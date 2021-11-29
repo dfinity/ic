@@ -1,0 +1,41 @@
+crash-safe-io:
+  extends: .ubuntu-nix-docker
+  needs: []  # don't wait on other jobs
+  stage: test
+  artifacts:
+    paths:
+      - std-fs-usage.txt
+  script:
+    - |
+      set -xuo pipefail
+
+      # relative to rs/
+      WHITELIST_FILE="../gitlab-ci/src/std-fs-check/std-fs-whitelist.txt"
+      echo "Checking for new uses of std::fs"
+      EXCL_PATHS=$(grep -v "^#.*" gitlab-ci/src/std-fs-check/std-fs-excluded.txt)
+      echo "Excluded Paths: ${EXCL_PATHS}"
+
+      TGT_FILE="../std-fs-usage.txt"
+
+      # Search for imports of std::fs
+      cd rs
+      which rg
+      find . -path ./target -prune -name '*.rs' | xargs -n1 -0 rg -U '^use[^;]*std[^;]*fs' --color=never | sort > "$TGT_FILE"
+
+      # exclude paths
+      # (-prune cannot be used with multiple directories)
+      for p in $EXCL_PATHS; do
+        sed -i "/^${p//\//\\\/}/d" "$TGT_FILE"
+      done
+
+      # .. and compare with white list
+      echo "If this fails for you, please talk to the node-team at #eng-node"
+      echo "To regenerate the list, run the following commands:"
+      echo "cd rs && /usr/bin/rg -U '^use[^;]*std[^;]*fs' -g '*.rs' --color=never | sort > $WHITELIST_FILE"
+      echo "# make sure to remove all excluded paths from the whitelist"
+      echo "EXCL_PATHS=\$(grep -v \"^#.*\" ../gitlab-ci/src/std-fs-check/std-fs-excluded.txt)"
+      echo "for p in $EXCL_PATHS; do"
+      echo "  sed -i \"/^${p//\//\\\/}}/d\" \"$WHITELIST_FILE\""
+      echo "done"
+
+      diff -w "$TGT_FILE" "$WHITELIST_FILE"

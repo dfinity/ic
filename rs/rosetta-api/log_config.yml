@@ -1,0 +1,56 @@
+# Scan this file for changes every 30 seconds
+#refresh_rate: 30 seconds
+
+appenders:
+  # An appender named "stdout" that writes to stdout
+  # It has an additional filter to block low level messages
+  stdout:
+    kind: console
+    encoder:
+      pattern: "{d(%H:%M:%S%.6f)} {h({l})} [{T}] {t} - {m}{n}"
+    filters:
+      [{ kind: threshold, level: info }]
+
+  rosetta-api:
+    kind: rolling_file
+    path: "log/rosetta-api.log"
+    encoder:
+      pattern: "{d} {h({l})} [{T}] {t} - {m}{n}"
+    policy:
+      trigger:
+        kind: size
+        limit: 100 mb
+      roller:
+        kind: fixed_window
+        count: 5
+        pattern: "log/rosetta-api.{}.log"
+
+  background_noise:
+    kind: rolling_file
+    path: "log/background_noise.log"
+    encoder:
+      pattern: "{d} {h({l})} [{T}] {t} - {m}{n}"
+    policy:
+      trigger:
+        kind: size
+        limit: 10 mb
+      roller:
+        kind: fixed_window
+        count: 2
+        pattern: "log/background_noise.{}.log"
+
+# Set the default logging level to "trace" and attach the "stdout" appender to the root
+root:
+  level: trace
+  appenders:
+    - background_noise
+
+loggers:
+  # Route log events sent to the "ic_rosetta_api" logger to the "rosetta-api" appender,
+  # and *not* the normal appenders installed at the root
+  ic_rosetta_api:
+    level: trace
+    appenders:
+      - rosetta-api
+      - stdout
+    additive: false

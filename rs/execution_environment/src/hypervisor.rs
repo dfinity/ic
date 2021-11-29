@@ -116,6 +116,7 @@ impl Hypervisor {
     ///
     /// - The size of the heap delta change that the canister produced during
     /// execution. If execution failed, then the value is 0.
+    #[allow(clippy::too_many_arguments)]
     pub fn execute_update(
         &self,
         canister: CanisterState,
@@ -124,6 +125,7 @@ impl Hypervisor {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         execution_parameters: ExecutionParameters,
+        nns_subnet_id: SubnetId,
     ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
         debug!(self.log, "execute_update: method {}", request.method_name());
 
@@ -143,7 +145,7 @@ impl Hypervisor {
         }
 
         let method = WasmMethod::Update(request.method_name().to_string());
-        let memory_usage = canister.memory_usage();
+        let memory_usage = canister.memory_usage(self.own_subnet_type);
         let (execution_state, mut system_state, scheduler_state) = canister.into_parts();
 
         // Validate that the Wasm module is present.
@@ -188,6 +190,7 @@ impl Hypervisor {
             call_context_id,
             self.own_subnet_id,
             self.own_subnet_type,
+            nns_subnet_id,
             routing_table,
             subnet_records,
         );
@@ -257,7 +260,7 @@ impl Hypervisor {
         }
 
         let method = WasmMethod::Query(method.to_string());
-        let memory_usage = canister.memory_usage();
+        let memory_usage = canister.memory_usage(self.own_subnet_type);
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
         // Validate that the Wasm module is present.
@@ -402,6 +405,7 @@ impl Hypervisor {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         execution_parameters: ExecutionParameters,
+        nns_subnet_id: SubnetId,
     ) -> (
         CanisterState,
         NumInstructions,
@@ -451,6 +455,7 @@ impl Hypervisor {
                 call_responded,
                 self.own_subnet_id,
                 self.own_subnet_type,
+                nns_subnet_id,
                 routing_table,
                 subnet_records,
             ),
@@ -462,6 +467,7 @@ impl Hypervisor {
                 call_responded,
                 self.own_subnet_id,
                 self.own_subnet_type,
+                nns_subnet_id,
                 routing_table,
                 subnet_records,
             ),
@@ -479,7 +485,7 @@ impl Hypervisor {
         let output = execute(
             api_type,
             canister.system_state.clone(),
-            canister.memory_usage(),
+            canister.memory_usage(self.own_subnet_type),
             execution_parameters.clone(),
             func_ref,
             canister.execution_state.take().unwrap(),
@@ -491,7 +497,7 @@ impl Hypervisor {
 
         let cycles_account_manager = Arc::clone(&self.cycles_account_manager);
         let metrics = Arc::clone(&self.metrics);
-        let canister_current_memory_usage = canister.memory_usage();
+        let canister_current_memory_usage = canister.memory_usage(self.own_subnet_type);
         let call_origin = call_origin.clone();
 
         canister.execution_state = Some(output.execution_state);
@@ -596,7 +602,7 @@ impl Hypervisor {
         execution_parameters: ExecutionParameters,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterStart);
-        let memory_usage = canister.memory_usage();
+        let memory_usage = canister.memory_usage(self.own_subnet_type);
         let canister_id = canister.canister_id();
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
@@ -658,7 +664,7 @@ impl Hypervisor {
         execution_parameters: ExecutionParameters,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterPreUpgrade);
-        let memory_usage = canister.memory_usage();
+        let memory_usage = canister.memory_usage(self.own_subnet_type);
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
         // Validate that the Wasm module is present.
@@ -719,7 +725,7 @@ impl Hypervisor {
         execution_parameters: ExecutionParameters,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterInit);
-        let memory_usage = canister.memory_usage();
+        let memory_usage = canister.memory_usage(self.own_subnet_type);
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
         // Validate that the Wasm module is present.
@@ -780,7 +786,7 @@ impl Hypervisor {
         execution_parameters: ExecutionParameters,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterPostUpgrade);
-        let memory_usage = canister.memory_usage();
+        let memory_usage = canister.memory_usage(self.own_subnet_type);
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
         // Validate that the Wasm module is present.
@@ -834,7 +840,7 @@ impl Hypervisor {
         execution_parameters: ExecutionParameters,
     ) -> Result<(), CanonicalError> {
         let method = WasmMethod::System(SystemMethod::CanisterInspectMessage);
-        let memory_usage = canister.memory_usage();
+        let memory_usage = canister.memory_usage(self.own_subnet_type);
         let (execution_state, system_state, _) = canister.into_parts();
 
         // Validate that the Wasm module is present.
@@ -912,9 +918,10 @@ impl Hypervisor {
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         time: Time,
         execution_parameters: ExecutionParameters,
+        nns_subnet_id: SubnetId,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterHeartbeat);
-        let memory_usage = canister.memory_usage();
+        let memory_usage = canister.memory_usage(self.own_subnet_type);
         let (execution_state, mut system_state, scheduler_state) = canister.into_parts();
 
         // Validate that the Wasm module is present.
@@ -949,6 +956,7 @@ impl Hypervisor {
             call_context_id,
             self.own_subnet_id,
             self.own_subnet_type,
+            nns_subnet_id,
             routing_table,
             subnet_records,
         );
@@ -1053,6 +1061,7 @@ impl Hypervisor {
                 canister_memory_limit: memory_usage,
                 subnet_available_memory: SubnetAvailableMemory::new(memory_usage.get() as i64),
                 compute_allocation: ComputeAllocation::zero(),
+                subnet_type: self.own_subnet_type,
             },
             self.cycles_account_manager.clone(),
         )
@@ -1066,6 +1075,7 @@ impl Hypervisor {
         self.wasm_executor.compile(wasm_binary, persistence_type)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: Config,
         num_runtime_threads: usize,

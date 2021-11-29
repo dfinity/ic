@@ -4,22 +4,22 @@ use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::{certification::CertifierImpl, consensus::ConsensusImpl, dkg};
-use ic_consensus_message::make_genesis;
 use ic_interfaces::{state_manager::Labeled, time_source::TimeSource};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities::registry::{setup_registry, SubnetRecordBuilder};
-use ic_test_utilities::self_validating_payload_builder::FakeSelfValidatingPayloadBuilder;
-use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities::{
+    consensus::make_genesis,
     crypto::CryptoReturningOk,
     ingress_selector::FakeIngressSelector,
     message_routing::FakeMessageRouting,
+    registry::{setup_registry, SubnetRecordBuilder},
+    self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state::get_initial_state,
     state_manager::MockStateManager,
     types::ids::{node_test_id, subnet_test_id},
     types::messages::SignedIngressBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
+    FastForwardTimeSource,
 };
 use ic_types::{
     crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,

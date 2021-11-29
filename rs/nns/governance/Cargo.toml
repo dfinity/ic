@@ -42,7 +42,7 @@ registry-canister = { path = "../../registry/canister" }
 bytes = "1.0.1"
 strum_macros = "0.18.0"
 strum = "0.18.0"
-comparable = { version = "0.3", features = ["derive"] }
+comparable = { version = "0.5", features = ["derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 clap = "3.0.0-beta.2"

@@ -1,0 +1,49 @@
+[package]
+name = "ic-replica-tests"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+futures = "0.3.13"
+ic-config = { path = "../config" }
+ic-canister-client = { path = "../canister_client" }
+ic-execution-environment = { path = "../execution_environment" }
+ic-replica = { path = "../replica" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-keys = { path = "../registry/keys" }
+ic-registry-common = { path = "../registry/common" }
+ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-transport = { path = "../transport" }
+ic-interfaces = { path = "../interfaces" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-prep = { path = "../prep" }
+ic-protobuf = { path = "../protobuf" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-state-manager = { path = "../state_manager" }
+ic-test-utilities = { path = "../test_utilities" }
+ic-crypto = { path = "../crypto" }
+ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
+ic-types = { path = "../types/types" }
+ic-utils = { path = "../utils" }
+ic-base-types = { path = "../types/base_types" }
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog-scope = "4.1.2"
+tempfile = "3.1.0"
+tokio = { version = "1.9.0", features = ["full"] }
+prometheus = { version = "0.12.0", features = [ "process" ] }
+prost = "0.9.0"
+tower-service = "0.3.1"
+tower = { version = "0.4.8", features = ["util"] }
+wabt = "0.10.0"
+
+[dev-dependencies]
+assert_matches = "1.3.0"
+candid = "0.7.4"
+canister-test = { path = "../rust_canisters/canister_test" }
+ic-crypto-sha = { path = "../crypto/sha" }
+ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-sys = { path = "../sys" }
+ic-test-utilities = { path = "../test_utilities" }
+maplit = "1.0.2"
+predicates = "1.0.1"

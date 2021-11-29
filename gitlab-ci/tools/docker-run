@@ -7,6 +7,10 @@
 
 set -eEuo pipefail
 
+if [ -n "${DEBUG:-}" ]; then
+    set -x
+fi
+
 REPO_ROOT="$(
     cd "$(dirname "$0")"
     git rev-parse --show-toplevel
@@ -14,6 +18,5 @@ REPO_ROOT="$(
 
 source "$REPO_ROOT/gitlab-ci/docker/docker-run-include"
 
-if $DEBUG; then set -x; fi
-
-docker run --rm -it "${DOCKER_RUN_ARGS[@]}" "$IMAGE" "${@:-bash}"
+set -x
+docker run --rm "${DOCKER_RUN_ARGS[@]}" "$IMAGE" "${@:-bash}"

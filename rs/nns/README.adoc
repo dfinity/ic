@@ -1,0 +1,141 @@
+# Network Nervous System (NNS)
+
+This directory is intended to contain the various canisters, and possibly command-line tools, used for decentralized control of the Internet Computer.
+
+## Deploying the NNS canisters
+
+Before using the NNS a range of canisters must be deployed into the
+NNS subnet.
+
+To production and testnets, the NNS canisters are deployed by Ansible onto the NNS subnet.
+
+### Choose a target replica
+
+There are two possibilities:
+
+* Use a local replica. This can be done with, from `rs/nns`:
+----
+dfx start --host 127.0.0.1:8080
+----
+
+* Use a remote replica on an NNS subnet.
+
+#### Deploy from local build to a local replica
+
+After running the command to build the canisters (`cargo build -p registry-canister...`) run the following
+command, from `rs/`:
+----
+cargo run --bin ic-nns-init -- --url http://localhost:8080/ --wasm-dir=./target/wasm32-unknown-unknown/release
+----
+
+Run `+cargo run --bin ic-nns-init -- --help+` for the usage and all available options.
+
+## Manual interactions with `dfx` and the Candid web server
+
+An easy way to interact with the NNS for manual testing is through the Candid web UI and/or the `dfx canister` command.
+
+To get `dfx`, see https://sdk.dfinity.org/docs/quickstart/quickstart.html#download-and-install
+
+All commands in these instructions assume that the NNS dir `rs/nns` is the current dir.
+
+### Interacting with an existing NNS
+
+To interact with the NNS on `<testnet>`, on which the NNS canisters have already been deployed:
+
+. Add the `network` in `dfx.json`.
+Point at a machine from the NNS subnet from `env/<testnet>/hosts`.
+It's already done for the NNS testnet.
+.Depending on the type of "network", `dfx` will expect the mapping between canister names and ids to either be in `./canister_ids.json` (the current dir must be the NNS dir), or `./.dfx/<networkname>/canister_ids.json`.
+. Add entries for each `canister` in `canister_ids.json`:
+duplicate the existing one, and just change the network name.
+The canister ids are identical of all subnets.
+. For each canister, copy its `.did` file under `.dfx/<networkname>/canisters/<canister_name>/<canister_name.did>`
+
+[#webui]
+### Start the Candid web server
+
+Run `dfx bootstrap`. If you test against a remote replica, run `dfx bootstrap --network=nnstestnet` instead.
+The webserver starts by default on http://localhost:8081
+
+Check the web UIs:
+
+* Governance: http://localhost:8081/candid?canisterId=rrkah-fqaaa-aaaaa-aaaaq-cai
+* Root: http://localhost:8081/candid?canisterId=r7inp-6aaaa-aaaaa-aaabq-cai
+* Lifeline: http://localhost:8081/candid?canisterId=rkp4c-7iaaa-aaaaa-aaaca-cai
+* further canisters, deduce `canisterId` from `rs/nns/canister_ids.json`
+
+There is no web UI for the registry, because it's API is not Candid-based.
+
+## An example of a demo scenario for upgrades
+
+Show the content of a neuron
+[code,shell]
+----
+dfx canister call neurons get_neuron_info --type=idl '( 449479075714955186 )'
+----
+
+Create proposal (web UI)
+Demo `get_proposal_info` and `get_pending_proposals`
+Vote (CLI)
+[code,shell]
+----
+dfx canister call neurons forward_vote --type=idl '( 449479075714955186, 1, variant{Yes} )'
+dfx canister call neurons forward_vote --type=idl '( 4368585614685248742, 1, variant{No} )'
+----
+
+Change deadline, execute proposal.
+
+Check blessed versions:
+[code,shell]
+----
+cargo run --bin ic-admin -- --nns-url=http://localhost:8080 get-blessed-replica-versions
+----
+
+## An example of a demo scenario for subnet creation
+
+Show the content of a neuron
+[code,shell]
+----
+dfx canister call neurons get_neuron_info --type=idl '( 449479075714955186 )'
+----
+
+Create proposal (web UI)
+Demo `get_proposal_info` and `get_pending_proposals`
+----
+# create key material
+cargo run --bin ic-prep --release -- --working-dir /tmp/replicas --replica-version 0.8.0 --replica-download-url <download url> --nodes 1,1,192.168.0.101,20,30,0 2,1,192.168.0.102,30,40,0 3,1,192.168.0.200,40,50,0
+
+# upload the key material to the registry
+cargo run --bin ic-admin -- --registry-url http://localhost:8080 add-all-pb-files-in-path /tmp/replicas/node-1
+cargo run --bin ic-admin -- --registry-url http://localhost:8080 add-all-pb-files-in-path /tmp/replicas/node-2
+cargo run --bin ic-admin -- --registry-url http://localhost:8080 add-all-pb-files-in-path /tmp/replicas/node-3
+
+# create the proposal
+cargo run --bin ic-admin -- \
+  --nns-url http://localhost:8080 \
+  propose-to-create-subnet \
+  --subnet-handler 3llps-yifaa-aaaaa-aaaaj-waiaa-aaaaa-aaaaa-q \
+  3jo2y-lqbaa-aaaaa-aaaap-2ai gfvbo-licaa-aaaaa-aaaap-2ai 32uhy-eydaa-aaaaa-aaaap-2ai
+----
+
+Vote (CLI)
+[code,shell]
+----
+dfx canister call neurons forward_vote --type=idl '( 449479075714955186 )'
+dfx canister call neurons forward_vote --type=idl '( 4368585614685248742 )'
+----
+
+Change deadline -- since the form requires an epoch time in nano-seconds,
+execute the following command to get the current time:
+
+----
+echo "$(date +%s)000000000"
+----
+
+Then, execute proposal.
+
+Get the subnet list to verify that the new subnet has been added:
+[code,shell]
+----
+cargo run --bin ic-admin -- --nns-url=http://localhost:8080 get-subnet-list
+----

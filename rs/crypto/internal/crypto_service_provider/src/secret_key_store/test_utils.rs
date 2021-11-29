@@ -77,11 +77,11 @@ impl SecretKeyStore for TempSecretKeyStore {
     }
 }
 
-fn make_key_id(seed: u64) -> KeyId {
+pub fn make_key_id(seed: u64) -> KeyId {
     KeyId::from(ChaCha20Rng::seed_from_u64(seed).gen::<[u8; 32]>())
 }
 
-fn make_secret_key(seed: u64) -> CspSecretKey {
+pub fn make_secret_key(seed: u64) -> CspSecretKey {
     CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
         SecretArray::new_and_dont_zeroize_argument(&ChaCha20Rng::seed_from_u64(seed).gen()),
     ))

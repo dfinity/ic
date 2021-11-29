@@ -17,8 +17,9 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallOrigin, CanisterState, CanisterStatus, ReplicatedState, SchedulerState, SystemState,
+    CallOrigin, CanisterState, CanisterStatus, Memory, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_types::{
@@ -59,11 +60,6 @@ pub(crate) enum StopCanisterResult {
     RequestAccepted,
 }
 
-/// Returns true if the canister is empty, false otherwise.
-fn canister_is_empty(canister: &CanisterState) -> bool {
-    canister.execution_state.is_none() && canister.system_state.stable_memory.size.get() == 0
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) struct CanisterMgrConfig {
     pub(crate) subnet_memory_capacity: NumBytes,
@@ -72,6 +68,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) default_freeze_threshold: NumSeconds,
     pub(crate) compute_capacity: u64,
     pub(crate) own_subnet_id: SubnetId,
+    pub(crate) own_subnet_type: SubnetType,
     pub(crate) max_controllers: usize,
 }
 
@@ -83,6 +80,7 @@ impl CanisterMgrConfig {
         default_provisional_cycles_balance: Cycles,
         default_freeze_threshold: NumSeconds,
         own_subnet_id: SubnetId,
+        own_subnet_type: SubnetType,
         max_controllers: usize,
         num_cores: usize,
     ) -> Self {
@@ -92,6 +90,7 @@ impl CanisterMgrConfig {
             default_provisional_cycles_balance,
             default_freeze_threshold,
             own_subnet_id,
+            own_subnet_type,
             max_controllers,
             compute_capacity: 100 * num_cores as u64,
         }
@@ -275,12 +274,12 @@ impl CanisterManager {
             //
             // However, log an error in case it happens for visibility.
             if let MemoryAllocation::Reserved(bytes) = memory_allocation {
-                if bytes < canister.memory_usage() {
+                if bytes < canister.memory_usage(self.config.own_subnet_type) {
                     error!(
                         self.log,
                         "Requested memory allocation of {} which is smaller than current canister memory usage {}",
                         bytes,
-                        canister.memory_usage(),
+                        canister.memory_usage(self.config.own_subnet_type),
                     );
                 }
             }
@@ -444,7 +443,7 @@ impl CanisterManager {
         }
         match context.mode {
             CanisterInstallMode::Install => {
-                if !canister_is_empty(old_canister) {
+                if old_canister.execution_state.is_some() {
                     return (
                         execution_parameters.instruction_limit,
                         Err(CanisterManagerError::CanisterNonEmpty(context.canister_id)),
@@ -457,7 +456,7 @@ impl CanisterManager {
         // All validation checks have passed. Reserve cycles on the old canister
         // for executing the various hooks such as `start`, `pre_upgrade`,
         // `post_upgrade`.
-        let memory_usage = old_canister.memory_usage();
+        let memory_usage = old_canister.memory_usage(self.config.own_subnet_type);
         let compute_allocation = old_canister.scheduler_state.compute_allocation;
         if let MemoryAllocation::Reserved(bytes) = old_canister.memory_allocation() {
             execution_parameters.canister_memory_limit = bytes;
@@ -703,7 +702,7 @@ impl CanisterManager {
                 .map(|es| es.wasm_binary.binary.hash_sha256().to_vec()),
             *controller,
             controllers,
-            canister.memory_usage(),
+            canister.memory_usage(self.config.own_subnet_type),
             canister.system_state.cycles_balance.get(),
             canister.scheduler_state.compute_allocation.as_percent(),
             Some(canister.memory_allocation().bytes().get()),
@@ -845,8 +844,8 @@ impl CanisterManager {
         let execution_state = match self.hypervisor.create_execution_state(
             context.wasm_module,
             layout.raw_path(),
-            system_state,
-            old_canister.memory_usage(),
+            system_state.clone(),
+            old_canister.memory_usage(self.config.own_subnet_type),
         ) {
             Ok(execution_state) => Some(execution_state),
             Err(err) => {
@@ -857,9 +856,6 @@ impl CanisterManager {
             }
         };
 
-        let mut system_state = old_canister.system_state.clone();
-        // According to spec, we must clear stable memory on install and reinstall.
-        system_state.clear_stable_memory();
         let scheduler_state = old_canister.scheduler_state.clone();
         let mut new_canister = CanisterState::new(system_state, execution_state, scheduler_state);
 
@@ -879,13 +875,13 @@ impl CanisterManager {
             None => new_canister.system_state.memory_allocation,
         };
         if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
-            if bytes < new_canister.memory_usage() {
+            if bytes < new_canister.memory_usage(self.config.own_subnet_type) {
                 return (
                     execution_parameters.instruction_limit,
                     Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                         canister_id,
                         memory_allocation_given: desired_memory_allocation,
-                        memory_usage_needed: new_canister.memory_usage(),
+                        memory_usage_needed: new_canister.memory_usage(self.config.own_subnet_type),
                     }),
                 );
             }
@@ -985,16 +981,24 @@ impl CanisterManager {
                 .upgrade();
         }
 
-        // Replace the execution state of the canister with a new execution state.
+        // Replace the execution state of the canister with a new execution state, but
+        // persist the stable memory (if it exists).
         let layout = canister_layout(&canister_layout_path, &canister_id);
         new_canister.execution_state = match self.hypervisor.create_execution_state(
             context.wasm_module,
             layout.raw_path(),
             new_canister.system_state.clone(),
-            new_canister.memory_usage(),
+            new_canister.memory_usage(self.config.own_subnet_type),
         ) {
             Err(err) => return (instructions_limit, Err((canister_id, err).into())),
-            Ok(execution_state) => Some(execution_state),
+            Ok(mut execution_state) => {
+                let stable_memory = match new_canister.execution_state {
+                    Some(es) => es.stable_memory,
+                    None => Memory::default(),
+                };
+                execution_state.stable_memory = stable_memory;
+                Some(execution_state)
+            }
         };
 
         // Update allocations.  This must happen after we have created the new
@@ -1013,13 +1017,13 @@ impl CanisterManager {
             None => new_canister.system_state.memory_allocation,
         };
         if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
-            if bytes < new_canister.memory_usage() {
+            if bytes < new_canister.memory_usage(self.config.own_subnet_type) {
                 return (
                     instructions_limit,
                     Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                         canister_id,
                         memory_allocation_given: desired_memory_allocation,
-                        memory_usage_needed: new_canister.memory_usage(),
+                        memory_usage_needed: new_canister.memory_usage(self.config.own_subnet_type),
                     }),
                 );
             }
@@ -1257,17 +1261,17 @@ impl CanisterManager {
     ) -> Result<(), CanisterManagerError> {
         if let Some(memory_allocation) = memory_allocation {
             if let MemoryAllocation::Reserved(requested_allocation) = memory_allocation {
-                if requested_allocation < canister.memory_usage() {
+                if requested_allocation < canister.memory_usage(self.config.own_subnet_type) {
                     return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                         canister_id: canister.canister_id(),
                         memory_allocation_given: memory_allocation,
-                        memory_usage_needed: canister.memory_usage(),
+                        memory_usage_needed: canister.memory_usage(self.config.own_subnet_type),
                     });
                 }
             }
             let canister_current_allocation = match canister.memory_allocation() {
                 MemoryAllocation::Reserved(bytes) => bytes,
-                MemoryAllocation::BestEffort => canister.memory_usage(),
+                MemoryAllocation::BestEffort => canister.memory_usage(self.config.own_subnet_type),
             };
             if memory_allocation.bytes() + total_subnet_memory_taken - canister_current_allocation
                 > self.config.subnet_memory_capacity
@@ -1604,9 +1608,6 @@ pub fn uninstall_canister(
 ) -> Vec<Response> {
     // Drop the canister's execution state.
     canister.execution_state = None;
-
-    // Drop its stable memory
-    canister.system_state.clear_stable_memory();
 
     // Drop its certified data.
     canister.system_state.certified_data = Vec::new();

@@ -4,9 +4,12 @@ mod setup;
 
 use assert_matches::assert_matches;
 use ic_artifact_manager::artifact::ConsensusArtifact;
-use ic_consensus_message::{make_genesis, ConsensusMessageHashable};
+use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::{artifact_manager::OnArtifactError, artifact_pool::ArtifactPoolError};
-use ic_test_utilities::{consensus::fake::*, types::ids::node_test_id};
+use ic_test_utilities::{
+    consensus::{fake::*, make_genesis},
+    types::ids::node_test_id,
+};
 use ic_types::{artifact::ArtifactKind, consensus::*, ReplicaVersion};
 use setup::run_test;
 use std::convert::TryFrom;

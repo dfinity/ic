@@ -15,6 +15,10 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex};
 
+use ic_canister_sandbox_common::protocol::id::{ExecId, StateId, WasmId};
+use ic_canister_sandbox_common::protocol::sbxsvc::{
+    MemoryDeltaSerialization, MemorySerialization, OpenStateRequest, StateSerialization,
+};
 use ic_canister_sandbox_common::{
     controller_service::ControllerService,
     protocol,
@@ -29,16 +33,16 @@ use ic_embedders::{
     },
     WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{HypervisorError, InstanceStats};
+use ic_interfaces::execution_environment::{HypervisorError, InstanceStats, SystemApi};
 use ic_logger::replica_logger::no_op_logger;
-use ic_replicated_state::{EmbedderCache, Global, NumWasmPages, PageMap};
-use ic_system_api::SystemApiImpl;
+use ic_replicated_state::page_map::PageSerialization;
+use ic_replicated_state::{EmbedderCache, Global, Memory, NumWasmPages64, PageMap};
+use ic_system_api::{ModificationTracking, SystemApiImpl};
 use ic_types::{
     methods::{FuncRef, SystemMethod, WasmMethod},
     NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
-use memory_tracker::DirtyPageTracking;
 
 use crate::logging::log;
 use crate::system_state_accessor_rpc::SystemStateAccessorRPC;
@@ -50,10 +54,10 @@ struct State {
     globals: Vec<Global>,
 
     /// Wasm memory.
-    pages: PageMap,
+    wasm_memory: Memory,
 
-    /// Wasm memory size.
-    heap_size: NumWasmPages,
+    /// The canister's stable memory.
+    stable_memory: Memory<NumWasmPages64>,
 }
 
 struct ExecutionInstantiateError;
@@ -69,7 +73,7 @@ struct Execution {
     /// Id of the execution. This is used in communicating back to
     /// the replica (e.g. for syscalls) such that replica can associate
     /// events with the correct execution.
-    exec_id: String,
+    exec_id: ExecId,
 
     /// The canister wasm used in this execution.
     canister_wasm: Arc<CanisterWasm>,
@@ -88,11 +92,8 @@ struct Execution {
 enum ExecutionInner {
     /// The execution thread is running.
     Running,
-
-    FinishedOk {},
-
-    FinishedError {},
-
+    FinishedOk,
+    FinishedError,
     /// Execution is finished and has been closed. This is an
     /// intermittent state before the object is destroyed -- it should
     /// not really be externally visible, but if it were to (e.g.
@@ -102,6 +103,15 @@ enum ExecutionInner {
 }
 
 impl Execution {
+    fn record_error(&self, exec_output: protocol::structs::ExecOutput) {
+        *self.internal.lock().unwrap() = ExecutionInner::FinishedError;
+        self.controller
+            .exec_finished(protocol::ctlsvc::ExecFinishedRequest {
+                exec_id: self.exec_id,
+                exec_output,
+            });
+    }
+
     /// Creates new execution based on canister wasm and state. In order
     /// to start the execution, the given state object will be "locked" --
     /// if that cannot be done, then creation of execution will fail.
@@ -110,13 +120,13 @@ impl Execution {
     ///
     /// This will *actually* schedule and initiate a new execution.
     pub(crate) fn create(
-        exec_id: String,
+        exec_id: ExecId,
         canister_wasm: Arc<CanisterWasm>,
         state: Arc<State>,
         controller: Arc<dyn ControllerService>,
         workers: &mut threadpool::ThreadPool,
         exec_input: protocol::structs::ExecInput,
-    ) -> Result<Arc<Self>, ExecutionInstantiateError> {
+    ) -> Arc<Self> {
         let runtime_state = (*state).clone();
 
         let instance = Arc::new(Self {
@@ -129,76 +139,71 @@ impl Execution {
         let instance_copy = Arc::clone(&instance);
         workers.execute(move || instance_copy.entry(exec_input, runtime_state));
 
-        Ok(instance)
+        instance
     }
 
     // Actual wasm code execution -- this is run on the target thread
     // in the thread pool.
     fn entry(&self, exec_input: protocol::structs::ExecInput, runtime_state: State) {
-        fn record_error(
-            exec: &Execution,
+        fn error_exec_output(
             err: HypervisorError,
             num_instructions_left: NumInstructions,
-            globals: Vec<Global>,
             instance_stats: InstanceStats,
-            heap_size: NumWasmPages,
-        ) {
-            *exec.internal.lock().unwrap() = ExecutionInner::FinishedError {};
-            let exec_output = protocol::structs::ExecOutput {
+        ) -> protocol::structs::ExecOutput {
+            protocol::structs::ExecOutput {
                 wasm_result: Err(err),
                 num_instructions_left,
-                globals,
                 instance_stats,
-                page_delta: vec![],
-                heap_size,
-            };
-            exec.controller
-                .exec_finished(protocol::ctlsvc::ExecFinishedRequest {
-                    exec_id: exec.exec_id.to_string(),
-                    exec_output,
-                });
+                state_modifications: None,
+            }
         }
 
         // Prepare instance for running -- memory map, some ancillary
         // parameters and system API.
         let memory_creator = None;
-        let memory_init: Option<PageMap> = Some(runtime_state.pages.clone());
+        let memory_init = Some(runtime_state.wasm_memory.page_map.clone());
+        let stable_memory = runtime_state.stable_memory.clone();
 
         let system_state_accessor =
-            SystemStateAccessorRPC::new(self.exec_id.clone(), self.controller.clone());
+            SystemStateAccessorRPC::new(self.exec_id, self.controller.clone());
         let num_instructions = exec_input.execution_parameters.instruction_limit;
+        let initial_stable_memory_size = stable_memory.size;
+        let canister_id = exec_input.static_system_state.canister_id();
+        let modification_tracking = exec_input.api_type.modification_tracking();
+        let subnet_available_memory = exec_input
+            .execution_parameters
+            .subnet_available_memory
+            .clone();
         let system_api = SystemApiImpl::new(
-            exec_input.canister_id,
             exec_input.api_type,
             system_state_accessor,
+            exec_input.static_system_state,
             exec_input.canister_current_memory_usage,
             exec_input.execution_parameters,
+            stable_memory,
             no_op_logger(),
         );
 
         let mut instance = match self.canister_wasm.embedder.new_instance(
-            exec_input.canister_id,
+            canister_id,
             &self.canister_wasm.compilate,
             &runtime_state.globals,
-            runtime_state.heap_size,
+            runtime_state.wasm_memory.size,
             memory_creator,
             memory_init,
-            DirtyPageTracking::Track,
+            modification_tracking,
             system_api,
         ) {
             Ok(instance) => instance,
             Err((err, _)) => {
-                record_error(
-                    self,
+                self.record_error(error_exec_output(
                     err,
                     NumInstructions::from(0),
-                    exec_input.globals,
                     InstanceStats {
                         accessed_pages: 0,
                         dirty_pages: 0,
                     },
-                    NumWasmPages::from(0),
-                );
+                ));
                 return;
             }
         };
@@ -209,15 +214,20 @@ impl Execution {
                 wasm_result: Ok(None),
                 num_instructions_left: NumInstructions::from(0),
                 instance_stats: instance.get_stats(),
-                globals: instance.get_exported_globals(),
-                heap_size: instance.heap_size(),
-                page_delta: vec![],
+                state_modifications: Some(protocol::structs::StateModifications {
+                    globals: instance.get_exported_globals(),
+                    wasm_memory_size: instance.heap_size(),
+                    wasm_memory_page_delta: vec![],
+                    stable_memory_size: initial_stable_memory_size,
+                    stable_memory_page_delta: vec![],
+                    subnet_available_memory: subnet_available_memory.get(),
+                }),
             };
 
-            *self.internal.lock().unwrap() = ExecutionInner::FinishedOk {};
+            *self.internal.lock().unwrap() = ExecutionInner::FinishedOk;
             self.controller
                 .exec_finished(protocol::ctlsvc::ExecFinishedRequest {
-                    exec_id: self.exec_id.to_string(),
+                    exec_id: self.exec_id,
                     exec_output,
                 });
             return;
@@ -228,96 +238,107 @@ impl Execution {
 
         let num_instructions_left = instance.get_num_instructions();
         let instance_stats = instance.get_stats();
-        let heap_size = instance.heap_size();
 
+        // Has the side effect up deallocating unused memory.
+        let wasm_result = instance.store_data_mut().system_api.take_execution_result();
         match run_result {
             Ok(run_result) => {
-                let wasm_result = instance.store_data_mut().system_api.take_execution_result();
-                let page_delta = compute_page_delta(&mut instance, &run_result.dirty_pages);
+                let state_modifications = match modification_tracking {
+                    ModificationTracking::Ignore => None,
+                    ModificationTracking::Track => {
+                        let page_delta = compute_page_delta(&mut instance, &run_result.dirty_pages);
 
-                let ser_page_delta: Vec<protocol::structs::IndexedPage> = page_delta
-                    .iter()
-                    .map(|x| protocol::structs::IndexedPage {
-                        index: x.0,
-                        data: *x.1,
-                    })
-                    .collect();
+                        let ser_page_delta: Vec<_> = page_delta
+                            .iter()
+                            .map(|x| PageSerialization {
+                                index: x.0,
+                                bytes: *x.1,
+                            })
+                            .collect();
 
-                let mut pages = runtime_state.pages;
-                pages.update(&page_delta);
+                        let wasm_memory_size = instance.heap_size();
 
+                        let stable_memory_delta = instance
+                            .store_data_mut()
+                            .system_api
+                            .stable_memory_dirty_pages();
+
+                        let ser_stable_memory_page_delta: Vec<_> = stable_memory_delta
+                            .into_iter()
+                            .map(|(index, bytes)| PageSerialization {
+                                index,
+                                bytes: *bytes,
+                            })
+                            .collect();
+                        Some(protocol::structs::StateModifications {
+                            globals: run_result.exported_globals.clone(),
+                            wasm_memory_size,
+                            wasm_memory_page_delta: ser_page_delta,
+                            stable_memory_size: run_result.stable_memory_size,
+                            stable_memory_page_delta: ser_stable_memory_page_delta,
+                            subnet_available_memory: subnet_available_memory.get(),
+                        })
+                    }
+                };
+
+                // This has a side effect of refunding unused cycles.
+                let _ = instance
+                    .into_store_data()
+                    .system_api
+                    .release_system_state_accessor();
                 let exec_output = protocol::structs::ExecOutput {
                     wasm_result,
                     num_instructions_left,
                     instance_stats,
-                    globals: run_result.exported_globals.clone(),
-                    heap_size: instance.heap_size(),
-                    page_delta: ser_page_delta,
+                    state_modifications,
                 };
 
-                *self.internal.lock().unwrap() = ExecutionInner::FinishedOk {};
+                *self.internal.lock().unwrap() = ExecutionInner::FinishedOk;
                 self.controller
                     .exec_finished(protocol::ctlsvc::ExecFinishedRequest {
-                        exec_id: self.exec_id.to_string(),
+                        exec_id: self.exec_id,
                         exec_output,
                     });
             }
             Err(err) => {
-                record_error(
-                    self,
+                let system_api = instance.into_store_data().system_api;
+                // This has a side effect of refunding unused cycles.
+                let _ = system_api.release_system_state_accessor();
+                self.record_error(error_exec_output(
                     err,
                     num_instructions_left,
-                    exec_input.globals,
                     instance_stats,
-                    heap_size,
-                );
+                ));
             }
         }
     }
 
     /// Closes the current execution (assuming that it has finished).
-    /// Optionally, commits changes made during execution to the state.
-    /// The state is finally unlocked.
+    /// Returns true if the close completed successfully.
     pub(crate) fn close(&self) -> bool {
         let mut guard = self.internal.lock().unwrap();
-
-        // "Optimistically" replace present state with "Closed" state --
-        // this trickery is partially necessary as there is no other
-        // way to perform a consuming in-place modification of an
-        // enum.
-        match std::mem::replace(&mut *guard, ExecutionInner::Closed) {
-            ExecutionInner::FinishedOk {} => true,
-            ExecutionInner::FinishedError {} => true,
-            ExecutionInner::Running => {
-                // Restore state to running if it was running before --
-                // cannot close yet.
-                *guard = ExecutionInner::Running;
-                false
+        match *guard {
+            ExecutionInner::FinishedOk | ExecutionInner::FinishedError => {
+                *guard = ExecutionInner::Closed;
+                true
             }
-            _ => false,
+            ExecutionInner::Closed | ExecutionInner::Running => false,
         }
     }
 }
 
 impl State {
-    /// Instantiates a new state. This consists of the global variables,
-    /// wasm memory and memory size.
+    /// Instantiates a new state. This consists of the global variables and
+    /// the wasm memory.
     pub fn new(
-        globals: &[Global],
-        wasm_memory: &[protocol::structs::IndexedPage],
-        memory_size: NumWasmPages,
+        globals: Vec<Global>,
+        wasm_memory: Memory,
+        stable_memory: Memory<NumWasmPages64>,
     ) -> Self {
-        let mut page_map = PageMap::new();
-        let page_refs: Vec<_> = wasm_memory
-            .iter()
-            .map(|page| (page.index, &page.data))
-            .collect();
-        page_map.update(&page_refs);
-
         Self {
             globals: globals.to_vec(),
-            pages: page_map,
-            heap_size: memory_size,
+            wasm_memory,
+            stable_memory,
         }
     }
 }
@@ -376,9 +397,9 @@ pub struct SandboxManager {
     controller: Arc<dyn ControllerService>,
 }
 struct SandboxManagerInt {
-    canister_wasms: std::collections::HashMap<String, Arc<CanisterWasm>>,
-    states: std::collections::HashMap<String, Arc<State>>,
-    active_execs: std::collections::HashMap<String, Arc<Execution>>,
+    canister_wasms: std::collections::HashMap<WasmId, Arc<CanisterWasm>>,
+    states: std::collections::HashMap<StateId, Arc<State>>,
+    active_execs: std::collections::HashMap<ExecId, Arc<Execution>>,
     workers: threadpool::ThreadPool,
 }
 
@@ -405,7 +426,7 @@ impl SandboxManager {
     /// open for multiple, requests.
     pub fn open_wasm(
         &self,
-        wasm_id: &str,
+        wasm_id: WasmId,
         wasm_file_path: Option<String>,
         wasm_src: Vec<u8>,
     ) -> bool {
@@ -414,8 +435,8 @@ impl SandboxManager {
             LogRequest(
                 LogLevel::Debug,
                 format!(
-                    "Opening wasm session: Wasm id: {:?}; wasm file path: {:?}",
-                    &wasm_id, wasm_file_path
+                    "Opening wasm session: {}; wasm file path: {:?}",
+                    wasm_id, wasm_file_path
                 ),
             ),
         );
@@ -427,15 +448,15 @@ impl SandboxManager {
             None => Arc::new(CanisterWasm::new_from_src(wasm_src)),
         };
 
-        guard.canister_wasms.insert(wasm_id.to_string(), wasm);
+        guard.canister_wasms.insert(wasm_id, wasm);
 
         log(
             &*self.controller,
             LogRequest(
                 LogLevel::Debug,
                 format!(
-                    "Opened wasm session: Wasm id: {:?}; wasm file path: {:?}",
-                    &wasm_id, wasm_file_path
+                    "Opened wasm session: {}; wasm file path: {:?}",
+                    wasm_id, wasm_file_path
                 ),
             ),
         );
@@ -444,49 +465,34 @@ impl SandboxManager {
     }
 
     /// Closes previously opened wasm instance, by id.
-    pub fn close_wasm(&self, wasm_id: &str) -> bool {
+    pub fn close_wasm(&self, wasm_id: WasmId) -> bool {
         let mut guard = self.repr.lock().unwrap();
         log(
             &*self.controller,
             LogRequest(
                 LogLevel::Debug,
-                format!("Closing wasm session: Wasm id: {:?}", &wasm_id),
+                format!("Closing wasm session: {}", wasm_id),
             ),
         );
-        guard.canister_wasms.remove(wasm_id).is_some()
+        guard.canister_wasms.remove(&wasm_id).is_some()
     }
 
-    /// Opens new state instance.
-    pub fn open_state(
-        &self,
-        state_id: &str,
-        globals: &[Global],
-        pages: &[protocol::structs::IndexedPage],
-        memory_size: NumWasmPages,
-    ) -> bool {
+    pub fn open_state(&self, request: OpenStateRequest) -> bool {
         let mut guard = self.repr.lock().unwrap();
-
-        match guard.states.get(&state_id.to_owned()) {
-            Some(_) => false,
-            None => {
-                let state = Arc::new(State::new(globals, pages, memory_size));
-                guard.states.insert(state_id.to_owned(), state);
-                true
-            }
-        }
+        guard.open_state(request)
     }
 
     /// Closes previously opened state instance, by id.
-    pub fn close_state(&self, state_id: &str) -> bool {
+    pub fn close_state(&self, state_id: StateId) -> bool {
         let mut guard = self.repr.lock().unwrap();
         log(
             &*self.controller,
             LogRequest(
                 LogLevel::Debug,
-                format!("Closing state session: state id: {:?}", &state_id),
+                format!("Closing state session: {}", state_id),
             ),
         );
-        guard.states.remove(state_id).is_some()
+        guard.states.remove(&state_id).is_some()
     }
 
     /// Opens new execution using specific code and state, passing
@@ -497,70 +503,50 @@ impl SandboxManager {
     /// this particular session.
     pub fn open_execution(
         &self,
-        exec_id: &str,
-        wasm_id: &str,
-        state_id: &str,
+        exec_id: ExecId,
+        wasm_id: WasmId,
+        state_id: StateId,
         exec_input: protocol::structs::ExecInput,
     ) -> bool {
         let mut guard = self.repr.lock().unwrap();
-        eprintln!("Exec: Exec id: {:?}", &exec_id);
-        log(
-            &*self.controller,
-            LogRequest(
-                LogLevel::Debug,
-                format!(
-                    "Opening exec session: Exec id: {:?} on state {:?} with wasm {:?}",
-                    &exec_id, &wasm_id, &wasm_id
-                ),
-            ),
+        eprintln!(
+            "Opening exec session: {}, {}, {}",
+            exec_id, state_id, wasm_id
         );
 
-        if let Some(_exec_id) = guard.active_execs.get(&exec_id.to_owned()) {
+        if let Some(_exec_id) = guard.active_execs.get(&exec_id) {
             // This should be unreachable: if we reach this point
             // we have failed to close an execution.
             //
             // Note that we do not have a lot of options regarding the panic. If we
             // are instructing to start a new execution it means that the replica
             // controller and the sandbox are now out of sync.
+            eprintln!("Exec session {} error: id is already in use.", exec_id);
             unreachable!();
         }
-        eprintln!("To open with wasm id : {:?}", wasm_id);
-        let wasm_runner = guard.canister_wasms.get(wasm_id);
+        let wasm_runner = guard.canister_wasms.get(&wasm_id);
         if let Some(wasm_runner) = wasm_runner {
-            eprintln!("Found wasm id : {:?}", wasm_id);
-            let state = guard.states.get(state_id);
+            let state = guard.states.get(&state_id);
             if let Some(state) = state {
                 let exec = Execution::create(
-                    exec_id.to_string(),
+                    exec_id,
                     Arc::clone(wasm_runner),
                     Arc::clone(state),
                     Arc::clone(&self.controller),
                     &mut guard.workers,
                     exec_input,
                 );
-
-                if let Ok(exec) = exec {
-                    guard.active_execs.insert(exec_id.to_owned(), exec);
-                    log(
-                        &*self.controller,
-                        LogRequest(
-                            LogLevel::Debug,
-                            format!(
-                                "Opened exec session: Exec id: {:?} on state {:?} with wasm {:?}",
-                                &exec_id, &wasm_id, &wasm_id
-                            ),
-                        ),
-                    );
-
-                    true
-                } else {
-                    false
-                }
+                guard.active_execs.insert(exec_id, exec);
+                true
             } else {
+                eprintln!(
+                    "Exec session {} error: state {} not found",
+                    exec_id, state_id
+                );
                 false
             }
         } else {
-            eprintln!("NOT FOUND wasm id : {:?}", wasm_id);
+            eprintln!("Exec session {} error: wasm {} not found", exec_id, wasm_id);
             false
         }
     }
@@ -573,14 +559,80 @@ impl SandboxManager {
     /// replica, as we assume a malicious sandboxed process. For
     /// stability reasons we should ensure still that sandbox is
     /// robust.
-    pub fn close_execution(&self, exec_id: &str) -> bool {
+    pub fn close_execution(&self, exec_id: ExecId) -> bool {
         let mut guard = self.repr.lock().unwrap();
-        match guard.active_execs.remove(exec_id) {
+        match guard.active_execs.remove(&exec_id) {
             Some(exec) => {
                 // **Attempt** closing the execution object.
                 exec.close()
             }
-            None => false,
+            None => {
+                eprintln!("Failed to close exec session {}: not found", exec_id);
+                false
+            }
         }
+    }
+}
+
+impl SandboxManagerInt {
+    fn open_state(&mut self, request: OpenStateRequest) -> bool {
+        if self.states.get(&request.state_id).is_some() {
+            eprintln!("Failed to open {}: already exists", request.state_id);
+            return false;
+        }
+
+        let (globals, wasm_memory, stable_memory) = match request.state {
+            StateSerialization::Full {
+                globals,
+                wasm_memory,
+                stable_memory,
+            } => {
+                let wasm_memory = deserialize_memory(wasm_memory);
+                let stable_memory = deserialize_memory(stable_memory);
+                (globals, wasm_memory, stable_memory)
+            }
+            StateSerialization::Delta {
+                parent_state_id,
+                globals,
+                wasm_memory,
+                stable_memory,
+            } => {
+                let parent_state = self.states.get(&parent_state_id).unwrap();
+                let wasm_memory =
+                    deserialize_delta_memory(&parent_state.wasm_memory.page_map, wasm_memory);
+                let stable_memory =
+                    deserialize_delta_memory(&parent_state.stable_memory.page_map, stable_memory);
+                (globals, wasm_memory, stable_memory)
+            }
+        };
+
+        let state = Arc::new(State::new(globals, wasm_memory, stable_memory));
+        self.states.insert(request.state_id, state);
+        true
+    }
+}
+
+// Constructs `Memory` from the given full memory serialization.
+fn deserialize_memory<T>(memory: MemorySerialization<T>) -> Memory<T> {
+    let page_map = PageMap::deserialize(memory.page_map).unwrap();
+    Memory {
+        page_map,
+        size: memory.num_wasm_pages,
+    }
+}
+
+// Constructs `Memory` by applying the given delta to the given parent memory.
+fn deserialize_delta_memory<T>(
+    parent_page_map: &PageMap,
+    delta: MemoryDeltaSerialization<T>,
+) -> Memory<T> {
+    let mut page_map = parent_page_map.clone();
+    if let Some(page_allocator) = delta.page_allocator {
+        page_map.deserialize_allocator(page_allocator);
+    }
+    page_map.deserialize_delta(delta.page_delta);
+    Memory {
+        page_map,
+        size: delta.num_wasm_pages,
     }
 }

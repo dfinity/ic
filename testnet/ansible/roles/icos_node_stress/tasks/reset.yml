@@ -1,0 +1,28 @@
+---
+# Reset delays and network drops and restart the service
+#
+
+- name: Reset network changes
+  # In case there is fq discipline, we know it's not one of ours, and we can safely skip.
+  # Not skipping means this command will fail, which is not something we want.
+  shell: |
+    set -exuo pipefail
+    if [[ -n "{{ ic_iface_ipv6 }}" ]]; then
+      if tc qdisc list dev {{ ic_iface_ipv6 }} | grep -v 'qdisc fq'; then
+        tc qdisc del dev {{ ic_iface_ipv6 }} root
+      fi
+    fi
+    if [[ -n "{{ ic_iface_ipv4 }}" ]]; then
+      if tc qdisc list dev {{ ic_iface_ipv4 }} | grep -v 'qdisc fq'; then
+        tc qdisc del dev {{ ic_iface_ipv4 }} root
+      fi
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: "Start ic-replica systemd service."
+  service:
+    name: ic-replica
+    state: started
+    enabled: yes

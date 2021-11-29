@@ -69,6 +69,52 @@ mod handshakes {
     }
 }
 
+mod handshakes_against_openssl_implementation {
+    use super::*;
+    use crate::tls_utils::test_client::Client as RustTlsClient;
+    use crate::tls_utils::test_client_openssl::OpenSslClient;
+    use crate::tls_utils::test_server::Server as RustTlsServer;
+    use crate::tls_utils::test_server_openssl::OpenSslServer;
+
+    #[tokio::test]
+    async fn should_perform_tls_handshake_from_rustls_client_to_openssl_server() {
+        let registry = TlsRegistry::new();
+        let server = OpenSslServer::builder(SERVER_ID_1)
+            .add_allowed_client(CLIENT_ID_1)
+            .build(registry.get());
+        let client = RustTlsClient::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
+        registry
+            .add_cert(SERVER_ID_1, server.cert())
+            .add_cert(CLIENT_ID_1, client.cert())
+            .update();
+
+        let (client_result, authenticated_client) =
+            tokio::join!(client.run(server.port()), server.run());
+
+        assert!(client_result.is_ok());
+        assert_peer_node_eq(authenticated_client.unwrap(), CLIENT_ID_1);
+    }
+
+    #[tokio::test]
+    async fn should_perform_tls_handshake_from_openssl_client_to_rustls_server() {
+        let registry = TlsRegistry::new();
+        let server = RustTlsServer::builder(SERVER_ID_1)
+            .add_allowed_client(CLIENT_ID_1)
+            .build(registry.get());
+        let client = OpenSslClient::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
+        registry
+            .add_cert(SERVER_ID_1, server.cert())
+            .add_cert(CLIENT_ID_1, client.cert())
+            .update();
+
+        let (client_result, authenticated_client) =
+            tokio::join!(client.run(server.port()), server.run());
+
+        assert!(client_result.is_ok());
+        assert_peer_node_eq(authenticated_client.unwrap(), CLIENT_ID_1);
+    }
+}
+
 mod server_allowing_all_nodes {
     use super::*;
 

@@ -1,0 +1,16 @@
+[package]
+name = "ic-p8s-service-discovery-log"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+chrono = "0.4.19"
+elastic_common_schema = { path = "../../elastic_common_schema" }
+gflags = "0.3.7"
+gflags-derive = "0.1"
+serde = { version = "1.0.115", features = ["derive"] }
+slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_trace", "nested-values"] }
+slog-async = { version = "2.5", features = ["nested-values"] }
+strum = "0.18.0"
+strum_macros = "0.18.0"
+thiserror = "1.0"

@@ -1,0 +1,22 @@
+[package]
+name = "canister-test"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+backoff = "0.3.0"
+candid = "0.7.4"
+cargo_metadata = "0.9.1"
+dfn_candid={path="../dfn_candid"}
+ic-canister-client = { path = "../../canister_client" }
+ic-config = { path = "../../config" }
+ic-registry-transport = { path = "../../registry/transport" }
+ic-replica-tests = { path = "../../replica_tests" }
+ic-test-utilities = { path = "../../test_utilities" }
+ic-types = { path = "../../types/types" }
+escargot = "0.5.2"
+on_wire = { path = "../on_wire" }
+rand = "0.7.3"
+reqwest = { version = "0.11.1", features = [ "native-tls" ] }
+wabt = "0.10.0"

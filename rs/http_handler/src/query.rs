@@ -1,6 +1,11 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
-use crate::{common, map_box_error_to_canonical_error, ReplicaHealthStatus};
+use crate::{
+    common::{cbor_response, make_response, make_response_on_validation_error},
+    types::{ApiReqType, RequestType},
+    HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
+};
+use futures::future::FutureExt;
 use hyper::{Body, Response};
 use ic_interfaces::{
     crypto::IngressSigVerifier, execution_environment::QueryExecutionService,
@@ -8,93 +13,138 @@ use ic_interfaces::{
 };
 use ic_logger::{trace, ReplicaLogger};
 use ic_types::{
-    canonical_error::{
-        invalid_argument_error, permission_denied_error, unavailable_error, CanonicalError,
-    },
+    canonical_error::{invalid_argument_error, permission_denied_error, unavailable_error},
     malicious_flags::MaliciousFlags,
     messages::{
-        CertificateDelegation, HttpReadContent, HttpRequest, HttpRequestEnvelope,
+        CertificateDelegation, HttpQueryContent, HttpRequest, HttpRequestEnvelope,
         SignedRequestBytes, UserQuery,
     },
     time::current_time,
 };
 use ic_validator::get_authorized_canisters;
 use std::convert::TryFrom;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, RwLock};
-use tower::{Service, ServiceExt};
+use std::task::{Context, Poll};
+use tower::{BoxError, Service};
 
-/// Handles a call to /api/v2/canister/.../query
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn handle(
-    log: &ReplicaLogger,
+#[derive(Clone)]
+pub(crate) struct QueryService {
+    log: ReplicaLogger,
+    metrics: HttpHandlerMetrics,
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    mut query_handler: QueryExecutionService,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
-    body: Vec<u8>,
+    query_execution_service: QueryExecutionService,
     malicious_flags: MaliciousFlags,
-) -> Result<Response<Body>, CanonicalError> {
-    trace!(log, "in handle query");
-    if *health_status.read().unwrap() != ReplicaHealthStatus::Healthy {
-        return Err(unavailable_error(
-            "Replica is starting. Check the /api/v2/status for more information.",
-        ));
-    }
-    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+}
 
-    let request =
-        match <HttpRequestEnvelope<HttpReadContent>>::try_from(&SignedRequestBytes::from(body)) {
+impl QueryService {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        log: ReplicaLogger,
+        metrics: HttpHandlerMetrics,
+        health_status: Arc<RwLock<ReplicaHealthStatus>>,
+        delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+        validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+        registry_client: Arc<dyn RegistryClient>,
+        query_execution_service: QueryExecutionService,
+        malicious_flags: MaliciousFlags,
+    ) -> QueryService {
+        Self {
+            log,
+            metrics,
+            health_status,
+            delegation_from_nns,
+            validator,
+            registry_client,
+            query_execution_service,
+            malicious_flags,
+        }
+    }
+}
+
+impl Service<Vec<u8>> for QueryService {
+    type Response = Response<Body>;
+    type Error = BoxError;
+    #[allow(clippy::type_complexity)]
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.query_execution_service.poll_ready(cx)
+    }
+
+    fn call(&mut self, body: Vec<u8>) -> Self::Future {
+        trace!(self.log, "in handle query");
+        self.metrics
+            .requests_body_size_bytes
+            .with_label_values(&[
+                RequestType::Query.as_str(),
+                ApiReqType::Query.as_str(),
+                UNKNOWN_LABEL,
+            ])
+            .observe(body.len() as f64);
+        if *self.health_status.read().unwrap() != ReplicaHealthStatus::Healthy {
+            let res = make_response(unavailable_error(
+                "Replica is starting. Check the /api/v2/status for more information.",
+            ));
+            return Box::pin(async move { Ok(res) });
+        }
+        let delegation_from_nns = self.delegation_from_nns.read().unwrap().clone();
+
+        let request = match <HttpRequestEnvelope<HttpQueryContent>>::try_from(
+            &SignedRequestBytes::from(body),
+        ) {
             Ok(request) => request,
             Err(e) => {
-                return Err(invalid_argument_error(
+                let res = make_response(invalid_argument_error(
                     format!("Could not parse body as read request: {}", e).as_str(),
                 ));
+                return Box::pin(async move { Ok(res) });
             }
         };
 
-    // Convert the message to a strongly-typed struct, making structural validations
-    // on the way.
-    let request = match HttpRequest::<UserQuery>::try_from(request) {
-        Ok(request) => request,
-        Err(e) => {
-            return Err(invalid_argument_error(
-                format!("Malformed request: {:?}", e).as_str(),
-            ));
-        }
-    };
-    let query = request.content();
-
-    match get_authorized_canisters(
-        &request,
-        validator.as_ref(),
-        current_time(),
-        registry_client.get_latest_version(),
-        &malicious_flags,
-    ) {
-        Ok(targets) => {
-            if !targets.contains(&query.receiver) {
-                return Err(permission_denied_error(""));
+        // Convert the message to a strongly-typed struct, making structural validations
+        // on the way.
+        let request = match HttpRequest::<UserQuery>::try_from(request) {
+            Ok(request) => request,
+            Err(e) => {
+                let res = make_response(invalid_argument_error(
+                    format!("Malformed request: {:?}", e).as_str(),
+                ));
+                return Box::pin(async move { Ok(res) });
             }
-        }
-        Err(err) => {
-            return Err(common::make_response_on_validation_error(
-                request.id(),
-                err,
-                log,
-            ));
-        }
-    };
+        };
+        let query = request.content();
 
-    // Here we want to hold the mutex only for the duration of the non-blocking
-    // call, and not for duration until the query completes. Hence the await on
-    // the callback is after the mutex was released.
-    let query_result = query_handler
-        .ready()
-        .await
-        .expect("The service must always be able to process requests")
-        .call((query.clone(), delegation_from_nns))
-        .await
-        .map_err(|err| map_box_error_to_canonical_error(err))?;
-    Ok(common::cbor_response(&query_result))
+        match get_authorized_canisters(
+            &request,
+            self.validator.as_ref(),
+            current_time(),
+            self.registry_client.get_latest_version(),
+            &self.malicious_flags,
+        ) {
+            Ok(targets) => {
+                if !targets.contains(&query.receiver) {
+                    let res = make_response(permission_denied_error(""));
+                    return Box::pin(async move { Ok(res) });
+                }
+            }
+            Err(err) => {
+                let res = make_response_on_validation_error(request.id(), err, &self.log);
+                return Box::pin(async move { Ok(res) });
+            }
+        };
+
+        Box::pin(
+            self.query_execution_service
+                .call((query.clone(), delegation_from_nns))
+                .map(|result| {
+                    let v = result?;
+                    Ok(cbor_response(&v))
+                }),
+        )
+    }
 }

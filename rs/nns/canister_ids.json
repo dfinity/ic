@@ -1,0 +1,38 @@
+{
+  "registry": {
+    "mercury": "rwlgt-iiaaa-aaaaa-aaaaa-cai",
+    "nnstestnet": "rwlgt-iiaaa-aaaaa-aaaaa-cai"
+  },
+  "governance": {
+    "mercury": "rrkah-fqaaa-aaaaa-aaaaq-cai",
+    "nnstestnet": "rrkah-fqaaa-aaaaa-aaaaq-cai"
+  },
+  "ledger": {
+    "mercury": "ryjl3-tyaaa-aaaaa-aaaba-cai",
+    "nnstestnet": "ryjl3-tyaaa-aaaaa-aaaba-cai"
+  },
+  "root": {
+    "mercury": "r7inp-6aaaa-aaaaa-aaabq-cai",
+    "nnstestnet": "r7inp-6aaaa-aaaaa-aaabq-cai"
+  },
+  "cycles-minting": {
+    "mercury": "rkp4c-7iaaa-aaaaa-aaaca-cai",
+    "nnstestnet": "rkp4c-7iaaa-aaaaa-aaaca-cai"
+  },
+  "lifeline": {
+    "mercury": "rno2w-sqaaa-aaaaa-aaacq-cai",
+    "nnstestnet": "rno2w-sqaaa-aaaaa-aaacq-cai"
+  },
+  "genesis-token": {
+    "mercury": "renrk-eyaaa-aaaaa-aaada-cai",
+    "nnstestnet": "renrk-eyaaa-aaaaa-aaada-cai"
+  },
+  "identity": {
+    "mercury": "rdmx6-jaaaa-aaaaa-aaadq-cai",
+    "nnstestnet": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+  },
+  "nns-ui": {
+    "mercury": "qoctq-giaaa-aaaaa-aaaea-cai",
+    "nnstestnet": "qoctq-giaaa-aaaaa-aaaea-cai"
+  }
+}

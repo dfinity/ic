@@ -10,15 +10,15 @@ mod webauthn;
 
 pub use self::http::{
     Authentication, Certificate, CertificateDelegation, Delegation, HasCanisterId,
-    HttpCanisterUpdate, HttpQueryResponse, HttpQueryResponseReply, HttpReadContent, HttpReadState,
-    HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent, HttpRequestEnvelope,
-    HttpResponseStatus, HttpStatusResponse, HttpSubmitContent, HttpUserQuery, RawHttpRequestVal,
-    ReplicaHealthStatus, SignedDelegation,
+    HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
+    HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
+    HttpRequestEnvelope, HttpRequestError, HttpResponseStatus, HttpStatusResponse,
+    HttpSubmitContent, HttpUserQuery, RawHttpRequestVal, ReplicaHealthStatus, SignedDelegation,
 };
 use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
 pub use blob::Blob;
 pub use ic_base_types::CanisterInstallMode;
-use ic_base_types::{CanisterId, CanisterIdError, PrincipalId};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
@@ -30,8 +30,8 @@ pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
 pub use query::UserQuery;
 pub use read_state::ReadState;
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 use std::mem::size_of;
-use std::{convert::TryFrom, error::Error, fmt};
 pub use webauthn::{WebAuthnEnvelope, WebAuthnSignature};
 
 const MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64: u64 = 2 * 1024 * 1024; // 2 MiB
@@ -187,46 +187,6 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                 }
             };
         Ok(stop_canister_context)
-    }
-}
-
-/// Errors returned by `HttpHandler` when processing ingress messages.
-#[derive(Debug, Clone, Serialize)]
-pub enum HttpHandlerError {
-    InvalidMessageId(String),
-    InvalidIngressExpiry(String),
-    InvalidDelegationExpiry(String),
-    InvalidPrincipalId(String),
-    MissingPubkeyOrSignature(String),
-    InvalidEncoding(String),
-}
-
-impl From<serde_cbor::Error> for HttpHandlerError {
-    fn from(err: serde_cbor::Error) -> Self {
-        HttpHandlerError::InvalidEncoding(format!("{}", err))
-    }
-}
-
-impl fmt::Display for HttpHandlerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            HttpHandlerError::InvalidMessageId(msg) => write!(f, "invalid message ID: {}", msg),
-            HttpHandlerError::InvalidIngressExpiry(msg) => write!(f, "{}", msg),
-            HttpHandlerError::InvalidDelegationExpiry(msg) => write!(f, "{}", msg),
-            HttpHandlerError::InvalidPrincipalId(msg) => write!(f, "invalid princial id: {}", msg),
-            HttpHandlerError::MissingPubkeyOrSignature(msg) => {
-                write!(f, "missing pubkey or signature: {}", msg)
-            }
-            HttpHandlerError::InvalidEncoding(err) => write!(f, "Invalid CBOR encoding: {}", err),
-        }
-    }
-}
-
-impl Error for HttpHandlerError {}
-
-impl From<CanisterIdError> for HttpHandlerError {
-    fn from(err: CanisterIdError) -> Self {
-        Self::InvalidPrincipalId(format!("Converting to canister id failed with {}", err))
     }
 }
 

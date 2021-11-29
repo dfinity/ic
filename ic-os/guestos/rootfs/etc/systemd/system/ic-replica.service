@@ -1,0 +1,40 @@
+[Unit]
+Description=IC replica
+# We must wait for IC bootstrap to complete: It writes various
+# state files and may also be needed to obtain network config.
+After=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
+# We must also wait for the network to become online: We must
+# put the correct address(es) into the ic.json5, but in case
+# of dynamic assignment they only become available once all
+# network interfaces are up.
+After=sys-subsystem-net-devices-enp1s0.device
+BindsTo=sys-subsystem-net-devices-enp1s0.device
+After=systemd-networkd.service
+PartOf=systemd-networkd.service
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=ic-replica
+
+Environment=RUST_BACKTRACE=1
+# Remember to update 'rs/default.nix' for nix-shell users
+# Remember to update 'src/dfx/src/actors/replica.rs' in the sdk repo for dfx users
+Environment=RUST_MIN_STACK=8192000
+# Actually, setting up permissions does not belong here. It should be a separate
+# one-shot service coupled with storage setup.
+ExecStartPre=+/opt/ic/bin/setup-permissions.sh
+ExecStartPre=+/opt/ic/bin/generate-replica-config.sh -n /boot/config/network.conf -c /boot/config/nns.conf -b /boot/config/backup.conf -l /boot/config/log.conf -m /boot/config/malicious_behavior.conf -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic.json5
+ExecStart=/opt/ic/bin/nodemanager --replica-binary-dir /var/lib/ic/data/images --cup-dir /var/lib/ic/data/cups --replica-config-file /run/ic-node/config/ic.json5 --enable-provisional-registration --ic-binary-directory /opt/ic/bin --version-file /opt/ic/share/version.txt
+LimitNOFILE=131072
+Restart=always
+RestartSec=10
+# The timeout was increased because the setup-permissions.sh may take very long
+# time to finish. It can be decreased again once the setup-permissions.sh is
+# moved to standalone service
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

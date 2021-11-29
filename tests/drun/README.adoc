@@ -1,0 +1,5 @@
+= drun tests
+
+The `drun` tools emulates a single node with one canister installed and allows
+running query and ingress messsages against the canister. `drun` is primarily
+used by Motoko developers to test wasm-binaries.

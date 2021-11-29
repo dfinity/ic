@@ -31,7 +31,7 @@ message SendRequest {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
   Memo memo = 1                  [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   Payment payment = 2            [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-  ICPTs max_fee = 3              [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Tokens max_fee = 3              [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   Subaccount from_subaccount = 4 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   AccountIdentifier to = 5       [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   BlockHeight created_at = 6;
@@ -46,7 +46,7 @@ message SendResponse {
 message NotifyRequest {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
   BlockHeight block_height = 1                    [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-  ICPTs max_fee = 2                               [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Tokens max_fee = 2                               [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   Subaccount from_subaccount = 3                  [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   ic_base_types.pb.v1.PrincipalId to_canister = 4 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   Subaccount to_subaccount = 5                    [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
@@ -61,7 +61,7 @@ message TransactionNotificationRequest {
   ic_base_types.pb.v1.PrincipalId to = 3;
   Subaccount to_subaccount = 4;
   BlockHeight block_height = 5;
-  ICPTs amount = 6;
+  Tokens amount = 6;
   Memo memo = 7;
 }
 
@@ -83,7 +83,7 @@ message AccountBalanceRequest  {
 }
 
 message AccountBalanceResponse {
-  ICPTs balance = 1;
+  Tokens balance = 1;
 }
 
 // Get the length of the chain with a certification
@@ -95,12 +95,12 @@ message TipOfChainResponse {
   BlockHeight chain_length = 2;
 }
 
-// How many ICPTs are there not in the minting account
+// How many Tokens are there not in the minting account
 message TotalSupplyRequest {
 }
 
 message TotalSupplyResponse {
-  ICPTs total_supply = 1;
+  Tokens total_supply = 1;
 }
 
 // Archive any blocks older than this
@@ -201,7 +201,7 @@ message GetNodesResponse {
 
 
 // ** BASIC TYPES **
-message ICPTs {
+message Tokens {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
   uint64 e8s = 1       [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 
@@ -209,7 +209,7 @@ message ICPTs {
 
 message Payment {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
-  ICPTs receiver_gets = 1      [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Tokens receiver_gets = 1      [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 
 }
 
@@ -232,7 +232,7 @@ message Hash {
 
 message Account {
   AccountIdentifier identifier = 1;
-  ICPTs balance = 2;
+  Tokens balance = 2;
 }
 
 message Transaction {
@@ -249,18 +249,18 @@ message Transaction {
 message Send {
   AccountIdentifier from = 1;
   AccountIdentifier to = 2;
-  ICPTs amount = 3;
-  ICPTs max_fee = 4;
+  Tokens amount = 3;
+  Tokens max_fee = 4;
 }
 
 message Mint {
   AccountIdentifier to = 2;
-  ICPTs amount = 3;
+  Tokens amount = 3;
 }
 
 message Burn {
   AccountIdentifier from = 1;
-  ICPTs amount = 3;
+  Tokens amount = 3;
 }
 
 

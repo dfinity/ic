@@ -1,0 +1,42 @@
+# This file will be dynamically included into the child pipeline if necessary.
+# For instance, if there are changes in the "prod" directory.
+# The following parts of the job may be overridden in gen_gitlab_cargo_pipeline.py:
+# - stage
+# - needs
+# - GIT_REVISION and possibly some other variables
+
+prod-generic-test:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline-prs-only
+  # we modify stage in gen_gitlab_cargo_pipeline.py
+  stage: test
+  needs:
+    - guest-os-diskimg-dev
+    - generic-guest-os-diskimg
+    - cargo-build-canisters
+    - cargo-build-release-linux-native
+  resource_group: $CDPRNET
+  artifacts:
+    paths:
+    - artifacts/results
+  timeout: 30m
+  retry:
+    max: 2
+    when:
+      - always
+  variables:
+    GIT_REVISION: $CI_COMMIT_SHA
+  script:
+    - |
+      set -xeuo pipefail
+      # The GIT_REVISION may be provided as a variable when generating the child pipeline.
+      # Otherwise, the latest revision with disk image will be used.
+      GIT_REVISION=${GIT_REVISION:-$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh HEAD)}
+      export GIT_REVISION
+      # Run generic test against $CDPRNET
+      # * run it for 120 seconds
+      # * require at least 100 RPS
+      # * use requests of size 1KB
+      placebo -i "testnet/**/*" -t "${GIT_REVISION}" -i "ic-os/guestos/build-out/disk-img-dev/*" -i "ic-os/generic-guestos/build-out/disk-img/*" -i "artifacts/canisters/*" -i "artifacts/release/*"  -i "artifacts/nix-release/*" -- \
+      testnet/tests/scripts/generic.sh "$CDPRNET" 120 100 1k artifacts/results

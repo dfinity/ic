@@ -1,0 +1,12 @@
+{
+    "type": "record",
+    "name": "ingress_wire",
+    "fields": [
+        {"name": "source", "type": "long", "default": 0},
+        {"name": "receiver", "type": "long", "default": 0},
+        {"name": "method_name", "type": "string", "default": ""},
+        {"name": "method_payload", "type": "bytes", "default": ""},
+        {"name": "message_id", "type": "long", "default": 0},
+        {"name": "message_time_ns", "type": "long", "default": 0}
+    ]
+}

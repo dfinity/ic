@@ -9,6 +9,7 @@ bitflags = "1.2.1"
 hex = "0.4.2"
 prost = "0.9.0"
 scoped_threadpool = "0.1.*"
+serde = { version = "1.0.99", default-features = false }
 
 [target.'cfg(target_family = "unix")'.dependencies]
 rand = "0.8.3"
@@ -19,3 +20,4 @@ libc = "0.2.91"
 
 [dev-dependencies]
 tempfile = "3.1.0"
+serde = { version = "1.0.99", features = ["derive"] }

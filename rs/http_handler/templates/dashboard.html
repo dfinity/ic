@@ -103,7 +103,6 @@
                     <h3>System state</h3>
                     <table>
                         <tr><td>controllers</td><td>{{ c.system_state.collect_controllers_as_string() }}</td></tr>
-                        <tr><td>stable_memory_size</td><td>{{ c.system_state.stable_memory.size }} pages</td></tr>
                         <tr><td>certified_data length</td><td>{{ c.system_state.certified_data.len() }} bytes</td></tr>
                     </table>
                     <h3>Execution state</h3>
@@ -114,6 +113,7 @@
                         <tr><td>wasm_binary size</td><td>{{ exec_state.wasm_binary.binary.len() }} bytes</td></tr>
                         <tr><td>wasm_binary sha256</td><td>{{ hex::encode(exec_state.wasm_binary.binary.hash_sha256()) }}</td></tr>
                         <tr><td>heap_size</td><td>{{ exec_state.wasm_memory.size }} pages</td></tr>
+                        <tr><td>stable_memory_size</td><td>{{ exec_state.stable_memory.size }} pages</td></tr>
                         <tr><td>exports</td><td>
                             {% let dbg = format!("{:?}",  exec_state.exports) %}
                             {% if dbg.len() > 5000 %}
@@ -131,7 +131,7 @@
                         <tr><td>last_full_execution_round</td><td>{{ c.scheduler_state.last_full_execution_round }}</td></tr>
                         <tr><td>compute_allocation</td><td>{{ c.scheduler_state.compute_allocation }}</td></tr>
                         <tr><td>freeze_threshold (seconds)</td><td>{{ c.system_state.freeze_threshold }}</td></tr>
-                        <tr><td>memory_usage</td><td>{{ c.memory_usage() }}</td></tr>
+                        <tr><td>memory_usage</td><td>{{ c.memory_usage_ref(subnet_type) }}</td></tr>
                         <tr><td>accumulated_priority</td><td>{{ c.scheduler_state.accumulated_priority.value() }} </td></tr>
                         <tr><td>Cycles balance</td><td>{{ c.system_state.cycles_balance }}</td></tr>
                     </table>

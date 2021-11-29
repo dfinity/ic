@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "canisters": {
+    "ledger": {
+      "type": "custom",
+      "candid": "./ledger.did",
+      "wasm": "./ledger-canister-min.wasm",
+      "build": "true"
+    }
+  },
+  "networks": {
+    "nnstestnet": {
+      "providers": [
+        "http://dcs-nns-8.dfinity.systems:8080"
+      ],
+      "type": "persistent"
+    }
+  }
+}

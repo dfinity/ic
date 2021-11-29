@@ -1,0 +1,12 @@
+<?xml version="1.0" ?>
+<testsuites disabled="0" errors="0" failures="0" tests="3" time="51.993700000000004">
+	<testsuite disabled="0" errors="0" failures="0" name="cargo test" skipped="0" tests="3" time="51.993700000000004">
+		<testcase name="system_tests::request_signature_test" time="26.031400" classname="system_tests">
+			<system-err>Feb 15 10:19:30.860 INFO Running 'request_signature_test' with seed 42
+DEBG Using...</system-err>
+		</testcase>
+		<testcase name="system_tests::request_signature_test::malicious_input_test" time="24.476000" classname="system_tests"/>
+		<testcase name="system_tests::request_signature_test::request_signature_test" time="1.486300" classname="system_tests"/>
+	</testsuite>
+</testsuites>
+

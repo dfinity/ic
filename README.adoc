@@ -78,6 +78,7 @@ The https://dfinity.org/[DFINITY Foundation] is a Swiss not-for-profit organizat
 *For all environments*
 
 - https://www.docker.com/[Docker].
+- Git
 
 *Please note: The default memory assigned to the docker image may be less (2GB by default on MacOS). We recommend this should be increased to 10 GB avoid build failures within the Docker container.*
 
@@ -89,84 +90,22 @@ ifdef::env-github[]
 ++++
 endif::[]
 
-*MacOS*
-
-- https://brew.sh/[Homebrew]
-- Xcode command line tools
-- coreutils (tip: once you have homebrew, you can run `$ brew install coreutils` if you do not have them)
-
-
-Note: You do not need to install the Rust package manager https://doc.rust-lang.org/cargo/[Cargo] or a lot of the toolchain used to build the repo. That all comes for you with the Docker image.
-
 == Building the code
 
-Note: we have observed that to build all the pieces it takes around 30-50 minutes, depending on your machine.
-
-=== 1. Build a Docker image
-
-Run the bash script in the repo to build a docker image that includes:
-
-  - The repo you have cloned
-  - Third-party binary dependencies (e.g. rustup, ubuntu, etc). For the purpose of transparency and security, you can look at the https://gitlab.com/dfinity-lab/core/ic/blob/master/gitlab-ci/docker/Dockerfile[dockerfile] file to see what these binaries are
-
+To see what dependencies the Docker image pulls in, check https://github.com/dfinity/ic/blob/master/gitlab-ci/docker/Dockerfile[Dockerfile].
 
 ----
-$ gitlab-ci/docker/docker-build-local-image.sh
+$ ./gitlab-ci/docker/docker-build-local-image.sh
+$ ./gitlab-ci/tools/docker-run ./gitlab-ci/tools/build-all
 ----
 
-=== 2. Enter Docker shell
+This builds:
 
-Execute this command to run the docker image you just built:
+* Native binaries (replica, nodemanager, et al -- for the full list, see https://github.com/dfinity/ic/blob/master/gitlab-ci/src/job_scripts/cargo-build-release-linux-native.sh)
+* Canisters
+* The ICOS disk image
 
-----
-$ gitlab-ci/tools/docker-run
-----
-
-Your shell may look something like this
-
-=== 3. Build the three main components within Docker shell
-
-This will put you in a shell inside the Docker container. Within the Docker container, you will need to navigate to the Rust directory (`/rs`):
-
-----
-ubuntu@c4cdffddc7d6:/builds/dfinity/ic$ cd rs
-ubuntu@c4cdffddc7d6:/builds/dfinity/ic/rs$
-----
-
-==== 4. Use regular Cargo commands to build the three main pieces (replica, nodemanager, NNS Canisters):
-
-*a. Build the replica.*
-The *replica* is a collection of protocol components that are necessary for a node to participate in a subnet.
-
-
-----
-ubuntu@c4cdffddc7d6:/builds/dfinity/ic/rs$ cargo build -p ic-replica
-----
-
-*b. Build the nodemanager:*
-The *nodemanager* is a component of the Internet Computer that manages the *replica*. Among other things, it continuously determines the correct *replica* binary to run for this node at any point in time, runs this binary, and monitors this process (e.g. restarting it if it exits unexpectedly). This may take an hour if it is being built inside an VM.
-
-
-----
-ubuntu@c4cdffddc7d6:/builds/dfinity/ic/rs$ cargo build -p nodemanager
-----
-
-Note: You can build both a. *replica* and b. *nodemanager* together:
-
-
-----
-ubuntu@c4cdffddc7d6:/builds/dfinity/ic/rs$ cargo build -p ic-replica -p nodemanager
-----
-
-The target diretory for cargo is `$HOME/.cache/dfinity/cargo_target`, so you can access the binaries you have built there.
-
-*c. Build the NNS (Network Nervous System) canisters*
-Once you have *replica* and *nodemanager* built, you need to install NNS Canisters. NNS canisters have a special Cargo command because they are written in Rust but compiled to Wasm, so you need to tell Cargo to target Wasm.
-
-
-----
-$ gitlab-ci/tools/docker-run gitlab-ci/tools/cargo-build-canisters
-----
+All the built artifacts can be found in the top-level `artifacts/` directory.
 
 == Contributing
 

@@ -41,7 +41,7 @@ pub(crate) fn get_value_from_snapshot<T: Message + Default>(
 ) -> Option<T> {
     snapshot
         .get(key.as_bytes())
-        .map(|v| decode_or_panic(v.clone()))
+        .map(|v| decode_or_panic::<T>(v.clone()))
 }
 
 /// Returns all node records from the snapshot.

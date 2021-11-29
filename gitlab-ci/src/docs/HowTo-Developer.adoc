@@ -1,0 +1,23 @@
+# Developer How-To
+
+## How-To Add Python Packages
+. Search https://search.nixos.org/packages[Nix packages] for corresponding Nix package name.
+. Edit `shell.nix`.
+. Under `python3-packages` add the Nix package name.
+
+## How-To Auto Format All Python Code
+. nix-shell
+. pre-commit run -a
+
+## Python tests
+### How-To Run Python Tests
+. nix-shell
+. pytest
+
+### How-To Make Pytest Emit Logging Output
+. nix-shell
+. pytest --log-cli-level=10
+
+### How-To Make Pytest Emit Stdout
+. nix-shell
+. pytest -s

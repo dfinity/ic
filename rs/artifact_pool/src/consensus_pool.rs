@@ -212,12 +212,17 @@ impl UncachedConsensusPoolImpl {
                     log.clone(),
                 ),
             ) as Box<_>,
+            #[cfg(feature = "rocksdb_backend")]
             PersistentPoolBackend::RocksDB(config) => Box::new(
                 crate::rocksdb_pool::PersistentHeightIndexedPool::new_consensus_pool(
                     config,
                     log.clone(),
                 ),
             ) as Box<_>,
+            #[allow(unreachable_patterns)]
+            cfg => {
+                unimplemented!("Configuration {:?} is not supported", cfg)
+            }
         };
 
         UncachedConsensusPoolImpl {
@@ -670,13 +675,12 @@ impl ConsensusGossipPool for ConsensusPoolImpl {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_message::make_genesis;
     use ic_interfaces::artifact_pool::UnvalidatedArtifact;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
     use ic_test_utilities::{
-        consensus::fake::*,
+        consensus::{fake::*, make_genesis},
         mock_time,
         types::ids::{node_test_id, subnet_test_id},
         FastForwardTimeSource,
@@ -1021,6 +1025,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_backup_purging() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
@@ -1041,13 +1046,13 @@ mod tests {
             let test_start_time = Instant::now();
             let mut next_wakeup_time = test_start_time;
 
-            let purging_interval = Duration::from_millis(2000);
+            let purging_interval = Duration::from_millis(3000);
             pool.backup = Some(Backup::new(
                 &pool,
                 backup_dir.path().into(),
                 backup_dir.path().join(format!("{:?}", subnet_id)),
                 // Artifact retention time
-                Duration::from_millis(900),
+                Duration::from_millis(2700),
                 purging_interval,
                 MetricsRegistry::new(),
                 no_op_logger(),
@@ -1112,7 +1117,6 @@ mod tests {
             // sync
             pool.backup.as_ref().unwrap().sync_backup();
 
-            //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 8));
             // We expect 5 folders for heights 0 to 4.
             assert_eq!(fs::read_dir(&group_path).unwrap().count(), 5);
 
@@ -1130,7 +1134,6 @@ mod tests {
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
-            //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 11));
             // We expect only 2 folders to survive the purging: 3, 4
             assert_eq!(fs::read_dir(&group_path).unwrap().count(), 2);
             assert!(group_path.join("3").exists());
@@ -1149,7 +1152,6 @@ mod tests {
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
-            //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 24));
             // We deleted all artifacts, but the group folder was updated by this and needs
             // to age now.
             assert!(group_path.exists());
@@ -1185,7 +1187,6 @@ mod tests {
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
-            //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 50));
             // The subnet_id folder expired and was deleted.
             assert!(!path.exists());
             assert_eq!(fs::read_dir(&backup_dir).unwrap().count(), 0);
@@ -1194,8 +1195,11 @@ mod tests {
 
     fn sleep_until(time: Instant, test_start_time: Instant) {
         let now = Instant::now();
-        let sleep_time = time.duration_since(now);
-        std::thread::sleep(sleep_time);
+
+        if now < time {
+            let sleep_time = time.duration_since(now);
+            std::thread::sleep(sleep_time);
+        }
 
         let now = Instant::now();
         println!(

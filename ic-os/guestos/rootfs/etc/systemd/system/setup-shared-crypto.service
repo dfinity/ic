@@ -1,0 +1,17 @@
+[Unit]
+Description=Set shared-crypto storage
+DefaultDependencies=no
+Requires=dev-mapper-store\x2dshared\x2d\x2dcrypto.device
+After=dev-mapper-store\x2dshared\x2d\x2dcrypto.device
+Before=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2dcrypto.service
+Before=var-lib-ic-crypto.mount
+
+[Install]
+RequiredBy=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2dcrypto.service
+RequiredBy=var-lib-ic-crypto.mount
+WantedBy=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-shared-crypto.sh

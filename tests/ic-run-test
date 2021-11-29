@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# vim: set ft=bash
+set -euo pipefail
+
+# We recreate a `TMPDIR` For the sake of people not using the sandbox, because
+# `application` litters `TMPDIR` with files and doesn't clean up
+TMPDIR=$(mktemp -d)
+export TMPDIR
+
+# We don't create the file yet, `replica` will do this for us
+port_file=$(mktemp -d)/port
+starter_pid_file=$(mktemp)
+readonly starter_pid_file
+
+function kill_replica() {
+    # Show the last lines of the replica output (create if necessary)
+    echo >>replica.stdout
+    echo >>replica.stderr
+    tail -n 5 replica.stdout replica.stderr
+    if [[ -f "$starter_pid_file" ]]; then
+        # We don't print anything here because this function is called
+        # on PIPE signal, so trying to output anything might cause an
+        # infinite loop.
+        kill "$(cat "$starter_pid_file")"
+        unlink "$starter_pid_file"
+    fi
+    rm -f "$port_file"
+    rm -rf "$TMPDIR/ic_crypto"
+}
+
+trap kill_replica EXIT PIPE
+
+# The Darwin sandbox does not do port-sandboxing, so we tell the replica
+# executable to use any free port to avoid clashes when multiple tests run
+# at the same time
+ic-starter --http-port-file="$port_file" \
+    --replica-path="$(command -v replica)" \
+    --state-dir="$TMPDIR" \
+    >replica.stdout 2>replica.stderr &
+starter_pid=$!
+
+echo $starter_pid >"$starter_pid_file"
+echo "Started replica $(command -v replica) with PID $starter_pid"
+
+retries=0
+max=30
+while ! [ -f "$port_file" ]; do
+    if [[ $retries -lt $max ]]; then
+        retries=$((retries + 1))
+        echo "waiting for port to be reported"
+        sleep 1
+    else
+        echo "Could not connect to the server after $max retries"
+        exit 1
+    fi
+done
+
+replica_port=$(cat "$port_file")
+
+echo "Server reported port: $replica_port"
+
+retries=0
+max=30
+while ! nc -z 127.0.0.1 "$replica_port"; do
+    if [[ $retries -lt $max ]]; then
+        retries=$((retries + 1))
+        echo "waiting for server to accept connections"
+        sleep 1
+    else
+        echo "Server did not accept connection after $retries retries."
+        exit 1
+    fi
+done
+
+export IC_URI="http://127.0.0.1:$replica_port"
+echo "Replica is up and running on port $IC_URI"
+
+eval "$@"

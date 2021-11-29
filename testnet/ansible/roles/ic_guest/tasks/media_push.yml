@@ -1,0 +1,12 @@
+---
+
+- name: copy media.img to remote
+  copy:
+    # copy the media image built for the node, or fallback to the generic 'media.img'
+    src: "{{ lookup('first_found', ['{{ ic_media_path }}/{{ item }}.img', '{{ ic_media_path }}/media.img']) }}"
+    dest: "/var/local/ic/media/{{ ic_deployment_name }}/{{ ic_git_revision }}/{{ item }}.img"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ hostvars[inventory_hostname].ic_guests }}"
+  tags: [ "ic_guest" ]

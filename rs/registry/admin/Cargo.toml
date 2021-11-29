@@ -1,0 +1,66 @@
+[package]
+name = "ic-admin"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+async-trait = "0.1.51"
+regex = "1.3.9"
+bytes = "1.0.1"
+base64 = "0.13.0"
+clap = "3.0.0-beta.2"
+ed25519-dalek = "1.0.1"
+futures = "0.3.8"
+hex = "0.4"
+lazy_static = "1.4.0"
+cycles-minting-canister = { path ="../../nns/cmc" }
+ic-admin-derive = { path = "../admin-derive"}
+ic-nns-init = { path="../../nns/init" }
+ic-base-thread = { path = "../../base/thread" }
+ic-base-types = { path="../../types/base_types" }
+ic-canister-client = { path = "../../canister_client" }
+ic-config = { path = "../../config" }
+ic-consensus = { path = "../../consensus" }
+ic-crypto = { path = "../../crypto" }
+ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
+ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
+ic-http-utils = { path = "../../http_utils" }
+ic-interfaces = { path = "../../interfaces" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-client = { path = "../client" }
+ic-registry-common = { path = "../common" }
+ic-registry-keys = { path = "../keys" }
+ic-registry-provisional-whitelist = { path = "../provisional_whitelist" }
+ic-registry-subnet-features = { path = "../subnet_features" }
+ic-registry-subnet-type = { path = "../subnet_type" }
+ic-registry-transport = { path = "../transport" }
+ic-types = { path = "../../types/types" }
+ic-nns-common = { path = "../../nns/common" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance = { path = "../../nns/governance" }
+ic-nns-handler-root = { path = "../../nns/handlers/root" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-registry-routing-table = { path = "../routing_table" }
+on_wire = { path = "../../rust_canisters/on_wire" }
+prost = "0.9.0"
+registry-canister = { path = "../canister" }
+serde = { version = "1.0", features = ["derive"] }
+serde_cbor = "0.11.1"
+serde_json = "1.0.40"
+serde-bytes-repr = "0.1.5"
+tokio = { version = "1.9.0", features = ["full"] }
+walkdir = "2.3.1"
+candid = "0.7.4"
+reqwest = { version = "0.11.1", features = [ "native-tls" ] }
+tempfile = "3.1.0"
+url = { version = "2.1.1", features = ["serde"] }
+strum = "0.18.0"
+strum_macros = "0.18.0"
+chrono = "0.4"
+
+[dev-dependencies]
+assert_matches = "1.4.0"
+
+[[bin]]
+name = "ic-admin"
+path = "src/main.rs"

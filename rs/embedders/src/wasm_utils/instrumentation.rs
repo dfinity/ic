@@ -107,6 +107,8 @@
 //! non-reentrant basic blocks.
 
 use super::errors::into_parity_wasm_error;
+use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
+use ic_replicated_state::NumWasmPages;
 use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
 use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 
@@ -290,6 +292,27 @@ impl Segments {
     #[allow(dead_code)]
     pub fn as_slice(&self) -> &[(usize, Vec<u8>)] {
         &self.0
+    }
+
+    pub fn validate(
+        &self,
+        initial_wasm_pages: NumWasmPages,
+    ) -> Result<(), WasmInstrumentationError> {
+        let initial_memory_size =
+            (initial_wasm_pages.get() as usize) * WASM_PAGE_SIZE_IN_BYTES as usize;
+        for (offset, bytes) in self.0.iter() {
+            let out_of_bounds = match offset.checked_add(bytes.len()) {
+                None => true,
+                Some(end) => end > initial_memory_size,
+            };
+            if out_of_bounds {
+                return Err(WasmInstrumentationError::InvalidDataSegment {
+                    offset: *offset,
+                    len: bytes.len(),
+                });
+            }
+        }
+        Ok(())
     }
 
     // Takes chunks extracted from data, and creates pages out of them, by mapping
@@ -543,6 +566,8 @@ pub fn instrument(
         }
     };
 
+    data.validate(NumWasmPages::from(limits.0))?;
+
     let result = parity_wasm::serialize(module).map_err(|err| {
         WasmInstrumentationError::ParitySerializeError(into_parity_wasm_error(err))
     })?;
@@ -786,7 +811,7 @@ fn get_data(sections: &mut Vec<Section>) -> Vec<(usize, Vec<u8>)> {
                                 [
                                     Instruction::I32Const(val),
                                     Instruction::End
-                                ] => *val as usize,
+                               ] => ((*val) as u32) as usize, // Convert via `u32` to avoid 64-bit sign-extension.
                                 _ => panic!(
                                     "complex initialization expressions for data segments are not supported!"
                                     ),

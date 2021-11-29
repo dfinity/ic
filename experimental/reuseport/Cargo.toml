@@ -1,0 +1,40 @@
+[package]
+name = "reuseport"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+nix = "0.20.0"
+net2 = "0.2"
+rand = "0.7"
+
+[[bin]]
+name = "allocator_nix"
+path = "src/allocator_nix.rs"
+
+[[bin]]
+name = "client_nix"
+path = "src/client_nix.rs"
+
+[[bin]]
+name = "allocator_net2"
+path = "src/allocator_net2.rs"
+
+[[bin]]
+name = "client_net2"
+path = "src/client_net2.rs"
+
+[[bin]]
+name = "client_noreuse"
+path = "src/client_noreuse.rs"
+
+[[bin]]
+name = "peer_manager"
+path = "src/peer_manager.rs"
+
+[[bin]]
+name = "peer"
+path = "src/peer.rs"

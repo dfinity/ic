@@ -8,6 +8,7 @@ pub mod sandbox_service;
 pub mod transport;
 pub mod protocol {
     pub mod ctlsvc;
+    pub mod id;
     pub mod logging;
     pub mod sbxsvc;
     pub mod structs;

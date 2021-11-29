@@ -1,6 +1,10 @@
 //! Module that deals with requests to /api/v2/canister/.../read_state
 
-use crate::{common, ReplicaHealthStatus};
+use crate::{
+    common::{cbor_response, into_cbor, make_response, make_response_on_validation_error},
+    types::{ApiReqType, RequestType},
+    HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
+};
 use hyper::{Body, Response};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path};
 use ic_interfaces::{
@@ -15,7 +19,7 @@ use ic_types::{
     },
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpReadContent, HttpReadStateResponse,
+        Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
         HttpRequest, HttpRequestEnvelope, MessageId, ReadState, SignedRequestBytes,
         EXPECTED_MESSAGE_ID_LENGTH,
     },
@@ -28,14 +32,14 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
-use tower::{limit::ConcurrencyLimit, load_shed::LoadShed, Service, ServiceBuilder};
+use tower::{BoxError, Service};
 
 const MAX_READ_STATE_REQUEST_IDS: u8 = 100;
-const MAX_CONCURRENT_READ_STATE_REQUESTS: usize = 1000;
 
 #[derive(Clone)]
 pub(crate) struct ReadStateService {
     log: ReplicaLogger,
+    metrics: HttpHandlerMetrics,
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -45,39 +49,35 @@ pub(crate) struct ReadStateService {
 }
 
 impl ReadStateService {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         log: ReplicaLogger,
+        metrics: HttpHandlerMetrics,
         health_status: Arc<RwLock<ReplicaHealthStatus>>,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         validator: Arc<dyn IngressSigVerifier + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
         malicious_flags: MaliciousFlags,
-    ) -> LoadShed<ConcurrencyLimit<ReadStateService>> {
-        let base_service = Self {
+    ) -> Self {
+        Self {
             log,
+            metrics,
             health_status,
             delegation_from_nns,
             state_reader,
             validator,
             registry_client,
             malicious_flags,
-        };
-
-        ServiceBuilder::new()
-            .load_shed()
-            .layer(tower::limit::GlobalConcurrencyLimitLayer::new(
-                MAX_CONCURRENT_READ_STATE_REQUESTS,
-            ))
-            .service(base_service)
+        }
     }
 }
 
 impl Service<Vec<u8>> for ReadStateService {
     type Response = Response<Body>;
-    type Error = CanonicalError;
+    type Error = BoxError;
     #[allow(clippy::type_complexity)]
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -85,35 +85,43 @@ impl Service<Vec<u8>> for ReadStateService {
 
     fn call(&mut self, body: Vec<u8>) -> Self::Future {
         trace!(self.log, "in handle read_state");
+        self.metrics
+            .requests_body_size_bytes
+            .with_label_values(&[
+                RequestType::ReadState.as_str(),
+                ApiReqType::ReadState.as_str(),
+                UNKNOWN_LABEL,
+            ])
+            .observe(body.len() as f64);
         if *self.health_status.read().unwrap() != ReplicaHealthStatus::Healthy {
-            let res = Err(unavailable_error(
+            let res = make_response(unavailable_error(
                 "Replica is starting. Check the /api/v2/status for more information.",
             ));
-            return Box::pin(async move { res });
+            return Box::pin(async move { Ok(res) });
         }
         let delegation_from_nns = self.delegation_from_nns.read().unwrap().clone();
 
-        let request =
-            match <HttpRequestEnvelope<HttpReadContent>>::try_from(&SignedRequestBytes::from(body))
-            {
-                Ok(request) => request,
-                Err(e) => {
-                    let res = Err(invalid_argument_error(
-                        format!("Could not parse body as read request: {}", e).as_str(),
-                    ));
-                    return Box::pin(async move { res });
-                }
-            };
+        let request = match <HttpRequestEnvelope<HttpReadStateContent>>::try_from(
+            &SignedRequestBytes::from(body),
+        ) {
+            Ok(request) => request,
+            Err(e) => {
+                let res = make_response(invalid_argument_error(
+                    format!("Could not parse body as read request: {}", e).as_str(),
+                ));
+                return Box::pin(async move { Ok(res) });
+            }
+        };
 
         // Convert the message to a strongly-typed struct, making structural validations
         // on the way.
         let request = match HttpRequest::<ReadState>::try_from(request) {
             Ok(request) => request,
             Err(e) => {
-                let res = Err(invalid_argument_error(
+                let res = make_response(invalid_argument_error(
                     format!("Malformed request: {:?}", e).as_str(),
                 ));
-                return Box::pin(async move { res });
+                return Box::pin(async move { Ok(res) });
             }
         };
         let read_state = request.content();
@@ -132,16 +140,12 @@ impl Service<Vec<u8>> for ReadStateService {
                     &read_state.paths,
                     &targets,
                 ) {
-                    return Box::pin(async move { Err(err) });
+                    return Box::pin(async move { Ok(make_response(err)) });
                 }
             }
             Err(err) => {
-                let res = Err(common::make_response_on_validation_error(
-                    request.id(),
-                    err,
-                    &self.log,
-                ));
-                return Box::pin(async move { res });
+                let res = make_response_on_validation_error(request.id(), err, &self.log);
+                return Box::pin(async move { Ok(res) });
             }
         }
 
@@ -158,19 +162,19 @@ impl Service<Vec<u8>> for ReadStateService {
             Some((_state, tree, certification)) => {
                 let signature = certification.signed.signature.signature.get().0;
                 let res = HttpReadStateResponse {
-                    certificate: Blob(common::into_cbor(&Certificate {
+                    certificate: Blob(into_cbor(&Certificate {
                         tree,
                         signature: Blob(signature),
                         delegation: delegation_from_nns,
                     })),
                 };
-                Ok(common::cbor_response(&res))
+                cbor_response(&res)
             }
-            None => Err(unavailable_error(
+            None => make_response(unavailable_error(
                 "Certified state is not available yet. Please try again...",
             )),
         };
-        Box::pin(async move { res })
+        Box::pin(async move { Ok(res) })
     }
 }
 

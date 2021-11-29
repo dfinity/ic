@@ -1,0 +1,17 @@
+version: v1beta1
+build:
+  roots:
+    - rs/crypto/internal/crypto_service_provider/proto
+    - rs/nns/common/proto
+    - rs/nns/gtc/proto Temporarily removed because a PR was reverted and then un-reverted
+    - rs/nns/handlers/root/proto
+    - rs/nns/governance/proto
+    - rs/protobuf/def
+    - rs/rosetta-api/ledger_canister/proto
+    - rs/types/base_types/proto
+lint:
+  use:
+    - DEFAULT
+breaking:
+  use:
+    - WIRE

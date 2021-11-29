@@ -1,0 +1,24 @@
+[package]
+name = "ic-prober"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ed25519-dalek = "1.0.1"
+ic-canister-client = { path = "../../canister_client" }
+ic-metrics = { path = "../metrics" }
+ic-types = { path = "../../types/types" }
+lazy_static = "1.4.0"
+prometheus = { version = "0.12.0", features = [ "process" ] }
+rand_chacha = "0.2.2"
+rand_core = "0.5.1"
+reqwest = { version = "0.11.1", features = [ "native-tls" ] }
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog-term = "2.6.0"
+tiny_http = "0.7"
+tokio = { version = "1.9.0", features = ["full"] }
+url = "2.1.1"
+
+[[bin]]
+name = "ic-prober"
+path = "src/main.rs"

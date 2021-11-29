@@ -1,0 +1,81 @@
+This is a standalone server which implements the https://www.rosetta-api.org/[Rosetta API]
+
+When complete this will allow cryptocurrency exchanges with this binary to read and write ICPT transactions using a standard interface.
+
+The Rosetta API uses slightly different terminology to us:
+* Accounts are canisters on our system
+* Shards are subnets
+* Mempools are the ingress queue
+
+== Pulling Docker images from GitLab ==
+First log in to the registry
+
+[source,bash]
+....
+docker login registry.gitlab.com --username coinbase --password gxNpUvPsh5Cf4y476cYx
+....
+
+Then pull an image
+
+[source,bash]
+....
+docker pull registry.gitlab.com/dfinity-lab/rosetta-node/rosetta-api
+....
+
+Then run it
+
+[source,bash]
+....
+docker run \
+    --interactive \
+    --tty \
+    --publish 8080:8080 \
+    --rm \
+    registry.gitlab.com/dfinity-lab/rosetta-node/rosetta-api
+....
+
+== Pushing Docker images to Docker Hub ==
+
+First log in to the registry (`docker login`) with your username and password. Make sure that the user is in the `dfinity` organization. Then, pull the image from GitLab, as above. Then tag it as follows, and then and push.
+
+[source,bash]
+....
+docker tag \
+    registry.gitlab.com/dfinity-lab/rosetta-node/rosetta-api:latest \
+    dfinity/rosetta-api:latest
+docker push dfinity/rosetta-api:latest
+....
+
+The image is now available directly from Docker Hub.
+
+[source,bash]
+....
+docker run \
+    --interactive \
+    --tty \
+    --publish 8080:8080 \
+    --rm \
+    dfinity/rosetta-api
+....
+
+== Building and running Docker image
+Building Docker image requires GitHub token `repository` permissions in order to download tarball with the sources via GitHub API. The command below assumes that the token is available in `github-token.txt` in the current working directory.
+
+[source,bash]
+....
+docker build . \
+    --build-arg GITHUB_TOKEN=$(cat github-token.txt) \
+    --file Dockerfile-Coinbase \
+    --tag dfinity/rosetta-api
+....
+
+Once the image is built, start Rosetta API server with
+
+[source,bash]
+....
+docker run \
+    --interactive \
+    --tty \
+    --publish 8080:8080 \
+    --rm \
+    dfinity/rosetta-api

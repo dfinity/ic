@@ -1,0 +1,17 @@
+[package]
+name = "test-wasmtime-table-call"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+anyhow = "*"
+wabt = "*"
+
+wasmtime = { git = "https://github.com/lostman/wasmtime", branch = "custom-signal-handler" }
+wasmtime-environ = { git = "https://github.com/lostman/wasmtime", branch = "custom-signal-handler" }
+wasmtime-interface-types = { git = "https://github.com/lostman/wasmtime", branch = "custom-signal-handler" }
+wasmtime-runtime = { git = "https://github.com/lostman/wasmtime", branch = "custom-signal-handler" }
+
+cranelift-entity = { version = "0.50.0", features = ["enable-serde"] }
+cranelift-wasm = "0.50.0"

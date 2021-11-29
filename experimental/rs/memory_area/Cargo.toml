@@ -1,0 +1,21 @@
+[package]
+name = "memory_area"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+bit-vec = "0.5"
+lazy_static = "*"
+libc = "*"
+memory_tracker = { path = "../../../rs/memory_tracker" }
+slog = "*"
+slog-scope = "*"
+nix = "*"
+
+[dev-dependencies]
+lazy_static = "*"
+slog-async = "*"
+slog-term = "*"
+tempfile = "*"
+yansi = "*"

@@ -5,9 +5,9 @@ use ic_canister_client::Sender;
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, ArchiveOptions, BinaryAccountBalanceArgs, Block,
-    BlockArg, BlockHeight, BlockRes, EncodedBlock, GetBlocksArgs, GetBlocksRes, ICPTs,
-    IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation,
-    SendArgs, Subaccount, TimeStamp, TotalSupplyArgs, Transaction, TransferArgs, TransferError,
+    BlockArg, BlockHeight, BlockRes, EncodedBlock, GetBlocksArgs, GetBlocksRes, IterBlocksArgs,
+    IterBlocksRes, LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation, SendArgs,
+    Subaccount, TimeStamp, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError,
     MIN_BURN_AMOUNT, TRANSACTION_FEE,
 };
 use on_wire::IntoWire;
@@ -30,7 +30,7 @@ fn example_block() -> Block {
     let transaction = Transaction::new(
         AccountIdentifier::new(CanisterId::from_u64(1).get(), None),
         AccountIdentifier::new(CanisterId::from_u64(2).get(), None),
-        ICPTs::new(10000, 50).unwrap(),
+        Tokens::new(10000, 50).unwrap(),
         TRANSACTION_FEE,
         Memo(456),
         TimeStamp::new(2_000_000_000, 123_456_789),
@@ -51,8 +51,8 @@ async fn simple_send(
             protobuf,
             SendArgs {
                 memo: Memo::default(),
-                amount: ICPTs::from_e8s(amount_e8s),
-                fee: ICPTs::from_e8s(fee_e8s),
+                amount: Tokens::from_e8s(amount_e8s),
+                fee: Tokens::from_e8s(fee_e8s),
                 from_subaccount: None,
                 to: to.get_principal_id().into(),
                 created_at_time: None,
@@ -62,7 +62,7 @@ async fn simple_send(
         .await
 }
 
-async fn query_balance(ledger: &Canister<'_>, acc: &Sender) -> Result<ICPTs, String> {
+async fn query_balance(ledger: &Canister<'_>, acc: &Sender) -> Result<Tokens, String> {
     ledger
         .query_(
             "account_balance_pb",
@@ -74,7 +74,7 @@ async fn query_balance(ledger: &Canister<'_>, acc: &Sender) -> Result<ICPTs, Str
         .await
 }
 
-async fn account_balance_candid(ledger: &Canister<'_>, acc: &AccountIdentifier) -> ICPTs {
+async fn account_balance_candid(ledger: &Canister<'_>, acc: &AccountIdentifier) -> Tokens {
     ledger
         .query_(
             "account_balance",
@@ -98,7 +98,7 @@ async fn transfer_candid(
         .expect("transfer call trapped")
 }
 
-fn make_accounts(num_accounts: u64, num_subaccounts: u8) -> HashMap<AccountIdentifier, ICPTs> {
+fn make_accounts(num_accounts: u64, num_subaccounts: u8) -> HashMap<AccountIdentifier, Tokens> {
     (1..=num_accounts)
         .flat_map(|i| {
             let pid = CanisterId::from_u64(i).get();
@@ -106,7 +106,7 @@ fn make_accounts(num_accounts: u64, num_subaccounts: u8) -> HashMap<AccountIdent
                 let subaccount: [u8; 32] = [j; 32];
                 (
                     AccountIdentifier::new(pid, Some(Subaccount(subaccount))),
-                    ICPTs::from_e8s(i * j as u64),
+                    Tokens::from_e8s(i * j as u64),
                 )
             })
         })
@@ -397,7 +397,7 @@ fn notify_timeout_test() {
         let sender = create_sender(100);
         accounts.insert(
             sender.get_principal_id().into(),
-            ICPTs::from_icpts(100).unwrap(),
+            Tokens::from_tokens(100).unwrap(),
         );
 
         let test_canister = proj
@@ -435,7 +435,7 @@ fn notify_timeout_test() {
                 SendArgs {
                     from_subaccount: None,
                     to: test_canister.canister_id().into(),
-                    amount: ICPTs::from_icpts(1).unwrap(),
+                    amount: Tokens::from_tokens(1).unwrap(),
                     fee: TRANSACTION_FEE,
                     memo: Memo(0),
                     created_at_time: None,
@@ -473,7 +473,7 @@ fn notify_test() {
         let sender = create_sender(100);
         accounts.insert(
             sender.get_principal_id().into(),
-            ICPTs::from_icpts(100).unwrap(),
+            Tokens::from_tokens(100).unwrap(),
         );
 
         let test_canister = proj
@@ -536,7 +536,7 @@ fn notify_test() {
                 SendArgs {
                     from_subaccount: None,
                     to: test_canister.canister_id().into(),
-                    amount: ICPTs::from_icpts(1).unwrap(),
+                    amount: Tokens::from_tokens(1).unwrap(),
                     fee: TRANSACTION_FEE,
                     memo: Memo(0),
                     created_at_time: None,
@@ -553,7 +553,7 @@ fn notify_test() {
                     SendArgs {
                         from_subaccount: None,
                         to: test_canister.canister_id().into(),
-                        amount: ICPTs::from_e8s(1),
+                        amount: Tokens::from_e8s(1),
                         fee: TRANSACTION_FEE,
                         memo: Memo(i),
                         created_at_time: None,
@@ -611,7 +611,7 @@ fn notify_test() {
                 SendArgs {
                     from_subaccount: None,
                     to: test_canister_2.canister_id().into(),
-                    amount: ICPTs::from_icpts(1).unwrap(),
+                    amount: Tokens::from_tokens(1).unwrap(),
                     fee: TRANSACTION_FEE,
                     memo: Memo(0),
                     created_at_time: None,
@@ -653,7 +653,7 @@ fn sub_account_test() {
 
         initial_values.insert(
             AccountIdentifier::new(sender.get_principal_id(), sub_account(1)),
-            ICPTs::from_icpts(10).unwrap(),
+            Tokens::from_tokens(10).unwrap(),
         );
         let from_subaccount = sub_account(1);
         let mut send_whitelist = HashSet::new();
@@ -681,7 +681,7 @@ fn sub_account_test() {
                 SendArgs {
                     from_subaccount,
                     to: AccountIdentifier::new(sender.get_principal_id(), sub_account(2)),
-                    amount: ICPTs::from_icpts(1).unwrap(),
+                    amount: Tokens::from_tokens(1).unwrap(),
                     fee: TRANSACTION_FEE,
                     memo: Memo(0),
                     created_at_time: None,
@@ -713,15 +713,15 @@ fn sub_account_test() {
             .await?;
 
         // Transaction fees are a pain so we're easy going with equality
-        fn is_roughly(a: ICPTs, b: ICPTs) {
-            let one_tenth = ICPTs::from_e8s(10_000_000);
+        fn is_roughly(a: Tokens, b: Tokens) {
+            let one_tenth = Tokens::from_e8s(10_000_000);
             assert!((a + one_tenth).unwrap() > b);
             assert!((a - one_tenth).unwrap() < b);
         }
 
-        is_roughly(balance_1, ICPTs::from_icpts(9).unwrap());
+        is_roughly(balance_1, Tokens::from_tokens(9).unwrap());
 
-        is_roughly(balance_2, ICPTs::from_icpts(1).unwrap());
+        is_roughly(balance_2, Tokens::from_tokens(1).unwrap());
 
         Ok(())
     })
@@ -738,7 +738,7 @@ fn check_anonymous_cannot_send() {
         let mut initial_values = HashMap::new();
         initial_values.insert(
             AccountIdentifier::new(us, sub_account(1)),
-            ICPTs::from_icpts(10).unwrap(),
+            Tokens::from_tokens(10).unwrap(),
         );
 
         let ledger_canister = proj
@@ -764,7 +764,7 @@ fn check_anonymous_cannot_send() {
                 SendArgs {
                     from_subaccount: sub_account(1),
                     to: AccountIdentifier::new(us, sub_account(2)),
-                    amount: ICPTs::from_icpts(1).unwrap(),
+                    amount: Tokens::from_tokens(1).unwrap(),
                     fee: TRANSACTION_FEE,
                     memo: Memo(0),
                     created_at_time: None,
@@ -791,11 +791,11 @@ fn transaction_test() {
         let mut accounts = HashMap::new();
         accounts.insert(
             acc1.get_principal_id().into(),
-            ICPTs::from_e8s(acc1_start_amount),
+            Tokens::from_e8s(acc1_start_amount),
         );
         accounts.insert(
             acc2.get_principal_id().into(),
-            ICPTs::from_e8s(acc2_start_amount),
+            Tokens::from_e8s(acc2_start_amount),
         );
 
         let ledger = proj
@@ -821,7 +821,7 @@ fn transaction_test() {
         let acc2_balance = query_balance(&ledger, &acc2).await?;
         assert_eq!(acc2_balance.get_e8s(), acc2_start_amount);
 
-        let supply: ICPTs = ledger
+        let supply: Tokens = ledger
             .query_("total_supply_pb", protobuf, TotalSupplyArgs {})
             .await?;
         assert_eq!(supply.get_e8s(), acc1_start_amount + acc2_start_amount);
@@ -833,7 +833,7 @@ fn transaction_test() {
         let acc1_balance = query_balance(&ledger, &acc1).await?;
         assert_eq!(acc1_balance.get_e8s(), acc1_start_amount + mint_amount);
 
-        let supply: ICPTs = ledger
+        let supply: Tokens = ledger
             .query_("total_supply_pb", protobuf, TotalSupplyArgs {})
             .await?;
         assert_eq!(
@@ -918,7 +918,7 @@ fn transaction_test() {
             mint_transaction,
             Operation::Mint {
                 to: acc1.get_principal_id().into(),
-                amount: ICPTs::from_e8s(mint_amount)
+                amount: Tokens::from_e8s(mint_amount)
             }
         );
 
@@ -927,8 +927,8 @@ fn transaction_test() {
             Operation::Transfer {
                 from: acc1.get_principal_id().into(),
                 to: acc2.get_principal_id().into(),
-                amount: ICPTs::from_e8s(send_amount),
-                fee: ICPTs::from_e8s(send_fee)
+                amount: Tokens::from_e8s(send_amount),
+                fee: Tokens::from_e8s(send_fee)
             }
         );
 
@@ -936,7 +936,7 @@ fn transaction_test() {
             burn_transaction,
             Operation::Burn {
                 from: acc2.get_principal_id().into(),
-                amount: ICPTs::from_e8s(burn_amount)
+                amount: Tokens::from_e8s(burn_amount)
             }
         );
 
@@ -1407,8 +1407,8 @@ fn test_transfer_candid() {
         let acc3_address: AccountIdentifier = acc3.get_principal_id().into();
 
         let mut accounts = HashMap::new();
-        accounts.insert(acc1_address, ICPTs::from_e8s(1_000_000_000));
-        accounts.insert(acc2_address, ICPTs::from_e8s(1_000_000_000));
+        accounts.insert(acc1_address, Tokens::from_e8s(1_000_000_000));
+        accounts.insert(acc2_address, Tokens::from_e8s(1_000_000_000));
 
         let ledger = proj
             .cargo_bin("ledger-canister")
@@ -1429,15 +1429,15 @@ fn test_transfer_candid() {
 
         assert_eq!(
             account_balance_candid(&ledger, &acc1_address).await,
-            ICPTs::from_e8s(1_000_000_000)
+            Tokens::from_e8s(1_000_000_000)
         );
         assert_eq!(
             account_balance_candid(&ledger, &acc2_address).await,
-            ICPTs::from_e8s(1_000_000_000)
+            Tokens::from_e8s(1_000_000_000)
         );
         assert_eq!(
             account_balance_candid(&ledger, &acc3_address).await,
-            ICPTs::ZERO
+            Tokens::ZERO
         );
 
         let timestamp_nanos = SystemTime::now()
@@ -1452,8 +1452,8 @@ fn test_transfer_candid() {
             &acc1,
             TransferArgs {
                 memo: Memo(0),
-                amount: ICPTs::from_e8s(10_000_000),
-                fee: ICPTs::from_e8s(10_000),
+                amount: Tokens::from_e8s(10_000_000),
+                fee: Tokens::from_e8s(10_000),
                 from_subaccount: None,
                 to: acc2_address.to_address(),
                 created_at_time: Some(TimeStamp { timestamp_nanos }),
@@ -1464,11 +1464,11 @@ fn test_transfer_candid() {
 
         assert_eq!(
             account_balance_candid(&ledger, &acc1_address).await,
-            ICPTs::from_e8s(989_990_000)
+            Tokens::from_e8s(989_990_000)
         );
         assert_eq!(
             account_balance_candid(&ledger, &acc2_address).await,
-            ICPTs::from_e8s(1_010_000_000)
+            Tokens::from_e8s(1_010_000_000)
         );
 
         // Test error cases
@@ -1478,8 +1478,8 @@ fn test_transfer_candid() {
                 &acc1,
                 TransferArgs {
                     memo: Memo(0),
-                    amount: ICPTs::from_e8s(10_000_000),
-                    fee: ICPTs::from_e8s(10_000),
+                    amount: Tokens::from_e8s(10_000_000),
+                    fee: Tokens::from_e8s(10_000),
                     from_subaccount: None,
                     to: acc2_address.to_address(),
                     created_at_time: Some(TimeStamp { timestamp_nanos }),
@@ -1497,8 +1497,8 @@ fn test_transfer_candid() {
                 &acc3,
                 TransferArgs {
                     memo: Memo(0),
-                    amount: ICPTs::from_e8s(10_000_000),
-                    fee: ICPTs::from_e8s(10_000),
+                    amount: Tokens::from_e8s(10_000_000),
+                    fee: Tokens::from_e8s(10_000),
                     from_subaccount: None,
                     to: acc2_address.to_address(),
                     created_at_time: None,
@@ -1506,7 +1506,7 @@ fn test_transfer_candid() {
             )
             .await,
             Err(TransferError::InsufficientFunds {
-                balance: ICPTs::ZERO
+                balance: Tokens::ZERO
             })
         );
 
@@ -1516,8 +1516,8 @@ fn test_transfer_candid() {
                 &acc3,
                 TransferArgs {
                     memo: Memo(0),
-                    amount: ICPTs::from_e8s(10_000_000),
-                    fee: ICPTs::from_e8s(10),
+                    amount: Tokens::from_e8s(10_000_000),
+                    fee: Tokens::from_e8s(10),
                     from_subaccount: None,
                     to: acc1_address.to_address(),
                     created_at_time: None,
@@ -1525,7 +1525,7 @@ fn test_transfer_candid() {
             )
             .await,
             Err(TransferError::BadFee {
-                expected_fee: ICPTs::from_e8s(10_000),
+                expected_fee: Tokens::from_e8s(10_000),
             })
         );
 
@@ -1535,8 +1535,8 @@ fn test_transfer_candid() {
                 &acc1,
                 TransferArgs {
                     memo: Memo(0),
-                    amount: ICPTs::from_e8s(10_000_000),
-                    fee: ICPTs::from_e8s(10_000),
+                    amount: Tokens::from_e8s(10_000_000),
+                    fee: Tokens::from_e8s(10_000),
                     from_subaccount: None,
                     to: acc2_address.to_address(),
                     created_at_time: Some(TimeStamp {
@@ -1556,8 +1556,8 @@ fn test_transfer_candid() {
                 &acc1,
                 TransferArgs {
                     memo: Memo(0),
-                    amount: ICPTs::from_e8s(10_000_000),
-                    fee: ICPTs::from_e8s(10_000),
+                    amount: Tokens::from_e8s(10_000_000),
+                    fee: Tokens::from_e8s(10_000),
                     from_subaccount: None,
                     to: acc2_address.to_address(),
                     created_at_time: Some(TimeStamp {

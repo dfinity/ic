@@ -1,0 +1,11 @@
+[Unit]
+Description=Generate ssh keys on first boot
+Before=ssh.service
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/dfinity/setup-ssh-keys.sh

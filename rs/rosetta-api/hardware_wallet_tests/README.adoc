@@ -1,0 +1,8 @@
+Tests for the Hardware Wallets
+==============================
+
+This directory contains a binary that generates tests cases for the hardware wallet.
+
+This does not actually contains the tests themselves, only the generation of those tests.
+
+The code for the hardware wallet is in https://github.com/Zondax/ledger-dfinity

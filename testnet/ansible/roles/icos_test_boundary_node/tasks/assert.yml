@@ -1,0 +1,9 @@
+---
+
+- name: assert operating system
+  assert:
+    that: "(ansible_distribution is match 'Ubuntu') and (ansible_distribution_version is match('20\\.04'))"
+    fail_msg: "Operating system is not supported."
+    success_msg: "Operating system is supported."
+  tags:
+    - boundary_node

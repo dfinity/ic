@@ -1,0 +1,118 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.2.
+--
+-- see: https://github.com/sol/hpack
+
+name:           analyzer
+version:        0.0.1
+synopsis:       Event analyzer
+category:       System, Data, Nix
+homepage:       https://gitlab.com/dfinity-lab/core/ic#readme
+bug-reports:    https://gitlab.com/dfinity-lab/core/ic
+license:        BSD3
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://gitlab.com/dfinity-lab/core/ic
+
+library
+  exposed-modules:
+      Analyzer
+      Analyzer.Ekg
+      Analyzer.Event
+      Analyzer.Report
+      Analyzer.Rules
+      Analyzer.Types
+      Analyzer.Multiplex
+  other-modules:
+      Paths_analyzer
+  hs-source-dirs:
+      src
+  ghc-options: -Wall
+  build-depends:
+      HUnit
+    , aeson
+    , arrows
+    , base >=4.9 && <5
+    , bytestring
+    , candid
+    , constraints
+    , containers
+    , cryptohash
+    , deepseq
+    , directory
+    , ed25519
+    , filepath
+    , hedgehog
+    , lens
+    , listsafe
+    , monad-par
+    , mtl
+    , multiset
+    , pcre-heavy
+    , pipes
+    , pretty-show
+    , simple-ltl
+    , tasty-hunit
+    , text
+    , time
+    , transformers
+    , unordered-containers
+  default-language: Haskell2010
+
+executable analyze
+  main-is: Analyze.hs
+  other-modules:
+      Paths_analyzer
+  hs-source-dirs:
+      bin
+  build-depends:
+      HUnit
+    , aeson
+    , analyzer
+    , arrows
+    , base >=4.9 && <5
+    , bytestring
+    , candid
+    , constraints
+    , containers
+    , cryptohash
+    , deepseq
+    , directory
+    , ed25519
+    , hedgehog
+    , lens
+    , listsafe
+    , monad-par
+    , mtl
+    , multiset
+    , pcre-heavy
+    , pipes
+    , pretty-show
+    , simple-ltl
+    , tasty-hunit
+    , text
+    , time
+    , transformers
+    , unordered-containers
+  default-language: Haskell2010
+
+test-suite analyzer-tests
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Basic
+  hs-source-dirs:
+      test
+  build-depends:
+      HUnit
+    , analyzer
+    , base
+    , pipes
+    , hedgehog
+    , tasty
+    , tasty-hedgehog
+    , tasty-hunit
+  default-language: Haskell2010

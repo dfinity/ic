@@ -1,0 +1,54 @@
+---
+# Install IC network service discovery files on Prometheus
+
+# Sub-directories are used to group scrape configs by job, so that the
+# Prometheus configuration for a given job can load all the files inside
+# a particular directory, instead of having to glob out a subset of files
+# from a single directory.
+#
+# /var/lib/p8s-scrape is created by the code in
+# //infra/monitoring/manifests/prometheus/nix/configuration.nix
+- name: Create the ic_networks/ config directory and sub-directories
+  file:
+    path: /var/lib/p8s-scrape/ic_networks/{{ item }}
+    state: directory
+    group: p8s-scrape
+    mode: 0775
+  loop:
+    - boundary_node_nginx
+    - boundary_node_control_plane
+    - nodemanager
+    - node_exporter
+
+- name: "Generate the scrape configuration"
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "{{ item }}_scrape_config.tmpl"
+    dest: /var/lib/p8s-scrape/ic_networks/{{ item }}/{{ ic }}_{{ item }}_scrape_config.json
+    group: p8s-scrape
+    mode: 0664
+    # Ensure the targets list in the generated file is non-zero length
+    validate: jq -e '.[0].targets | length != 0' %s
+  loop:
+    - nodemanager
+    - node_exporter
+
+# Same as the previous step, but conditional on the inventory having
+# a "boundary_nodes" group.
+# Some testnets do not have that group and deploying such testnets would fail
+# without the conditional.
+- name: "Generate the boundary_node scrape configurations"
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "{{ item }}_scrape_config.tmpl"
+    dest: /var/lib/p8s-scrape/ic_networks/{{ item }}/{{ ic }}_{{ item }}_scrape_config.json
+    group: p8s-scrape
+    mode: 0664
+    # Ensure the targets list in the generated file is non-zero length
+    validate: jq -e '.[0].targets | length != 0' %s
+  loop:
+    - boundary_node_nginx
+    - boundary_node_control_plane
+  when: "'boundary_nodes' in groups"

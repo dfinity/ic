@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package encoding_bench.proto;
+
+message IngressWire {
+  uint64 source = 1;
+  uint64 receiver = 2;
+  string method_name = 3;
+  bytes method_payload = 4;
+  uint64 message_id = 5;
+  uint64 message_time_ns = 6;
+}

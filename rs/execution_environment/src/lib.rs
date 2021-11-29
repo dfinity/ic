@@ -103,6 +103,7 @@ pub fn setup_execution(
         Arc::clone(&ingress_history_writer) as Arc<_>,
         metrics_registry,
         own_subnet_id,
+        own_subnet_type,
         scheduler_config.scheduler_cores,
         config.clone(),
         Arc::clone(&cycles_account_manager),

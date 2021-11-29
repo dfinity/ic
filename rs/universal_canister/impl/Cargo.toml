@@ -1,0 +1,7 @@
+[package]
+name = "universal_canister"
+version = "0.8.0"
+
+[dependencies]
+wee_alloc = "0.4.3"
+lazy_static = "1.4.0"

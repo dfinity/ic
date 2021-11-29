@@ -1,0 +1,64 @@
+= Runbooks for alerts
+:icons: font
+:sectanchors:
+:sectlinks:
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Synopsis
+
+== Alerts
+
+include::IC_Subnet_NotEnoughToMakeProgress.adoc[leveloffset=+2]
+
+include::IC_Replica_SlowFinalization.adoc[leveloffset=+2]
+
+include::NGINX_InstanceMissing.adoc[leveloffset=+2]
+
+include::NGINX_InstanceFlapping.adoc[leveloffset=+2]
+
+include::IC_TooFewRequestsReachReplica.adoc[leveloffset=+2]
+
+== Creating new runbook entries
+
+To create a new alert runbook file:
+
+- Make a copy of `_template.adoc`, name it after the alert
+- Fill the new file
+- Include it in this document
+
+== Best practices for writing runbook entries
+
+1. Be clear and concise
+
+2. Be specific with instructions.
++
+DO NOT:
++
+> Look at the replica dashboard ...
++
+DO:
++
+> View the replica dashboard at <link> ...
+
+3. Use bulleted or numbered lists where possible.
++
+This makes the documentation easier to skim and focus on the actionable part.
++
+DO NOT:
++
+> First log in to the machine, then check the logs, then restart the server.
++
+DO:
++
+> 1. Log in to the machine using `ssh ...`.
+> 2. Check the logs at location `/path/to/logs/...`
+> 3. If necessary, restart the server by running `some command`
+
+4. Be clear that some information may be missing or the problem may be novel
++
+We do not want people to fall in to the trap of thinking that the runbook is
+100% comprehensive and if it doesn't solve their problem they are stuck.
+
+== Alert Configuration Files
+
+Alert configurations can be found https://github.com/dfinity-lab/infra/tree/master/monitoring/manifests/prometheus/nix[here].

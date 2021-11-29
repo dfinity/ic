@@ -11,7 +11,7 @@ use ic_types::{
     crypto::CryptoError,
     messages::MessageId,
     time::{Time, UNIX_EPOCH},
-    CanisterId,
+    CanisterId, NumBytes,
 };
 use std::collections::HashSet;
 
@@ -129,6 +129,9 @@ pub trait IngressSelector: Send + Sync {
     /// used as parameter for the valid set rule check run to select a valid
     /// set of messages.
     ///
+    /// The following invariant is placed on this function by consensus:
+    /// get_ingress_payload(..., byte_limit).count_bytes() <= byte_limit
+    ///
     /// #Returns
     /// [IngressPayload] which is a collection of valid ingress messages
     fn get_ingress_payload(
@@ -136,6 +139,7 @@ pub trait IngressSelector: Send + Sync {
         ingress_pool: &dyn IngressPoolSelect,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
+        byte_limit: NumBytes,
     ) -> IngressPayload;
 
     /// Validates an IngressPayload against the past payloads and

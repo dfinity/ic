@@ -1,0 +1,13 @@
+[package]
+name = "ic-fake1"
+version = "0.1.0"
+
+[dependencies]
+ascii = "1.0.0"
+askama = "0.9.0"
+
+[build-dependencies]
+tempfile = "3.1.0"
+
+[dev-dependencies]
+bytes = "0.5.4"

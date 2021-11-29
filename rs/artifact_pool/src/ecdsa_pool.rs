@@ -8,8 +8,8 @@
 //! 3. EcdsaObjectPool is the backend storage for a particular artifact
 //! type. This is where the in memory artifacts are actually stored.
 
-use crate::ecdsa_objects::EcdsaObject;
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
+use ic_ecdsa_object::EcdsaObject;
 use ic_interfaces::artifact_pool::{IntoInner, UnvalidatedArtifact};
 use ic_interfaces::ecdsa::{
     EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, MutableEcdsaPool,
@@ -49,7 +49,7 @@ impl<T: EcdsaObject> EcdsaObjectPool<T> {
     fn insert_object(&mut self, object: T) {
         self.metrics.observe_insert(MESSAGE_SIZE_BYTES);
         if self.objects.insert(object.key(), object).is_some() {
-            self.metrics.observe_remove(MESSAGE_SIZE_BYTES);
+            self.metrics.observe_duplicate(MESSAGE_SIZE_BYTES);
         }
     }
 
@@ -200,6 +200,14 @@ impl MutableEcdsaPool for EcdsaPoolImpl {
                         warn!(
                             self.log,
                             "MoveToValidated:: artifact was not found: {:?}", action
+                        );
+                    }
+                }
+                EcdsaChangeAction::RemoveValidated(ref msg_id) => {
+                    if self.validated.remove_object(msg_id).is_none() {
+                        warn!(
+                            self.log,
+                            "RemoveValidated:: artifact was not found: {:?}", action
                         );
                     }
                 }
@@ -475,6 +483,58 @@ mod tests {
 
         ecdsa_pool.apply_changes(vec![EcdsaChangeAction::MoveToValidated(msg_id_2.clone())]);
         check_state(&ecdsa_pool, &[], &[msg_id_1, msg_id_2]);
+    }
+
+    #[test]
+    fn test_ecdsa_pool_remove_validated() {
+        let mut ecdsa_pool = EcdsaPoolImpl::new(
+            ic_logger::replica_logger::no_op_logger(),
+            MetricsRegistry::new(),
+        );
+        let time_source = FastForwardTimeSource::new();
+
+        let msg_id_1 = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(100));
+            let key = ecdsa_dealing.key();
+            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let change_set = vec![EcdsaChangeAction::AddToValidated(
+                EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+            )];
+            ecdsa_pool.apply_changes(change_set);
+            msg_id
+        };
+        let msg_id_2 = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let key = ecdsa_dealing.key();
+            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let change_set = vec![EcdsaChangeAction::AddToValidated(
+                EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+            )];
+            ecdsa_pool.apply_changes(change_set);
+            msg_id
+        };
+        let msg_id_3 = {
+            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(300));
+            let key = ecdsa_dealing.key();
+            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            ecdsa_pool.insert(UnvalidatedArtifact {
+                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                peer_id: NODE_1,
+                timestamp: time_source.get_relative_time(),
+            });
+            msg_id
+        };
+        check_state(
+            &ecdsa_pool,
+            &[msg_id_3.clone()],
+            &[msg_id_1.clone(), msg_id_2.clone()],
+        );
+
+        ecdsa_pool.apply_changes(vec![EcdsaChangeAction::RemoveValidated(msg_id_1)]);
+        check_state(&ecdsa_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
+
+        ecdsa_pool.apply_changes(vec![EcdsaChangeAction::RemoveValidated(msg_id_2)]);
+        check_state(&ecdsa_pool, &[msg_id_3], &[]);
     }
 
     #[test]

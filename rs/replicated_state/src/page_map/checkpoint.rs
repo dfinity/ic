@@ -2,12 +2,15 @@ use crate::page_map::{FileDescriptor, MemoryRegion, PageIndex, PersistenceError}
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_sys::{page_bytes_from_ptr, PageBytes};
 use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::ops::Range;
 use std::os::unix::io::AsRawFd;
-use std::os::unix::io::RawFd;
+use std::os::unix::prelude::FromRawFd;
 use std::path::Path;
 use std::sync::Arc;
+
+use super::FileOffset;
 
 lazy_static! {
     static ref ZEROED_PAGE: Box<PageBytes> = Box::new([0; PAGE_SIZE]);
@@ -26,11 +29,41 @@ pub(crate) struct Checkpoint {
 struct Mapping {
     mmap: ScopedMmap,
     _file: File, // It is not used but it keeps the `file_descriptor` alive.
-    file_descriptor: RawFd,
+    file_descriptor: FileDescriptor,
 }
 
 impl Mapping {
-    fn new(path: &Path) -> Result<Option<Mapping>, PersistenceError> {
+    fn new(
+        file: File,
+        len: usize,
+        path: Option<&Path>,
+    ) -> Result<Option<Mapping>, PersistenceError> {
+        if len == 0 {
+            // It's illegal to mmap an empty region, so the checkpoint
+            // will act as an empty mapping if the file size is zero.
+            Ok(None)
+        } else {
+            let mmap = ScopedMmap::from_readonly_file(&file, len).map_err(|err| {
+                let path = match path {
+                    Some(path) => path.display().to_string(),
+                    None => format!("/proc/self/fd/{}", file.as_raw_fd()),
+                };
+                PersistenceError::MmapError {
+                    path,
+                    len,
+                    internal_error: err.to_string(),
+                }
+            })?;
+            let fd = file.as_raw_fd();
+            Ok(Some(Mapping {
+                _file: file,
+                file_descriptor: FileDescriptor { fd },
+                mmap,
+            }))
+        }
+    }
+
+    fn open(path: &Path) -> Result<Option<Mapping>, PersistenceError> {
         let file = OpenOptions::new().read(true).open(path).map_err(|err| {
             PersistenceError::FileSystemError {
                 path: path.display().to_string(),
@@ -54,26 +87,25 @@ impl Mapping {
                 page_size: PAGE_SIZE,
             });
         }
+        Self::new(file, len, Some(path))
+    }
 
-        if len == 0 {
-            // It's illegal to mmap an empty region, so the checkpoint
-            // will act as an empty mapping if the file size is zero.
-            Ok(None)
-        } else {
-            let mmap = ScopedMmap::from_readonly_file(&file, len).map_err(|err| {
-                PersistenceError::MmapError {
-                    path: path.display().to_string(),
-                    len,
-                    internal_error: err.to_string(),
-                }
-            })?;
-            let fd = file.as_raw_fd();
-            Ok(Some(Mapping {
-                _file: file,
-                file_descriptor: fd,
-                mmap,
-            }))
+    /// Returns a serialization-friendly representation of `Mapping`.
+    fn serialize(&self) -> MappingSerialization {
+        MappingSerialization {
+            file_descriptor: self.file_descriptor.clone(),
+            file_len: self.mmap.len() as FileOffset,
         }
+    }
+
+    /// Creates `Mapping` from the given serialization-friendly representation.
+    fn deserialize(
+        serialized_mapping: MappingSerialization,
+    ) -> Result<Option<Mapping>, PersistenceError> {
+        // SAFETY: the file descriptor is valid because `serialized_mapping` is
+        // guaranteed to be valid as a precondition.
+        let file = unsafe { File::from_raw_fd(serialized_mapping.file_descriptor.fd) };
+        Mapping::new(file, serialized_mapping.file_len as usize, None)
     }
 
     fn get_page(&self, page_index: PageIndex) -> &PageBytes {
@@ -107,9 +139,7 @@ impl Mapping {
                     start: page_range.start,
                     end: PageIndex::new(std::cmp::min(num_pages, page_range.end.get())),
                 },
-                FileDescriptor {
-                    fd: self.file_descriptor,
-                },
+                self.file_descriptor.clone(),
             )
         }
     }
@@ -128,7 +158,28 @@ impl Checkpoint {
 
     /// Opens an existing heap file located at the specified path.
     pub fn open(path: &Path) -> Result<Checkpoint, PersistenceError> {
-        Mapping::new(path).map(|mapping| Checkpoint {
+        Mapping::open(path).map(|mapping| Checkpoint {
+            mapping: mapping.map(Arc::new),
+        })
+    }
+
+    /// Returns a serialization-friendly representation of `Checkpoint`.
+    pub fn serialize(&self) -> CheckpointSerialization {
+        CheckpointSerialization {
+            mapping: self.mapping.as_ref().map(|mapping| mapping.serialize()),
+        }
+    }
+
+    /// Creates `Checkpoint` from the given serialization-friendly
+    /// representation.
+    pub fn deserialize(
+        serialized_checkpoint: CheckpointSerialization,
+    ) -> Result<Checkpoint, PersistenceError> {
+        let mapping = match serialized_checkpoint.mapping {
+            None => None,
+            Some(mapping) => Mapping::deserialize(mapping)?,
+        };
+        Ok(Checkpoint {
             mapping: mapping.map(Arc::new),
         })
     }
@@ -168,4 +219,23 @@ impl Default for Checkpoint {
     fn default() -> Self {
         Self::empty()
     }
+}
+
+/// Serialization-friendly representation of `Mapping`.
+///
+/// It contains sufficient information to reconstruct `Mapping`
+/// in another process.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MappingSerialization {
+    pub file_descriptor: FileDescriptor,
+    pub file_len: FileOffset,
+}
+
+/// Serialization-friendly representation of `Checkpoint`.
+///
+/// It contains sufficient information to reconstruct `Checkpoint`
+/// in another process.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CheckpointSerialization {
+    pub mapping: Option<MappingSerialization>,
 }

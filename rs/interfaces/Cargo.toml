@@ -13,7 +13,9 @@ ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist"
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
+ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
+ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 phantom_newtype = { path = "../phantom_newtype" }
 prost = "0.9.0"

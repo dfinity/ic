@@ -1,0 +1,22 @@
+== Wasm Generator
+
+This scripts generates automatically an IC canister.
+It uses a compiler testing infrastructure that generates random C code to test any C compiler.
+Generated C programs are constructed so that each randomly generated program is known to compute a particular integer value.
+The user can choose to generate programs containing a single function or an arbitrary number N of functions.
+We use clang to compile the generate C code into x86_64 and run it. We then use clang to translate it into wasm code tat can run on the IC.
+The wasm code is installed on the IC using dfx. Executing the code on the IC and running the x86_64 executable should produce the same value.
+
+=== Usage
+
+wasm-generator.sh N
+
+where N is a number of functions in the wasm file. The larger the number of functions, the larger the wasm file.
+
+=== Output
+
+the output is a file called **canister.wasm** ready to be installed in the IC
+
+=== Restrictions
+
+keep the number of functions N smaller than 400. Otherwise, the tool will take a while to produce a random canister.

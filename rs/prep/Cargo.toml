@@ -1,0 +1,58 @@
+[package]
+name = "ic-prep"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0"
+base64 = "0.11"
+chrono = "0.4.19"
+ic-crypto = { path = "../crypto" }
+ic-config = { path = "../config" }
+structopt = { version = "0.3", features = ["wrap_help"] }
+ic-interfaces = { path = "../interfaces" }
+ic-logger = { path = "../monitoring/logger" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-common = { path = "../registry/common" }
+ic-registry-keys = { path = "../registry/keys" }
+ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-registry-routing-table = { path = "../registry/routing_table" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-registry-transport = { path = "../registry/transport" }
+ic-types = { path = "../types/types" }
+json5 = "0.3"
+openssl = "0.10.29"
+maplit = "1.0.2"
+phantom_newtype = { path = "../phantom_newtype" }
+prost = "0.9.0"
+rand = "0.7.3"
+reqwest = { version = "0.11.1", features = [ "native-tls" ] }
+serde = { version = "1.0.99", features = ["derive"] }
+serde_json = "1.0.40"
+slog = { version = "2.5.2", features = [
+    "nested-values",
+    "max_level_trace",
+    "release_max_level_debug",
+] }
+slog-term = "2.6.0"
+tempfile = "3.1.0"
+thiserror = "1.0"
+url = "2.1.1"
+
+[dev-dependencies]
+assert_matches = "1"
+slog-async = "2.5.0"
+pretty_assertions = "0.6"
+
+[lib]
+name = "ic_prep_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ic-prep"
+path = "src/bin/prep.rs"
+
+[[bin]]
+name = "ic-principal-id"
+path = "src/bin/principal_id.rs"

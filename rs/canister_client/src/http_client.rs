@@ -17,6 +17,7 @@ pub struct HttpClient {
 impl HttpClient {
     pub fn new() -> Self {
         let native_tls_connector = native_tls::TlsConnector::builder()
+            .use_sni(false)
             .request_alpns(&["h2"])
             .danger_accept_invalid_certs(true)
             .build()

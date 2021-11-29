@@ -1,0 +1,6 @@
+:toc2:
+:stem: latexmath
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix: .adoc]
+
+include::README.adoc[]

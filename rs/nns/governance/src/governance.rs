@@ -31,6 +31,7 @@ use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
@@ -43,14 +44,13 @@ use async_trait::async_trait;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use registry_canister::mutations::do_update_icp_xdr_conversion_rate::UpdateIcpXdrConversionRatePayload;
 
 use crate::pb::v1::governance::GovernanceCachedMetrics;
 use crate::pb::v1::manage_neuron_response::MergeMaturityResponse;
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::WaitForQuietState;
 use dfn_core::api::spawn;
-use ledger_canister::{ICPTs, ICP_SUBDIVIDABLE_BY};
+use ledger_canister::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 
 // A few helper constants for durations.
 pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
@@ -75,7 +75,7 @@ const MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO: f64 = 0.03;
 
 // Parameter of the wait for quiet algorithm. This is the maximum amount the
 // deadline can be delayed on each vote.
-pub const WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS: u64 = ONE_DAY_SECONDS / 2;
+pub const WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS: u64 = ONE_DAY_SECONDS;
 
 // 1 KB - maximum payload size of NNS function calls to keep in listing of
 // proposals
@@ -116,7 +116,7 @@ pub const MAX_NUMBER_OF_NEURONS: usize = 200_000;
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
 /// The number of e8s per ICPT;
-const E8S_PER_ICPT: u64 = ICP_SUBDIVIDABLE_BY;
+const E8S_PER_ICPT: u64 = TOKEN_SUBDIVIDABLE_BY;
 
 /// The max number of unsettled proposals -- that is proposals for which ballots
 /// are still stored.
@@ -413,7 +413,7 @@ impl NnsFunction {
             }
             NnsFunction::UpdateConfigOfSubnet => (REGISTRY_CANISTER_ID, "update_subnet"),
             NnsFunction::IcpXdrConversionRate => {
-                (REGISTRY_CANISTER_ID, "update_icp_xdr_conversion_rate")
+                (CYCLES_MINTING_CANISTER_ID, "set_icp_xdr_conversion_rate")
             }
             NnsFunction::ClearProvisionalWhitelist => {
                 (REGISTRY_CANISTER_ID, "clear_provisional_whitelist")
@@ -430,6 +430,9 @@ impl NnsFunction {
             }
             NnsFunction::AddOrRemoveDataCenters => {
                 (REGISTRY_CANISTER_ID, "add_or_remove_data_centers")
+            }
+            NnsFunction::UpdateUnassignedNodesConfig => {
+                (REGISTRY_CANISTER_ID, "update_unassigned_nodes_config")
             }
         };
         Ok((canister_id, method))
@@ -1000,7 +1003,8 @@ impl Proposal {
                             NnsFunction::Unspecified => Topic::Unspecified,
                             NnsFunction::AssignNoid
                             | NnsFunction::UpdateNodeOperatorConfig
-                            | NnsFunction::RemoveNodes => Topic::NodeAdmin,
+                            | NnsFunction::RemoveNodes
+                            | NnsFunction::UpdateUnassignedNodesConfig => Topic::NodeAdmin,
                             NnsFunction::CreateSubnet
                             | NnsFunction::AddNodeToSubnet
                             | NnsFunction::RecoverSubnet
@@ -1136,19 +1140,22 @@ impl ProposalData {
     /// This, this method can return true even if the proposal is
     /// already decided.
     pub fn accepts_vote(&self, now_seconds: u64, voting_period_seconds: u64) -> bool {
-        // Naive version of the wait-for-quiet mechanics. For now just
-        // tests that the proposal duration is smaller than the threshold,
-        // which we're just currently setting as seconds.
+        // If voting_period_seconds is zero, always accept votes. This only happens in
+        // tests.
+        #[cfg(not(feature = "test"))]
+        let always_allow = false;
+        #[cfg(feature = "test")]
+        let always_allow = voting_period_seconds == 0;
+        // Naive version of the wait-for-quiet mechanics. For now just tests
+        // that the proposal duration is smaller than the threshold, which
+        // we're just currently setting as seconds.
         //
         // Wait for quiet is meant to be able to decide proposals without
         // quorum. The tally must have been done above already.
         //
         // If the wait for quit threshold is unset (0), then proposals can
         // accept votes forever.
-        let deadline_timestamp_seconds = self.get_deadline_timestamp_seconds(voting_period_seconds);
-        // If voting_period_seconds is zero, always accept votes. This only happens in
-        // tests.
-        voting_period_seconds == 0 || (now_seconds < deadline_timestamp_seconds)
+        always_allow || (now_seconds < self.get_deadline_timestamp_seconds(voting_period_seconds))
     }
 
     pub fn evaluate_wait_for_quiet(
@@ -1163,11 +1170,16 @@ impl ProposalData {
             None => return,
         };
 
-        // Dont evaluate wait for quiet if there is already a decision, or the deadline
-        // is met.
-        if new_tally.yes > new_tally.total / 2 + 1
-            || new_tally.no > new_tally.total / 2 + 1
-            || now_seconds > wait_for_quiet_state.current_deadline_timestamp_seconds
+        // Dont evaluate wait for quiet if there is already a decision, or the
+        // deadline has been met. The deciding amount for yes and no are
+        // slightly different, because yes needs a majority to succeed, while
+        // no only needs a tie.
+        let current_deadline = wait_for_quiet_state.current_deadline_timestamp_seconds;
+        let deciding_amount_yes = new_tally.total / 2 + 1;
+        let deciding_amount_no = (new_tally.total + 1) / 2;
+        if new_tally.yes >= deciding_amount_yes
+            || new_tally.no >= deciding_amount_no
+            || now_seconds > current_deadline
         {
             return;
         }
@@ -1178,36 +1190,60 @@ impl ProposalData {
             (old_tally.yes > old_tally.no && new_tally.yes <= new_tally.no)
                 || (old_tally.yes <= old_tally.no && new_tally.yes > new_tally.no)
         }
-
         if !vote_has_turned(old_tally, new_tally) {
             return;
         }
 
-        let original_deadline_timestamp_seconds =
-            self.proposal_timestamp_seconds + voting_period_seconds;
-
+        // The required_margin reflects the proposed deadline extension to be
+        // made beyond the current moment, so long as that extends beyond the
+        // current wait-for-quiet deadline. We calculate the required_margin a
+        // bit indirectly here so as to keep with unsigned integers, but the
+        // idea is:
+        //
+        //     W + (voting_period - elapsed) / 2
+        //
+        // Thus, while we are still within the original voting period, we add
+        // to W, but once we are beyond that window, we subtract from W until
+        // reaching the limit where required_margin remains at zero. This
+        // occurs when:
+        //
+        //     elasped = voting_period + 2 * W
+        //
+        // As an example, given that W = 12h, if the initial voting_period is
+        // 24h then the maximum deadline will be 48h.
+        //
+        // The required_margin ends up being a linearly decreasing value,
+        // starting at W + voting_period / 2 and reducing to zero at the
+        // furthest possible deadline. When the vote does not flip, we do not
+        // update the deadline, and so there is a chance of ending prior to
+        // the extreme limit. But each time the vote flips, we "re-enter" the
+        // linear progression according to the elapsed time.
+        //
+        // This means that whenever there is a flip, the deadline is always
+        // set to the current time plus the required_margin, which places us
+        // along the a linear path that was determined by the starting
+        // variables.
+        let elapsed_seconds = now_seconds.saturating_sub(self.proposal_timestamp_seconds);
         let required_margin = WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS
-            .saturating_add(original_deadline_timestamp_seconds / 2)
-            .saturating_sub(now_seconds / 2);
-        let remaining_time = wait_for_quiet_state
-            .current_deadline_timestamp_seconds
-            .saturating_sub(now_seconds);
-
-        if remaining_time >= required_margin {
-            return;
-        }
-
-        let extension = required_margin.saturating_sub(remaining_time);
-        let old_deadline = wait_for_quiet_state.current_deadline_timestamp_seconds;
-        let new_deadline = wait_for_quiet_state.current_deadline_timestamp_seconds + extension;
-        println!(
-            "{}Updating WFQ deadline for proposal: {:?}. Old: {}, New: {}",
-            LOG_PREFIX,
-            self.id.unwrap(),
-            old_deadline,
-            new_deadline
+            .saturating_add(voting_period_seconds / 2)
+            .saturating_sub(elapsed_seconds / 2);
+        let new_deadline = std::cmp::max(
+            current_deadline,
+            now_seconds.saturating_add(required_margin),
         );
-        wait_for_quiet_state.current_deadline_timestamp_seconds = new_deadline;
+
+        if new_deadline != current_deadline {
+            println!(
+                "{}Updating WFQ deadline for proposal: {:?}. Old: {}, New: {}, Ext: {}",
+                LOG_PREFIX,
+                self.id.unwrap(),
+                current_deadline,
+                new_deadline,
+                new_deadline - current_deadline
+            );
+
+            wait_for_quiet_state.current_deadline_timestamp_seconds = new_deadline;
+        }
     }
 
     /// This is an expensive operation.
@@ -1240,7 +1276,8 @@ impl ProposalData {
             total,
         };
 
-        // Only update timestamp if the tally actually changes.
+        // Every time the tally changes, (possibly) update the wait-for-quiet
+        // dynamic deadline.
         if let Some(old_tally) = self.latest_tally.clone() {
             if new_tally.yes == old_tally.yes
                 && new_tally.no == old_tally.no
@@ -1248,6 +1285,7 @@ impl ProposalData {
             {
                 return;
             }
+
             self.evaluate_wait_for_quiet(
                 now_seconds,
                 voting_period_seconds,
@@ -1262,18 +1300,15 @@ impl ProposalData {
     /// Returns true if a proposal meets the conditions to be accepted. The
     /// result is only meaningful if the deadline has passed.
     pub fn is_accepted(&self) -> bool {
-        let latest_tally = &self.latest_tally;
-        if self.wait_for_quiet_state.is_some() {
-            if let Some(tally) = latest_tally {
-                (tally.yes as f64 >= MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO * (tally.total as f64))
-                    && tally.yes > tally.no
+        if let Some(tally) = self.latest_tally.as_ref() {
+            if self.wait_for_quiet_state.is_none() {
+                tally.is_absolute_majority_for_yes()
             } else {
-                false
+                (tally.yes as f64 >= tally.total as f64 * MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO)
+                    && tally.yes > tally.no
             }
         } else {
-            latest_tally
-                .as_ref()
-                .map_or(false, |x| x.is_absolute_majority_for_yes())
+            false
         }
     }
 
@@ -1319,6 +1354,62 @@ impl ProposalData {
                 .reward_status(now_seconds, voting_period_seconds)
                 .is_final()
     }
+}
+
+#[cfg(test)]
+mod test_wait_for_quiet {
+    use crate::pb::v1::{ProposalData, Tally, WaitForQuietState};
+    use ic_nns_common::pb::v1::ProposalId;
+    use proptest::prelude::{prop_assert, proptest};
+
+    proptest! {
+        /// This test ensures that none of the asserts in
+        /// `evaluate_wait_for_quiet` fire, and that the wait-for-quiet
+        /// deadline is only ever increased, if at all.
+        #[test]
+        fn test_evaluate_wait_for_quiet(voting_period_seconds in 3600u64..604_800,
+                                        now_seconds in 0u64..1_000_000,
+                                        old_yes in 0u64..1_000_000,
+                                        old_no in 0u64..1_000_000,
+                                        old_total in 10_000_000u64..100_000_000,
+                                        yes_votes in 0u64..1_000_000,
+                                        no_votes in 0u64..1_000_000,
+    ) {
+            let current_deadline_timestamp_seconds = voting_period_seconds;
+            let proposal_timestamp_seconds = 0; // initial timestamp is always 0
+            let mut proposal = ProposalData {
+                id: Some(ProposalId { id: 0 }),
+                proposal_timestamp_seconds,
+                wait_for_quiet_state: Some(WaitForQuietState {
+                    current_deadline_timestamp_seconds,
+                }),
+                ..ProposalData::default()
+            };
+            let old_tally = Tally {
+                timestamp_seconds: now_seconds,
+                yes: old_yes,
+                no: old_no,
+                total: old_total,
+            };
+            let new_tally = Tally {
+                timestamp_seconds: now_seconds,
+                yes: old_yes + yes_votes,
+                no: old_no + no_votes,
+                total: old_total,
+            };
+            proposal.evaluate_wait_for_quiet(
+                now_seconds,
+                voting_period_seconds,
+                &old_tally,
+                &new_tally,
+            );
+            let new_deadline = proposal
+                .wait_for_quiet_state
+                .unwrap()
+                .current_deadline_timestamp_seconds;
+            prop_assert!(new_deadline >= current_deadline_timestamp_seconds);
+        }
+        }
 }
 
 impl ProposalStatus {
@@ -1503,10 +1594,10 @@ impl GovernanceProto {
     }
 
     /// Iterate over all neurons and compute `GovernanceCachedMetrics`
-    pub fn compute_cached_metrics(&self, now: u64, icp_supply: ICPTs) -> GovernanceCachedMetrics {
+    pub fn compute_cached_metrics(&self, now: u64, icp_supply: Tokens) -> GovernanceCachedMetrics {
         let mut metrics = GovernanceCachedMetrics {
             timestamp_seconds: now,
-            total_supply_icp: icp_supply.get_icpts(),
+            total_supply_icp: icp_supply.get_tokens(),
             ..Default::default()
         };
 
@@ -1657,9 +1748,9 @@ pub trait Ledger: Send + Sync {
         memo: u64,
     ) -> Result<u64, GovernanceError>;
 
-    async fn total_supply(&self) -> Result<ICPTs, GovernanceError>;
+    async fn total_supply(&self) -> Result<Tokens, GovernanceError>;
 
-    async fn account_balance(&self, account: AccountIdentifier) -> Result<ICPTs, GovernanceError>;
+    async fn account_balance(&self, account: AccountIdentifier) -> Result<Tokens, GovernanceError>;
 }
 
 /// A single ongoing update for a single neuron.
@@ -1720,6 +1811,14 @@ pub struct Governance {
 
     /// The number of proposals after the last time GC was run.
     pub latest_gc_num_proposals: usize,
+}
+
+pub fn governance_minting_account() -> AccountIdentifier {
+    AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), None)
+}
+
+pub fn neuron_subaccount(subaccount: Subaccount) -> AccountIdentifier {
+    AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount))
 }
 
 impl Governance {
@@ -2205,8 +2304,7 @@ impl Governance {
         let recipient_subaccount = Subaccount::try_from(&recipient_neuron.account[..])
             .expect("Couldn't create a Subaccount from recipient_neuron");
 
-        let recipient_account_identifier =
-            AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(recipient_subaccount));
+        let recipient_account_identifier = neuron_subaccount(recipient_subaccount);
 
         let transfer_amount_doms = donor_neuron.cached_neuron_stake_e8s - transaction_fee;
 
@@ -2357,10 +2455,7 @@ impl Governance {
                     fees_amount_e8s,
                     0, // Burning transfers don't pay a fee.
                     Some(from_subaccount),
-                    AccountIdentifier::new(
-                        ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-                        None,
-                    ),
+                    governance_minting_account(),
                     self.env.now(),
                 )
                 .await?;
@@ -2586,10 +2681,7 @@ impl Governance {
                 staked_amount,
                 transaction_fee_e8s,
                 Some(from_subaccount),
-                AccountIdentifier::new(
-                    ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-                    Some(to_subaccount),
-                ),
+                neuron_subaccount(to_subaccount),
                 memo,
             )
             .await;
@@ -2753,10 +2845,7 @@ impl Governance {
                 child_stake_e8s,
                 0, // Minting transfer don't pay a fee.
                 None,
-                AccountIdentifier::new(
-                    ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-                    Some(to_subaccount),
-                ),
+                neuron_subaccount(to_subaccount),
                 memo,
             )
             .await;
@@ -2870,10 +2959,7 @@ impl Governance {
                 maturity_to_merge,
                 0, // Minting transfer don't pay a fee.
                 None,
-                AccountIdentifier::new(
-                    ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-                    Some(subaccount),
-                ),
+                neuron_subaccount(subaccount),
                 id.id,
             )
             .await?;
@@ -3112,10 +3198,7 @@ impl Governance {
                 staked_amount,
                 transaction_fee_e8s,
                 Some(from_subaccount),
-                AccountIdentifier::new(
-                    ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-                    Some(to_subaccount),
-                ),
+                neuron_subaccount(to_subaccount),
                 memo,
             )
             .await;
@@ -3383,8 +3466,6 @@ impl Governance {
             ballots
         }
 
-        let deadline_timestamp_seconds = data.get_deadline_timestamp_seconds(voting_period_seconds);
-
         ProposalInfo {
             id: data.id,
             proposer: data.proposer.clone(),
@@ -3401,7 +3482,9 @@ impl Governance {
             topic: topic as i32,
             status: status as i32,
             reward_status: reward_status as i32,
-            deadline_timestamp_seconds: Some(deadline_timestamp_seconds),
+            deadline_timestamp_seconds: Some(
+                data.get_deadline_timestamp_seconds(voting_period_seconds),
+            ),
         }
     }
 
@@ -3686,10 +3769,7 @@ impl Governance {
                         reward.amount_e8s,
                         0, // Minting transfers don't pay transaction fees.
                         None,
-                        AccountIdentifier::new(
-                            ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-                            Some(to_subaccount),
-                        ),
+                        neuron_subaccount(to_subaccount),
                         now,
                     )
                     .await?;
@@ -4992,7 +5072,7 @@ impl Governance {
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<NeuronId, GovernanceError> {
         let now = self.env.now();
-        let account = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
+        let account = neuron_subaccount(subaccount);
         // We need to lock the neuron to make sure it doesn't undergo
         // concurrent changes while we're checking the balance and
         // refreshing the stake.
@@ -5109,7 +5189,7 @@ impl Governance {
         )?;
 
         // Get the balance of the neuron's subaccount from ledger canister.
-        let account = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
+        let account = neuron_subaccount(subaccount);
         let balance = self.ledger.account_balance(account).await?;
         let min_stake = self.economics().neuron_minimum_stake_e8s;
         if balance.get_e8s() < min_stake {
@@ -5377,7 +5457,7 @@ impl Governance {
     /// can no longer accept votes for the purpose of rewards and that have
     /// not yet been considered in a reward event.
     /// * Associate those proposals to the new reward event
-    fn distribute_rewards(&mut self, supply: ICPTs) {
+    fn distribute_rewards(&mut self, supply: Tokens) {
         println!("{}distribute_rewards. Supply: {:?}", LOG_PREFIX, supply);
 
         let day_after_genesis = (self.env.now() - self.proto.genesis_timestamp_seconds)

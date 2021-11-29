@@ -1,0 +1,21 @@
+[package]
+name = "test-wasmtime-orthogonal-persistence"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+anyhow = "*"
+libc = "*"
+libsigsegv = { path = "../libsigsegv" }
+memory_area = { path = "../memory_area" }
+nix = "*"
+slog = "*"
+slog-async = "*"
+slog-scope = "*"
+slog-term = "*"
+wabt = "*"
+wasmtime = { git = "https://github.com/lostman/wasmtime", branch = "custom-signal-handler" }
+wasmtime-environ = { git = "https://github.com/lostman/wasmtime", branch = "custom-signal-handler" }
+wasmtime-interface-types = { git = "https://github.com/lostman/wasmtime", branch = "custom-signal-handler" }
+wasmtime-runtime = { git = "https://github.com/lostman/wasmtime", branch = "custom-signal-handler" }

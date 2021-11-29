@@ -1,0 +1,31 @@
+---
+# Kill the replica binary
+#
+
+- name: Check that downtime_seconds is a positive number, if provided
+  assert:
+    that: downtime_seconds | default('0') | int >= 0
+
+- name: "Permanently stop ic-replica systemd service, no downtime_seconds provided."
+  command: /usr/bin/systemctl stop ic-replica
+  when:
+    - downtime_seconds | default('0') | int == 0
+
+- name: "Temporarily stop ic-replica systemd service"
+  command: /usr/bin/systemctl stop ic-replica
+  when:
+    - downtime_seconds | default('0') | int > 0
+
+- name: "Sleep for the given downtime and continue with play"
+  wait_for:
+    timeout: "{{ downtime_seconds }}"
+  when:
+    - downtime_seconds | default('0') | int > 0
+
+- name: "Start ic-replica systemd service."
+  service:
+    name: ic-replica
+    state: started
+    enabled: yes
+  when:
+    - downtime_seconds | default('0') | int > 0

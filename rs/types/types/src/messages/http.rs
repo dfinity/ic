@@ -2,19 +2,22 @@
 #![cfg_attr(test, allow(clippy::unit_arg))]
 //! HTTP requests that the Internet Computer is prepared to handle.
 
-use super::{Blob, HttpHandlerError};
-use crate::messages::{MessageId, UserSignature};
+use super::Blob;
 use crate::{
-    crypto::SignedBytesWithoutDomainSeparator, messages::ingress_messages::SignedIngressContent,
-    messages::message_id::hash_of_map, messages::ReadState, messages::UserQuery, Time, UserId,
+    crypto::SignedBytesWithoutDomainSeparator,
+    messages::{
+        message_id::hash_of_map, MessageId, ReadState, SignedIngressContent, UserQuery,
+        UserSignature,
+    },
+    Time, UserId,
 };
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{CanisterId, CanisterIdError, PrincipalId};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
 use maplit::btreemap;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, convert::TryFrom};
+use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt};
 
 /// Describes the fields of a canister update call as defined in
 /// https://sdk.dfinity.org/docs/interface-spec/index.html#api-update.
@@ -100,6 +103,29 @@ pub struct HttpUserQuery {
     pub nonce: Option<Blob>,
 }
 
+/// Describes the contents of a /api/v2/canister/_/query request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "request_type")]
+pub enum HttpQueryContent {
+    Query {
+        #[serde(flatten)]
+        query: HttpUserQuery,
+    },
+}
+
+impl HttpQueryContent {
+    pub fn representation_independent_hash(&self) -> [u8; 32] {
+        match self {
+            Self::Query { query } => query.representation_independent_hash(),
+        }
+    }
+
+    pub fn id(&self) -> MessageId {
+        MessageId::from(self.representation_independent_hash())
+    }
+}
+
 /// A `read_state` request as defined in https://sdk.dfinity.org/docs/interface-spec/index.html#api-request-read-state.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HttpReadState {
@@ -111,26 +137,20 @@ pub struct HttpReadState {
     pub ingress_expiry: u64,
 }
 
-/// Describes the contents of a /api/v2/canister/_/{read_state|query} request.
+/// Describes the contents of a /api/v2/canister/_/read_state request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "request_type")]
-pub enum HttpReadContent {
-    Query {
-        #[serde(flatten)]
-        query: HttpUserQuery,
-    },
+pub enum HttpReadStateContent {
     ReadState {
         #[serde(flatten)]
         read_state: HttpReadState,
     },
 }
 
-impl HttpReadContent {
-    /// Returns the representation-independent hash.
+impl HttpReadStateContent {
     pub fn representation_independent_hash(&self) -> [u8; 32] {
         match self {
-            Self::Query { query } => query.representation_independent_hash(),
             Self::ReadState { read_state } => read_state.representation_independent_hash(),
         }
     }
@@ -193,7 +213,8 @@ impl HttpReadState {
 /// A request envelope as defined in
 /// https://sdk.dfinity.org/docs/interface-spec/index.html#authentication.
 ///
-/// The content is either an [`HttpSubmitContent`] or an [`HttpReadContent`].
+/// The content is either [`HttpSubmitContent`], [`HttpQueryContent`] or
+/// [`HttpReadStateContent`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct HttpRequestEnvelope<C> {
@@ -221,7 +242,7 @@ pub enum Authentication {
 }
 
 impl<C> TryFrom<&HttpRequestEnvelope<C>> for Authentication {
-    type Error = HttpHandlerError;
+    type Error = HttpRequestError;
 
     fn try_from(env: &HttpRequestEnvelope<C>) -> Result<Self, Self::Error> {
         match (&env.sender_pubkey, &env.sender_sig, &env.sender_delegation) {
@@ -325,42 +346,36 @@ impl HttpRequestContent for ReadState {
     }
 }
 
-impl TryFrom<HttpRequestEnvelope<HttpReadContent>> for HttpRequest<UserQuery> {
-    type Error = HttpHandlerError;
+impl TryFrom<HttpRequestEnvelope<HttpQueryContent>> for HttpRequest<UserQuery> {
+    type Error = HttpRequestError;
 
-    fn try_from(envelope: HttpRequestEnvelope<HttpReadContent>) -> Result<Self, Self::Error> {
+    fn try_from(envelope: HttpRequestEnvelope<HttpQueryContent>) -> Result<Self, Self::Error> {
         let auth = Authentication::try_from(&envelope)?;
         match envelope.content {
-            HttpReadContent::Query { query } => Ok(HttpRequest {
+            HttpQueryContent::Query { query } => Ok(HttpRequest {
                 content: UserQuery::try_from(query)?,
                 auth,
             }),
-            _ => Err(HttpHandlerError::InvalidEncoding(
-                "Could not decode the query message.".to_string(),
-            )),
         }
     }
 }
 
-impl TryFrom<HttpRequestEnvelope<HttpReadContent>> for HttpRequest<ReadState> {
-    type Error = HttpHandlerError;
+impl TryFrom<HttpRequestEnvelope<HttpReadStateContent>> for HttpRequest<ReadState> {
+    type Error = HttpRequestError;
 
-    fn try_from(envelope: HttpRequestEnvelope<HttpReadContent>) -> Result<Self, Self::Error> {
+    fn try_from(envelope: HttpRequestEnvelope<HttpReadStateContent>) -> Result<Self, Self::Error> {
         let auth = Authentication::try_from(&envelope)?;
         match envelope.content {
-            HttpReadContent::ReadState { read_state } => Ok(HttpRequest {
+            HttpReadStateContent::ReadState { read_state } => Ok(HttpRequest {
                 content: ReadState::try_from(read_state)?,
                 auth,
             }),
-            _ => Err(HttpHandlerError::InvalidEncoding(
-                "Could not decode the read state message.".to_string(),
-            )),
         }
     }
 }
 
 impl TryFrom<HttpRequestEnvelope<HttpSubmitContent>> for HttpRequest<SignedIngressContent> {
-    type Error = HttpHandlerError;
+    type Error = HttpRequestError;
 
     fn try_from(envelope: HttpRequestEnvelope<HttpSubmitContent>) -> Result<Self, Self::Error> {
         let auth = Authentication::try_from(&envelope)?;
@@ -370,6 +385,46 @@ impl TryFrom<HttpRequestEnvelope<HttpSubmitContent>> for HttpRequest<SignedIngre
                 auth,
             }),
         }
+    }
+}
+
+/// Errors returned by `HttpHandler` when processing ingress messages.
+#[derive(Debug, Clone, Serialize)]
+pub enum HttpRequestError {
+    InvalidMessageId(String),
+    InvalidIngressExpiry(String),
+    InvalidDelegationExpiry(String),
+    InvalidPrincipalId(String),
+    MissingPubkeyOrSignature(String),
+    InvalidEncoding(String),
+}
+
+impl From<serde_cbor::Error> for HttpRequestError {
+    fn from(err: serde_cbor::Error) -> Self {
+        HttpRequestError::InvalidEncoding(format!("{}", err))
+    }
+}
+
+impl fmt::Display for HttpRequestError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HttpRequestError::InvalidMessageId(msg) => write!(f, "invalid message ID: {}", msg),
+            HttpRequestError::InvalidIngressExpiry(msg) => write!(f, "{}", msg),
+            HttpRequestError::InvalidDelegationExpiry(msg) => write!(f, "{}", msg),
+            HttpRequestError::InvalidPrincipalId(msg) => write!(f, "invalid princial id: {}", msg),
+            HttpRequestError::MissingPubkeyOrSignature(msg) => {
+                write!(f, "missing pubkey or signature: {}", msg)
+            }
+            HttpRequestError::InvalidEncoding(err) => write!(f, "Invalid CBOR encoding: {}", err),
+        }
+    }
+}
+
+impl Error for HttpRequestError {}
+
+impl From<CanisterIdError> for HttpRequestError {
+    fn from(err: CanisterIdError) -> Self {
+        Self::InvalidPrincipalId(format!("Converting to canister id failed with {}", err))
     }
 }
 

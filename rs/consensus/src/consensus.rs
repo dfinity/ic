@@ -145,10 +145,13 @@ impl ConsensusImpl {
         local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
     ) -> Self {
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
+            replica_config.subnet_id,
+            registry_client.clone(),
             ingress_selector.clone(),
             xnet_payload_builder,
             self_validating_payload_builder,
             metrics_registry.clone(),
+            logger.clone(),
         ));
 
         let current_time = time_source.get_relative_time();

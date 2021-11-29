@@ -1,24 +1,44 @@
 use ic_interfaces::execution_environment::{ExecutionParameters, HypervisorResult, InstanceStats};
-use ic_replicated_state::{Global, NumWasmPages, PageIndex};
-use ic_sys::PageBytes;
-use ic_system_api::ApiType;
-use ic_types::{ingress::WasmResult, methods::FuncRef, CanisterId, NumBytes, NumInstructions};
+use ic_replicated_state::{page_map::PageSerialization, Global, NumWasmPages, NumWasmPages64};
+use ic_system_api::{ApiType, StaticSystemState};
+use ic_types::{ingress::WasmResult, methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
-use serde_big_array::big_array;
-
-big_array! { BigArray; }
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Round(pub u64);
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ExecInput {
-    pub canister_id: CanisterId,
     pub func_ref: FuncRef,
     pub api_type: ApiType,
     pub globals: Vec<Global>,
     pub canister_current_memory_usage: NumBytes,
     pub execution_parameters: ExecutionParameters,
+
+    /// System state that won't change over the course of executing a single
+    /// message.
+    pub static_system_state: StaticSystemState,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct StateModifications {
+    /// The state of the global variables after execution.
+    pub globals: Vec<Global>,
+
+    /// Wasm memory page delta produced by this execution.
+    pub wasm_memory_page_delta: Vec<PageSerialization>,
+
+    /// Size of wasm memory.
+    pub wasm_memory_size: NumWasmPages,
+
+    /// Stable memory page delta produced by this execution.
+    pub stable_memory_page_delta: Vec<PageSerialization>,
+
+    /// Size of stable memory.
+    pub stable_memory_size: NumWasmPages64,
+
+    /// The number of free bytes of memory left on the subnet after executing
+    /// the message.
+    pub subnet_available_memory: i64,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -26,25 +46,5 @@ pub struct ExecOutput {
     pub wasm_result: HypervisorResult<Option<WasmResult>>,
     pub num_instructions_left: NumInstructions,
     pub instance_stats: InstanceStats,
-
-    // Note on fields below: This is not exactly the right place --
-    // they belong to "state" more than "execution". This is presently
-    // owed to the fact that we are not making efforts to keep "state"
-    // persistently held in sandbox process, so the fields below
-    // might go away and/or move to a different place eventually.
-    /// Global variables.
-    pub globals: Vec<Global>,
-
-    /// Page delta produced by this execution.
-    pub page_delta: Vec<IndexedPage>,
-
-    /// Size of memory.
-    pub heap_size: NumWasmPages,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct IndexedPage {
-    pub index: PageIndex,
-    #[serde(with = "BigArray")]
-    pub data: PageBytes,
+    pub state_modifications: Option<StateModifications>,
 }

@@ -1,0 +1,4 @@
+= Overlays
+
+https://nixos.org/nixpkgs/manual/#chap-overlays[Nix overlays] are used
+to override and extend the `nixpkgs` set as returned from `../nixpkgs.nix`.

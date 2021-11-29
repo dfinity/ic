@@ -1,0 +1,16 @@
+# Security Policy
+
+The security of the Internet Computer is essential to its success. If you
+believe you have found a security vulnerability please report it to us as
+described below.
+
+## Reporting a Vulnerability
+
+Please do not report security vulnerabilities and other bugs through public
+GitLab issues. Instead, report them to DFINITY via email at:
+bugs@dfinity.org. Please do not submit any third party code - only textual 
+descriptions. Any comments, suggestions and recommendations you submit to 
+us will be assigned to the DFINITY Foundation.
+
+Thank you very much for taking the time to read and analyze the code of the
+Internet Computer. This is very much appreciated.

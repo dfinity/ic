@@ -1,0 +1,55 @@
+---
+
+- name: destroy guests
+  shell: |
+    set -exuo pipefail
+
+    # Destroy (stop) all existing VMs from this deployment running on this node
+    VMS=$(virsh list --name)
+    for vm in {{ hostvars[inventory_hostname].ic_guests | join(' ') }}; do
+      # Destroy/stop all known guests for this deployment, if running
+      if ! grep -E -q "^${vm}$" <(echo "$VMS"); then continue; fi
+      echo "Destroying VM $vm"
+      virsh destroy "$vm"
+    done
+
+    if [[ -n "{{ ic_deployment_name }}" ]]; then
+      VMS=$(virsh list --name)
+      for vm in $VMS; do
+        # Next, if ic_deployment_name is set, destroy all guests for the deployment
+        if ! grep -E -q "^{{ ic_deployment_name }}\b" <(echo "$vm"); then continue; fi
+        echo "Destroying VM $vm"
+        virsh destroy "$vm"
+      done
+    fi
+
+    # Undefine all existing VMs from this deployment running on this node
+    VMS=$(virsh list --name --all)
+    for vm in {{ hostvars[inventory_hostname].ic_guests | join(' ') }}; do
+      # Undefine/delete all known guests for this deployment
+      if ! grep -E -q "^${vm}$" <(echo "$VMS"); then continue; fi
+      echo "Un-defining VM $vm"
+      virsh undefine --nvram "$vm"
+    done
+
+    if [[ -n "{{ ic_deployment_name }}" ]]; then
+      VMS=$(virsh list --name --all)
+      for vm in $VMS; do
+        # Next, if ic_deployment_name is set, undefine/delete all guests for the deployment
+        if ! grep -E -q "^{{ ic_deployment_name }}\b" <(echo "$vm"); then continue; fi
+        echo "Un-defining VM $vm"
+        virsh undefine --nvram "$vm"
+      done
+    fi
+
+    # Remove downloaded media images, they get updated on every deployment.
+    # Downloaded disk images are left in place and will be updated with rclone if modified on S3.
+    rm -rvf /var/local/ic/media/{{ ic_deployment_name }}
+    # Wipe both disk and media images in libvirt
+    rm -vf "/var/lib/libvirt/media/{{ ic_deployment_name }}"*.img
+    rm -vf "/var/lib/libvirt/images/{{ ic_deployment_name }}"*.img
+  args:
+    executable: /bin/bash
+  register: script_res
+  changed_when: "'Destroying VM ' in (script_res.stddout | default('')) or 'Un-defining VM ' in (script_res.stddout | default(''))"
+  tags: [ "ic_guest" ]

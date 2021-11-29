@@ -1,0 +1,25 @@
+[guest-os-diskimg]
+input_files = [
+    "scripts/build-disk-image.sh",
+    "scripts/partitions.sh",
+    "scripts/partitions.csv",
+    "scripts/build-docker-save.sh",
+    "scripts/build-ubuntu.sh",
+    "scripts/docker_extract.py",
+    "bootloader/Dockerfile",
+    "bootloader/grub.cfg",
+    "bootloader/grubenv",
+    ]
+
+[guest-os-updateimg-build]
+input_files = [
+    "scripts/build-update-image.sh",
+    "scripts/partitions.sh",
+    "scripts/partitions.csv",
+    "scripts/build-docker-save.sh",
+    "scripts/build-ubuntu.sh",
+    "scripts/docker_extract.py",
+    "bootloader/Dockerfile",
+    "bootloader/grub.cfg",
+    "bootloader/grubenv",
+    ]

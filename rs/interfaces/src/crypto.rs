@@ -52,8 +52,6 @@ pub trait Crypto:
     // DKG
     + NiDkgAlgorithm
     // CertificationContent
-    + MultiSigner<CertificationContent>
-    + MultiSigVerifier<CertificationContent>
     + ThresholdSigner<CertificationContent>
     + ThresholdSigVerifier<CertificationContent>
     + ThresholdSigVerifierByPublicKey<CertificationContent>
@@ -104,8 +102,6 @@ impl<T> Crypto for T where
         + BasicSigner<consensus_dkg::DealingContent>
         + BasicSigVerifier<consensus_dkg::DealingContent>
         + NiDkgAlgorithm
-        + MultiSigner<CertificationContent>
-        + MultiSigVerifier<CertificationContent>
         + ThresholdSigner<CertificationContent>
         + ThresholdSigVerifier<CertificationContent>
         + ThresholdSigVerifierByPublicKey<CertificationContent>

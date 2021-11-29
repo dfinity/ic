@@ -1,0 +1,20 @@
+= AlertName
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+_Put the alertname, likely `IC_Something_SomeMoreThings` in the title above._
+
+== Triggered by
+
+_Explain what is triggering the alert_
+
+== Impact
+
+_Describe the impact of the problem, and explain why this needs someone to
+remediate the problem._
+
+== Possible causes (non-exhaustive)
+
+_Describe some possible causes for the problem_
+
+== Troubleshooting and remediation

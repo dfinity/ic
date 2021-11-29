@@ -1,0 +1,241 @@
+**This crate is considered deprecated. If you intend to write System Tests, talk to the
+testing team and/or use `ic_fondue`.**
+
+= Scenario Tests
+This directory contains everything you need to write and run scenario tests for the IC.
+This crate is host to both, the scenario tests and a Rust-API to write those tests.
+
+== System Tests
+
+=== Where do I put my system tests?
+
+Tests scenarios are in `tests/testcase/`. Say we want to create a new test `my_specific_scenario`. The first step
+is writing the necessary code in `tests/testcase/my_specific_scenario.rs`, include `pup mod my_specific_scenario;` in
+`tests/testcase.rs` and add a corresponding raclette `test_entry` in `tests/main.rs`.
+
+=== How do I run system tests?
+First, run a `nix-shell` in `ic/rs` and `cd` to this directory.
+run `cargo test --tests` here to compile and run all the test scenarios listed in `tests/testcase/`.
+Please, adjust the table at the bottom of this file accordingly if you want to change the expectation from
+failing to passing for your test.
+
+=== Dependencies
+The tests start a `replica` process for each node. Thus, when running the tests (`cargo test testcase_`), a `replica` and a `nodemanager` binary needs to be on the `$PATH`.
+
+It is recommended to use a *release*-build of the `replica`. You can build a release-build using the following command in the `rs/` directory:
+
+```
+$ cargo build --bin replica --release
+```
+
+The built replica is placed under `ic/rs/target/x86_64-<target_os>/release`, where `<target_os>` refers to the target platform you are running on (e.g. `apple-darwin`). Either add this directory to your `$PATH` variable, or copy the replica binary to a directory already contained in `$PATH`, before running the tests.
+
+==== Known Issues and caveats
+
+* You may also use a debug-build of the `replica` for tests, of course. In general, this is not recommended, as, typically, multiple replicas are started per test and there is a significant performance difference between debug- and release-builds of the replica.
+
+* The `IcHandle::ready` function needs work. Currently, it starts up the different replicas and attempts to query the `api/v2/status` endpoint of each
+replica until either they all respond or some specified timeout is reached. Still, sometimes we see tests that were supposed to pass are failing with a `ConnectionRefused` error. 
+We are working to fix this.
+
+
+=== How do I write system tests?
+
+Look at examples. Below is a rudimentary sketch.
+
+System Tests are multi-node tests that run on a single CPU/operating system. The API is subject to change (!!!), so look at the examples in `tests/testcase/` for the most recent API version. The following should give a rough idea how System Tests look like regardless of how the API might evolve:
+
+[source,rust]
+----
+async fn test() {
+    // Setup the IC
+    let ic = InternetComputer::new()
+        .with_subnet(NodeCount::from(4))
+        .with_subnet(NodeCount::from(28))
+        .start()
+        .await
+        .ready()
+        .await
+        .expect("Not ready yet");
+
+    // calling start() starts an orchestrator in the background that
+    // runs all the required nodes as processes. The orchestrator
+    // is torn down when `ic` is dropped.
+
+    // `ic` is of type `ICInstance` which provides an API to access
+    // the network toplogy. E.g., to get a handle on the public API
+    // of the first node in the first subnet, you can call
+    let api = ic.subnet_by_idx(0).node_by_idx(0).api();
+
+    // `api` is a Runtime-instance as known from the `canister_test`-
+    // framework. Thus, we can build and install rust canister as
+    // follows ...
+
+    // assuming we have a canister binary called 'json'
+    let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+
+    // the canister object `json` provides the method familiar from the
+    // canister test framework
+    let json = proj.cargo_bin("json").install_(&r, Vec::new()).await?;
+
+    // if you want to pull in canister binaries from other crates, you
+    // might need pass a different path in place of
+    // `env!("CARGO_MANIFEST_DIR")`
+
+    // install with api from subnet(0) node(0)
+    json.install(api);
+
+    // We might provide a function that gives you an api of a random
+    // node
+    let api1 = ic.api();
+
+    assert_eq!(ic.management_url().to_string(), "http://localhost:8080/");
+}
+----
+
+A lot of the API is currently just stubbed out. Feel free to program against the current API and add comments in tests to give hints at what is missing.
+
+=== Which tests are currently expected to pass?
+
+.Tests under `tests/testcase/`
+|===
+|Test Name |OKR |Expectation | Owner| File
+
+|Appropriate Params
+|4.1
+|failing, not yet impl.
+|None
+|`tests/testcases/t4_1_appropriate_params.rs`
+
+|XNet Messaging
+|4.3
+|passing
+|None
+|`tests/testcases/t4_3_xnet_slo.rs`
+
+|Does Not Stop
+|5.1
+|passing
+|None
+|`tests/testcases/t5_1_does_not_stop.rs`
+
+|Does Not Stop
+|5.2
+|failing, only E2E test is implemented yet
+|DMD
+|`tests/testcases/t5_2_does_not_stop.rs`
+
+|Does Not Stop
+|5.3
+|failing, not yet impl.
+|DMD
+|`tests/testcases/t5_3_does_not_stop.rs`
+
+|Decentralization
+|6.1
+|failing, not yet impl.
+|None
+|`tests/testcases/t6_1_decentralization.rs`
+
+|Decentralization
+|6.2
+|failing, not yet impl.
+|None
+|`tests/testcases/t6_2_decentralization.rs`
+
+|Decentralization
+|6.3
+|failing, not yet impl.
+|None
+|`tests/testcases/t6_3_decentralization.rs`
+
+|Decentralization
+|6.4
+|failing, not yet impl.
+|None
+|`tests/testcases/t6_4_decentralization.rs`
+
+|Topology Change
+|7.1
+|failing, not yet impl.
+|DSD
+|`tests/testcases/t7_1_decentralization.rs`
+
+|Topology Change
+|7.2
+|failing, not yet impl.
+|DSD
+|`tests/testcases/t7_2_decentralization.rs`
+
+|Topology Change
+|7.3
+|passing
+|None
+|`tests/testcases/t7_3_decentralization.rs`
+
+|Upgrade
+|9.1
+|passing
+|None
+|`tests/testcases/t9_1_decentralization.rs`
+
+|Malicious Nodes
+|10.1
+|passing
+|Hassen
+|`tests/testcases/t10_1_malicious_nodes.rs`
+
+|Malicious Nodes
+|10.2
+|failing, not yet impl.
+|Hassen
+|`tests/testcases/t10_2_malicious_nodes.rs`
+
+|Malicious Nodes
+|10.3
+|passing
+|Hassen
+|`tests/testcases/t10_3_malicious_nodes.rs`
+
+|Malicious Nodes
+|10.4
+|passing
+|Hassen
+|`tests/testcases/t10_4_malicious_nodes.rs`
+
+|Malicious Nodes
+|10.5
+|passing
+|Hassen
+|`tests/testcases/t10_5_malicious_nodes.rs`
+
+|Malicious Nodes
+|10.6
+|passing
+|Hassen
+|`tests/testcases/t10_6_malicious_nodes.rs`
+
+|Malicious Nodes
+|10.7
+|passing
+|Hassen
+|`tests/testcases/t10_7_malicious_nodes.rs`
+
+|Malicious Users
+|11.1
+|failing, not yet impl.
+|Eftychis
+|`tests/testcases/t11_1_malicious_users.rs`
+
+|Malicious Users
+|11.2
+|failing, not yet impl.
+|None
+|`tests/testcases/t11_2_malicious_users.rs`
+
+|Malicious Users
+|11.3
+|failing, not yet impl.
+|None
+|`tests/testcases/t11_3_malicious_users.rs`
+|===

@@ -52,7 +52,7 @@ fn test_can_charge_application_subnets() {
                     let duration = Duration::from_secs(1);
 
                     let memory = match memory_allocation {
-                        MemoryAllocation::BestEffort => canister.memory_usage(),
+                        MemoryAllocation::BestEffort => canister.memory_usage(*subnet_type),
                         MemoryAllocation::Reserved(bytes) => *bytes,
                     };
                     let expected_fee = cycles_account_manager

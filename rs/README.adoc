@@ -1,0 +1,21 @@
+= Rust crates
+
+This directory should contain all the replica's Rust code.
+
+= Kicking the tires
+
+Warning: we are still working to clean up the documentation to provide a clean mapping of the rust code. 
+
+In the meantime, the least we can do is provide you an easy way to do that very first thing _what we would_ do when encountering repos which look interesting: git clone them and see if they compile locally.
+
+To do that simplest of steps:
+
+1. install rust
+2. ``cd rs``
+3. ``cargo build --release --bin replica``
+
+
+= Documentation
+
+https://docs.dfinity.systems/cargo-docs[Latest cargo docs].
+

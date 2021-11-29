@@ -129,7 +129,7 @@ impl<'a> QueryContext<'a> {
         max_canister_memory_size: NumBytes,
         max_instructions_per_message: NumInstructions,
     ) -> Self {
-        let routing_table = Arc::new(state.metadata.network_topology.routing_table.clone());
+        let routing_table = Arc::clone(&state.metadata.network_topology.routing_table);
         Self {
             log,
             hypervisor,
@@ -322,7 +322,8 @@ impl<'a> QueryContext<'a> {
     fn enqueue_requests(&mut self, canister: &mut CanisterState) -> EnqueueRequestsResult {
         let mut sent_messages = false;
         let canister_id = canister.canister_id();
-        let outgoing_messages: Vec<RequestOrResponse> =
+
+        let outgoing_messages: Vec<_> =
             canister.output_into_iter().map(|(_, _, msg)| msg).collect();
         let call_context_manager = canister
             .system_state
@@ -414,7 +415,7 @@ impl<'a> QueryContext<'a> {
         let (canister, instructions_left, result) = self.hypervisor.execute_query(
             QueryExecutionType::NonReplicated {
                 call_context_id,
-                routing_table: self.routing_table.clone(),
+                routing_table: Arc::clone(&self.routing_table),
                 query_kind,
             },
             method_name,
@@ -496,9 +497,10 @@ impl<'a> QueryContext<'a> {
                 // No cycles are refunded in a response to a query call.
                 Cycles::from(0),
                 self.state.time(),
-                self.routing_table.clone(),
+                Arc::clone(&self.routing_table),
                 subnet_records,
                 execution_parameters,
+                self.state.metadata.network_topology.nns_subnet_id,
             );
         let instructions_executed = instruction_limit - instructions_left;
         measurement_scope.add(instructions_executed, NumMessages::from(1));
@@ -925,6 +927,7 @@ impl<'a> QueryContext<'a> {
             canister_memory_limit: canister.memory_limit(self.max_canister_memory_size),
             subnet_available_memory: self.subnet_available_memory.clone(),
             compute_allocation: canister.scheduler_state.compute_allocation,
+            subnet_type: self.own_subnet_type,
         }
     }
 }

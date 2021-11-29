@@ -1,0 +1,9 @@
+0 json 0.034397
+1 cbor 1.4567
+2 capnproto 4.3406
+3 protobuf 6.9848
+4 bincode 6.7923
+5 thrift 6.1094
+6 avro 2.0669
+7 flatbuffers 0.17536
+8 msgpack 5.1594

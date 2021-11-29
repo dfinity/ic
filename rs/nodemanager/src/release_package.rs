@@ -16,8 +16,6 @@ use ic_types::{
     RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::convert::TryFrom;
-use std::fs;
-use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 use std::process::{exit, Command};
 use std::sync::{Arc, Mutex};
@@ -31,14 +29,10 @@ pub(crate) struct ReleasePackage {
     release_package_provider: Arc<ReleasePackageProvider>,
     cup_provider: Arc<CatchUpPackageProvider>,
     subnet_id: Option<SubnetId>,
-    replica_version: Option<ReplicaVersion>,
+    replica_version: ReplicaVersion,
     high_threshold_pub_key: Option<ThresholdSigPublicKey>,
-    release_content_dir: PathBuf,
-    force_replica_binary: Option<String>,
     replica_config_file: PathBuf,
     ic_binary_dir: PathBuf,
-    current_node_manager_hash: String,
-    fixed_version_mode: bool,
     nns_registry_replicator: Arc<NnsRegistryReplicator>,
     logger: ReplicaLogger,
     enabled: Arc<std::sync::atomic::AtomicBool>,
@@ -51,30 +45,12 @@ impl ReleasePackage {
         replica_process: Arc<Mutex<ReplicaProcess>>,
         release_package_provider: Arc<ReleasePackageProvider>,
         cup_provider: Arc<CatchUpPackageProvider>,
-        release_content_dir: PathBuf,
-        force_replica_binary: Option<String>,
+        replica_version: ReplicaVersion,
         replica_config_file: PathBuf,
         ic_binary_dir: PathBuf,
-        version_file: PathBuf,
-        current_node_manager_hash: String,
         nns_registry_replicator: Arc<NnsRegistryReplicator>,
         logger: ReplicaLogger,
     ) -> Arc<std::sync::atomic::AtomicBool> {
-        // For base OS upgrades, we determine the current version from a file packed
-        // into the image.
-        let contents = fs::read_to_string(version_file);
-        let (fixed_version_mode, replica_version) = if let Ok(version) = contents {
-            info!(logger, "Setting replica version ID to: {}", &version);
-            let version = version.trim_end();
-            (true, Some(ReplicaVersion::try_from(version).unwrap()))
-        } else {
-            info!(
-                logger,
-                "Could not read version.txt, current replica version set to None"
-            );
-            (false, None)
-        };
-
         let high_threshold_pub_key = get_public_key(&registry, registry.get_latest_version()).await;
 
         let enabled = Arc::new(std::sync::atomic::AtomicBool::new(true));
@@ -86,12 +62,8 @@ impl ReleasePackage {
             subnet_id: None,
             high_threshold_pub_key,
             replica_version,
-            release_content_dir,
-            force_replica_binary,
             replica_config_file,
             ic_binary_dir,
-            current_node_manager_hash,
-            fixed_version_mode,
             nns_registry_replicator,
             logger,
             enabled: enabled.clone(),
@@ -137,8 +109,10 @@ impl ReleasePackage {
                 .get_registry_cup(latest_registry_version)
                 .expect("A registry cup must be present in the the registry");
 
-            self.cup_provider
-                .persist_cup(&CUPWithOriginalProtobuf::from_cup(cup), latest_subnet_id)?;
+            self.cup_provider.persist_cup_deprecated(
+                &CUPWithOriginalProtobuf::from_cup(cup),
+                latest_subnet_id,
+            )?;
 
             warn!(
                 self.logger,
@@ -215,15 +189,14 @@ impl ReleasePackage {
         // Note that we do not allow version transitions v1 -> v2 -> v1.
         // Even without this optimization, the node manager would not trigger restarting
         // the replica (e.g. in cases we directly upgrade v1 -> v1).
-        let current_replica_version = &self.replica_version;
-        if Some(&latest_replica_version) == current_replica_version.as_ref()
+        if latest_replica_version == self.replica_version
             && (latest_public_key == self.high_threshold_pub_key ||
                 // There are cases where during start() get_public_key() was
                 // not yet available and it has been set to None. If that's
                 // the case and it is now available, set it and return.
                     self.high_threshold_pub_key.is_none())
         {
-            if self.fixed_version_mode && self.subnet_id.is_none() {
+            if self.subnet_id.is_none() {
                 // Confirm base OS has booted (so it does not get reverted on next boot).
                 let mut script = self.ic_binary_dir.clone();
                 script.push("manageboot.sh");
@@ -253,12 +226,11 @@ impl ReleasePackage {
                 // bit ugly, but the API of the CUP package provider
                 // currently doesn't easily allow to get the actual
                 // path out. And persisting it again shouldn't break anything ..
-                let cup_path = self.cup_provider.persist_cup(&cup, latest_subnet_id)?;
+                let cup_path = self
+                    .cup_provider
+                    .persist_cup_deprecated(&cup, latest_subnet_id)?;
 
-                let replica_version = self
-                    .replica_version
-                    .clone()
-                    .expect("Replica version has to be known in fixed_version_mode");
+                let replica_version = self.replica_version.clone();
                 // Start new replica binary
                 let mut replica_path = self.ic_binary_dir.clone();
                 replica_path.push("replica");
@@ -317,18 +289,6 @@ impl ReleasePackage {
         // Get latest CUP from peers & local CUPs on disk (fallback to registry)
         let cup = self.cup_provider.get_latest_cup(latest_subnet_id).await?;
 
-        let cup_public_key = cup
-            .cup
-            .content
-            .block
-            .get_value()
-            .payload
-            .as_ref()
-            .as_summary()
-            .dkg
-            .current_transcript(&NiDkgTag::HighThreshold)
-            .public_key();
-
         let cup_registry_version = cup.cup.content.registry_version();
 
         // For the CUP's registry version, get replica version of current subnet.
@@ -338,110 +298,30 @@ impl ReleasePackage {
         let new_replica_version =
             &RegistryHelper::get_replica_version_from_subnet_record(subnet_record)?;
 
-        // If that replica version matches what we are already running, do nothing.
-        if let Some(current_replica_version) = current_replica_version {
-            // Version is identical, no upgrade needed
-            if new_replica_version == current_replica_version {
-                info!(
-                    self.logger,
-                    "Expecting upgrade to version {}, but highest CUP has version {}, running {}",
-                    latest_replica_version,
-                    new_replica_version,
-                    current_replica_version
-                );
-                return Ok((current_replica_version.clone(), None));
-            }
+        // Version is identical, no upgrade needed
+        if new_replica_version == &self.replica_version {
+            info!(
+                self.logger,
+                "Expecting upgrade to version {}, but highest CUP has version {}, running {}",
+                latest_replica_version,
+                new_replica_version,
+                self.replica_version
+            );
+            return Ok((self.replica_version.clone(), None));
         }
 
         // Now that we know we are upgrading, persist the CUP.
-        let cup_path = self.cup_provider.persist_cup(&cup, latest_subnet_id)?;
+        self.cup_provider
+            .persist_cup_deprecated(&cup, latest_subnet_id)?;
 
         info!(
             self.logger,
             "Replica upgrade detected: old version {:?} -> new version {}",
-            current_replica_version,
+            self.replica_version,
             new_replica_version
         );
 
-        let replica_version_record = self.registry.get_replica_version_record(
-            new_replica_version.clone(),
-            self.registry.get_latest_version(),
-        )?;
-
-        if ReleasePackageProvider::release_package_is_available(&replica_version_record) {
-            info!(self.logger, "Upgrade is guest-OS upgrade");
-            // Download base OS upgrade
-            self.download_and_upgrade(new_replica_version).await
-        } else {
-            info!(self.logger, "Upgrade is replica/nodemanager upgrade");
-            // Download the replica version referred to by the CUP with
-            // the new version. Note that we don't know which version we
-            // have to upgrade to before we have the CUP.
-            //
-            // Example: If there are updates to versions v2 and v3 it
-            // might be necessary to join v2 to produce a CUP rather than
-            // directly joining v3. The only way to learn which version
-            // should be booted is by considering CUPs that have been agreed upon by
-            // consensus.
-            let release_content = self
-                .release_package_provider
-                .download_release_package(new_replica_version.clone())
-                .await?;
-
-            // Release package has been downloaded, set symlink to mark as current
-            self.set_current_symlink(new_replica_version)?;
-
-            // Ensure there is a replica binary available before starting a new Node Manager
-            let replica_binary = match &self.force_replica_binary {
-                Some(binary) => binary.clone(),
-                None => release_content
-                    .get_replica_binary()
-                    .map(utils::path_to_string)
-                    .map_err(NodeManagerError::ReleasePackageError)?,
-            };
-
-            if let Ok(node_manager_binary) = release_content.get_node_manager_binary() {
-                // We fail if there is a node manager is part of the release package, but we
-                // can't determine its sha256 hash.
-                let release_node_manager_hash =
-                    hex::encode(release_content.get_node_manager_hash().expect(
-                        "Failed to determine sha256 hash for node manager in release content",
-                    ));
-
-                // Reboot the node manager if the hash of the binary does not match.
-                // Will also reboot if the current node manager's binary has cannot be
-                // determined.
-                info!(
-                    self.logger,
-                    "release_node_manager_hash: {} current_node_manager_hash: {:?}",
-                    release_node_manager_hash,
-                    &self.current_node_manager_hash
-                );
-                if self.current_node_manager_hash != release_node_manager_hash {
-                    info!(self.logger, "Restarting node manager due to hash mismatch");
-                    self.stop_replica()?;
-                    utils::exec_node_manager(&node_manager_binary, &self.logger);
-                    // control never reaches this line due to calling 'exec'...
-                }
-            } else {
-                info!(
-                    self.logger,
-                    "Not upgrading node manager - checksum did not change"
-                );
-            }
-
-            // Start new replica binary
-            self.start_replica(
-                replica_binary,
-                new_replica_version.clone(),
-                cup_path,
-                latest_subnet_id,
-            )?;
-            Ok((
-                new_replica_version.clone(),
-                Some((latest_subnet_id, cup_public_key)),
-            ))
-        }
+        self.download_and_upgrade(new_replica_version).await
     }
 
     #[allow(dead_code)]
@@ -518,29 +398,6 @@ impl ReleasePackage {
         })
     }
 
-    /// Symlink "$replica_binary_dir/current" to the current release package
-    ///
-    /// On reboot, start-up scripts will use this symlink to start the most
-    /// recent Node Manager, instead of a potentially ancient Node Manager
-    fn set_current_symlink(&self, replica_version: &ReplicaVersion) -> NodeManagerResult<()> {
-        let version_dir = self
-            .release_package_provider
-            .get_version_dir(replica_version);
-
-        if version_dir.join("nodemanager").exists() {
-            let current_dir = self.release_content_dir.join("current");
-
-            // If we delete this, it's not atomic any more.
-            // However, symlink does not seem to work if destination already exists.
-            let _ = std::fs::remove_file(&current_dir);
-
-            symlink(&version_dir, &current_dir)
-                .map_err(|e| NodeManagerError::symlink_error(&version_dir, &current_dir, e))
-        } else {
-            Ok(())
-        }
-    }
-
     /// Stop the current Replica and start a new Replica command
     fn start_replica(
         &self,
@@ -554,9 +411,12 @@ impl ReleasePackage {
             format!("--replica-version={}", replica_version.as_ref()),
             format!(
                 "--config-file={}",
-                utils::path_to_string(self.replica_config_file.clone())
+                self.replica_config_file.as_path().display().to_string()
             ),
-            format!("--catch-up-package={}", utils::path_to_string(cup_path)),
+            format!(
+                "--catch-up-package={}",
+                cup_path.as_path().display().to_string()
+            ),
             format!("--force-subnet={}", subnet_id),
         ];
 
@@ -573,7 +433,7 @@ impl ReleasePackage {
         info!(self.logger, "Checking for release package");
         match self.check_for_upgrade().await {
             Ok((new_version, new_subnet)) => {
-                self.replica_version = Some(new_version);
+                self.replica_version = new_version;
                 // For subnet ID other than None, set that.
                 if let Some((subnet_id, latest_public_key)) = new_subnet {
                     self.subnet_id = Some(subnet_id);

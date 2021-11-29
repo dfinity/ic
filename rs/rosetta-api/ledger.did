@@ -1,0 +1,99 @@
+type ICPTs = record {
+     e8s : nat64;
+};
+
+type Duration = record {
+    secs: nat64;
+    nanos: nat32;
+};
+
+// Number of nanoseconds from the UNIX epoch in UTC timezone.
+type TimeStamp = record {
+    timestamp_nanos: nat64;
+};
+
+type ArchiveOptions = record {
+    trigger_threshold : nat64;
+    num_blocks_to_archive : nat64;
+    node_max_memory_size_bytes: opt nat64;
+    max_message_size_bytes: opt nat64;
+    controller_id: principal;
+};
+
+// Height of a ledger block.
+type BlockHeight = nat64;
+
+// A number associated with a transaction.
+// Can be set by the caller in `send` call as a correlation identifier.
+type Memo = nat64;
+
+// Account identifier encoded as a 64-byte ASCII hex string.
+type AccountIdentifier = text;
+
+// Subaccount is an arbitrary 32-byte byte array.
+type SubAccount = blob;
+
+type Transfer = variant {
+    Burn: record {
+        from: AccountIdentifier;
+        amount: ICPTs;
+    };
+    Mint: record {
+        to: AccountIdentifier;
+        amount: ICPTs;
+    };
+    Send: record {
+        from: AccountIdentifier;
+        to: AccountIdentifier;
+        amount: ICPTs;
+    };
+};
+
+type Transaction = record {
+    transfer: Transfer;
+    memo: Memo;
+    created_at: BlockHeight;
+};
+
+// Arguments for the `send_dfx` call.
+type SendArgs = record {
+    memo: Memo;
+    amount: ICPTs;
+    fee: ICPTs;
+    from_subaccount: opt SubAccount;
+    to: AccountIdentifier;
+    created_at_time: opt TimeStamp;
+};
+
+// Arguments for the `notify` call.
+type NotifyCanisterArgs = record {
+    // The of the block to send a notification about.
+    block_height: BlockHeight;
+    // Max fee, should be 10000 e8s.
+    max_fee: ICPTs;
+    // Subaccount the payment came from.
+    from_subaccount: opt SubAccount;
+    // Canister that received the payment.
+    to_canister: principal;
+    // Subaccount that received the payment.
+    to_subaccount: opt SubAccount;
+};
+
+type AccountBalanceArgs = record {
+    account: AccountIdentifier;
+};
+
+type LedgerCanisterInitPayload = record {
+    minting_account: AccountIdentifier;
+    initial_values: vec record {AccountIdentifier; ICPTs};
+    max_message_size_bytes: opt nat64;
+    transaction_window: opt Duration;
+    archive_options: opt ArchiveOptions;
+    send_whitelist: vec principal;
+};
+
+service: (LedgerCanisterInitPayload) -> {
+  send_dfx : (SendArgs) -> (BlockHeight);
+  notify_dfx: (NotifyCanisterArgs) -> ();
+  account_balance_dfx : (AccountBalanceArgs) -> (ICPTs) query;
+}

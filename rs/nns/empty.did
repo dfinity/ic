@@ -1,0 +1,3 @@
+// This is an empty candid file.
+// It is a workaround to be able to deploy any canister that does not have a candid interface with dfx.
+// One such canister is the registry canister.

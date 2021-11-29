@@ -1,0 +1,32 @@
+pre-commit:
+  variables:
+    # Set the pre-commit home to this directory so we can cache it
+    # more easily.
+    PRE_COMMIT_HOME: /cache/pre-commit/$CI_CONCURRENT_ID
+  extends: .ubuntu-nix-docker
+  needs: []  # don't wait on other jobs
+  stage: test
+  script:
+    - |
+      set -eEuo pipefail
+      # Make sure CI can pull from the private repo.
+      if ! pre-commit run -a --hook-stage=manual ; then
+        echo "Pre-commit checks failed. Here is the diff of the changes:"
+        git diff
+        echo
+        echo "You can fix the code locally by following these instructions in the same branch."
+        echo
+        echo "a) preferably permanently install pre-commit by following https://pre-commit.com/#installation:"
+        echo "(brew|pip) install pre-commit"
+        echo "pre-commit install"
+        echo
+        echo "b) for one-off runs it's enough to either use sorri or to enter the top-level nix-shell."
+        echo
+        echo "Then, to fix the checks in this branch, run:"
+        echo "pre-commit run --from-ref=\$(git merge-base HEAD master) --to-ref=HEAD"
+        echo
+        echo "And then commit the changes."
+        echo
+        echo "For more information check out https://www.notion.so/GitLab-CI-Developer-How-To-068401fe38ae410d9d608b7a945788bb"
+        exit 1
+      fi

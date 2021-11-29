@@ -1,6 +1,6 @@
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
-use prometheus::{histogram_opts, labels, opts, Histogram, HistogramVec, IntGauge};
+use prometheus::{histogram_opts, labels, opts, Histogram, HistogramVec, IntCounter, IntGauge};
 
 pub const LABEL_POOL: &str = "pool";
 pub const LABEL_POOL_TYPE: &str = "pool_type";
@@ -12,6 +12,7 @@ pub const POOL_TYPE_UNVALIDATED: &str = "unvalidated";
 pub struct PoolMetrics {
     pub op_duration: HistogramVec,
     pub received_artifact_bytes: Histogram,
+    received_duplicate_artifacts: IntCounter,
     pub pool_artifacts: IntGauge,
     pub pool_size_bytes: IntGauge,
 }
@@ -42,6 +43,14 @@ impl PoolMetrics {
                 ))
                 .unwrap(),
             ),
+            received_duplicate_artifacts: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "artifact_pool_received_duplicate_artifacts",
+                    "Duplicate artifacts received by the given pool",
+                    labels! {LABEL_POOL => pool, LABEL_POOL_TYPE => pool_type}
+                ))
+                .unwrap(),
+            ),
             pool_artifacts: metrics_registry.register(
                 IntGauge::with_opts(opts!(
                     "artifact_pool_artifacts",
@@ -67,6 +76,12 @@ impl PoolMetrics {
         self.received_artifact_bytes.observe(size_bytes as f64);
         self.pool_artifacts.inc();
         self.pool_size_bytes.add(size_bytes as i64);
+    }
+
+    pub fn observe_duplicate(&self, size_bytes: usize) {
+        self.received_duplicate_artifacts.inc();
+        self.pool_artifacts.dec();
+        self.pool_size_bytes.sub(size_bytes as i64);
     }
 
     pub fn observe_remove(&self, size_bytes: usize) {

@@ -1,0 +1,12 @@
+[package]
+name = "libsigsegv"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+lazy_static = "*"
+libc = "*"
+libsigsegv-sys = { path = "../libsigsegv-sys" }
+slog = "*"
+slog-scope = "*"

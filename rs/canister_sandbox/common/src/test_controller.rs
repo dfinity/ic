@@ -1,3 +1,4 @@
+use ic_canister_sandbox_common::protocol::id::WasmId;
 use ic_canister_sandbox_common::protocol::logging::LogRequest;
 use ic_canister_sandbox_common::protocol::{ctlsvc, sbxsvc};
 use std::sync::atomic::AtomicBool;
@@ -42,9 +43,10 @@ fn main() {
     .unwrap();
 
     println!("Controller: Sending 'open_wasm' request");
+    let wasm_id = WasmId::new();
     sbx.open_wasm(sbxsvc::OpenWasmRequest {
         wasm_file_path: None,
-        wasm_id: "foo".to_owned(),
+        wasm_id,
         wasm_src: Vec::new(),
     })
     .sync()

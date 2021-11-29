@@ -1,0 +1,10 @@
+# This is a no-op job that does nothing when no files in /rs or /ic-os/guestos have changed.
+# 
+# A GitLab pipeline must have at least one job defined, or GitLab's linter throws an error.
+# When generating the cargo test pipeline, this is a problem when there's nothing to test.
+# Therefore, use this template to generate a no-op config.
+#
+# https://gitlab.com/gitlab-org/gitlab/-/issues/30396
+
+include:
+- local: /gitlab-ci/config/30--cargo-build--child-pipeline-noop.yml

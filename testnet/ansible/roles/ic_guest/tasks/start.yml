@@ -1,0 +1,13 @@
+---
+
+- name: start guest
+  shell: |
+    set -eExuo pipefail
+    virsh start "{{ item }}"
+    virsh autostart "{{ item }}"
+  loop: "{{ hostvars[inventory_hostname].ic_guests }}"
+  loop_control:
+    label:
+  args:
+    executable: /bin/bash
+  tags: [ "ic_guest" ]

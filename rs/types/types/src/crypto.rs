@@ -101,6 +101,7 @@ pub enum KeyPurpose {
     QueryResponseSigning = 2,
     DkgDealingEncryption = 3,
     CommitteeSigning = 4,
+    IDkgMEGaEncryption = 5,
 }
 
 /// An algorithm ID. This is used to specify the signature algorithm associated

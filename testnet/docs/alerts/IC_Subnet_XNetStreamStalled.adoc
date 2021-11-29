@@ -1,0 +1,27 @@
+= IC_Subnet_XNetStreamStalled
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+The XNet stream between the subnets indicated in the alert did not move
+for 1 hour.
+
+== Impact
+
+Cross-subnet canister to canister messages between these subnets will
+hang until the stream makes progress again.
+
+== Possible causes (non-exhaustive)
+
+- Bug in a recent binary or configuration update
+
+- Network misconfiguration
+
+- Firewall misconfiguration
+
+== Troubleshooting and remediation
+
+- Check whether only one or multiple subnets are affected
+
+- Check logs regarding further information on the failure

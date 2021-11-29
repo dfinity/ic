@@ -1,0 +1,36 @@
+test-push-branch:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-master-schedule-push-branch
+  stage: push-branches
+  dependencies: []  # don't copy artifacts from other jobs
+  script:
+    - |
+      # The remote might already exist from a previous CI job run because GitLab re-uses the git repo.
+      git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+      git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+
+      git config --global user.email "infra+gitlab-automation@dfinity.org"
+      git config --global user.name "IDX GitLab Automation"
+
+      git switch --force-create post-merge-tests-passed HEAD
+      git push --force --set-upstream origin post-merge-tests-passed
+
+cut-release-candidate:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-rc-cut-schedule
+  stage: push-branches
+  dependencies: []  # don't copy artifacts from other jobs
+  script:
+    - |
+      # The remote might already exist from a previous CI job run because GitLab re-uses the git repo.
+      git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+      git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+
+      git config --global user.email "infra+gitlab-automation@dfinity.org"
+      git config --global user.name "IDX GitLab Automation"
+
+      RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')"
+      git switch --force-create "$RC_BRANCH_NAME" HEAD
+      git push --force --set-upstream origin  "$RC_BRANCH_NAME"

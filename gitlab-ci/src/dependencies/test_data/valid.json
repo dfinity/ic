@@ -1,0 +1,9 @@
+{
+  "dependency1": {
+    "owners": [
+      {"email": "foobar@example.com"}, {"email": "test@example.com"}
+    ],
+    "description": "Foobar dependency",
+    "keywords": ["dependency"],
+  },
+}

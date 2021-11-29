@@ -1,0 +1,35 @@
+[package]
+name = "ic-nns-init"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+candid = "0.7.4"
+canister-test = {path="../../rust_canisters/canister_test"}
+ic-base-types = {path="../../types/base_types"}
+ic-canister-client = { path = "../../canister_client" }
+ic-interfaces = { path = "../../interfaces" }
+ic-registry-common = { path = "../../registry/common" }
+ic-registry-transport = { path="../../registry/transport" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-nns-common = { path = "../common" }
+ic-nns-constants = {path="../constants"}
+ic-nns-governance = {path="../governance"}
+ic-test-identity = {path="../../test_utilities/identity"}
+ic-sys = { path = "../../sys" }
+ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+prost = "0.9.0"
+structopt = "0.3.20"
+tokio = { version = "1.9.0", features = ["full"] }
+url = "2.2.0"
+
+[[bin]]
+name = "ic-nns-init"
+path = "src/main.rs"
+
+[[bin]]
+name = "ic-get-neuron-ids"
+path = "src/get_neuron_ids.rs"
+
+[dev-dependencies]
+tempfile = "3.0"

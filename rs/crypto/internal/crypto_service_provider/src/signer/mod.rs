@@ -3,8 +3,7 @@ use super::types::{CspPop, CspPublicKey, CspSignature};
 use super::Csp;
 use crate::secret_key_store::SecretKeyStore;
 use crate::server::api::{
-    BasicSignatureCspServer, CspBasicSignatureError, CspMultiSignatureError,
-    MultiSignatureCspServer,
+    BasicSignatureCspVault, CspBasicSignatureError, CspMultiSignatureError, MultiSignatureCspVault,
 };
 use crate::types::MultiBls12_381_Signature;
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
@@ -27,11 +26,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> CspSigner for Csp
     ) -> CryptoResult<CspSignature> {
         match algorithm_id {
             AlgorithmId::Ed25519 => self
-                .csp_server
+                .csp_vault
                 .sign(algorithm_id, message, key_id)
                 .map_err(CspBasicSignatureError::into),
             AlgorithmId::MultiBls12_381 => self
-                .csp_server
+                .csp_vault
                 .multi_sign(algorithm_id, message, key_id)
                 .map_err(CspMultiSignatureError::into),
             _ => Err(CryptoError::InvalidArgument {

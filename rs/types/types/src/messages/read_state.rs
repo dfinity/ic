@@ -1,6 +1,6 @@
 use crate::{
     messages::{
-        message_id::hash_of_map, HttpHandlerError, HttpReadState, MessageId, RawHttpRequestVal,
+        message_id::hash_of_map, HttpReadState, HttpRequestError, MessageId, RawHttpRequestVal,
     },
     PrincipalId, UserId,
 };
@@ -46,12 +46,12 @@ impl ReadState {
 }
 
 impl TryFrom<HttpReadState> for ReadState {
-    type Error = HttpHandlerError;
+    type Error = HttpRequestError;
 
     fn try_from(read_state: HttpReadState) -> Result<Self, Self::Error> {
         Ok(Self {
             source: UserId::from(PrincipalId::try_from(read_state.sender.0).map_err(|err| {
-                HttpHandlerError::InvalidPrincipalId(format!(
+                HttpRequestError::InvalidPrincipalId(format!(
                     "Converting sender to PrincipalId failed with {}",
                     err
                 ))

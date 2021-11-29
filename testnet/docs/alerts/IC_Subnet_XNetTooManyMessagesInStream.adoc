@@ -1,0 +1,25 @@
+= IC_Subnet_XNetTooManyMessagesInStream
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+The cumulative stream size of the subnet indicated in the alert is > 500MB.
+
+== Impact
+
+Canister to canister messages may take longer to be delivered and/or get a
+reply.
+
+== Possible causes (non-exhaustive)
+
+- A lot of canister-to-canister traffic
+
+- Slow message execution on the remote subnet(s)
+
+== Troubleshooting and remediation
+
+There is currently not much we can do if this alert fires as we have no
+influence on how many requests are sent by the users. The alert is intended
+to make us notice that XNet traffic is increasing in general so that we can
+react early and prioritize implementing mitigations.

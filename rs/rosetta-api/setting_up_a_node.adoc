@@ -1,0 +1,76 @@
+=== Setting up a node
+
+To keep the instructions simple, the integration with the Rosetta API is encapsulated in a Docker image.
+If you don't already have Docker on your local computer, download and install the latest version.
+
+
+. https://docs.docker.com/get-docker/[Install docker] and https://docs.docker.com/config/daemon/[start the `dockerd` daemon].
+
+. Pull the latest `dfinity/rosetta-api` image down from Docker Hub by running the following command:
+
+[source,bash]
+....
+docker pull dfinity/rosetta-api
+....
+
+. Run the image by running the following command:
+
+[source,bash]
+....
+docker run \
+    --interactive \
+    --tty \
+    --publish 8080:8080 \
+    --rm \
+   dfinity/rosetta-api
+....
+
+Optionally, you can run the command above with an additional `canister` argument if you have been assigned a testnet. For example, the following command illustrates running the command using the `canister` argument set to "2xh5f-viaaa-aaaab-aae3q-cai".
+
+[source,bash]
+....
+docker run \
+    --interactive \
+    --tty \
+    --publish 8080:8080 \
+    --rm \
+   dfinity/rosetta-api
+   --canister 2xh5f-viaaa-aaaab-aae3q-cai
+....
+
+On first run, the node may take a while to catch up to the current tip of the chain. Objects will be saved to the `/data `directory inside the image.
+
+Once you are at all caught up, you should see output similar to like this:
+
+....
+You are all caught up to block height 100
+....
+
+After completing this step, the node continues to run as a **passive** node  that does not participate in block making.
+
+=== Reading/Writing transactions with a node
+
+While there are a number of ways to interact with ICP tokens on the Internet Computer, the best supported one is https://www.rosetta-api.org/[the Rosetta API]. The Rosetta API is a https://www.rosetta-api.org/docs/welcome.html[well documented open standard] that supports a number of blockchains and is designed to support exchange workflows.
+=== Requirements and limitations
+We do add one conditions not found in the Rosetta API documentation. If you are creating a new transaction you must create the unsigned transaction no more than 24 hours before the network receives the signed transaction.
+
+This implementation of the Rosetta API is fully-compliant with all standard endpoints and passes all of the `rosetta-cli` tests. The implementation can accept any valid Rosetta request.  However, it only replies with a small subset of the potential responses that the specification supports.
+
+The integration for ICP tokens only prompts for transactions to be signed using Ed25519, rather than https://www.rosetta-api.org/docs/models/SignatureType.html#values[all the signature schemes listed here].
+
+The software doesn't implement any of the UTXO features of Rosetta, so you won't see them in any of our responses.
+
+Below are some examples of the kinds of requests and responses that our node will expect/return.
+TODO
+
+=== The ICP Token
+
+The ICP token is very closely modeled off Bitcoin, with some small differences.
+- Rather than using proof of work, staked participant nodes use a variant of BLS to agree on a valid state of the chain.
+- Any transaction can store an 8-byte memo, which can be used to disambiguate payments received by a payee.
+
+But it is broadly the same as Bitcoin.
+- Each ICP token is divisible 10^8 times.
+- All transactions are stored in the ledger starting with the genesis initial state.
+- Tokens are entirely fungible.
+- Account identifiers are 23 bytes and derived from a public key.

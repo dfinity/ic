@@ -7,4 +7,3 @@ edition = "2018"
 ic-crypto = { path = "../../crypto" }
 ic-interfaces = { path = "../../interfaces" }
 ic-types = { path = "../../types/types" }
-phantom_newtype = { path = "../../phantom_newtype" }

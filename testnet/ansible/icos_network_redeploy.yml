@@ -1,0 +1,7 @@
+---
+
+- hosts: physical_hosts
+  become: yes
+  gather_facts: no
+  roles:
+    - role: ic_guest

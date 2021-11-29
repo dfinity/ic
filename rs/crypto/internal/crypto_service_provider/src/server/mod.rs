@@ -1,11 +1,63 @@
+use crate::api::CspThresholdSignError;
 use crate::server::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError,
+    CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError,
 };
 use ic_types::crypto::CryptoError;
 
 pub mod api;
 pub mod local_csp_server;
+pub mod remote_csp_server;
+#[cfg(test)]
+mod test_util;
+
+impl From<tarpc::client::RpcError> for CspThresholdSignError {
+    fn from(e: tarpc::client::RpcError) -> Self {
+        CspThresholdSignError::InternalError {
+            internal_error: e.to_string(),
+        }
+    }
+}
+
+impl From<tarpc::client::RpcError> for CspThresholdSignatureKeygenError {
+    fn from(e: tarpc::client::RpcError) -> Self {
+        CspThresholdSignatureKeygenError::InternalError {
+            internal_error: e.to_string(),
+        }
+    }
+}
+
+impl From<tarpc::client::RpcError> for CspMultiSignatureError {
+    fn from(e: tarpc::client::RpcError) -> Self {
+        CspMultiSignatureError::InternalError {
+            internal_error: e.to_string(),
+        }
+    }
+}
+
+impl From<tarpc::client::RpcError> for CspMultiSignatureKeygenError {
+    fn from(e: tarpc::client::RpcError) -> Self {
+        CspMultiSignatureKeygenError::InternalError {
+            internal_error: e.to_string(),
+        }
+    }
+}
+
+impl From<tarpc::client::RpcError> for CspBasicSignatureError {
+    fn from(e: tarpc::client::RpcError) -> Self {
+        CspBasicSignatureError::InternalError {
+            internal_error: e.to_string(),
+        }
+    }
+}
+
+impl From<tarpc::client::RpcError> for CspBasicSignatureKeygenError {
+    fn from(e: tarpc::client::RpcError) -> Self {
+        CspBasicSignatureKeygenError::InternalError {
+            internal_error: e.to_string(),
+        }
+    }
+}
 
 impl From<CspBasicSignatureError> for CryptoError {
     fn from(e: CspBasicSignatureError) -> CryptoError {
@@ -30,6 +82,12 @@ impl From<CspBasicSignatureError> for CryptoError {
                     internal_error: "Malformed secret key".to_string(),
                 }
             }
+            // TODO(CRP-1262): using InvalidArgument here is not ideal.
+            CspBasicSignatureError::InternalError { internal_error } => {
+                CryptoError::InvalidArgument {
+                    message: format!("Internal error: {}", internal_error),
+                }
+            }
         }
     }
 }
@@ -41,6 +99,11 @@ impl From<CspBasicSignatureKeygenError> for CryptoError {
                 CryptoError::AlgorithmNotSupported {
                     algorithm,
                     reason: "Unsupported algorithm".to_string(),
+                }
+            }
+            CspBasicSignatureKeygenError::InternalError { internal_error } => {
+                CryptoError::InvalidArgument {
+                    message: format!("Internal error: {}", internal_error),
                 }
             }
         }
@@ -91,6 +154,11 @@ impl From<CspMultiSignatureKeygenError> for CryptoError {
                 key_bytes,
                 internal_error,
             },
+            CspMultiSignatureKeygenError::InternalError { internal_error } => {
+                CryptoError::InvalidArgument {
+                    message: internal_error,
+                }
+            }
         }
     }
 }

@@ -1,0 +1,60 @@
+= Down_Response_code_mismatch_error_ic-api.internetcomputer.org
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+A CloudFlare HealthCheck against the URL https://ic-api.internetcomputer.org/api/v1/health returned a result that is not 200.
+
+== Impact
+
+The public dashboard at https://dashboard.internetcomputer.com uses the ic-api to pull down stats that are shown.
+
+If the ic-api is failing, it means that the public dashboard stats are not updating.
+
+== Possible causes (non-exhaustive)
+
+* The ic-api service has a healthcheck URL that will give you some idea of what is going on: https://ic-api.internetcomputer.org/api/v1/health
+** `{"services":{"metrics":"Metric backend is unhealthy.  Connection to metrics not established","persistence":"Persistence Runners are more than 30 seconds behind"},"status":"unavailable"}`
+*** This means that the VictoriaMetrics are not being inserted by remote_write from the IC Prometheus server.
+
+* CloudFlare
+** Up/Down Alerts are coming from a CloudFlare HealthCheck
+
+* IC Prometheus
+** The IC Prometheus may have a full `/var/lib/prometheus2` filesystem.
+** This prometheus does a remote_write to Victoria Metrics using the URL https://metric-ingress.dfinity.network/insert/0/prometheus/api/v1/write which may have connectivity problems.
+** Check the prometheus service logs on the prometheus.dfinity.systems server.
+
+* Victoria Metrics
+** This is an AWS EKS cluster (Kubernetes) that runs VictoriaMetrics to handle the ic-api requests
+** There are horizontally scaled pod layers which need to be checked to ensure they are working:
+*** vminsert is used by the IC prometheus remote_write, and has gotten stuck in the past.
+*** vmselect is used by the ic-api query calls
+*** vmstorage is used to store the metrics
+** Special k8s credentials are needed here, please escalate to PlatformOps to investigate further
+
+== Troubleshooting and remediation
+
+* The Public Dashboard Operational Runbook is published in Notion:
+** https://www.notion.so/Public-Dashboard-e4dbfa6c18ff492badf0f29e5eb8706f
+
+* Check the public dashboard webpage
+** https://dashboard.internetcomputer.org
+*** Are the stats live updating correctly? If anything shows as `NaN`, or the blocks are not updating, there is a problem.
+
+* Check the public dashboard ic-api healthcheck URL
+** https://ic-api.internetcomputer.org/api/v1/health
+*** This should give you an error message to investigate further.
+
+* Check Prometheus
+** `ssh prometheus.dfinity.systems df -k /var/lib/prometheus2`
+** `ssh prometheus.dfinity.systems curl https://metric-ingress.dfinity.network/insert/0/prometheus/api/v1/write`
+** `ssh prometheus.dfinity.systems journalctl -f -u prometheus`
+
+* Check VictoriaMetrics
+** https://metric-ingress.dfinity.network/insert/0/prometheus/api/v1/write
+** Kubernetes access is restricted: escalate to PFOPS oncall.
+
+This is public facing. If the public dashboard is not updating, it is considered a Sev2 outage.
+

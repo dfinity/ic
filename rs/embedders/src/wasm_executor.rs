@@ -12,15 +12,19 @@ use ic_interfaces::execution_environment::{
 use ic_logger::ReplicaLogger;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::{EmbedderCache, ExecutionState, SystemState};
+use ic_replicated_state::{
+    canister_state::execution_state::SandboxExecutionState, EmbedderCache, ExecutionState,
+    SystemState,
+};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
-use ic_system_api::{ApiType, NonReplicatedQueryKind, SystemApiImpl, SystemStateAccessorDirect};
+use ic_system_api::{
+    ApiType, ModificationTracking, StaticSystemState, SystemApiImpl, SystemStateAccessorDirect,
+};
 use ic_types::{
     methods::{FuncRef, WasmMethod},
     NumBytes, NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
-use memory_tracker::DirtyPageTracking;
 
 use crate::cow_memory_creator::CowMemoryCreator;
 use crate::{
@@ -196,6 +200,8 @@ impl WasmExecutor {
             cycles_account_manager,
         }: WasmExecutionInput,
     ) -> WasmExecutionOutput {
+        let static_system_state =
+            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let canister_id = system_state.canister_id;
         let system_state_accessor =
             SystemStateAccessorDirect::new(system_state, cycles_account_manager);
@@ -239,15 +245,16 @@ impl WasmExecutor {
         };
 
         let commit_dirty_pages = func_ref.to_commit();
-        let dirty_page_tracking = get_dirty_page_tracking(&api_type);
+        let modification_tracking = api_type.modification_tracking();
 
         let instruction_limit = execution_parameters.instruction_limit;
         let system_api = SystemApiImpl::new(
-            canister_id,
             api_type,
             system_state_accessor,
+            static_system_state,
             canister_current_memory_usage,
             execution_parameters,
+            execution_state.stable_memory.clone(),
             self.log.clone(),
         );
 
@@ -258,7 +265,7 @@ impl WasmExecutor {
             execution_state.wasm_memory.size,
             memory_creator,
             Some(execution_state.wasm_memory.page_map.clone()),
-            dirty_page_tracking,
+            modification_tracking,
             system_api,
         ) {
             Ok(instance) => instance,
@@ -283,7 +290,7 @@ impl WasmExecutor {
             let run_result = instance.run(func_ref);
             match run_result {
                 Ok(run_result) => {
-                    if dirty_page_tracking == DirtyPageTracking::Track {
+                    if modification_tracking == ModificationTracking::Track {
                         if execution_state.cow_mem_mgr.is_valid() && commit_dirty_pages {
                             let mapped_state = execution_state.mapped_state.take();
                             let pages: Vec<u64> =
@@ -294,9 +301,20 @@ impl WasmExecutor {
                                 compute_page_delta(&mut instance, &run_result.dirty_pages);
                             execution_state.wasm_memory.page_map.update(&page_delta);
                         }
+                        execution_state.wasm_memory.size = instance.heap_size();
+                        execution_state.stable_memory.page_map.update(
+                            &run_result
+                                .stable_memory_dirty_pages
+                                .iter()
+                                .map(|(i, p)| (*i, p))
+                                .collect::<Vec<_>>(),
+                        );
+                        execution_state.stable_memory.size = run_result.stable_memory_size;
+                        execution_state.exported_globals = run_result.exported_globals;
+
+                        // TODO(EXC-624): Create delta-based remote state here.
+                        execution_state.sandbox_state = SandboxExecutionState::new();
                     }
-                    execution_state.exported_globals = run_result.exported_globals;
-                    execution_state.wasm_memory.size = instance.heap_size();
                 }
                 Err(err) => {
                     instance
@@ -308,14 +326,10 @@ impl WasmExecutor {
             let num_instructions = instance.get_num_instructions();
             let stats = instance.get_stats();
             let mut system_api = instance.into_store_data().system_api;
-            (
-                system_api.take_execution_result(),
-                num_instructions,
-                system_api
-                    .release_system_state_accessor()
-                    .release_system_state(),
-                stats,
-            )
+            let execution_result = system_api.take_execution_result();
+            let system_state_accessor = system_api.release_system_state_accessor();
+            let system_state = system_state_accessor.release_system_state();
+            (execution_result, num_instructions, system_state, stats)
         };
 
         WasmExecutionOutput {
@@ -327,7 +341,6 @@ impl WasmExecutor {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn create_execution_state(
         &self,
         wasm_binary: Vec<u8>,
@@ -343,16 +356,19 @@ impl WasmExecutor {
                 .create_execution_state(wasm_binary, canister_root, &self.config)?;
 
         let canister_id = system_state.canister_id;
+        let static_system_state =
+            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api_type = ApiType::start();
-        let dirty_page_tracking = get_dirty_page_tracking(&api_type);
+        let modification_tracking = api_type.modification_tracking();
         let system_api = SystemApiImpl::new(
-            canister_id,
             api_type,
             system_state_accessor,
+            static_system_state,
             canister_current_memory_usage,
             execution_parameters,
+            execution_state.stable_memory.clone(),
             self.log.clone(),
         );
 
@@ -371,7 +387,7 @@ impl WasmExecutor {
             execution_state.wasm_memory.size,
             memory_creator,
             Some(execution_state.wasm_memory.page_map.clone()),
-            dirty_page_tracking,
+            modification_tracking,
             system_api,
         ) {
             Ok(instance) => instance,
@@ -387,18 +403,6 @@ impl WasmExecutor {
 
     pub fn compile_count_for_testing(&self) -> u64 {
         self.metrics.compile.get_sample_count()
-    }
-}
-
-fn get_dirty_page_tracking(api_type: &ApiType) -> DirtyPageTracking {
-    match api_type {
-        ApiType::ReplicatedQuery { .. }
-        | ApiType::NonReplicatedQuery {
-            query_kind: NonReplicatedQueryKind::Pure,
-            ..
-        }
-        | ApiType::InspectMessage { .. } => DirtyPageTracking::Ignore,
-        _ => DirtyPageTracking::Track,
     }
 }
 

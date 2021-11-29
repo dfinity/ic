@@ -1,0 +1,8 @@
+= Visualizing Rust dependencies with Dot
+
+Usage:
+
+-----
+cd dfinity/rs
+python3 ../gitlab-ci/tools/cargo_tree_viz/cargo_tree_viz.py | dot -Tsvg -o graph.svg
+----

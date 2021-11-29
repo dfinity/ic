@@ -1,0 +1,28 @@
+== e2e Tests
+
+The e2e tests use the NixOS test framework. See
+https://nixos.org/nixos/manual/#sec-nixos-tests
+
+=== Running e2e Tests
+
+To run integration tests create a draft PR and let the CI test suite run.
+
+=== Running e2e Tests Locally [Linux Only]
+
+Running tests locally on Darwin is broken. As a work around, you can `ssh -A
+zrh-linux-3.dfinity.systems`, clone your changes from github, and run the
+following commands.
+
+To run all tests locally use.
+[source,shell]
+----
+cd $(git rev-parse --show-toplevel)/testnet
+nix-build -A tests
+----
+
+To run only `e2e-tests.py`.
+[source,shell]
+----
+cd $(git rev-parse --show-toplevel)/testnet
+nix-build -A tests.e2e-test
+----

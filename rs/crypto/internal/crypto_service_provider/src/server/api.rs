@@ -1,5 +1,4 @@
-use crate::api::CspThresholdSignError;
-#[cfg(test)]
+use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::types::CspPublicCoefficients;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -10,10 +9,17 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
+use ic_types::crypto::canister_threshold_sig::error::{
+    IDkgCreateDealingError, IDkgLoadTranscriptError,
+};
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use tecdsa::{
+    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaPublicKey,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspBasicSignatureError {
@@ -30,11 +36,15 @@ pub enum CspBasicSignatureError {
     MalformedSecretKey {
         algorithm: AlgorithmId,
     },
+    InternalError {
+        internal_error: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspBasicSignatureKeygenError {
     UnsupportedAlgorithm { algorithm: AlgorithmId },
+    InternalError { internal_error: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -64,12 +74,16 @@ pub enum CspMultiSignatureKeygenError {
         key_bytes: Option<Vec<u8>>,
         internal_error: String,
     },
+    InternalError {
+        internal_error: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspThresholdSignatureKeygenError {
     UnsupportedAlgorithm { algorithm: AlgorithmId },
     InvalidArgument { message: String },
+    InternalError { internal_error: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -80,20 +94,30 @@ pub enum CspTlsSignError {
     SigningFailed { error: String },
 }
 
-/// `CspServer` offers a selection of operations that involve
-/// secret keys managed by the server.
-pub trait CspServer:
-    BasicSignatureCspServer
-    + MultiSignatureCspServer
-    + ThresholdSignatureCspServer
-    + NiDkgCspServer
-    + SecretKeyStoreCspServer
+/// `CspVault` offers a selection of operations that involve
+/// secret keys managed by the vault.
+pub trait CspVault:
+    BasicSignatureCspVault
+    + MultiSignatureCspVault
+    + ThresholdSignatureCspVault
+    + NiDkgCspVault
+    + SecretKeyStoreCspVault
+{
+}
+// Blanket implementation of `CspVault` for all types that fulfill the
+// requirements.
+impl<T> CspVault for T where
+    T: BasicSignatureCspVault
+        + MultiSignatureCspVault
+        + ThresholdSignatureCspVault
+        + NiDkgCspVault
+        + SecretKeyStoreCspVault
 {
 }
 
-/// Operations of `CspServer` related to basic signatures
+/// Operations of `CspVault` related to basic signatures
 /// (cf. `CspSigner` and `CspKeyGenerator`).
-pub trait BasicSignatureCspServer {
+pub trait BasicSignatureCspVault {
     /// Signs the given message using the specified algorithm and key ID.
     ///
     /// # Arguments
@@ -108,7 +132,7 @@ pub trait BasicSignatureCspServer {
     /// The reason for this "inefficiency" is the fact that in
     /// Ed25519-signatures (that this trait has to support) the computation
     /// of the message digest uses secret key data as an input, and so
-    /// cannot be computed outside of the CspServer (cf. PureEdDSA in
+    /// cannot be computed outside of the CspVault (cf. PureEdDSA in
     /// [RFC 8032](https://tools.ietf.org/html/rfc8032#section-5.1.6))
     fn sign(
         &self,
@@ -129,9 +153,9 @@ pub trait BasicSignatureCspServer {
     ) -> Result<(KeyId, CspPublicKey), CspBasicSignatureKeygenError>;
 }
 
-/// Operations of `CspServer` related to multi-signatures
+/// Operations of `CspVault` related to multi-signatures
 /// (cf. `CspSigner` and `CspKeyGenerator`).
-pub trait MultiSignatureCspServer {
+pub trait MultiSignatureCspVault {
     /// Signs the given message using the specified algorithm and key ID.
     ///
     /// # Arguments
@@ -144,7 +168,7 @@ pub trait MultiSignatureCspServer {
     /// # Note
     /// `multi_sign`-method takes the full message as an argument (rather than
     /// just message digest) to be consistent with
-    /// `BasicSignatureCspServer::sign()`-method.
+    /// `BasicSignatureCspVault::sign()`-method.
     fn multi_sign(
         &self,
         algorithm_id: AlgorithmId,
@@ -164,9 +188,9 @@ pub trait MultiSignatureCspServer {
     ) -> Result<(KeyId, CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
 }
 
-/// Operations of `CspServer` related to threshold signatures
+/// Operations of `CspVault` related to threshold signatures
 /// (cf. `ThresholdSignatureCspClient`).
-pub trait ThresholdSignatureCspServer {
+pub trait ThresholdSignatureCspVault {
     /// Generates threshold keys.
     ///
     /// This interface is primarily of interest for testing and demos.
@@ -196,7 +220,6 @@ pub trait ThresholdSignatureCspServer {
     ///   implementations MUST return an error.
     /// * An implementation MAY return an error if it is temporarily unable to
     ///   generate and store keys.
-    #[cfg(test)]
     fn threshold_keygen_for_test(
         &self,
         algorithm_id: AlgorithmId,
@@ -216,7 +239,7 @@ pub trait ThresholdSignatureCspServer {
     /// # Note
     /// `threshold_sign`-method takes the full message as an argument (rather
     /// than just message digest) to be consistent with
-    /// `BasicSignatureCspServer::sign()`-method.
+    /// `BasicSignatureCspVault::sign()`-method.
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
@@ -225,8 +248,8 @@ pub trait ThresholdSignatureCspServer {
     ) -> Result<CspSignature, CspThresholdSignError>;
 }
 
-/// Operations of `CspServer` related to NI-DKG (cf. `NiDkgCspClient`).
-pub trait NiDkgCspServer {
+/// Operations of `CspVault` related to NI-DKG (cf. `NiDkgCspClient`).
+pub trait NiDkgCspVault {
     /// Generates a forward-secure key pair used to encrypt threshold key shares
     /// in transmission.
     ///
@@ -319,17 +342,17 @@ pub trait NiDkgCspServer {
     fn retain_threshold_keys_if_present(&self, active_key_ids: BTreeSet<KeyId>);
 }
 
-/// Operations of `CspServer` related to querying the secret key store (cf.
+/// Operations of `CspVault` related to querying the secret key store (cf.
 /// `CspSecretKeyStoreChecker`).
-pub trait SecretKeyStoreCspServer {
+pub trait SecretKeyStoreCspVault {
     /// Checks whether the secret key store contains a key with the given
     /// `key_id`. # Arguments
     /// * `key_id` identifies the key whose presence should be checked.
     fn sks_contains(&self, key_id: &KeyId) -> bool;
 }
 
-/// Operations of `CspServer` related to TLS handshakes.
-pub trait TlsHandshakeCspServer: Send + Sync {
+/// Operations of `CspVault` related to TLS handshakes.
+pub trait TlsHandshakeCspVault: Send + Sync {
     /// Generates TLS key material for node with ID `node_id`.
     ///
     /// The secret key is stored in the key store and used to create a
@@ -360,6 +383,37 @@ pub trait TlsHandshakeCspServer: Send + Sync {
     /// # Note
     /// The method takes the full message as an argument (rather than
     /// just message digest) to be consistent with
-    /// `BasicSignatureCspServer::sign()`-method.
+    /// `BasicSignatureCspVault::sign()`-method.
     fn sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError>;
+}
+
+/// Operations of `CspVault` related to I-DKG (cf. `IDkgProtocolCspClient`).
+pub trait IDkgProtocolCspVault {
+    /// Generate an IDkg dealing.
+    fn idkg_create_dealing(
+        &self,
+        algorithm_id: AlgorithmId,
+        context_data: &[u8],
+        dealer_index: NodeIndex,
+        reconstruction_threshold: NumberOfNodes,
+        receiver_keys: &[MEGaPublicKey],
+        transcript_operation: &IDkgTranscriptOperationInternal,
+    ) -> Result<IDkgDealingInternal, IDkgCreateDealingError>;
+
+    /// Compute secret from transcript and store in SKS, generating complaints
+    /// if necessary.
+    fn idkg_load_transcript(
+        &self,
+        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        context_data: &[u8],
+        receiver_index: NodeIndex,
+        key_id: &KeyId,
+        transcript: &IDkgTranscriptInternal,
+    ) -> Result<Vec<IDkgComplaintInternal>, IDkgLoadTranscriptError>;
+
+    /// Generate a MEGa keypair, for encrypting/decrypting IDkg dealing shares.
+    fn idkg_gen_mega_key_pair(
+        &self,
+        algorithm_id: AlgorithmId,
+    ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
 }

@@ -4,8 +4,8 @@ use ic_embedders::{
     WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Global, NumWasmPages};
-use ic_system_api::SystemStateAccessor;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, mock_time, state::SystemStateBuilder,
     types::ids::user_test_id,
@@ -23,13 +23,15 @@ fn execution_parameters() -> ExecutionParameters {
         canister_memory_limit: ic_types::NumBytes::from(4 << 30),
         subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2),
         compute_allocation: ComputeAllocation::default(),
+        subnet_type: SubnetType::Application,
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use ic_replicated_state::Memory;
+    use ic_system_api::{ModificationTracking, StaticSystemState};
     use ic_test_utilities::types::ids::canister_test_id;
-    use memory_tracker::DirtyPageTracking;
 
     use super::*;
 
@@ -76,14 +78,17 @@ mod tests {
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
+        let static_system_state =
+            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
-            system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
             system_state_accessor,
+            static_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
+            Memory::default(),
             log,
         );
 
@@ -95,7 +100,7 @@ mod tests {
                 ic_replicated_state::NumWasmPages::from(0),
                 None,
                 None,
-                DirtyPageTracking::Track,
+                ModificationTracking::Track,
                 api,
             )
             .map_err(|r| r.0)
@@ -156,14 +161,17 @@ mod tests {
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
+        let static_system_state =
+            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
-            system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
             system_state_accessor,
+            static_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
+            Memory::default(),
             log,
         );
 
@@ -175,7 +183,7 @@ mod tests {
                 ic_replicated_state::NumWasmPages::from(0),
                 None,
                 None,
-                DirtyPageTracking::Track,
+                ModificationTracking::Track,
                 api,
             )
             .map_err(|r| r.0)
@@ -222,16 +230,19 @@ mod tests {
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
 
         let system_state = SystemStateBuilder::default().build();
+        let static_system_state =
+            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
             system_state,
             Arc::clone(&cycles_account_manager),
         );
         let api = ic_system_api::SystemApiImpl::new(
-            system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
             system_state_accessor,
+            static_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
+            Memory::default(),
             log.clone(),
         );
         let mut inst = embedder
@@ -242,7 +253,7 @@ mod tests {
                 NumWasmPages::from(0),
                 None,
                 None,
-                DirtyPageTracking::Track,
+                ModificationTracking::Track,
                 api,
             )
             .map_err(|r| r.0)
@@ -256,14 +267,17 @@ mod tests {
 
         // Change the value of globals and verify we can get them back.
         let system_state = SystemStateBuilder::default().build();
+        let static_system_state =
+            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
-            system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
             system_state_accessor,
+            static_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
+            Memory::default(),
             log,
         );
 
@@ -275,7 +289,7 @@ mod tests {
                 NumWasmPages::from(0),
                 None,
                 None,
-                DirtyPageTracking::Track,
+                ModificationTracking::Track,
                 api,
             )
             .map_err(|r| r.0)
@@ -307,16 +321,19 @@ mod tests {
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = SystemStateBuilder::default().build();
+        let static_system_state =
+            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
             system_state,
             Arc::clone(&cycles_account_manager),
         );
         let api = ic_system_api::SystemApiImpl::new(
-            system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
             system_state_accessor,
+            static_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
+            Memory::default(),
             log.clone(),
         );
         let mut inst = embedder
@@ -327,7 +344,7 @@ mod tests {
                 NumWasmPages::from(0),
                 None,
                 None,
-                DirtyPageTracking::Track,
+                ModificationTracking::Track,
                 api,
             )
             .map_err(|r| r.0)
@@ -344,14 +361,17 @@ mod tests {
 
         // Change the value of globals and verify we can get them back.
         let system_state = SystemStateBuilder::default().build();
+        let static_system_state =
+            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
-            system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
             system_state_accessor,
+            static_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
+            Memory::default(),
             log,
         );
         let mut inst = embedder
@@ -362,7 +382,7 @@ mod tests {
                 NumWasmPages::from(0),
                 None,
                 None,
-                DirtyPageTracking::Track,
+                ModificationTracking::Track,
                 api,
             )
             .map_err(|r| r.0)
@@ -390,14 +410,17 @@ mod tests {
         .unwrap();
         let system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+        let static_system_state =
+            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
-            system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
             system_state_accessor,
+            static_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
+            Memory::default(),
             log.clone(),
         );
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log);
@@ -410,7 +433,7 @@ mod tests {
                 NumWasmPages::from(0),
                 None,
                 None,
-                DirtyPageTracking::Track,
+                ModificationTracking::Track,
                 api,
             )
             .map_err(|r| r.0)
@@ -438,14 +461,17 @@ mod tests {
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
         let system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+        let static_system_state =
+            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
-            system_state_accessor.canister_id(),
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
             system_state_accessor,
+            static_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
+            Memory::default(),
             log,
         );
         embedder
@@ -456,7 +482,7 @@ mod tests {
                 NumWasmPages::from(0),
                 None,
                 None,
-                DirtyPageTracking::Track,
+                ModificationTracking::Track,
                 api,
             )
             .map_err(|r| r.0)

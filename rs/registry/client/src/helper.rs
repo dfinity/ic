@@ -9,3 +9,4 @@ pub mod node;
 pub mod provisional_whitelist;
 pub mod routing_table;
 pub mod subnet;
+pub mod unassigned_nodes;

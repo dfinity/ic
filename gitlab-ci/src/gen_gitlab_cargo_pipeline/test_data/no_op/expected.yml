@@ -1,0 +1,2 @@
+include:
+  - local: /gitlab-ci/config/00--child-pipeline-noop-root.yml

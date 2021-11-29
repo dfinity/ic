@@ -1,8 +1,8 @@
-//! TLS handshake operations provided by the CSP server
+//! TLS handshake operations provided by the CSP vault
 use crate::keygen::tls_cert_hash_as_key_id;
 use crate::secret_key_store::SecretKeyStore;
-use crate::server::api::{CspTlsSignError, TlsHandshakeCspServer};
-use crate::server::local_csp_server::LocalCspServer;
+use crate::server::api::{CspTlsSignError, TlsHandshakeCspVault};
+use crate::server::local_csp_server::LocalCspVault;
 use crate::types::{CspSecretKey, CspSignature};
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
@@ -18,8 +18,8 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> TlsHandshakeCspServer
-    for LocalCspServer<R, S, C>
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> TlsHandshakeCspVault
+    for LocalCspVault<R, S, C>
 {
     fn gen_tls_key_pair(&self, node: NodeId, not_after: &str) -> (KeyId, TlsPublicKeyCert) {
         let serial = self.rng_write_lock().gen::<[u8; 19]>();
@@ -98,7 +98,7 @@ fn ed25519_secret_key_bytes_from_der(
     ))
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspServer<R, S, C> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
     pub(super) fn store_tls_secret_key(
         &self,
         cert: &TlsPublicKeyCert,

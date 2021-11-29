@@ -1,0 +1,4 @@
+crates_allowed_to_fail:
+  - foo
+crates_tested_with_release_build:
+crate_test_name_override:

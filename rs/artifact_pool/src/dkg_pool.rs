@@ -221,7 +221,7 @@ impl<K: Ord, V> PoolSection<K, V> {
         self.metrics.observe_insert(MESSAGE_SIZE_BYTES);
         let replaced = self.messages.insert(key, value);
         if replaced.is_some() {
-            self.metrics.observe_remove(MESSAGE_SIZE_BYTES);
+            self.metrics.observe_duplicate(MESSAGE_SIZE_BYTES);
         }
         replaced
     }

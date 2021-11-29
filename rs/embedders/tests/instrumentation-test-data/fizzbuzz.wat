@@ -1,6 +1,6 @@
 (module
-    (import "js" "memory" (memory 1))
     (import "js" "println" (func $println (param i32 i32)))
+    (memory 1)
     (data (i32.const 0) "Fizz")
     (data (i32.const 4) "Buzz")
     (data (i32.const 8) "FizzBuzz")

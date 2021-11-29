@@ -1,0 +1,35 @@
+---
+# Add the delay using tc
+#
+
+- name: Check that latency_ms arg is between 10 and 1000.
+  assert:
+    that:
+      - latency_ms|int <= 1000
+      - latency_ms|int >= 10
+    fail_msg: "'latency_ms' must be between 10 and 1000"
+
+- name: Add network delay
+  changed_when: true
+  # This command adds a network delay, but ensures that SSH is not affected
+  # It works by creating two priorities, and sends all traffic (priomap) to the
+  # higher priority. Then, filter redirects the IC traffic to the lower priority
+  # lane. We have to do it this way, because the higher prio lane is always consulted
+  # first, and we expect more IC network traffic than any other (SSH, Prometheus, ...).
+  shell: |
+    set -exuo pipefail
+    if [[ -n "{{ ic_iface_ipv6 }}" ]]; then
+      tc qdisc add dev {{ ic_iface_ipv6 }} root handle 1: prio bands 2 priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+      tc qdisc add dev {{ ic_iface_ipv6 }} parent 1:1 handle 10: sfq perturb 10
+      tc qdisc add dev {{ ic_iface_ipv6 }} parent 1:2 handle 20: netem delay {{ latency_ms }}ms
+      tc filter add dev {{ ic_iface_ipv6 }} protocol ipv6 parent 1:0 prio 1 u32 match ip6 dport {{ p2p_listen_port }} 0xFFFF flowid 1:2
+    fi
+    if [[ -n "{{ ic_iface_ipv4 }}" ]]; then
+      tc qdisc add dev {{ ic_iface_ipv4 }} root handle 1: prio bands 2 priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+      tc qdisc add dev {{ ic_iface_ipv4 }} parent 1:1 handle 10: sfq perturb 10
+      tc qdisc add dev {{ ic_iface_ipv4 }} parent 1:2 handle 20: netem delay {{ latency_ms }}ms
+      tc filter add dev {{ ic_iface_ipv4 }} protocol ipv4 parent 1:0 prio 1 u32 match ip dport {{ xnet_listen_port }} 0xFFFF flowid 1:2
+      tc filter add dev {{ ic_iface_ipv4 }} protocol ipv4 parent 1:0 prio 1 u32 match ip dport {{ api_listen_port }} 0xFFFF flowid 1:2
+    fi
+  args:
+    executable: /bin/bash

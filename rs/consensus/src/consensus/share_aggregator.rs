@@ -7,6 +7,7 @@ use crate::consensus::{
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::ReplicaLogger;
+use std::cmp::min;
 use std::sync::Arc;
 
 /// The ShareAggregator is responsible for aggregating shares of random beacons,
@@ -66,9 +67,13 @@ impl ShareAggregator {
     fn aggregate_random_tape_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
         let expected_height = self.message_routing.expected_batch_height();
         let finalized_height = pool.get_finalized_height();
+        let max_height = min(
+            expected_height + Height::from(RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE),
+            finalized_height.increment(),
+        );
         // Filter out those at a height where we have a full tape already.
         let shares = pool
-            .get_random_tape_shares(expected_height, finalized_height.increment())
+            .get_random_tape_shares(expected_height, max_height)
             .filter(|share| pool.get_random_tape(share.height()).is_none());
         let state_reader = pool.as_cache();
         to_messages(utils::aggregate(

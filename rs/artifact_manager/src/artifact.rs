@@ -1,9 +1,11 @@
 //! The module contains implementations for different artifact kinds.
 
 use ic_consensus_message::ConsensusMessageHashable;
+use ic_ecdsa_object::ecdsa_msg_hash;
 use ic_types::{
-    artifact::*, consensus::certification::CertificationMessageHash, crypto::CryptoHashOf,
-    messages::SignedRequestBytes, CountBytes,
+    artifact::*, consensus::certification::CertificationMessageHash,
+    consensus::ecdsa::EcdsaMessageAttribute, crypto::CryptoHashOf, messages::SignedRequestBytes,
+    CountBytes,
 };
 use serde::{Deserialize, Serialize};
 
@@ -151,7 +153,14 @@ impl ArtifactKind for EcdsaArtifact {
 
     /// The function converts a `EcdsaMessage` into an advert for a
     /// `EcdsaArtifact`.
-    fn message_to_advert(_msg: &EcdsaMessage) -> Advert<EcdsaArtifact> {
-        unimplemented!()
+    fn message_to_advert(msg: &EcdsaMessage) -> Advert<EcdsaArtifact> {
+        // TODO: use serialize_len() in all the clients
+        let size = bincode::serialize(msg).unwrap().len();
+        Advert {
+            id: ecdsa_msg_hash(msg),
+            attribute: EcdsaMessageAttribute::from(msg),
+            size,
+            integrity_hash: ic_crypto::crypto_hash(msg).get(),
+        }
     }
 }

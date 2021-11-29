@@ -1,0 +1,41 @@
+= IC_Backup_IO_Errors
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+The backup subsystem encountered a I/O error while writing or purging backup artifacts.
+
+== Impact
+
+There is an issue with writing the backup artifacts to disk or purging them.
+
+This is a low severity incident, as long as it only happens on a single node, as all nodes are writing their backups to disk.
+
+The immediate functionality of the IC is not affected. There will be no user facing effects.
+
+NOTE: At the moment, we only keep backups of the NNS subnet.
+If the affected nodes do not belong to the NNS, this is not an incident.
+However, it still makes sense to investigate and inform Consensus.
+
+== Possible causes (non-exhaustive)
+
+- A bug in the backup subsystem
+
+- The disk that the backup is stored on ran out of space / inodes
+
+- Depending on filesystem, spurious I/O errors can also happen
+
+== Troubleshooting and remediation
+
+1. Check the logs whether a single node or multiple nodes are encountering this error at the same time. Also check the exact error message of the I/O error.
+
+2. On the affected node(s), check the `consensus_backup_io_errors` metric. Did the error happen just once or is it firing rapidly?
+
+3. If the error is spurious, simply inform Consensus about the incident.
+
+4. If the error is caused by the file system (e.g. no space left), inform PfOps and the node operator.
+
+5. If the error is either replicated or repeating and not related to the file system itself, inform Consensus immediately.
+
+6. If the error is replicated AND repeating, we might be losing backups. Raise a Sev3 with Priority 1 and inform Consensus immediately. While not user facing, this is a highly time sensitive issue.

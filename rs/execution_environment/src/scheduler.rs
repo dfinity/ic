@@ -16,7 +16,8 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::QUEUE_INDEX_NONE, CanisterState, CanisterStatus, ReplicatedState,
+    canister_state::QUEUE_INDEX_NONE, CanisterState, CanisterStatus, InputQueueType,
+    ReplicatedState,
 };
 use ic_types::{
     ic00::{EmptyBlob, InstallCodeArgs, Payload as _, IC_00},
@@ -380,10 +381,11 @@ impl SchedulerImpl {
                 current_round,
                 state.time(),
                 subnet_available_memory / self.config.scheduler_cores as i64,
-                Arc::new(state.metadata.network_topology.routing_table.clone()),
+                Arc::clone(&state.metadata.network_topology.routing_table),
                 subnet_records.clone(),
                 heartbeat_handling,
                 &measurement_scope,
+                state.metadata.network_topology.nns_subnet_id,
             );
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
@@ -491,6 +493,7 @@ impl SchedulerImpl {
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         heartbeat_handling: HeartbeatHandling,
         measurement_scope: &MeasurementScope,
+        nns_subnet_id: SubnetId,
     ) -> (
         Vec<CanisterState>,
         Vec<(MessageId, IngressStatus)>,
@@ -549,6 +552,7 @@ impl SchedulerImpl {
                         subnet_records,
                         heartbeat_handling,
                         logger,
+                        nns_subnet_id,
                     );
                 });
             }
@@ -772,8 +776,11 @@ impl SchedulerImpl {
                 Some(canister) => canister,
             };
 
-            source_canister
-                .induct_messages_to_self(max_canister_memory_size, &mut subnet_available_memory);
+            source_canister.induct_messages_to_self(
+                max_canister_memory_size,
+                &mut subnet_available_memory,
+                state.metadata.own_subnet_type,
+            );
 
             source_canister
                 .system_state
@@ -784,6 +791,8 @@ impl SchedulerImpl {
                             (*msg).clone(),
                             max_canister_memory_size,
                             &mut subnet_available_memory,
+                            state.metadata.own_subnet_type,
+                            InputQueueType::LocalSubnet,
                         )
                         .map_err(|_| ()),
 
@@ -1055,6 +1064,7 @@ fn execute_canisters_on_thread(
     subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
     heartbeat_handling: HeartbeatHandling,
     logger: ReplicaLogger,
+    nns_subnet_id: SubnetId,
 ) -> ExecutionThreadResult {
     // Since this function runs on a helper thread, we cannot use a nested scope
     // here. Instead, we propagate metrics to the outer scope manually via
@@ -1100,6 +1110,7 @@ fn execute_canisters_on_thread(
                         Arc::clone(&subnet_records),
                         time,
                         subnet_available_memory.clone(),
+                        nns_subnet_id,
                     );
                 let heap_delta = match result {
                     Ok(heap_delta) => heap_delta,
@@ -1167,6 +1178,7 @@ fn execute_canisters_on_thread(
                 Arc::clone(&routing_table),
                 Arc::clone(&subnet_records),
                 subnet_available_memory.clone(),
+                nns_subnet_id,
             );
             let instructions_consumed = canister_execution_limits.instruction_limit_per_message
                 - result.num_instructions_left;
@@ -1241,6 +1253,7 @@ fn observe_replicated_state_metrics(state: &ReplicatedState, metrics: &Scheduler
     let mut input_queues_size_bytes = 0;
     let mut queues_response_bytes = 0;
     let mut queues_reservations = 0;
+    let mut queues_oversized_requests_extra_bytes = 0;
 
     state.canisters_iter().for_each(|canister| {
         match canister.status() {
@@ -1259,6 +1272,7 @@ fn observe_replicated_state_metrics(state: &ReplicatedState, metrics: &Scheduler
         input_queues_size_bytes += queues.input_queues_size_bytes();
         queues_response_bytes += queues.responses_size_bytes();
         queues_reservations += queues.reserved_slots();
+        queues_oversized_requests_extra_bytes += queues.oversized_requests_extra_bytes();
     });
     let streams_response_bytes = state
         .metadata
@@ -1289,6 +1303,7 @@ fn observe_replicated_state_metrics(state: &ReplicatedState, metrics: &Scheduler
 
     metrics.observe_queues_response_bytes(queues_response_bytes);
     metrics.observe_queues_reservations(queues_reservations);
+    metrics.observe_oversized_requests_extra_bytes(queues_oversized_requests_extra_bytes);
     metrics.observe_streams_response_bytes(streams_response_bytes);
 
     metrics

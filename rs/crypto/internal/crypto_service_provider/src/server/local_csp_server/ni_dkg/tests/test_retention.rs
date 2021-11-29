@@ -1,11 +1,14 @@
 #![allow(clippy::unwrap_used)]
-use super::fixtures::cache::STATE_WITH_TRANSCRIPT;
-use crate::server::api::{NiDkgCspServer, ThresholdSignatureCspServer};
-use crate::server::local_csp_server::ni_dkg::tests::fixtures::{MockNode, StateWithTranscript};
+use crate::server::local_csp_server::ni_dkg::tests::fixtures::{
+    MockDkgConfig, MockNetwork, MockNode, StateWithTranscript,
+};
+use crate::server::local_csp_server::ni_dkg::tests::state_with_transcript;
 use crate::types as csp_types;
 use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_types::crypto::{AlgorithmId, KeyId};
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 use std::collections::BTreeSet;
 
 /// Verifies that precisely the expected keys are retained.
@@ -32,9 +35,13 @@ use std::collections::BTreeSet;
 /// successfully reloading the transcript.
 #[test]
 fn test_retention() {
-    let mut state = STATE_WITH_TRANSCRIPT
-        .lock()
-        .expect("Test setup failed:  Could not get CSP with transcript");
+    let seed = [69u8; 32];
+    let network_size = 4;
+    let mut rng = ChaCha20Rng::from_seed(seed);
+    let network = MockNetwork::random(&mut rng, network_size);
+    let config = MockDkgConfig::from_network(&mut rng, &network, None);
+    let mut state = state_with_transcript(&config, network);
+
     state.load_keys();
 
     let internal_public_coefficients = state.transcript.public_coefficients();
@@ -51,7 +58,7 @@ fn test_retention() {
 
         // Verify that the key is there:
         let key_id = key_id_from_csp_pub_coeffs(&internal_public_coefficients);
-        node.csp_server
+        node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
                 &b"Here's a howdyedo!"[..],
@@ -64,11 +71,11 @@ fn test_retention() {
             .iter()
             .map(key_id_from_csp_pub_coeffs)
             .collect();
-        node.csp_server
+        node.csp_vault
             .retain_threshold_keys_if_present(active_key_ids);
 
         // The key should still be there:
-        node.csp_server
+        node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
                 &b"Here's a state of things!"[..],
@@ -89,11 +96,11 @@ fn test_retention() {
             .iter()
             .map(key_id_from_csp_pub_coeffs)
             .collect();
-        node.csp_server
+        node.csp_vault
             .retain_threshold_keys_if_present(active_key_ids);
 
         // The key should be unavailable
-        node.csp_server
+        node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
                 &b"To her life she clings!"[..],
@@ -115,7 +122,7 @@ fn test_retention() {
 
         // Verify that the threshold key has been reloaded:
         let key_id = key_id_from_csp_pub_coeffs(&internal_public_coefficients);
-        node.csp_server
+        node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
                 &b"Here's a howdyedo!"[..],

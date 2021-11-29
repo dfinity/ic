@@ -126,6 +126,10 @@ impl std::fmt::Display for PayloadType {
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Payload {
     payload_type: PayloadType,
+    // It is not crucial that Arc used here is unique, because the data referenced remains
+    // immutable. We use Arc only to optimize cloning cost.
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     payload: Arc<Hashed<CryptoHashOf<BlockPayload>, Thunk<BlockPayload>>>,
 }
 

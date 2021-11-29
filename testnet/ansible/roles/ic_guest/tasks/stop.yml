@@ -1,0 +1,13 @@
+---
+
+- name: stop guest
+  shell: |
+    set -eExu
+    virsh stop "{{ item }}"
+    virsh autostart --disable "{{ item }}"
+  loop: "{{ hostvars[inventory_hostname].ic_guests }}"
+  loop_control:
+    label:
+  args:
+    executable: /bin/bash
+  tags: [ "ic_guest" ]

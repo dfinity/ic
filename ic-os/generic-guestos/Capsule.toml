@@ -1,0 +1,13 @@
+[generic-guest-os-diskimg]
+input_files = [
+    "scripts/build-disk-image.sh",
+    "../../artifacts/release/boundary-node-control-plane",
+    "scripts/partitions.sh",
+    "scripts/partitions.csv",
+    "scripts/build-docker-save.sh",
+    "scripts/build-ubuntu.sh",
+    "scripts/docker_extract.py",
+    "bootloader/Dockerfile",
+    "bootloader/grub.cfg",
+    "bootloader/grubenv",
+    ]

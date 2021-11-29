@@ -160,7 +160,7 @@ pub fn deliver_batches(
                     );
                 }
                 if let Err(err) = result {
-                    warn!(log, "Batch delivery failed: {:?}", &err);
+                    warn!(every_n_seconds => 5, log, "Batch delivery failed: {:?}", err);
                     return Err(err);
                 }
                 last_delivered_batch_height = h;

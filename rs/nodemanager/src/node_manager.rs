@@ -20,14 +20,16 @@ use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_crypto::CryptoComponentForNonReplicaProcess;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::{crypto::KeyManager, registry::RegistryClient};
-use ic_logger::{info, new_replica_logger, warn, LoggerImpl, ReplicaLogger};
+use ic_logger::{error, info, new_replica_logger, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_common::local_store::{LocalStore, LocalStoreImpl};
+use ic_types::ReplicaVersion;
 use slog_async::AsyncGuard;
+use std::convert::TryFrom;
 use std::env;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 pub struct NodeManager {
@@ -40,6 +42,23 @@ pub struct NodeManager {
     firewall: Arc<std::sync::atomic::AtomicBool>,
     ssh_access_manager: Arc<std::sync::atomic::AtomicBool>,
     replica_process: Arc<Mutex<ReplicaProcess>>,
+}
+
+// Loads the replica version from the file specified as argument on node
+// manager's start.
+fn load_version_from_file(logger: &ReplicaLogger, path: &Path) -> Result<ReplicaVersion, ()> {
+    let contents = std::fs::read_to_string(path).map_err(|err| {
+        error!(
+            logger,
+            "Couldn't open the version file {:?}: {:?}", path, err
+        );
+    })?;
+    ReplicaVersion::try_from(contents.trim()).map_err(|err| {
+        error!(
+            logger,
+            "Couldn't parse the contents of {:?}: {:?}", path, err
+        );
+    })
 }
 
 impl NodeManager {
@@ -74,10 +93,24 @@ impl NodeManager {
             config
         );
 
+        let replica_version = load_version_from_file(&logger, &args.version_file)?;
         let registry = Arc::new(RegistryHelper::new_with(
             &metrics_registry,
             &config,
             node_id,
+            logger.clone(),
+        ));
+
+        let crypto = Arc::new(setup_crypto(
+            &config.crypto,
+            registry.get_registry_client(),
+            logger.clone(),
+        ));
+
+        let cup_provider = Arc::new(CatchUpPackageProvider::new(
+            Arc::clone(&registry),
+            args.cup_dir.clone(),
+            crypto.clone(),
             logger.clone(),
         ));
 
@@ -92,13 +125,6 @@ impl NodeManager {
         } else {
             panic!("Only LocalStore is supported in the nodemanager.");
         };
-        let registry_local_store = Arc::new(LocalStoreImpl::new(local_store_path));
-
-        let crypto = Arc::new(setup_crypto(
-            &config.crypto,
-            registry.get_registry_client(),
-            logger.clone(),
-        ));
 
         let (metrics, _metrics_runtime) = Self::get_metrics(
             metrics_addr,
@@ -109,6 +135,7 @@ impl NodeManager {
         );
         let metrics = Arc::new(metrics);
 
+        let registry_local_store = Arc::new(LocalStoreImpl::new(local_store_path));
         let mut registration = NodeRegistration::new(
             logger.clone(),
             config.clone(),
@@ -137,13 +164,6 @@ impl NodeManager {
             registration.register_node().await;
         }
 
-        let cup_provider = Arc::new(CatchUpPackageProvider::new(
-            Arc::clone(&registry),
-            args.cup_dir.clone(),
-            crypto.clone(),
-            logger.clone(),
-        ));
-
         let release_package_provider = Arc::new(ReleasePackageProvider::new(
             Arc::clone(&registry),
             args.replica_binary_dir.clone(),
@@ -158,22 +178,15 @@ impl NodeManager {
             .as_ref()
             .unwrap_or(&PathBuf::from("/tmp"))
             .clone();
-        let mut fallback_version_file = ic_binary_directory.clone();
-        fallback_version_file.push("version.txt");
+
         let release_package = ReleasePackage::start(
             Arc::clone(&registry),
             replica_process.clone(),
             release_package_provider,
             cup_provider,
-            args.replica_binary_dir.clone(),
-            args.force_replica_binary.clone(),
+            replica_version,
             args.replica_config_file.clone(),
             ic_binary_directory.clone(),
-            args.version_file
-                .as_ref()
-                .unwrap_or(&fallback_version_file)
-                .clone(),
-            current_node_manager_hash,
             nns_registry_replicator,
             logger.clone(),
         )

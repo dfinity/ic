@@ -9,6 +9,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use ic_system_api::ModificationTracking;
 use wasmtime::{unix::StoreExt, Memory, Mutability, Store, Val, ValType};
 
 use host_memory::MmapMemoryCreator;
@@ -19,7 +20,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{debug, error, fatal, ReplicaLogger};
 use ic_replicated_state::{
-    EmbedderCache, ExecutionState, Global, NumWasmPages, PageIndex, PageMap,
+    EmbedderCache, ExecutionState, Global, NumWasmPages, NumWasmPages64, PageIndex, PageMap,
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
@@ -47,7 +48,14 @@ mod wasmtime_embedder_tests;
 const NUM_INSTRUCTION_GLOBAL_NAME: &str = "canister counter_instructions";
 
 fn trap_to_error(err: anyhow::Error) -> HypervisorError {
-    let message = format!("{}", err);
+    let message = {
+        // We cannot use `format!` here because displaying `err` may fail.
+        let mut output = String::new();
+        match std::fmt::write(&mut output, format_args!("{}", err)) {
+            Ok(()) => output,
+            Err(_) => "Conversion of Wasmtime error to string failed.".to_string(),
+        }
+    };
     let re_signature_mismatch =
         regex::Regex::new("expected \\d+ arguments, got \\d+").expect("signature mismatch regex");
     if message.contains("wasm trap: call stack exhausted") {
@@ -216,7 +224,7 @@ impl WasmtimeEmbedder {
         heap_size: NumWasmPages,
         memory_creator: Option<Arc<CowMemoryCreator>>,
         page_map: Option<PageMap>,
-        dirty_page_tracking: DirtyPageTracking,
+        modification_tracking: ModificationTracking,
         system_api: S,
     ) -> Result<WasmtimeInstance<S>, (HypervisorError, S)> {
         let (module, memory_creator_proxy) = cache
@@ -241,9 +249,21 @@ impl WasmtimeEmbedder {
 
                 cow_mem_creator_proxy.replace(memory_creator);
 
-                let instance = linker
-                    .instantiate(&mut store, module)
-                    .expect("failed to create Wasmtime instance");
+                let instance = match linker.instantiate(&mut store, module) {
+                    Ok(instance) => instance,
+                    Err(err) => {
+                        error!(
+                            self.log,
+                            "Failed to instantiate module for {}: {}", canister_id, err
+                        );
+                        return Err((
+                            HypervisorError::WasmEngineError(
+                                WasmEngineError::FailedToInstantiateModule,
+                            ),
+                            store.into_data().system_api,
+                        ));
+                    }
+                };
 
                 // After the Wasm module instance and its corresponding memory
                 // are created we want to ensure that this particular
@@ -252,12 +272,24 @@ impl WasmtimeEmbedder {
                     .replace(std::sync::Arc::new(CowMemoryCreator::new_uninitialized()));
                 (instance, PersistenceType::Pagemap)
             }
-            (None, None) => (
-                linker
-                    .instantiate(&mut store, module)
-                    .expect("failed to create Wasmtime instance"),
-                PersistenceType::Sigsegv,
-            ),
+            (None, None) => {
+                let instance = match linker.instantiate(&mut store, module) {
+                    Ok(instance) => instance,
+                    Err(err) => {
+                        error!(
+                            self.log,
+                            "Failed to instantiate module for {}: {}", canister_id, err
+                        );
+                        return Err((
+                            HypervisorError::WasmEngineError(
+                                WasmEngineError::FailedToInstantiateModule,
+                            ),
+                            store.into_data().system_api,
+                        ));
+                    }
+                };
+                (instance, PersistenceType::Sigsegv)
+            }
             (None, Some(_)) | (Some(_), None) => {
                 fatal!(
                     self.log,
@@ -345,6 +377,11 @@ impl WasmtimeEmbedder {
                 instance_memory
             });
 
+        let dirty_page_tracking = match modification_tracking {
+            ModificationTracking::Ignore => DirtyPageTracking::Ignore,
+            ModificationTracking::Track => DirtyPageTracking::Track,
+        };
+
         // if `wasmtime::Instance` does not have memory we don't need a memory tracker
         let memory_tracker = match instance_memory {
             None => None,
@@ -372,10 +409,10 @@ impl WasmtimeEmbedder {
                             store.into_data().system_api,
                         ));
                     }
-                    Some(current_page_size) => Some(sigsegv_memory_tracker(
+                    Some(current_memory_size_in_pages) => Some(sigsegv_memory_tracker(
                         persistence_type,
                         &instance_memory,
-                        current_page_size,
+                        current_memory_size_in_pages,
                         &mut store,
                         page_map,
                         self.log.clone(),
@@ -413,7 +450,7 @@ unsafe impl Send for StoreRef {}
 fn sigsegv_memory_tracker<S>(
     persistence_type: PersistenceType,
     instance_memory: &wasmtime::Memory,
-    current_page_size: MemoryPageSize,
+    current_memory_size_in_pages: MemoryPageSize,
     store: &mut wasmtime::Store<S>,
     page_map: Option<PageMap>,
     log: ReplicaLogger,
@@ -451,7 +488,7 @@ fn sigsegv_memory_tracker<S>(
 
     let handler = crate::signal_handler::sigsegv_memory_tracker_handler(
         Arc::clone(&sigsegv_memory_tracker),
-        current_page_size,
+        current_memory_size_in_pages,
     );
     // http://man7.org/linux/man-pages/man7/signal-safety.7.html
     unsafe {
@@ -508,11 +545,8 @@ impl<S: SystemApi> WasmtimeInstance<S> {
             let dirty_pages = memory_tracker.take_dirty_pages();
             dirty_pages
                 .into_iter()
-                .chain(
-                    speculatively_dirty_pages
-                        .into_iter()
-                        .filter_map(|p| memory_tracker.validate_speculatively_dirty_page(p)),
-                )
+                .chain(speculatively_dirty_pages.into_iter())
+                .filter_map(|p| memory_tracker.validate_speculatively_dirty_page(p))
                 .collect::<Vec<PageIndex>>()
         } else {
             debug!(
@@ -578,16 +612,27 @@ impl<S: SystemApi> WasmtimeInstance<S> {
             .memory_tracker
             .as_ref()
             .map_or(0, |tracker| tracker.lock().unwrap().num_accessed_pages());
-        let num_dirty_pages = dirty_pages.len();
         self.instance_stats.accessed_pages += num_accessed_pages;
-        self.instance_stats.dirty_pages += num_dirty_pages;
-        self.instance_stats.dirty_pages +=
-            self.store.data().system_api.get_stable_memory_delta_pages();
+        self.instance_stats.dirty_pages += dirty_pages.len();
+
+        let stable_memory_dirty_pages: Vec<_> = self
+            .store
+            .data()
+            .system_api
+            .stable_memory_dirty_pages()
+            .into_iter()
+            .map(|(i, p)| (i, *p))
+            .collect();
+        let stable_memory_size =
+            NumWasmPages64::from(self.store.data().system_api.stable_memory_size());
+        self.instance_stats.dirty_pages += stable_memory_dirty_pages.len();
 
         match result {
             Ok(_) => Ok(InstanceRunResult {
                 exported_globals: self.get_exported_globals(),
                 dirty_pages,
+                stable_memory_size,
+                stable_memory_dirty_pages,
             }),
             Err(err) => Err(err),
         }

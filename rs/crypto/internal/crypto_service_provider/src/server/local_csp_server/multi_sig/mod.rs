@@ -1,10 +1,10 @@
-//! Multi-Signature operations provided by the CSP server.
+//! Multi-Signature operations provided by the CSP vault.
 use crate::keygen::public_key_hash_as_key_id;
 use crate::secret_key_store::SecretKeyStore;
 use crate::server::api::{
-    CspMultiSignatureError, CspMultiSignatureKeygenError, MultiSignatureCspServer,
+    CspMultiSignatureError, CspMultiSignatureKeygenError, MultiSignatureCspVault,
 };
-use crate::server::local_csp_server::LocalCspServer;
+use crate::server::local_csp_server::LocalCspVault;
 use crate::types::{CspPop, CspPublicKey, CspSecretKey, CspSignature, MultiBls12_381_Signature};
 use ic_crypto_internal_multi_sig_bls12381 as multi_bls12381;
 use ic_types::crypto::{AlgorithmId, CryptoError, KeyId};
@@ -13,8 +13,8 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> MultiSignatureCspServer
-    for LocalCspServer<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> MultiSignatureCspVault
+    for LocalCspVault<R, S, C>
 {
     fn multi_sign(
         &self,

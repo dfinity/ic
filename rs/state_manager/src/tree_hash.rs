@@ -65,7 +65,7 @@ mod tests {
     use ic_crypto_tree_hash::Digest;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        canister_state::execution_state::WasmBinary,
+        canister_state::execution_state::{SandboxExecutionState, WasmBinary},
         metadata_state::Stream,
         page_map::{PageIndex, PAGE_SIZE},
         testing::ReplicatedStateTesting,
@@ -184,11 +184,13 @@ mod tests {
                 session_nonce: None,
                 wasm_binary,
                 wasm_memory,
+                stable_memory: Memory::default(),
                 exported_globals: vec![Global::I32(1)],
                 exports: ExportedFunctions::new(BTreeSet::new()),
                 last_executed_round: ExecutionRound::from(0),
                 cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(tmpdir.path().into())),
                 mapped_state: None,
+                sandbox_state: SandboxExecutionState::new(),
             };
             canister_state.execution_state = Some(execution_state);
 

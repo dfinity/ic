@@ -1,0 +1,24 @@
+# Universal Canister
+
+The implementation of the universal canister is in `/impl`, while the library that
+tests use to interface with the universal canister is in `/lib`.
+
+To make modifications to the universal canister:
+
+    # Build the universal canister
+    cd impl
+    cargo build --target wasm32-unknown-unknown --release
+
+    # Copy the wasm into the /lib directory.
+    cp target/wasm32-unknown-unknown/release/universal_canister.wasm ../lib/src/universal_canister.wasm
+
+    # When done making changes and you're ready to push a change,
+    # you need to update the checksum in /lib.
+    sha256sum ../lib/src/universal_canister.wasm
+
+    # Take the output of the command above and paste it as the value of UNIVERSAL_CANISTER_WASM_SHA256
+    # in lib/src/lib.rs
+
+Note that the universal canister's implementation is temporarily using its `Cargo.lock` file
+and is excluded from being built in the top-level workspace. In the future, it will be integrated
+into the top-level workspace and its `Cargo.lock` will be merged.

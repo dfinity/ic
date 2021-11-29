@@ -321,12 +321,16 @@ impl SigsegvMemoryTracker {
     }
 
     pub fn validate_speculatively_dirty_page(&self, page_index: PageIndex) -> Option<PageIndex> {
-        let page_map = self.page_map.as_ref().unwrap();
-        let maybe_dirty_page = self.page_start_addr_from(page_index);
-        let original_page = page_map.get_page(page_index).as_ptr() as *const libc::c_void;
-        match unsafe { libc::memcmp(maybe_dirty_page, original_page, PAGE_SIZE) } {
-            0 => None,
-            _ => Some(page_index),
+        match self.page_map.as_ref() {
+            None => Some(page_index),
+            Some(page_map) => {
+                let maybe_dirty_page = self.page_start_addr_from(page_index);
+                let original_page = page_map.get_page(page_index).as_ptr() as *const libc::c_void;
+                match unsafe { libc::memcmp(maybe_dirty_page, original_page, PAGE_SIZE) } {
+                    0 => None,
+                    _ => Some(page_index),
+                }
+            }
         }
     }
 

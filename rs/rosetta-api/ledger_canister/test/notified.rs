@@ -8,7 +8,7 @@ use dfn_core::{
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use lazy_static::lazy_static;
-use ledger_canister::{ICPTs, Memo, TransactionNotification};
+use ledger_canister::{Memo, Tokens, TransactionNotification};
 use std::sync::RwLock;
 
 // This is a canister that gets notified
@@ -45,7 +45,7 @@ fn transaction_notification(tn: TransactionNotification) -> Result<(), String> {
         from_subaccount: None,
         from: PrincipalId::new_anonymous(),
         to_subaccount: None,
-        amount: ICPTs::from_icpts(1).unwrap(),
+        amount: Tokens::from_tokens(1).unwrap(),
         memo: Memo(0),
         block_height: 3,
         to: id(),

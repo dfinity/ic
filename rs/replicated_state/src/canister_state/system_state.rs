@@ -2,7 +2,8 @@ mod call_context_manager;
 
 pub use super::queues::memory_required_to_push_request;
 use super::{queues::can_push, ENFORCE_MESSAGE_MEMORY_USAGE};
-use crate::{CanisterQueues, Memory, NumWasmPages64, StateError};
+pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
+use crate::{CanisterQueues, InputQueueType, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
 use ic_interfaces::messages::CanisterInputMessage;
@@ -10,10 +11,10 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
 };
+use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response, StopCanisterContext},
     nominal_cycles::NominalCycles,
-    xnet::QueueId,
     CanisterId, Cycles, MemoryAllocation, NumBytes, PrincipalId, QueueIndex,
 };
 use lazy_static::lazy_static;
@@ -55,7 +56,6 @@ pub struct SystemState {
     // This must remain private, in order to properly enforce system states (running, stopping,
     // stopped) when enqueuing inputs; and to ensure message memory reservations are accurate.
     queues: CanisterQueues,
-    pub stable_memory: Memory<NumWasmPages64>,
     /// The canister's memory allocation.
     pub memory_allocation: MemoryAllocation,
     pub freeze_threshold: NumSeconds,
@@ -230,7 +230,6 @@ impl SystemState {
             canister_id,
             controllers: btreeset! {controller},
             queues: CanisterQueues::default(),
-            stable_memory: Memory::default(),
             cycles_balance: initial_cycles,
             memory_allocation: MemoryAllocation::BestEffort,
             freeze_threshold,
@@ -261,7 +260,6 @@ impl SystemState {
         controllers: BTreeSet<PrincipalId>,
         canister_id: CanisterId,
         queues: CanisterQueues,
-        stable_memory: Memory<NumWasmPages64>,
         memory_allocation: MemoryAllocation,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
@@ -273,7 +271,6 @@ impl SystemState {
             controllers,
             canister_id,
             queues,
-            stable_memory,
             memory_allocation,
             freeze_threshold,
             status,
@@ -372,7 +369,7 @@ impl SystemState {
     }
 
     /// Extracts the next inter-canister or ingress message (round-robin).
-    pub fn pop_input(&mut self) -> Option<CanisterInputMessage> {
+    pub(crate) fn pop_input(&mut self) -> Option<CanisterInputMessage> {
         self.queues.pop_input()
     }
 
@@ -417,6 +414,8 @@ impl SystemState {
         msg: RequestOrResponse,
         canister_available_memory: i64,
         subnet_available_memory: &mut i64,
+        own_subnet_type: SubnetType,
+        input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         assert_eq!(
             msg.receiver(),
@@ -445,6 +444,8 @@ impl SystemState {
                 msg,
                 canister_available_memory,
                 subnet_available_memory,
+                own_subnet_type,
+                input_queue_type,
             ),
         }
     }
@@ -452,14 +453,6 @@ impl SystemState {
     /// Pushes an ingress message into the induction pool.
     pub(crate) fn push_ingress(&mut self, msg: Ingress) {
         self.queues.push_ingress(msg)
-    }
-
-    /// Returns an iterator that consumes all output messages.
-    pub fn output_into_iter(
-        &mut self,
-        owner: CanisterId,
-    ) -> impl std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)> + '_ {
-        self.queues.output_into_iter(owner)
     }
 
     /// For each output queue, invokes `f` on every message until `f` returns
@@ -473,6 +466,13 @@ impl SystemState {
         F: FnMut(&CanisterId, Arc<RequestOrResponse>) -> Result<(), ()>,
     {
         self.queues.output_queues_for_each(f)
+    }
+
+    /// Returns an iterator that loops over the canister's output queues,
+    /// popping one message at a time from each in a round robin fashion. The
+    /// iterator consumes all popped messages.
+    pub fn output_into_iter(&mut self, owner: CanisterId) -> CanisterOutputQueuesIterator {
+        self.queues.output_into_iter(owner)
     }
 
     /// Returns an immutable reference to the canister queues.
@@ -513,15 +513,12 @@ impl SystemState {
     }
 
     /// Returns the memory that is currently used by the `SystemState`.
-    pub fn memory_usage(&self) -> NumBytes {
-        let mut memory_usage = crate::num_bytes_try_from64(self.stable_memory.size)
-            .expect("could not convert from wasm pages to bytes");
-
-        if ENFORCE_MESSAGE_MEMORY_USAGE {
-            memory_usage += (self.queues.memory_usage() as u64).into();
+    pub fn memory_usage(&self, own_subnet_type: SubnetType) -> NumBytes {
+        if ENFORCE_MESSAGE_MEMORY_USAGE && own_subnet_type != SubnetType::System {
+            ((self.queues.memory_usage()) as u64).into()
+        } else {
+            NumBytes::from(0)
         }
-
-        memory_usage
     }
 
     /// Sets the (transient) size in bytes of responses from this canister
@@ -537,11 +534,6 @@ impl SystemState {
             }
             CanisterStatus::Stopping { stop_contexts, .. } => stop_contexts.push(stop_context),
         }
-    }
-
-    /// Clears stable memory of this canister.
-    pub fn clear_stable_memory(&mut self) {
-        self.stable_memory = Memory::default();
     }
 
     /// Method used only by the dashboard.
@@ -563,6 +555,7 @@ impl SystemState {
         &mut self,
         canister_available_memory: i64,
         subnet_available_memory: &mut i64,
+        own_subnet_type: SubnetType,
     ) {
         // Bail out if the canister is not running.
         match self.status {
@@ -570,7 +563,7 @@ impl SystemState {
             CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
         }
 
-        if !ENFORCE_MESSAGE_MEMORY_USAGE {
+        if !ENFORCE_MESSAGE_MEMORY_USAGE || own_subnet_type == SubnetType::System {
             while self.queues.induct_message_to_self(self.canister_id).is_ok() {}
             return;
         }
@@ -612,7 +605,7 @@ impl SystemState {
 /// Returns `StateError::OutOfMemory` if pushing the message would require more
 /// memory than `queues_available_memory.min(subnet_available_memory)`.
 ///
-/// `subnet_available_memory` is updated to reflect thechange in memory usage
+/// `subnet_available_memory` is updated to reflect the change in memory usage
 /// after a successful push; and left unmodified if the push failed.
 ///
 /// See `CanisterQueues::push_input()` for further details.
@@ -622,9 +615,11 @@ pub(crate) fn push_input(
     msg: RequestOrResponse,
     queues_available_memory: i64,
     subnet_available_memory: &mut i64,
+    own_subnet_type: SubnetType,
+    input_queue_type: InputQueueType,
 ) -> Result<(), (StateError, RequestOrResponse)> {
-    if !ENFORCE_MESSAGE_MEMORY_USAGE {
-        return queues.push_input(index, msg);
+    if !ENFORCE_MESSAGE_MEMORY_USAGE || own_subnet_type == SubnetType::System {
+        return queues.push_input(index, msg, input_queue_type);
     }
 
     let available_memory = queues_available_memory.min(*subnet_available_memory);
@@ -642,7 +637,7 @@ pub(crate) fn push_input(
     // memory_usage_after`. Defer to `CanisterQueues` for the accounting, to avoid
     // duplication (and the possibility of divergence).
     *subnet_available_memory += queues.memory_usage() as i64;
-    let res = queues.push_input(index, msg);
+    let res = queues.push_input(index, msg, input_queue_type);
     *subnet_available_memory -= queues.memory_usage() as i64;
     res
 }
@@ -650,6 +645,7 @@ pub(crate) fn push_input(
 pub mod testing {
     use super::SystemState;
     use crate::CanisterQueues;
+    use ic_interfaces::messages::CanisterInputMessage;
     use ic_types::CanisterId;
 
     /// Exposes `SystemState` internals for use in other crates' unit tests.
@@ -659,6 +655,12 @@ pub mod testing {
 
         /// Testing only: Returns a mutable reference to `self.queues`.
         fn queues_mut(&mut self) -> &mut CanisterQueues;
+
+        /// Testing only: Sets `self.queues` to the given `queues`
+        fn put_queues(&mut self, queues: CanisterQueues);
+
+        /// Testing only: pops next input message
+        fn pop_input(&mut self) -> Option<CanisterInputMessage>;
     }
 
     impl SystemStateTesting for SystemState {
@@ -668,6 +670,14 @@ pub mod testing {
 
         fn queues_mut(&mut self) -> &mut CanisterQueues {
             &mut self.queues
+        }
+
+        fn put_queues(&mut self, queues: CanisterQueues) {
+            self.queues = queues;
+        }
+
+        fn pop_input(&mut self) -> Option<CanisterInputMessage> {
+            self.pop_input()
         }
     }
 }

@@ -1,0 +1,139 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.2.
+--
+-- see: https://github.com/sol/hpack
+
+name:           consensus-model
+version:        0.0.1
+synopsis:       Various Haskell notes
+description:    Various Haskell notes.
+category:       System, Data, Nix
+homepage:       https://gitlab.com/dfinity-lab/core/ic#readme
+bug-reports:    https://gitlab.com/dfinity-lab/core/ic
+author:         John Wiegley
+maintainer:     johnw@newartisans.com
+license:        BSD3
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://gitlab.com/dfinity-lab/core/ic
+
+library
+  exposed-modules:
+      Consensus
+      Errors
+      Generate
+      Genesis
+      JSON
+      Lib
+      Meaning
+      Monad
+      Types
+      Utils
+  other-modules:
+      Paths_consensus_model
+  hs-source-dirs:
+      src
+  ghc-options: -Wall
+  build-depends:
+      HUnit
+    , aeson
+    , arrows
+    , base >=4.9 && <5
+    , bytestring
+    , candid
+    , constraints
+    , containers
+    , cryptohash
+    , deepseq
+    , ed25519
+    , hedgehog
+    , lens
+    , listsafe
+    , monad-par
+    , mtl
+    , multiset
+    , pcre-heavy
+    , pretty-show
+    , tasty-hunit
+    , text
+    , time
+    , transformers
+    , unordered-containers
+  default-language: Haskell2010
+
+executable replay
+  main-is: Replay.hs
+  other-modules:
+      Bisimilar
+      Schedule
+      Paths_consensus_model
+  hs-source-dirs:
+      bin
+  build-depends:
+      HUnit
+    , aeson
+    , arrows
+    , base >=4.9 && <5
+    , bytestring
+    , candid
+    , consensus-model
+    , constraints
+    , containers
+    , cryptohash
+    , deepseq
+    , ed25519
+    , hedgehog
+    , lens
+    , listsafe
+    , monad-par
+    , mtl
+    , multiset
+    , pcre-heavy
+    , pretty-show
+    , tasty-hunit
+    , text
+    , time
+    , transformers
+    , unordered-containers
+  default-language: Haskell2010
+
+test-suite consensus-model-tests
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Basic
+      Paths_consensus_model
+  hs-source-dirs:
+      test
+  build-depends:
+      HUnit
+    , aeson
+    , arrows
+    , base >=4.9 && <5
+    , bytestring
+    , candid
+    , consensus-model
+    , constraints
+    , containers
+    , cryptohash
+    , deepseq
+    , ed25519
+    , hedgehog
+    , lens
+    , listsafe
+    , monad-par
+    , mtl
+    , multiset
+    , pcre-heavy
+    , pretty-show
+    , tasty
+    , tasty-hedgehog
+    , tasty-hunit
+    , text
+    , time
+    , transformers
+    , unordered-containers
+  default-language: Haskell2010

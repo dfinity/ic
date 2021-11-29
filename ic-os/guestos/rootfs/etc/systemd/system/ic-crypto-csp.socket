@@ -1,0 +1,11 @@
+[Unit]
+Description=Socket for IC Crypto Service Provider
+
+[Socket]
+ListenStream=/run/ic-node/crypto-csp/socket
+SocketUser=ic-replica
+SocketGroup=ic-replica
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target

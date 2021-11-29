@@ -4,7 +4,7 @@ use candid::{CandidType, Deserialize};
 use dfn_core::println;
 
 use ic_base_types::SubnetId;
-use ic_protobuf::registry::subnet::v1::{GossipAdvertConfig, SubnetRecord};
+use ic_protobuf::registry::subnet::v1::{EcdsaConfig, GossipAdvertConfig, SubnetRecord};
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -81,6 +81,8 @@ pub struct UpdateSubnetPayload {
     pub max_instructions_per_round: Option<u64>,
     pub max_instructions_per_install_code: Option<u64>,
     pub features: Option<SubnetFeatures>,
+
+    pub ecdsa_config: Option<EcdsaConfig>,
 
     pub max_number_of_canisters: Option<u64>,
 
@@ -168,6 +170,7 @@ fn merge_subnet_record(
         max_instructions_per_round,
         max_instructions_per_install_code,
         features,
+        ecdsa_config,
         max_number_of_canisters,
         ssh_readonly_access,
         ssh_backup_access,
@@ -216,6 +219,7 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, max_instructions_per_install_code);
 
     maybe_set_option!(subnet_record, features);
+    maybe_set_option!(subnet_record, ecdsa_config);
 
     maybe_set!(subnet_record, max_number_of_canisters);
 
@@ -229,6 +233,10 @@ mod tests {
     use super::*;
     use ic_protobuf::registry::subnet::v1::{GossipAdvertConfig, GossipConfig};
     use ic_registry_subnet_type::SubnetType;
+    use ic_types::p2p::{
+        MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_WAIT_MS, MAX_DUPLICITY, PFN_EVALUATION_PERIOD_MS,
+        RECEIVE_CHECK_PEER_SET_SIZE, REGISTRY_POLL_PERIOD_MS, RETRANSMISSION_REQUEST_MS,
+    };
     use ic_types::{PrincipalId, SubnetId};
     use std::str::FromStr;
 
@@ -303,6 +311,9 @@ mod tests {
                 ecdsa_signatures: false,
                 canister_sandboxing: false,
             }),
+            ecdsa_config: Some(EcdsaConfig {
+                quadruples_to_create_in_advance: 10,
+            }),
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -347,10 +358,12 @@ mod tests {
                     }
                     .into()
                 ),
+                ecdsa_config: Some(EcdsaConfig {
+                    quadruples_to_create_in_advance: 10,
+                }),
                 max_number_of_canisters: 10,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
-                ecdsa_config: None,
             }
         );
     }
@@ -425,6 +438,7 @@ mod tests {
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: None,
             features: None,
+            ecdsa_config: None,
             max_number_of_canisters: Some(50),
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -531,6 +545,7 @@ mod tests {
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
             features: None,
+            ecdsa_config: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -552,7 +567,7 @@ mod tests {
             replica_version_id: "version_42".to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
-            gossip_config: None,
+            gossip_config: Some(build_default_gossip_config()),
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
@@ -580,14 +595,14 @@ mod tests {
             initial_notary_delay_millis: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
-            max_artifact_streams_per_peer: Some(0),
-            max_chunk_wait_ms: Some(100),
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: Some(100),
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
+            max_artifact_streams_per_peer: Some(MAX_ARTIFACT_STREAMS_PER_PEER),
+            max_chunk_wait_ms: Some(MAX_CHUNK_WAIT_MS),
+            max_duplicity: Some(MAX_DUPLICITY),
+            max_chunk_size: Some(10),
+            receive_check_cache_size: Some(RECEIVE_CHECK_PEER_SET_SIZE),
+            pfn_evaluation_period_ms: Some(PFN_EVALUATION_PERIOD_MS),
+            registry_poll_period_ms: Some(REGISTRY_POLL_PERIOD_MS),
+            retransmission_request_ms: Some(RETRANSMISSION_REQUEST_MS),
             advert_best_effort_percentage: Some(30),
             set_gossip_config_to_default: true,
             start_as_nns: None,
@@ -597,6 +612,7 @@ mod tests {
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
             features: None,
+            ecdsa_config: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -616,14 +632,14 @@ mod tests {
                 dkg_interval_length: 0,
                 dkg_dealings_per_block: 1,
                 gossip_config: Some(GossipConfig {
-                    max_artifact_streams_per_peer: 0,
-                    max_chunk_wait_ms: 100,
-                    max_duplicity: 1,
-                    max_chunk_size: 4096,
-                    receive_check_cache_size: 100,
-                    pfn_evaluation_period_ms: 3000,
-                    registry_poll_period_ms: 3000,
-                    retransmission_request_ms: 60_000,
+                    max_artifact_streams_per_peer: MAX_ARTIFACT_STREAMS_PER_PEER,
+                    max_chunk_wait_ms: MAX_CHUNK_WAIT_MS,
+                    max_duplicity: MAX_DUPLICITY,
+                    max_chunk_size: 10,
+                    receive_check_cache_size: RECEIVE_CHECK_PEER_SET_SIZE,
+                    pfn_evaluation_period_ms: PFN_EVALUATION_PERIOD_MS,
+                    registry_poll_period_ms: REGISTRY_POLL_PERIOD_MS,
+                    retransmission_request_ms: RETRANSMISSION_REQUEST_MS,
                     advert_config: Some(GossipAdvertConfig {
                         best_effort_percentage: 30
                     }),
@@ -713,6 +729,7 @@ mod tests {
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: None,
             features: None,
+            ecdsa_config: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,

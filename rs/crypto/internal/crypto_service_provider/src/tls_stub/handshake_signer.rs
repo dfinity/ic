@@ -1,6 +1,6 @@
 use crate::api::CspTlsHandshakeSignerProvider;
 use crate::secret_key_store::SecretKeyStore;
-use crate::{Csp, TlsHandshakeCspServer};
+use crate::{Csp, TlsHandshakeCspVault};
 use rand::{CryptoRng, Rng};
 use std::sync::Arc;
 
@@ -27,7 +27,7 @@ impl<
         C: SecretKeyStore + 'static,
     > CspTlsHandshakeSignerProvider for Csp<R, S, C>
 {
-    fn handshake_signer(&self) -> Arc<dyn TlsHandshakeCspServer> {
-        Arc::clone(&self.csp_server) as Arc<_>
+    fn handshake_signer(&self) -> Arc<dyn TlsHandshakeCspVault> {
+        Arc::clone(&self.csp_vault) as Arc<_>
     }
 }

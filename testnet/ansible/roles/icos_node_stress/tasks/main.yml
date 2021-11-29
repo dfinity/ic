@@ -1,0 +1,30 @@
+---
+- name: Dispatcher for kill-replica
+  include_tasks: kill.yml
+  when: ic_action == "kill-replica"
+
+- name: Dispatcher for reset
+  include_tasks: reset.yml
+  when: ic_action == "reset"
+
+- name: Dispatcher for add-drops
+  include_tasks: add_drops.yml
+  when: ic_action == "add-drops"
+
+- name: Dispatcher for add-delay
+  vars:
+    latency_ms: 0
+  include_tasks: add_delay.yml
+  when: ic_action == "add-delay"
+
+- name: Dispatcher for limit-bandwidth
+  vars:
+    drops_percentage: 0
+    latency_ms: 0
+  include_tasks: limit_bandwidth.yml
+  when: ic_action == "limit-bandwidth"
+
+- name: Dispatcher for debug
+  debug:
+    var: ic_iface_6
+  when: ic_action == "debug"

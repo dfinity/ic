@@ -1,0 +1,113 @@
+[package]
+name = "tests"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0"
+assert_matches = "1.3.0"
+async-recursion = "0.3.2"
+base64 = "0.11"
+candid = "0.7.4"
+canister-test = { path = "../rust_canisters/canister_test" }
+chrono = "0.4.19"
+crossbeam-channel = "0.5.1"
+cycles-minting-canister = { path = "../nns/cmc" }
+cycles_minting_client = { path = "../rosetta-api/cycles_minting_client" }
+dfn_candid = { path = "../rust_canisters/dfn_candid" }
+dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
+dfn_core = { path = "../rust_canisters/dfn_core" }
+ed25519-dalek = "1.0.1"
+fondue = { path = "../ic_fondue/fondue" }
+futures = "0.3.10"
+garcon = "0.2"
+ic-base-types = { path = "../types/base_types" }
+hex = "0.4.2"
+ic-canister-client = { path = "../canister_client" }
+ic-certified-vars = { path = "../certified_vars" }
+ic-config = { path = "../config" }
+ic-crypto = { path = "../crypto" }
+ic-crypto-sha = { path = "../crypto/sha" }
+ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-fondue = { path = "../ic_fondue" }
+ic-ic00-types = { path = "../types/ic00_types" }
+ic-nns-common = { path = "../nns/common" }
+ic-nns-init = { path = "../nns/init" }
+ic-interfaces = { path = "../interfaces" }
+ic-nns-constants = { path = "../nns/constants" }
+ic-nns-governance = { path = "../nns/governance" }
+ic-nns-handler-root = { path = "../nns/handlers/root" }
+ic-nns-test-utils = { path = "../nns/test_utils" }
+ic-prep = { path = "../prep" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-common = { path = "../registry/common" }
+ic-registry-keys = { path = "../registry/keys" }
+ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-registry-transport = { path = "../registry/transport" }
+ic-rosetta-api = { path = "../rosetta-api" }
+ic-rosetta-test-utils = { path = "../rosetta-api/test_utils" }
+ic-test-identity = { path = "../test_utilities/identity" }
+ic-types = { path = "../types/types" }
+ic-types-test-utils = { path = "../types/types_test_utils" }
+ic-universal-canister = { path = "../universal_canister/lib" }
+hyper = "0.14.5"
+lazy_static = "1.4.0"
+ledger-canister = { path = "../rosetta-api/ledger_canister" }
+lifeline = { path = "../nns/handlers/lifeline" }
+log_analyzer = { path = "../log_analyzer" }
+itertools = "0.10.0"
+maplit = "1.0.2"
+nix = "0.23.0"
+on_wire = { path = "../rust_canisters/on_wire"}
+openssh-keys ="0.5.0"
+openssl = "0.10.29"
+pem = "1.0.1"
+proptest = "0.9.4"
+prost = "0.9.0"
+quickcheck = "1.0.3"
+rand = "0.8.3"
+rand_chacha = "0.3.0"
+rand_chacha-02 = { package = "rand_chacha", version = "0.2" }
+rand_core-05 = { package = "rand_core", version = "0.5.1" }
+regex = "1.5.0"
+registry-canister = { path = "../registry/canister" }
+reqwest = { version = "0.11.1", features = ["blocking", "multipart", "stream"] }
+ring = { version = "0.16.11", features = ["std"] }
+secp256k1 = "0.20.3"
+serde = { version = "1.0.99", features = ["derive"] }
+serde_bytes = "0.11"
+serde_cbor = "0.11.1"
+serde_json = "1.0"
+serde_millis =  "0.1"
+slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_trace"] }
+ssh2 = "0.9.3"
+structopt = "0.3"
+tempfile = "3.1.0"
+tokio = {version = "1.9.0", features = ["full"]}
+tree-deserializer = { path = "../tree_deserializer" }
+url = "2.1.1"
+wabt = "0.10.0"
+zstd = "0.6.1"
+
+
+ic-agent = "=0.6.0"
+ic-utils = "=0.4.0"
+
+[[bin]]
+name = "system-tests"
+path = "src/main.rs"
+
+[lib]
+name = "ic_tests"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ic-test-bin"
+path = "bin/ic_test_bin.rs"
+
+[[bin]]
+name = "prod-test-driver"
+path = "bin/prod_test_driver.rs"

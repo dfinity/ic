@@ -1,0 +1,19 @@
+---
+
+ic_cores: 4
+
+ic_disk_gb: 100
+
+ic_memory_gb: 16
+
+ic_disk_path: ""
+
+ic_generic_os_disk_path: ""
+
+ic_media_path: ""
+
+ic_media_branch: "master"
+
+ic_nodes: "{{ groups['nodes'] }}"
+
+ic_git_revision: "git-revision-is-not-set"

@@ -173,18 +173,22 @@ use crate::consensus::{
 use crate::ecdsa::pre_signer::{EcdsaPreSigner, EcdsaPreSignerImpl};
 
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
-use ic_interfaces::ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaGossip};
+use ic_interfaces::ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaGossip, EcdsaPool};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::{EcdsaMessageAttribute, EcdsaMessageId, PriorityFn},
-    NodeId,
+    artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
+    consensus::ecdsa::{EcdsaBlockReader, EcdsaBlockReaderImpl},
+    Height, NodeId,
 };
 
 use std::sync::Arc;
 
 mod payload_builder;
 mod pre_signer;
+
+/// Similar to consensus, we don't fetch artifacts too far ahead in future.
+const LOOK_AHEAD: u64 = 10;
 
 /// `EcdsaImpl` is the consensus component responsible for processing threshold
 /// ECDSA payloads.
@@ -231,7 +235,7 @@ impl EcdsaImpl {
 }
 
 impl Ecdsa for EcdsaImpl {
-    fn on_state_change(&self, ecdsa_pool: &dyn ic_interfaces::ecdsa::EcdsaPool) -> EcdsaChangeSet {
+    fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet {
         let mut changes: Vec<EcdsaChangeSet> = Vec::new();
         let metrics = self.metrics.clone();
 
@@ -249,12 +253,106 @@ impl Ecdsa for EcdsaImpl {
     }
 }
 
-struct EcdsaGossipImpl;
+/// `EcdsaGossipImpl` implements the priority function and other gossip related
+/// functionality
+pub struct EcdsaGossipImpl {
+    consensus_cache: Arc<dyn ConsensusPoolCache>,
+}
+
+impl EcdsaGossipImpl {
+    /// Builds a new EcdsaGossipImpl component
+    pub fn new(consensus_cache: Arc<dyn ConsensusPoolCache>) -> Self {
+        Self { consensus_cache }
+    }
+}
+
 impl EcdsaGossip for EcdsaGossipImpl {
     fn get_priority_function(
         &self,
-        _ecdsa_pool: &dyn ic_interfaces::ecdsa::EcdsaPool,
+        _ecdsa_pool: &dyn EcdsaPool,
     ) -> PriorityFn<EcdsaMessageId, EcdsaMessageAttribute> {
-        todo!()
+        let block_reader = EcdsaBlockReaderImpl::new(self.consensus_cache.finalized_block());
+        let cached_finalized_height = block_reader.height();
+        Box::new(move |_, attr: &'_ EcdsaMessageAttribute| {
+            compute_priority(attr, cached_finalized_height)
+        })
+    }
+}
+
+// TODO:
+// 1. We don't drop anything right now. Once the purging part settles down
+// (https://dfinity.atlassian.net/browse/CON-624), we can start dropping
+// unwanted adverts
+// 2. The current filtering is light weight, purely based on the finalized
+// height (cached when the priority function is periodically computed).
+// We could potentially do more filtering (e.g) drop adverts for transcripts
+// we are not interested in, and use the latest state of the artifact pools.
+// But this would require more processing per call to priority function, and
+// cause extra lock contention for the main processing paths.
+fn compute_priority(attr: &EcdsaMessageAttribute, cached_finalized_height: Height) -> Priority {
+    match attr {
+        EcdsaMessageAttribute::EcdsaDealing(height) => {
+            if *height < cached_finalized_height + Height::from(LOOK_AHEAD) {
+                Priority::Fetch
+            } else {
+                Priority::Stash
+            }
+        }
+        EcdsaMessageAttribute::EcdsaDealingSupport(height) => {
+            if *height < cached_finalized_height + Height::from(LOOK_AHEAD) {
+                Priority::Fetch
+            } else {
+                Priority::Stash
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Tests the priority computation
+    #[test]
+    fn test_ecdsa_priority_dealing() {
+        let cached_finalized_height = Height::from(100);
+        let tests = vec![
+            (
+                EcdsaMessageAttribute::EcdsaDealing(Height::from(90)),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaDealing(Height::from(109)),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaDealing(Height::from(110)),
+                Priority::Stash,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaDealing(Height::from(120)),
+                Priority::Stash,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaDealingSupport(Height::from(90)),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaDealingSupport(Height::from(109)),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaDealingSupport(Height::from(110)),
+                Priority::Stash,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaDealingSupport(Height::from(120)),
+                Priority::Stash,
+            ),
+        ];
+
+        for (attr, expected) in tests {
+            assert_eq!(compute_priority(&attr, cached_finalized_height), expected);
+        }
     }
 }

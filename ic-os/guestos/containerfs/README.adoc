@@ -1,0 +1,24 @@
+= Docker container of IC node
+
+This directory contains glue code required to turn the Ubuntu rootfs (normally
+deployed as a VM on target systems) into a docker container. This allows
+booting an entire testnet on a laptop far faster than a VM deployment.
+
+In order to turn the system into a docker container, all services interacting
+with (virtual) devices are deactivated, and only services related to starting
+a node are left intact. The "simplest possible" launch of such a container
+can be performed using:
+
+    docker run \
+        --tmpfs /run \
+        --tmpfs /tmp:exec \
+        --tmpfs /run/lock \
+        -v /sys/fs/cgroup:/sys/fs/cgroup:ro \
+        ${ID_OF_CONTAINER}
+
+Note that this is not _quite_ sufficient to run as a node (need
+network setup and node configuration), but it gets the software stack up
+and running to the point where it can be contacted via ssh and then
+manually interacted with.
+        
+See also ../scripts/build-container.sh.

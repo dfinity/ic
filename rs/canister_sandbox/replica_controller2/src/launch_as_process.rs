@@ -1,6 +1,9 @@
 use ic_types::CanisterId;
 use nix::unistd::Pid;
-use std::os::unix::{io::AsRawFd, net::UnixStream};
+use std::{
+    os::unix::{io::AsRawFd, net::UnixStream},
+    path::{Path, PathBuf},
+};
 
 use ic_canister_sandbox_common::{
     protocol, protocol::ctlsvc, rpc, sandbox_client_stub::SandboxClientStub,
@@ -8,6 +11,8 @@ use ic_canister_sandbox_common::{
 };
 
 use std::sync::Arc;
+
+const SANDBOX_EXECUTABLE_NAME: &str = "canister_sandbox";
 
 pub struct SocketedProcess {
     pub pid: libc::pid_t,
@@ -41,24 +46,28 @@ pub fn spawn_socketed_process(
         // as well as raw handling of raw file descriptor.
         // Safety is assured, cf. posix_spawn API.
         let mut pid = std::mem::MaybeUninit::<libc::pid_t>::uninit();
-        let file_actions = std::ptr::null_mut::<libc::posix_spawn_file_actions_t>();
-        let attr = std::ptr::null_mut::<libc::posix_spawnattr_t>();
+        let mut file_actions = std::mem::MaybeUninit::<libc::posix_spawn_file_actions_t>::uninit();
+        let mut attr = std::mem::MaybeUninit::<libc::posix_spawnattr_t>::uninit();
 
-        libc::posix_spawn_file_actions_init(file_actions);
-        libc::posix_spawn_file_actions_adddup2(file_actions, sock_sandbox.as_raw_fd(), 3);
-        libc::posix_spawnattr_init(attr);
+        libc::posix_spawn_file_actions_init(file_actions.as_mut_ptr());
+        libc::posix_spawn_file_actions_adddup2(
+            file_actions.as_mut_ptr(),
+            sock_sandbox.as_raw_fd(),
+            3,
+        );
+        libc::posix_spawnattr_init(attr.as_mut_ptr());
 
         let spawn_result = libc::posix_spawn(
             pid.as_mut_ptr(),
             exec_path.as_ptr(),
-            file_actions,
-            attr,
+            file_actions.as_mut_ptr(),
+            attr.as_mut_ptr(),
             argvp.as_ptr(),
             envp.as_ptr(),
         );
 
-        libc::posix_spawn_file_actions_destroy(file_actions);
-        libc::posix_spawnattr_destroy(attr);
+        libc::posix_spawn_file_actions_destroy(file_actions.as_mut_ptr());
+        libc::posix_spawnattr_destroy(attr.as_mut_ptr());
 
         if spawn_result != 0 {
             return Err(std::io::Error::last_os_error());
@@ -131,18 +140,40 @@ pub fn create_sandbox_process(
     controller_service: Arc<dyn rpc::DemuxServer<ctlsvc::Request, ctlsvc::Reply> + Send + Sync>,
     canister_id: &CanisterId,
 ) -> Arc<dyn SandboxService> {
-    let exec_path = if let Ok(path) = std::env::var("CANISTER_SANDBOX_BIN_PATH") {
-        path
-    } else {
-        build_sandbox_binary_relative_path("canister_sandbox")
-            .expect("No canister_sandbox binary found.")
+    let (exec_path, mut argv) = match build_sandbox_binary_relative_path(SANDBOX_EXECUTABLE_NAME) {
+        Some(path) if Path::exists(Path::new(&path)) => (path.clone(), vec![path]),
+        // Detect if we are running tests by checking if the cargo executable exists.
+        // If so, run the sandbox using cargo.
+        Some(_) | None => match (which::which("cargo"), top_level_cargo_manifest()) {
+            (Ok(path), Some(manifest)) => {
+                let path = path.to_str().unwrap().to_string();
+                let manifest = manifest.to_str().unwrap().to_string();
+                (
+                    path.clone(),
+                    [
+                        &path,
+                        "run",
+                        "--quiet",
+                        "--manifest-path",
+                        &manifest,
+                        "--bin",
+                        SANDBOX_EXECUTABLE_NAME,
+                        "--",
+                    ]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                )
+            }
+            _ => panic!("No canister_sandbox binary found"),
+        },
     };
 
-    let canister_id = format!("{}", canister_id);
+    argv.push(canister_id.to_string());
 
     let (sandbox_handle, _pid, _recv_thread_handle) = spawn_canister_sandbox_process(
         &exec_path,
-        &[exec_path.clone(), canister_id],
+        &argv,
         Arc::clone(&controller_service) as Arc<_>,
     )
     .expect("Failed to start sandbox process");
@@ -190,12 +221,37 @@ fn make_null_terminated_string_array(
     result
 }
 
+/// Get the folder of the current running binary.
+fn current_binary_folder() -> Option<PathBuf> {
+    let argv0 = std::env::args().next()?;
+    let this_exec_path = PathBuf::from(&argv0);
+    this_exec_path.parent().map(PathBuf::from)
+}
+
 /// Build path to the sandbox executable relative to this executable's
 /// path (using argv[0]). This allows easily locating the sandbox
 /// executable provided it is in the same path as the main replica.
 pub fn build_sandbox_binary_relative_path(sandbox_executable_name: &str) -> Option<String> {
-    let argv0 = std::env::args().next()?;
-    let this_exec_path = std::path::Path::new(&argv0);
-    let parent = this_exec_path.parent()?;
-    Some(parent.join(sandbox_executable_name).to_str()?.to_string())
+    let folder = current_binary_folder()?;
+    Some(folder.join(sandbox_executable_name).to_str()?.to_string())
+}
+
+/// This should only be used for testing purposes.
+/// Finds the top most parent of the folder of the current executable which has
+/// a Cargo.toml file.
+fn top_level_cargo_manifest() -> Option<PathBuf> {
+    let mut pwd = current_binary_folder()?.canonicalize().ok()?;
+    let mut current_manifest = None;
+    loop {
+        let next: PathBuf = [&pwd, Path::new("Cargo.toml")].iter().collect();
+        if next.exists() {
+            current_manifest = Some(next);
+        }
+        if let Some(parent) = pwd.parent() {
+            pwd = PathBuf::from(parent);
+            continue;
+        }
+        break;
+    }
+    current_manifest
 }

@@ -282,6 +282,7 @@ mod load_transcript {
 mod create_dealing_error_conversions_v2 {
     // TODO (CRP-818): Remove the v2 and merge.
     use crate::api::ni_dkg_errors::{CspDkgCreateDealingError, CspDkgCreateReshareDealingError};
+    use ic_types::crypto::error::InternalError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
 
@@ -354,6 +355,11 @@ mod create_dealing_error_conversions_v2 {
                         "{}MalformedReshareSecretKeyError: {:?}",
                         panic_prefix, error
                     );
+                }
+                CspDkgCreateReshareDealingError::InternalError(error) => {
+                    DkgCreateDealingError::InternalError(InternalError {
+                        internal_error: error.internal_error,
+                    })
                 }
             }
         }
@@ -444,6 +450,7 @@ mod verify_dealing_error_conversions {
 
 mod retain_active_keys_error_conversions {
     use crate::api::ni_dkg_errors::CspDkgUpdateFsEpochError;
+    use ic_types::crypto::error::InternalError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 
     impl From<CspDkgUpdateFsEpochError> for DkgKeyRemovalError {
@@ -456,6 +463,11 @@ mod retain_active_keys_error_conversions {
                 }
                 CspDkgUpdateFsEpochError::FsKeyNotInSecretKeyStoreError(e) => {
                     DkgKeyRemovalError::FsKeyNotInSecretKeyStoreError(e)
+                }
+                CspDkgUpdateFsEpochError::InternalError(e) => {
+                    DkgKeyRemovalError::InternalError(InternalError {
+                        internal_error: e.internal_error,
+                    })
                 }
             }
         }

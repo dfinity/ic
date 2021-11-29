@@ -7,17 +7,45 @@ use ic_interfaces::state_manager::StateReader;
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    canonical_error::{invalid_argument_error, permission_denied_error, CanonicalError},
+    canonical_error::{
+        internal_error, invalid_argument_error, permission_denied_error, resource_exhausted_error,
+        CanonicalError,
+    },
     messages::MessageId,
 };
 use ic_validator::RequestValidationError;
 use prost::Message;
 use serde::Serialize;
 use std::sync::Arc;
+use tower::{load_shed::error::Overloaded, BoxError};
 
 pub const CONTENT_TYPE_HTML: &str = "text/html";
 pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
 pub const CONTENT_TYPE_PROTOBUF: &str = "application/x-protobuf";
+
+pub(crate) fn make_response(canonical_error: CanonicalError) -> Response<Body> {
+    let mut resp = Response::new(Body::from(canonical_error.message));
+    *resp.status_mut() = StatusCode::from(canonical_error.code);
+    *resp.headers_mut() = get_cors_headers();
+    resp
+}
+
+fn map_box_error_to_canonical_error(err: BoxError) -> CanonicalError {
+    if err.is::<CanonicalError>() {
+        return *err
+            .downcast::<CanonicalError>()
+            .expect("Downcasting must succeed.");
+    }
+    if err.is::<Overloaded>() {
+        return resource_exhausted_error("The service is overloaded.");
+    }
+    internal_error(&format!("Could not convert {:?} to CanonicalError", err))
+}
+
+pub(crate) fn map_box_error_to_response(err: BoxError) -> Response<Body> {
+    let canonical_error = map_box_error_to_canonical_error(err);
+    make_response(canonical_error)
+}
 
 /// Add CORS headers to provided Response. In particular we allow
 /// wildcard origin, POST and GET and allow Accept, Authorization and
@@ -94,17 +122,19 @@ pub(crate) fn make_response_on_validation_error(
     message_id: MessageId,
     err: RequestValidationError,
     log: &ReplicaLogger,
-) -> CanonicalError {
+) -> Response<Body> {
     match err {
         RequestValidationError::InvalidIngressExpiry(msg)
-        | RequestValidationError::InvalidDelegationExpiry(msg) => invalid_argument_error(&msg),
+        | RequestValidationError::InvalidDelegationExpiry(msg) => {
+            make_response(invalid_argument_error(&msg))
+        }
         _ => {
             let message = format!(
                 "Failed to authenticate request {} due to: {}",
                 message_id, err
             );
             info!(log, "{}", message);
-            permission_denied_error(&message)
+            make_response(permission_denied_error(&message))
         }
     }
 }

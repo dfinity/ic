@@ -1,0 +1,13 @@
+[Unit]
+Description=Set up logical volumes on first boot
+DefaultDependencies=no
+Requires=systemd-cryptsetup@vda10\x2dcrypt.service
+After=systemd-cryptsetup@vda10\x2dcrypt.service
+
+[Install]
+WantedBy=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-lvs.sh

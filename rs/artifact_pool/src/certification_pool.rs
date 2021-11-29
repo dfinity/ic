@@ -50,11 +50,16 @@ impl CertificationPoolImpl {
                     log,
                 ),
             ) as Box<_>,
+            #[cfg(feature = "rocksdb_backend")]
             PersistentPoolBackend::RocksDB(config) => Box::new(
                 crate::rocksdb_pool::PersistentHeightIndexedPool::new_certification_pool(
                     config, log,
                 ),
             ) as Box<_>,
+            #[allow(unreachable_patterns)]
+            cfg => {
+                unimplemented!("Configuration {:?} is not supported", cfg)
+            }
         };
 
         CertificationPoolImpl {

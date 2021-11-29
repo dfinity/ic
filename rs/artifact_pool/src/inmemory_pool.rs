@@ -322,7 +322,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> MutablePoolSection<T
 pub mod test {
     use super::*;
     use ic_interfaces::artifact_pool::ValidatedArtifact;
-    use ic_test_utilities::consensus::fake::*;
+    use ic_test_utilities::consensus::{fake::*, make_genesis};
 
     fn make_summary(genesis_height: Height) -> ic_types::consensus::dkg::Summary {
         let mut summary = ic_types::consensus::dkg::Summary::fake();
@@ -331,7 +331,7 @@ pub mod test {
     }
 
     fn fake_random_beacon(h: Height) -> RandomBeacon {
-        let parent = ic_consensus_message::make_genesis(make_summary(h.decrement()))
+        let parent = make_genesis(make_summary(h.decrement()))
             .content
             .random_beacon;
         RandomBeacon::from_parent(parent.as_ref())

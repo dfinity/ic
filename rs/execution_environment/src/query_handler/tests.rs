@@ -38,22 +38,23 @@ fn with_setup<F>(subnet_type: SubnetType, f: F)
 where
     F: FnOnce(InternalHttpQueryHandler, CanisterManager, ReplicatedState),
 {
-    fn canister_manager_config(subnet_id: SubnetId) -> CanisterMgrConfig {
+    fn canister_manager_config(subnet_id: SubnetId, subnet_type: SubnetType) -> CanisterMgrConfig {
         CanisterMgrConfig::new(
             MEMORY_CAPACITY,
             Some(CYCLE_BALANCE),
             CYCLE_BALANCE,
             NumSeconds::from(100_000),
             subnet_id,
+            subnet_type,
             1000,
             1,
         )
     }
 
     fn initial_state(path: &Path, subnet_id: SubnetId, subnet_type: SubnetType) -> ReplicatedState {
-        let routing_table = RoutingTable::new(btreemap! {
+        let routing_table = Arc::new(RoutingTable::new(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-        });
+        }));
         let mut state = ReplicatedState::new_rooted_at(subnet_id, subnet_type, path.to_path_buf());
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = subnet_id;
@@ -81,7 +82,7 @@ where
         let canister_manager = CanisterManager::new(
             Arc::clone(&hypervisor) as Arc<_>,
             log.clone(),
-            canister_manager_config(subnet_id),
+            canister_manager_config(subnet_id, subnet_type),
             cycles_account_manager,
             ingress_history_writer,
         );
@@ -131,6 +132,7 @@ fn universal_canister(
                 canister_memory_limit: MEMORY_CAPACITY,
                 subnet_available_memory: SubnetAvailableMemory::new(MEMORY_CAPACITY.get() as i64),
                 compute_allocation: ComputeAllocation::default(),
+                subnet_type: SubnetType::Application,
             },
         )
         .1

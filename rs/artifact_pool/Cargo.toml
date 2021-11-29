@@ -11,6 +11,7 @@ clap = "2.33.3"
 ic-config = { path = "../config" }
 ic-consensus-message = { path = "../consensus/message" }
 ic-crypto = { path = "../crypto" }
+ic-ecdsa-object = { path = "../consensus/ecdsa_object" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -47,7 +48,8 @@ name = "load_blocks"
 harness = false
 
 [features]
-default = ["rocksdb"]
+default = ["rocksdb_backend"]
+rocksdb_backend = ["rocksdb"]
 
 [[bin]]
 name = "ic-consensus-pool-util"

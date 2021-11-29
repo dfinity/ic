@@ -1,0 +1,17 @@
+[Unit]
+Description=Jiralert
+# Wait for networking to be up, as it needs to contact the NNS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+UMask=0002
+ExecStart=/opt/dfinity/jiralert/jiralert -config /opt/dfinity/jiralert/jiralert.yml -hash-jira-label
+Restart=always
+User=root
+Group=wheel
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

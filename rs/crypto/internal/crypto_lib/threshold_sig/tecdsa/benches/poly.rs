@@ -43,7 +43,7 @@ fn poly_bench(c: &mut Criterion) {
             &format!("poly simple commitment({}, degree {})", curve, degree),
             |b| {
                 b.iter(|| {
-                    let _ = SimpleCommitment::new(&poly, degree).unwrap();
+                    let _ = SimpleCommitment::create(&poly, degree).unwrap();
                 })
             },
         );
@@ -52,7 +52,7 @@ fn poly_bench(c: &mut Criterion) {
             &format!("poly Pedersen commitment({}, degree {})", curve, degree),
             |b| {
                 b.iter(|| {
-                    let _ = PedersenCommitment::new(&poly, &poly_b, degree).unwrap();
+                    let _ = PedersenCommitment::create(&poly, &poly_b, degree).unwrap();
                 })
             },
         );

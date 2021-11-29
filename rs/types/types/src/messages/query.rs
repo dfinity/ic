@@ -1,6 +1,6 @@
 use crate::{
     messages::{
-        message_id::hash_of_map, HasCanisterId, HttpHandlerError, HttpUserQuery, MessageId,
+        message_id::hash_of_map, HasCanisterId, HttpRequestError, HttpUserQuery, MessageId,
         RawHttpRequestVal,
     },
     CanisterId, PrincipalId, UserId,
@@ -40,18 +40,18 @@ impl UserQuery {
 }
 
 impl TryFrom<HttpUserQuery> for UserQuery {
-    type Error = HttpHandlerError;
+    type Error = HttpRequestError;
 
     fn try_from(query: HttpUserQuery) -> Result<Self, Self::Error> {
         Ok(Self {
             source: UserId::from(PrincipalId::try_from(query.sender.0).map_err(|err| {
-                HttpHandlerError::InvalidPrincipalId(format!(
+                HttpRequestError::InvalidPrincipalId(format!(
                     "Converting sender to PrincipalId failed with {}",
                     err
                 ))
             })?),
             receiver: CanisterId::try_from(query.canister_id.0).map_err(|err| {
-                HttpHandlerError::InvalidPrincipalId(format!(
+                HttpRequestError::InvalidPrincipalId(format!(
                     "Converting canister_id to PrincipalId failed with {:?}",
                     err
                 ))

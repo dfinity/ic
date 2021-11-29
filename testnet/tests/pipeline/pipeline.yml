@@ -1,0 +1,919 @@
+.prod-test:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-prod-tests
+  stage: prod-tests
+  dependencies: []  # don't copy artifacts from other jobs by default
+  variables:
+    SHELL_WRAPPER: "/usr/bin/time"
+  artifacts:
+    when: always
+    paths:
+      - $CI_JOB_STAGE/$CI_JOB_NAME
+  tags:
+    - ic-prod-tests
+    - docker
+    - ubuntu
+
+.prod-stress-test:
+  extends: .prod-test
+  resource_group: $TESTNET
+  variables:
+    cd_target_env: "STRESS"
+
+.prod-hourly-test:
+  extends: .prod-test
+  resource_group: $TESTNET
+  variables:
+    cd_target_env: "HOURLY"
+
+.prod-nightly-test:
+  extends: .prod-test
+  variables:
+    cd_target_env: "NIGHTLY"
+  timeout: 3 hours
+
+# The prod nightly test groups partition the prod tests to parallelize across
+# multiple testnets. In our case, we have 5 testnets so create 5 prod groups.
+# This is a short term solution to speed up nightly tests, until testnets can be
+# deployed dynamically using farm.
+
+# The first testing group is reserved for the longest running test [6 hours].
+# For new tests, try to distribute them evenly across testing groups. You can also
+# inspect the Honeycomb traces for the rc--* branches to determine which group is
+# the least utilized.
+#
+# Find traces here: https://ui.honeycomb.io/dfinity/datasets/gitlab-ci-dfinity/result/G8UcQLcnfd3/a/3wQM1irQAYr/GitLab-Release-Candidate-Pipeline-Status?tab=traces
+# The overall dashboard is available here: https://ui.honeycomb.io/dfinity/board/58LbKzZgjTA/GitLab-Release-Candidate-Performance
+.prod-nightly-test-group-1-reserved:
+  stage: prod-tests-01
+  extends: .prod-nightly-test
+  variables:
+    TESTNET: $TESTNET1
+  resource_group: $TESTNET1
+
+.prod-nightly-test-group-2:
+  stage: prod-tests-02
+  extends: .prod-nightly-test
+  variables:
+    TESTNET: $TESTNET2
+    cd_debug_target: "true"
+  resource_group: $TESTNET2
+
+.prod-nightly-test-group-3:
+  stage: prod-tests-03
+  extends: .prod-nightly-test
+  variables:
+    TESTNET: $TESTNET3
+    cd_debug_target: "true"
+  resource_group: $TESTNET3
+
+.prod-nightly-test-group-4:
+  stage: prod-tests-04
+  extends: .prod-nightly-test
+  variables:
+    TESTNET: $TESTNET4
+  resource_group: $TESTNET4
+
+.prod-nightly-test-group-5:
+  stage: prod-tests-05
+  extends: .prod-nightly-test
+  variables:
+    TESTNET: $TESTNET5
+  resource_group: $TESTNET5
+
+.prod-slo-test:
+  extends: .prod-test
+  resource_group: $TESTNET
+  variables:
+    cd_target_env: "SLO"
+  timeout: 3 hours
+
+.prod-max-script-slo-test:
+  extends: .prod-test
+  resource_group: $TESTNET
+  variables:
+    cd_target_env: "MAXSCRIPTSLO"
+  timeout: 10 hours
+
+.prod-benchmark-suite-slo-test:
+  extends: .prod-test
+  resource_group: $TESTNET
+  variables:
+    cd_target_env: "BENCHMARK_SUITE_SLO"
+  timeout: 10 hours
+
+# HOURLY TESTS
+
+# TESTING NOTE:
+# $SHELL_WRAPPER allows us to emulate CI runs without actually executing the complicated and time-consuming
+#      operations.
+#      While validating the CI configuration, "$SHELL_WRAPPER" will be substituted with "echo"
+#      During actual execution, "$SHELL_WRAPPER" will be substituted with "time", i.e. will time the execution
+
+# Generic: 30 minutes 1k @ 100 update requests per second despite a failed nodes
+generic-hourly:
+  extends: .prod-hourly-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 50m ./testnet/tests/scripts/generic.sh "$TESTNET" 1800 100 1k "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# NIGHTLY TESTS
+
+# Backup recovery test
+# TODO (CON-575): once we are ready to use an unprotected or authenticated endpoint,
+# re-nable this test.
+# backup-recovery-nightly:
+#   extends: .prod-nightly-test-group-2
+#   needs: []  # allow starting immediately
+#   script:
+#     - |
+#       set -eExou pipefail
+#       git fetch
+#       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+#       export GIT_REVISION
+
+#       $SHELL_WRAPPER ./testnet/tests/scripts/nns_backup.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# Deprecated backup recovery test (will be removed after switching to endpoint based artifact syncing)
+backup-recovery-deprecated-nightly:
+  extends: .prod-nightly-test-group-4
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET4" ]]; then echo "Please set the TESTNET4 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 46m ./testnet/tests/scripts/nns_backup_deprecated.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+upgrade-reject-nightly:
+  extends: .prod-nightly-test-group-4
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET4" ]]; then echo "Please set the TESTNET4 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 46m ./testnet/tests/scripts/upgrade_reject.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# subnet_update_workload: 6 hour 1kb @ 300 update requests per second
+subnet-update-workload-nightly:
+  extends: .prod-nightly-test-group-1-reserved
+  timeout: 8 hours
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET1" ]]; then echo "Please set the TESTNET1 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 7h ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 21600 300 1k normal replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# boundary_update_workload: 1 hour 1kb @ 100 update requests per second
+boundary-update-workload-nightly:
+  extends: .prod-nightly-test-group-3
+  allow_failure: true
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 148m ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 3600 100 1k normal boundary_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# global_reboot_test: 30min 50k @ 2 update requests per second and @ 10 XNet requests * 1 KB / round
+# Restart all nodes after 5min and check if they run _fine_ after another 10min
+global-reboot-nightly:
+  extends: .prod-nightly-test-group-3
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET3" ]]; then echo "Please set the TESTNET3 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 45m ./testnet/tests/scripts/global_reboot_test.sh "$TESTNET" 300 2 50k 2 10 1024 "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# test topology change
+# create subnet and extend it with new nodes
+node-assign-test-nightly:
+  extends: .prod-nightly-test-group-5
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET5" ]]; then echo "Please set the TESTNET5 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 45m ./testnet/tests/scripts/node_assign_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# test topology change
+# create subnet, extend it with new nodes, and attempt to delete them from both their subnet and the registry
+node-remove-test-nightly:
+  extends: .prod-nightly-test-group-3
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET3" ]]; then echo "Please set the TESTNET3 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 48m ./testnet/tests/scripts/node_assign_remove_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# kill 1/3 of the nodes and observe that the rest progresses.
+subnet-threshold-test-nightly:
+  extends: .prod-nightly-test-group-2
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET2" ]]; then echo "Please set the TESTNET2 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 40m ./testnet/tests/scripts/subnet_threshold_test.sh "$TESTNET" 300 20 5kb "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# nns_workload: Perform batches with 10 proposals each for 3 minutes,
+# perform a batch of 9 ledger transfers and queries per second for 3 minutes,
+# Stop one node after 0.75 minutes for 1.5 minutes and let it restart
+# Stop another 2/3 nodes and observe previously restarted node participates consensus
+nns-workload-nightly:
+  extends: .prod-nightly-test-group-3
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET3" ]]; then echo "Please set the TESTNET3 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 35m ./testnet/tests/scripts/nns_workload.sh "$TESTNET" 180 5 10 normal 0.25 "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# Install xnet-test-canister instance on 3 subnets and have them exchange messages with each other for 10min
+xnet-slo-nightly:
+  extends: .prod-nightly-test-group-4
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET4" ]]; then echo "Please set the TESTNET4 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 45m ./testnet/tests/scripts/xnet_slo_test.sh "$TESTNET" 3 600 10 1024 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# Install xnet-test-canister instance onto single node subnets, have them message each other for 10 minutes
+xnet-slo-nightly-many-single-node-subnets:
+  extends: .prod-nightly-test-group-5
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET5" ]]; then echo "Please set the TESTNET5 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 45m ./testnet/tests/scripts/xnet_slo_test.sh "$TESTNET" 27 600 10 1024 single_node "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# network_reliability_test: 15min 1k @ 100 update requests per second
+# Add losses, bandwidth limit and drops to 1/3 of nodes and check if the whole system ran _fine_
+network-reliability-test:
+  extends: .prod-nightly-test-group-4
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET4" ]]; then echo "Please set the TESTNET4 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 40m ./testnet/tests/scripts/network_reliability_test.sh "$TESTNET" 900 100 1k normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# rejoin_test: 15min runtime, 8 canisters installed
+# Kill one node for the majority of time during the 15min runtime, restart it and check if it contributes to IC later
+rejoin-nightly:
+  extends: .prod-nightly-test-group-2
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET2" ]]; then echo "Please set the TESTNET2 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 46m ./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 8 8 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# Ensure finalization rate doesn't drop by more than 10% for frequent registry changes
+nns-registry-changes-test:
+  extends: .prod-nightly-test-group-4
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET4" ]]; then echo "Please set the TESTNET4 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 45m ./testnet/tests/scripts/nns_registry_changes.sh "$TESTNET" 600 200 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# Maximum update call capacity (run nightly to ensure it runs correctly, not to determine capacity)
+maximum-capacity-subnet-update-nightly:
+  extends: .prod-nightly-test-group-5
+  allow_failure: true
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET5" ]]; then echo "Please set the TESTNET5 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 36m ./testnet/tests/scripts/maximum_capacity_subnet_update.sh "$TESTNET" 30 20 2 2 1k dest_nodes large "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# Maximum query call capacity (run nightly to ensure it runs correctly, not to determine capacity)
+maximum-capacity-subnet-query-nightly:
+  extends: .prod-nightly-test-group-5
+  allow_failure: true
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET5" ]]; then echo "Please set the TESTNET5 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 36m ./testnet/tests/scripts/maximum_capacity_subnet_query.sh "$TESTNET" 30 20 2 2 1k dest_nodes large "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# Maximum xnet capacity (run nightly to ensure it runs correctly, not to determine capacity)
+maximum-capacity-xnet-slo-nightly:
+  extends: .prod-nightly-test-group-2
+  allow_failure: true
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET2" ]]; then echo "Please set the TESTNET2 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 37m ./testnet/tests/scripts/maximum_capacity_xnet_slo.sh "$TESTNET" 2 30 20 2 1024 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# Maximum rejoin capacity (run nightly to ensure it runs correctly, not to determine capacity)
+maximum-capacity-rejoin-nightly:
+  extends: .prod-nightly-test-group-3
+  allow_failure: true
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET3" ]]; then echo "Please set the TESTNET3 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 1h ./testnet/tests/scripts/maximum_capacity_rejoin.sh "$TESTNET" 2 2 1 2 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# Check if proposal to change firewall is processed correctly
+firewall-test-nightly:
+  extends: .prod-nightly-test-group-4
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET4" ]]; then echo "Please set the TESTNET4 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 36m ./testnet/tests/scripts/firewall_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# Check that subnet can be created with a proposal
+create-subnet-test-nightly:
+  extends: .prod-nightly-test-group-5
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET5" ]]; then echo "Please set the TESTNET5 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 40m ./testnet/tests/scripts/create_subnet_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# SCENARIO TEST uninstall_canister_by_proposal:
+uninstall-canister-by-proposal-test-nightly:
+  extends: .prod-nightly-test-group-5
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET5" ]]; then echo "Please set the TESTNET5 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 37m ./testnet/tests/scripts/uninstall_canister_by_proposal_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+graceful-node-leaving-test-nightly:
+  extends: .prod-nightly-test-group-2
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET2" ]]; then echo "Please set the TESTNET2 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+      $SHELL_WRAPPER timeout 1h ./testnet/tests/scripts/node_graceful_leaving.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# SCENARIO TEST disaster_recovery_nns: Milestone 4b style recovery
+disaster-recovery-nns-test-nightly:
+  extends: .prod-nightly-test-group-2
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET2" ]]; then echo "Please set the TESTNET2 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+      $SHELL_WRAPPER timeout 1h ./testnet/tests/scripts/disaster_recovery_nns_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# disaster_recovery_nns_upgrade: Milestone 4b style recovery
+disaster-recovery-nns-upgrade-test-nightly:
+  extends: .prod-nightly-test-group-2
+  script:
+    - |
+      set -eExou pipefail
+      if [[ -z "$TESTNET2" ]]; then echo "Please set the TESTNET2 environment variable for proper resource_group locking"; exit 1; fi
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+      $SHELL_WRAPPER timeout 1h ./testnet/tests/scripts/disaster_recovery_nns_upgrade_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# Disaster Recovery Basic Test
+# Update to broken version, propose and vote on recovery cup, observer recovery
+# Allow disaster recovery basic test to fail until the consensus and message routing team have fixed the underlying problem
+# TODO CON-613
+disaster-recovery-basic-test-nightly:
+   extends: .prod-nightly-test-group-2
+   allow_failure: true
+   script:
+     - |
+       set -eExou pipefail
+       if [[ -z "$TESTNET2" ]]; then echo "Please set the TESTNET2 environment variable for proper resource_group locking"; exit 1; fi
+       git fetch
+       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+       export GIT_REVISION
+       $SHELL_WRAPPER timeout 1h ./testnet/tests/scripts/disaster_recovery_basic_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# subnet_update_workload: 6 hours with 100 update requests per second, 1kb each
+subnet-update-workload-slo-100-1kb:
+  extends: .prod-slo-test
+  needs: []  # allow starting immediately
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 21600 100 1k normal replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
+  timeout: 7 hours
+
+# SCENARIO TEST large-subnet_update_workload: 20min 1kb @ 300 update requests per second
+large-subnet-update-workload-slo-200-1kb:
+  extends: .prod-slo-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 1200 200 1k large replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# SCENARIO TEST subnet_update_workload: 30min 100kb @ 5 update requests per second
+subnet-update-workload-slo-5-100kb:
+  extends: .prod-slo-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 1800 5 100k normal replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+
+# SCENARIO TEST with update workload using boundary nodes: 2h 1kb @ 100 update requests per second
+boundary-update-workload-slo-2h:
+  extends: .prod-slo-test
+  allow_failure: true
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 148m ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 7200 100 1k normal boundary_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# SCENARIO TEST network_reliability_test: 15min 1k @ 100 update requests per second
+# Add losses, bandwidth limit and drops to 1/3 of nodes and check if the whole system ran _fine_
+network-reliability-test-slo:
+  extends: .prod-slo-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/network_reliability_test.sh "$TESTNET" 900 100 1k normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# SCENARIO TEST subnet_query_workload: 30 min 1k @ 300 query calls per second
+subnet-query-workload-slo-300-1kb:
+  extends: .prod-slo-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/subnet_query_workload.sh "$TESTNET" 1800 300 1k replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# SCENARIO TEST xnet_slo_test: 20min @ 10 XNet requests * 1 KB / round
+# Install 1 xnet-test-canister instance onto each of 2 subnets, have them message each other for 20 minutes
+xnet-slo-test-slo:
+  extends: .prod-slo-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/xnet_slo_test.sh "$TESTNET" 2 1200 10 1024 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# SCENARIO TEST xnet_slo_test: 20min @ 10 XNet requests * 1 KB / round
+# Install 1 xnet-test-canister instance onto each of 29 single-node subnets, have them message each other for 20 minutes
+xnet-slo-test-slo-29-subnets:
+  extends: .prod-slo-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/xnet_slo_test.sh "$TESTNET" 29 1200 10 1024 single_node "$CI_JOB_STAGE/$CI_JOB_NAME"
+  timeout: 3 hours
+
+# SCENARIO TEST rejoin: 15min runtime, 8 canisters installed
+# Kill one node for the majority of time during the 15min runtime, restart it and check if it contributes to IC later
+rejoin-test-slo:
+  extends: .prod-slo-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 8 8 large "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# SCENARIO TEST nns_workload: Perform batches with 10 proposals each for 3 minutes,
+# perform a batch of 20 ledger transfers and queries per second for 3 minutes,
+# Stop one node after 0.75 minutes for 1.5 minutes and let it restart
+# Stop another 2/3 nodes and observe previously restarted node participates consensus
+nns-workload-test-slo:
+  extends: .prod-slo-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/nns_workload.sh "$TESTNET" 180 20 10 large_nns 0.30 "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# 56-nns-tests-slo: run some tests on topology with 56 nodes in the NNS subents
+56-nns-tests-slo:
+  extends: .prod-slo-test
+  allow_failure: true # to be removed when NET-633 has been completed
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 3h ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 7200 300 1k 56_nns replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
+      $SHELL_WRAPPER timeout 45m ./testnet/tests/scripts/network_reliability_test.sh "$TESTNET" 900 300 1k 56_nns "$CI_JOB_STAGE/$CI_JOB_NAME"
+      $SHELL_WRAPPER timeout 45m ./testnet/tests/scripts/nns_registry_changes.sh "$TESTNET" 600 200 56_nns "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# SCENARIO TEST maximum_capacity_rejoin_script: have 30GiB state in old checkpoint and start from 20GiB of fetched state size and increase by 5GiB each time
+# Repeatedly run rejoin tests for at most 20 times until state sync reaches its limit
+maximum-capacity-rejoin-script:
+  extends: .prod-max-script-slo-test
+  needs: []  # allow starting immediately
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/maximum_capacity_rejoin.sh "$TESTNET" 30 20 5 20 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+  timeout: 10 hours
+
+# SCENARIO TEST maximum_capacity_xnet_script: start from initial rate at 210 and increase by 100 each time
+# 10min @ {increased_rate} XNet requests * 1 KB / round
+# Repeatedly run xnet tests for at most 10 times until the xnet sending rate reaches its limit
+maximum-capacity-xnet-script:
+  extends: .prod-max-script-slo-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/maximum_capacity_xnet_slo.sh "$TESTNET" 2 210 100 10 1024 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+  timeout: 6 hours
+
+# SCENARIO TEST maximum_capacity_large_subnet_update: start from initial rate at 200 and increase by 50 each time
+# 20min 1kb @ {increased_rate} update requests per second
+# Repeatedly run the test until the rps reaches the limit or at most 10 times if all tests pass
+maximum-capacity-large-subnet-update:
+  extends: .prod-max-script-slo-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/maximum_capacity_subnet_update.sh "$TESTNET" 1200 200 50 10 1k dest_nodes large "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# SCENARIO TEST maximum_capacity_large_subnet_query: start from initial rate at 500 and increase by 100 each time
+# 20min 1kb @ {increased_rate} query calls per second
+# Repeatedly run the test until the rps reaches the limit or at most 20 times if all tests pass
+maximum-capacity-large-subnet-query:
+  extends: .prod-max-script-slo-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/maximum_capacity_subnet_query.sh "$TESTNET" 1200 500 100 20 1k dest_nodes large "$CI_JOB_STAGE/$CI_JOB_NAME"
+
+# BENCHMARK SUITE maximum-capacity-experiment-1 with query calls
+benchmark-1-maximum-capacity-experiment1-query:
+  extends: .prod-benchmark-suite-slo-test
+  artifacts:
+    when: always
+    paths:
+      - scalability/
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+
+      $SHELL_WRAPPER timeout 10m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
+      cd ./scalability
+      $SHELL_WRAPPER pip3 install --user -r requirements.txt
+      $SHELL_WRAPPER python3 max-capacity-experiment-1.py --testnet $TESTNET --wg_testnet $TESTNET --skip_generate_report=True
+      cd -
+
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+
+# BENCHMARK SUITE maximum-capacity-experiment-1 with update calls
+benchmark-1-maximum-capacity-experiment1-update:
+  extends: .prod-benchmark-suite-slo-test
+  artifacts:
+    when: always
+    paths:
+      - scalability/
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+
+      $SHELL_WRAPPER timeout 10m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
+      cd ./scalability
+      $SHELL_WRAPPER pip3 install --user -r requirements.txt
+      $SHELL_WRAPPER python3 max-capacity-experiment-1.py --testnet $TESTNET --wg_testnet $TESTNET --use_updates=True --skip_generate_report=True
+
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+
+# BENCHMARK SUITE maximum-capacity-experiment-2 with query calls
+benchmark-2-maximum-capacity-experiment-query:
+  extends: .prod-benchmark-suite-slo-test
+  artifacts:
+    when: always
+    paths:
+      - scalability/
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+
+      $SHELL_WRAPPER timeout 10m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
+      cd ./scalability
+      $SHELL_WRAPPER pip3 install --user -r requirements.txt
+      $SHELL_WRAPPER python3 max-capacity-experiment-2.py --testnet $TESTNET --wg_testnet $TESTNET --skip_generate_report=True
+
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+
+# BENCHMARK SUITE maximum-capacity-experiment-2 with update calls
+benchmark-2-maximum-capacity-experiment-update:
+  extends: .prod-benchmark-suite-slo-test
+  artifacts:
+    when: always
+    paths:
+      - scalability/
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+
+      $SHELL_WRAPPER timeout 10m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
+      cd ./scalability
+      $SHELL_WRAPPER pip3 install --user -r requirements.txt
+      $SHELL_WRAPPER python3 max-capacity-experiment-2.py --testnet $TESTNET --wg_testnet $TESTNET --skip_generate_report=True --use_updates=True
+
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+
+icos-continuous-upgrade-nightly:
+  extends: .prod-nightly-test
+  variables:
+    cd_target_env: "IC_UPGRADE"
+  needs: []  # allow starting immediately
+  dependencies: []  # don't copy artifacts from other jobs
+  timeout: 6 hours
+  artifacts:
+    when: always
+    paths:
+      - ic-os/guestos/test-out/e2e-continuous-upgrade
+  script:
+    - |
+      set -eExou pipefail
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)
+      export GIT_REVISION
+
+      ls -lah /dev/kvm /dev/net/tun
+
+      mkdir -p gitlab-runner-tmp; cd gitlab-runner-tmp
+
+      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev "$GIT_REVISION" --remote-path=guest-os --out=guest-os --latest-to
+      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev "$GIT_REVISION" --remote-path=canisters --out=artifacts --latest-to
+      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev "$GIT_REVISION" --remote-path=release --out=artifacts --latest-to
+
+      ls -R artifacts guest-os
+      (cd artifacts; for f in *.gz; do gunzip "$f"; done; chmod u+x ./*)
+      (cd guest-os/disk-img; for f in *.gz; do gunzip "$f"; done)
+      (cd guest-os/disk-img; for f in *.tar; do tar -xf "$f"; done)
+      ls -R artifacts guest-os
+
+      # Prepare network. There are more convenient ways to do it if requisite
+      # services are set up (which they aren't in a simple docker runner),
+      # but probably also helpful for debugging to have this "explicit" for now.
+
+      sudo ip tuntap add ipv6_ic_node0 mode tap
+      sudo ip link set dev ipv6_ic_node0 up
+
+      sudo ip tuntap add ipv6_ic_node1 mode tap
+      sudo ip link set dev ipv6_ic_node1 up
+
+      sudo ip link add name ipv6_ic type bridge
+      sudo ip link set ipv6_ic_node0 master ipv6_ic
+      sudo ip link set ipv6_ic_node1 master ipv6_ic
+      sudo ip link set dev ipv6_ic up
+
+      sudo ip addr add fd00:2:1:1:1::1/64 dev ipv6_ic
+
+      # Output what image we are using:
+      GUESTOS_IMG="$(pwd)/guest-os/disk-img/disk.img"
+      UPGRADE_IMG="$(pwd)/guest-os/update-img/update-img.tar.gz"
+      VERSION=$(cat "$(pwd)/guest-os/disk-img/version.txt")
+      echo "Initial GuestOS image: ${GUESTOS_IMG} at version ${VERSION}"
+      echo "Upgrade GuestOS image: ${UPGRADE_IMG}"
+
+      mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-continuous-upgrade"
+      # Actual test script, sets up VMs and drives the test.
+      $SHELL_WRAPPER "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-continuous-upgrade-testing.py" \
+          --vmtoolscfg=internal \
+          --disk_image "${GUESTOS_IMG}" \
+          --ic_prep_bin "$(pwd)/artifacts/ic-prep" \
+          --install_nns_bin "$(pwd)/artifacts/ic-nns-init" \
+          --script_dir "${CI_PROJECT_DIR}/ic-os/guestos/scripts/" \
+          --upgrade_tar "${UPGRADE_IMG}" \
+          --ic_admin_bin "$(pwd)/artifacts/ic-admin" \
+          --nns_canisters "$(pwd)/artifacts/" \
+          --log_directory "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-continuous-upgrade" \
+          --version "$GIT_REVISION" \
+          --is_upgrade_test
+
+.farm-based-test:
+  extends: .prod-test
+  needs: []  # allow starting immediately
+  artifacts:
+    when: always
+    paths:
+      - "$CI_PROJECT_DIR/test-results.json"
+      - "$CI_PROJECT_DIR/logs/"
+  allow_failure: true
+  script:
+    - |
+      BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
+      mkdir -p "$BASE_DIR"
+      # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
+      # Unstructured logs, i.e. those which bypassed the logger and were outputed directly to stdout/stderr,
+      # are forwarded to a separate file.
+      # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
+      # Hence, the fourth column can be used to distinguish structured from unstructerd logs.
+      $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh" \
+        --suite "${SUITE_NAME}" \
+        --log-base-dir "${BASE_DIR}" \
+      | tee "${BASE_DIR}/unstructured-logs.log" \
+      | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
+
+main-suite-hourly:
+  extends: .farm-based-test
+  variables:
+    SUITE_NAME: "main_suite"
+    cd_target_env: "HOURLY"
+
+.wasm-generator-farm-based:
+  extends: .farm-based-test
+  variables:
+    SUITE_NAME: "wasm_generator_suite"
+  before_script:
+    - |
+      export RANDOM_CANISTERS_BASE_DIR="${CI_PROJECT_DIR}/test_canisters"
+      mkdir "${RANDOM_CANISTERS_BASE_DIR}"
+      export TEST_MODULES="${CI_PROJECT_DIR}/testnet/tests/scripts/test_modules"
+      $SHELL_WRAPPER "${TEST_MODULES}/wasm-generator/wasm-generator.sh" 20 "${NUMBER_OF_CANISTERS}"
+
+wasm-generator-hourly:
+  extends: .wasm-generator-farm-based
+  variables:
+    SUITE_NAME: "wasm_generator_suite"
+    cd_target_env: "HOURLY"
+    NUM_OF_CANISTERS: 1
+
+wasm-generator-nightly:
+  extends: .wasm-generator-farm-based
+  stage: prod-tests-04
+  variables:
+    SUITE_NAME: "wasm_generator_suite"
+    NUM_OF_CANISTERS: 5
+    cd_target_env: "NIGHTLY"
+  timeout: 3 hours
+
+wasm-generator-slo:
+  extends: .wasm-generator-farm-based
+  variables:
+    SUITE_NAME: "wasm_generator_suite"
+    NUM_OF_CANISTERS: 10
+    cd_target_env: "SLO"
+
+# Stress tests: Run given job sequence every N minutes so we can easily collect failure data
+icos-deploy-stress:
+  extends: .prod-stress-test
+  parallel:
+    matrix:
+      - DEPLOY_FLAVOR: single-dc
+        TESTNET:
+        - cdhourlydebug01
+        - cdhourlydebug02
+      - DEPLOY_FLAVOR: multi-dc
+        TESTNET:
+        - cdhourlydebug03
+        - cdhourlydebug04
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER timeout 10m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"

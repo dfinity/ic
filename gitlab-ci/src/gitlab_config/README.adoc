@@ -1,0 +1,26 @@
+# How-To See All Jobs
+python3 main.py --job-list
+
+# How-To Dump All Jobs to a File
+python3 main.py --job-list --out out.yml
+
+# How-To See the Child Pipeline
+python3 main.py --job-list --child-pipeline
+
+# How-To See the Shell Script for a Job
+python3 main.py --job-script $JOB_NAME
+
+# How-To See the Shell Script for a Child Pipeline Job
+python3 main.py --job-script $JOB_NAME --child-pipeline
+
+# How-To Dump the GitLab Config for a Job
+python3 main.py --cfg-dump-job $JOB_NAME
+
+# How-To Dump the GitLab Config for a Child Pipeline Job
+python3 main.py --cfg-dump-job $JOB_NAME --child-pipeline
+
+# How-To Validate the Config Against Bash Linter and witLab CI Validator
+python3 main.py --cfg-validate
+
+# How-To Dump the Entire Raw Config
+python3 main.py --cfg-dump-all

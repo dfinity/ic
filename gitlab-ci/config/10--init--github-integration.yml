@@ -1,0 +1,16 @@
+no-interrupt:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-any-schedule
+  stage: init
+  interruptible: False
+  script:
+    - echo "This pipeline is not interruptible"
+
+cargo-audit:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-cargo-audit-schedule
+  stage: init
+  script:
+    - $SHELL_WRAPPER nix-shell --run "cd rs; cargo audit"

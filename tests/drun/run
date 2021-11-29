@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# vim: set ft=bash
+
+set -e
+
+wat2wasm counter.wat -o counter.wasm
+RUST_BACKTRACE=1 drun counter_in.txt >counter_out.txt
+diff counter_out.txt counter_expected.txt

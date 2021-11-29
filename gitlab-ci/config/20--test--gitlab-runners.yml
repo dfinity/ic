@@ -1,0 +1,28 @@
+docker-generate-runner-list:
+  extends: 
+    - .ubuntu-nix-docker
+    - .rules-simple-prober
+  stage: init
+  tags:
+    - dfinity
+    - docker
+    - ubuntu
+  script:
+    -  |
+        set -euo pipefail
+        ./gitlab-ci/src/gitlab_runners_check/create-gitlab-runner-jobs.py
+  artifacts:
+    paths:
+      - runners.yml
+ 
+gitlab-runner-tests:
+  extends: 
+    - .rules-simple-prober
+  stage: test
+  needs:
+    - docker-generate-runner-list
+  trigger:
+    include:
+      - artifact: runners.yml
+        job: docker-generate-runner-list
+    strategy: depend

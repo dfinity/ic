@@ -1,0 +1,27 @@
+= IC_Execution_SubnetMessages_ErrorRateTooHigh
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+More than 5% of subnet messages result in an error over the last hour.
+
+== Impact
+
+Too many subnet messages are failing which can result in bad user experience.
+
+== Possible causes (non-exhaustive)
+
+- System error could result in subnet messages failing.
+
+- Bug in the code could result in subnet messages failing.
+
+== Troubleshooting and remediation
+
+- Check whether the errors are system errors or user errors by filtering on the `outcome` label of `execution_subnet_message_duration_seconds_count`. You can focus on `WasmEngineError` the only current system error. If it's a user error there isn't much we can do about it.
+
+- If this is a system error, check the replica logs (focus on `execution_environment`, `embedders` and `system_api` crates) to see if there's something useful that would help explain the errors.
+
+- Check if there was a recent replica upgrade that could have introduced a bug.
+
+- Escalate to the execution team.

@@ -38,12 +38,14 @@ where
 /// * `initial_values` - The list of accounts that will get balances at genesis.
 ///   This balances are paid out from the minting canister using 'Send'
 ///   transfers.
-/// * `archive_canister` - The canister that manages the store of old blocks.
 /// * `max_message_size_bytes` - The maximum message size that this subnet
-///   supports. This is used for egressing block to the archive canister.
+/// * `transaction_window` - The [Ledger] transaction window.
+/// * `archive_options` - The options of the canister that manages the store of
+///   old blocks.
+/// * `send_whitelist` - The [Ledger] canister whitelist.
 fn init(
     minting_account: AccountIdentifier,
-    initial_values: HashMap<AccountIdentifier, ICPTs>,
+    initial_values: HashMap<AccountIdentifier, Tokens>,
     max_message_size_bytes: Option<usize>,
     transaction_window: Option<Duration>,
     archive_options: Option<archive::ArchiveOptions>,
@@ -108,20 +110,21 @@ fn add_payment(
 /// # Arguments
 ///
 /// * `memo` -  A 8 byte "message" you can attach to transactions to help the
-///   receiver disambiguate transactions
-/// * `amount` - The number of ICPTs the recipient gets. The number of ICPTs
-///   withdrawn is equal to the amount + the fee
+///   receiver disambiguate transactions.
+/// * `amount` - The number of Tokens the recipient gets. The number of Tokens
+///   withdrawn is equal to the amount + the fee.
 /// * `fee` - The maximum fee that the sender is willing to pay. If the required
 ///   fee is greater than this the transaction will be rejected otherwise the
 ///   required fee will be paid. TODO(ROSETTA1-45): automatically pay a lower
-///   fee if possible
-/// * `from_subaccount` - The subaccount you want to draw funds from
-/// * `to` - The account you want to send the funds to
-/// * `to_subaccount` - The subaccount you want to send funds to
+///   fee if possible.
+/// * `from_subaccount` - The subaccount you want to draw funds from.
+/// * `to` - The account you want to send the funds to.
+/// * `created_at_time`: When the transaction has been created. If not set then
+///   now is used.
 async fn send(
     memo: Memo,
-    amount: ICPTs,
-    fee: ICPTs,
+    amount: Tokens,
+    fee: Tokens,
     from_subaccount: Option<Subaccount>,
     to: AccountIdentifier,
     created_at_time: Option<TimeStamp>,
@@ -140,14 +143,14 @@ async fn send(
         .expect("Minting canister id not initialized");
 
     let transfer = if from == minting_acc {
-        assert_eq!(fee, ICPTs::ZERO, "Fee for minting should be zero");
+        assert_eq!(fee, Tokens::ZERO, "Fee for minting should be zero");
         assert_ne!(
             to, minting_acc,
             "It is illegal to mint to a minting_account"
         );
         Operation::Mint { to, amount }
     } else if to == minting_acc {
-        assert_eq!(fee, ICPTs::ZERO, "Fee for burning should be zero");
+        assert_eq!(fee, Tokens::ZERO, "Fee for burning should be zero");
         if amount < MIN_BURN_AMOUNT {
             panic!("Burns lower than {} are not allowed", MIN_BURN_AMOUNT);
         }
@@ -187,12 +190,16 @@ async fn send(
 /// # Arguments
 ///
 /// * `block_height` -  The height of the block you would like to send a
-///   notification about
-/// * `to_canister` - The canister that received the payment
-/// * `to_subaccount` - The subaccount that received the payment
+///   notification about.
+/// * `max_fee` - The fee of the payment.
+/// * `from_subaccount` - The subaccount that made the payment.
+/// * `to_canister` - The canister that received the payment.
+/// * `to_subaccount` - The subaccount that received the payment.
+/// * `notify_using_protobuf` - Whether the notification should be encoded using
+///   protobuf or candid.
 pub async fn notify(
     block_height: BlockHeight,
-    max_fee: ICPTs,
+    max_fee: Tokens,
     from_subaccount: Option<Subaccount>,
     to_canister: CanisterId,
     to_subaccount: Option<Subaccount>,
@@ -265,12 +272,12 @@ pub async fn notify(
 
     change_notification_state(block_height, block_timestamp, true).expect("Notification failed");
 
-    // This transaction provides and on chain record that a notification was
+    // This transaction provides an on chain record that a notification was
     // attempted
     let transfer = Operation::Transfer {
         from: expected_from,
         to: expected_to,
-        amount: ICPTs::ZERO,
+        amount: Tokens::ZERO,
         fee: max_fee,
     };
 
@@ -378,13 +385,13 @@ fn block(block_index: BlockHeight) -> Option<Result<EncodedBlock, CanisterId>> {
 }
 
 /// Get an account balance.
-/// If the account does not exist it will return 0 ICPTs
-fn account_balance(account: AccountIdentifier) -> ICPTs {
+/// If the account does not exist it will return 0 Tokens
+fn account_balance(account: AccountIdentifier) -> Tokens {
     LEDGER.read().unwrap().balances.account_balance(&account)
 }
 
-/// The total number of ICPTs not inside the minting canister
-fn total_supply() -> ICPTs {
+/// The total number of Tokens not inside the minting canister
+fn total_supply() -> Tokens {
     LEDGER.read().unwrap().balances.total_supply()
 }
 
@@ -646,7 +653,7 @@ fn account_balance_() {
 }
 
 #[candid_method(query, rename = "account_balance")]
-fn account_balance_candid_(arg: BinaryAccountBalanceArgs) -> ICPTs {
+fn account_balance_candid_(arg: BinaryAccountBalanceArgs) -> Tokens {
     let account = AccountIdentifier::from_address(arg.account).unwrap_or_else(|e| {
         trap_with(&format!("Invalid account identifier: {}", e));
         unreachable!()
@@ -660,14 +667,14 @@ fn account_balance_candid() {
 }
 
 #[candid_method(query, rename = "account_balance_dfx")]
-fn account_balance_dfx_(args: AccountBalanceArgs) -> ICPTs {
+fn account_balance_dfx_(args: AccountBalanceArgs) -> Tokens {
     account_balance(args.account)
 }
 
 /// See caveats of use on send_dfx
 #[export_name = "canister_query account_balance_dfx"]
 fn account_balance_dfx() {
-    over(protobuf, account_balance_dfx_);
+    over(candid_one, account_balance_dfx_);
 }
 
 #[export_name = "canister_query total_supply_pb"]
@@ -761,9 +768,9 @@ fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::
         "Total number of blocks sent to the archive.",
     )?;
     w.encode_gauge(
-        "ledger_balances_icpt_pool",
-        ledger.balances.icpt_pool.get_icpts() as f64,
-        "Total number of ICPTs in the pool.",
+        "ledger_balances_token_pool",
+        ledger.balances.token_pool.get_tokens() as f64,
+        "Total number of Tokens in the pool.",
     )?;
     w.encode_gauge(
         "ledger_balance_store_entries",

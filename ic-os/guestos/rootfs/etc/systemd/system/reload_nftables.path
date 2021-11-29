@@ -1,0 +1,9 @@
+[Unit]
+Description=Watches the nftables configuration for changes and reloads it
+Before=nftables.service
+
+[Install]
+WantedBy=multi-user.target
+
+[Path]
+PathChanged=/run/ic-node/nftables-ruleset/nftables.conf

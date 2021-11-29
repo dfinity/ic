@@ -1,0 +1,8 @@
+cargo-clippy-fast-path-linux:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-merge-branch-only
+  needs: []  # don't wait on other jobs
+  stage: test
+  variables:
+    BUILD_COMMAND: "$CI_PROJECT_DIR/gitlab-ci/src/rust_lint/lint.sh"

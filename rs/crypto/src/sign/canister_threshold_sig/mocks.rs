@@ -1,4 +1,3 @@
-use ic_crypto_internal_types::sign::canister_threshold_sig::CspThresholdEcdsaSigShare;
 use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaGetPublicKeyError,
     ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
@@ -16,7 +15,7 @@ pub fn sign_share(
     _inputs: &ThresholdEcdsaSigInputs,
 ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
     Ok(ThresholdEcdsaSigShare {
-        internal_msg: CspThresholdEcdsaSigShare {},
+        sig_share_raw: vec![],
     })
 }
 

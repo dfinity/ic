@@ -12,7 +12,7 @@ use ic_interfaces::{
     registry::{LocalStoreCertifiedTimeReader, RegistryClient},
     self_validating_payload::NoOpSelfValidatingPayloadBuilder,
 };
-use ic_logger::ReplicaLogger;
+use ic_logger::{info, ReplicaLogger};
 use ic_messaging::{MessageRoutingImpl, XNetEndpoint, XNetEndpointConfig, XNetPayloadBuilderImpl};
 use ic_registry_subnet_type::SubnetType;
 use ic_replica_setup_ic_network::{create_networking_stack, P2PStateSyncClient};
@@ -145,11 +145,73 @@ pub fn construct_ic_stack(
 
     let artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool);
 
-    let catch_up_package = catch_up_package.unwrap_or_else(|| {
-        CUPWithOriginalProtobuf::from_cup(ic_consensus_message::make_genesis(
-            ic_consensus::dkg::make_genesis_summary(&*registry, subnet_id, None),
-        ))
-    });
+    // Determine the correct catch-up package.
+    let catch_up_package = {
+        use ic_types::consensus::HasHeight;
+        let make_registry_cup = || {
+            CUPWithOriginalProtobuf::from_cup(
+                ic_consensus::dkg::make_registry_cup(&*registry, subnet_id, None)
+                    .expect("Couldn't create a registry CUP"),
+            )
+        };
+        match catch_up_package {
+            // The node manager has persisted a CUP for the replica.
+            Some(cup_from_nm) => {
+                let signed = !cup_from_nm
+                    .cup
+                    .signature
+                    .signature
+                    .clone()
+                    .get()
+                    .0
+                    .is_empty();
+                if signed {
+                    // The CUP persisted by the node manager is safe to use because it's signed.
+                    info!(
+                        &replica_logger,
+                        "Using the signed CUP with height {}",
+                        cup_from_nm.cup.height()
+                    );
+                    cup_from_nm
+                } else {
+                    // The CUP persisted by the node manager is unsigned and hence it was created
+                    // from the registry CUP contents. In this case, we re-create this CUP to avoid
+                    // incompatibility issues, because on other replicas of the same subnet the node
+                    // manager version may differ, so the CUP contents might differ as well.
+                    let registry_cup = make_registry_cup();
+                    // However in a special case of the NNS disaster recovery, we still have to use
+                    // a newer unsigned CUP. The incompatibility issue is not a problem in this
+                    // case, because this CUP will not be created by the node manager.
+                    if registry_cup.cup.height() < cup_from_nm.cup.height() {
+                        info!(
+                            &replica_logger,
+                            "Using the newer CUP with height {} passed from the node manager",
+                            cup_from_nm.cup.height()
+                        );
+                        cup_from_nm
+                    } else {
+                        info!(
+                            &replica_logger,
+                            "Using the CUP with height {} generated from the registry (CUP height from the node manager is {})",
+                            registry_cup.cup.height(),
+                            cup_from_nm.cup.height()
+                        );
+                        registry_cup
+                    }
+                }
+            }
+            // No CUP was persisted by the node manager, which is usually the case for fresh nodes.
+            None => {
+                let registry_cup = make_registry_cup();
+                info!(
+                    &replica_logger,
+                    "Using the CUP with height {} generated from the registry",
+                    registry_cup.cup.height()
+                );
+                registry_cup
+            }
+        }
+    };
 
     let (p2p_event_handler, p2p_runner, consensus_pool_cache) = create_networking_stack(
         metrics_registry,

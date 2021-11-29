@@ -1,0 +1,49 @@
+# GuestOS - Base Image
+#
+# Build steps:
+# - `docker build -t dfinity/guestos-base:<tag> -f Dockerfile.base .`
+# - `docker push/pull dfinity/guestos-base:<tag>`
+#
+# First build stage:
+# - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
+# - Install and cache upstream packages from built-in Ubuntu repositories
+#
+FROM ubuntu:20.04
+
+ENV SOURCE_DATE_EPOCH=0
+ENV TZ=UTC
+
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
+    attr \
+    ca-certificates \
+    checkpolicy \
+    chrony \
+    cryptsetup \
+    curl \
+    faketime \
+    fdisk \
+    initramfs-tools \
+    iproute2 \
+    iputils-ping \
+    isc-dhcp-client \
+    less \
+    liblmdb0 \
+    linux-image-virtual-hwe-20.04 \
+    lvm2 \
+    net-tools \
+    nftables \
+    opensc \
+    openssh-client openssh-server \
+    parted \
+    pcsc-tools pcscd \
+    policycoreutils \
+    protobuf-compiler \
+    rsync \
+    selinux-policy-default selinux-utils semodule-utils selinux-policy-dev setools \
+    sudo \
+    systemd systemd-sysv \
+    udev \
+    usbutils \
+    vim \
+    xfsprogs

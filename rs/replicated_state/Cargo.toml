@@ -24,13 +24,16 @@ libc = "0.2.91"
 maplit = "1.0.2"
 nix = "0.23.0"
 phantom_newtype = { path = "../phantom_newtype" }
-serde = { version = "1.0.99", features = [ "derive", "rc" ] }
+serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 tempfile = "3.1.0"
 
 [dev-dependencies]
 criterion = "0.3"
+criterion-time = { path = "../criterion_time" }
 ic-test-utilities = { path = "../test_utilities" }
+serde_cbor = "0.11.1"
+proptest = "0.9.4"
 
 [[bench]]
 name = "bench_allocator"

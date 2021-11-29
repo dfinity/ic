@@ -1,0 +1,3 @@
+/run/ic-node/etc/journalbeat  -d gen_context(system_u:object_r:journalbeat_conf_t,s0)
+/usr/local/bin/journalbeat    -- gen_context(system_u:object_r:journalbeat_exec_t,s0)
+/var/lib/journalbeat          -d gen_context(system_u:object_r:journalbeat_var_lib_t,s0)

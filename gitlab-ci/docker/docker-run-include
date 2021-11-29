@@ -10,61 +10,37 @@ REPO_ROOT="$(
 
 IMAGE_TAG=${IMAGE_TAG:-$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")}
 IMAGE="${IMAGE:-dfinity/ic-build:$IMAGE_TAG}"
-SUBDIR=$(realpath --relative-to="$REPO_ROOT" "$PWD")
-WORKDIR="/builds/dfinity/ic"
-SSL_DIR=$HOME/.cache/dfinity/openssl
+WORKDIR="/ic"
 
-mkdir -p $HOME/.cache/dfinity/sccache
-mkdir -p $HOME/.cache/dfinity/cargo
-mkdir -p $HOME/.cache/dfinity/cargo_target
-mkdir -p $HOME/.cache/dfinity/home
-mkdir -p "$SSL_DIR"
+DOCKER_RUN_ARGS=(
+    -w "$WORKDIR"
 
-DOCKER_RUN_ARGS=()
+    -v /var/run/docker.sock:/var/run/docker.sock
+    -v /dev/kvm:/dev/kvm
 
-DOCKER_RUN_ARGS+=(-v "$REPO_ROOT:$WORKDIR")
-DOCKER_RUN_ARGS+=(-w "$WORKDIR/$SUBDIR")
-DOCKER_RUN_ARGS+=(${DOCKER_RUN_ARGS_EXTRA:-})
+    # Environment variables matching what GitLab sets in CI pipelines to make scripts easier to debug
+    -e CI_PROJECT_DIR=${CI_PROJECT_DIR:-"$WORKDIR"}
+    -e CI_COMMIT_SHA=${CI_COMMIT_SHA:-"$(git rev-parse HEAD)"}
+    -e CI_JOB_NAME=${CI_JOB_NAME:-""}
+    -e SHELL_WRAPPER="${SHELL_WRAPPER:-/usr/bin/time}"
+)
 
-if uname -s | grep -q Darwin; then
-    # On Mac in the docker container the USER is ubuntu (uid 1000) which most likely does not match the USER on the host.
-    DOCKER_USER="ubuntu"
-    DOCKER_HOME="/home/$DOCKER_USER"
-else
-    DOCKER_USER=$USER
-    DOCKER_HOME=$HOME
-    DOCKER_RUN_ARGS+=(-v /etc/passwd:/etc/passwd)
-    DOCKER_RUN_ARGS+=(-v /etc/group:/etc/group)
-    DOCKER_RUN_ARGS+=(-u $(id -u):$(id -g))
-    DOCKER_RUN_ARGS+=(-v ${SSH_AUTH_SOCK}:/ssh-agent)
-    DOCKER_RUN_ARGS+=(-e SSH_AUTH_SOCK=/ssh-agent)
+# if i'm not withing docker already, bind mount the source
+if [ ! -e /.dockerenv ]; then
+    # we would make this readonly to ensure people don't accidentally chown things
+    # to ubuntu, but it also prevents cargo from updating Cargo.lock
+    DOCKER_RUN_ARGS+=(
+        --mount type=bind,source="$REPO_ROOT",target=$WORKDIR
+    )
 fi
 
-if [[ ! -r "$SSL_DIR/private.pem" ]]; then
-    openssl genrsa -out "$SSL_DIR/private.pem" 4096
-    openssl rsa -in "$SSL_DIR/private.pem" -out "$SSL_DIR/public.pem" -pubout
+if [ -z "${CI_DISPOSABLE_ENVIRONMENT:-}" ]; then
+    DOCKER_RUN_ARGS+=(-it)
 fi
 
-DOCKER_RUN_ARGS+=(-e USER=$DOCKER_USER)
-DOCKER_RUN_ARGS+=(-e BASH_ENV=$DOCKER_HOME/.profile)
-DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/home:$DOCKER_HOME)
-DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/sccache:/cache)
-DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/cargo:/cargo)
-DOCKER_RUN_ARGS+=(-v $HOME/.cache/dfinity/cargo_target:/cargo_target)
-DOCKER_RUN_ARGS+=(-v $SSL_DIR:/openssl)
-DOCKER_RUN_ARGS+=(-e CI_PROJECT_DIR=$WORKDIR)
-DOCKER_RUN_ARGS+=(-e CI_COMMIT_SHA=$(git rev-parse HEAD))
-DOCKER_RUN_ARGS+=(-e CARGO_TEST_TIMEOUT=3600)
-# sccache does not play well with incremental compilation
-DOCKER_RUN_ARGS+=(-e CARGO_INCREMENTAL=0)
-DOCKER_RUN_ARGS+=(-e CARGO_BUILD_INCREMENTAL=false)
-DOCKER_RUN_ARGS+=(-e CI_JOB_NAME=custom-job-$USER)
-DOCKER_RUN_ARGS+=(-e RUSTC_WRAPPER=/usr/bin/sccache)
-DOCKER_RUN_ARGS+=(-e SHELL_WRAPPER=${SHELL_WRAPPER:-/usr/bin/time})
-
-DEBUG=false
-# Check if the first argument is "--verbose"
-if [[ "${1:-}" == "--verbose" ]]; then
-    DEBUG=true
-    shift
+if [ -n "${SSH_AUTH_SOCK:-}" ]; then
+    DOCKER_RUN_ARGS+=(
+        -v "$SSH_AUTH_SOCK:/ssh-agent"
+        -e SSH_AUTH_SOCK="/ssh-agent"
+    )
 fi

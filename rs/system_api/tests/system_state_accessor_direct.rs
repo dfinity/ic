@@ -228,7 +228,11 @@ fn mint_all_cycles() {
         .with_subnet_type(SubnetType::System)
         .build();
     let system_state = SystemStateBuilder::new().build();
-    let mut api = get_system_api(get_update_api_type(), system_state, cycles_account_manager);
+
+    let api_type = ApiTypeBuilder::new()
+        .with_nns_subnet_id(cycles_account_manager.get_subnet_id())
+        .build_update_api();
+    let mut api = get_system_api(api_type, system_state, cycles_account_manager);
     let balance_before = api.ic0_canister_cycle_balance().unwrap();
 
     let amount = 50;
@@ -257,7 +261,10 @@ fn mint_cycles_above_max() {
         )
         .unwrap();
 
-    let mut api = get_system_api(get_update_api_type(), system_state, cycles_account_manager);
+    let api_type = ApiTypeBuilder::new()
+        .with_nns_subnet_id(cycles_account_manager.get_subnet_id())
+        .build_update_api();
+    let mut api = get_system_api(api_type, system_state, cycles_account_manager);
     let balance_before = api.ic0_canister_cycle_balance().unwrap();
 
     let amount = 50;
@@ -273,7 +280,11 @@ fn mint_cycles_above_max() {
 fn mint_cycles_fails_caller_not_on_nns() {
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let mut api = get_system_api(get_update_api_type(), system_state, cycles_account_manager);
+    let mut api = get_system_api(
+        ApiTypeBuilder::new().build_update_api(),
+        system_state,
+        cycles_account_manager,
+    );
 
     let balance_before = api.ic0_canister_cycle_balance().unwrap();
 

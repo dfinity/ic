@@ -32,7 +32,7 @@ use crate::consensus::{
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::{error, trace, ReplicaLogger};
 use ic_types::replica_config::ReplicaConfig;
-use std::cmp::max;
+use std::cmp::{max, min};
 use std::sync::Arc;
 
 pub struct RandomTapeMaker {
@@ -160,7 +160,11 @@ impl RandomTapeMaker {
             pool.get_catch_up_height().get() + 1,
         );
         let finalized_height = pool.get_finalized_height().get();
-        (next_batch_height..=finalized_height + 1)
+        let max_height = min(
+            next_batch_height + RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE,
+            finalized_height + 1,
+        );
+        (next_batch_height..=max_height)
             .filter(|h| self.should_create_share(pool, Height::from(*h)))
             .filter_map(|h| self.create_random_tape_share(Height::from(h), pool))
             .collect()

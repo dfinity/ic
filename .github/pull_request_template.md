@@ -1,2 +1,0 @@
-Dear contributor:
-The DFINITY Foundation does not accept any Pull Requests at this time. Pull Requests will be closed automatically. We gladly accept feedback on https://forum.dfinity.org/. However, we only accept textual descriptions of bugs, but no third party code. Any comments, suggestion and recommendations to us with respect to our code shall be deemed to be automatically assigned to the DFINITY Foundation.

@@ -1,0 +1,114 @@
+---
+
+- name: Wait for replica to listen on all NNS nodes on port 8080
+  include_tasks: 
+    file: url_waitfor_connect.yml
+  loop: "{{ groups['nns'] }}"
+  loop_control:
+    label: 
+  tags: [ "ic_guest" ]
+
+- name: Check if the initial neuron config exists
+  stat:
+    path: "{{ inventory_file | dirname }}/initial-neurons.csv"
+  register: stat_result
+  become: no
+  delegate_to: localhost
+  run_once: true
+
+- debug:
+    msg: "Using the initial neuron configuration from {{ inventory_file | dirname }}/initial-neurons.csv"
+  delegate_to: localhost
+  run_once: true
+  when: stat_result.stat.exists
+
+- name: "Set initial_neurons to path to csv file it is exists and is not set already"
+  set_fact:
+     initial_neurons: "{{ stat_result.stat.path }}"
+  delegate_to: localhost
+  run_once: true
+  become: no
+  when: stat_result.stat.exists and initial_neurons is undefined
+
+- name: "Print value of initial_neurons"
+  debug: var=initial_neurons
+  delegate_to: localhost
+  run_once: true
+  become: no
+
+- name: Install NNS canisters
+  shell: |
+    set -exuo pipefail
+
+    NODE0_NAME={{ groups['nns'][0] }}
+    NODE0_IPV6={{ hostvars[groups['nns'][0]].ipv6 }}
+    NNS_URL="http://[$NODE0_IPV6]:8080"
+
+    echo "Running on $(hostname -f)"
+
+    if ! "{{ ic_media_path }}/bin/ic-admin" --nns-url http://[$NODE0_IPV6]:8080 \
+        get-subnet 0 | grep -q 'subnet_type'; then
+
+      # Ensure we can reach the replica
+      curl --fail "$NNS_URL/api/v2/status" --retry 50 --retry-max-time 300 -o /dev/null || {
+        echo "Could not reach replica to install NNS at $NNS_URL";
+        exit 1;
+      }
+
+      echo "Installing NNS"
+
+      GOVERNANCE_PB=""
+      {% if governance_pb_file is defined %}
+        GOVERNANCE_PB="--governance-pb-file {{ governance_pb_file }}"
+      {% else %}
+        if [[ -r "{{ inventory_file | dirname }}/initial-governance.pb" ]]; then
+          GOVERNANCE_PB="--governance-pb-file '{{ inventory_file | dirname }}/initial-governance.pb'"
+        fi
+      {% endif %}
+
+      tar xzf "{{ ic_media_path }}"/config.tgz -C "{{ ic_media_path }}" "./$NODE0_NAME"
+      "{{ ic_media_path }}/bin/ic-nns-init" \
+          --url "$NNS_URL" \
+          --registry-local-store-dir "{{ ic_media_path }}/$NODE0_NAME/ic_registry_local_store" \
+          $GOVERNANCE_PB \
+          {% if initial_neurons is defined %} --initial-neurons "{{ initial_neurons }}" {% endif %} \
+          {% if test_ledger_accounts is defined %}
+          {% for principal in test_ledger_accounts %}
+          --initialize-ledger-with-test-accounts-for-principals "{{ principal }}" \
+          {% endfor %}
+          {% endif %}
+          {% if init_ledger_accounts is defined %}
+          {% for account in init_ledger_accounts %}
+          --initialize-ledger-with-test-accounts "{{ account }}" \
+          {% endfor %}
+          {% endif %}
+          {% if (with_hsm | default('no')) == "yes" %}
+          --use-hsm
+          --slot {{ hsm_slot }}
+          --pin {{ hsm_pin }}
+          --key-id {{ hsm_key_id }}
+          {% endif %}
+          --wasm-dir "{{ ic_media_path }}/canisters"
+
+      echo "Test NNS is installed"
+      "{{ ic_media_path }}/bin/ic-admin" --nns-url "$NNS_URL" get-subnet 0
+    fi
+  delegate_to: localhost
+  run_once: true
+  register: script_res
+  changed_when: "script_res.stdout | default('')"
+  become: false
+  args:
+    executable: /bin/bash
+  tags: [ "ic_guest" ]
+
+- name: Wait for all nodes to listen on port 8080
+  include_tasks: 
+    file: url_waitfor_connect.yml
+  when:
+    - "'subnet_unassigned' not in hostvars[item].group_names and 'boundary' not in hostvars[item].group_names and 'aux' not in hostvars[item].group_names"
+  loop: "{{ groups['nodes'] }}"
+  loop_control:
+    label: 
+  tags: [ "ic_guest" ]
+

@@ -18,6 +18,12 @@ use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
     FsEncryptionPop, FsEncryptionPublicKey,
 };
 use ic_crypto_secrets_containers::SecretArray;
+use rand::Rng;
+use std::convert::TryFrom;
+use tecdsa::{
+    CommitmentOpeningBytes, EccCurveType, EccScalarBytes, MEGaKeySetK256Bytes, MEGaPrivateKey,
+    MEGaPrivateKeyK256Bytes, MEGaPublicKeyK256Bytes,
+};
 
 impl CspSecretKey {
     /// This function is only used for tests
@@ -289,4 +295,37 @@ pub fn arbitrary_threshold_bls12381_individual_signature() -> ThresBls12_381_Sig
     ThresBls12_381_Signature::Individual(threshold_sig_types::IndividualSignatureBytes(
         random_bytes,
     ))
+}
+
+/// This function is only used for tests
+#[allow(unused)]
+pub fn arbitrary_mega_k256_encryption_key_set() -> CspSecretKey {
+    let private_key = MEGaPrivateKey::generate(EccCurveType::K256, &mut rand::thread_rng())
+        .expect("failed to generate MEGa private key");
+    let public_key = private_key
+        .public_key()
+        .expect("private key should have public key");
+    let public_key =
+        MEGaPublicKeyK256Bytes::try_from(&public_key).expect("just-generated key should serialize");
+    let private_key = MEGaPrivateKeyK256Bytes::try_from(&private_key)
+        .expect("just-generated key should serialize");
+    CspSecretKey::MEGaEncryptionK256(MEGaKeySetK256Bytes {
+        public_key,
+        private_key,
+    })
+}
+
+/// This function is only used for tests
+#[allow(unused)]
+pub fn arbitrary_threshold_ecdsa_opening() -> CspSecretKey {
+    let mut rng = rand::thread_rng();
+    match rng.gen::<bool>() {
+        true => CspSecretKey::IDkgCommitmentOpening(CommitmentOpeningBytes::Simple(
+            EccScalarBytes::K256(rng.gen::<[u8; 32]>()),
+        )),
+        false => CspSecretKey::IDkgCommitmentOpening(CommitmentOpeningBytes::Pedersen(
+            EccScalarBytes::K256(rng.gen::<[u8; 32]>()),
+            EccScalarBytes::K256(rng.gen::<[u8; 32]>()),
+        )),
+    }
 }

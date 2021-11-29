@@ -8,6 +8,7 @@ use ic_types::{
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     messages::SignedIngress,
+    NumBytes,
 };
 
 /// A fake `IngressSelector` implementation based on a `FakeQueue` of ingress
@@ -20,6 +21,7 @@ impl IngressSelector for FakeIngressSelector {
         _ingress_pool: &dyn IngressPoolSelect,
         _past_payloads: &dyn IngressSetQuery,
         _context: &ValidationContext,
+        _byte_limit: NumBytes,
     ) -> IngressPayload {
         self.dequeue().unwrap_or_default().into()
     }

@@ -1,13 +1,12 @@
 use ic_artifact_manager::{manager, processors};
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_message::make_genesis;
 use ic_interfaces::artifact_manager::*;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::{no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities::{
-    consensus::{fake::*, MockConsensus},
+    consensus::{fake::*, make_genesis, MockConsensus},
     types::ids::subnet_test_id,
 };
 use std::sync::{Arc, RwLock};

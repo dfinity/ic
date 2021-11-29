@@ -1,0 +1,7 @@
+[package]
+name = "canister_sandbox"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-canister-sandbox-backend-lib = { path = "backend_lib" }

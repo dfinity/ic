@@ -1,0 +1,265 @@
+= Ubuntu base OS
+
+This contains the build scripts for using full system images of Ubuntu
+including the IC software stack as units of deployment and upgrade.
+
+== Quick build and test instructions (MacOS)
+
+Before you start, ensure that you have the prerequisites:
+
+- https://www.docker.com/get-started[Docker]: for building the disk image.
+- https://www.qemu.org/download[QEMU]: for testing.
+- OVMF UEFI firmware: for testing. If you're running Linux, you can simply
+`sudo apt-get install ovmf`. If you're on MacOS, you'd need a Linux system to
+install the OVMF package, and then download the `OVMF_CODE.fd` file to your
+local machine for testing.
+
+To build a full system image, run:
+
+[source,shell]
+----
+scripts/build-macos.sh
+----
+
+This should build an IC-OS image tarball `ic-os.img.tar`. Once the image tarball
+is available, you can extract the disk image.
+
+[source,shell]
+----
+tar -xf ic-os.img.tar
+----
+
+Then run it on qemu:
+
+[source,shell]
+----
+qemu-system-x86_64 \
+  -display none -serial mon:stdio \
+  -machine type=q35 \
+  -m 2G \
+  -bios scripts/OVMF_CODE.fd \
+  -device virtio-blk-pci,drive=drive0,addr=2.0 -drive file=ic-os.img,format=raw,id=drive0,if=none \
+  -device pcie-root-port,id=pcie.1,chassis=1 \
+  -netdev user,id=enp1s0 -device virtio-net-pci,netdev=enp1s0,bus=pcie.1,addr=0.0 \
+----
+
+== Quick build and test instructions (Linux)
+
+To build a full system image, run:
+
+  scripts/build-disk-image.sh -o /tmp/disk.img
+
+When building your replica, nodemanger and other IC binaries, be sure *not* to use Nix to build those.
+Instead do a docker based build as described here: https://github.com/dfinity/ic#building-the-code
+
+  cd rs
+  ../gitlab-ci/tools/docker-run cargo build --bin ic-workload-generator --bin vsock_agent --bin state-tool --bin ic-consensus-pool-util --bin ic-crypto-csp --bin ic-regedit --release
+  ../gitlab-ci/tools/docker-run cargo build -p nodemanager -p ic-replica --release
+  # To build the NNS canisters needed for installing the NNS
+  cd ../ic-os/guestos
+  ../../gitlab-ci/tools/docker-run gitlab-ci/tools/cargo-build-canisters
+
+If you want to include binaries that you have been locally building, append `-x`.
+You might also want to set the version number to be used `-v`.
+
+  scripts/build-disk-image.sh -o "/tmp/disk.img" -x ~/.cache/dfinity/cargo_target/debug/ -v skaestle-test
+
+(Expected build time: ~90 seconds, including docker downloads and container
+builds; ~20 seconds if docker cached).
+
+This can then be booted in qemu, e.g.:
+
+  qemu-system-x86_64 \
+    -display none -serial mon:stdio \
+    -machine type=q35,accel=kvm -enable-kvm \
+    -m 2G \
+    -bios /usr/share/OVMF/OVMF_CODE.fd \
+    -device virtio-blk-pci,drive=drive0,addr=2.0 -drive file=/tmp/disk.img,format=raw,id=drive0,if=none \
+    -device pcie-root-port,id=pcie.1,chassis=1 \
+    -netdev user,id=enp1s0,hostfwd=tcp::8080-:8080,hostfwd=tcp::22222-:22 \
+    -device virtio-net-pci,netdev=enp1s0,bus=pcie.1,addr=0.0
+
+You can interact with the VM via the console now (note: issue "ctrl-a", "c"
+to enter qemu console from here; issue "quit" to terminate the VM).
+
+You can also SSH into your qemu instance on [::1]:22222.
+
+The system is laid out such that there are two alternate system partitions
+(called "A" and "B"): One is active at any point in time, the other is available
+for writing updates into it. You can test this by first building a
+partition image that can be put there as upgrade:
+
+  scripts/build-ubuntu.sh -o /tmp/upgrade-image.tar
+
+(Note that this is basically also built as part of the above full
+disk image build). Transfer this in whatever way to the target system
+and install it using the tool included, by running on the *target* *system*:
+
+  cat /tmp/upgrade-image.tar | /opt/ic/bin/install-upgrade.sh
+  reboot
+
+After that, the newly installed system will be booted. On next boot, it will
+revert to the original system unless you previously confirm that the new
+system is actually fully operational:
+
+  /opt/ic/bin/manageboot.sh confirm
+
+== Developing the Ubuntu system
+
+The entirety of the actual Ubuntu operating system is contained in the
+rootfs/ subdirectory. See instructions link:rootfs/README.adoc#[there] on how to
+make changes to the OS.
+
+== Directory organization
+
+The directory rootfs/ contains everything related to building a bootable
+Ubuntu system. It uses various template directories (e.g. /opt) that
+are simply copied verbatim to the target system -- you can just drop
+files there to include in the image.
+
+The directory bootloader/ contains everything related to building EFI
+firmware and the grub bootloader image. It is configured to support
+A/B partition split:
+
+All build scripts are contained in the scripts/ subdirectory.
+
+== CI build
+
+For CI purposes, the build is split such that the network-dependent
+part (docker) is separated from the other parts of the build pipeline.
+
+To run these two steps separately, execute:
+
+  scripts/build-docker.sh /tmp/dockertmp
+  scripts/build-disk-image.sh -o /tmp/disk.img -t /tmp/dockertmp/bootloader.tar -u /tmp/dockertmp/rootfs.tar
+
+The "update artifact" image can be built using:
+
+  scripts/build-docker.sh /tmp/dockertmp
+  scripts/build-ubuntu.sh -o /tmp/update-image.tar -i /tmp/dockertmp/rootfs.tar
+
+== Docker container use
+
+The system can also be turned into a docker image that allows to boot an
+entire testnet as a set of docker containers. See link:containerfs/README.adoc#[containerfs/]
+for some initial build documentation.
+
+== Prerequisites
+
+docker, usual set of fs tools (sfdisk, ext4fs tools, vfat, ...)
+
+== Under the hood
+
+The ubuntu system is built by converting the official Ubuntu docker image
+into a bootable "bare-metal" image (or "virtual-metal" VM image). This
+results in a very minimal system with basically no services running at all.
+All pre-configuration of the system is performed using docker utilities,
+and the system is actually also fully operational as a docker container.
+This means that development and testing can be done on the docker image
+itself - actual VM image is only required for full end to end testing.
+
+== Prod deployment
+
+The prod deployment is facilitated using the following command:
+
+  virt-install \
+    --disk disk.img --import \
+    --memory 4096 \
+    --os-variant ubuntu20.04 \
+    --network bridge=X \
+    --network bridge=Y \
+    --graphics none \
+    --console pty,target.type=virtio --serial pty \
+    --boot uefi \
+    --noautoconsole
+
+This sets up the following critical system pieces for operation:
+
+* a virtual harddisk driven by virtio-blk
+* first virtual network device driven by virtio-net, using PCI bus 1 slot 0
+* second virtual network device driven by virtio-net, using PCI bus 2 slot 0
+
+== Run a single machine NNS using qemu (e.g. on developer laptop)
+
+Generate key material and configuration files for the guest and the disk image with it:
+
+    ./boot-single-machine-nns.sh
+    ./scripts/build-disk-image.sh -o disk.img
+
+Then start qemu as described above.
+
+Then, install the NNS:
+
+    ./scripts/install-nns.sh /tmp/tmp.3HNnhenaD8
+
+The directory given as argument is printed at the end of the `boot-single-machine-nns.sh` script.
+
+== Test base OS upgrades
+
+Boot a single machine NNS instance and run in qemu as described above.
+
+Build a base OS upgrade image and servce it via http.
+
+    mkdir /tmp/upgrade
+    scripts/build-update-image.sh -o /tmp/upgrade/upgrade-image.tar -v 42
+    (cd /tmp/upgrade; python -m http.server 8000 --bind ::)
+
+Upgrade the NNS subnetwork. First, check the currently running version.
+
+    /tmp/tmp.3HNnhenaD8/ic-admin --nns-url http://[::1]:8080 get-replica-version 0.1.0
+
+This should return a replica version record. Note that the record does not specify a base OS image yet.
+Then, trigger the upgrade (currently, with a very recent ic-admin, which is not yet on master)
+
+    export IP=192.168.178.139
+    ic-admin --nns-url http://[::1]:8080 propose-to-bless-replica-version-flexible 42 foo foo foo foo \
+      http://$IP:8000/upgrade-image.tar e592d1a0aa055da6e9436f95c2a7e7e96ed0417eebb55d6a5af0fa15a4cd0ce4
+    ic-admin --nns-url=http://[::1]:8080 forward-test-neuron-vote ${PROPOSAL_ID} && ic-admin --nns-url=http://[::1]:8080 execute-eligible-proposals
+    ic-admin --nns-url=http://[::1]:8080 get-replica-version 42
+    ic-admin --nns-url=http://[::1]:8080 get-subnet 0 | grep replica_version
+    ic-admin --nns-url=http://[::1]:8080 update-subnet-replica-version 0 42
+
+== Boot replica and join existing subnetwork as new node
+
+You have to be connected to the DFINITY VPN for those steps to work.
+
+Boot an existing testnet as described here:
+https://gitlab.com/dfinity-lab/core/ic/blob/master/testnet/docs/HowTo-OperateNetworks.adoc#new-how-to-deploy-a-new-network
+
+Typically, it is enough to do:
+
+    cd testnet/tools
+    nix run -c testnet-install-head-sh ${testnet}
+
+Assume the IP address of the machine we want to join is 10.11.10.109 and 2a00:fb01:400:42:5054:ff:fe33:4eb0. We want to join subnetwork 1.
+The eastist way to find the IP addresses to use is to boot an image via `virt-install`, use `ifconfig` to determine MAC addresses and IP
+addresses assigned to that guest.
+
+Call join-as-new-node, e.g.:
+
+    ./join-as-new-node.sh dcs-consensus2-11.dfinity.systems 1 10.11.10.109 2a00:fb01:400:42:5054:ff:fe33:4eb0
+
+Then build the image.
+
+    ./scripts/build-disk-image.sh -o disk.img && \
+      tar c --sparse disk.img >disk.tar && \
+      scp -C disk.tar zh1-spm22.zh1.dfinity.network:
+
+Then deploy it there:
+Note that we specify the MAC addresses of the network interfaces here, so that we guarantee we get the same IP addresses assigned from DHCP.
+
+    sudo virsh destroy skaestle; \
+    sudo virsh undefine skaestle --nvram; \
+    tar -xf disk.tar && \
+    cp disk.img /tmp/skaestle/disk.img && \
+    virt-install --disk /tmp/skaestle/disk.img --import --memory 4096 --os-variant ubuntu20.04 --network bridge=br0,mac=52:54:00:4f:f8:ec \
+      --network bridge=vlan66,mac=52:54:00:33:4e:b0 --graphics none --name skaestle --console pty,target.type=virtio --serial pty --boot uefi --noautoconsole
+
+Check that it comes up:
+
+    curl -s 10.11.10.109:9090 | grep ^consensus_batch_height
+
+That's the current block height of the new replica. It should be larger than 0 after a little time to catch up.
+Also check network connections:
+
+    ssh root@10.11.10.109 -o UserKnownHostsFile=/dev/null 'ss -plant'

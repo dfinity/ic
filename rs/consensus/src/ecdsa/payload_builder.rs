@@ -16,7 +16,7 @@ use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
 use ic_types::{
     batch::ValidationContext,
-    consensus::{ecdsa, get_faults_tolerated, Block, HasHeight, SummaryPayload},
+    consensus::{ecdsa, Block, HasHeight, SummaryPayload},
     crypto::{
         canister_threshold_sig::{
             error::{IDkgParamsValidationError, PresignatureQuadrupleCreationError},
@@ -26,7 +26,7 @@ use ic_types::{
         AlgorithmId,
     },
     registry::RegistryClientError,
-    Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId,
+    Height, NodeId, RegistryVersion, SubnetId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -238,28 +238,12 @@ fn new_random_config(
 ) -> Result<ecdsa::RandomTranscriptParams, EcdsaPayloadError> {
     let transcript_id = *next_unused_transcript_id;
     *next_unused_transcript_id = transcript_id.increment();
-    let num_nodes = subnet_nodes.len();
-    let max_corrupt_dealers = get_faults_tolerated(num_nodes);
-    let max_corrupt_receivers = get_faults_tolerated(num_nodes);
-    let num_dealers = max_corrupt_dealers + 1;
-    let dealers = IDkgDealers::new(
-        subnet_nodes
-            .iter()
-            .take(num_dealers)
-            .copied()
-            .collect::<BTreeSet<_>>(),
-    )?;
-    // Question: shall we limit receivers to get_committee_size(num_nodes)?
+    let dealers = IDkgDealers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
     let receivers = IDkgReceivers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
-    let verification_threshold =
-        NumberOfNodes::from(get_faults_tolerated(receivers.count().get() as usize) as u32);
     Ok(ecdsa::RandomTranscriptParams {
         transcript_id,
-        max_corrupt_dealers: NumberOfNodes::from(max_corrupt_dealers as u32),
         dealers,
-        max_corrupt_receivers: NumberOfNodes::from(max_corrupt_receivers as u32),
         receivers,
-        verification_threshold,
         registry_version: summary_registry_version,
         algorithm_id: AlgorithmId::EcdsaP256,
         operation_type: IDkgTranscriptOperation::Random,

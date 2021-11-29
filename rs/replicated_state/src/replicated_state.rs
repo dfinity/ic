@@ -3,7 +3,10 @@ use super::{
     metadata_state::{IngressHistoryState, Stream, Streams, SystemMetadata},
 };
 use crate::{
-    canister_state::{system_state::push_input, ENFORCE_MESSAGE_MEMORY_USAGE},
+    canister_state::{
+        system_state::{push_input, CanisterOutputQueuesIterator},
+        ENFORCE_MESSAGE_MEMORY_USAGE,
+    },
     metadata_state::StreamMap,
     CanisterQueues,
 };
@@ -11,6 +14,7 @@ use ic_base_types::PrincipalId;
 use ic_interfaces::{
     execution_environment::CanisterOutOfCyclesError, messages::CanisterInputMessage,
 };
+use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     ingress::IngressStatus,
@@ -20,9 +24,34 @@ use ic_types::{
     CanisterId, MemoryAllocation, NumBytes, QueueIndex, SubnetId, Time,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+/// Input queue type: Local or Remote Subnet
+pub enum InputQueueType {
+    /// Local Subnet input messages
+    LocalSubnet,
+    /// Remote Subnet input messages
+    RemoteSubnet,
+}
+
+/// Next input queue: round-robin across Local, Ingress, and Remote Subnet
+#[derive(Clone, Copy, Eq, Debug, PartialEq)]
+pub enum NextInputQueue {
+    /// Local Subnet input messages
+    LocalSubnet,
+    /// Ingress messages
+    Ingress,
+    /// Remote Subnet input messages
+    RemoteSubnet,
+}
+
+impl Default for NextInputQueue {
+    fn default() -> Self {
+        NextInputQueue::LocalSubnet
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum StateError {
@@ -51,6 +80,120 @@ pub enum StateError {
     /// Message enqueuing would have caused the canister or subnet to run over
     /// their memory limit.
     OutOfMemory { requested: NumBytes, available: i64 },
+}
+
+/// Circular iterator that consumes messages from all canisters' and the
+/// subnet's output queues. All messages that have not been explicitly popped
+/// will remain in the state.
+///
+/// The iterator loops over the canisters (plus subnet) consuming one output
+/// message from each in a round robin fashion. For each canister and the subnet
+/// a circular iterator again ensures that messages are consumed from output
+/// queues in a round robin fashion.
+///
+/// Additional operations compared to a standard iterator:
+///  * peeking (returning a reference to the next message without consuming it);
+///    and
+///  * excluding whole queues from iteration while retaining their messages
+///    (e.g. in order to efficiently implement per destination limits).
+#[derive(Debug)]
+struct OutputIterator<'a> {
+    /// Priority queue of non-empty canister iterators. The next message will be
+    /// popped / peeked from the first iterator.
+    canister_iterators: VecDeque<CanisterOutputQueuesIterator<'a>>,
+
+    /// Number of messages left in the iterator.
+    size: usize,
+}
+
+impl<'a> OutputIterator<'a> {
+    fn new(
+        own_subnet_id: SubnetId,
+        canisters: &'a mut BTreeMap<CanisterId, CanisterState>,
+        subnet_queues: &'a mut CanisterQueues,
+    ) -> Self {
+        let mut canister_iterators: VecDeque<_> = canisters
+            .iter_mut()
+            .map(|(owner, canister)| canister.system_state.output_into_iter(*owner))
+            .filter(|handle| !handle.is_empty())
+            .collect();
+
+        // Push the subnet queues in front in order to make sure that at least one
+        // system message is always routed as long as there is space for it.
+        let subnet_queues_iter = subnet_queues.output_into_iter(CanisterId::from(own_subnet_id));
+        if !subnet_queues_iter.is_empty() {
+            canister_iterators.push_front(subnet_queues_iter)
+        }
+        let size = canister_iterators.iter().map(|q| q.size_hint().0).sum();
+
+        OutputIterator {
+            canister_iterators,
+            size,
+        }
+    }
+
+    /// Computes the number of messages left in `queue_handles`.
+    ///
+    /// Time complexity: O(N).
+    fn compute_size(queue_handles: &VecDeque<CanisterOutputQueuesIterator<'a>>) -> usize {
+        queue_handles.iter().map(|q| q.size_hint().0).sum()
+    }
+}
+
+impl std::iter::Iterator for OutputIterator<'_> {
+    type Item = (QueueId, QueueIndex, RequestOrResponse);
+
+    /// Pops a message from the next canister. If this was not the last message
+    /// for that canister, the canister iterator is moved to the back of the
+    /// iteration order.
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
+            if let Some((queue_id, queue_index, msg)) = canister_iterator.next() {
+                self.size -= 1;
+                if !canister_iterator.is_empty() {
+                    self.canister_iterators.push_back(canister_iterator);
+                }
+                debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
+
+                return Some((queue_id, queue_index, msg));
+            }
+        }
+        None
+    }
+
+    /// Returns the exact number of messages left in the iterator.
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.size, Some(self.size))
+    }
+}
+
+pub trait PeekableOutputIterator:
+    std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)>
+{
+    /// Peeks into the iterator and returns a reference to the item `next`
+    /// would return.
+    fn peek(&self) -> Option<(QueueId, QueueIndex, Arc<RequestOrResponse>)>;
+
+    /// Permanently filters out from iteration the next queue (i.e. all messages
+    /// with the same sender and receiver as the next). The mesages are retained
+    /// in the output queue.
+    fn exclude_queue(&mut self);
+}
+
+impl PeekableOutputIterator for OutputIterator<'_> {
+    fn peek(&self) -> Option<(QueueId, QueueIndex, Arc<RequestOrResponse>)> {
+        self.canister_iterators.front().and_then(|it| it.peek())
+    }
+
+    fn exclude_queue(&mut self) {
+        if let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
+            self.size -= canister_iterator.exclude_queue();
+            if !canister_iterator.is_empty() {
+                self.canister_iterators.push_front(canister_iterator);
+            }
+            debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
+        }
+    }
 }
 
 pub const LABEL_VALUE_CANISTER_NOT_FOUND: &str = "CanisterNotFound";
@@ -219,6 +362,10 @@ impl ReplicatedState {
         std::mem::take(&mut self.canister_states)
     }
 
+    pub fn routing_table(&self) -> Arc<RoutingTable> {
+        Arc::clone(&self.metadata.network_topology.routing_table)
+    }
+
     /// Insert the canister state into the replicated state. If a canister
     /// already exists for the given canister id, it will be replaced. It is the
     /// responsibility of the caller of this function to ensure that any
@@ -306,10 +453,12 @@ impl ReplicatedState {
             .canisters_iter()
             .map(|canister| match canister.memory_allocation() {
                 MemoryAllocation::Reserved(bytes) => bytes,
-                MemoryAllocation::BestEffort => canister.memory_usage(),
+                MemoryAllocation::BestEffort => {
+                    canister.memory_usage(self.metadata.own_subnet_type)
+                }
             })
             .sum();
-        if ENFORCE_MESSAGE_MEMORY_USAGE {
+        if ENFORCE_MESSAGE_MEMORY_USAGE && self.metadata.own_subnet_type != SubnetType::System {
             memory_taken += (self.subnet_queues.memory_usage() as u64).into();
         }
         memory_taken
@@ -334,6 +483,10 @@ impl ReplicatedState {
     /// Pushes a `RequestOrResponse` into the induction pool (canister or subnet
     /// input queue).
     ///
+    /// The messages from the same subnet get pushed into the local subnet
+    /// queue, while the messages form the other subnets get pushed to the inter
+    /// subnet queues.
+    ///
     /// On failure (queue full, canister not found, out of memory), returns the
     /// corresponding error and the original message.
     ///
@@ -345,12 +498,25 @@ impl ReplicatedState {
         max_canister_memory_size: NumBytes,
         subnet_available_memory: &mut i64,
     ) -> Result<(), (StateError, RequestOrResponse)> {
+        let own_subnet_type = self.metadata.own_subnet_type;
+        let input_queue_type = match self.find_subnet_id(*msg.sender().get_ref()) {
+            Ok(sender_subnet_id) => {
+                if self.metadata.own_subnet_id == sender_subnet_id {
+                    InputQueueType::LocalSubnet
+                } else {
+                    InputQueueType::RemoteSubnet
+                }
+            }
+            Err(_) => InputQueueType::LocalSubnet, // unknown sender is local subnet
+        };
         match self.canister_state_mut(&msg.receiver()) {
             Some(receiver_canister) => receiver_canister.push_input(
                 index,
                 msg,
                 max_canister_memory_size,
                 subnet_available_memory,
+                own_subnet_type,
+                input_queue_type,
             ),
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
@@ -362,6 +528,8 @@ impl ReplicatedState {
                         // No canister limit, so pass the subnet limit twice.
                         *subnet_available_memory,
                         subnet_available_memory,
+                        own_subnet_type,
+                        input_queue_type,
                     )
                 } else {
                     Err((StateError::CanisterNotFound(msg.receiver()), msg))
@@ -403,19 +571,26 @@ impl ReplicatedState {
         self.subnet_queues.push_output_response(msg)
     }
 
-    /// Returns an iterator that consumes all messages in all output queues
-    /// (canisters and subnet).
-    pub fn output_into_iter(
-        &mut self,
-    ) -> impl std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)> + '_ {
+    /// Returns a circular iterator that consumes messages from all canisters'
+    /// and the subnet's output queues.
+    ///
+    /// The iterator loops over the canisters (plus subnet) consuming one output
+    /// message from each in a round robin fashion. For each canister and the
+    /// subnet a circular iterator again ensures that messages are consumed
+    /// from output queues in a round robin fashion.
+    ///
+    /// The iterator is peekable so that one can obtain a reference to the next
+    /// message. Calling `next` will consume the message and remove it from the
+    /// state. All messages that have not been explicitly consumed will remain
+    /// in the state.
+    pub fn output_into_iter(&mut self) -> impl PeekableOutputIterator + '_ {
         let own_subnet_id = self.metadata.own_subnet_id;
-        self.canister_states
-            .values_mut()
-            .flat_map(|canister| canister.output_into_iter())
-            .chain(
-                self.subnet_queues
-                    .output_into_iter(CanisterId::from(own_subnet_id)),
-            )
+
+        OutputIterator::new(
+            own_subnet_id,
+            &mut self.canister_states,
+            &mut self.subnet_queues,
+        )
     }
 
     pub fn time(&self) -> Time {
@@ -479,12 +654,18 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
 
 pub mod testing {
     use super::*;
-    use crate::metadata_state::testing::StreamsTesting;
+    use crate::{metadata_state::testing::StreamsTesting, testing::CanisterQueuesTesting};
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
+        /// Testing only: Returns a reference to `self.subnet_queues`
+        fn subnet_queues(&self) -> &CanisterQueues;
+
         /// Testing only: Returns a mutable reference to `self.subnet_queues`.
         fn subnet_queues_mut(&mut self) -> &mut CanisterQueues;
+
+        /// Testing only: Replaces `self.subnet_queues` with `subnet_queues`
+        fn put_subnet_queues(&mut self, subnet_queues: CanisterQueues);
 
         /// Testing only: Replaces `SystemMetadata::streams` with the provided
         /// ones.
@@ -493,11 +674,23 @@ pub mod testing {
         /// Testing only: Modifies `SystemMetadata::streams` by applying the
         /// provided function.
         fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F);
+
+        /// Testing only: Returns the number of messages across all canister and
+        /// subnet output queues.
+        fn output_message_count(&self) -> usize;
     }
 
     impl ReplicatedStateTesting for ReplicatedState {
+        fn subnet_queues(&self) -> &CanisterQueues {
+            &self.subnet_queues
+        }
+
         fn subnet_queues_mut(&mut self) -> &mut CanisterQueues {
             &mut self.subnet_queues
+        }
+
+        fn put_subnet_queues(&mut self, subnet_queues: CanisterQueues) {
+            self.subnet_queues = subnet_queues;
         }
 
         fn with_streams(&mut self, streams: StreamMap) {
@@ -508,6 +701,14 @@ pub mod testing {
             let mut streams = self.take_streams();
             streams.modify_streams(f);
             self.put_streams(streams);
+        }
+
+        fn output_message_count(&self) -> usize {
+            self.canister_states
+                .values()
+                .map(|canister| canister.system_state.queues().output_message_count())
+                .sum::<usize>()
+                + self.subnet_queues.output_message_count()
         }
     }
 }

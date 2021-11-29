@@ -15,6 +15,7 @@ lazy_static = "1.4.0"
 serde = "1.0"
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 hex = {version = "0.4.2", features = ["serde"] }
 digest = "0.9.0"
 phantom_newtype = { path = "../../phantom_newtype" }
@@ -29,7 +30,7 @@ crc32fast = "1.2.0"
 prost = "0.9.0"
 prost-derive = "0.9.0"
 ic-nns-constants = {path = "../../nns/constants" }
-comparable = { version = "0.3", features = ["derive"] }
+comparable = { version = "0.5", features = ["derive"] }
 
 [[bin]]
 name = "ledger-canister"
@@ -40,6 +41,7 @@ name = "ledger-archive-node-canister"
 path = "src/archive_node.rs"
 
 [dev-dependencies]
+canister-test = {path = "../../rust_canisters/canister_test"}
 ed25519-dalek = "1.0.1"
 ic-canister-client = {path = "../../canister_client/"}
 rand_chacha = "0.2.2"

@@ -1,12 +1,12 @@
 //! This module contains various definitions related to Ingress messages
 
-use super::{HttpHandlerError, MessageId, RawHttpRequestVal};
+use super::{MessageId, RawHttpRequestVal, EXPECTED_MESSAGE_ID_LENGTH};
 use crate::{
     ic00::IC_00,
     messages::message_id::hash_of_map,
     messages::{
         Authentication, HasCanisterId, HttpCanisterUpdate, HttpRequest, HttpRequestContent,
-        HttpRequestEnvelope, HttpSubmitContent, SignedRequestBytes,
+        HttpRequestEnvelope, HttpRequestError, HttpSubmitContent, SignedRequestBytes,
     },
     CanisterId, CountBytes, PrincipalId, SubnetId, Time, UserId,
 };
@@ -99,18 +99,18 @@ impl HttpRequestContent for SignedIngressContent {
 }
 
 impl TryFrom<HttpCanisterUpdate> for SignedIngressContent {
-    type Error = HttpHandlerError;
+    type Error = HttpRequestError;
 
     fn try_from(update: HttpCanisterUpdate) -> Result<Self, Self::Error> {
         Ok(Self {
             sender: UserId::from(PrincipalId::try_from(update.sender.0).map_err(|err| {
-                HttpHandlerError::InvalidPrincipalId(format!(
+                HttpRequestError::InvalidPrincipalId(format!(
                     "Converting sender to PrincipalId failed with {}",
                     err
                 ))
             })?),
             canister_id: CanisterId::try_from(update.canister_id.0).map_err(|err| {
-                HttpHandlerError::InvalidPrincipalId(format!(
+                HttpRequestError::InvalidPrincipalId(format!(
                     "Converting canister_id to PrincipalId failed with {:?}",
                     err
                 ))
@@ -261,7 +261,7 @@ impl SignedIngress {
 }
 
 impl TryFrom<SignedRequestBytes> for SignedIngress {
-    type Error = HttpHandlerError;
+    type Error = HttpRequestError;
 
     fn try_from(binary: SignedRequestBytes) -> Result<Self, Self::Error> {
         let request: HttpRequestEnvelope<HttpSubmitContent> = (&binary).try_into()?;
@@ -274,7 +274,7 @@ impl TryFrom<SignedRequestBytes> for SignedIngress {
 /// 'SignedIngress' goes through serialization first, because the
 /// actual encoded bytes has to be part of 'SignedIngress'.
 impl TryFrom<HttpRequestEnvelope<HttpSubmitContent>> for SignedIngress {
-    type Error = HttpHandlerError;
+    type Error = HttpRequestError;
 
     fn try_from(request: HttpRequestEnvelope<HttpSubmitContent>) -> Result<Self, Self::Error> {
         let bytes = SignedRequestBytes::try_from(request)?;
@@ -284,7 +284,9 @@ impl TryFrom<HttpRequestEnvelope<HttpSubmitContent>> for SignedIngress {
 
 impl CountBytes for SignedIngress {
     fn count_bytes(&self) -> usize {
-        self.binary().len()
+        // Since we not only add the message, but also the pointer to the message,
+        // we need to account for that when building the length
+        self.binary().len() + EXPECTED_MESSAGE_ID_LENGTH
     }
 }
 

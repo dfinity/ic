@@ -1,23 +1,20 @@
 //! Module that serves the human-readable replica dashboard, which provide
 //! information about the state of the replica.
 
-use crate::common::CONTENT_TYPE_HTML;
+use crate::common::{make_response, CONTENT_TYPE_HTML};
 use askama::Template;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
 use ic_interfaces::state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{
-    canonical_error::{internal_error, CanonicalError},
-    Height, ReplicaVersion,
-};
+use ic_types::{canonical_error::internal_error, Height, ReplicaVersion};
 use ic_utils::ic_features::cow_state_feature;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tower::{limit::ConcurrencyLimit, load_shed::LoadShed, Service, ServiceBuilder};
+use tower::{limit::ConcurrencyLimit, BoxError, Service, ServiceBuilder};
 
 const MAX_CONCURRENT_DASHBOARD_REQUESTS: usize = 1000;
 
@@ -36,14 +33,13 @@ impl DashboardService {
         config: Config,
         subnet_type: SubnetType,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    ) -> LoadShed<ConcurrencyLimit<DashboardService>> {
+    ) -> ConcurrencyLimit<DashboardService> {
         let base_service = Self {
             config,
             subnet_type,
             state_reader,
         };
         ServiceBuilder::new()
-            .load_shed()
             .layer(tower::limit::GlobalConcurrencyLimitLayer::new(
                 MAX_CONCURRENT_DASHBOARD_REQUESTS,
             ))
@@ -51,9 +47,9 @@ impl DashboardService {
     }
 }
 
-impl Service<()> for DashboardService {
+impl Service<Body> for DashboardService {
     type Response = Response<Body>;
-    type Error = CanonicalError;
+    type Error = BoxError;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
 
@@ -61,7 +57,7 @@ impl Service<()> for DashboardService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, _empty: ()) -> Self::Future {
+    fn call(&mut self, _unused: Body) -> Self::Future {
         use hyper::header;
         // get_latest_state returns a new struct, not a ref. We have to store it,
         // otherwise lifetime issues show up in the template.
@@ -92,12 +88,12 @@ impl Service<()> for DashboardService {
                     header::CONTENT_TYPE,
                     header::HeaderValue::from_static(CONTENT_TYPE_HTML),
                 );
-                Ok(response)
+                response
             }
             // If there was an internal error, the error description is text, not HTML, and
             // therefore we don't attach the header
-            Err(e) => Err(internal_error(&format!("Internal error: {}", e))),
+            Err(e) => make_response(internal_error(&format!("Internal error: {}", e))),
         };
-        Box::pin(async move { res })
+        Box::pin(async move { Ok(res) })
     }
 }

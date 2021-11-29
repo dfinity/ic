@@ -1,0 +1,9 @@
+[target.wasm32-unknown-unknown]
+runner = "cargo run --release --bin runner  --target x86_64-apple-darwin -- "
+
+[build]
+target = "wasm32-unknown-unknown"
+rustflags = ["-Z", "unstable-options"]
+
+[profile.release]
+opt-level = 'z'

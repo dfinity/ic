@@ -187,10 +187,7 @@ impl HttpQueryHandler {
                 .concurrency_limit(threads)
                 .service(base_service),
         );
-
-        // TODO(NET-795): provide documentation on the design of the interface
         ServiceBuilder::new()
-            .load_shed()
             .buffer(max_buffered_queries)
             .service(base_service)
     }

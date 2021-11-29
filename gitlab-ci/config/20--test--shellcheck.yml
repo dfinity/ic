@@ -1,0 +1,15 @@
+shellcheck:
+  extends: .ubuntu-nix-docker
+  needs: []  # don't wait on other jobs
+  stage: test
+  script:
+    - |
+      set -eExuo pipefail
+
+      # Run shellcheck for all testnet/tests/scripts/*.sh
+      cd testnet/tests/scripts
+      shellcheck --source-path=include ./*.sh
+
+      # Run shellcheck in for testnet/tests/scripts/test_modules/*.sh
+      cd test_modules
+      shellcheck --source-path=include ./*.sh

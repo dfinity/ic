@@ -1,0 +1,10 @@
+[Unit]
+Description=Bootstrap the IC node
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/dfinity/bootstrap-ic-node.sh

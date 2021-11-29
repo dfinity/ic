@@ -1,0 +1,36 @@
+= IC_Subnet_CallRequests_ResponseTooSlow
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+Estimated 90th percentile latency for successful **read_state** requests sent to
+the subnet has exceeded the SLO limit for the last 60 minutes.
+
+Latency for **read_state** requests that failed is not taken in to account.
+
+== Impact
+
+Users observe high **read_state** latencies. 
+
+High latencies will result in bad user experience. Potentially if the NNS is the slow subnet, this
+can impact operational tasks on the IC.
+
+== Possible causes (non-exhaustive)
+
+1. Replicas receive more requests than they can process. A single replica should be able to handle
+2000 **read_state** requests per second. This rate is achieved by production tests running on CD. 
+ 
+2. Due to code change the replica became slower and can't handle what is expected.
+
+== Troubleshooting and remediation
+
+1. Find a replica instance that has high call request latencies. Use the following prometheus query,
+substituting the labels from the alert, to find "bad" replica IP.
+
+    histogram_quantile(0.90, sum without(ic_node) (rate(replica_http_request_duration_seconds_bucket{ic="$ic",job="replica",ic_subnet="$ic_subnet",type="$type",request_type="$request_type", status=~"2...*"}[1m])))
+
+2. Check the instance doesn't receive more requests than it can handle. It should be less than 2000
+requests per second. If there are more than 2000 requests boundary nodes should be reconfigured to 
+send less traffic.
+

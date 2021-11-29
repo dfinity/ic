@@ -441,6 +441,8 @@ enum NnsFunction {
   NNS_FUNCTION_UPDATE_NODE_REWARDS_TABLE = 20;
   // Add or remove Data Center records.
   NNS_FUNCTION_ADD_OR_REMOVE_DATA_CENTERS = 21;
+  // Update the config for all unassigned nodes.
+  NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG = 22;
 }
 
 // Payload of a proposal that calls a function on another NNS

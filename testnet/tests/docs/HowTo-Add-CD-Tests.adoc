@@ -1,0 +1,16 @@
+== CD Nightly Tests
+
+The CD nightly tests run at midnighty UTC time. The full
+list of test cases is in `cd.sh`.
+
+=== How-To Add a New Nightly CD Test
+
+See the example PR that adds a demo test to the nightly cd environment.
+
+https://github.com/dfinity-lab/dfinity/pull/5188
+
+. Create a subdirectory under `/testnet/tests`.
+.. Add your test script and corresponding nix deriviation.
+.. Add a corresponding `README.adoc`
+. Add your test script to `/testnet/tests/default.nix`
+. Add your test case to `/testnet/tests/cd.sh`

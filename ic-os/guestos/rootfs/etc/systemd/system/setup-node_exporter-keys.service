@@ -1,0 +1,12 @@
+[Unit]
+Description=Generate node_exporter TLS key pair on first boot
+After=boot-config.mount
+Before=node_exporter.service
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-node_exporter-keys.sh

@@ -1,0 +1,34 @@
+= IC_Subnet_TooManyMessagesUndelivered
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+Estimated 80th percentile of acknowledged ingress messages didn't reach execution for 5m.
+
+== Impact
+
+Users observe ingress messages that don't reach execution. This will force users to resend their
+ingress messages.
+
+== Possible causes (non-exhaustive)
+
+1. Since our networking communication is best effort we don't acknowledge messages if they have 
+reached a particular node. Hence, the way we compute the undelivered messages is an estimate.
+In theory, if the propagation latency is high the alert may fire as well.
+
+2. Significant number of network links or replicas are down. 
+
+3. Messages are indeed dropped.
+
+== Troubleshooting and remediation
+
+1. First step is to figure out what can be the possible cause for the alert to fire. In the 
+previous section we listed 3 possible causes.
+
+    a. High latency can be observed if consensus is too slow, transport queues are full, etc.
+    b. Some of the physical components may be down due to maintenance work, network partitioning, etc.
+    c. Messages being dropped is mainly due to bug in the code.
+
+2. Determining the potential cause may require escalation to the appropriate team.
+

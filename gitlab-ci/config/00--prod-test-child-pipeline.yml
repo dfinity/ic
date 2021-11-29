@@ -1,0 +1,3 @@
+include:
+- local: /gitlab-ci/config/00--common.yml
+- local: /testnet/tests/pipeline/pipeline.yml

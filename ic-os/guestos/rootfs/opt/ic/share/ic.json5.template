@@ -1,0 +1,272 @@
+{
+    // ============================================
+    // Global Replica Configuration
+    // ============================================
+
+    node_id: "{{ node_index }}",
+
+    // =======================================================
+    // Configuration of transport parameters and node identity
+    // =======================================================
+    transport: {
+        node_ip: "{{ ipv6_address }}",
+        // mapping of flow ids to TCP port number, also depth of send queue
+        p2p_flows: [
+        {flow_tag: 1234, server_port: 4100, queue_size: 51200}
+        ],
+    },
+    // ============================================
+    // Configuration of registry client
+    // ============================================
+    registry_client: {
+        // Alternatives:
+        //   * EXAMPLE: registry_canister_url: "https://registry.dfinity.org/",
+        //     fetch updates from node at given url
+        //   * EXAMPLE: protobuf_file: "/tmp/registry.proto"
+        //     read the registry from a file during boot
+        //
+        // The default is not to specify it.
+        local_store: "/var/lib/ic/data/ic_registry_local_store/"
+    },
+    // ============================================
+    // Configuration of the node state persistence.
+    // ============================================
+    state_manager: {
+        // The directory that should be used to persist node state.
+        state_root: "/var/lib/ic/data/ic_state",
+    },
+
+    // ============================================
+    // Configuration of the artifact pool state persistence.
+    // ============================================
+    artifact_pool: {
+        consensus_pool_path: "/var/lib/ic/data/ic_consensus_pool",
+        ingress_pool_size_threshold: 5000,
+        // Backup configuration
+        backup: {
+            spool_path: "/var/lib/ic/backup",
+            // How long the artifacts stay in the pool before they get purged.
+            retention_time_secs: {{ backup_retention_time_secs }},
+            // How often the purging is triggered.
+            purging_interval_secs: {{ backup_purging_interval_secs }},
+        }
+    },
+
+    // ============================================
+    // Consensus related config.
+    // ============================================
+    consensus: {
+        detect_starvation: true,
+    },
+
+    // ============================================
+    // Configuration of the crypto state persistence.
+    // ============================================
+    crypto: {
+        // The directory that should be used to persist crypto state.
+        crypto_root: "/var/lib/ic/crypto",
+    },
+
+    // ========================================
+    // Configuration of the message scheduling.
+    // ========================================
+    scheduler: {
+        /// Number of canisters that the scheduler is allowed to schedule in
+        /// parallel on the NNS subnet.
+        nns_subnet_scheduler_cores: 1,
+
+        /// Number of canisters that the scheduler is allowed to schedule in
+        /// parallel on the non-NNS subnets.
+        non_nns_subnet_scheduler_cores: 32,
+
+        // Maximum amount of instructions a single round can consume.
+        max_instructions_per_round: 26843545600,
+        // Maximum number of instructions a single message's execution
+        // can consume.
+        max_instructions_per_message: 5368709120,
+    },
+
+    // ================================================
+    // Configuration of the Wasm execution environment.
+    // ================================================
+    hypervisor: {
+        // Which technology to use to intercept Wasm memory changes.
+        // Options:
+        // - "sigsegv" - use mprotect + SIGSEGV
+        // - { fuse: { mount_point: "/tmp/fuse", }, } (experimental)
+        persistence_type: "sigsegv",
+        // A whitelist of principal IDs that are allowed to call the
+        // "dev_create_canister_with_funds" and "dev_set_funds" methods on
+        // the subnet.
+        //
+        // * The list should be a comma-separated list of principal IDs.
+        // * Setting the value to "*" = the methods are calleable by all IDs.
+        // * Setting the value to an empty string = the methods are
+        //   calleable by no one.
+        //
+        // The principal id below is used by the wallet CLI, the workload
+        // generator and scenario tests (corresponds to the hardcoded,
+        // DER-encoded keypair that these tools use).
+        create_funds_whitelist: "5o66h-77qch-43oup-7aaui-kz5ty-tww4j-t2wmx-e3lym-cbtct-l3gpw-wae",
+    },
+
+    // ====================================
+    // Configuration of the HTTP endpoint.
+    // ====================================
+    http_handler: {
+        listen_addr: "[{{ ipv6_address }}]:8080",
+
+        // For test networks, and networks that we still reset
+        // rather often (e.g. Sodium), let them indicate the root public key
+        // in /api/v2/status, so that agents can fetch them.
+        // This is convenient, but of course not very secure.
+        //
+        // From Mercury on, or at least once we really stop resetting,
+        // we should set this to false and thus force agents
+        // to get the key from a secure place.
+        show_root_key_in_status: true,
+    },
+
+    // ==================================================
+    // Configuration of the metrics collection subsystem.
+    // ==================================================
+    metrics: {
+        // How to export metrics.
+        // Supported values are:
+        // - "log"  — periodically write prometheus metrics to the application log
+        // - { http: <port> } — expose prometheus metrics on the specified port
+        // - { file: <path> } — dump prometheus metrics to the specified file on shutdown
+        exporter: { http: "[{{ ipv6_address }}]:9090", },
+    },
+
+    // ===================================
+    // Configuration of the logging setup.
+    // ===================================
+    logger: {
+        // The node id to append to log lines.
+        node_id: {{ node_index }},
+        // The datacenter id to append to log lines.
+        dc_id: 200,
+        // The log level to use.
+        level: "info",
+        // The format of emitted log lines
+        format: "json",
+        debug_overrides: {{ log_debug_overrides }},
+    },
+
+    // ==================================
+    // Configuration for Message Routing.
+    // ==================================
+    message_routing: {
+        xnet_ip_addr: "{{ ipv6_address }}",
+        xnet_port: 2497,
+    },
+
+    firewall: {
+        config_file: "/run/ic-node/nftables-ruleset/nftables.conf",
+        firewall_config: "table filter {\n\
+  chain INPUT {\n\
+    type filter hook input priority 0; policy drop;\n\
+    iif lo accept\n\
+    ct state { invalid } drop\n\
+    ct state { established, related } accept\n\
+    icmp type destination-unreachable accept\n\
+    icmp type source-quench accept\n\
+    icmp type time-exceeded accept\n\
+    icmp type parameter-problem accept\n\
+    icmp type echo-request accept\n\
+    icmp type echo-reply accept\n\
+  }\n\
+\n\
+  chain FORWARD {\n\
+    type filter hook forward priority 0; policy drop;\n\
+  }\n\
+\n\
+  chain OUTPUT {\n\
+    type filter hook output priority 0; policy accept;\n\
+  }\n\
+}\n\
+\n\
+define IPV6_PREFIXES={\n\
+  << ipv6_prefixes >>\n\
+}\n\
+\n\
+table ip6 filter {\n\
+  chain INPUT {\n\
+    type filter hook input priority 0; policy drop;\n\
+    iif lo accept\n\
+    ct state { invalid } drop\n\
+    ct state { established, related } accept\n\
+    icmpv6 type destination-unreachable accept\n\
+    icmpv6 type packet-too-big accept\n\
+    icmpv6 type time-exceeded accept\n\
+    icmpv6 type parameter-problem accept\n\
+    icmpv6 type echo-request accept\n\
+    icmpv6 type echo-reply accept\n\
+    icmpv6 type nd-router-advert accept\n\
+    icmpv6 type nd-neighbor-solicit accept\n\
+    icmpv6 type nd-neighbor-advert accept\n\
+    ip6 saddr $IPV6_PREFIXES ct state { new } tcp dport { 22, 2497, 4100, 8080, 9090, 9091, 9100 } accept\n\
+  }\n\
+\n\
+  chain FORWARD {\n\
+    type filter hook forward priority 0; policy drop;\n\
+  }\n\
+\n\
+  chain OUTPUT {\n\
+    type filter hook output priority 0; policy accept;\n\
+  }\n\
+}\n",
+        ipv4_prefixes: [],
+        ipv6_prefixes: [
+            "fd00:2:1:1:1::/64",
+            "2001:920:401a:1708::/64",
+            "2607:f758:1220::/64",
+            "2604:3fc0:2001::/48",
+            "2001:920:401a:1710::/64",
+            "2001:920:401a:1706::/64",
+            "2a04:9dc0:0:108::/64",
+            "2607:f6f0:3004::/48",
+            "2604:7e00:50::/64",
+            "2607:ff70:3:2::/64",
+            "2600:3000:6100:200::/64",
+            "2001:470:1:c76::/64",
+            "2001:4d78:40d::/48",
+            "2a0f:cd00:0002::/56",
+            "2a00:fa0:3::/48",
+            "2604:B900:4001:76::/64",
+            "2600:2c01:21::/64",
+            "2600:3006:1400:1500::/64",
+            "2a01:138:900a::/48",
+            "2607:f1d0:10:1::/64",
+            "2604:3fc0:3002::/48",
+            "2610:190:6000:1::/64",
+            "2600:3004:1200:1200::/56",
+            "2607:fb58:9005::/48",
+            "2401:3f00:1000:24::/64",
+            "2401:3f00:1000:22::/64",
+            "2401:3f00:1000:23::/64",
+            "2600:c02:b002:15::/64",
+            "2610:190:df01:5::/64",
+            "2607:f758:c300::/64",
+            "2a00:fb01:400::/56",
+            "2a00:fb01:400:100::/56",
+            "2604:1380:4601:6200::/64",
+            "2604:1380:4641:6100::/64",
+            "2604:1380:4091:3000::/64",
+            "2604:1380:40e1:4700::/64",
+            "2604:1380:45e1:a600::/64",
+            "2604:1380:45f1:9400::/64",
+            "2604:1380:45d1:bf00::/64",
+            "2604:1380:40f1:1700::/64",
+            "2a05:d01c:e2c:a700::/56",
+        ]
+    },
+
+    registration: {
+        nns_url: "{{ nns_url }}",
+        nns_pub_key_pem: "/var/lib/ic/data/nns_public_key.pem"
+    },
+
+    malicious_behaviour: {{ malicious_behavior }},
+}

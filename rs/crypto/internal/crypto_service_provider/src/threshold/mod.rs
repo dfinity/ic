@@ -1,7 +1,7 @@
 //! Threshold signature implementation for the CSP
 use crate::api::{CspThresholdSignError, ThresholdSignatureCspClient};
 use crate::secret_key_store::SecretKeyStore;
-use crate::server::api::ThresholdSignatureCspServer;
+use crate::server::api::ThresholdSignatureCspVault;
 use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
 use crate::Csp;
@@ -36,7 +36,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdSignatur
         threshold: ic_types::NumberOfNodes,
         signatory_eligibilty: &[bool],
     ) -> CryptoResult<(CspPublicCoefficients, Vec<Option<KeyId>>)> {
-        self.csp_server
+        self.csp_vault
             .threshold_keygen_for_test(algorithm_id, threshold, signatory_eligibilty)
             .map_err(CryptoError::from)
     }
@@ -48,8 +48,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdSignatur
         public_coefficients: CspPublicCoefficients,
     ) -> Result<CspSignature, CspThresholdSignError> {
         let key_id = key_id_from_csp_pub_coeffs(&public_coefficients);
-        self.csp_server
-            .threshold_sign(algorithm_id, message, key_id)
+        self.csp_vault.threshold_sign(algorithm_id, message, key_id)
     }
 
     fn threshold_combine_signatures(

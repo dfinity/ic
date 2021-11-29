@@ -1,0 +1,27 @@
+:url-execution-dashboard: https://grafana.dfinity.systems/d/GWlsOrn7z/execution-metrics-2-0?orgId=1&from=now-30m&to=now&var-ic=mercury&var-ic_subnet=All&var-instance=All&var-period=$__auto_interval_period
+
+= IC_Execution_RoundTooSlow
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+50th percentile of execution rounds takes more than 2 seconds to complete over the last hour.
+
+== Impact
+
+Longer execution rounds can result in a general slowdown eventually impacting the finalization rate of the subnet.
+
+== Possible causes (non-exhaustive)
+
+- Canister messages do a lot of heavy computation that is not reflected by the instructions limit per round.
+
+- Bug in the code could result in the round taking longer.
+
+== Troubleshooting and remediation
+
+- Check the {url-execution-dashboard}[execution dashboard] to determine the execution time for subnet messages or canister messages. One of the two (or both) could be contributing to the increased execution round time.
+
+- Check if a recent replica upgrade has happened that could have introduced a code bug.
+
+- Escalate to the execution team.

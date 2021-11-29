@@ -53,7 +53,8 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::{
-            execution_state::WasmBinary, ExecutionState, ExportedFunctions, Global, NumWasmPages,
+            execution_state::{SandboxExecutionState, WasmBinary},
+            ExecutionState, ExportedFunctions, Global, NumWasmPages,
         },
         metadata_state::SubnetTopology,
         page_map::PageMap,
@@ -244,11 +245,13 @@ mod tests {
             session_nonce: None,
             wasm_binary,
             wasm_memory,
+            stable_memory: Memory::default(),
             exported_globals: vec![Global::I32(1)],
             exports: ExportedFunctions::new(BTreeSet::new()),
             last_executed_round: ExecutionRound::from(0),
             cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(tmpdir.path().into())),
             mapped_state: None,
+            sandbox_state: SandboxExecutionState::new(),
         };
         canister_state.execution_state = Some(execution_state);
 
@@ -590,11 +593,11 @@ mod tests {
                 end: CanisterId::from_u64(to),
             }
         }
-        state.metadata.network_topology.routing_table = RoutingTable(btreemap! {
+        state.metadata.network_topology.routing_table = Arc::new(RoutingTable(btreemap! {
             id_range(0, 10) => subnet_test_id(0),
             id_range(11, 20) => subnet_test_id(1),
             id_range(21, 30) => subnet_test_id(0),
-        });
+        }));
 
         let visitor = TracingVisitor::new(NoopVisitor);
         state.metadata.certification_version = 2;

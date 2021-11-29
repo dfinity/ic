@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+DISK_DIR=${1:-/ic/artifacts/icos}
+ROOT_DIR=$(git rev-parse --show-toplevel)
+cd $ROOT_DIR
+sudo setfacl -m u:$(id -u):rwx -R $ROOT_DIR
+
+HEADER_BINARIES=$(
+    cat <<"EOF"
+______       _ _     _ _              ______ _                  _
+| ___ \     (_) |   | (_)             | ___ (_)                (_)
+| |_/ /_   _ _| | __| |_ _ __   __ _  | |_/ /_ _ __   __ _ _ __ _  ___  ___
+| ___ \ | | | | |/ _` | | '_ \ / _` | | ___ \ | '_ \ / _` | '__| |/ _ \/ __|
+| |_/ / |_| | | | (_| | | | | | (_| | | |_/ / | | | | (_| | |  | |  __/\__ \_ _ _
+\____/ \__,_|_|_|\__,_|_|_| |_|\__, | \____/|_|_| |_|\__,_|_|  |_|\___||___(_|_|_)
+                                __/ |
+                               |___/
+EOF
+)
+
+HEADER_CANISTERS=$(
+    cat <<"EOF"
+______       _ _     _ _               _____             _     _
+| ___ \     (_) |   | (_)             /  __ \           (_)   | |
+| |_/ /_   _ _| | __| |_ _ __   __ _  | /  \/ __ _ _ __  _ ___| |_ ___ _ __ ___
+| ___ \ | | | | |/ _` | | '_ \ / _` | | |    / _` | '_ \| / __| __/ _ \ '__/ __|
+| |_/ / |_| | | | (_| | | | | | (_| | | \__/\ (_| | | | | \__ \ ||  __/ |  \__ \_ _ _
+\____/ \__,_|_|_|\__,_|_|_| |_|\__, |  \____/\__,_|_| |_|_|___/\__\___|_|  |___(_|_|_)
+                                __/ |
+                               |___/
+EOF
+)
+
+HEADER_ICOS=$(
+    cat <<"EOF"
+______       _ _     _ _               _____ _____   _____ _____   _____
+| ___ \     (_) |   | (_)             |_   _/  __ \ |  _  /  ___| |_   _|
+| |_/ /_   _ _| | __| |_ _ __   __ _    | | | /  \/ | | | \ `--.    | | _ __ ___   __ _  __ _  ___
+| ___ \ | | | | |/ _` | | '_ \ / _` |   | | | |     | | | |`--. \   | || '_ ` _ \ / _` |/ _` |/ _ \
+| |_/ / |_| | | | (_| | | | | | (_| |  _| |_| \__/\ \ \_/ /\__/ /  _| || | | | | | (_| | (_| |  __/_ _ _
+\____/ \__,_|_|_|\__,_|_|_| |_|\__, |  \___/ \____/  \___/\____/   \___/_| |_| |_|\__,_|\__, |\___(_|_|_)
+                                __/ |                                                    __/ |
+                               |___/                                                    |___/
+EOF
+)
+
+HEADER_BUILD=$(
+    cat <<"EOF"
+______       _ _     _    ___       _   _  __           _
+| ___ \     (_) |   | |  / _ \     | | (_)/ _|         | |      _
+| |_/ /_   _ _| | __| | / /_\ \_ __| |_ _| |_ __ _  ___| |_ ___(_)
+| ___ \ | | | | |/ _` | |  _  | '__| __| |  _/ _` |/ __| __/ __|
+| |_/ / |_| | | | (_| | | | | | |  | |_| | || (_| | (__| |_\__ \_
+\____/ \__,_|_|_|\__,_| \_| |_/_|   \__|_|_| \__,_|\___|\__|___(_)
+EOF
+)
+
+export CI_JOB_ID=${CI_JOB_ID:-""}
+export CI_JOB_NAME=${CI_JOB_NAME:-""}
+export ROOT_PIPELINE_ID=${ROOT_PIPELINE_ID:-""}
+export CI_PROJECT_DIR=${CI_PROJECT_DIR:-$ROOT_DIR}
+export BUILD_EXTRA_SUFFIX=${BUILD_EXTRA_SUFFIX:-""}
+export BUILD_EXTRA_ARGS=${BUILD_EXTRA_ARGS:-""}
+
+echo -e "\n${HEADER_BINARIES}\n"
+gitlab-ci/src/job_scripts/cargo-build-release-linux-native.sh
+echo -e "\n${HEADER_CANISTERS}\n"
+gitlab-ci/tools/cargo-build-canisters
+echo -e "\n${HEADER_ICOS}\n"
+gitlab-ci/src/job_scripts/guest-os-updateimg.sh "${DISK_DIR}"
+
+echo
+echo -e "\n${HEADER_BUILD}\n"
+echo Release Binaries
+cd /ic/artifacts/release
+# only binaries listed below are shipped to ic-os ~ we rm everything else
+ls -1 *.gz \
+    | grep -v -E '(replica|nodemanager|canister_sandbox|vsock_agent|state-tool|ic-consensus-pool-util|ic-crypto-csp|ic-regedit).gz' \
+    | xargs -P0 rm -f
+
+ls -1 *.gz | xargs -n1 sha256sum | tee /tmp/binaries.txt
+echo
+
+echo Canister Binaries
+cd /ic/artifacts/canisters
+ls -1 *.gz | xargs -n1 sha256sum | tee /tmp/canisters.txt
+echo
+
+echo IC-OS Image
+cd "$DISK_DIR"
+ls -1 update-img.tar.gz | xargs -n1 sha256sum | tee /tmp/update-img.txt
+echo
+
+cd /tmp
+echo SHA256SUMS
+sha256sum binaries.txt
+sha256sum canisters.txt
+sha256sum update-img.txt
+echo

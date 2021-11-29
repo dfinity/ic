@@ -19,7 +19,7 @@ use ic_nns_governance::{
         Proposal,
     },
 };
-use ledger_canister::{AccountIdentifier, ICPTs};
+use ledger_canister::{AccountIdentifier, Tokens};
 use maplit::hashmap;
 use std::convert::TryFrom;
 
@@ -62,11 +62,11 @@ impl Ledger for DegradedEnv {
         unimplemented!()
     }
 
-    async fn total_supply(&self) -> Result<ICPTs, GovernanceError> {
+    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
         unimplemented!()
     }
 
-    async fn account_balance(&self, _: AccountIdentifier) -> Result<ICPTs, GovernanceError> {
+    async fn account_balance(&self, _: AccountIdentifier) -> Result<Tokens, GovernanceError> {
         unimplemented!()
     }
 }

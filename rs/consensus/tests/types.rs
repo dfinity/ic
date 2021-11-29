@@ -1,6 +1,6 @@
 use ic_interfaces::crypto::Signable;
 use ic_protobuf::types::v1 as pb;
-use ic_test_utilities::consensus::fake::*;
+use ic_test_utilities::consensus::{fake::*, make_genesis};
 use ic_types::consensus::catchup::*;
 use ic_types::consensus::dkg;
 use ic_utils::fs::write_protobuf_using_tmp_file;
@@ -9,7 +9,7 @@ use tempfile::Builder;
 
 #[test]
 fn ensure_equality_of_signed_bytes_of_catch_up_package_wrappers() {
-    let cup = ic_consensus_message::make_genesis(dkg::Summary::fake());
+    let cup = make_genesis(dkg::Summary::fake());
     let protobuf = pb::CatchUpPackage::from(&cup);
 
     assert_eq!(

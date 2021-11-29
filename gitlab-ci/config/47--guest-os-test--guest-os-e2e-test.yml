@@ -1,0 +1,540 @@
+.e2e-test-base:
+  extends:
+    # Use untrusted builders for e2e tests.
+    # The trusted builders don't work with IPv6 right now.
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline
+  stage: guest-os-test
+  # The e2e tests are flaky and impacting developer merges
+  # https://dfinity.slack.com/archives/C012RDFNK7U/p1618233620112900
+  variables:
+    E2E_TEST_TIMEOUT: 240
+
+e2e-workload-test:
+  extends:
+    - .e2e-test-base
+  needs:
+    - guest-os-diskimg
+    - cargo-build-release-linux-native
+  artifacts:
+    paths:
+    - ic-os/guestos/test-out/e2e
+  script:
+    - |
+      # Make sure the host has mounted necessary devices into the docker container.
+      # And check dependencies.
+      ls -lah /dev/kvm /dev/net/tun "${CI_PROJECT_DIR}/artifacts/release" "${CI_PROJECT_DIR}/ic-os/guestos/build-out"
+
+      mkdir -p gitlab-runner-tmp; cd gitlab-runner-tmp
+
+      tar --sparse -xvf  "${CI_PROJECT_DIR}/ic-os/guestos/build-out/disk-img/disk-img.tar.gz"
+
+      for f in ic-prep ic-workload-generator; do
+        gzip -d "${CI_PROJECT_DIR}/artifacts/release/$f.gz"
+        chmod u+x "${CI_PROJECT_DIR}/artifacts/release/$f"
+        ln -sf "${CI_PROJECT_DIR}/artifacts/release/$f" "$f"
+      done
+
+      ls -lah
+
+      # Prepare network. There are more convenient ways to do it if requisite
+      # services are set up (which they aren't in a simple docker runner),
+      # but probably also helpful for debugging to have this "explicit" for now.
+
+      sudo ip link del ipv6_ic_node0 || true
+      sudo ip link del ipv6_ic_node1 || true
+      sudo ip link del ipv6_ic || true
+
+      sudo ip tuntap add ipv6_ic_node0 mode tap user ubuntu
+      sudo ip link set dev ipv6_ic_node0 up
+
+      sudo ip tuntap add ipv6_ic_node1 mode tap user ubuntu
+      sudo ip link set dev ipv6_ic_node1 up
+
+      sudo ip link add name ipv6_ic type bridge
+      sudo ip link set ipv6_ic_node0 master ipv6_ic
+      sudo ip link set ipv6_ic_node1 master ipv6_ic
+      sudo ip link set dev ipv6_ic up
+
+      sudo ip addr add fd00:2:1:1:1::1/64 dev ipv6_ic
+
+      mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e"
+      # Actual test script, sets up VMs and drives the test.
+      placebo -v -i "${CI_PROJECT_DIR}/ic-os/guestos/tests/*.py" -i "${CI_PROJECT_DIR}/gitlab-runner-tmp/**/*" -- \
+      "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-workload.py" \
+          --vmtoolscfg=internal \
+          --disk_image "$(pwd)/disk.img" \
+          --ic_prep_bin "$(pwd)/ic-prep" \
+          --ic_workload_generator_bin "$(pwd)/ic-workload-generator" \
+          --log_directory "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e" \
+          --timeout "$E2E_TEST_TIMEOUT"
+
+e2e-scalability-suite-test:
+  extends:
+    - .e2e-test-base
+  needs:
+    - guest-os-diskimg
+    - cargo-build-release-linux-native
+    - cargo-build-canisters
+  artifacts:
+    paths:
+    - ic-os/guestos/test-out/e2e
+  script:
+    - |
+      # Make sure the host has mounted necessary devices into the docker container.
+      # And check dependencies.
+      ls -lah /dev/kvm /dev/net/tun "${CI_PROJECT_DIR}/artifacts/release" "${CI_PROJECT_DIR}/ic-os/guestos/build-out"
+
+      mkdir -p gitlab-runner-tmp; cd gitlab-runner-tmp
+
+      tar --sparse -xvf  "${CI_PROJECT_DIR}/ic-os/guestos/build-out/disk-img/disk-img.tar.gz"
+
+      ls "${CI_PROJECT_DIR}/artifacts/canisters"
+      for canister in "${CI_PROJECT_DIR}"/artifacts/canisters/*.gz; do
+        gzip -d "${canister}"
+      done
+      ls "${CI_PROJECT_DIR}/artifacts/canisters"
+
+      for f in ic-admin ic-nns-init ic-prep ic-workload-generator; do
+        gzip -d "${CI_PROJECT_DIR}/artifacts/release/$f.gz"
+        chmod u+x "${CI_PROJECT_DIR}/artifacts/release/$f"
+        ln -sf "${CI_PROJECT_DIR}/artifacts/release/$f" "$f"
+      done
+
+      ls -lah
+
+      # Prepare network. There are more convenient ways to do it if requisite
+      # services are set up (which they aren't in a simple docker runner),
+      # but probably also helpful for debugging to have this "explicit" for now.
+
+      sudo ip link del ipv6_ic_node0 || true
+      sudo ip link del ipv6_ic_node1 || true
+      sudo ip link del ipv6_ic || true
+
+      sudo ip tuntap add ipv6_ic_node0 mode tap user ubuntu
+      sudo ip link set dev ipv6_ic_node0 up
+
+      sudo ip tuntap add ipv6_ic_node1 mode tap user ubuntu
+      sudo ip link set dev ipv6_ic_node1 up
+
+      sudo ip link add name ipv6_ic type bridge
+      sudo ip link set ipv6_ic_node0 master ipv6_ic
+      sudo ip link set ipv6_ic_node1 master ipv6_ic
+      sudo ip link set dev ipv6_ic up
+
+      sudo ip addr add fd00:2:1:1:1::1/64 dev ipv6_ic
+
+      mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e"
+      # Actual test script, sets up VMs and drives the test.
+
+      GUESTOS_IMG="$(pwd)/disk.img"
+      cd "${CI_PROJECT_DIR}/scalability"
+      # Actual test script, sets up VMs and drives the test.
+      pip3 install --user -r requirements.txt
+      placebo -v -i "${CI_PROJECT_DIR}/ic-os/guestos/tests/*.py" -i "${CI_PROJECT_DIR}/gitlab-runner-tmp/**/*" -- \
+      "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-benchmarking-suite.py" \
+          --vmtoolscfg=internal \
+          --timeout "$E2E_TEST_TIMEOUT" \
+          --disk_image "$GUESTOS_IMG" \
+          --ic_admin_bin "${CI_PROJECT_DIR}/artifacts/release/ic-admin" \
+          --ic_workload_generator_bin "${CI_PROJECT_DIR}/artifacts/release/ic-workload-generator" \
+          --nns_canisters "${CI_PROJECT_DIR}/artifacts/canisters/" \
+          --ic_prep_bin "${CI_PROJECT_DIR}/artifacts/release/ic-prep" \
+          --install_nns_bin "${CI_PROJECT_DIR}/artifacts/release/ic-nns-init" \
+          --artifacts_path "${CI_PROJECT_DIR}/artifacts/release/" \
+          --testnet none \
+          --wg_testnet none
+
+
+guest-os-upgrade-to-self:
+  extends:
+    - .e2e-test-base
+  needs:
+    - guest-os-diskimg
+    - guest-os-updateimg-build
+    - cargo-build-release-linux-native
+    - cargo-build-canisters
+  artifacts:
+    paths:
+    - ic-os/guestos/test-out/e2e-upgrade-to-self
+  script:
+    - |
+      # Make sure the host has mounted necessary devices into the docker container.
+      # And check dependencies.
+      ls -lah /dev/kvm /dev/net/tun "${CI_PROJECT_DIR}/artifacts/release" "${CI_PROJECT_DIR}/ic-os/guestos/build-out"/{disk-img,update-img}
+
+      mkdir -p gitlab-runner-tmp; cd gitlab-runner-tmp
+
+      stat "${CI_PROJECT_DIR}/ic-os/guestos/build-out/update-img/update-img.tar.gz"
+      tar --sparse -xvf "${CI_PROJECT_DIR}/ic-os/guestos/build-out/disk-img/disk-img.tar.gz"
+
+      ls "${CI_PROJECT_DIR}/artifacts/canisters"
+      for canister in "${CI_PROJECT_DIR}"/artifacts/canisters/*.gz; do
+        gzip -d "${canister}"
+      done
+      ls "${CI_PROJECT_DIR}/artifacts/canisters"
+
+      for f in ic-prep ic-admin ic-nns-init ic-workload-generator; do
+        gzip -d "${CI_PROJECT_DIR}/artifacts/release/$f.gz"
+        chmod u+x "${CI_PROJECT_DIR}/artifacts/release/$f"
+        ln -sf "${CI_PROJECT_DIR}/artifacts/release/$f" "$f"
+      done
+
+      ls -lah
+
+      # Prepare network. There are more convenient ways to do it if requisite
+      # services are set up (which they aren't in a simple docker runner),
+      # but probably also helpful for debugging to have this "explicit" for now.
+
+      sudo ip link del ipv6_ic_node0 || true
+      sudo ip link del ipv6_ic_node1 || true
+      sudo ip link del ipv6_ic || true
+
+      sudo ip tuntap add ipv6_ic_node0 mode tap user ubuntu
+      sudo ip link set dev ipv6_ic_node0 up
+
+      sudo ip tuntap add ipv6_ic_node1 mode tap user ubuntu
+      sudo ip link set dev ipv6_ic_node1 up
+
+      sudo ip link add name ipv6_ic type bridge
+      sudo ip link set ipv6_ic_node0 master ipv6_ic
+      sudo ip link set ipv6_ic_node1 master ipv6_ic
+      sudo ip link set dev ipv6_ic up
+
+      sudo ip addr add fd00:2:1:1:1::1/64 dev ipv6_ic
+
+      # Output what image we are using:
+      GUESTOS_IMG="$(pwd)/disk.img"
+      UPGRADE_IMG="${CI_PROJECT_DIR}/ic-os/guestos/build-out/update-img/update-img-test.tar.gz"
+      echo "Initial GuestOS image: ${GUESTOS_IMG}"
+      echo "Upgrade GuestOS image: ${UPGRADE_IMG}"
+
+      mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-upgrade-to-self"
+      # Actual test script, sets up VMs and drives the test.
+      placebo -v -i "${CI_PROJECT_DIR}/ic-os/guestos/tests/*.py" -i "${CI_PROJECT_DIR}/gitlab-runner-tmp/**/*" -- \
+      "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-upgrade.py" \
+          --vmtoolscfg=internal \
+          --disk_image "${GUESTOS_IMG}" \
+          --ic_prep_bin "$(pwd)/ic-prep" \
+          --install_nns_bin "$(pwd)/ic-nns-init" \
+          --upgrade_tar "${UPGRADE_IMG}" \
+          --ic_admin_bin "$(pwd)/ic-admin" \
+          --nns_canisters "${CI_PROJECT_DIR}/artifacts/canisters/" \
+          --log_directory "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-upgrade-to-self" \
+          --timeout "$E2E_TEST_TIMEOUT" \
+          --ic_workload_generator_bin "$(pwd)/ic-workload-generator" \
+          --is_upgrade_test
+
+guest-os-upgrade-to-master:
+  extends:
+    - .e2e-test-base
+  needs:
+    - guest-os-diskimg
+    - guest-os-updateimg-build
+    - cargo-build-release-linux-native
+    - cargo-build-canisters
+  artifacts:
+    paths:
+    - ic-os/guestos/test-out/e2e-upgrade-to-master
+  script:
+    - |
+      # Make sure the host has mounted necessary devices into the docker container.
+      # And check dependencies.
+      ls -lah /dev/kvm /dev/net/tun "${CI_PROJECT_DIR}/artifacts/release" "${CI_PROJECT_DIR}/ic-os/guestos/build-out"/{disk-img,update-img}
+
+      mkdir -p gitlab-runner-tmp; cd gitlab-runner-tmp
+
+      # Download Guest OS from master
+      mkdir guestos-master
+
+      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --merge-base=post-merge-tests-passed --remote-path=guest-os --out=guestos-master --latest-to
+
+      # temporary workaround until update-img.tar.gz is always in update-img/ on master
+      (cd guestos-master;
+       if [[ -r update-img.tar.gz ]]; then mkdir -p update-img; mv update-img.tar.gz update-img/; fi
+      )
+
+      ls -R guestos-master
+
+      echo "Checking if upgrade image could be downloaded"
+      stat guestos-master/update-img/update-img.tar.gz
+
+      ls "${CI_PROJECT_DIR}/ic-os/guestos/build-out"/{disk-img,update-img}
+      stat "${CI_PROJECT_DIR}/ic-os/guestos/build-out/update-img/update-img.tar.gz"
+      tar --sparse -xvf "${CI_PROJECT_DIR}/ic-os/guestos/build-out/disk-img/disk-img.tar.gz"
+
+      ls "${CI_PROJECT_DIR}/artifacts/canisters"
+      for canister in "${CI_PROJECT_DIR}"/artifacts/canisters/*.gz; do
+        gzip -d "${canister}"
+      done
+      ls "${CI_PROJECT_DIR}/artifacts/canisters"
+
+      for f in ic-prep ic-admin ic-nns-init ic-workload-generator; do
+        gzip -d "${CI_PROJECT_DIR}/artifacts/release/$f.gz"
+        chmod u+x "${CI_PROJECT_DIR}/artifacts/release/$f"
+        ln -sf "${CI_PROJECT_DIR}/artifacts/release/$f" "$f"
+      done
+
+      ls -lah
+
+      # Prepare network. There are more convenient ways to do it if requisite
+      # services are set up (which they aren't in a simple docker runner),
+      # but probably also helpful for debugging to have this "explicit" for now.
+
+      sudo ip link del ipv6_ic_node0 || true
+      sudo ip link del ipv6_ic_node1 || true
+      sudo ip link del ipv6_ic || true
+
+      sudo ip tuntap add ipv6_ic_node0 mode tap user ubuntu
+      sudo ip link set dev ipv6_ic_node0 up
+
+      sudo ip tuntap add ipv6_ic_node1 mode tap user ubuntu
+      sudo ip link set dev ipv6_ic_node1 up
+
+      sudo ip link add name ipv6_ic type bridge
+      sudo ip link set ipv6_ic_node0 master ipv6_ic
+      sudo ip link set ipv6_ic_node1 master ipv6_ic
+      sudo ip link set dev ipv6_ic up
+
+      sudo ip addr add fd00:2:1:1:1::1/64 dev ipv6_ic
+
+      # Output what image we are using:
+      GUESTOS_IMG="$(pwd)/disk.img"
+      UPGRADE_IMG="$(pwd)/guestos-master/update-img/update-img.tar.gz"
+      echo "Initial GuestOS image: ${GUESTOS_IMG}"
+      echo "Upgrade GuestOS image: ${UPGRADE_IMG}"
+
+      mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-upgrade-to-master"
+      # Actual test script, sets up VMs and drives the test.
+      placebo -v -i "${CI_PROJECT_DIR}/ic-os/guestos/tests/*.py" -i "${CI_PROJECT_DIR}/gitlab-runner-tmp/**/*" -- \
+      "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-upgrade.py" \
+          --vmtoolscfg=internal \
+          --disk_image "${GUESTOS_IMG}" \
+          --ic_prep_bin "$(pwd)/ic-prep" \
+          --install_nns_bin "$(pwd)/ic-nns-init" \
+          --upgrade_tar "${UPGRADE_IMG}" \
+          --ic_admin_bin "$(pwd)/ic-admin" \
+          --nns_canisters "${CI_PROJECT_DIR}/artifacts/canisters/" \
+          --log_directory "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-upgrade-to-master" \
+          --timeout "$E2E_TEST_TIMEOUT" \
+          --ic_workload_generator_bin "$(pwd)/ic-workload-generator" \
+          --is_upgrade_test
+
+guest-os-upgrade-from-master:
+  extends:
+    - .e2e-test-base
+  needs:
+    - guest-os-diskimg
+    - guest-os-updateimg-build
+    - cargo-build-release-linux-native
+    - cargo-build-canisters
+  artifacts:
+    paths:
+    - ic-os/guestos/test-out/e2e-upgrade-from-master
+  script:
+    - |
+      # Make sure the host has mounted necessary devices into the docker container.
+      # And check dependencies.
+      ls -lah /dev/kvm /dev/net/tun "${CI_PROJECT_DIR}/artifacts/release" "${CI_PROJECT_DIR}/ic-os/guestos/build-out"/{disk-img,update-img}
+
+      mkdir -p gitlab-runner-tmp; cd gitlab-runner-tmp
+
+      # Download Guest OS from master
+      mkdir -p guestos-master
+      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --merge-base=post-merge-tests-passed --remote-path=guest-os --out=guestos-master --latest-to
+
+      ls guestos-master
+      (cd guestos-master;
+       # temporary workaround until disk-img.tar.gz is always in disk-img/ on master
+       if [[ -r disk-img.tar.gz ]]; then mkdir -p disk-img; mv disk-img.tar.gz disk-img/; fi
+       tar --sparse -xvf disk-img/disk-img.tar.gz)    # generates disk.img
+      ls -R guestos-master
+
+      # Get tools and NNS canisters from master
+      mkdir -p artifacts-master
+      mkdir -p canisters-master
+      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --merge-base=post-merge-tests-passed --remote-path=release --out=artifacts-master --latest-to
+      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --merge-base=post-merge-tests-passed --remote-path=canisters --out=canisters-master --latest-to
+
+      (cd artifacts-master; for f in *.gz; do gunzip "$f"; done; chmod u+x ./*)
+      (cd canisters-master; for f in *.gz; do gunzip "$f"; done)
+      ls -R artifacts-master
+      ls -R canisters-master
+
+      ls "${CI_PROJECT_DIR}/ic-os/guestos/build-out/update-img"
+      stat "${CI_PROJECT_DIR}/ic-os/guestos/build-out/update-img/update-img.tar.gz"
+
+      ls "${CI_PROJECT_DIR}/artifacts/canisters"
+      for canister in "${CI_PROJECT_DIR}"/artifacts/canisters/*.gz; do
+        gzip -d "${canister}"
+      done
+      ls "${CI_PROJECT_DIR}/artifacts/canisters"
+
+      for f in ic-prep ic-admin ic-nns-init ic-workload-generator; do
+        gzip -d "${CI_PROJECT_DIR}/artifacts/release/$f.gz"
+        chmod u+x "${CI_PROJECT_DIR}/artifacts/release/$f"
+        ln -sf "${CI_PROJECT_DIR}/artifacts/release/$f" "$f"
+      done
+
+      ls -lah
+
+      # Prepare network. There are more convenient ways to do it if requisite
+      # services are set up (which they aren't in a simple docker runner),
+      # but probably also helpful for debugging to have this "explicit" for now.
+
+      sudo ip link del ipv6_ic_node0 || true
+      sudo ip link del ipv6_ic_node1 || true
+      sudo ip link del ipv6_ic || true
+
+      sudo ip tuntap add ipv6_ic_node0 mode tap user ubuntu
+      sudo ip link set dev ipv6_ic_node0 up
+
+      sudo ip tuntap add ipv6_ic_node1 mode tap user ubuntu
+      sudo ip link set dev ipv6_ic_node1 up
+
+      sudo ip link add name ipv6_ic type bridge
+      sudo ip link set ipv6_ic_node0 master ipv6_ic
+      sudo ip link set ipv6_ic_node1 master ipv6_ic
+      sudo ip link set dev ipv6_ic up
+
+      sudo ip addr add fd00:2:1:1:1::1/64 dev ipv6_ic
+
+      # Output what image we are using:
+      GUESTOS_IMG="$(pwd)/guestos-master/disk.img"
+      UPGRADE_IMG="${CI_PROJECT_DIR}/ic-os/guestos/build-out/update-img/update-img.tar.gz"
+      echo "Initial GuestOS image: ${GUESTOS_IMG}"
+      echo "Upgrade GuestOS image: ${UPGRADE_IMG}"
+
+      mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-upgrade-from-master"
+      # Actual test script, sets up VMs and drives the test.
+      placebo -v -i "${CI_PROJECT_DIR}/ic-os/guestos/tests/*.py" -i "${CI_PROJECT_DIR}/gitlab-runner-tmp/**/*" -- \
+      "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-upgrade.py" \
+          --vmtoolscfg=internal \
+          --disk_image "${GUESTOS_IMG}" \
+          --ic_prep_bin "$(pwd)/artifacts-master/ic-prep" \
+          --install_nns_bin "$(pwd)/artifacts-master/ic-nns-init" \
+          --upgrade_tar "${UPGRADE_IMG}" \
+          --ic_admin_bin "$(pwd)/artifacts-master/ic-admin" \
+          --nns_canisters "$(pwd)/canisters-master/" \
+          --log_directory "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-upgrade-from-master" \
+          --timeout "$E2E_TEST_TIMEOUT" \
+          --ic_workload_generator_bin "$(pwd)/ic-workload-generator" \
+          --is_upgrade_test
+
+
+guest-os-upgrade-app-subnet-to-self:
+  extends:
+    - .e2e-test-base
+  # Test is flaky as of 2021-15-13
+  # Example pipeline: https://gitlab.com/dfinity-lab/core/dfinity/-/pipelines/302297504
+  retry: 1
+  needs:
+    - guest-os-diskimg
+    - guest-os-updateimg-build
+    - cargo-build-release-linux-native
+    - cargo-build-canisters
+  artifacts:
+    paths:
+    - ic-os/guestos/test-out/e2e-upgrade-app-subnet-to-self
+  script:
+    - |
+      # Make sure the host has mounted necessary devices into the docker container.
+      # And check dependencies.
+      ls -lah /dev/kvm /dev/net/tun "${CI_PROJECT_DIR}/artifacts/release" "${CI_PROJECT_DIR}/ic-os/guestos/build-out"/{disk-img,update-img}
+
+      mkdir -p gitlab-runner-tmp; cd gitlab-runner-tmp
+
+      ls "${CI_PROJECT_DIR}/ic-os/guestos/build-out/update-img"
+      stat "${CI_PROJECT_DIR}/ic-os/guestos/build-out/update-img/update-img.tar.gz"
+      tar --sparse -xvf "${CI_PROJECT_DIR}/ic-os/guestos/build-out/disk-img/disk-img.tar.gz"
+
+      ls "${CI_PROJECT_DIR}/artifacts/canisters"
+      for canister in "${CI_PROJECT_DIR}"/artifacts/canisters/*.gz; do
+        gzip -d "${canister}"
+      done
+      ls "${CI_PROJECT_DIR}/artifacts/canisters"
+
+      for f in ic-prep ic-admin ic-nns-init ic-workload-generator; do
+        gzip -d "${CI_PROJECT_DIR}/artifacts/release/$f.gz"
+        chmod u+x "${CI_PROJECT_DIR}/artifacts/release/$f"
+        ln -sf "${CI_PROJECT_DIR}/artifacts/release/$f" "$f"
+      done
+
+      ls -lah
+
+      # Prepare network. There are more convenient ways to do it if requisite
+      # services are set up (which they aren't in a simple docker runner),
+      # but probably also helpful for debugging to have this "explicit" for now.
+
+      sudo ip link del ipv6_ic_node0 || true
+      sudo ip link del ipv6_ic_node1 || true
+      sudo ip link del ipv6_ic || true
+
+      sudo ip tuntap add ipv6_ic_node0 mode tap user ubuntu
+      sudo ip link set dev ipv6_ic_node0 up
+
+      sudo ip tuntap add ipv6_ic_node1 mode tap user ubuntu
+      sudo ip link set dev ipv6_ic_node1 up
+
+      sudo ip link add name ipv6_ic type bridge
+      sudo ip link set ipv6_ic_node0 master ipv6_ic
+      sudo ip link set ipv6_ic_node1 master ipv6_ic
+      sudo ip link set dev ipv6_ic up
+
+      sudo ip addr add fd00:2:1:1:1::1/64 dev ipv6_ic
+
+      # Output what image we are using:
+      GUESTOS_IMG="$(pwd)/disk.img"
+      UPGRADE_IMG="${CI_PROJECT_DIR}/ic-os/guestos/build-out/update-img/update-img-test.tar.gz"
+      echo "Initial GuestOS image: ${GUESTOS_IMG}"
+      echo "Upgrade GuestOS image: ${UPGRADE_IMG}"
+
+      mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-upgrade-app-subnet-to-self"
+      # Actual test script, sets up VMs and drives the test.
+      placebo -v -i "${CI_PROJECT_DIR}/ic-os/guestos/tests/*.py" -i "${CI_PROJECT_DIR}/gitlab-runner-tmp/**/*" -- \
+      "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-upgrade-appnet.py" \
+          --vmtoolscfg=internal \
+          --disk_image "${GUESTOS_IMG}" \
+          --ic_prep_bin "$(pwd)/ic-prep" \
+          --install_nns_bin "$(pwd)/ic-nns-init" \
+          --upgrade_tar "${UPGRADE_IMG}" \
+          --ic_admin_bin "$(pwd)/ic-admin" \
+          --nns_canisters "${CI_PROJECT_DIR}/artifacts/canisters/" \
+          --log_directory "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-upgrade-app-subnet-to-self" \
+          --timeout "$E2E_TEST_TIMEOUT" \
+          --ic_workload_generator_bin "$(pwd)/ic-workload-generator" \
+          --is_upgrade_test
+
+.upgraded-system-tests:
+  extends:
+    - .e2e-test-base
+  needs:
+    - guest-os-diskimg
+    - cargo-build-release-linux-native
+  artifacts:
+    when: always
+    paths:
+      - "test-results.json"
+      - "logs/"
+  timeout: 30m
+  allow_failure: true
+  script:
+    - |
+      BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
+      mkdir -p "$BASE_DIR"
+      # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
+      # Unstructured logs, i.e. those which bypassed the logger and were outputed directly to stdout/stderr,
+      # are forwarded to a separate file.
+      # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
+      # Hence, the fourth column can be used to distinguish structured from unstructerd logs.
+      $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh" \
+        --suite "${SUITE_NAME}" \
+        --log-base-dir "${BASE_DIR}" \
+        --git-use-current-commit \
+      | tee "${BASE_DIR}/unstructured-logs.log" \
+      | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
+
+upgraded-system-tests-main-suite:
+  extends: .upgraded-system-tests
+  variables:
+    SUITE_NAME: "main_suite"

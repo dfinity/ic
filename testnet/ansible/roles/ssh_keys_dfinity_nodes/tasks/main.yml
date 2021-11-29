@@ -1,0 +1,5 @@
+- name: import admin tasks
+  import_tasks: "admin.yml"
+  when: node_type == "dfinity"
+  tags:
+  - ssh_keys_dfinity_nodes

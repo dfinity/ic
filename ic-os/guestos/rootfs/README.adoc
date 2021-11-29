@@ -1,0 +1,182 @@
+= Ubuntu base OS development
+
+The Ubuntu-based IC OS is built by:
+
+* creating a root filesystem image using docker -- this is based on the
+  official Ubuntu docker image and simply adds the OS kernel plus our
+  required services to it
+
+* converting this root filesystem into filesystem images for +/+ and +/boot+
+  via +mke2fs+
+
+The build instructions in the Dockerfile itself should be straight-forward
+to read, required additional steps can simply be amended.
+
+The following template directories are simply copied verbatim onto the target
+system:
+
+* +etc+
+* +opt+
+* +boot+
+
+If you simply need to add files to the system, simply drop them into the
+appropriate target directory. At present, all dfinity-specific binaries
+and scripts simply go to +/opt/ic/bin+.
+
+If you install new systemd services, drop an appropriate unit file into
+/etc/systemd/system and add an activation to the Dockerfile (maybe the
+last step could be automated based on the contents of the directory).
+
+Various more detailed implementation aspects of the system are documented
+below.
+
+== Dynamic file system mounts
+
+The exact partitions used for the +/boot+ and +/var+ filesystems depends on
+what root partition the system is running from:
+
+* A: +/dev/vda4+ -> +/boot+, +/dev/vda5+ -> +/+, +/dev/vda6+ -> +/var+
+* B: +/dev/vda7+ -> +/boot+, +/dev/vda8+ -> +/+, +/dev/vda9+ -> +/var+
+
+The system will be informed via bootloader command line whether it is
+running as A or B. Since the root filesystem is conceptually supposed to
+be immutable, the dynamic mappings cannot be stored in +/etc/fstab+.
+
+This is addressed using a generator in +/etc/systemd/system-generator/mount-generator+:
+Systemd runs these during early boot, and it will dynamically generate an
+appropriate +boot.mount+ unit based on the boot command-line.
+
+== First boot actions
+
+Several preparatory operations are performed when the system boots for the
+first time. This documents what actions are performed presently and might
+serve as a guide on how to add further actions.
+
+=== ssh key generation
+
+The +setup-ssh-keys+ (and corresponding shell script) service performs one of
+two things: If this is the first boot ever (on a newly installed system), it
+generates ssh keys and stashes them away in a location that is preserved across
+upgrades. On first boot after an upgrade, it integrates the keys from their
+storage location into the running system. The corr
+
+=== Encrypted data store setup
+
+The partition number 10 is used as encrypted LVM containing at least the
++shared-data+ LV to serve as backing store for +/var/lib/ic/data+. The
+sequence to set it up is in principle not complicated, but due to the
+event-driven nature of systemd must be scattered across multiple service
+units and scripts:
+
+* Creating partition and setting up LUKS inside it: This is done by
+  the service +setup-encryption+ (and corresponding shell script). It creates
+  the partition number 10 (unless it exists already), and sets it LUKS
+  using a newly-generated random key. The key is stored for re-use across
+  reboots and upgrades.
+
+* Systemd opens the encrypted block device as per configuration in +/etc/crypttab+
+
+* Creating VG and LV as needed: The service +setup-lvs+ (and corresponding
+  shell script) creates a volume group named +store+ in the encrypted block device
+  (unless it exists already) and makes sure that the logical volume
+  +shared-data+ exists inside this volume group
+
+* Systemd opens and activates all logical volumes
+
+* The service +setup-shared-data+ creates a filesystem in the +store/shared-data+
+  logical volume (unless it contain a filesystem already). Similarly,
+  services +setup-shared-crypto+ and +setup-shared-backup+ creates
+  filesystems in the +store/shared-crypto+ and +store/shared-backup+.
+
+* Systemd then proceeds to fsck and mount the +shared-data+ volume as
+  +/var/lib/ic/data+, the +shared-crypto+ volume as +/var/lib/ic/crypto+,
+  and +shared-backup+ volume as +/var/lib/ic/backup+
+
+All of the above actions are chained using appropriate +Before+/+RequiredBy+
+and +After+/+Requires+ dependencies expressed in the service definitions.
+
+=== /var filesystem setup
+
+Partition numbers 6 or 9 (for system A and system B, respectively) are used
+for the /var filesystem hierarchy. It is set up as an encrypted filesystem
+as well, but its lifetime is limited to the system that it is associated with:
+If system A is upgraded to system B, then the /var partition associated of
+system B is set up from scratch on first boot of system B. The (now unused)
+/var partition of system A will be scrapped and overwritten on next upgrade
+written into system A again.
+
+The partition is set up as an encrypted partition as well (since IC intermediary
+data might leak to it). This is facilitated in the following way:
+
+* The script +/opt/ic/bin/setup-var-encryption.sh+ will check if the partition
+  is set up correctly already. If it is, then it is simply used as-is.
+  Otherwise, it is reformatted as an encrypted partition, and a filesystem
+  is put in. The filesystem is initialized from the filesystem state of
+  the /var subtree that is part of the root filesystem. (So this effectively
+  serves as a template defining initial structure of /var).
+
+* The unit file triggering this script is dynamically generated through
+  +/etc/systemd/system-generators/mount-generator+: The generater will
+  check which partition is the correct one to use and synthesize a proper
+  unit file.
+
+When an upgrade is installed into either system slot A or B, it is ensured
+that the corresponding /var partition is wiped such that the newly booted
+system will set up its own /var filesystem correctly again.
+
+=== IC bootstrap
+
+The +bootstrap-ic-node+ service (and its corresponding) shell script performs
+customization of the installation using node-specific information. This includes:
+
+* network environment
+
+* keys or registration parameters for the IC node software
+
+For all of the above, the system expects a file +ic-bootstrap.tar+ - either
+already present at +/mnt+ or supplied on a removable storage medium (e.g.
+a USB stick or an optical medium).
+
+==== Network configuration
+
+The network configuration is performed using a file +network.conf+ in the
+bootstrap tarball. It must contain lines of "key=value" statements,
+with the following keys supported:
+
+* ipv6_address: address used for the IC replica service
+* ipv6_gateway: gateway used for the primary interface
+* name_servers: space-separated list of DNS servers
+
+This configuration file is simply copied to the +config+ partition and evaluated
+on each boot to set up network.
+
+==== Journalbeat configuration
+
+The Journalbeat configuration is performed using a file +journalbeat.conf+ in
+the bootstrap tarball. It must contain lines of "key=value= statements,
+with the following keys supported:
+
+* journalbeat_hosts:    space-separated list of logging hosts
+
+== SELinux
+
+The system will (eventually) run SELinux in enforcing mode for security. This
+requires that all system objects including all files on filesystems are
+labelled appropriately. The "usual" way of setting up such a system is
+to run it in "permissive" mode first on top of an (SELinux-less) base
+install, however this would not work for our cases as we never want the
+system to be in anything else than "enforcing" mode (similarly as for
+embedded systems in general).
+
+Instead, SELinux is installed using docker into the target system, but
+without applying any file labels (which would not be possible in docker
+anyways). The labelling is then applied when extracting the docker image
+into a regular filesystem image, with labels applied as per
++/etc/selinux/default/contexts/files/file_contexts+ in the file system
+tree.
+
+Since the system has never run, some files that would have "usually" been
+created do not exist yet and are not labelled -- to account for this,
+a small number of additional permissions not foreseen in the reference
+policy are required -- this is contained in module +fixes.te+ and set
+up as part of the +prep.sh+ script called in docker.

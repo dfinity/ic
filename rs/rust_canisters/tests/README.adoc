@@ -1,0 +1,3 @@
+These are a few tests + benchmarks to make sure that rust canisters still work as expected.
+
+They should only be run in release mode, in debug mode the install ingress message takes a very long time. This both annoys people who want CI to run quickly and will time out after 30 seconds.

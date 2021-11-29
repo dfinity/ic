@@ -41,7 +41,7 @@ use ic_types::{
     batch::{ValidationContext, XNetPayload},
     registry::{connection_endpoint::ConnectionEndpoint, RegistryClientError},
     xnet::{CertifiedStreamSlice, StreamIndex},
-    Height, NodeId, NumBytes, RegistryVersion, SubnetId,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};
@@ -849,6 +849,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         // just behind.
         self.refill_task_handle.trigger_refill();
 
+        debug_assert!(payload.count_bytes() <= byte_limit.get() as usize);
         payload
     }
 

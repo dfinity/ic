@@ -8,6 +8,8 @@ pub use ic_types::crypto::error::{
     InvalidArgumentError, KeyNotFoundError, MalformedDataError, MalformedPublicKeyError,
 };
 use ic_types::crypto::{AlgorithmId, CryptoError};
+use serde::{Deserialize, Serialize};
+
 mod conversions;
 mod imported_conversions;
 
@@ -15,7 +17,7 @@ mod imported_conversions;
 mod tests;
 
 /// Cognate to CryptoError::MalformedSecretKey
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MalformedSecretKeyError {
     pub algorithm: AlgorithmId,
     pub internal_error: String,
@@ -31,9 +33,15 @@ pub struct MalformedPopError {
 
 /// A size is unsupported by this machine; this is not a protocol error as other
 /// machines may be able to complete this instruction successfully.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SizeError {
     pub message: String,
+}
+
+/// An internal error.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InternalError {
+    pub internal_error: String,
 }
 
 /// Creation of an ephemeral key failed.

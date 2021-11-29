@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+set -exuo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+VERSION=$(git rev-parse --verify HEAD)
+
+"$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
+
+cd "$REPO_ROOT"
+docker image build -t ic-build-src:$VERSION -f- . <<EOF
+FROM dfinity/ic-build:latest
+COPY --chown=ubuntu:ubuntu . /ic
+EOF
+
+export IMAGE=ic-build-src:$VERSION
+"$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-all

@@ -49,7 +49,7 @@ pub struct NodeManagerArgs {
 
     /// The path to the version file.
     #[structopt(long, parse(from_os_str))]
-    pub(crate) version_file: Option<PathBuf>,
+    pub(crate) version_file: PathBuf,
 }
 
 impl NodeManagerArgs {

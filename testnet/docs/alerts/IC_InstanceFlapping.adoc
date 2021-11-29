@@ -1,0 +1,35 @@
+= IC_InstanceFlapping
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+An instance of a job (i.e., one process for the job running on one
+machine) has restarted more than 3 times in the last hour.
+
+== Impact
+
+This is not generally immediately service threatening, unless it is
+accompanied by a more serious alert indicating that multiple instances of
+the job have been failing simultaneously.
+
+== Possible causes (non-exhaustive)
+
+- Someone has deliberately restarted this particular instance more than
+  3 times in the last hour -- perhaps they've botched several roll outs?
+
+- The instance is slowly crashlooping for some reason. Perhaps running out
+  of resources, or repeatedly hitting a bug.
+
+- Buggy code was recently deployed, and this is the canary instance that
+  is failing.
+
+== Troubleshooting and remediation (non-exhaustive)
+
+- Review the logs for the instance, which may indicate why it is restarting.
+
+- Review the machine's resource usage, perhaps the instance is being killed
+  to free up resources
+
+- If associated with a recent binary or configuration change, assess whether
+  the change may be responsible, and pause it as necessary.

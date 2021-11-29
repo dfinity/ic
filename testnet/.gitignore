@@ -1,0 +1,6 @@
+**/.vagrant/**
+nodemanager
+./replica
+ic-prep
+ic-admin
+ic-workload-generator

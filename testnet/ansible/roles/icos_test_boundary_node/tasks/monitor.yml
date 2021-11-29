@@ -1,0 +1,55 @@
+---
+- name: install journalbeat repo
+  apt:
+    deb: "https://artifacts.elastic.co/downloads/beats/journalbeat/journalbeat-{{ journalbeat_version }}-amd64.deb"
+
+- name: install journalbeat
+  package:
+    name: journalbeat
+    state: present
+
+- name: setup journalbeat config
+  vars:
+    elasticsearch_index_prefix: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "journalbeat.yml"
+    dest: "/etc/journalbeat/journalbeat.yml"
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - restart journalbeat
+
+- name: install metricbeat repo
+  apt:
+    deb: "https://artifacts.elastic.co/downloads/beats/metricbeat/metricbeat-{{ metricbeat_version }}-amd64.deb"
+
+- name: install metricbeat
+  package:
+    name: metricbeat
+    state: present
+
+- name: setup metricbeat config
+  template:
+    src: "metricbeat.yml"
+    dest: "/etc/metricbeat/metricbeat.yml"
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - restart metricbeat
+
+
+- meta: flush_handlers
+
+- name: ensure journalbeat started
+  service:
+    name: journalbeat
+    state: started
+    enabled: true
+
+- name: ensure metricbeat started
+  service:
+    name: metricbeat
+    state: started
+    enabled: true

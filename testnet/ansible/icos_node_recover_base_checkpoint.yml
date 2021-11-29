@@ -1,0 +1,22 @@
+---
+# By default this will stress-test all nodes. Make sure you limit the nodes to be stress-tested by
+# providing an argument to the playbook --limit <node1,node2,...>
+- hosts: nodes
+  gather_facts: false
+  become: true
+  vars_files:
+    - "config/common.yml"
+
+  tasks:
+    - name: Clean up checkpoints directory.
+      file:
+        path: /var/lib/ic/data/ic_state/checkpoints
+        state: absent
+
+    - name: Check if backup checkpoint exists.
+      stat: path=/var/lib/ic/data/ic_state/test_backup_checkpoint/checkpoints
+      register: backup_checkpoint_dir
+
+    - name: Copy backup checkpoint to checkpoints directory.
+      command: cp -r /var/lib/ic/data/ic_state/test_backup_checkpoint/checkpoints /var/lib/ic/data/ic_state
+      when: backup_checkpoint_dir.stat.exists

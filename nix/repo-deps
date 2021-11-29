@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#
+# USAGE: ./nix/repo-deps NIX_FILE ATTRIBUTE
+#
+# This script will print all the files and directories from this repository
+# required to build ATTRIBUTE from NIX_FILE. For example:
+
+# $ /nix/repo-deps ./default.nix dfinity.rs.ic-replica
+# /nix/default.nix
+# /nix/overlays/cargo2nix.nix
+# /nix/overlays/cargo2nix/overlay/default.nix
+# /nix/overlays/cargo2nix/overlay/lib/default.nix
+# ...
+# /rs/Cargo.nix
+# /rs/artifact_manager
+# /rs/artifact_pool
+# ...
+# /rs/replica
+# /rs/types/ic00_types
+# /rs/types/types
+# /rs/types/wasm_types
+# /rs/utils
+# /rs/validator
+# /rs/wasm_utils
+# /rs/workspace.nix
+#
+# (Some output has been omitted from the above to make it more readable).
+# You can see that the build of the replica requires a few Nix files
+# and depends on a number of cargo crates found under the rs directory.
+#
+# It's implemented by evaluating the given Nix attribute and printing the path
+# of every import of a nix file or read of a file or directory from this
+# repository.
+#
+# The latter is done in ./repo-deps.nix by overriding the `import`, `readFile`,
+# `readDir` and `path` Nix builtins and printing whenever they open a file or
+# directory from this repository.
+file="$1"
+job="$2"
+nix-instantiate "$(dirname ${BASH_SOURCE[0]})/repo-deps.nix" \
+    --arg file "$file" -A "$job" 2>&1 1>/dev/null \
+    | head -n -1 | sed -E -e "/warning:|building '/d" -e 's/trace: //' | sort | uniq

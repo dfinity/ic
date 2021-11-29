@@ -1,7 +1,7 @@
 // This is the official Ledger interface that is guaranteed to be backward compatible.
 
-// Amount of ICP tokens, measured in 10^-8 of a token.
-type ICP = record {
+// Amount of tokens, measured in 10^-8 of a token.
+type Tokens = record {
      e8s : nat64;
 };
 
@@ -10,9 +10,9 @@ type TimeStamp = record {
     timestamp_nanos: nat64;
 };
 
-// Address is a 32-byte array.
+// AccountIdentifier is a 32-byte array.
 // The first 4 bytes is big-endian encoding of a CRC32 checksum of the last 28 bytes.
-type Address = blob;
+type AccountIdentifier = blob;
 
 // Subaccount is an arbitrary 32-byte byte array.
 // Ledger uses subaccounts to compute the source address, which enables one
@@ -32,17 +32,17 @@ type TransferArgs = record {
     // See comments for the `Memo` type.
     memo: Memo;
     // The amount that the caller wants to transfer to the destination address.
-    amount: ICP;
+    amount: Tokens;
     // The amount that the caller pays for the transaction.
     // Must be 10000 e8s.
-    fee: ICP;
+    fee: Tokens;
     // The subaccount from which the caller wants to transfer funds.
     // If null, the ledger uses the default (all zeros) subaccount to compute the source address.
     // See comments for the `SubAccount` type.
     from_subaccount: opt SubAccount;
-    // The destination address.
+    // The destination account.
     // If the transfer is successful, the balance of this address increases by `amount`.
-    to: Address;
+    to: AccountIdentifier;
     // The point in time when the caller created this request.
     // If null, the ledger uses current IC time as the timestamp.
     created_at_time: opt TimeStamp;
@@ -51,9 +51,9 @@ type TransferArgs = record {
 type TransferError = variant {
     // The fee that the caller specified in the transfer request was not the one that ledger expects.
     // The caller can change the transfer fee to the `expected_fee` and retry the request.
-    BadFee : record { expected_fee : ICP; };
+    BadFee : record { expected_fee : Tokens; };
     // The account specified by the caller doesn't have enough funds.
-    InsufficientFunds : record { balance: ICP; };
+    InsufficientFunds : record { balance: Tokens; };
     // The request is too old.
     // The ledger only accepts requests created within 24 hours window.
     // This is a non-recoverable error.
@@ -73,7 +73,7 @@ type TransferResult = variant {
 
 // Arguments for the `account_balance` call.
 type AccountBalanceArgs = record {
-    account: Address;
+    account: AccountIdentifier;
 };
 
 service : {
@@ -82,6 +82,6 @@ service : {
   // When successful, returns the index of the block containing the transaction.
   transfer : (TransferArgs) -> (TransferResult);
 
-  // Returns the amount of ICP on the specified account.
-  account_balance : (AccountBalanceArgs) -> (ICP) query;
+  // Returns the amount of Tokens on the specified account.
+  account_balance : (AccountBalanceArgs) -> (Tokens) query;
 }

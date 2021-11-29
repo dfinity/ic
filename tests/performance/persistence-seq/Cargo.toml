@@ -1,0 +1,19 @@
+[package]
+name = "perf-persistence-seq"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+default-run = "main"
+
+[dependencies]
+dfn_core = { path = "../../../rs/rust_canisters/dfn_core" }
+
+[profile.release]
+lto = true
+opt-level = 'z'
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
+test = false
+target = "wasm32-unknown-unknown"

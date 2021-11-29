@@ -1,0 +1,20 @@
+
+appenders:
+  # An appender named "stdout" that writes to stdout
+  stdout:
+    kind: console
+    encoder:
+      pattern: "{d(%H:%M:%S%.6f)} {h({l})} [{T}] {t} - {m}{n}"
+
+# Set the default logging level to "warn" and attach the "stdout" appender to the root
+root:
+  level: warn
+  appenders:
+    - stdout
+
+loggers:
+  # Raise the log level for our logs
+  ic_rosetta_api:
+    level: warn
+  rosetta_api_tests:
+    level: warn

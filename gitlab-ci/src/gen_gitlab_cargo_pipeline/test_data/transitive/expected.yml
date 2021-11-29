@@ -1,0 +1,14 @@
+include:
+  - local: /gitlab-ci/config/00--child-pipeline-root-unprotected.yml
+
+bar:
+  extends: .cargo-crate-test
+
+foo:
+  extends: .cargo-crate-test
+
+leaf1:
+  extends: .cargo-crate-test
+
+leaf2:
+  extends: .cargo-crate-test

@@ -1,0 +1,21 @@
+---
+- hosts: localhost
+  any_errors_fatal: yes
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Check action
+      fail: msg="'ic_action' not given, valid options are kill-replica, add-drops, add-delay, limit-bandwidth or reset."
+      when: ic_action is not defined or ic_action not in ["kill-replica", "add-drops", "add-delay", "limit-bandwidth", "reset"]
+
+# By default this will stress-test all nodes. Make sure you limit the nodes to be stress-tested by
+# providing an argument to the playbook --limit <node1,node2,...>
+- hosts: nodes
+  gather_facts: true
+  become: true
+  vars_files:
+    - "config/common.yml"
+
+  roles:
+    - role: icos_node_stress

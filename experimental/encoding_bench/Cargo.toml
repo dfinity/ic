@@ -1,0 +1,41 @@
+[package]
+name = "encoding_bench"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bson = "0.14"
+capnp = "0.12"
+prost = "0.6"
+prost-types = "0.6"
+serde = { version = "1", features = ['derive'] }
+serde_json = "1"
+serde_cbor = "0.11"
+serde_bytes = "0.11"
+serde_repr = "0.1"
+flatbuffers = "0.6.1"
+bincode = "1.2.1"
+thrift = "0.13.0"
+ordered-float = "1.0"
+try_from = "0.3"
+avro-rs = "0.7"
+rmp-serde = "0.14.3"
+# See https://issues.apache.org/jira/browse/THRIFT-5131
+integer-encoding = "=1.0.8"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[build-dependencies]
+capnpc = "0.12"
+prost-build = "0.6.1"
+
+[[bench]]
+name = "encoding_benchmark"
+harness = false
+
+[profile.release]
+debug = true

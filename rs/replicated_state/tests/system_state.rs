@@ -1,9 +1,10 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_interfaces::messages::CanisterInputMessage;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{DEFAULT_QUEUE_CAPACITY, ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
-    testing::SystemStateTesting,
-    SystemState,
+    testing::{CanisterQueuesTesting, SystemStateTesting},
+    InputQueueType, SystemState,
 };
 use ic_test_utilities::types::{
     ids::{canister_test_id, user_test_id},
@@ -40,7 +41,7 @@ fn correct_charging_target_canister_for_a_response() {
     // Enqueue the Request.
     system_state
         .queues_mut()
-        .push_input(QueueIndex::from(0), request)
+        .push_input(QueueIndex::from(0), request, InputQueueType::RemoteSubnet)
         .unwrap();
 
     // Assume it was processed and enqueue a Response.
@@ -76,6 +77,7 @@ fn induct_messages_to_self_in_running_status_works() {
     system_state.induct_messages_to_self(
         CANISTER_AVAILABLE_MEMORY,
         &mut SUBNET_AVAILABLE_MEMORY.clone(),
+        SubnetType::Application,
     );
     assert!(system_state.has_input());
     assert!(!system_state.queues().has_output());
@@ -101,6 +103,7 @@ fn induct_messages_to_self_in_stopped_status_does_not_work() {
     system_state.induct_messages_to_self(
         CANISTER_AVAILABLE_MEMORY,
         &mut SUBNET_AVAILABLE_MEMORY.clone(),
+        SubnetType::Application,
     );
     assert!(!system_state.has_input());
     assert!(system_state.queues().has_output());
@@ -126,6 +129,7 @@ fn induct_messages_to_self_in_stopping_status_does_not_work() {
     system_state.induct_messages_to_self(
         CANISTER_AVAILABLE_MEMORY,
         &mut SUBNET_AVAILABLE_MEMORY.clone(),
+        SubnetType::Application,
     );
     assert!(!system_state.has_input());
     assert!(system_state.queues().has_output());
@@ -173,7 +177,11 @@ fn induct_messages_to_self_respects_memory_limit_impl(
     );
     system_state
         .queues_mut()
-        .push_input(QUEUE_INDEX_NONE, request.clone().into())
+        .push_input(
+            QUEUE_INDEX_NONE,
+            request.clone().into(),
+            InputQueueType::RemoteSubnet,
+        )
         .unwrap();
     system_state.queues_mut().pop_input().unwrap();
 
@@ -192,35 +200,36 @@ fn induct_messages_to_self_respects_memory_limit_impl(
         .push_output_request(request.clone())
         .unwrap();
 
-    system_state.induct_messages_to_self(canister_available_memory, subnet_available_memory);
+    system_state.induct_messages_to_self(
+        canister_available_memory,
+        subnet_available_memory,
+        SubnetType::Application,
+    );
 
     // Expect the response and first request to have been inducted.
     assert_eq!(
         Some(CanisterInputMessage::Response(response)),
-        system_state.pop_input()
+        system_state.queues_mut().pop_input()
     );
     assert_eq!(
         Some(CanisterInputMessage::Request(request.clone())),
-        system_state.pop_input()
+        system_state.queues_mut().pop_input()
     );
 
     if ENFORCE_MESSAGE_MEMORY_USAGE {
-        assert_eq!(None, system_state.pop_input());
+        assert_eq!(None, system_state.queues_mut().pop_input());
 
         // Expect the second request to still be in the output queue.
         assert_eq!(
             vec![RequestOrResponse::Request(request)],
-            system_state
-                .output_into_iter(canister_id)
-                .map(|(_, _, msg)| msg)
-                .collect::<Vec<_>>()
+            vec![system_state.output_into_iter(canister_id).next().unwrap().2]
         );
     } else {
         assert_eq!(
             Some(CanisterInputMessage::Request(request)),
-            system_state.pop_input()
+            system_state.queues_mut().pop_input()
         );
-        assert_eq!(None, system_state.pop_input());
+        assert_eq!(None, system_state.queues_mut().pop_input());
 
         // Expect the output queue to be empty.
         assert!(!system_state.queues().has_output());
@@ -254,6 +263,7 @@ fn induct_messages_to_self_full_queue() {
     system_state.induct_messages_to_self(
         CANISTER_AVAILABLE_MEMORY,
         &mut SUBNET_AVAILABLE_MEMORY.clone(),
+        SubnetType::Application,
     );
 
     // Expect exactly one request to have been inducted before the queue filled up.
@@ -266,6 +276,6 @@ fn induct_messages_to_self_full_queue() {
     // All other requests should still be in the output queue.
     assert_eq!(
         DEFAULT_QUEUE_CAPACITY - 2,
-        system_state.output_into_iter(canister_id).count()
+        system_state.queues().output_message_count()
     );
 }

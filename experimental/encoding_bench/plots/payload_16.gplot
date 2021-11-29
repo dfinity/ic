@@ -1,0 +1,6 @@
+set term svg
+set output "payload_16.svg"
+set ylabel "MiB/s"
+set boxwidth 0.5
+set style fill solid
+plot "payload_16.data" using 1:3:xtic(2) with boxes

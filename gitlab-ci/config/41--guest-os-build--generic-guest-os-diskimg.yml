@@ -1,0 +1,46 @@
+generic-guest-os-diskimg:
+  extends:
+    - .ubuntu-nix-docker-protected
+    - .rules-parent-pipeline-autorun-on-trigger
+  stage: guest-os-build
+  needs:
+    - cargo-build-release-linux-native
+  script:
+    - |
+      set -xeuo pipefail
+
+      VERSION=$(git rev-parse --verify HEAD)
+
+      ls -lah /var/run/docker.sock; groups
+
+      gunzip -c -d artifacts/release/boundary-node-control-plane.gz > artifacts/release/boundary-node-control-plane
+
+      cd ic-os/generic-guestos
+
+      IMAGE=$(grep FROM rootfs/Dockerfile | cut -d' ' -f2 | head -1)
+      if ! (docker image list --format "{{.Repository}}:{{.Tag}}" | grep -q "$IMAGE"); then
+          docker pull "$IMAGE"
+      fi
+
+      mkdir -p build-out/disk-img/ build-tmp/
+      buildevents cmd  "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-img -- \
+      placebo -v -i "rootfs/**/*" -i "../../artifacts/release/**/*" -- \
+      ./scripts/build-disk-image.sh -o build-tmp/disk.img -p root -v "${VERSION}" -x ../../artifacts/release/
+      echo "${VERSION}" > build-tmp/version.txt
+      ls -lah build-tmp
+
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" tar-build-out -- tar --sort=name --owner=root:0 --group=root:0 --mtime 0 --sparse -cvzf build-out/disk-img/disk-img.tar.gz -C build-tmp disk.img version.txt
+      ls -lah build-out
+
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/openssl-sign.sh "build-out/disk-img"
+
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rsync-disk-img -- \
+        "$CI_PROJECT_DIR"/gitlab-ci/tools/copy-disk "$CDPRNET" "generic"
+
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+        "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_upload.py build-out/disk-img/ generic-guest-os/disk-img
+
+  artifacts:
+    paths:
+      - ic-os/generic-guestos/build-out/disk-img/*
+    expire_in: 2 days

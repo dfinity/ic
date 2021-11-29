@@ -9,6 +9,7 @@ use ic_types::consensus::ecdsa::{EcdsaDealing, EcdsaDealingSupport, EcdsaMessage
 pub enum EcdsaChangeAction {
     AddToValidated(EcdsaMessage),
     MoveToValidated(EcdsaMessageId),
+    RemoveValidated(EcdsaMessageId),
     RemoveUnvalidated(EcdsaMessageId),
     HandleInvalid(EcdsaMessageId, String),
 }

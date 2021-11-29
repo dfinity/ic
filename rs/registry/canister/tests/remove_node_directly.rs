@@ -21,6 +21,7 @@ use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
 };
 use ic_test_utilities::crypto::temp_dir::temp_dir;
+use ic_types::p2p::build_default_gossip_config;
 use ic_types::NodeId;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
@@ -161,6 +162,8 @@ fn node_cannot_be_removed_if_in_subnet() {
         let test_subnet_record = SubnetRecord {
             membership: vec![node_id.get().to_vec()],
             replica_version_id: "version_42".to_string(),
+            unit_delay_millis: 600,
+            gossip_config: Some(build_default_gossip_config()),
             ..Default::default()
         };
         let test_subnet_list_record = SubnetListRecord {

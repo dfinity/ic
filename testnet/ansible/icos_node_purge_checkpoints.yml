@@ -1,0 +1,14 @@
+---
+# By default this will stress-test all nodes. Make sure you limit the nodes to be stress-tested by
+# providing an argument to the playbook --limit <node1,node2,...>
+- hosts: nodes
+  gather_facts: false
+  become: true
+  vars_files:
+    - "config/common.yml"
+
+  tasks:
+    - name: Purge checkpoints dir.
+      file:
+        path: /var/lib/ic/data/ic_state/checkpoints
+        state: absent

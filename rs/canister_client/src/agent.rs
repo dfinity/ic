@@ -12,8 +12,8 @@ use ic_protobuf::types::v1 as pb;
 use ic_types::{
     consensus::catchup::CatchUpPackageParam,
     messages::{
-        Blob, HttpReadContent, HttpRequestEnvelope, HttpStatusResponse, HttpSubmitContent,
-        MessageId, ReplicaHealthStatus,
+        Blob, HttpQueryContent, HttpReadStateContent, HttpRequestEnvelope, HttpStatusResponse,
+        HttpSubmitContent, MessageId, ReplicaHealthStatus,
     },
     CanisterId, PrincipalId,
 };
@@ -259,6 +259,12 @@ impl Agent {
     pub fn new(url: Url, sender: Sender) -> Self {
         let http_client = Arc::new(HttpClient::new());
         Self::build_agent(url, http_client, sender)
+    }
+
+    /// Creates a agent that is a copy of `agent` except that
+    /// that is has a new sender.
+    pub fn new_with_sender(agent: &Agent, sender: Sender) -> Self {
+        Self::build_agent(agent.url.clone(), agent.http_client.clone(), sender)
     }
 
     /// Creates an agent.
@@ -552,15 +558,36 @@ pub fn sign_submit(
 /// Prerequisite: if `content` contains a `sender` field (this is the case for
 /// queries, but not for request_status), then this 'sender' must be compatible
 /// with the `keypair` argument.
-pub fn sign_read(
-    content: HttpReadContent,
+pub fn sign_read_state(
+    content: HttpReadStateContent,
     sender: &Sender,
-) -> Result<HttpRequestEnvelope<HttpReadContent>, Box<dyn Error>> {
+) -> Result<HttpRequestEnvelope<HttpReadStateContent>, Box<dyn Error>> {
     let message_id = content.id();
     let pub_key_der = sender.sender_pubkey_der().map(Blob);
     let sender_sig = sender.sign_message_id(&message_id)?.map(Blob);
 
-    Ok(HttpRequestEnvelope::<HttpReadContent> {
+    Ok(HttpRequestEnvelope::<HttpReadStateContent> {
+        content,
+        sender_pubkey: pub_key_der,
+        sender_sig,
+        sender_delegation: None,
+    })
+}
+
+/// Wraps the content into an envelope that contains the message signature.
+///
+/// Prerequisite: if `content` contains a `sender` field (this is the case for
+/// queries, but not for request_status), then this 'sender' must be compatible
+/// with the `keypair` argument.
+pub fn sign_query(
+    content: HttpQueryContent,
+    sender: &Sender,
+) -> Result<HttpRequestEnvelope<HttpQueryContent>, Box<dyn Error>> {
+    let message_id = content.id();
+    let pub_key_der = sender.sender_pubkey_der().map(Blob);
+    let sender_sig = sender.sign_message_id(&message_id)?.map(Blob);
+
+    Ok(HttpRequestEnvelope::<HttpQueryContent> {
         content,
         sender_pubkey: pub_key_der,
         sender_sig,
@@ -766,7 +793,7 @@ mod tests {
         let sender = UserId::from(PrincipalId::new_self_authenticating(
             &ed25519_public_key_to_der(keypair.public.to_bytes().to_vec()),
         ));
-        let content = HttpReadContent::Query {
+        let content = HttpQueryContent::Query {
             query: HttpUserQuery {
                 canister_id: Blob(vec![67, 3]),
                 method_name: "foo".to_string(),
@@ -776,13 +803,13 @@ mod tests {
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
             },
         };
-        // Workaround because HttpReadContent is not cloneable
-        let content_copy = serde_cbor::value::from_value::<HttpReadContent>(
+        // Workaround because HttpQueryContent is not cloneable
+        let content_copy = serde_cbor::value::from_value::<HttpQueryContent>(
             serde_cbor::value::to_value(&content).unwrap(),
         )
         .unwrap();
 
-        let read = sign_read(content, &Sender::from_keypair(&keypair)).unwrap();
+        let read = sign_query(content, &Sender::from_keypair(&keypair)).unwrap();
 
         // The wrapped content is content, without modification
         assert_eq!(read.content, content_copy);
@@ -818,7 +845,7 @@ mod tests {
             )
             .expect("DER encoding failed"),
         ));
-        let content = HttpReadContent::Query {
+        let content = HttpQueryContent::Query {
             query: HttpUserQuery {
                 canister_id: Blob(vec![67, 3]),
                 method_name: "foo".to_string(),
@@ -828,14 +855,14 @@ mod tests {
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
             },
         };
-        // Workaround because HttpReadContent is not cloneable
-        let content_copy = serde_cbor::value::from_value::<HttpReadContent>(
+        // Workaround because HttpQueryContent is not cloneable
+        let content_copy = serde_cbor::value::from_value::<HttpQueryContent>(
             serde_cbor::value::to_value(&content).unwrap(),
         )
         .unwrap();
 
         let sender = Sender::from_secp256k1_keys(&sk, &pk);
-        let read = sign_read(content, &sender).unwrap();
+        let read = sign_query(content, &sender).unwrap();
 
         // The wrapped content is content, without modification
         assert_eq!(read.content, content_copy);

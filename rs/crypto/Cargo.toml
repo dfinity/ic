@@ -7,6 +7,7 @@ edition = "2018"
 arrayvec = "0.5.1"
 async-trait = "0.1.41"
 base64 = "0.11.0"
+clap = "2.33.3"
 ed25519-dalek = "1.0.1"
 hex = "0.4.2"
 ic-config = { path = "../config" }
@@ -54,6 +55,7 @@ slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "rel
 slog-scope = "4.1.2"
 strum = "0.18.0"
 strum_macros = "0.18.0"
+tecdsa = { path = "internal/crypto_lib/threshold_sig/tecdsa" }
 tempfile = "3.1.0"
 tokio = { version = "1.9.0", features = ["full"] }
 tokio-openssl = "0.6.0"
@@ -75,6 +77,7 @@ ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
 ic-crypto-test-utils = { path = "test_utils" }
 ic-crypto-test-utils-multi-sigs = { path = "test_utils/multi_sigs" }
 ic-crypto-test-utils-threshold-sigs = { path = "test_utils/threshold_sigs" }
+ic-crypto-test-utils-canister-threshold-sigs = { path = "test_utils/canister_threshold_sigs" }
 ic-test-utilities = { path = "../test_utilities" }
 json5 = "0.2.7"
 maplit = "1.0.2"

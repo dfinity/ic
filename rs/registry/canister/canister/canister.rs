@@ -10,6 +10,7 @@ use dfn_core::{
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nns_common::{
     access_control::check_caller_is_root, pb::v1::CanisterAuthzInfo, types::MethodAuthzChange,
+    types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_protobuf::registry::{
     dc::v1::AddOrRemoveDataCentersProposalPayload,
@@ -38,10 +39,10 @@ use registry_canister::{
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_node_directly::RemoveNodeDirectlyPayload, do_remove_nodes::RemoveNodesPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
-        do_update_icp_xdr_conversion_rate::UpdateIcpXdrConversionRatePayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
+        do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
     },
     pb::v1::RegistryCanisterStableStorage,
     proto_on_wire::protobuf,
@@ -379,6 +380,8 @@ fn update_icp_xdr_conversion_rate() {
 #[export_name = "canister_update add_node"]
 fn add_node() {
     // This method can be called by anyone
+    // Note that for now, once a node record has been added, it MUST not be
+    // modified, as P2P and Transport rely on this data to stay the same
     println!(
         "{}call: {} from: {}",
         LOG_PREFIX,
@@ -528,6 +531,15 @@ fn add_or_remove_data_centers() {
             recertify_registry();
         },
     );
+}
+
+#[export_name = "canister_update update_unassigned_nodes_config"]
+fn update_unassigned_nodes_config() {
+    check_caller_is_governance_and_log("update_unassigned_nodes_config");
+    over(candid_one, |payload: UpdateUnassignedNodesConfigPayload| {
+        registry_mut().do_update_unassigned_nodes_config(payload);
+        recertify_registry();
+    });
 }
 
 fn recertify_registry() {

@@ -1,6 +1,6 @@
 use ic_crypto_internal_csp::keygen::tls_cert_hash_as_key_id;
 use ic_crypto_internal_csp::types::CspSignature;
-use ic_crypto_internal_csp::TlsHandshakeCspServer;
+use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::KeyId;
 use std::sync::Arc;
@@ -25,7 +25,7 @@ impl CspServerEd25519SigningKey {
     /// private key.
     pub fn new(
         self_cert: &TlsPublicKeyCert,
-        tls_csp_server: Arc<dyn TlsHandshakeCspServer>,
+        tls_csp_server: Arc<dyn TlsHandshakeCspVault>,
     ) -> Self {
         Self {
             signer: CspServerEd25519Signer {
@@ -57,7 +57,7 @@ impl rustls::sign::SigningKey for CspServerEd25519SigningKey {
 #[derive(Clone)]
 struct CspServerEd25519Signer {
     key_id: KeyId,
-    tls_csp_server: Arc<dyn TlsHandshakeCspServer>,
+    tls_csp_server: Arc<dyn TlsHandshakeCspVault>,
 }
 
 impl rustls::sign::Signer for CspServerEd25519Signer {

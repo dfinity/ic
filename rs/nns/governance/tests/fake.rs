@@ -11,7 +11,7 @@ use ic_nns_governance::{
         Motion, Neuron, Proposal, Vote,
     },
 };
-use ledger_canister::{AccountIdentifier, ICPTs};
+use ledger_canister::{AccountIdentifier, Tokens};
 use rand::rngs::StdRng;
 use rand_core::{RngCore, SeedableRng};
 use std::collections::hash_map::Entry;
@@ -120,21 +120,21 @@ impl FakeDriver {
         self.with_ledger_accounts(accounts)
     }
 
-    pub fn with_supply(self, supply: ICPTs) -> FakeDriver {
+    pub fn with_supply(self, supply: Tokens) -> FakeDriver {
         {
             let old_supply = self.get_supply();
             let accounts = &mut self.state.lock().unwrap().accounts;
             let minting = accounts.entry(FakeDriver::minting_account()).or_default();
-            assert!(old_supply >= ICPTs::from_e8s(*minting));
-            let old_in_use = (old_supply - ICPTs::from_e8s(*minting)).unwrap();
+            assert!(old_supply >= Tokens::from_e8s(*minting));
+            let old_in_use = (old_supply - Tokens::from_e8s(*minting)).unwrap();
             assert!(supply >= old_in_use);
             *minting = (supply - old_in_use).unwrap().get_e8s();
         }
         self
     }
 
-    pub fn get_supply(&self) -> ICPTs {
-        ICPTs::from_e8s(
+    pub fn get_supply(&self) -> Tokens {
+        Tokens::from_e8s(
             self.state
                 .lock()
                 .unwrap()
@@ -245,19 +245,19 @@ impl Ledger for FakeDriver {
 
         *from_e8s -= requested_e8s;
 
-        *accounts.entry(to_account).or_default() += amount_e8s - fee_e8s;
+        *accounts.entry(to_account).or_default() += amount_e8s;
 
         Ok(0)
     }
 
-    async fn total_supply(&self) -> Result<ICPTs, GovernanceError> {
+    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
         Ok(self.get_supply())
     }
 
-    async fn account_balance(&self, account: AccountIdentifier) -> Result<ICPTs, GovernanceError> {
+    async fn account_balance(&self, account: AccountIdentifier) -> Result<Tokens, GovernanceError> {
         let accounts = &mut self.state.try_lock().unwrap().accounts;
         let account_e8s = accounts.get(&account).unwrap_or(&0);
-        Ok(ICPTs::from_e8s(*account_e8s))
+        Ok(Tokens::from_e8s(*account_e8s))
     }
 }
 
