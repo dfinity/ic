@@ -4,15 +4,12 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult,
     TrapCode::{HeapOutOfBounds, StableMemoryOutOfBounds, StableMemoryTooBigFor32Bit},
 };
-use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, page_map, NumWasmPages64};
+use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, page_map, NumWasmPages};
 use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
 
-const MAX_64_BIT_STABLE_MEMORY_IN_PAGES: u64 = MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES;
-const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: u64 = if 64 * 1024 < MAX_64_BIT_STABLE_MEMORY_IN_PAGES {
-    64 * 1024 // 4GiB
-} else {
-    MAX_64_BIT_STABLE_MEMORY_IN_PAGES
-};
+const MAX_64_BIT_STABLE_MEMORY_IN_PAGES: usize =
+    (MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64) as usize;
+const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: usize = 64 * 1024; // 4GiB
 
 /// Essentially the same as a `page_map::Memory`, but we use a `Buffer` instead
 /// of a `PageMap`.
@@ -25,11 +22,11 @@ pub struct StableMemory {
     /// subsequent calls.
     pub stable_memory_buffer: page_map::Buffer,
     /// The size of the canister's stable memory.
-    pub stable_memory_size: NumWasmPages64,
+    pub stable_memory_size: NumWasmPages,
 }
 
 impl StableMemory {
-    pub fn new(stable_memory: ic_replicated_state::Memory<NumWasmPages64>) -> Self {
+    pub fn new(stable_memory: ic_replicated_state::Memory) -> Self {
         Self {
             stable_memory_buffer: page_map::Buffer::new(stable_memory.page_map),
             stable_memory_size: stable_memory.size,
@@ -49,14 +46,14 @@ impl StableMemory {
 
     /// Grows stable memory by specified amount.
     pub(super) fn stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32> {
-        let initial_page_count = self.stable_size()? as u64;
-        let additional_pages = additional_pages as u64;
+        let initial_page_count = self.stable_size()? as usize;
+        let additional_pages = additional_pages as usize;
 
         if additional_pages + initial_page_count > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
             return Ok(-1);
         }
 
-        self.stable_memory_size = NumWasmPages64::from(initial_page_count + additional_pages);
+        self.stable_memory_size = NumWasmPages::from(initial_page_count + additional_pages);
 
         Ok(initial_page_count
             .try_into()
@@ -110,7 +107,7 @@ impl StableMemory {
 
     /// Determines size of stable memory in Web assembly pages.
     pub(super) fn stable64_size(&self) -> HypervisorResult<u64> {
-        Ok(self.stable_memory_size.get())
+        Ok(self.stable_memory_size.get() as u64)
     }
 
     /// Grows stable memory by specified amount.
@@ -118,11 +115,12 @@ impl StableMemory {
         let initial_page_count = self.stable64_size()?;
 
         let (page_count, overflow) = additional_pages.overflowing_add(initial_page_count);
-        if overflow || page_count > MAX_64_BIT_STABLE_MEMORY_IN_PAGES {
+        if overflow || page_count > MAX_64_BIT_STABLE_MEMORY_IN_PAGES as u64 {
             return Ok(-1);
         }
 
-        self.stable_memory_size = NumWasmPages64::from(initial_page_count + additional_pages);
+        self.stable_memory_size =
+            NumWasmPages::from(initial_page_count as usize + additional_pages as usize);
 
         Ok(initial_page_count as i64)
     }
@@ -141,7 +139,7 @@ impl StableMemory {
 
         let (stable_memory_size_in_bytes, overflow) = self
             .stable64_size()?
-            .overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
+            .overflowing_mul(WASM_PAGE_SIZE_IN_BYTES as u64);
         if overflow {
             return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
         }
@@ -174,7 +172,7 @@ impl StableMemory {
 
         let (stable_memory_size_in_bytes, overflow) = self
             .stable64_size()?
-            .overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
+            .overflowing_mul(WASM_PAGE_SIZE_IN_BYTES as u64);
         if overflow {
             return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
         }

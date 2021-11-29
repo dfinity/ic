@@ -22,7 +22,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     page_map, testing::CanisterQueuesTesting, CallContextManager, CallOrigin, CanisterStatus,
-    NumWasmPages64, PageMap, ReplicatedState,
+    NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -1343,14 +1343,14 @@ fn reinstall_clears_stable_memory() {
                 .unwrap()
                 .stable_memory
                 .size,
-            NumWasmPages64::new(0)
+            NumWasmPages::new(0)
         );
         canister
             .execution_state
             .as_mut()
             .unwrap()
             .stable_memory
-            .size = NumWasmPages64::new(1);
+            .size = NumWasmPages::new(1);
         let mut buf = page_map::Buffer::new(PageMap::default());
         buf.write(&[1; 10], 0);
         canister
@@ -1386,7 +1386,7 @@ fn reinstall_clears_stable_memory() {
                 .unwrap()
                 .stable_memory
                 .size,
-            NumWasmPages64::new(0)
+            NumWasmPages::new(0)
         );
     });
 }

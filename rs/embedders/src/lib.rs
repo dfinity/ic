@@ -7,7 +7,7 @@ pub mod wasmtime_embedder;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{ExecutionParameters, HypervisorError, InstanceStats};
 use ic_replicated_state::{
-    canister_state::system_state::SystemState, ExecutionState, Global, NumWasmPages64, PageIndex,
+    canister_state::system_state::SystemState, ExecutionState, Global, NumWasmPages, PageIndex,
 };
 use ic_sys::PageBytes;
 use ic_system_api::ApiType;
@@ -35,7 +35,7 @@ pub struct WasmExecutionOutput {
 
 pub struct InstanceRunResult {
     pub dirty_pages: Vec<PageIndex>,
-    pub stable_memory_size: NumWasmPages64,
+    pub stable_memory_size: NumWasmPages,
     pub stable_memory_dirty_pages: Vec<(PageIndex, PageBytes)>,
     pub exported_globals: Vec<Global>,
 }

@@ -7,7 +7,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::ENFORCE_MESSAGE_MEMORY_USAGE, testing::CanisterQueuesTesting, CallOrigin,
-    Memory, NumWasmPages64, PageMap, SystemState,
+    Memory, NumWasmPages, PageMap, SystemState,
 };
 use ic_system_api::{
     ApiType, NonReplicatedQueryKind, StaticSystemState, SystemApiImpl, SystemStateAccessorDirect,
@@ -1535,7 +1535,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
             subnet_available_memory: subnet_available_memory.clone(),
             ..execution_parameters()
         },
-        Memory::new(PageMap::default(), NumWasmPages64::new(1 << 32)),
+        Memory::new(PageMap::default(), NumWasmPages::new(1 << 32)),
         no_op_logger(),
     );
 

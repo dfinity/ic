@@ -9,13 +9,13 @@ pub mod testing {
 }
 pub use canister_state::{
     execution_state::Memory,
-    num_bytes_from, num_bytes_try_from64,
+    num_bytes_try_from,
     system_state::{
         memory_required_to_push_request, CallContext, CallContextAction, CallContextManager,
         CallOrigin, CanisterMetrics, CanisterStatus, SystemState,
     },
     CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, Global,
-    NumWasmPages, NumWasmPages64, SchedulerState,
+    NumWasmPages, SchedulerState,
 };
 pub use metadata_state::{NetworkTopology, NodeTopology, Stream, SubnetTopology, SystemMetadata};
 pub use page_map::{PageIndex, PageMap};

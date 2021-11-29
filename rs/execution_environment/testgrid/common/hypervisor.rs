@@ -16,7 +16,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::MemoryRegion;
 use ic_replicated_state::{
     testing::CanisterQueuesTesting, CallContextAction, CallOrigin, CanisterState, Global,
-    NumWasmPages, NumWasmPages64, SystemState,
+    NumWasmPages, SystemState,
 };
 use ic_replicated_state::{PageIndex, PageMap};
 use ic_sys::PAGE_SIZE;
@@ -3192,7 +3192,7 @@ fn sys_api_call_update_available_memory_1() {
                 None,
                 MAX_NUM_INSTRUCTIONS,
                 // Only 9 pages available
-                ic_replicated_state::num_bytes_from(NumWasmPages::from(9)),
+                ic_replicated_state::num_bytes_try_from(NumWasmPages::from(9)).unwrap(),
                 mock_time(),
                 tmp_path,
                 subnet_test_id(0x101), // NNS subnet != canister subnet
@@ -3917,7 +3917,7 @@ where
         // Stable memory should remain empty since the call failed.
         assert_eq!(
             canister.execution_state.unwrap().stable_memory.size,
-            NumWasmPages64::new(0)
+            NumWasmPages::new(0)
         );
     });
 }

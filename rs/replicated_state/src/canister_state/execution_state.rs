@@ -1,8 +1,5 @@
 use super::SessionNonce;
-use crate::{
-    num_bytes_from, num_bytes_try_from64, page_map::PageAllocatorDelta, NumWasmPages,
-    NumWasmPages64, PageIndex, PageMap,
-};
+use crate::{num_bytes_try_from, page_map::PageAllocatorDelta, NumWasmPages, PageIndex, PageMap};
 use ic_config::embedders::PersistenceType;
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState, MappedStateImpl};
 use ic_interfaces::execution_environment::HypervisorResult;
@@ -182,7 +179,7 @@ impl WasmBinary {
 
 /// Represents a canister's wasm or stable memory.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Memory<T = NumWasmPages> {
+pub struct Memory {
     /// The contents of this memory.
     pub page_map: PageMap,
     /// The size of the memory in wasm pages. This does not indicate how much
@@ -190,29 +187,20 @@ pub struct Memory<T = NumWasmPages> {
     /// has access to. For example, if a canister grows it's memory to N pages
     /// that will be reflected in this field, but the `page_map` will remain
     /// empty until data is written to the memory.
-    pub size: T,
+    pub size: NumWasmPages,
 }
 
-impl<T> Memory<T> {
-    pub fn new(page_map: PageMap, size: T) -> Self {
+impl Memory {
+    pub fn new(page_map: PageMap, size: NumWasmPages) -> Self {
         Memory { page_map, size }
     }
 }
 
-impl Default for Memory<NumWasmPages> {
+impl Default for Memory {
     fn default() -> Self {
         Self {
             page_map: PageMap::default(),
             size: NumWasmPages::from(0),
-        }
-    }
-}
-
-impl Default for Memory<NumWasmPages64> {
-    fn default() -> Self {
-        Self {
-            page_map: PageMap::default(),
-            size: NumWasmPages64::from(0),
         }
     }
 }
@@ -337,12 +325,13 @@ pub struct ExecutionState {
     /// properly when loading a state from checkpoint.
     pub wasm_binary: Arc<WasmBinary>,
 
-    /// The persistent heap of the module.
+    /// The persistent heap of the module. The size of this memory is expected
+    /// to fit in a `u32`.
     #[debug_stub = "PageMap"]
     pub wasm_memory: Memory,
 
     /// The canister stable memory which is persisted across canister upgrades.
-    pub stable_memory: Memory<NumWasmPages64>,
+    pub stable_memory: Memory,
 
     /// The state of exported globals. Internal globals are not accessible.
     pub exported_globals: Vec<Global>,
@@ -450,9 +439,10 @@ impl ExecutionState {
         // We use 8 bytes per global.
         let globals_size_bytes = 8 * self.exported_globals.len() as u64;
         let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
-        num_bytes_from(self.wasm_memory.size)
-            + num_bytes_try_from64(self.stable_memory.size)
-                .expect("could not convert from wasm pages to bytes")
+        num_bytes_try_from(self.wasm_memory.size)
+            .expect("could not convert from wasm memory number of pages to bytes")
+            + num_bytes_try_from(self.stable_memory.size)
+                .expect("could not convert from stable memory number of pages to bytes")
             + NumBytes::from(globals_size_bytes)
             + NumBytes::from(wasm_binary_size_bytes)
     }

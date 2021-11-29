@@ -89,7 +89,7 @@ mod tests {
     use ic_registry_routing_table::RoutingTable;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        page_map::PageAllocatorDelta, Global, NumWasmPages, NumWasmPages64, PageIndex, PageMap,
+        page_map::PageAllocatorDelta, Global, NumWasmPages, PageIndex, PageMap,
     };
     use ic_sys::PageBytes;
     use ic_system_api::{ApiType, CanisterStatusView, StaticSystemState};
@@ -126,10 +126,10 @@ mod tests {
         )
     }
 
-    fn memory_for_test<T>(
+    fn memory_for_test(
         pages: &[(PageIndex, &PageBytes)],
-        num_wasm_pages: T,
-    ) -> MemorySerialization<T> {
+        num_wasm_pages: NumWasmPages,
+    ) -> MemorySerialization {
         let mut page_map = PageMap::default();
         page_map.update(pages);
         let mut memory = MemorySerialization {
@@ -146,11 +146,11 @@ mod tests {
         memory
     }
 
-    fn memory_delta_for_test<T>(
+    fn memory_delta_for_test(
         page_map: PageMap,
         delta: (Vec<PageIndex>, PageAllocatorDelta),
-        num_wasm_pages: T,
-    ) -> MemoryDeltaSerialization<T> {
+        num_wasm_pages: NumWasmPages,
+    ) -> MemoryDeltaSerialization {
         let page_delta = page_map.serialize_delta(&delta.0);
         let page_allocator = match delta.1 {
             PageAllocatorDelta::Unchanged => None,
@@ -443,7 +443,7 @@ mod tests {
                 state: StateSerialization::Full {
                     globals: vec![],
                     wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(&[], NumWasmPages64::new(0)),
+                    stable_memory: memory_for_test(&[], NumWasmPages::new(0)),
                 },
             })
             .sync()
@@ -529,7 +529,7 @@ mod tests {
                 state: StateSerialization::Full {
                     globals: vec![],
                     wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(&[], NumWasmPages64::new(0)),
+                    stable_memory: memory_for_test(&[], NumWasmPages::new(0)),
                 },
             })
             .sync()
@@ -610,7 +610,7 @@ mod tests {
                         &[(PageIndex::from(0), &page_data)],
                         NumWasmPages::new(1),
                     ),
-                    stable_memory: memory_for_test(&[], NumWasmPages64::new(0)),
+                    stable_memory: memory_for_test(&[], NumWasmPages::new(0)),
                 },
             })
             .sync()
@@ -681,7 +681,7 @@ mod tests {
                 state: StateSerialization::Full {
                     globals: vec![],
                     wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(&[], NumWasmPages64::new(0)),
+                    stable_memory: memory_for_test(&[], NumWasmPages::new(0)),
                 },
             })
             .sync()
@@ -729,7 +729,7 @@ mod tests {
                 state: StateSerialization::Full {
                     globals: vec![],
                     wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(&[], NumWasmPages64::new(0)),
+                    stable_memory: memory_for_test(&[], NumWasmPages::new(0)),
                 },
             })
             .sync()
@@ -814,7 +814,7 @@ mod tests {
                 state: StateSerialization::Full {
                     globals: vec![],
                     wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(&[], NumWasmPages64::new(1)),
+                    stable_memory: memory_for_test(&[], NumWasmPages::new(1)),
                 },
             })
             .sync()
@@ -898,7 +898,7 @@ mod tests {
                     wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
                     stable_memory: memory_for_test(
                         &[(PageIndex::from(0), &page_data)],
-                        NumWasmPages64::new(1),
+                        NumWasmPages::new(1),
                     ),
                 },
             })
@@ -956,7 +956,7 @@ mod tests {
                 state: StateSerialization::Full {
                     globals: vec![],
                     wasm_memory: memory_for_test(&[], NumWasmPages::new(1)),
-                    stable_memory: memory_for_test(&[], NumWasmPages64::new(0)),
+                    stable_memory: memory_for_test(&[], NumWasmPages::new(0)),
                 },
             })
             .sync()
@@ -1120,7 +1120,7 @@ mod tests {
                 state: StateSerialization::Full {
                     globals: vec![],
                     wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(&[], NumWasmPages64::new(1)),
+                    stable_memory: memory_for_test(&[], NumWasmPages::new(1)),
                 },
             })
             .sync()

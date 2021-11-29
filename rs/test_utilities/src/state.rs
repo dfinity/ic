@@ -19,7 +19,7 @@ use ic_replicated_state::{
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
-    InputQueueType, Memory, NumWasmPages64, ReplicatedState, SchedulerState, SystemState,
+    InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse},
@@ -249,7 +249,7 @@ impl CanisterStateBuilder {
         let stable_memory = if let Some(data) = self.stable_memory {
             Memory::new(
                 PageMap::from(&data[..]),
-                NumWasmPages64::new((data.len() / WASM_PAGE_SIZE_BYTES) as u64 + 1),
+                NumWasmPages::new((data.len() / WASM_PAGE_SIZE_BYTES) as usize + 1),
             )
         } else {
             Memory::default()

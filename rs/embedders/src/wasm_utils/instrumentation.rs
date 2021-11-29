@@ -566,7 +566,7 @@ pub fn instrument(
         }
     };
 
-    data.validate(NumWasmPages::from(limits.0))?;
+    data.validate(NumWasmPages::from(limits.0 as usize))?;
 
     let result = parity_wasm::serialize(module).map_err(|err| {
         WasmInstrumentationError::ParitySerializeError(into_parity_wasm_error(err))
