@@ -161,7 +161,7 @@
 
 .rules-simple-prober:
   rules:
-    - if: '$CI_COMMIT_REF_NAME == "precious-automation/run-simple-prober-v4"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_REF_NAME == "precious-automation/run-simple-prober-v4"'
 
 .rules-protected-branch:
   rules:
