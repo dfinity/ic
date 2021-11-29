@@ -46,8 +46,8 @@
   },
   "scripts": {
     "clean": "rm -fr dist",
-    "build": "NODE_OPTIONS=--openssl-legacy-provider webpack",
-    "build-dev": "NODE_OPTIONS=--openssl-legacy-provider FORCE_FETCH_ROOT_KEY=1 webpack --mode development",
+    "build": "rm -fr dist dist-prod && NODE_OPTIONS=--openssl-legacy-provider webpack && mv dist dist-prod",
+    "build-dev": "rm -fr dist dist-dev && NODE_OPTIONS=--openssl-legacy-provider FORCE_FETCH_ROOT_KEY=1 webpack --mode development && mv dist dist-dev",
     "deploy": "npm run deploy-dev && npm run deploy-prod",
     "deploy-prod": "./bin/deploy-prod",
     "deploy-dev": "./bin/deploy-dev",
