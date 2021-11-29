@@ -14,6 +14,7 @@ const hostnameCanisterIdMap: Record<string, [string, string]> = {
   'identity.ic0.app': ['rdmx6-jaaaa-aaaaa-aaadq-cai', 'ic0.app'],
   'nns.ic0.app': ['qoctq-giaaa-aaaaa-aaaea-cai', 'ic0.app'],
   'dscvr.ic0.app': ['h5aet-waaaa-aaaab-qaamq-cai', 'ic0.page'],
+  'personhood.ic0.app': ['g3wsl-eqaaa-aaaan-aaaaa-cai', 'ic0.app'],
 };
 
 const shouldFetchRootKey: boolean = !!process.env.FORCE_FETCH_ROOT_KEY || false;
