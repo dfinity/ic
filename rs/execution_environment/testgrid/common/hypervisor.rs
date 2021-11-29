@@ -3888,6 +3888,45 @@ fn grow_memory_beyond_max_size_2() {
     });
 }
 
+#[test]
+fn grow_memory_beyond_32_bit_limit_fails() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        let wasm = wabt::wat2wasm(
+            r#"
+                        (module
+                          (func (export "canister_init")
+                            ;; 65536 is the maximum number of 32-bit wasm memory pages 
+                            (drop (memory.grow (i32.const 65537)))
+                            ;; grow failed so accessing the memory triggers HeapOutOfBounds
+                            (i32.store
+                              (i32.const 1)
+                              (i32.const 1)))
+                          (memory 0))
+                        "#,
+        )
+        .unwrap();
+
+        let canister_id = canister_test_id(42);
+        let execution_state = hypervisor
+            .create_execution_state(wasm, tmp_path, canister_id)
+            .unwrap();
+        let canister = canister_from_exec_state(execution_state, canister_id);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
+        let (_, _, res) = hypervisor.execute_canister_init(
+            canister,
+            test_caller(),
+            EMPTY_PAYLOAD.as_slice(),
+            mock_time(),
+            execution_parameters,
+        );
+
+        assert_eq!(
+            res.unwrap_err(),
+            HypervisorError::Trapped(TrapCode::HeapOutOfBounds)
+        );
+    });
+}
+
 fn test_stable_memory_is_rolled_back_on_failure<F>(execute_method: F)
 where
     F: FnOnce(

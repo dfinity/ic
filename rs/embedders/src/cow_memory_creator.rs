@@ -25,8 +25,8 @@ impl crate::ICMemoryCreator for CowMemoryCreator {
         _total_memory_size: usize,
         _guard_size: usize,
         instance_heap_offset: usize,
-        _mem_pages_min: u32,
-        _mem_pages_max: Option<u32>,
+        _mem_pages_min: usize,
+        _mem_pages_max: Option<usize>,
     ) -> Self::Mem {
         assert!(
             instance_heap_offset == 0,
@@ -86,8 +86,8 @@ impl crate::ICMemoryCreator for CowMemoryCreatorProxy {
         mem_size: usize,
         guard_size: usize,
         instance_heap_offset: usize,
-        min_pages: u32,
-        max_pages: Option<u32>,
+        min_pages: usize,
+        max_pages: Option<usize>,
     ) -> MappedStateMemory {
         self.memory_creator.lock().unwrap().new_memory(
             mem_size,

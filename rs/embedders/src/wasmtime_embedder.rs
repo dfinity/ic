@@ -3,9 +3,11 @@ mod signal_stack;
 mod system_api;
 pub mod system_api_charges;
 
-use std::convert::TryInto;
-use std::sync::{Arc, Mutex};
-use std::{collections::HashMap, convert::TryFrom};
+use std::{
+    collections::HashMap,
+    convert::TryFrom,
+    sync::{Arc, Mutex},
+};
 
 use ic_system_api::ModificationTracking;
 use wasmtime::{unix::StoreExt, Memory, Mutability, Store, Val, ValType};
@@ -148,7 +150,7 @@ impl WasmtimeEmbedder {
             // static. setting this to maximum Wasm memory size will guarantee
             // the memory is always static.
             .static_memory_maximum_size(
-                wasmtime_environ::WASM_PAGE_SIZE as u64 * wasmtime_environ::WASM_MAX_PAGES as u64,
+                wasmtime_environ::WASM_PAGE_SIZE as u64 * wasmtime_environ::WASM32_MAX_PAGES as u64,
             )
             .max_wasm_stack(self.max_wasm_stack_size)
             .map_err(|_| HypervisorError::WasmEngineError(WasmEngineError::FailedToSetWasmStack))?;
@@ -312,11 +314,7 @@ impl WasmtimeEmbedder {
             .get_memory(&mut store, "memory")
             .map(|instance_memory| {
                 let current_heap_size = instance_memory.size(&store);
-                // TODO(EXC-650): Remove panic on wasmtime upgrade.
-                let requested_size: u32 = heap_size
-                    .get()
-                    .try_into()
-                    .expect("Couldn't convert requested heap size to u32");
+                let requested_size = heap_size.get() as u64;
 
                 if current_heap_size < requested_size {
                     let delta = requested_size - current_heap_size;
