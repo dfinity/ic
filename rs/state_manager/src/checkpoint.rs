@@ -6,7 +6,7 @@ use ic_replicated_state::canister_state::execution_state::SandboxExecutionState;
 use ic_replicated_state::Memory;
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
-    ExecutionState, NumWasmPages64, ReplicatedState, SchedulerState, SystemState,
+    ExecutionState, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{
     CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadPolicy, ReadWritePolicy, RwPolicy,
@@ -156,7 +156,7 @@ fn serialize_canister_to_tip(
                     .execution_state
                     .as_ref()
                     .map(|es| es.stable_memory.size)
-                    .unwrap_or_else(|| NumWasmPages64::from(0)),
+                    .unwrap_or_else(|| NumWasmPages::from(0)),
                 heap_delta_debit: canister_state.scheduler_state.heap_delta_debit,
             }
             .into(),
@@ -403,7 +403,7 @@ mod tests {
     use ic_replicated_state::{
         canister_state::execution_state::WasmBinary, page_map, testing::ReplicatedStateTesting,
         CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages,
-        NumWasmPages64, PageIndex,
+        PageIndex,
     };
     use ic_sys::PAGE_SIZE;
     use ic_test_utilities::{
@@ -595,7 +595,7 @@ mod tests {
                 NumSeconds::from(100_000),
             );
             let page_map = PageMap::from(&[1, 2, 3, 4][..]);
-            let stable_memory = Memory::new(page_map, NumWasmPages64::new(1));
+            let stable_memory = Memory::new(page_map, NumWasmPages::new(1));
             let execution_state = ExecutionState {
                 canister_root: root.clone(),
                 session_nonce: None,
@@ -650,7 +650,7 @@ mod tests {
                     .unwrap()
                     .stable_memory
                     .size,
-                NumWasmPages64::new(1)
+                NumWasmPages::new(1)
             );
 
             // Verify that the deserialized stable memory is correctly retrieved.

@@ -9,7 +9,7 @@ use ic_interfaces::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    page_map::PageIndex, testing::ReplicatedStateTesting, NumWasmPages64, PageMap, ReplicatedState,
+    page_map::PageIndex, testing::ReplicatedStateTesting, NumWasmPages, PageMap, ReplicatedState,
     Stream,
 };
 use ic_state_manager::StateManagerImpl;
@@ -178,7 +178,7 @@ fn stable_memory_is_persisted() {
             .as_mut()
             .unwrap()
             .stable_memory
-            .size = NumWasmPages64::new(2);
+            .size = NumWasmPages::new(2);
         canister_state
             .execution_state
             .as_mut()
@@ -190,7 +190,7 @@ fn stable_memory_is_persisted() {
         let (_height, state) = state_manager.take_tip();
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
         assert_eq!(
-            NumWasmPages64::new(2),
+            NumWasmPages::new(2),
             canister_state
                 .execution_state
                 .as_ref()
@@ -215,7 +215,7 @@ fn stable_memory_is_persisted() {
         let state = recovered.take();
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
         assert_eq!(
-            NumWasmPages64::new(2),
+            NumWasmPages::new(2),
             canister_state
                 .execution_state
                 .as_ref()

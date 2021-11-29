@@ -3,6 +3,7 @@ mod signal_stack;
 mod system_api;
 pub mod system_api_charges;
 
+use std::convert::TryInto;
 use std::{collections::HashMap, convert::TryFrom};
 use std::{
     path::PathBuf,
@@ -20,7 +21,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{debug, error, fatal, ReplicaLogger};
 use ic_replicated_state::{
-    EmbedderCache, ExecutionState, Global, NumWasmPages, NumWasmPages64, PageIndex, PageMap,
+    EmbedderCache, ExecutionState, Global, NumWasmPages, PageIndex, PageMap,
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
@@ -361,7 +362,11 @@ impl WasmtimeEmbedder {
             .get_memory(&mut store, "memory")
             .map(|instance_memory| {
                 let current_heap_size = instance_memory.size(&store);
-                let requested_size = heap_size.get();
+                // TODO(EXC-650): Remove panic on wasmtime upgrade.
+                let requested_size: u32 = heap_size
+                    .get()
+                    .try_into()
+                    .expect("Couldn't convert requested heap size to u32");
 
                 if current_heap_size < requested_size {
                     let delta = requested_size - current_heap_size;
@@ -624,7 +629,7 @@ impl<S: SystemApi> WasmtimeInstance<S> {
             .map(|(i, p)| (i, *p))
             .collect();
         let stable_memory_size =
-            NumWasmPages64::from(self.store.data().system_api.stable_memory_size());
+            NumWasmPages::from(self.store.data().system_api.stable_memory_size());
         self.instance_stats.dirty_pages += stable_memory_dirty_pages.len();
 
         match result {
@@ -667,8 +672,9 @@ impl<S: SystemApi> WasmtimeInstance<S> {
     }
 
     /// Returns the heap size.
+    /// Result is guaranteed to fit in a `u32`.
     pub fn heap_size(&mut self) -> NumWasmPages {
-        NumWasmPages::from(self.memory().map_or(0, |mem| mem.size(&self.store)))
+        NumWasmPages::from(self.memory().map_or(0, |mem| mem.size(&self.store)) as usize)
     }
 
     /// Returns a list of exported globals.

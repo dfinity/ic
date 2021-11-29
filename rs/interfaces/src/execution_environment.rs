@@ -214,7 +214,7 @@ pub trait SystemApi {
     fn stable_memory_dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)>;
 
     /// Returns the current size of the stable memory in wasm pages.
-    fn stable_memory_size(&self) -> u64;
+    fn stable_memory_size(&self) -> usize;
 
     /// Copies `size` bytes starting from `offset` inside the opaque caller blob
     /// and copies them to heap[dst..dst+size]. The caller is the canister

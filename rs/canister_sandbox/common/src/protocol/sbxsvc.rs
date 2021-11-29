@@ -5,7 +5,7 @@ use ic_replicated_state::{
         CheckpointSerialization, MappingSerialization, PageAllocatorSerialization,
         PageDeltaSerialization, PageMapSerialization,
     },
-    Global, NumWasmPages, NumWasmPages64,
+    Global, NumWasmPages,
 };
 use serde::{Deserialize, Serialize};
 
@@ -82,12 +82,12 @@ pub enum StateBranch {
 
 /// Represents a snapshot of a memory that can be sent to the sandbox process.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct MemorySerialization<T> {
+pub struct MemorySerialization {
     pub page_map: PageMapSerialization,
-    pub num_wasm_pages: T,
+    pub num_wasm_pages: NumWasmPages,
 }
 
-impl<T> EnumerateInnerFileDescriptors for MemorySerialization<T> {
+impl EnumerateInnerFileDescriptors for MemorySerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         self.page_map.enumerate_fds(fds);
     }
@@ -98,13 +98,13 @@ impl<T> EnumerateInnerFileDescriptors for MemorySerialization<T> {
 /// parent state has an empty allocator and a new allocator was created for the
 /// current state.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct MemoryDeltaSerialization<T> {
+pub struct MemoryDeltaSerialization {
     pub page_delta: PageDeltaSerialization,
     pub page_allocator: Option<PageAllocatorSerialization>,
-    pub num_wasm_pages: T,
+    pub num_wasm_pages: NumWasmPages,
 }
 
-impl<T> EnumerateInnerFileDescriptors for MemoryDeltaSerialization<T> {
+impl EnumerateInnerFileDescriptors for MemoryDeltaSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         if let Some(page_allocator) = self.page_allocator.as_mut() {
             page_allocator.enumerate_fds(fds)
@@ -159,14 +159,14 @@ impl EnumerateInnerFileDescriptors for PageAllocatorSerialization {
 pub enum StateSerialization {
     Full {
         globals: Vec<Global>,
-        wasm_memory: MemorySerialization<NumWasmPages>,
-        stable_memory: MemorySerialization<NumWasmPages64>,
+        wasm_memory: MemorySerialization,
+        stable_memory: MemorySerialization,
     },
     Delta {
         parent_state_id: StateId,
         globals: Vec<Global>,
-        wasm_memory: MemoryDeltaSerialization<NumWasmPages>,
-        stable_memory: MemoryDeltaSerialization<NumWasmPages64>,
+        wasm_memory: MemoryDeltaSerialization,
+        stable_memory: MemoryDeltaSerialization,
     },
 }
 

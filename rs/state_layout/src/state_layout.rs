@@ -11,7 +11,7 @@ use ic_protobuf::{
     },
 };
 use ic_replicated_state::{
-    CallContextManager, CanisterStatus, ExportedFunctions, Global, NumWasmPages, NumWasmPages64,
+    CallContextManager, CanisterStatus, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_types::{
     nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation, Cycles,
@@ -177,7 +177,7 @@ pub struct CanisterStateBits {
     pub interruped_during_execution: u64,
     pub certified_data: Vec<u8>,
     pub consumed_cycles_since_replica_started: NominalCycles,
-    pub stable_memory_size: NumWasmPages64,
+    pub stable_memory_size: NumWasmPages,
     pub heap_delta_debit: NumBytes,
 }
 
@@ -993,7 +993,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 // case.
                 Err(_) => u32::MAX,
             },
-            stable_memory_size64: item.stable_memory_size.get(),
+            stable_memory_size64: item.stable_memory_size.get() as u64,
             heap_delta_debit: item.heap_delta_debit.get(),
         }
     }
@@ -1083,7 +1083,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             interruped_during_execution: value.interruped_during_execution,
             certified_data: value.certified_data,
             consumed_cycles_since_replica_started,
-            stable_memory_size: NumWasmPages64::from(stable_memory_size),
+            stable_memory_size: NumWasmPages::from(stable_memory_size as usize),
             heap_delta_debit: NumBytes::from(value.heap_delta_debit),
         })
     }
@@ -1097,7 +1097,11 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
                 .iter()
                 .map(|global| global.into())
                 .collect(),
-            heap_size: item.heap_size.get(),
+            heap_size: item
+                .heap_size
+                .get()
+                .try_into()
+                .expect("Canister heap size didn't fit into 32 bits"),
             exports: (&item.exports).into(),
             last_executed_round: item.last_executed_round.get(),
         }
@@ -1113,7 +1117,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
         }
         Ok(Self {
             exported_globals: globals,
-            heap_size: value.heap_size.into(),
+            heap_size: (value.heap_size as usize).into(),
             exports: value.exports.try_into()?,
             last_executed_round: value.last_executed_round.into(),
         })
@@ -1153,7 +1157,7 @@ mod test {
             interruped_during_execution: 0,
             certified_data: vec![],
             consumed_cycles_since_replica_started: NominalCycles::from(0),
-            stable_memory_size: NumWasmPages64::from(0),
+            stable_memory_size: NumWasmPages::from(0),
             heap_delta_debit: NumBytes::from(0),
         };
 
@@ -1192,7 +1196,7 @@ mod test {
             interruped_during_execution: 0,
             certified_data: vec![],
             consumed_cycles_since_replica_started: NominalCycles::from(0),
-            stable_memory_size: NumWasmPages64::from(0),
+            stable_memory_size: NumWasmPages::from(0),
             heap_delta_debit: NumBytes::from(0),
         };
 
@@ -1233,7 +1237,7 @@ mod test {
             interruped_during_execution: 0,
             certified_data: vec![],
             consumed_cycles_since_replica_started: NominalCycles::from(0),
-            stable_memory_size: NumWasmPages64::from(0),
+            stable_memory_size: NumWasmPages::from(0),
             heap_delta_debit: NumBytes::from(0),
         };
 

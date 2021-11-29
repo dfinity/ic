@@ -1,5 +1,5 @@
 use ic_interfaces::execution_environment::{ExecutionParameters, HypervisorResult, InstanceStats};
-use ic_replicated_state::{page_map::PageSerialization, Global, NumWasmPages, NumWasmPages64};
+use ic_replicated_state::{page_map::PageSerialization, Global, NumWasmPages};
 use ic_system_api::{ApiType, StaticSystemState};
 use ic_types::{ingress::WasmResult, methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
@@ -34,7 +34,7 @@ pub struct StateModifications {
     pub stable_memory_page_delta: Vec<PageSerialization>,
 
     /// Size of stable memory.
-    pub stable_memory_size: NumWasmPages64,
+    pub stable_memory_size: NumWasmPages,
 
     /// The number of free bytes of memory left on the subnet after executing
     /// the message.

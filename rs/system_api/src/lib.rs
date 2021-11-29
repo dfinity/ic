@@ -17,7 +17,7 @@ use ic_replicated_state::{
     canister_state::{system_state::CanisterStatus, ENFORCE_MESSAGE_MEMORY_USAGE},
     memory_required_to_push_request,
     page_map::PAGE_SIZE,
-    Memory, NumWasmPages64, PageIndex, StateError, SystemState,
+    Memory, NumWasmPages, PageIndex, StateError, SystemState,
 };
 use ic_sys::PageBytes;
 use ic_types::{
@@ -538,8 +538,8 @@ impl MemoryUsage {
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
     /// if either the canister memory limit or the subnet memory limit would be
     /// exceeded.
-    fn allocate_pages(&mut self, pages: u64) -> HypervisorResult<()> {
-        let bytes = ic_replicated_state::num_bytes_try_from64(NumWasmPages64::from(pages))
+    fn allocate_pages(&mut self, pages: usize) -> HypervisorResult<()> {
+        let bytes = ic_replicated_state::num_bytes_try_from(NumWasmPages::from(pages))
             .map_err(|_| HypervisorError::OutOfMemory)?;
         self.allocate_memory(bytes)
     }
@@ -547,10 +547,10 @@ impl MemoryUsage {
     /// Unconditionally deallocates the given number of Wasm pages. Should only
     /// be called immediately after `allocate_pages()`, with the same number of
     /// pages, in case growing the heap failed.
-    fn deallocate_pages(&mut self, pages: u64) {
+    fn deallocate_pages(&mut self, pages: usize) {
         // Expected to work as we have converted `pages` to bytes when `increase_usage`
         // was called and if it would have failed, we wouldn't call `decrease_usage`.
-        let bytes = ic_replicated_state::num_bytes_try_from64(NumWasmPages64::from(pages))
+        let bytes = ic_replicated_state::num_bytes_try_from(NumWasmPages::from(pages))
             .expect("could not convert wasm pages to bytes");
         self.deallocate_memory(bytes)
     }
@@ -679,7 +679,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
         static_system_state: StaticSystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
-        stable_memory: Memory<NumWasmPages64>,
+        stable_memory: Memory,
         log: ReplicaLogger,
     ) -> Self {
         let memory_usage = MemoryUsage::new(
@@ -993,7 +993,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
         self.system_state_accessor
     }
 
-    pub fn stable_memory_size(&self) -> NumWasmPages64 {
+    pub fn stable_memory_size(&self) -> NumWasmPages {
         self.stable_memory.stable_memory_size
     }
 
@@ -1069,7 +1069,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             .collect()
     }
 
-    fn stable_memory_size(&self) -> u64 {
+    fn stable_memory_size(&self) -> usize {
         self.stable_memory.stable_memory_size.get()
     }
 
@@ -1885,13 +1885,13 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                match self.memory_usage.allocate_pages(additional_pages as u64) {
+                match self.memory_usage.allocate_pages(additional_pages as usize) {
                     Ok(()) => {
                         let res = self.stable_memory.stable_grow(additional_pages);
                         match &res {
-                            Err(_) | Ok(-1) => {
-                                self.memory_usage.deallocate_pages(additional_pages as u64)
-                            }
+                            Err(_) | Ok(-1) => self
+                                .memory_usage
+                                .deallocate_pages(additional_pages as usize),
                             _ => {}
                         }
                         res
@@ -1983,13 +1983,13 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                match self.memory_usage.allocate_pages(additional_pages as u64) {
+                match self.memory_usage.allocate_pages(additional_pages as usize) {
                     Ok(()) => {
                         let res = self.stable_memory.stable64_grow(additional_pages);
                         match &res {
-                            Err(_) | Ok(-1) => {
-                                self.memory_usage.deallocate_pages(additional_pages as u64)
-                            }
+                            Err(_) | Ok(-1) => self
+                                .memory_usage
+                                .deallocate_pages(additional_pages as usize),
                             _ => {}
                         }
                         res
@@ -2080,7 +2080,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         if native_memory_grow_res == -1 {
             return Ok(-1);
         }
-        match self.memory_usage.allocate_pages(additional_pages as u64) {
+        match self.memory_usage.allocate_pages(additional_pages as usize) {
             Ok(()) => Ok(native_memory_grow_res),
             Err(_err) => Err(HypervisorError::OutOfMemory),
         }

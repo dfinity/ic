@@ -363,11 +363,11 @@ fn open_remote_state(
 
 // Creates a serialization-friendly representation of the memory delta from
 // the list of modified pages and the page allocator delta.
-fn serialize_memory_delta<T: Copy>(
-    memory: &Memory<T>,
+fn serialize_memory_delta(
+    memory: &Memory,
     pages: &[PageIndex],
     page_allocator: &PageAllocatorDelta,
-) -> MemoryDeltaSerialization<T> {
+) -> MemoryDeltaSerialization {
     let page_delta = memory.page_map.serialize_delta(pages);
     let page_allocator = match page_allocator {
         PageAllocatorDelta::Unchanged => None,

@@ -36,7 +36,7 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{HypervisorError, InstanceStats, SystemApi};
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::page_map::PageSerialization;
-use ic_replicated_state::{EmbedderCache, Global, Memory, NumWasmPages64, PageMap};
+use ic_replicated_state::{EmbedderCache, Global, Memory, PageMap};
 use ic_system_api::{ModificationTracking, SystemApiImpl};
 use ic_types::{
     methods::{FuncRef, SystemMethod, WasmMethod},
@@ -57,7 +57,7 @@ struct State {
     wasm_memory: Memory,
 
     /// The canister's stable memory.
-    stable_memory: Memory<NumWasmPages64>,
+    stable_memory: Memory,
 }
 
 struct ExecutionInstantiateError;
@@ -330,11 +330,7 @@ impl Execution {
 impl State {
     /// Instantiates a new state. This consists of the global variables and
     /// the wasm memory.
-    pub fn new(
-        globals: Vec<Global>,
-        wasm_memory: Memory,
-        stable_memory: Memory<NumWasmPages64>,
-    ) -> Self {
+    pub fn new(globals: Vec<Global>, wasm_memory: Memory, stable_memory: Memory) -> Self {
         Self {
             globals: globals.to_vec(),
             wasm_memory,
@@ -613,7 +609,7 @@ impl SandboxManagerInt {
 }
 
 // Constructs `Memory` from the given full memory serialization.
-fn deserialize_memory<T>(memory: MemorySerialization<T>) -> Memory<T> {
+fn deserialize_memory(memory: MemorySerialization) -> Memory {
     let page_map = PageMap::deserialize(memory.page_map).unwrap();
     Memory {
         page_map,
@@ -622,10 +618,7 @@ fn deserialize_memory<T>(memory: MemorySerialization<T>) -> Memory<T> {
 }
 
 // Constructs `Memory` by applying the given delta to the given parent memory.
-fn deserialize_delta_memory<T>(
-    parent_page_map: &PageMap,
-    delta: MemoryDeltaSerialization<T>,
-) -> Memory<T> {
+fn deserialize_delta_memory(parent_page_map: &PageMap, delta: MemoryDeltaSerialization) -> Memory {
     let mut page_map = parent_page_map.clone();
     if let Some(page_allocator) = delta.page_allocator {
         page_map.deserialize_allocator(page_allocator);
