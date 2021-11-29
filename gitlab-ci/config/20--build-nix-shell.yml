@@ -15,7 +15,7 @@ nix-shell:
       }
 
       echo '{}' | jq '{origin: $origin, rev: $rev, paths: $paths}' \
-        --arg origin "git@gitlab.com:dfinity-lab/core/ic.git" \
+        --arg origin "git@gitlab.com:dfinity-lab/public/ic.git" \
         --arg rev "$CI_COMMIT_SHA" \
         --arg paths "$(join "${shellfiles[@]}")" > request.json
       cat request.json
