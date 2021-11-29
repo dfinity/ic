@@ -67,7 +67,7 @@ fi
 
 # Store git information
 git rev-parse HEAD >"$experiment_dir/git-SHA"
-git describe HEAD >"$experiment_dir/git-describe"
+git describe HEAD --always >"$experiment_dir/git-describe"
 git status -s >"$experiment_dir/git-status"
 git diff >"$experiment_dir/git-diff"
 
