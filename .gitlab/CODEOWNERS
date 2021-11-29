@@ -78,6 +78,7 @@
 
 /rs/artifact_manager/                @dfinity-lab/teams/consensus-owners
 /rs/artifact_pool/                   @dfinity-lab/teams/consensus-owners
+/rs/canister_client/                 @dfinity-lab/teams/networking-team
 /rs/canister_sandbox/                @dfinity-lab/teams/execution-owners
 /rs/canonical_state/                 @dfinity-lab/teams/message-routing-owners
 /rs/certified_vars/                  @dfinity-lab/teams/message-routing-owners
