@@ -17,7 +17,7 @@ use strum::IntoEnumIterator;
 pub mod util {
     use super::*;
     use crate::api::CspThresholdSignError;
-    use crate::server::api::ThresholdSignatureCspVault;
+    use crate::vault::api::ThresholdSignatureCspVault;
     use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_csp_pub_coeffs;
 
     /// Test that a set of threshold signatures behaves correctly.

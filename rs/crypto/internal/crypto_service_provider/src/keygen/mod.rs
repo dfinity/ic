@@ -16,7 +16,7 @@ use tecdsa::{EccCurveType, MEGaPublicKey};
 
 const KEY_ID_DOMAIN: &str = "ic-key-id";
 
-use crate::server::api::{BasicSignatureCspVault, MultiSignatureCspVault, SecretKeyStoreCspVault};
+use crate::vault::api::{BasicSignatureCspVault, MultiSignatureCspVault, SecretKeyStoreCspVault};
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_sha::Sha256;
 pub use tls_keygen::tls_cert_hash_as_key_id;
