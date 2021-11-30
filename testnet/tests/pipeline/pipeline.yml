@@ -342,7 +342,7 @@ maximum-capacity-subnet-update-nightly:
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
       export GIT_REVISION
 
-      $SHELL_WRAPPER timeout 36m ./testnet/tests/scripts/maximum_capacity_subnet_update.sh "$TESTNET" 30 20 2 2 1k dest_nodes large "$CI_JOB_STAGE/$CI_JOB_NAME"
+      $SHELL_WRAPPER timeout 46m ./testnet/tests/scripts/maximum_capacity_subnet_update.sh "$TESTNET" 30 20 2 2 1k dest_nodes large "$CI_JOB_STAGE/$CI_JOB_NAME"
 
 # Maximum query call capacity (run nightly to ensure it runs correctly, not to determine capacity)
 maximum-capacity-subnet-query-nightly:
@@ -356,7 +356,7 @@ maximum-capacity-subnet-query-nightly:
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
       export GIT_REVISION
 
-      $SHELL_WRAPPER timeout 36m ./testnet/tests/scripts/maximum_capacity_subnet_query.sh "$TESTNET" 30 20 2 2 1k dest_nodes large "$CI_JOB_STAGE/$CI_JOB_NAME"
+      $SHELL_WRAPPER timeout 46m ./testnet/tests/scripts/maximum_capacity_subnet_query.sh "$TESTNET" 30 20 2 2 1k dest_nodes large "$CI_JOB_STAGE/$CI_JOB_NAME"
 
 # Maximum xnet capacity (run nightly to ensure it runs correctly, not to determine capacity)
 maximum-capacity-xnet-slo-nightly:
@@ -370,7 +370,7 @@ maximum-capacity-xnet-slo-nightly:
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
       export GIT_REVISION
 
-      $SHELL_WRAPPER timeout 37m ./testnet/tests/scripts/maximum_capacity_xnet_slo.sh "$TESTNET" 2 30 20 2 1024 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+      $SHELL_WRAPPER timeout 47m ./testnet/tests/scripts/maximum_capacity_xnet_slo.sh "$TESTNET" 2 30 20 2 1024 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
 
 # Maximum rejoin capacity (run nightly to ensure it runs correctly, not to determine capacity)
 maximum-capacity-rejoin-nightly:
@@ -384,7 +384,7 @@ maximum-capacity-rejoin-nightly:
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
       export GIT_REVISION
 
-      $SHELL_WRAPPER timeout 1h ./testnet/tests/scripts/maximum_capacity_rejoin.sh "$TESTNET" 2 2 1 2 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+      $SHELL_WRAPPER timeout 72h ./testnet/tests/scripts/maximum_capacity_rejoin.sh "$TESTNET" 2 2 1 2 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
 
 # Check if proposal to change firewall is processed correctly
 firewall-test-nightly:
