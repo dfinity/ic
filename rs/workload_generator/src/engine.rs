@@ -709,7 +709,6 @@ impl Engine {
             fs::write(f, bytes).unwrap();
         }
 
-        println!("{:?}", &call_response);
         let counter_value = call_response
             .reply
             .as_ref()
