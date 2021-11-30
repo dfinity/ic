@@ -10,11 +10,9 @@ cargo-lock-generate:
       git checkout "${CI_COMMIT_REF_NAME}"
       nix-shell --run "cargo check -p ic-sys"
       cd "${CI_PROJECT_DIR}"
-    - nix-shell rs -A cargo-generate
     - |
       set -exuo pipefail
       git add rs/Cargo.lock
-      git add rs/Cargo.nix
       git status
       if ! git diff --cached --quiet; then
         # There are some changes staged

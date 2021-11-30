@@ -26,7 +26,7 @@ let
   prod = import ./testnet { inherit pkgs rs baseJobs jobset; };
 
   rs-required = rs // pkgs.lib.requireAllLinuxAndDarwin {
-    inherit (rs) ic-replica-debug cargo-generate shell;
+    inherit (rs) shell;
   };
 in
 rec {

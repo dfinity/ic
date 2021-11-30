@@ -218,9 +218,4 @@
   # the cargo2nix overlays
   (self: super: import ./cargo2nix/overlay self super)
   (import ./cargo2nix.nix)
-
-  # XXX: both workspace.nix and cargo2nix define rustBuilder, and
-  # workspace.nix' rustBuilder depends on cargo2nix.nix' so workspace.nix
-  # _must_ be evaluated _after_ cargo2nix.nix
-  (import ../../rs/workspace.nix)
 ]
