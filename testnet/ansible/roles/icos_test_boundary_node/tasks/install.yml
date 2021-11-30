@@ -488,6 +488,7 @@
     - boundary_node
 
 - name: reload nginx
+  ignore_errors: yes
   service:
     name: nginx
     state: reloaded
