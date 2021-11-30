@@ -14,6 +14,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     str::FromStr,
+    time::Duration,
 };
 
 use std::{convert::TryFrom, net::SocketAddrV4};
@@ -28,7 +29,9 @@ mod metrics;
 mod plan;
 mod stats;
 
-use ic_canister_client::{ed25519_public_key_to_der, HttpClient, Sender as AgentSender};
+use ic_canister_client::{
+    ed25519_public_key_to_der, HttpClient, HttpClientConfig, Sender as AgentSender,
+};
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_test_identity::{get_pair, TEST_IDENTITY_KEYPAIR, TEST_IDENTITY_KEYPAIR_HARD_CODED};
 use ic_types::{messages::Blob, CanisterId, PrincipalId, UserId};
@@ -233,6 +236,24 @@ async fn main() {
                 .takes_value(true)
                 .help(format!("If specified, that many connections will be opened per host when sending the load. Default : {}", CONNECTIONS_PER_HOST).as_str()),
         )
+        .arg(
+            Arg::with_name("http2-only")
+                .long("http2-only")
+                .takes_value(true)
+                .help("If specified, sets this option when building the hyper http client."),
+        )
+        .arg(
+            Arg::with_name("pool-max-idle-per-host")
+                .long("pool-max-idle-per-host")
+                .takes_value(true)
+                .help("If specified, sets this option when building the hyper http client."),
+        )
+        .arg(
+            Arg::with_name("pool-idle-timeout-secs")
+                .long("pool-idle-timeout-secs")
+                .takes_value(true)
+                .help("If specified, sets this option when building the hyper http client."),
+        )
 
         .get_matches();
 
@@ -352,6 +373,18 @@ async fn main() {
 
     let mut exit_code_success = true;
 
+    let mut http_client_config = HttpClientConfig::default();
+    if let Some(val) = matches.value_of("http2-only") {
+        http_client_config.http2_only = val.parse::<bool>().unwrap();
+    }
+    if let Some(val) = matches.value_of("pool-max-idle-per-host") {
+        http_client_config.pool_max_idle_per_host = val.parse::<usize>().unwrap();
+    }
+    if let Some(val) = matches.value_of("pool-idle-timeout-secs") {
+        http_client_config.pool_idle_timeout =
+            Some(Duration::from_secs(val.parse::<u64>().unwrap()));
+    }
+
     let http_client = HttpClient::new();
     let (sender, pubkey_bytes) = match principal_id {
         None => (
@@ -399,7 +432,13 @@ async fn main() {
                 }
                 _ => {}
             }
-            let eng = engine::Engine::new(sender.clone(), sender_field, &url, connections_per_host);
+            let eng = engine::Engine::new(
+                sender.clone(),
+                sender_field,
+                &url,
+                connections_per_host,
+                http_client_config,
+            );
 
             if !matches.is_present("no-status-check") {
                 eng.wait_for_all_agents_to_be_healthy().await;
