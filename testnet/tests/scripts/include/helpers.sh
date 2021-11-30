@@ -95,12 +95,14 @@ deploy_with_timeout() {
     fi
     typeset -i SLEEP_TIMEOUT=$(cat "${experiment_dir}/sleep_timeout.txt")
     typeset -i DEPLOY_EXIT_CODE=$(cat "${experiment_dir}/deploy_exit_code.txt")
-    if ((DEPLOY_EXIT_CODE == 1000 || SLEEP_TIMEOUT != 0)); then
-        failure "Deployment process timed out"
-        exit 124
-    fi
     if ((DEPLOY_EXIT_CODE == 0 && SLEEP_TIMEOUT == 0)); then
         success "Deployment processes finished gracefully"
+    elif ((SLEEP_TIMEOUT != 0)); then
+        failure "Deployment process timed out"
+        exit 124
+    elif ((DEPLOY_EXIT_CODE == 1000)); then
+        failure "Deployment process exited prematurely"
+        exit 1
     else
         failure "Deployment process finished with exit code ${DEPLOY_EXIT_CODE}"
         exit "${DEPLOY_EXIT_CODE}"
