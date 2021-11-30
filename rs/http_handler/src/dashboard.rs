@@ -14,9 +14,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tower::{limit::ConcurrencyLimit, BoxError, Service, ServiceBuilder};
-
-const MAX_CONCURRENT_DASHBOARD_REQUESTS: usize = 1000;
+use tower::{BoxError, Service};
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
@@ -33,17 +31,12 @@ impl DashboardService {
         config: Config,
         subnet_type: SubnetType,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    ) -> ConcurrencyLimit<DashboardService> {
-        let base_service = Self {
+    ) -> DashboardService {
+        Self {
             config,
             subnet_type,
             state_reader,
-        };
-        ServiceBuilder::new()
-            .layer(tower::limit::GlobalConcurrencyLimitLayer::new(
-                MAX_CONCURRENT_DASHBOARD_REQUESTS,
-            ))
-            .service(base_service)
+        }
     }
 }
 

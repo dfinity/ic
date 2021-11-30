@@ -120,8 +120,8 @@ impl Service<Vec<u8>> for CallService {
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.ingress_sender.poll_ready(cx)
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, body: Vec<u8>) -> Self::Future {
@@ -180,24 +180,7 @@ impl Service<Vec<u8>> for CallService {
             return Box::pin(async move { Ok(res) });
         }
 
-        let ingress_sender = self.ingress_sender.clone();
-
-        // In case the inner service has state that's driven to readiness and
-        // not tracked by clones (such as `Buffer`), pass the version we have
-        // already called `poll_ready` on into the future, and leave its clone
-        // behind.
-        //
-        // The types implementing the Service trait are not necessary thread-safe.
-        // So the unless the caller is sure that the service implementation is
-        // thread-safe we must make sure 'poll_ready' is always called before 'call'
-        // on the same object. Hence if 'poll_ready' is called and not tracked by
-        // the 'Clone' implementation the following sequence of events may panic.
-        //
-        //  s1.call_ready()
-        //  s2 = s1.clone()
-        //  s2.call()
-        let mut ingress_sender = std::mem::replace(&mut self.ingress_sender, ingress_sender);
-
+        let mut ingress_sender = self.ingress_sender.clone();
         let mut ingress_filter = self.ingress_filter.clone();
         let log = self.log.clone();
 
@@ -213,7 +196,13 @@ impl Service<Vec<u8>> for CallService {
             }
 
             let ingress_log_entry = msg.log_entry();
-            if let Err(err) = ingress_sender.call(msg).await {
+            if let Err(err) = ingress_sender
+                .ready()
+                .await
+                .expect("The service must always be able to process requests")
+                .call(msg)
+                .await
+            {
                 return Ok(map_box_error_to_response(err));
             }
 

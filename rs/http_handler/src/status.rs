@@ -14,10 +14,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
-use tower::{limit::ConcurrencyLimit, BoxError, Service, ServiceBuilder};
-
-// Max number of inflight /api/v2/status requests across all connections.
-const MAX_CONCURRENT_STATUS_REQUESTS: usize = 1000;
+use tower::{BoxError, Service};
 
 // TODO(NET-776)
 // The IC API version reported on status requests.
@@ -39,20 +36,14 @@ impl StatusService {
         nns_subnet_id: SubnetId,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         replica_health_status: Arc<RwLock<ReplicaHealthStatus>>,
-    ) -> ConcurrencyLimit<StatusService> {
-        let base_service = Self {
+    ) -> StatusService {
+        Self {
             log,
             config,
             nns_subnet_id,
             state_reader,
             replica_health_status,
-        };
-
-        ServiceBuilder::new()
-            .layer(tower::limit::GlobalConcurrencyLimitLayer::new(
-                MAX_CONCURRENT_STATUS_REQUESTS,
-            ))
-            .service(base_service)
+        }
     }
 }
 

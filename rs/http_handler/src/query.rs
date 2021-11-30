@@ -5,7 +5,7 @@ use crate::{
     types::{ApiReqType, RequestType},
     HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
 };
-use futures::future::FutureExt;
+
 use hyper::{Body, Response};
 use ic_interfaces::{
     crypto::IngressSigVerifier, execution_environment::QueryExecutionService,
@@ -27,8 +27,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
+use tower::ServiceExt;
 use tower::{BoxError, Service};
 
+//
 #[derive(Clone)]
 pub(crate) struct QueryService {
     log: ReplicaLogger,
@@ -72,8 +74,8 @@ impl Service<Vec<u8>> for QueryService {
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.query_execution_service.poll_ready(cx)
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, body: Vec<u8>) -> Self::Future {
@@ -117,7 +119,7 @@ impl Service<Vec<u8>> for QueryService {
                 return Box::pin(async move { Ok(res) });
             }
         };
-        let query = request.content();
+        let query = request.content().clone();
 
         match get_authorized_canisters(
             &request,
@@ -138,13 +140,19 @@ impl Service<Vec<u8>> for QueryService {
             }
         };
 
-        Box::pin(
-            self.query_execution_service
-                .call((query.clone(), delegation_from_nns))
-                .map(|result| {
-                    let v = result?;
-                    Ok(cbor_response(&v))
-                }),
-        )
+        let mut query_execution_service = self.query_execution_service.clone();
+
+        Box::pin(async move {
+            match query_execution_service
+                .ready()
+                .await
+                .expect("Service must be available")
+                .call((query, delegation_from_nns))
+                .await
+            {
+                Ok(v) => Ok(cbor_response(&v)),
+                Err(err) => Err(err),
+            }
+        })
     }
 }
