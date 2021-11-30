@@ -47,6 +47,7 @@ tarpaulin-report.html
 *.iml
 *.swp
 *.swo
+.envrc
 
 ### Haskell related ###
 
