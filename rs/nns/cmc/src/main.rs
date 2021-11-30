@@ -327,8 +327,13 @@ fn update_recent_icp_xdr_rates(new_rate: &IcpXdrConversionRate, state: &mut Stat
         );
         NUM_DAYS_FOR_ICP_XDR_AVERAGE
     ]);
-    // The record is updated if it is the first entry of a new day.
-    if (recent_rates[index].timestamp_seconds / 86_400) < day {
+    // The record is updated if it is the first entry of a new day or an earlier
+    // entry of the same day.
+    let day_at_index = recent_rates[index].timestamp_seconds / 86_400;
+    if day_at_index < day
+        || (day_at_index == day
+            && recent_rates[index].timestamp_seconds > new_rate.timestamp_seconds)
+    {
         recent_rates[index] = new_rate.clone();
         // Update the average ICP/XDR rate.
         if let Ok(time) = dfn_core::api::now().duration_since(UNIX_EPOCH) {
@@ -881,7 +886,61 @@ fn post_upgrade() {
             "[cycles] deserializing state after upgrade ({} bytes)",
             bytes.len(),
         ));
-        *STATE.write().unwrap() = State::decode(&bytes).unwrap();
+
+        // TODO(NNS1-905): Remove these lines for subsequent upgrades
+        let mut state = State::decode(&bytes).unwrap();
+        let recent_rates = vec![
+            IcpXdrConversionRate {
+                xdr_permyriad_per_icp: 380328,
+                timestamp_seconds: 1636329600,
+            },
+            IcpXdrConversionRate {
+                xdr_permyriad_per_icp: 388621,
+                timestamp_seconds: 1636416000,
+            },
+            IcpXdrConversionRate {
+                xdr_permyriad_per_icp: 372643,
+                timestamp_seconds: 1636502400,
+            },
+            IcpXdrConversionRate {
+                xdr_permyriad_per_icp: 341526,
+                timestamp_seconds: 1636588800,
+            },
+            IcpXdrConversionRate {
+                xdr_permyriad_per_icp: 339530,
+                timestamp_seconds: 1636675200,
+            },
+            IcpXdrConversionRate {
+                xdr_permyriad_per_icp: 330262,
+                timestamp_seconds: 1636761600,
+            },
+            IcpXdrConversionRate {
+                xdr_permyriad_per_icp: 345074,
+                timestamp_seconds: 1636848000,
+            },
+            IcpXdrConversionRate {
+                xdr_permyriad_per_icp: 344204,
+                timestamp_seconds: 1636934400,
+            },
+            IcpXdrConversionRate {
+                xdr_permyriad_per_icp: 333766,
+                timestamp_seconds: 1637020800,
+            },
+            IcpXdrConversionRate {
+                xdr_permyriad_per_icp: 303999,
+                timestamp_seconds: 1637107200,
+            },
+            IcpXdrConversionRate {
+                xdr_permyriad_per_icp: 306846,
+                timestamp_seconds: 1637193600,
+            },
+        ];
+
+        recent_rates.iter().for_each(|x| {
+            update_recent_icp_xdr_rates(x, &mut state);
+        });
+
+        *STATE.write().unwrap() = state;
     })
 }
 
