@@ -11,14 +11,14 @@ pub mod imported_utilities;
 pub mod public_key_store;
 mod remaining_conversions;
 pub mod secret_key_store;
-mod server;
 pub mod threshold;
 pub mod tls_stub;
 pub mod types;
+mod vault;
 
-pub use crate::server::api::TlsHandshakeCspVault;
-pub use crate::server::local_csp_server::LocalCspVault;
-pub use crate::server::remote_csp_server::run_csp_vault_server;
+pub use crate::vault::api::TlsHandshakeCspVault;
+pub use crate::vault::local_csp_vault::LocalCspVault;
+pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 
 use crate::api::{
     CspKeyGenerator, CspSecretKeyStoreChecker, CspSigner, CspTlsClientHandshake,

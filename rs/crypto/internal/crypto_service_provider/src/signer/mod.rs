@@ -2,10 +2,10 @@ use super::api::CspSigner;
 use super::types::{CspPop, CspPublicKey, CspSignature};
 use super::Csp;
 use crate::secret_key_store::SecretKeyStore;
-use crate::server::api::{
+use crate::types::MultiBls12_381_Signature;
+use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspMultiSignatureError, MultiSignatureCspVault,
 };
-use crate::types::MultiBls12_381_Signature;
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;

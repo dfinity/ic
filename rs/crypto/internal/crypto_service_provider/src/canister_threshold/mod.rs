@@ -7,7 +7,7 @@
 use crate::api::{CspCreateMEGaKeyError, IDkgProtocolCspClient};
 use crate::keygen::mega_key_id;
 use crate::secret_key_store::SecretKeyStore;
-use crate::server::api::IDkgProtocolCspVault;
+use crate::vault::api::IDkgProtocolCspVault;
 use crate::Csp;
 use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;

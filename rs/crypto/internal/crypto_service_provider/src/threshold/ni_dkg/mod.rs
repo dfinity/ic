@@ -6,9 +6,9 @@
 
 use crate::api::{NiDkgCspClient, NodePublicKeyData};
 use crate::secret_key_store::SecretKeyStore;
-use crate::server::api::NiDkgCspVault;
 use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
+use crate::vault::api::NiDkgCspVault;
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as clib;

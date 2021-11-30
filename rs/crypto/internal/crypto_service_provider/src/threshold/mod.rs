@@ -1,9 +1,9 @@
 //! Threshold signature implementation for the CSP
 use crate::api::{CspThresholdSignError, ThresholdSignatureCspClient};
 use crate::secret_key_store::SecretKeyStore;
-use crate::server::api::ThresholdSignatureCspVault;
 use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
+use crate::vault::api::ThresholdSignatureCspVault;
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_bls12381 as clib;
 use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_pub_coeff_bytes;
