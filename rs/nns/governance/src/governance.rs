@@ -794,11 +794,7 @@ impl Neuron {
     /// neuron is dissolving, `aging_since` is a value in the far
     /// future, effectively making its age zero.
     pub fn age_seconds(&self, now_seconds: u64) -> u64 {
-        if self.aging_since_timestamp_seconds <= now_seconds {
-            now_seconds - self.aging_since_timestamp_seconds
-        } else {
-            0
-        }
+        now_seconds.saturating_sub(self.aging_since_timestamp_seconds)
     }
 
     /// Returns the dissolve delay of this neuron. For a non-dissolving
@@ -810,11 +806,7 @@ impl Neuron {
         match self.dissolve_state {
             Some(DissolveState::DissolveDelaySeconds(d)) => d,
             Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => {
-                if ts > now_seconds {
-                    ts - now_seconds
-                } else {
-                    0
-                }
+                ts.saturating_sub(now_seconds)
             }
             None => 0,
         }
@@ -922,11 +914,8 @@ impl Neuron {
     /// subsequently rejected, and increased by transferring funds
     /// to the acccount of this neuron and then refreshing the stake.
     pub fn stake_e8s(&self) -> u64 {
-        if self.cached_neuron_stake_e8s > self.neuron_fees_e8s {
-            self.cached_neuron_stake_e8s - self.neuron_fees_e8s
-        } else {
-            0
-        }
+        self.cached_neuron_stake_e8s
+            .saturating_sub(self.neuron_fees_e8s)
     }
 
     /// Update the stake of this neuron to `new_stake` and adjust this neuron's
@@ -2416,12 +2405,13 @@ impl Governance {
         // Calculate the amount to transfer, and adjust the cached stake,
         // accordingly. Make sure no matter what the user disburses we still
         // take the fees into account.
+        //
+        // Note that the implementation of stake_e8s is effectively:
+        //   neuron.cached_neuron_stake_e8s.saturating_sub(neuron.neuron_fees_e8s)
+        // So there is symmetry here in that we are subtracting
+        // fees_amount_e8s from both sides of this `map_or`.
         let mut disburse_amount_e8s = disburse.amount.as_ref().map_or(neuron.stake_e8s(), |a| {
-            if a.e8s > fees_amount_e8s {
-                a.e8s - fees_amount_e8s
-            } else {
-                0
-            }
+            a.e8s.saturating_sub(fees_amount_e8s)
         });
 
         // Subtract the transaction fee from the amount to disburse since it'll
@@ -2491,11 +2481,7 @@ impl Governance {
 
         let to_deduct = disburse_amount_e8s + transaction_fee_e8s;
         // The transfer was successful we can change the stake of the neuron.
-        if to_deduct >= neuron.cached_neuron_stake_e8s {
-            neuron.cached_neuron_stake_e8s = 0;
-        } else {
-            neuron.cached_neuron_stake_e8s -= to_deduct;
-        }
+        neuron.cached_neuron_stake_e8s = neuron.cached_neuron_stake_e8s.saturating_sub(to_deduct);
 
         // Transfer 3 - Transfer the accumulated maturity by minting into the
         // chosen account, but only if the value exceeds the cost of a transaction fee
