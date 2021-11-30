@@ -520,6 +520,18 @@ impl RosettaApiHandle {
             }
         }
     }
+
+    pub async fn raw_construction_endpoint(
+        &self,
+        endpoint: &str,
+        body: &[u8],
+    ) -> Result<(Vec<u8>, HttpStatusCode), std::string::String> {
+        self.post_json_request(
+            &format!("http://{}/construction/{}", self.api_url, endpoint),
+            body.to_owned(),
+        )
+        .await
+    }
 }
 
 impl Drop for RosettaApiHandle {
