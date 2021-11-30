@@ -4,7 +4,6 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tower::{Layer, Service};
 
-#[derive(Clone)]
 pub(crate) struct PassThroughLayer;
 
 impl<S> Layer<S> for PassThroughLayer {

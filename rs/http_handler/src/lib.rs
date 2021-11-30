@@ -77,8 +77,8 @@ use tokio::{
     time::{timeout, Instant},
 };
 use tower::{
-    limit::ConcurrencyLimit, load_shed::error::Overloaded, service_fn, steer::Steer,
-    util::BoxService, BoxError, ServiceBuilder, ServiceExt,
+    load_shed::error::Overloaded, service_fn, steer::Steer, util::BoxService, BoxError,
+    ServiceBuilder, ServiceExt,
 };
 
 // Constants defining the limits of the HttpHandler.
@@ -134,9 +134,6 @@ const CONTENT_TYPE_CBOR: &str = "application/cbor";
 // Placeholder used when we can't determine the approriate prometheus label.
 const UNKNOWN_LABEL: &str = "unknown";
 
-const MAX_CONCURRENT_READ_STATE_REQUESTS: usize = 1000;
-const MAX_CONCURRENT_CATCH_UP_PACKAGE_REQUESTS: usize = 1000;
-
 /// The struct that handles incoming HTTP requests for the IC replica.
 /// This is collection of thread-safe data members.
 #[derive(Clone)]
@@ -151,10 +148,10 @@ struct HttpHandler {
     // All handler services receive Body as input.
     call_service: BodyReceiverService<CallService>,
     query_service: BodyReceiverService<QueryService>,
-    read_state_service: ConcurrencyLimit<BodyReceiverService<ReadStateService>>,
-    status_service: ConcurrencyLimit<StatusService>,
-    dashboard_service: ConcurrencyLimit<DashboardService>,
-    catch_up_package_service: ConcurrencyLimit<BodyReceiverService<CatchUpPackageService>>,
+    read_state_service: BodyReceiverService<ReadStateService>,
+    status_service: StatusService,
+    dashboard_service: DashboardService,
+    catch_up_package_service: BodyReceiverService<CatchUpPackageService>,
     #[allow(dead_code)]
     backup_spool_path: Option<PathBuf>,
     malicious_flags: MaliciousFlags,
@@ -456,30 +453,26 @@ impl HttpHandler {
         );
         let dashboard_service =
             DashboardService::new(config, subnet_type, Arc::clone(&state_reader));
-        let catch_up_package_service = ServiceBuilder::new()
-            .layer(tower::limit::GlobalConcurrencyLimitLayer::new(
-                MAX_CONCURRENT_CATCH_UP_PACKAGE_REQUESTS,
-            ))
-            .layer(body_receiver.clone())
-            .service(CatchUpPackageService::new(
-                metrics.clone(),
-                consensus_pool_cache,
-            ));
-        let read_state_service = ServiceBuilder::new()
-            .layer(tower::limit::GlobalConcurrencyLimitLayer::new(
-                MAX_CONCURRENT_READ_STATE_REQUESTS,
-            ))
-            .layer(body_receiver.clone())
-            .service(ReadStateService::new(
-                log.clone(),
-                metrics.clone(),
-                Arc::clone(&health_status),
-                Arc::clone(&delegation_from_nns),
-                Arc::clone(&state_reader),
-                Arc::clone(&validator),
-                Arc::clone(&registry_client),
-                malicious_flags.clone(),
-            ));
+        let catch_up_package_service =
+            ServiceBuilder::new()
+                .layer(body_receiver.clone())
+                .service(CatchUpPackageService::new(
+                    metrics.clone(),
+                    consensus_pool_cache,
+                ));
+        let read_state_service =
+            ServiceBuilder::new()
+                .layer(body_receiver.clone())
+                .service(ReadStateService::new(
+                    log.clone(),
+                    metrics.clone(),
+                    Arc::clone(&health_status),
+                    Arc::clone(&delegation_from_nns),
+                    Arc::clone(&state_reader),
+                    Arc::clone(&validator),
+                    Arc::clone(&registry_client),
+                    malicious_flags.clone(),
+                ));
         let call_service = ServiceBuilder::new()
             .layer(body_receiver)
             .service(CallService::new(
