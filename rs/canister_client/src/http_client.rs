@@ -8,6 +8,23 @@ use hyper_tls::HttpsConnector as HyperTlsConnector;
 use std::time::Duration;
 use url::Url;
 
+#[derive(Copy, Clone)]
+pub struct HttpClientConfig {
+    pub pool_idle_timeout: Option<Duration>,
+    pub pool_max_idle_per_host: usize,
+    pub http2_only: bool,
+}
+
+impl Default for HttpClientConfig {
+    fn default() -> Self {
+        Self {
+            pool_idle_timeout: Some(Duration::from_secs(600)),
+            pool_max_idle_per_host: 1,
+            http2_only: true,
+        }
+    }
+}
+
 /// An HTTP Client to communicate with a replica.
 #[derive(Clone)]
 pub struct HttpClient {
@@ -15,7 +32,7 @@ pub struct HttpClient {
 }
 
 impl HttpClient {
-    pub fn new() -> Self {
+    pub fn new_with_config(config: HttpClientConfig) -> Self {
         let native_tls_connector = native_tls::TlsConnector::builder()
             .use_sni(false)
             .request_alpns(&["h2"])
@@ -28,12 +45,16 @@ impl HttpClient {
             HyperTlsConnector::from((http_connector, native_tls_connector.into()));
 
         let hyper = HyperClient::builder()
-            .pool_idle_timeout(Some(Duration::from_secs(600)))
-            .pool_max_idle_per_host(1)
-            .http2_only(true)
+            .pool_idle_timeout(config.pool_idle_timeout)
+            .pool_max_idle_per_host(config.pool_max_idle_per_host)
+            .http2_only(config.http2_only)
             .build::<_, hyper::Body>(https_connector);
 
         Self { hyper }
+    }
+
+    pub fn new() -> Self {
+        Self::new_with_config(HttpClientConfig::default())
     }
 
     fn build_uri(&self, url: &Url, end_point: &str) -> Result<HyperUri, String> {

@@ -8,7 +8,9 @@ use crate::{
     RequestType,
 };
 use backoff::backoff::Backoff;
-use ic_canister_client::{get_backoff_policy, update_path, Agent, Sender as AgentSender};
+use ic_canister_client::{
+    get_backoff_policy, update_path, Agent, HttpClientConfig, Sender as AgentSender,
+};
 use ic_types::{
     messages::{Blob, MessageId, SignedRequestBytes},
     time::current_time_and_expiry_time,
@@ -85,11 +87,16 @@ impl Engine {
         sender_field: Blob,
         urls: &[String],
         connections_per_host: u32,
+        http_client_config: HttpClientConfig,
     ) -> Engine {
         let mut agents = Vec::with_capacity(urls.len() * connections_per_host as usize);
         for _ in 0..connections_per_host {
             let current_batch = urls.iter().map(|url| {
-                let mut agent = Agent::new(Url::parse(url.as_str()).unwrap(), agent_sender.clone());
+                let mut agent = Agent::new_with_http_client_config(
+                    Url::parse(url.as_str()).unwrap(),
+                    agent_sender.clone(),
+                    http_client_config,
+                );
                 agent.sender_field = sender_field.clone();
                 agent
             });

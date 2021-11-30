@@ -10,5 +10,5 @@ pub use agent::{
     Sender,
 };
 pub use cbor::parse_read_state_response;
-pub use http_client::HttpClient;
+pub use http_client::{HttpClient, HttpClientConfig};
 pub use hyper::StatusCode as HttpStatusCode;

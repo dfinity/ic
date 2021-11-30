@@ -1,7 +1,7 @@
 //! An agent to talk to the Internet Computer through the public endpoints.
 use crate::{
     cbor::{parse_canister_query_response, parse_read_state_response, RequestStatus},
-    http_client::HttpClient,
+    http_client::{HttpClient, HttpClientConfig},
 };
 use backoff::backoff::Backoff;
 use ed25519_dalek::{Keypair, Signer, KEYPAIR_LENGTH};
@@ -261,10 +261,13 @@ impl Agent {
         Self::build_agent(url, http_client, sender)
     }
 
-    /// Creates a agent that is a copy of `agent` except that
-    /// that is has a new sender.
-    pub fn new_with_sender(agent: &Agent, sender: Sender) -> Self {
-        Self::build_agent(agent.url.clone(), agent.http_client.clone(), sender)
+    pub fn new_with_http_client_config(
+        url: Url,
+        sender: Sender,
+        http_client_config: HttpClientConfig,
+    ) -> Self {
+        let http_client = Arc::new(HttpClient::new_with_config(http_client_config));
+        Self::build_agent(url, http_client, sender)
     }
 
     /// Creates an agent.
