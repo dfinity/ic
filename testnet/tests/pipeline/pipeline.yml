@@ -878,14 +878,14 @@ wasm-generator-hourly:
   variables:
     SUITE_NAME: "wasm_generator_suite"
     cd_target_env: "HOURLY"
-    NUM_OF_CANISTERS: 1
+    NUMBER_OF_CANISTERS: 20
 
 wasm-generator-nightly:
   extends: .wasm-generator-farm-based
   stage: prod-tests-04
   variables:
     SUITE_NAME: "wasm_generator_suite"
-    NUM_OF_CANISTERS: 5
+    NUMBER_OF_CANISTERS: 100
     cd_target_env: "NIGHTLY"
   timeout: 3 hours
 
@@ -893,7 +893,7 @@ wasm-generator-slo:
   extends: .wasm-generator-farm-based
   variables:
     SUITE_NAME: "wasm_generator_suite"
-    NUM_OF_CANISTERS: 10
+    NUMBER_OF_CANISTERS: 100
     cd_target_env: "SLO"
 
 # Stress tests: Run given job sequence every N minutes so we can easily collect failure data
