@@ -14,9 +14,10 @@ Runbook::
 
 end::catalog[] */
 
+use assert_json_diff::{assert_json_eq, assert_json_include};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
-use ic_rosetta_api::models::PublicKey;
+use ic_rosetta_api::models::{ConstructionPayloadsResponse, Object, PublicKey};
 use ic_rosetta_api::request_types::Status;
 use ic_rosetta_api::time::Seconds;
 use ledger_canister::{
@@ -27,6 +28,7 @@ use ledger_canister::{
 
 use canister_test::{Canister, RemoteTestRuntime, Runtime};
 use dfn_protobuf::protobuf;
+use ed25519_dalek::Signer;
 use fondue::log::info;
 use ic_canister_client::Sender;
 use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
@@ -35,8 +37,8 @@ use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron, NeuronStat
 use ic_nns_test_utils::itest_helpers::{set_up_governance_canister, set_up_ledger_canister};
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::{
-    from_model_account_identifier, neuron_account_from_public_key,
-    neuron_subaccount_bytes_from_public_key, to_model_account_identifier,
+    from_hex, from_model_account_identifier, neuron_account_from_public_key,
+    neuron_subaccount_bytes_from_public_key, to_hex, to_model_account_identifier,
 };
 use ic_rosetta_api::request_types::{
     AddHotKey, Disburse, PublicKeyOrPrincipal, Request, RequestResult, SetDissolveTimestamp, Stake,
@@ -44,9 +46,11 @@ use ic_rosetta_api::request_types::{
 };
 use ic_rosetta_test_utils::{
     acc_id, assert_canister_error, assert_ic_error, do_multiple_txn, do_txn, make_user,
-    prepare_txn, rosetta_api_serv::RosettaApiHandle, send_icpts, sign_txn, EdKeypair, RequestInfo,
+    prepare_txn, rosetta_api_serv::RosettaApiHandle, send_icpts, sign_txn, to_public_key,
+    EdKeypair, RequestInfo,
 };
 use ic_types::{messages::Blob, CanisterId, PrincipalId};
+use serde_json::{json, Value};
 use slog::Logger;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -102,6 +106,13 @@ pub fn test_everything(handle: IcHandle, ctx: &fondue::pot::Context) {
     neuron_tests.add(
         &mut ledger_balances,
         "Test disburse",
+        rand::random(),
+        |neuron| neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+    );
+
+    neuron_tests.add(
+        &mut ledger_balances,
+        "Test raw JSON disburse",
         rand::random(),
         |neuron| neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
     );
@@ -309,9 +320,13 @@ pub fn test_everything(handle: IcHandle, ctx: &fondue::pot::Context) {
         test_multiple_transfers_fail(&rosetta_api_serv, &ledger, acc_b, Arc::clone(&kp_b)).await;
 
 
+        info!(&ctx.logger, "Neuron management tests");
         // Test against prepopulated neurons
         let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, neuron, ..} = neuron_tests.get_neuron_for_test("Test disburse");
         test_disburse(&rosetta_api_serv, &ledger, account_id, key_pair.into(), neuron_subaccount_identifier, None, None, &neuron).await.unwrap();
+        // Test against prepopulated neurons (raw)
+        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, neuron, ..} = neuron_tests.get_neuron_for_test("Test raw JSON disburse");
+        test_disburse_raw(&rosetta_api_serv, &ledger, account_id, key_pair.into(), neuron_subaccount_identifier, None, None, &neuron, &ctx.logger).await.unwrap();
 
         let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, neuron, ..} = neuron_tests.get_neuron_for_test("Test disburse to custom recipient");
         let (recipient, _, _, _) = make_user(102);
@@ -380,6 +395,8 @@ pub fn test_everything(handle: IcHandle, ctx: &fondue::pot::Context) {
 
         info!(&ctx.logger, "Test staking");
         let _ = test_staking(&rosetta_api_serv, acc_b, Arc::clone(&kp_b)).await;
+        info!(&ctx.logger, "Test staking (raw JSON)");
+        let _ = test_staking_raw(&rosetta_api_serv, acc_b, Arc::clone(&kp_b)).await;
         info!(&ctx.logger, "Test staking failure");
         test_staking_failure(&rosetta_api_serv, acc_b, Arc::clone(&kp_b)).await;
 
@@ -948,6 +965,346 @@ async fn test_staking(
     (dst_acc, dst_acc_kp)
 }
 
+async fn test_staking_raw(
+    ros: &RosettaApiHandle,
+    acc: AccountIdentifier,
+    key_pair: Arc<EdKeypair>,
+) -> (AccountIdentifier, Arc<EdKeypair>) {
+    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1300);
+    let dst_acc_kp = Arc::new(dst_acc_kp);
+    let neuron_identifier = 2;
+
+    // Could use /construction/derive for this.
+    let neuron_account =
+        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_identifier)
+            .unwrap();
+    let neuron_account = from_model_account_identifier(&neuron_account).unwrap();
+
+    // Key pairs as Json.
+    let pk1 = serde_json::to_value(to_public_key(&key_pair)).unwrap();
+    let pk2 = serde_json::to_value(to_public_key(&dst_acc_kp)).unwrap();
+
+    // Call /construction/derive.
+    let req_derive = json!({
+        "network_identifier": &ros.network_id(),
+        "public_key": pk1,
+        "metadata": {
+            "account_type": "ledger"
+        }
+    });
+    let res_derive = raw_construction(ros, "derive", req_derive).await;
+    let address = res_derive
+        .get("account_identifier")
+        .unwrap()
+        .get("address")
+        .unwrap();
+    assert_eq!(&acc.to_hex(), address); // 52bef...
+
+    // acc => 52bef...
+    // dest_acc => 1e31da...
+    // neuron_account => 79ec2...
+
+    // Call /construction/preprocess
+    let operations = json!([
+        {
+            "operation_identifier": {
+                "index": 0
+            },
+            "type": "TRANSACTION",
+            "account": {
+                "address": &acc
+            },
+            "amount": {
+                "value": "-1000010000",
+                "currency": {
+                    "symbol": "ICP",
+                    "decimals": 8
+                }
+            },
+        },
+        {
+            "operation_identifier": {
+                "index": 1
+            },
+            "type": "TRANSACTION",
+            "account": {
+                "address": &dst_acc
+            },
+            "amount": {
+                "value": "1000010000",
+                "currency": {
+                    "symbol": "ICP",
+                    "decimals": 8
+                }
+            },
+        },
+        {
+            "operation_identifier": {
+                "index": 2
+            },
+            "type": "FEE",
+            "account": {
+                "address": &acc
+            },
+            "amount": {
+                "value": "-10000",
+                "currency": {
+                    "symbol": "ICP",
+                    "decimals": 8
+                }
+            },
+        },
+        {
+            "operation_identifier": {
+                "index": 3
+            },
+            "type": "TRANSACTION",
+            "account": {
+                "address": &dst_acc
+            },
+            "amount": {
+                "value": "-1000000000",
+                "currency": {
+                    "symbol": "ICP",
+                    "decimals": 8
+                }
+            },
+        },
+        {
+            "operation_identifier": {
+                "index": 4
+            },
+            "type": "TRANSACTION",
+            "account": {
+                "address": &neuron_account
+            },
+            "amount": {
+                "value": "1000000000",
+                "currency": {
+                    "symbol": "ICP",
+                    "decimals": 8
+                }
+            },
+        },
+        {
+            "operation_identifier": {
+                "index": 5
+            },
+            "type": "FEE",
+            "account": {
+                "address": &dst_acc
+            },
+            "amount": {
+                "value": "-10000",
+                "currency": {
+                    "symbol": "ICP",
+                    "decimals": 8
+                }
+            },
+        },
+        {
+            "operation_identifier": {
+                "index": 6
+            },
+            "type": "STAKE",
+            "account": {
+                "address": &dst_acc
+            },
+            "metadata": {
+                "neuron_identifier": &neuron_identifier
+            }
+        }
+    ]);
+    let req_preprocess = json!({
+        "network_identifier": &ros.network_id(),
+        "operations": operations,
+        "metadata": {},
+    });
+    let res_preprocess = raw_construction(ros, "preprocess", req_preprocess).await;
+    let options = res_preprocess.get("options");
+    assert_json_eq!(
+        json!({
+            "request_types": [
+                "TRANSACTION",
+                "TRANSACTION",
+                {"STAKE": {"neuron_identifier": 2}}
+            ]
+        }),
+        options.unwrap()
+    );
+
+    // Call /construction/metadata
+    let req_metadata = json!({
+        "network_identifier": &ros.network_id(),
+        "options": options,
+        "public_keys": [pk1]
+    });
+    let res_metadata = raw_construction(ros, "metadata", req_metadata).await;
+    assert_json_eq!(
+        json!([
+            {
+                "currency": {"symbol": "ICP", "decimals": 8},
+                "value": "10000"
+            }
+        ]),
+        res_metadata.get("suggested_fee").unwrap()
+    );
+    // NB: metadata response will have to be added to payloads request.
+
+    // Call /construction/payloads
+    let req_payloads = json!({
+        "network_identifier": &ros.network_id(),
+        "operations": operations,
+        "metadata": res_metadata,
+        "public_keys": [pk1,pk2]
+    });
+    let res_payloads = raw_construction(ros, "payloads", req_payloads).await;
+    let unsigned_transaction: &Value = res_payloads.get("unsigned_transaction").unwrap();
+    let payloads = res_payloads.get("payloads").unwrap();
+    let payloads = payloads.as_array().unwrap();
+
+    // Call /construction/parse (unsigned).
+    let req_parse = json!({
+        "network_identifier": &ros.network_id(),
+        "signed": false,
+        "transaction": &unsigned_transaction
+    });
+    let _res_parse = raw_construction(ros, "parse", req_parse).await;
+
+    // Call /construction/combine.
+    let signatures = json!([
+        {
+            "signing_payload": payloads[0],
+            "public_key": pk1,
+            "signature_type": "ed25519",
+            "hex_bytes": sign(&payloads[0], &key_pair)
+        },{
+            "signing_payload": payloads[1],
+            "public_key": pk1,
+            "signature_type": "ed25519",
+            "hex_bytes": sign(&payloads[1], &key_pair)
+        },{
+            "signing_payload": payloads[2],
+            "public_key": pk2,
+            "signature_type": "ed25519",
+            "hex_bytes": sign(&payloads[2], &dst_acc_kp)
+        },{
+            "signing_payload": payloads[3],
+            "public_key": pk2,
+            "signature_type": "ed25519",
+            "hex_bytes": sign(&payloads[3], &dst_acc_kp)
+        },{
+            "signing_payload": payloads[4],
+            "public_key": pk2,
+            "signature_type": "ed25519",
+            "hex_bytes": sign(&payloads[4], &dst_acc_kp)
+        },{
+            "signing_payload": payloads[5],
+            "public_key": pk2,
+            "signature_type": "ed25519",
+            "hex_bytes": sign(&payloads[5], &dst_acc_kp)
+        },
+    ]);
+
+    let req_combine = json!({
+        "network_identifier": &ros.network_id(),
+        "unsigned_transaction": &unsigned_transaction,
+        "signatures": signatures
+    });
+    let res_combine = raw_construction(ros, "combine", req_combine).await;
+
+    // Call /construction/parse (signed).
+    let signed_transaction: &Value = res_combine.get("signed_transaction").unwrap();
+    let req_parse = json!({
+        "network_identifier": &ros.network_id(),
+        "signed": true,
+        "transaction": &signed_transaction
+    });
+    let _res_parse = raw_construction(ros, "parse", req_parse).await;
+
+    // Call /construction/hash.
+    let req_hash = json!({
+        "network_identifier": &ros.network_id(),
+        "signed_transaction": &signed_transaction
+    });
+    let _res_hash = raw_construction(ros, "hash", req_hash).await;
+
+    // Call /construction/submit.
+    let req_submit = json!({
+        "network_identifier": &ros.network_id(),
+        "signed_transaction": &signed_transaction
+    });
+    let res_submit = raw_construction(ros, "submit", req_submit).await;
+
+    // Check proper state after staking.
+    let operations = res_submit
+        .get("metadata")
+        .unwrap()
+        .get("operations")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    for op in operations.iter() {
+        assert_eq!(
+            op.get("status").unwrap(),
+            "COMPLETED",
+            "Operation didn't complete."
+        );
+    }
+    assert_json_include!(
+        actual: &operations[0],
+        expected: json!({
+            "amount": {"e8s": 1000010000},
+            "fee": {"e8s": 10000},
+            "from": &acc,
+            "to": &dst_acc,
+            "status": "COMPLETED"
+        })
+    );
+
+    let last_neuron_id = operations.last().unwrap().get("neuron_id");
+    assert!(
+        last_neuron_id.is_some(),
+        "NeuronId should have been returned here"
+    );
+    let neuron_id = last_neuron_id.unwrap().as_u64();
+
+    // Block height is the last block observed.
+    // In this case the transfer to neuron_account.
+    let last_block_idx = operations.iter().rev().find_map(|r| r.get("block_index"));
+    assert!(last_block_idx.is_some());
+
+    let neuron_info = ros
+        .account_balance_neuron(neuron_account, neuron_id, None, false)
+        .await
+        .unwrap()
+        .unwrap()
+        .metadata
+        .unwrap();
+    assert_eq!(neuron_info.state, i32::from(NeuronState::Dissolved));
+
+    // Return staked account.
+    (dst_acc, dst_acc_kp)
+}
+
+async fn raw_construction(ros: &RosettaApiHandle, operation: &str, req: Value) -> Object {
+    let req = req.to_string();
+    let res = &ros
+        .raw_construction_endpoint(operation, req.as_bytes())
+        .await
+        .unwrap();
+    assert!(res.1.is_success(), "Result should be a success");
+    serde_json::from_slice(&res.0).unwrap()
+}
+
+fn sign(payload: &Value, keypair: &Arc<EdKeypair>) -> Value {
+    let hex_bytes: &str = payload.get("hex_bytes").unwrap().as_str().unwrap();
+    let bytes = from_hex(hex_bytes).unwrap();
+    let signature_bytes = keypair.sign(&bytes).to_bytes();
+    let hex_bytes = to_hex(&signature_bytes);
+    json!(hex_bytes)
+}
+
 async fn test_staking_failure(
     ros: &RosettaApiHandle,
     acc: AccountIdentifier,
@@ -1260,6 +1617,95 @@ async fn test_disburse(
     if let Some(h) = res.last_block_index() {
         assert_eq!(h, expected_idx);
     }
+    let _ = ros.wait_for_block_at(expected_idx).await.unwrap();
+
+    check_balance(
+        ros,
+        ledger,
+        &recipient.unwrap_or(acc),
+        ((pre_disburse + amount).unwrap() - TRANSACTION_FEE).unwrap(),
+    )
+    .await;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn test_disburse_raw(
+    ros: &RosettaApiHandle,
+    ledger: &Canister<'_>,
+    acc: AccountIdentifier,
+    key_pair: Arc<EdKeypair>,
+    neuron_identifier: u64,
+    amount: Option<Tokens>,
+    recipient: Option<AccountIdentifier>,
+    neuron: &Neuron,
+    logger: &Logger,
+) -> Result<(), ic_rosetta_api::models::Error> {
+    let pre_disburse = get_balance(ledger, acc).await;
+    let (_, tip_idx) = get_tip(ledger).await;
+    let req = json!({
+        "network_identifier": &ros.network_id(),
+        "operations": [
+            {
+                "operation_identifier": {
+                    "index": 0
+                },
+                "type": "DISBURSE",
+                "account": {
+                    "address": &acc
+                },
+                "metadata": {
+                    "neuron_identifier": &neuron_identifier
+                }
+            }
+        ]
+    });
+    let req = req.to_string();
+
+    let metadata: Object = serde_json::from_slice(
+        &ros.raw_construction_endpoint("metadata", req.as_bytes())
+            .await
+            .unwrap()
+            .0,
+    )
+    .unwrap();
+
+    info!(logger, "{}", &req);
+
+    let mut req: Object = serde_json::from_str(&req).unwrap();
+    req.insert("metadata".to_string(), metadata.into());
+    req.insert(
+        "public_keys".to_string(),
+        serde_json::to_value(vec![to_public_key(&key_pair)]).unwrap(),
+    );
+
+    let payloads: ConstructionPayloadsResponse = serde_json::from_slice(
+        &ros.raw_construction_endpoint("payloads", &serde_json::to_vec_pretty(&req).unwrap())
+            .await
+            .unwrap()
+            .0,
+    )
+    .unwrap();
+
+    let signed = sign_txn(ros, &[key_pair.clone()], payloads).await.unwrap();
+
+    let hash_res = ros
+        .construction_hash(signed.signed_transaction.clone())
+        .await
+        .unwrap()?;
+
+    let submit_res = ros
+        .construction_submit(signed.signed_transaction().unwrap())
+        .await
+        .unwrap()?;
+
+    assert_eq!(
+        hash_res.transaction_identifier,
+        submit_res.transaction_identifier
+    );
+
+    let amount = amount.unwrap_or_else(|| Tokens::from_e8s(neuron.cached_neuron_stake_e8s));
+    let expected_idx = tip_idx + 1;
     let _ = ros.wait_for_block_at(expected_idx).await.unwrap();
 
     check_balance(

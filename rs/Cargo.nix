@@ -844,6 +844,17 @@ in
     };
   });
   
+  "registry+https://github.com/rust-lang/crates.io-index".assert-json-diff."2.0.1" = overridableMkRustCrate (profileName: rec {
+    name = "assert-json-diff";
+    version = "2.0.1";
+    registry = "registry+https://github.com/rust-lang/crates.io-index";
+    src = fetchCratesIo { inherit name version; sha256 = "50f1c3703dd33532d7f0ca049168930e9099ecac238e23cf932f3a69c42f06da"; };
+    dependencies = {
+      serde = rustPackages."registry+https://github.com/rust-lang/crates.io-index".serde."1.0.130" { inherit profileName; };
+      serde_json = rustPackages."registry+https://github.com/rust-lang/crates.io-index".serde_json."1.0.68" { inherit profileName; };
+    };
+  });
+  
   "registry+https://github.com/rust-lang/crates.io-index".assert_cmd."0.12.2" = overridableMkRustCrate (profileName: rec {
     name = "assert_cmd";
     version = "0.12.2";
@@ -13637,6 +13648,7 @@ in
     src = fetchCrateLocal ./tests/.;
     dependencies = {
       anyhow = rustPackages."registry+https://github.com/rust-lang/crates.io-index".anyhow."1.0.41" { inherit profileName; };
+      assert_json_diff = rustPackages."registry+https://github.com/rust-lang/crates.io-index".assert-json-diff."2.0.1" { inherit profileName; };
       assert_matches = rustPackages."registry+https://github.com/rust-lang/crates.io-index".assert_matches."1.4.0" { inherit profileName; };
       async_recursion = buildRustPackages."registry+https://github.com/rust-lang/crates.io-index".async-recursion."0.3.2" { profileName = "__noProfile"; };
       base64 = rustPackages."registry+https://github.com/rust-lang/crates.io-index".base64."0.11.0" { inherit profileName; };
