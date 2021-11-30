@@ -50,7 +50,8 @@ for i in $(seq 1 $NB_CANISTERS); do
     gcc -I "$CSMITH_INCLUDE" -I "$LIBC_INCLUDE" sample.c -o sample -w
 
     echo "running compiled x86_64 sample"
-    timeout 10s ./sample
+    # Reject a random program if it does not terminate within 10s
+    timeout 10s ./sample || continue
 
     echo "preparing sample for IC"
     sed -i'.original' -e 's/platform_main_end(crc32_context ^ 0xFFFFFFFFUL, print_hash_value);/return crc32_context ^ 0xFFFFFFFFUL ;/g' sample.c
