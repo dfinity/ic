@@ -159,6 +159,10 @@ impl IDkgDealingInternal {
                 (commitment, ciphertext, None)
             }
             SecretShares::ReshareOfUnmasked(secret) => {
+                if secret.curve_type() != curve {
+                    return Err(ThresholdEcdsaError::InvalidSecretShare);
+                }
+
                 let values =
                     Polynomial::random_with_constant(*secret, num_coefficients, &mut poly_rng)?;
 
@@ -175,7 +179,11 @@ impl IDkgDealingInternal {
 
                 (commitment, ciphertext, proof)
             }
-            SecretShares::ReshareOfMasked(secret, _masking) => {
+            SecretShares::ReshareOfMasked(secret, masking) => {
+                if secret.curve_type() != curve || masking.curve_type() != curve {
+                    return Err(ThresholdEcdsaError::InvalidSecretShare);
+                }
+
                 let values =
                     Polynomial::random_with_constant(*secret, num_coefficients, &mut poly_rng)?;
 
@@ -194,7 +202,14 @@ impl IDkgDealingInternal {
 
                 (commitment, ciphertext, proof)
             }
-            SecretShares::UnmaskedTimesMasked(left_value, (right_value, _right_masking)) => {
+            SecretShares::UnmaskedTimesMasked(left_value, (right_value, right_masking)) => {
+                if left_value.curve_type() != curve
+                    || right_value.curve_type() != curve
+                    || right_masking.curve_type() != curve
+                {
+                    return Err(ThresholdEcdsaError::InvalidSecretShare);
+                }
+
                 // Generate secret polynomials
                 let product = left_value.mul(right_value)?;
                 let values =

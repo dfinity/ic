@@ -14,6 +14,7 @@ pub enum ThresholdEcdsaError {
     InvalidPoint,
     InvalidRecipients,
     InvalidScalar,
+    InvalidSecretShare,
     InvalidThreshold(usize, usize),
     SerializationError(String),
 }
@@ -54,12 +55,13 @@ pub fn gen_keypair(
     Ok((public_key, private_key))
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IdkgCreateDealingInternalError {
     UnsupportedAlgorithm,
     InvalidRecipients,
     // Contains the requested threshold and the number of receivers
     InvalidThreshold(usize, usize),
+    InvalidSecretShare,
     InternalError(String),
 }
 
@@ -67,6 +69,7 @@ impl From<ThresholdEcdsaError> for IdkgCreateDealingInternalError {
     fn from(e: ThresholdEcdsaError) -> Self {
         match e {
             ThresholdEcdsaError::InvalidRecipients => Self::InvalidRecipients,
+            ThresholdEcdsaError::InvalidSecretShare => Self::InvalidSecretShare,
             ThresholdEcdsaError::InvalidThreshold(t, r) => Self::InvalidThreshold(t, r),
             x => Self::InternalError(format!("{:?}", x)),
         }
@@ -102,7 +105,7 @@ pub fn create_dealing(
     .map_err(|e| e.into())
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IDkgCreateTranscriptInternalError {
     UnsupportedAlgorithm,
     InconsistentCommitments,
@@ -142,7 +145,7 @@ pub fn create_transcript(
     .map_err(|e| e.into())
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IDkgLoadTranscriptInternalError {
     UnsupportedAlgorithm,
     InconsistentCommitments,
