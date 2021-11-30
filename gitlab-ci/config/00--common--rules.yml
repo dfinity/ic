@@ -126,11 +126,13 @@
       when: manual
       allow_failure: true
 
-# If on the RC branch and "[hotfix]" is in the commit message, then perfrom automatic execution
-# of the prod hotfix tests.
+#  If on the RC branch, whether "[hotfix]" is in the commit message or not, 
+#  always perfrom automatic execution of the prod hotfix tests. This means that, hotfix
+#  tests are not only exercised on hotfix pipelines, but are also exercised on nightly
+#  release qualification pipelines to ensure the hotfix tests are always working.
 .rules-prod-hotfix-tests:
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /\[hotfix\]/'
+    - if: '$CI_COMMIT_BRANCH =~ /^rc--/'
       when: always
     - if: '$CI_MERGE_REQUEST_TITLE =~ /\[rc\]/'
       when: manual
