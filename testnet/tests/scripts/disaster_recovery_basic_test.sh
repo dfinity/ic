@@ -24,11 +24,11 @@ Success::
 - finalization rate > threshold at most 1min after recovery proposal has been executed
 end::catalog[]
 
-S3 artifacts from MR 158 https://gitlab.com/dfinity-lab/core/ic/-/merge_requests/158
+S3 artifacts from MR 2067 https://gitlab.com/dfinity-lab/public/ic/-/merge_requests/2067
 are used in step 2. For this test to pass, that MR's branch must be backwards
 compatible with the version under test. In case of a breaking change (or two
 non-breaking changes that violate backwards compatibility together), it is
-thus necessary to merge master into branch 'diasasterRecoveryBroken' 
+thus necessary to merge master into branch 'broken-blockmaker' 
 DOC
 
 set -euo pipefail
@@ -207,8 +207,8 @@ step 1.C Calculate membership || time (
 step 2 Upgrade subnet "$subnet_index" to \"broken blockmaker\" || true
 
 step 2.A Compute checksum of the ICOS image of \"broken blockmaker\" branch || time (
-    ic_version_broken_blockmaker=$(cd "$PROD_SRC" && ../gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/diasasterRecoveryBroken 1 | tail -n1)
-    test -z "$ic_version_broken_blockmaker" && echo "Failed to retrieve a revision in disasterRecoveryBroken branch that disk image" && exit 1
+    ic_version_broken_blockmaker=$(cd "$PROD_SRC" && ../gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/broken-blockmaker 1 | tail -n1)
+    test -z "$ic_version_broken_blockmaker" && echo "Failed to retrieve a revision in broken-blockmaker branch that disk image" && exit 1
     setvar ic_version_broken_blockmaker "$ic_version_broken_blockmaker"
     setvar \
         ic_version_broken_blockmaker_sha256 \
