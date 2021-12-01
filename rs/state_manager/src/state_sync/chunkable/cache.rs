@@ -23,6 +23,7 @@ fn delete_folder(log: &ReplicaLogger, path: &Path) {
 /// cache if the artifact manager aborts the corresponding state sync.
 pub struct StateSyncCache {
     entry: Option<Arc<StateSyncCacheEntry>>,
+    highest_successful_sync: Option<Height>,
     log: ReplicaLogger,
 }
 
@@ -55,12 +56,34 @@ impl Drop for StateSyncCacheEntry {
 impl StateSyncCache {
     /// Create an empty cache
     pub fn new(log: ReplicaLogger) -> Self {
-        Self { entry: None, log }
+        Self {
+            entry: None,
+            highest_successful_sync: None,
+            log,
+        }
     }
 
     /// Returns a reference to the cached entry if there is one available.
     pub fn get(&self) -> Option<Arc<StateSyncCacheEntry>> {
         self.entry.as_ref().map(Arc::clone)
+    }
+
+    /// Tell the cache that a successful state sync has completed for `height`
+    pub fn register_successful_sync(&mut self, height: Height) {
+        let new_height = match self.highest_successful_sync {
+            Some(old_height) => height.max(old_height),
+            None => height,
+        };
+        self.highest_successful_sync = Some(new_height);
+    }
+
+    /// Returns true if we know that we successfully synced the state at
+    /// `height` using the state sync protocol
+    pub fn state_is_fetched(&self, height: Height) -> bool {
+        match self.highest_successful_sync {
+            Some(last_height) => last_height == height,
+            None => false,
+        }
     }
 
     /// Pushes the state sync data to the cache without checking that

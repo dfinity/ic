@@ -1,9 +1,9 @@
 use crate::{
     manifest::{filter_out_zero_chunks, DiffScript},
-    CheckpointRef, StateManagerMetrics, StateSyncRefs,
+    CheckpointRef, StateSyncMetrics, StateSyncRefs, STATE_SYNC_CORRUPTED_CHUNKS,
 };
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
-use ic_logger::{debug, fatal, info, trace, warn, ReplicaLogger};
+use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_layout::utils::do_copy_overwrite;
 use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
@@ -28,6 +28,10 @@ use std::{
 };
 
 pub mod cache;
+
+// If set to true, we validate chunks even in situations where it might not be
+// necessary
+const ALWAYS_VALIDATE: bool = true;
 
 /// The state of the communication with up-to-date nodes.
 #[derive(Clone)]
@@ -63,7 +67,7 @@ pub struct IncompleteState {
     root_hash: CryptoHashOfState,
     state: DownloadState,
     manifest_with_checkpoint_ref: Option<(Manifest, CheckpointRef)>,
-    metrics: StateManagerMetrics,
+    metrics: StateSyncMetrics,
     started_at: Instant,
     own_subnet_type: SubnetType,
     thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
@@ -135,7 +139,7 @@ impl IncompleteState {
         root_hash: CryptoHashOfState,
         state_layout: StateLayout,
         manifest_with_checkpoint_ref: Option<(Manifest, CheckpointRef)>,
-        metrics: StateManagerMetrics,
+        metrics: StateSyncMetrics,
         own_subnet_type: SubnetType,
         thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
         state_sync_refs: StateSyncRefs,
@@ -210,15 +214,27 @@ impl IncompleteState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn copy_files(
         log: &ReplicaLogger,
-        metrics: &StateManagerMetrics,
+        metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
         root_old: &Path,
         root_new: &Path,
         manifest_old: &Manifest,
         manifest_new: &Manifest,
         diff_script: &DiffScript,
+        validate_data: bool,
         fetch_chunks: &mut HashSet<usize>,
     ) {
+        info!(
+            log,
+            "state sync: copy_files for {} files {} validation",
+            diff_script.copy_files.len(),
+            if validate_data || ALWAYS_VALIDATE {
+                "with"
+            } else {
+                "without"
+            }
+        );
+
         let corrupted_chunks = Arc::new(Mutex::new(Vec::new()));
 
         thread_pool.scoped(|scope| {
@@ -258,81 +274,154 @@ impl IncompleteState {
                     } else {
                         assert!(!src_path.ends_with("state_file"));
 
-                        let src_map = ScopedMmap::from_path(&src_path).unwrap_or_else(|err| {
-                            fatal!(log, "Failed to mmap file {}: {}", src_path.display(), err)
-                        });
-                        let src_data = src_map.as_slice();
-
-                        let old_chunk_range = crate::manifest::file_chunk_range(
-                            &manifest_old.chunk_table,
-                            *old_index,
-                        );
                         let new_chunk_range = crate::manifest::file_chunk_range(
                             &manifest_new.chunk_table,
                             *new_index,
                         );
 
-                        // bad_chunks contains ids of chunks from the old checkpoint that
-                        // didn't pass validation or refer to non-existing portions of
-                        // the corresponding file.  The contents of these chunks will be
-                        // requested later from peers.
-                        let mut bad_chunks = vec![];
+                        if validate_data || ALWAYS_VALIDATE {
+                            let src_map = ScopedMmap::from_path(&src_path).unwrap_or_else(|err| {
+                                fatal!(log, "Failed to mmap file {}: {}", src_path.display(), err)
+                            });
+                            let src_data = src_map.as_slice();
 
-                        // Go through all the chunks of the local file and validate
-                        // each one.  If the validation fails, add the corresponding new
-                        // chunk ids to the set of chunks to fetch.
-                        for idx in old_chunk_range.clone() {
-                            let chunk = &manifest_old.chunk_table[idx];
-                            let chunk_offset = idx - old_chunk_range.start;
-                            let new_chunk_idx = new_chunk_range.start + chunk_offset;
-                            let byte_range = chunk.byte_range();
+                            let old_chunk_range = crate::manifest::file_chunk_range(
+                                &manifest_old.chunk_table,
+                                *old_index,
+                            );
 
-                            if src_data.len() < byte_range.end {
-                                warn!(
-                                    log,
-                                    "Local chunk {} ({}@{}—{}) is out of range (file len = {}), \
-                             will request chunk {} instead",
+                            // bad_chunks contains ids of chunks from the old checkpoint that
+                            // didn't pass validation or refer to non-existing portions of
+                            // the corresponding file.  The contents of these chunks will be
+                            // requested later from peers.
+                            let mut bad_chunks = vec![];
+
+                            // Go through all the chunks of the local file and validate
+                            // each one.  If the validation fails, add the corresponding new
+                            // chunk ids to the set of chunks to fetch.
+                            for idx in old_chunk_range.clone() {
+                                let chunk = &manifest_old.chunk_table[idx];
+                                let chunk_offset = idx - old_chunk_range.start;
+                                let new_chunk_idx = new_chunk_range.start + chunk_offset;
+                                let byte_range = chunk.byte_range();
+
+                                if src_data.len() < byte_range.end {
+                                    warn!(
+					log,
+					"Local chunk {} ({}@{}—{}) is out of range (file len = {}), \
+					 will request chunk {} instead",
+					idx,
+					src_path.display(),
+					byte_range.start,
+					byte_range.end,
+					src_data.len(),
+					new_chunk_idx + 1
+                                    );
+                                    bad_chunks.push(idx);
+                                    corrupted_chunks.lock().unwrap().push(new_chunk_idx + 1);
+                                    if !validate_data && ALWAYS_VALIDATE {
+                                        error!(
+                                            log,
+					    "Unexpected chunk validation error for local chunk {}. Incrementing error metric {}",
+					    idx,
+					    STATE_SYNC_CORRUPTED_CHUNKS,
+					);
+                                        metrics.state_sync_corrupted_chunks.inc();
+                                    }
+                                    continue;
+                                }
+
+                                if let Err(err) = crate::manifest::validate_chunk(
                                     idx,
-                                    src_path.display(),
-                                    byte_range.start,
-                                    byte_range.end,
-                                    src_data.len(),
-                                    new_chunk_idx + 1
-                                );
-                                bad_chunks.push(idx);
-                                corrupted_chunks.lock().unwrap().push(new_chunk_idx + 1);
-                                continue;
+                                    &src_data[byte_range.clone()],
+                                    manifest_old,
+                                ) {
+                                    warn!(
+                                        log,
+                                        "Local chunk {} ({}@{}–{}) doesn't pass validation: {}, \
+					 will request chunk {} instead",
+                                        idx,
+                                        src_path.display(),
+                                        byte_range.start,
+                                        byte_range.end,
+                                        err,
+                                        new_chunk_idx + 1
+                                    );
+
+                                    bad_chunks.push(idx);
+                                    corrupted_chunks.lock().unwrap().push(new_chunk_idx + 1);
+                                    if !validate_data && ALWAYS_VALIDATE {
+                                        error!(
+                                            log,
+					    "Unexpected chunk validation error for local chunk {}. Incrementing error metric {}",
+					    idx,
+					    STATE_SYNC_CORRUPTED_CHUNKS,
+					);
+                                        metrics.state_sync_corrupted_chunks.inc();
+                                    }
+                                }
                             }
 
-                            if let Err(err) = crate::manifest::validate_chunk(
-                                idx,
-                                &src_data[byte_range.clone()],
-                                manifest_old,
-                            ) {
-                                warn!(
-                                    log,
-                                    "Local chunk {} ({}@{}–{}) doesn't pass validation: {}, \
-                             will request chunk {} instead",
-                                    idx,
-                                    src_path.display(),
-                                    byte_range.start,
-                                    byte_range.end,
-                                    err,
-                                    new_chunk_idx + 1
+                            if bad_chunks.is_empty()
+                                && src_data.len()
+                                    == manifest_old.file_table[*old_index].size_bytes as usize
+                            {
+                                // All the hash sums and the file size match, so we can
+                                // simply copy the whole file.  That's much faster than
+                                // copying one chunk at a time.
+                                do_copy_overwrite(log, &src_path, &dst_path).unwrap_or_else(
+                                    |err| {
+                                        fatal!(
+                                            log,
+                                            "Failed to copy file from {} to {}: {}",
+                                            src_path.display(),
+                                            dst_path.display(),
+                                            err
+                                        )
+                                    },
                                 );
+                                metrics
+                                    .state_sync_remaining
+                                    .sub(new_chunk_range.len() as i64);
+                            } else {
+                                // Copy the chunks that passed validation to the
+                                // destination, the rest will be fetched and applied later.
+                                let dst = std::fs::OpenOptions::new()
+                                    .write(true)
+                                    .create(false)
+                                    .open(&dst_path)
+                                    .unwrap_or_else(|err| {
+                                        fatal!(
+                                            log,
+                                            "Failed to open file {}: {}",
+                                            dst_path.display(),
+                                            err
+                                        )
+                                    });
+                                for idx in old_chunk_range {
+                                    if bad_chunks.contains(&idx) {
+                                        continue;
+                                    }
 
-                                bad_chunks.push(idx);
-                                corrupted_chunks.lock().unwrap().push(new_chunk_idx + 1);
+                                    let chunk = &manifest_old.chunk_table[idx];
+                                    let data = &src_data[chunk.byte_range()];
+
+                                    dst.write_at(data, chunk.offset).unwrap_or_else(|err| {
+                                        fatal!(
+					    log,
+					    "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
+					    chunk.offset,
+					    chunk.size_bytes,
+					    dst_path.display(),
+					    err
+					)
+                                    });
+                                    metrics.state_sync_remaining.sub(1);
+                                }
                             }
-                        }
-
-                        if bad_chunks.is_empty()
-                            && src_data.len()
-                                == manifest_old.file_table[*old_index].size_bytes as usize
-                        {
-                            // All the hash sums and the file size match, so we can
-                            // simply copy the whole file.  That's much faster than
-                            // copying one chunk at a time.
+                        } else {
+                            // Since we do not validate in this else branch, we can simply copy the
+                            // file without any extra work
                             do_copy_overwrite(log, &src_path, &dst_path).unwrap_or_else(|err| {
                                 fatal!(
                                     log,
@@ -345,41 +434,6 @@ impl IncompleteState {
                             metrics
                                 .state_sync_remaining
                                 .sub(new_chunk_range.len() as i64);
-                        } else {
-                            // Copy the chunks that passed validation to the
-                            // destination, the rest will be fetched and applied later.
-                            let dst = std::fs::OpenOptions::new()
-                                .write(true)
-                                .create(false)
-                                .open(&dst_path)
-                                .unwrap_or_else(|err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to open file {}: {}",
-                                        dst_path.display(),
-                                        err
-                                    )
-                                });
-                            for idx in old_chunk_range {
-                                if bad_chunks.contains(&idx) {
-                                    continue;
-                                }
-
-                                let chunk = &manifest_old.chunk_table[idx];
-                                let data = &src_data[chunk.byte_range()];
-
-                                dst.write_at(data, chunk.offset).unwrap_or_else(|err| {
-                                    fatal!(
-                                log,
-                                "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
-                                chunk.offset,
-                                chunk.size_bytes,
-                                dst_path.display(),
-                                err
-                            )
-                                });
-                                metrics.state_sync_remaining.sub(1);
-                            }
                         }
                     }
                 });
@@ -394,15 +448,27 @@ impl IncompleteState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn copy_chunks(
         log: &ReplicaLogger,
-        metrics: &StateManagerMetrics,
+        metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
         root_old: &Path,
         root_new: &Path,
         manifest_old: &Manifest,
         manifest_new: &Manifest,
         diff_script: &DiffScript,
+        validate_data: bool,
         fetch_chunks: &mut HashSet<usize>,
     ) {
+        info!(
+            log,
+            "state sync: copy_chunks for {} chunks {} validation",
+            diff_script.copy_chunks.len(),
+            if validate_data || ALWAYS_VALIDATE {
+                "with"
+            } else {
+                "without"
+            }
+        );
+
         type DstIndex = usize;
         type SrcIndex = usize;
         type ChunkGroup = Vec<(DstIndex, SrcIndex)>;
@@ -506,26 +572,37 @@ impl IncompleteState {
                         }
 
                         let src_data = &src_map.as_slice()[byte_range];
-                        if let Err(err) = crate::manifest::validate_chunk(
-                            *dst_chunk_index,
-                            src_data,
-                            manifest_new,
-                        ) {
-                            let byte_range = src_chunk.byte_range();
-                            warn!(
-                                log,
-                                "Local chunk {} ({}@{}–{}) doesn't pass validation: {}, \
-                         will request chunk {} instead",
-                                *src_chunk_index,
-                                src_path.display(),
-                                byte_range.start,
-                                byte_range.end,
-                                err,
-                                *dst_chunk_index + 1
-                            );
+                        if validate_data || ALWAYS_VALIDATE {
+                            if let Err(err) = crate::manifest::validate_chunk(
+                                *dst_chunk_index,
+                                src_data,
+                                manifest_new,
+                            ) {
+                                let byte_range = src_chunk.byte_range();
+                                warn!(
+                                    log,
+                                    "Local chunk {} ({}@{}–{}) doesn't pass validation: {}, \
+				     will request chunk {} instead",
+                                    *src_chunk_index,
+                                    src_path.display(),
+                                    byte_range.start,
+                                    byte_range.end,
+                                    err,
+                                    *dst_chunk_index + 1
+                                );
 
-                            corrupted_chunks.lock().unwrap().push(*dst_chunk_index + 1);
-                            continue;
+                                corrupted_chunks.lock().unwrap().push(*dst_chunk_index + 1);
+                                if !validate_data && ALWAYS_VALIDATE {
+                                    error!(
+                                            log,
+					    "Unexpected chunk validation error for local chunk {}. Incrementing error metric {}",
+					    *src_chunk_index,
+					    STATE_SYNC_CORRUPTED_CHUNKS,
+					);
+                                    metrics.state_sync_corrupted_chunks.inc();
+                                }
+                                continue;
+                            }
                         }
 
                         dst.write_at(src_data, dst_chunk.offset)
@@ -552,7 +629,7 @@ impl IncompleteState {
 
     pub(crate) fn apply_chunk(
         log: &ReplicaLogger,
-        metrics: &StateManagerMetrics,
+        metrics: &StateSyncMetrics,
         root: &Path,
         ix: usize,
         bytes: &[u8],
@@ -623,7 +700,7 @@ impl IncompleteState {
 
     fn make_checkpoint(
         log: &ReplicaLogger,
-        metrics: &StateManagerMetrics,
+        metrics: &StateSyncMetrics,
         started_at: Instant,
         root: &Path,
         height: Height,
@@ -752,6 +829,7 @@ impl IncompleteState {
             missing_chunks: HashSet<usize>,
             root_old: PathBuf,
             height_old: Height,
+            validate_data: bool,
         }
 
         // Get a DiffData from the cache or checkpoint_ref, or neither
@@ -773,6 +851,7 @@ impl IncompleteState {
                             // StateSyncCacheEntry, so cloning the path is safe
                             root_old: cache_entry.path().to_path_buf(),
                             height_old: cache_entry.height,
+                            validate_data: false,
                         })
                     } else {
                         // This should be a special case that can only happen if the source of the
@@ -795,6 +874,7 @@ impl IncompleteState {
                             missing_chunks: Default::default(),
                             root_old: checkpoint_old.raw_path().to_path_buf(),
                             height_old: checkpoint_height,
+                            validate_data: true,
                         })
                     }
                 }
@@ -803,6 +883,7 @@ impl IncompleteState {
                     missing_chunks: cache_entry.missing_chunks.clone(),
                     root_old: cache_entry.path().to_path_buf(),
                     height_old: cache_entry.height,
+                    validate_data: false,
                 }),
                 (None, Some((checkpoint_manifest, checkpoint_ref))) => {
                     let checkpoint_height = checkpoint_ref.0.height;
@@ -825,6 +906,11 @@ impl IncompleteState {
                         // so cloning here is safe
                         root_old: checkpoint_old.raw_path().to_path_buf(),
                         height_old: checkpoint_height,
+                        validate_data: !self
+                            .state_sync_refs
+                            .cache
+                            .read()
+                            .state_is_fetched(checkpoint_height),
                     })
                 }
                 (None, None) => None,
@@ -835,6 +921,7 @@ impl IncompleteState {
             missing_chunks,
             root_old,
             height_old,
+            validate_data,
         }) = diff_data
         {
             info!(
@@ -870,6 +957,7 @@ impl IncompleteState {
                 manifest_old,
                 manifest_new,
                 &diff_script,
+                validate_data,
                 &mut fetch_chunks,
             );
 
@@ -882,6 +970,7 @@ impl IncompleteState {
                 manifest_old,
                 manifest_new,
                 &diff_script,
+                validate_data,
                 &mut fetch_chunks,
             );
 
@@ -1017,6 +1106,10 @@ impl Chunkable for IncompleteState {
                         );
 
                         self.state = DownloadState::Complete(Box::new(artifact.clone()));
+                        self.state_sync_refs
+                            .cache
+                            .write()
+                            .register_successful_sync(self.height);
                         Ok(artifact)
                     } else {
                         self.state = DownloadState::Loading {
@@ -1101,6 +1194,10 @@ impl Chunkable for IncompleteState {
                     );
 
                     self.state = DownloadState::Complete(Box::new(artifact.clone()));
+                    self.state_sync_refs
+                        .cache
+                        .write()
+                        .register_successful_sync(self.height);
                     return Ok(artifact);
                 }
 
