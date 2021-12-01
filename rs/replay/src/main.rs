@@ -57,6 +57,10 @@ struct CliArgs {
     /// Subnet id of the replica, whose state we use
     #[clap(long)]
     subnet_id: ClapSubnetId,
+
+    #[clap(long)]
+    /// The replay will stop at this height and make a checkpoint.
+    replay_until_height: Option<u64>,
 }
 
 #[derive(Clap)]
@@ -76,9 +80,6 @@ enum SubCommand {
 
     /// Restore from the backup.
     RestoreFromBackup(RestoreFromBackupCmd),
-
-    /// The replay will stop at this height and make a checkpoint.
-    ReplayUntilHeight(ReplayHeightCmd),
 
     /// The replay will add a test Neuron to the Governance canister
     /// and the corresponding account in the ledger.
@@ -152,12 +153,6 @@ struct AddRegistryContentCmd {
     allowed_mutation_key_prefixes: String,
 }
 
-#[derive(Clap)]
-struct ReplayHeightCmd {
-    /// The height until which the replay should run.
-    replay_height: u64,
-}
-
 static TRUSTED_NEURONS: &[(&str, u64)] = &[
     (
         "pkjng-fnb6a-zzirr-kykal-ghbjs-ndmj2-tfoma-bzski-wtbsl-2fgbu-hae",
@@ -221,13 +216,7 @@ fn main() {
         let subnet_id = args.subnet_id.0;
 
         let subcmd = &args.subcmd;
-
-        let replay_target_height =
-            if let Some(SubCommand::ReplayUntilHeight(replay_height)) = subcmd {
-                Some(replay_height.replay_height)
-            } else {
-                None
-            };
+        let target_height = args.replay_until_height;
 
         if let Some(SubCommand::RestoreFromBackup(cmd)) = subcmd {
             rt.block_on(async {
@@ -241,8 +230,9 @@ fn main() {
                     cmd.start_height,
                     cmd.persist_cup_heights_only,
                 )
-                .await;
-                player.restore(cmd.start_height + 1).await;
+                .await
+                .with_replay_target_height(target_height);
+                player.restore(cmd.start_height + 1);
             });
             return;
         }
@@ -281,10 +271,16 @@ fn main() {
             }
         };
         rt.block_on(async move {
-            let player = Player::new(cfg, subnet_id)
-                .await
-                .with_replay_target_height(replay_target_height);
-            player.replay(extra).await;
+            let player = match (subcmd.as_ref(), target_height) {
+                (Some(_), Some(_)) => {
+                    eprintln!("Target height cannot be used with any sub-command in disaster-recovery mode.");
+                    return;
+                },
+                (_, target_height) => {
+                    Player::new(cfg, subnet_id).await.with_replay_target_height(target_height)
+                },
+            };
+            player.replay(extra);
             if let Some(SubCommand::UpdateRegistryLocalStore) = subcmd {
                 player.update_registry_local_store()
             }

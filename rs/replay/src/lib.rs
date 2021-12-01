@@ -376,14 +376,13 @@ impl Player {
     /// block has been replayed. Note that this will advance the executed
     /// batch height but not advance finalized block height in consensus
     /// pool.
-    pub async fn replay<F: FnMut(&Player, Time) -> Vec<SignedIngress>>(&self, extra: F) {
+    pub fn replay<F: FnMut(&Player, Time) -> Vec<SignedIngress>>(&self, extra: F) {
         if let (Some(consensus_pool), Some(certification_pool)) =
             (&self.consensus_pool, &self.certification_pool)
         {
-            let last_batch_height = self
-                .deliver_batches(&self.message_routing, &PoolReader::new(consensus_pool))
-                .await;
-            self.wait_for_state(last_batch_height).await;
+            let last_batch_height =
+                self.deliver_batches(&self.message_routing, &PoolReader::new(consensus_pool));
+            self.wait_for_state(last_batch_height);
             // We only want to persist the checkpoint after the latest batch.
             self.state_manager.remove_states_below(last_batch_height);
 
@@ -398,12 +397,11 @@ impl Player {
             }
         }
 
-        let (latest_context_time, extra_batch_delivery) = self
-            .deliver_extra_batch(&self.message_routing, self.consensus_pool.as_ref(), extra)
-            .await;
+        let (latest_context_time, extra_batch_delivery) =
+            self.deliver_extra_batch(&self.message_routing, self.consensus_pool.as_ref(), extra);
 
         if let Some((last_batch_height, msg_ids)) = extra_batch_delivery {
-            self.wait_for_state(last_batch_height).await;
+            self.wait_for_state(last_batch_height);
             // We only want to persist the checkpoint after the latest batch.
             self.state_manager.remove_states_below(last_batch_height);
 
@@ -429,7 +427,7 @@ impl Player {
     }
 
     // Blocks until the state at the given height is committed.
-    async fn wait_for_state(&self, height: Height) {
+    fn wait_for_state(&self, height: Height) {
         print!("Waiting for state at height {}", height);
         loop {
             let latest_state_height = self.state_manager.latest_state_height();
@@ -452,7 +450,7 @@ impl Player {
                 }
             }
             print!(".");
-            tokio::time::sleep(WAIT_DURATION).await;
+            std::thread::sleep(WAIT_DURATION);
         }
         println!();
         println!(
@@ -486,7 +484,7 @@ impl Player {
     }
 
     /// Deliver finalized batches since last expected batch height.
-    async fn deliver_batches(
+    fn deliver_batches(
         &self,
         message_routing: &dyn MessageRouting,
         pool: &PoolReader<'_>,
@@ -506,7 +504,7 @@ impl Player {
                 None,
             ) {
                 Ok(h) => break h,
-                Err(MessageRoutingError::QueueIsFull) => tokio::time::sleep(WAIT_DURATION).await,
+                Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),
                 Err(MessageRoutingError::Ignored { .. }) => {
                     unreachable!();
                 }
@@ -521,7 +519,7 @@ impl Player {
         last_batch_height
     }
 
-    async fn deliver_extra_batch<F: FnMut(&Player, Time) -> Vec<SignedIngress>>(
+    fn deliver_extra_batch<F: FnMut(&Player, Time) -> Vec<SignedIngress>>(
         &self,
         message_routing: &dyn MessageRouting,
         pool: Option<&ConsensusPoolImpl>,
@@ -580,7 +578,7 @@ impl Player {
                     println!("Delivered batch {}", batch_number);
                     break;
                 }
-                Err(MessageRoutingError::QueueIsFull) => tokio::time::sleep(WAIT_DURATION).await,
+                Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),
                 Err(MessageRoutingError::Ignored { .. }) => {
                     unreachable!("Unexpected error on a valid batch number {}", batch_number);
                 }
@@ -731,7 +729,8 @@ impl Player {
     }
 
     /// Restores the execution state starting from the given height.
-    pub async fn restore(&mut self, start_height: u64) {
+    pub fn restore(&mut self, start_height: u64) {
+        let target_height = self.replay_target_height.map(Height::from);
         let backup_dir = self.backup_dir.as_ref().expect("No backup path found");
         let start_height = Height::from(start_height);
         let mut height_to_batches = backup::heights_to_artifacts_metadata(backup_dir, start_height)
@@ -756,17 +755,22 @@ impl Player {
                 &self.replica_version,
             );
 
-            let last_batch_height = self
-                .deliver_batches(
-                    &self.message_routing,
-                    &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
-                )
-                .await;
-            self.wait_for_state(last_batch_height).await;
+            let last_batch_height = self.deliver_batches(
+                &self.message_routing,
+                &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
+            );
+            self.wait_for_state(last_batch_height);
             backup::assert_consistency_and_clean_up(
                 &*self.state_manager,
                 self.consensus_pool.as_mut().unwrap(),
             );
+
+            if let Some(height) = target_height {
+                if last_batch_height >= height {
+                    println!("Target height {} reached.", height);
+                    return;
+                }
+            }
 
             match result {
                 // Since the pool cache assumes we always have at most one CUP inside the pool,
