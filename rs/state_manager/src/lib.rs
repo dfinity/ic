@@ -68,6 +68,9 @@ use std::{
 /// It is exported as public for use in tests and benchmarks.
 pub const NUMBER_OF_CHECKPOINT_THREADS: u32 = 16;
 
+/// Name of the error metric counting unexpectedly corrupted chunks
+const STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_chunks";
+
 #[derive(Clone)]
 pub struct StateManagerMetrics {
     state_manager_error_count: IntCounterVec,
@@ -79,9 +82,7 @@ pub struct StateManagerMetrics {
     min_resident_height: IntGauge,
     last_computed_manifest_height: IntGauge,
     resident_state_count: IntGauge,
-    state_sync_size: IntCounterVec,
-    state_sync_duration: HistogramVec,
-    state_sync_remaining: IntGauge,
+    state_sync_metrics: StateSyncMetrics,
     state_size: IntGauge,
     checkpoint_metrics: CheckpointMetrics,
     manifest_metrics: ManifestMetrics,
@@ -92,6 +93,14 @@ pub struct ManifestMetrics {
     hashed_chunk_bytes: IntCounter,
     reused_chunk_bytes: IntCounter,
     reused_chunk_hash_error_count: IntCounter,
+}
+
+#[derive(Clone)]
+pub struct StateSyncMetrics {
+    state_sync_size: IntCounterVec,
+    state_sync_duration: HistogramVec,
+    state_sync_remaining: IntGauge,
+    state_sync_corrupted_chunks: IntCounter,
 }
 
 #[derive(Clone)]
@@ -180,39 +189,10 @@ impl StateManagerMetrics {
             "Height of the last checkpoint we computed manifest for.",
         );
 
-        let state_sync_size = metrics_registry.int_counter_vec(
-            "state_sync_size_bytes_total",
-            "Size of chunks synchronized by different operations ('fetch', 'copy', 'preallocate') during all the state sync in bytes.",
-            &["op"],
-        );
-
-        // Note [Metrics preallocation]
-        for op in &["fetch", "copy"] {
-            state_sync_size.with_label_values(&[*op]);
-        }
-
-        let state_sync_remaining = metrics_registry.int_gauge(
-            "state_sync_remaining_chunks",
-            "Number of chunks not syncronized yet of all active state syncs",
-        );
-
         let state_size = metrics_registry.int_gauge(
             "state_manager_state_size_bytes",
             "Total size of the state on disk in bytes.",
         );
-
-        let state_sync_duration = metrics_registry.histogram_vec(
-            "state_sync_duration_seconds",
-            "Duration of state sync in seconds indexed by status ('ok', 'already_exists', 'unrecoverable', 'io_err').",
-            // 1s, 2s, 5s, 10s, 20s, 50s, …, 1000s, 2000s, 5000s
-            decimal_buckets(0, 3),
-            &["status"],
-        );
-
-        // Note [Metrics preallocation]
-        for status in &["ok", "already_exists", "unrecoverable", "io_err"] {
-            state_sync_duration.with_label_values(&[*status]);
-        }
 
         Self {
             state_manager_error_count,
@@ -224,9 +204,7 @@ impl StateManagerMetrics {
             min_resident_height,
             last_computed_manifest_height,
             resident_state_count,
-            state_sync_size,
-            state_sync_duration,
-            state_sync_remaining,
+            state_sync_metrics: StateSyncMetrics::new(metrics_registry),
             state_size,
             checkpoint_metrics: CheckpointMetrics::new(metrics_registry),
             manifest_metrics: ManifestMetrics::new(metrics_registry),
@@ -249,6 +227,49 @@ impl ManifestMetrics {
             // one.
             reused_chunk_hash_error_count: metrics_registry
                 .error_counter("state_manager_manifest_reused_chunk_hash_error_count"),
+        }
+    }
+}
+
+impl StateSyncMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        let state_sync_size = metrics_registry.int_counter_vec(
+            "state_sync_size_bytes_total",
+            "Size of chunks synchronized by different operations ('fetch', 'copy', 'preallocate') during all the state sync in bytes.",
+            &["op"],
+        );
+
+        // Note [Metrics preallocation]
+        for op in &["fetch", "copy"] {
+            state_sync_size.with_label_values(&[*op]);
+        }
+
+        let state_sync_remaining = metrics_registry.int_gauge(
+            "state_sync_remaining_chunks",
+            "Number of chunks not syncronized yet of all active state syncs",
+        );
+
+        let state_sync_duration = metrics_registry.histogram_vec(
+            "state_sync_duration_seconds",
+            "Duration of state sync in seconds indexed by status ('ok', 'already_exists', 'unrecoverable', 'io_err').",
+            // 1s, 2s, 5s, 10s, 20s, 50s, …, 1000s, 2000s, 5000s
+            decimal_buckets(0, 3),
+            &["status"],
+        );
+
+        // Note [Metrics preallocation]
+        for status in &["ok", "already_exists", "unrecoverable", "io_err"] {
+            state_sync_duration.with_label_values(&[*status]);
+        }
+
+        let state_sync_corrupted_chunks =
+            metrics_registry.error_counter(STATE_SYNC_CORRUPTED_CHUNKS);
+
+        Self {
+            state_sync_size,
+            state_sync_duration,
+            state_sync_remaining,
+            state_sync_corrupted_chunks,
         }
     }
 }
@@ -967,7 +988,7 @@ impl StateManagerImpl {
             id.hash.clone(),
             self.state_layout.clone(),
             self.latest_manifest(),
-            self.metrics.clone(),
+            self.metrics.state_sync_metrics.clone(),
             self.own_subnet_type,
             Arc::clone(&self.checkpoint_thread_pool),
             self.state_sync_refs.clone(),

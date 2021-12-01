@@ -16,7 +16,7 @@ use ic_state_manager::StateManagerImpl;
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
-    metrics::{fetch_int_counter, fetch_int_gauge},
+    metrics::{fetch_int_counter, fetch_int_counter_vec, fetch_int_gauge},
     mock_time,
     state::{arb_stream, arb_stream_slice, canister_ids},
     types::{
@@ -1275,9 +1275,19 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
     });
 }
 
+/// Asserts that all error counters in the state manager are still 0
+fn assert_error_counters(metrics: &MetricsRegistry) {
+    assert_eq!(
+        0,
+        fetch_int_counter_vec(metrics, "critical_errors")
+            .values()
+            .sum::<u64>()
+    );
+}
+
 #[test]
 fn can_do_simple_state_sync_transfer() {
-    state_manager_test(|_metrics, src_state_manager| {
+    state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
 
@@ -1294,7 +1304,9 @@ fn can_do_simple_state_sync_transfer() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
-        state_manager_test(|metrics, dst_state_manager| {
+        assert_error_counters(src_metrics);
+
+        state_manager_test(|dst_metrics, dst_state_manager| {
             let chunkable = dst_state_manager.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
@@ -1311,17 +1323,19 @@ fn can_do_simple_state_sync_transfer() {
             assert_eq!(state, recovered_state);
             assert_eq!(*state.as_ref(), dst_state_manager.take_tip().1);
             assert_eq!(vec![height(1)], heights_to_certify(&dst_state_manager));
+
             assert_eq!(
                 0,
-                fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
             );
+            assert_error_counters(dst_metrics);
         })
     })
 }
 
 #[test]
 fn can_state_sync_from_cache() {
-    state_manager_test(|_metrics, src_state_manager| {
+    state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
 
@@ -1338,7 +1352,9 @@ fn can_state_sync_from_cache() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
-        state_manager_test(|metrics, dst_state_manager| {
+        assert_error_counters(src_metrics);
+
+        state_manager_test(|dst_metrics, dst_state_manager| {
             let omit: HashSet<ChunkId> = maplit::hashset! {ChunkId::new(1)};
 
             // First state sync is destroyed before completion
@@ -1352,7 +1368,7 @@ fn can_state_sync_from_cache() {
             }
             assert_eq!(
                 0,
-                fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
             );
             // Second state sync continues from first state and successfully finishes
             {
@@ -1391,7 +1407,7 @@ fn can_state_sync_from_cache() {
             }
             assert_eq!(
                 0,
-                fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
             );
             // Third state sync can copy all chunks immediately
             {
@@ -1426,17 +1442,19 @@ fn can_state_sync_from_cache() {
                     heights_to_certify(&dst_state_manager)
                 );
             }
+
             assert_eq!(
                 0,
-                fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
             );
+            assert_error_counters(dst_metrics);
         })
     })
 }
 
 #[test]
 fn can_state_sync_into_existing_checkpoint() {
-    state_manager_test(|_metrics, src_state_manager| {
+    state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
 
@@ -1451,7 +1469,9 @@ fn can_state_sync_into_existing_checkpoint() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
-        state_manager_test(|metrics, dst_state_manager| {
+        assert_error_counters(src_metrics);
+
+        state_manager_test(|dst_metrics, dst_state_manager| {
             let chunkable = dst_state_manager.create_chunkable_state(&id);
 
             dst_state_manager.take_tip();
@@ -1465,17 +1485,19 @@ fn can_state_sync_into_existing_checkpoint() {
             dst_state_manager
                 .check_artifact_acceptance(dst_msg, &node_test_id(0))
                 .expect("Failed to process state sync artifact");
+
             assert_eq!(
                 0,
-                fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
             );
+            assert_error_counters(dst_metrics);
         })
     })
 }
 
 #[test]
 fn can_state_sync_based_on_old_checkpoint() {
-    state_manager_test(|_metrics, src_state_manager| {
+    state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
@@ -1493,7 +1515,9 @@ fn can_state_sync_based_on_old_checkpoint() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync message");
 
-        state_manager_test(|metrics, dst_state_manager| {
+        assert_error_counters(src_metrics);
+
+        state_manager_test(|dst_metrics, dst_state_manager| {
             let (_height, mut state) = dst_state_manager.take_tip();
             insert_dummy_canister(&mut state, canister_test_id(100));
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
@@ -1514,10 +1538,12 @@ fn can_state_sync_based_on_old_checkpoint() {
                 dst_state_manager.take_tip().1,
                 *expected_state.take().as_ref()
             );
+
             assert_eq!(
                 0,
-                fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
             );
+            assert_error_counters(dst_metrics);
         })
     });
 }
@@ -1552,7 +1578,7 @@ fn can_recover_from_corruption_on_state_sync() {
         ]);
     }
 
-    state_manager_test(|_metrics, src_state_manager| {
+    state_manager_test(|src_metrics, src_state_manager| {
         // Create initial state with a single canister.
         let (_height, mut state) = src_state_manager.take_tip();
         populate_original_state(&mut state);
@@ -1593,7 +1619,9 @@ fn can_recover_from_corruption_on_state_sync() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync message");
 
-        state_manager_test(|_metrics, dst_state_manager| {
+        assert_error_counters(src_metrics);
+
+        state_manager_test(|dst_metrics, dst_state_manager| {
             let (_height, mut state) = dst_state_manager.take_tip();
             populate_original_state(&mut state);
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
@@ -1672,13 +1700,15 @@ fn can_recover_from_corruption_on_state_sync() {
                 dst_state_manager.take_tip().1,
                 *expected_state.take().as_ref()
             );
+
+            assert_error_counters(dst_metrics);
         })
     });
 }
 
 #[test]
 fn can_commit_below_state_sync() {
-    state_manager_test(|_metrics, src_state_manager| {
+    state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
 
@@ -1693,7 +1723,9 @@ fn can_commit_below_state_sync() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
-        state_manager_test(|_metrics, dst_state_manager| {
+        assert_error_counters(src_metrics);
+
+        state_manager_test(|dst_metrics, dst_state_manager| {
             let chunkable = dst_state_manager.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
@@ -1704,6 +1736,8 @@ fn can_commit_below_state_sync() {
             dst_state_manager.take_tip();
             // Check committing an old state doesn't panic
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+            assert_error_counters(dst_metrics);
         })
     })
 }
@@ -1751,7 +1785,7 @@ fn can_get_dirty_pages() {
         execution_state.wasm_memory.page_map = PageMap::default();
     }
 
-    state_manager_test(|_metrics, state_manager| {
+    state_manager_test(|metrics, state_manager| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(80));
         insert_dummy_canister(&mut state, canister_test_id(90));
@@ -1790,6 +1824,8 @@ fn can_get_dirty_pages() {
                 canister_test_id(90) => (height(2), vec![]),
             }
         );
+
+        assert_error_counters(metrics);
     })
 }
 
