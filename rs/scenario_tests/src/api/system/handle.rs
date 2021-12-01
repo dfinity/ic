@@ -447,6 +447,8 @@ impl IcHandle {
                         subnet.max_instructions_per_install_code,
                         None,
                         subnet.max_number_of_canisters,
+                        vec![],
+                        vec![],
                     ),
                 );
 
@@ -475,6 +477,7 @@ impl IcHandle {
                 Some(whitelist),
                 None,
                 None,
+                vec![],
             );
 
             ic_config

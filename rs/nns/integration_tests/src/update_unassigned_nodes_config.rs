@@ -1,5 +1,8 @@
 use ic_canister_client::Sender;
-use ic_nns_common::types::{NeuronId, ProposalId};
+use ic_nns_common::{
+    registry::MAX_NUM_SSH_KEYS,
+    types::{NeuronId, ProposalId},
+};
 use ic_nns_constants::ids::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::registry::get_value;
@@ -22,7 +25,8 @@ fn test_submit_update_unassigned_nodes_config_proposal() {
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
 
         let ssh_keys = Some(vec!["key0".to_string(), "key1".to_string()]);
-        let ssh_keys_invalid = Some(vec!["key_invalid".to_string(); 51]);
+        // A registry invariant guards against exceeding the max number of keys.
+        let ssh_keys_invalid = Some(vec!["key_invalid".to_string(); MAX_NUM_SSH_KEYS + 1]);
         let replica_version = Some("replica_version".to_string());
 
         let payload = UpdateUnassignedNodesConfigPayload {

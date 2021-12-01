@@ -318,6 +318,8 @@ impl IcManager {
                     subnet.max_instructions_per_install_code,
                     subnet.features.clone(),
                     subnet.max_number_of_canisters,
+                    subnet.ssh_readonly_access.clone(),
+                    subnet.ssh_backup_access.clone(),
                 ),
             );
         }
@@ -355,6 +357,7 @@ impl IcManager {
             Some(whitelist),
             ic.node_operator,
             ic.node_provider,
+            ic.ssh_readonly_access_to_unassigned_nodes.clone(),
         );
 
         debug!(logger, "ic_config.initialize");

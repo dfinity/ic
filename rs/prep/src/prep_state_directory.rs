@@ -149,6 +149,8 @@ mod tests {
                 None,
                 None,
                 None,
+                vec![],
+                vec![],
             ),
         );
 
@@ -167,6 +169,7 @@ mod tests {
             None,
             None,
             None,
+            /* ssh_readonly_access_to_unassigned_nodes */ vec![],
         );
         let _init_ic = ic_config.initialize()?;
         let prep_state_dir = IcPrepStateDir::new(tmp.path());

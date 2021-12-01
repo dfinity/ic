@@ -9,11 +9,9 @@ use crate::invariants::common::{
 
 use ic_base_types::SubnetId;
 use ic_base_types::{NodeId, PrincipalId};
-use ic_nns_common::registry::decode_or_panic;
+use ic_nns_common::registry::{decode_or_panic, MAX_NUM_SSH_KEYS};
 use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
 use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_RECORD_KEY_PREFIX};
-
-const MAX_NUM_SSH_KEYS: usize = 50;
 
 /// Subnet invariants hold iff:
 ///    * Each SSH key access list does not contain more than 50 keys

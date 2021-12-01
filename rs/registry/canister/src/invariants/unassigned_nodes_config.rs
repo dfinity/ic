@@ -3,10 +3,9 @@ use crate::{
     invariants::common::{get_value_from_snapshot, InvariantCheckError, RegistrySnapshot},
 };
 
+use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;
-
-const MAX_NUM_SSH_KEYS: usize = 50;
 
 /// Subnet invariants hold iff:
 ///    * Record does not exist OR it does, and each SSH key access list does not

@@ -306,7 +306,7 @@ pub fn updating_readonly_does_not_remove_backup_keys(handle: IcHandle, ctx: &fon
     assert_authentication_works(&node_ip, "backup", &backup_mean);
 }
 
-pub fn can_add_50_readonly_and_backup_keys(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn can_add_100_readonly_and_backup_keys(handle: IcHandle, ctx: &fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
 
     // Choose a random node from the nns subnet
@@ -321,8 +321,8 @@ pub fn can_add_50_readonly_and_backup_keys(handle: IcHandle, ctx: &fondue::pot::
     // Update the registry with 50*2 new pairs of keys.
     let payload_for_subnet = get_updatesubnetpayload(
         app_subnet_id,
-        Some(vec![public_key.clone(); 50]),
-        Some(vec![public_key.clone(); 50]),
+        Some(vec![public_key.clone(); 100]),
+        Some(vec![public_key.clone(); 100]),
     );
     block_on(update_the_subnet_record(nns_endpoint, payload_for_subnet));
 
@@ -334,7 +334,7 @@ pub fn can_add_50_readonly_and_backup_keys(handle: IcHandle, ctx: &fondue::pot::
     ));
 }
 
-pub fn cannot_add_51_readonly_or_backup_keys(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn cannot_add_101_readonly_or_backup_keys(handle: IcHandle, ctx: &fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
 
     // Choose a random node from the nns subnet
@@ -350,7 +350,7 @@ pub fn cannot_add_51_readonly_or_backup_keys(handle: IcHandle, ctx: &fondue::pot
     // Try to update the registry with 51 readonly keys.
     let readonly_payload = get_updatesubnetpayload(
         app_subnet_id,
-        Some(vec![public_key.clone(); 51]),
+        Some(vec![public_key.clone(); 101]),
         Some(vec![]),
     );
     block_on(fail_updating_the_subnet_record(
@@ -362,7 +362,7 @@ pub fn cannot_add_51_readonly_or_backup_keys(handle: IcHandle, ctx: &fondue::pot
     let backup_payload = get_updatesubnetpayload(
         app_subnet_id,
         Some(vec![]),
-        Some(vec![public_key.clone(); 51]),
+        Some(vec![public_key.clone(); 101]),
     );
     block_on(fail_updating_the_subnet_record(
         nns_endpoint,
@@ -371,7 +371,7 @@ pub fn cannot_add_51_readonly_or_backup_keys(handle: IcHandle, ctx: &fondue::pot
 
     // Also do that for unassigned nodes
     let readonly_payload_for_the_unassigned =
-        get_updateunassignednodespayload(Some(vec![public_key; 51]));
+        get_updateunassignednodespayload(Some(vec![public_key; 101]));
     block_on(fail_updating_ssh_keys_for_all_unassigned_nodes(
         nns_endpoint,
         readonly_payload_for_the_unassigned,

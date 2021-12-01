@@ -161,6 +161,8 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
             None,
             None,
             None,
+            vec![],
+            vec![],
         ),
     );
 
@@ -180,6 +182,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
         Some(ProvisionalWhitelist::All),
         None,
         None,
+        /* ssh_readonly_access_to_unassigned_nodes */ vec![],
     );
     ic_config.initialize().unwrap();
     let path: PathBuf = temp_dir.path().into();

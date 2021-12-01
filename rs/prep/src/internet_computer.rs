@@ -29,6 +29,7 @@ use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::RoutingTable as PbRoutingTable,
     subnet::v1::SubnetListRecord,
+    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto};
 use ic_registry_client::client::RegistryDataProviderError;
@@ -39,7 +40,7 @@ use ic_registry_common::{
 use ic_registry_keys::{
     make_blessed_replica_version_key, make_node_operator_record_key,
     make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
-    make_subnet_list_record_key, ROOT_SUBNET_ID_KEY,
+    make_subnet_list_record_key, make_unassigned_nodes_config_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
@@ -226,6 +227,10 @@ pub struct IcConfig {
     /// The node provider principal id of the node operator record will be set
     /// to to this initial node provider id.
     pub initial_node_provider: Option<PrincipalId>,
+
+    /// The initial set of SSH public keys to populate the registry with, to
+    /// give "readonly" access to all unassigned nodes.
+    pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
 }
 
 #[derive(Error, Debug)]
@@ -306,6 +311,7 @@ impl IcConfig {
         provisional_whitelist: Option<ProvisionalWhitelist>,
         initial_node_operator: Option<PrincipalId>,
         initial_node_provider: Option<PrincipalId>,
+        ssh_readonly_access_to_unassigned_nodes: Vec<String>,
     ) -> Self {
         Self {
             target_dir: PathBuf::from(target_dir.as_ref()),
@@ -325,6 +331,7 @@ impl IcConfig {
             initial_mutations: Vec::new(),
             initial_node_operator,
             initial_node_provider,
+            ssh_readonly_access_to_unassigned_nodes,
         }
     }
 
@@ -510,6 +517,19 @@ impl IcConfig {
                 node_operator_record,
             );
         }
+
+        let unassigned_nodes_config = UnassignedNodesConfigRecord {
+            replica_version: String::new(),
+            ssh_readonly_access: self.ssh_readonly_access_to_unassigned_nodes,
+        };
+
+        write_registry_entry(
+            &data_provider,
+            self.target_dir.as_path(),
+            &make_unassigned_nodes_config_record_key(),
+            version,
+            unassigned_nodes_config,
+        );
 
         data_provider.write_to_file(InitializedIc::registry_path_(self.target_dir.as_path()));
 

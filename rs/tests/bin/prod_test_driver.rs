@@ -245,11 +245,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         ),
                         t(
                             "can_add_50_readonly_and_backup_keys",
-                            ssh_access_to_nodes::can_add_50_readonly_and_backup_keys,
+                            ssh_access_to_nodes::can_add_100_readonly_and_backup_keys,
                         ),
                         t(
                             "cannot_add_51_readonly_or_backup_keys",
-                            ssh_access_to_nodes::cannot_add_51_readonly_or_backup_keys,
+                            ssh_access_to_nodes::cannot_add_101_readonly_or_backup_keys,
                         ),
                     ]),
                 ),

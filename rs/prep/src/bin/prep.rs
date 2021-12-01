@@ -6,6 +6,7 @@ use std::{
     convert::TryFrom,
     fmt::Display,
     fs,
+    io::{self, BufRead},
     net::{SocketAddr, SocketAddrV4},
     path::{Path, PathBuf},
     str::FromStr,
@@ -122,6 +123,18 @@ struct CliArgs {
     /// is set as the node provider of that node operator.
     #[structopt(long)]
     pub initial_node_provider: Option<PrincipalId>,
+
+    /// The path to the file which contains the initial set of SSH public keys
+    /// to populate the registry with, to give "readonly" access to all the
+    /// nodes.
+    #[structopt(long, parse(from_os_str))]
+    pub ssh_readonly_access_file: Option<PathBuf>,
+
+    /// The path to the file which contains the initial set of SSH public keys
+    /// to populate the registry with, to give "backup" access to all the
+    /// nodes.
+    #[structopt(long, parse(from_os_str))]
+    pub ssh_backup_access_file: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -153,6 +166,8 @@ fn main() -> Result<()> {
             None,
             None,
             None,
+            valid_args.ssh_readonly_access.clone(),
+            valid_args.ssh_backup_access.clone(),
         );
         topology_config.insert_subnet(*subnet_id, subnet_configuration);
     }
@@ -174,6 +189,7 @@ fn main() -> Result<()> {
         valid_args.provisional_whitelist,
         valid_args.initial_node_operator,
         valid_args.initial_node_provider,
+        valid_args.ssh_readonly_access,
     );
 
     let ic_config = match valid_args.dc_pk_dir {
@@ -208,6 +224,8 @@ struct ValidatedArgs {
     pub provisional_whitelist: Option<ProvisionalWhitelist>,
     pub initial_node_operator: Option<PrincipalId>,
     pub initial_node_provider: Option<PrincipalId>,
+    pub ssh_readonly_access: Vec<String>,
+    pub ssh_backup_access: Vec<String>,
 }
 
 /// Structured definition of a flow provided by the `--p2p-flows` flag.
@@ -624,7 +642,32 @@ impl CliArgs {
             provisional_whitelist,
             initial_node_operator: self.initial_node_operator,
             initial_node_provider: self.initial_node_provider,
+            ssh_readonly_access: self
+                .ssh_readonly_access_file
+                .map_or(vec![], read_keys_from_pub_file),
+            ssh_backup_access: self
+                .ssh_backup_access_file
+                .map_or(vec![], read_keys_from_pub_file),
         })
+    }
+}
+
+fn read_keys_from_pub_file(filename: PathBuf) -> Vec<String> {
+    let mut keys = Vec::<String>::new();
+    if let Ok(file) = fs::File::open(filename.clone()) {
+        for line in io::BufReader::new(file).lines() {
+            match line {
+                Ok(key) => keys.push(key),
+                Err(e) => eprintln!(
+                    "Error while reading a key from {}: {}",
+                    filename.as_path().display(),
+                    e
+                ),
+            }
+        }
+        keys
+    } else {
+        vec![]
     }
 }
 

@@ -121,6 +121,8 @@ fn main() -> Result<()> {
                 None,
                 None,
                 None,
+                vec![],
+                vec![],
             ),
         );
 
@@ -143,6 +145,7 @@ fn main() -> Result<()> {
             config.provisional_whitelist,
             None,
             None,
+            /* ssh_readonly_access_to_unassigned_nodes */ vec![],
         );
         ic_config.initialize()?;
     }

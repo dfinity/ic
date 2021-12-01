@@ -17,6 +17,8 @@ use ic_registry_transport::{
 };
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, Time};
 
+pub const MAX_NUM_SSH_KEYS: usize = 100;
+
 /// A higher level helper to interact with the registry canister.
 pub struct RegistryCanister {
     canister_id: CanisterId,
