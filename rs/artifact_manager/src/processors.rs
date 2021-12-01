@@ -307,28 +307,10 @@ impl<
         )
     }
 
-    fn advert_class(&self, msg: &ConsensusMessage, source: AdvertSource) -> AdvertClass {
-        // Notify all peers for artifacts produced by us
-        if source == AdvertSource::Produced {
-            return AdvertClass::Critical;
-        }
-
-        // For relayed artifacts: use best effort for shares,
-        // notify all peers for the rest (actual objects like block
-        // proposals, notary/finalization)
-        match msg {
-            ConsensusMessage::RandomBeacon(_) => AdvertClass::Critical,
-            ConsensusMessage::Notarization(_) => AdvertClass::Critical,
-            ConsensusMessage::Finalization(_) => AdvertClass::Critical,
-            ConsensusMessage::RandomTape(_) => AdvertClass::Critical,
-            ConsensusMessage::CatchUpPackage(_) => AdvertClass::Critical,
-            ConsensusMessage::BlockProposal(_) => AdvertClass::Critical,
-            ConsensusMessage::RandomBeaconShare(_) => AdvertClass::BestEffort,
-            ConsensusMessage::NotarizationShare(_) => AdvertClass::BestEffort,
-            ConsensusMessage::FinalizationShare(_) => AdvertClass::BestEffort,
-            ConsensusMessage::RandomTapeShare(_) => AdvertClass::BestEffort,
-            ConsensusMessage::CatchUpPackageShare(_) => AdvertClass::BestEffort,
-        }
+    fn advert_class(&self, _msg: &ConsensusMessage, _source: AdvertSource) -> AdvertClass {
+        // Send to all peers until we can go back to using BestEffort for shares,
+        // after more experimentation.
+        AdvertClass::Critical
     }
 }
 
