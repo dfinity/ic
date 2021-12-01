@@ -23,7 +23,7 @@ fn test_create_dealing_should_detect_errors(
     _num_reshares: i32,
 ) {
     let mut rng = ChaCha20Rng::from_seed(seed);
-    let network = MockNetwork::random(&mut rng, network_size);
+    let network = MockNetwork::random(&mut rng, network_size, new_csp_vault);
     let config = MockDkgConfig::from_network(&mut rng, &network, None);
     let mut state = StateWithConfig { network, config };
     // Dealing errors:

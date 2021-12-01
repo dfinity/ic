@@ -5,6 +5,7 @@ use crate::vault::local_csp_vault::ni_dkg::tests::fixtures::{
     MockDkgConfig, MockNetwork, MockNode, StateWithTranscript,
 };
 use crate::vault::local_csp_vault::ni_dkg::tests::state_with_transcript;
+use crate::vault::local_csp_vault::test_utils::new_csp_vault;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_types::crypto::{AlgorithmId, KeyId};
 use rand::SeedableRng;
@@ -38,7 +39,7 @@ fn test_retention() {
     let seed = [69u8; 32];
     let network_size = 4;
     let mut rng = ChaCha20Rng::from_seed(seed);
-    let network = MockNetwork::random(&mut rng, network_size);
+    let network = MockNetwork::random(&mut rng, network_size, new_csp_vault);
     let config = MockDkgConfig::from_network(&mut rng, &network, None);
     let mut state = state_with_transcript(&config, network);
 
