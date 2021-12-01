@@ -451,10 +451,10 @@ lazy_static! {
             11_000_004,
         ),
         (
-            "ic0.canister_cycles_balance128() loop/1M",
+            "ic0.canister_cycle_balance128() loop/1M",
             render(
                 LOOP_1M,
-                "canister_cycles_balance128",
+                "canister_cycle_balance128",
                Param1(0),
                NoResults(),
             ),
