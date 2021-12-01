@@ -173,7 +173,7 @@ export HOSTS="$PROD_SRC/env/$testnet/hosts"
 
 NNS_HOST="$(jq_hostvars 'map(select(.subnet_index==0) | .ansible_host)[0]')"
 CHILD_NNS_HOST=$(jq_hostvars 'map(select(.subnet_index=="x") | .ansible_host)[0]')
-NNS_URL=$(jq_hostvars 'map(select(.subnet_index==0) | .api_listen_url)[0]')
+NNS_URL=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
 AUX_HOST=$(jq_hostvars 'map(select(.subnet_index=="aux") | .ansible_host)[0]')
 
 step 1.A Deploy the original IC || time (

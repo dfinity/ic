@@ -15,20 +15,20 @@
 #   compares it with expected_delta to verify that the difference is within 0.1%
 
 if (($# != 6)); then
-    echo >&2 "Wrong number of arguments, please provide values for <testnet_identifier> <duration> <tps> <hosts_file_path> <results_dir>"
+    echo >&2 "Wrong number of arguments, please provide values for <testnet_identifier> <duration> <tps> <results_dir>"
     exit 1
 fi
 
 testnet="$1"
 duration="$2"
 tps="$3"
-hosts_file_path="$4"
-experiment_dir="$5"
-test_account_id="$6"
+experiment_dir="$4"
+test_account_id="$5"
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 PROD_SRC=${PROD_SRC:-$REPO_ROOT/testnet}
 TEST_MODULES=${TEST_MODULES:-$PROD_SRC/tests/scripts/test_modules}
+hosts_file_path="$PROD_SRC/env/$testnet/hosts"
 
 # ledger canister_id on the testnet
 ledger="ryjl3-tyaaa-aaaaa-aaaba-cai"

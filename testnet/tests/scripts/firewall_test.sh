@@ -81,29 +81,11 @@ echo "# Starting firewall test"
 echo "########################################################################"
 echo ""
 
-cd "$PROD_SRC"
-
-NNS_URL=$(
-    ansible-inventory -i "env/$testnet/hosts" --list \
-        --list | jq -L./jq -r \
-        "import \"ansible\" as ansible; . as \$o | .nns.hosts[0] | \$o._meta.hostvars[.] | ansible::interpolate | .api_listen_url"
-)
-
+NNS_URL=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
 echo "Set NNS_URL to $NNS_URL"
 
 # Load firewall config from some node
-host=$(
-    cd "$PROD_SRC"
-    ansible-inventory -i "env/$testnet/hosts" --list \
-        | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-               ._meta.hostvars |
-               [
-                 with_entries(select(.value.subnet_index==1))[] |
-                 ansible::interpolate |
-                 .ansible_host
-               ][0]'
-)
-
+host=$(jq_hostvars 'map(select(.subnet_index==1) | .ansible_host)[0]')
 echo "Fetching config from node $host"
 
 # shellcheck disable=SC2002
@@ -185,18 +167,7 @@ echo "Waiting 120 seconds for config to propagate to nodes"
 sleep 120
 
 # Fetch the firewall file from the nodes and compare to expected content
-hosts=$(
-    cd "$PROD_SRC"
-    ansible-inventory -i "env/$testnet/hosts" --list \
-        | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-               ._meta.hostvars |
-               [
-                 with_entries(select(.value.subnet_index==1))[] |
-                 ansible::interpolate |
-                 .ipv6
-               ] |
-               join(" ")'
-)
+hosts=$(jq_hostvars 'map(select(.subnet_index==1) | .ipv6) | join(" ")')
 
 expected_config_path="$experiment_dir"/expected_ruleset
 cp "$fw_config_content_file" "$expected_config_path"~

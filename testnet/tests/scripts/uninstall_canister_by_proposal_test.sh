@@ -56,7 +56,7 @@ deploy_with_timeout "$testnet" --git-revision "$GIT_REVISION"
 echo "Testnet deployment successful. Test starts now."
 
 # obtain URL of a node in the NNS to send an ic-admin call to
-nns_url=$(jq_hostvars 'map(select(.subnet_index==0) | .api_listen_url)[0]')
+nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
 export nns_url
 echo "nns_url: $nns_url"
 

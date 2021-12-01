@@ -74,8 +74,8 @@ echo "Testnet deployment successful. Test starts now."
 # These are the hosts that the workload generator will target.
 # The code picks the first 1/3 of the nodes, so it does not clash
 # with the nodes that will be killed.
-load_urls=$(jq_subnet_nodes_urls_nth_third 1 0)
-echo "$load_urls" >"$experiment_dir/load_urls"
+loadhosts=$(jq_subnet_nodes_urls_nth_third 1 0)
+echo "$loadhosts" >"$experiment_dir/loadhosts"
 
 # Store the test start time in epoch, so we could query Prometheus later.
 starttime="$(date '+%s')"
@@ -99,7 +99,7 @@ wg_status_file="$experiment_dir/wg_exit_status"
         #  After a timeout make sure it's terminated, otherwise we may end up with stale processes
         #  on the CI/CD which block the entire pipeline (other job invocations).
         timeout -k 300 $((runtime + 300)) ic-workload-generator \
-            "$load_urls" -u \
+            "$loadhosts" -u \
             -r "$rate" \
             --payload-size="$payload_size" \
             -n "$runtime" \

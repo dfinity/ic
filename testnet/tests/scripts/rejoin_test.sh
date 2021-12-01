@@ -92,17 +92,7 @@ echo "On testnet with identifier $testnet with runtime $runtime (in seconds)."
 
 # Get the list of all nodes in subnet 1.
 # shellcheck disable=SC2046
-mapfile -d " " -t all_nodes <<<$(
-    cd "$PROD_SRC"
-    ansible-inventory -i "env/$testnet/hosts" --list \
-        | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-               ._meta.hostvars |
-               [
-                 with_entries(select(.value.subnet_index==1))[] |
-                 ansible::interpolate |
-                 .node_index
-               ]|@sh'
-)
+mapfile -d " " -t all_nodes <<<$(jq_hostvars 'map(select(.subnet_index==1) | .node_index) | @sh')
 
 num_all_nodes=${#all_nodes[@]}
 
@@ -113,60 +103,20 @@ fi
 
 # Get the list of data centers in subnet 1.
 # shellcheck disable=SC2046
-mapfile -t data_centers <<<$(
-    cd "$PROD_SRC"
-    ansible-inventory -i "env/$testnet/hosts" --list \
-        | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-               ._meta.hostvars |
-               [
-                 with_entries(select(.value.subnet_index==1))[] |
-                 ansible::interpolate |
-                 .ic_host[:3]
-               ]' | jq 'unique |.[] '
-)
+mapfile -t data_centers <<<$(jq_hostvars 'map(select(.subnet_index==1) | .ic_host[:3]) | unique | .[]')
 
 num_data_centers=${#data_centers[@]}
 
 declare -A dc_nodes
 # Get the list of nodes in each data center.
 for i in $(seq 0 $((num_data_centers - 1))); do
-    dc_nodes[${i}]=$(
-        cd "$PROD_SRC"
-        ansible-inventory -i "env/$testnet/hosts" --list \
-            | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-                 ._meta.hostvars |
-                 [
-                   with_entries(select(.value.subnet_index==1 and .value.ic_host[:3]=='"${data_centers[${i}]}"'))[] |
-                   ansible::interpolate |
-                   .node_index
-                 ]'
-    )
+    dc_nodes[${i}]=$(jq_hostvars "map(select(.subnet_index==1 and .ic_host[:3]==\"${data_centers[${i}]}\") | .node_index)")
 done
 
 if [[ $((num_data_centers)) -lt 2 ]]; then
     echo "Only one dc, we'll run the test anyways, but it won't tell us if statesync across dcs works well"
-    dc_nodes[0]=$(
-        cd "$PROD_SRC"
-        ansible-inventory -i "env/$testnet/hosts" --list \
-            | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-                 ._meta.hostvars |
-                 [
-                   with_entries(select(.value.subnet_index==1 and .value.ic_host[:3]=='"${data_centers[0]}"'))[] |
-                   ansible::interpolate |
-                   .node_index
-                 ]' | jq 'unique |.[2:] '
-    )
-    dc_nodes[1]=$(
-        cd "$PROD_SRC"
-        ansible-inventory -i "env/$testnet/hosts" --list \
-            | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-                 ._meta.hostvars |
-                 [
-                   with_entries(select(.value.subnet_index==1 and .value.ic_host[:3]=='"${data_centers[0]}"'))[] |
-                   ansible::interpolate |
-                   .node_index
-                 ]' | jq 'unique |.[:2] '
-    )
+    dc_nodes[0]=$(jq_hostvars "map(select(.subnet_index==1 and .ic_host[:3]==\"${data_centers[0]}\") | .node_index) | unique | .[2:]")
+    dc_nodes[1]=$(jq_hostvars "map(select(.subnet_index==1 and .ic_host[:3]==\"${data_centers[0]}\") | .node_index) | unique | .[:2]")
 fi
 
 group_0_nodes=[]
@@ -279,7 +229,7 @@ readarray -t group_1_remaining_keys < <(jq_hostvars "with_entries(select(.value.
 echo "Node $statesync_node is selected to do state sync with nodes in the other data center."
 
 # Testnet NNS URL: the API endpoint of the first NNS replica.
-nns_url=$(jq_hostvars 'map(select(.subnet_index==0) | .api_listen_url)[0]')
+nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
 
 if [[ $((size_level)) -eq 0 ]]; then
     # Deploy to testnet DKG interval length 20
@@ -425,19 +375,7 @@ echo "(Start time was $(dateFromEpoch "$starttime"))"
 
 # Get the report
 # Produce the list of all unaffected nodes in the testnet, suitable for passing to the Prometheus query
-metricshosts=$(
-    cd "$PROD_SRC"
-    ansible-inventory -i "env/$testnet/hosts" --list \
-        | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-               ._meta.hostvars |
-              [
-                 with_entries(select(.value.node_index | IN('"$group_0_nodes_list"')))[] |
-                 ansible::interpolate |
-                 .metrics_listen_addr
-               ] | flatten |
-               join("|")'
-)
-metricshosts=$(echo "$metricshosts" | escapebracket)
+metricshosts=$(jq_load_filtered_urls_for_metrics ".node_index | IN($group_0_nodes_list)")
 echo "metricshosts $metricshosts"
 
 # Extract the IC name from the testnet name (p2p_15_28 -> p2p)
@@ -477,16 +415,7 @@ curl -G "http://prometheus.dfinity.systems:9090/api/v1/query" \
     --data-urlencode "query=avg(rate(${selector}[300s]))"
 
 # Get the state sync duration from the node which is first killed.
-metricshosts=$(
-    cd "$PROD_SRC"
-    ansible-inventory -i "env/$testnet/hosts" --list \
-        | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-               ._meta.hostvars |
-                 with_entries(select(.value.node_index == '"${node_indices_1[0]}"'))[] |
-                 ansible::interpolate |
-                 .metrics_listen_addr'
-)
-metricshosts=$(echo "$metricshosts" | escapebracket)
+metricshosts=$(jq_load_filtered_urls_for_metrics ".node_index == ${node_indices_1[0]}")
 
 # Get the metrics of state sync duration, summed up until $finaltime.
 # Query the metrics from the first-killed node as it is the only one which conducts state sync.

@@ -87,7 +87,6 @@ if [[ ! " ${SUBNET_TYPES[*]} " =~ ${subnet_type} ]]; then
     exit_usage
 fi
 
-hosts_file_path="$PROD_SRC/env/$testnet/hosts"
 HOSTS_INI_ARGUMENTS=()
 if [[ "$subnet_type" == "large" ]]; then
     # The test will run with a special hosts file creating a large app subnet.
@@ -124,17 +123,7 @@ echo "On testnet with identifier $testnet with proposal_batches of size $batch_s
 
 # Get the list of all node_indices, so we can use that in scenarios
 # shellcheck disable=SC2046
-mapfile -d " " -t node_indices <<<$(
-    cd "$PROD_SRC"
-    ansible-inventory -i "$hosts_file_path" --list \
-        | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-               ._meta.hostvars |
-               [
-                 with_entries(select(.value.subnet_index==0))[] |
-                 ansible::interpolate |
-                 .node_index
-               ] | @sh'
-)
+mapfile -d " " -t node_indices <<<$(jq_hostvars 'map(select(.subnet_index==0) | .node_index) | @sh')
 echo "${node_indices[@]}" >"$experiment_dir/node_indices"
 
 # Prepare metric-collection related variables for later use.
@@ -144,12 +133,7 @@ metricshosts="$(jq_subnet_load_third_nodes_urls_for_metrics 0)"
 # Extract the IC name from the testnet name (p2p_15_28 -> p2p)
 ic="${testnet%%_*}"
 
-NNS_URL=$(
-    cd "$PROD_SRC"
-    ansible-inventory -i "$hosts_file_path" \
-        --list | jq -L./jq -r \
-        "import \"ansible\" as ansible; . as \$o | .nns.hosts[0] | \$o._meta.hostvars[.] | ansible::interpolate | .api_listen_url"
-)
+NNS_URL=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
 echo "Set NNS url to $NNS_URL"
 
 # start ledger transfer as asynchronous process
@@ -157,7 +141,7 @@ echo "Set NNS url to $NNS_URL"
     ledger_starttime="$(date '+%s')"
     echo "$ledger_starttime" >"$experiment_dir/ledger_starttime"
     echo "Starting ledger transfers at $ledger_starttime"
-    "$TEST_MODULES"/ledger_query_update.sh "$testnet" "$duration" "$tps" "$hosts_file_path" "$experiment_dir" "$test_account_id"
+    "$TEST_MODULES"/ledger_query_update.sh "$testnet" "$duration" "$tps" "$experiment_dir" "$test_account_id"
     ledger_endtime="$(date '+%s')"
     echo "Ledger workload finished at $ledger_endtime"
     echo "$ledger_endtime" >"$experiment_dir/ledger_endtime"

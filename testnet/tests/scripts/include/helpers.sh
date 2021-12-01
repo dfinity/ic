@@ -168,15 +168,29 @@ escapebracket() {
 
 # The function 'jq_hostvars' replaces the templates (e.g. '{{p2p_listen_port}}')
 # with their values defined in the same input file (e.g. '4100')
-# This functions expects an argument with further jq filters.
+# If one argument is provided, it must be further jq filters.
+# If two arguments are provided, the first is filters to feed into the template
+# expansion, while the second is further jq filters. (passing `._meta.hostvars`
+# for the first argument is the same as omitting the first argument altogether).
 # Example usage:
 # jq_hostvars 'map(select(.subnet_index==1) | .api_listen_url)[1:] | join(",")'
 function jq_hostvars() {
+    if [ -z ${1+x} ]; then
+        local prefilter='._meta.hostvars'
+        local postfilter='.'
+    elif [ -z ${2+x} ]; then
+        local prefilter='._meta.hostvars'
+        local postfilter=$1
+    else
+        local prefilter=$1
+        local postfilter=$2
+    fi
+
     cd "$PROD_SRC"
     ansible-inventory -i "env/$testnet/hosts" --list \
         | jq -L"${PROD_SRC}/jq" --sort-keys \
             -r "import \"ansible\" as ansible;
-                 ._meta.hostvars | map_values(ansible::interpolate) | $1"
+                 $prefilter | map_values(ansible::interpolate) | $postfilter"
 }
 
 # Join array $2 with a separator provided in $1. For instance:
@@ -259,7 +273,7 @@ large_subnet_finalization_threshold=0.3
 #return treshold value depending on size and index of subnet
 function finalization_rate_threshold() {
     local subnet_id=$1
-    local nns_url=$(jq_hostvars 'map(select(.subnet_index==0) | .api_listen_url)[0]')
+    local nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
     local num_nodes=$(ic-admin --nns-url "$nns_url" get-topology | jq -r ".topology.subnets | to_entries[$subnet_id].value.records[0].value.membership | length")
     if ((num_nodes > small_subnet_size)); then
         threshold=$large_subnet_finalization_threshold
@@ -321,11 +335,16 @@ function jq_subnet_nodes_urls_nth_third() {
     jq_hostvars "map(select(.subnet_index==$subnet_number) | .api_listen_url) | [_nwise(3)[$which_third]] | join(\",\")"
 }
 
+function jq_load_filtered_urls_for_metrics() {
+    # return '|' separated load nodes from the requested subnet, filtering before and after as requested
+    local prefilter=$1
+    local postfilter=${2:-.}
+    jq_hostvars "map(select($prefilter) | .metrics_listen_addr) | $postfilter | join(\"|\")" | escapebracket
+}
+
 function jq_subnet_load_urls_for_metrics() {
-    # return '|' separated load nodes from the requested subnet, filtering as requested
-    local subnet_number=$1
-    local filter=${2:-.}
-    jq_hostvars "map(select(.subnet_index==$subnet_number) | .metrics_listen_addr) | $filter | join(\"|\")" | escapebracket
+    # return '|' separated load nodes from the requested subnet, filtering after as requested
+    jq_load_filtered_urls_for_metrics ".subnet_index==$1" "${2:-.}"
 }
 
 function jq_subnet_load_third_nodes_urls_for_metrics() {

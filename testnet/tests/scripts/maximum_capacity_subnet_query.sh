@@ -70,7 +70,6 @@ fi
 
 subnet_index=1
 
-hosts_file_path="$PROD_SRC/env/$testnet/hosts"
 HOSTS_INI_ARGUMENTS=()
 if [[ "$subnet_type" == "large" ]]; then
     # The test will run with a special hosts file creating a large app subnet.
@@ -100,19 +99,8 @@ calltime="$(date '+%s')"
 if [[ -n "${TEST_LOADHOSTS-}" ]]; then
     loadhosts="$TEST_LOADHOSTS"
 else
-    loadhosts=$(
-        cd "$PROD_SRC"
-        ansible-inventory -i "$hosts_file_path" --list \
-            | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-                ._meta.hostvars |
-                [
-                    with_entries(select(.value.subnet_index== '"$subnet_index"' ))[] |
-                    ansible::interpolate |
-                    .api_listen_url
-                ][0]'
-    )
+    loadhosts=$(jq_hostvars 'map(select(.subnet_index=='"${subnet_index}"') | .api_listen_url)[0]')
 fi
-echo "Using loadhosts = $loadhosts"
 
 # Store the time at which the test was called, so we can compute how long everything takes.
 calltime="$(date '+%s')"

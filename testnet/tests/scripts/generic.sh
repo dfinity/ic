@@ -69,9 +69,9 @@ echo '
 
 # These are the hosts that the workload generator will target to install the counter canister
 # [1:] selects all nodes except the first one, which is going to be killed
-load_urls=$(jq_hostvars 'map(select(.subnet_index==1) | .api_listen_url)[1:] | join(",")')
-echo "load_ulrs: $load_urls"
-echo "$load_urls" >"$experiment_dir/load_urls"
+loadhosts=$(jq_hostvars 'map(select(.subnet_index==1) | .api_listen_url)[1:] | join(",")')
+echo "load_ulrs: $loadhosts"
+echo "$loadhosts" >"$experiment_dir/loadhosts"
 
 # As we start the workload generator in a subshell, the only way to pass the information back
 # is via files.
@@ -88,7 +88,7 @@ wg_status_file="$experiment_dir/wg_exit_status"
         # After a timeout make sure it's terminated, otherwise we may end up with stale processes
         # on the CI/CD which block the entire pipeline (other job invocations).
         timeout -k 300 $((runtime + 600)) ic-workload-generator \
-            "$load_urls" -u \
+            "$loadhosts" -u \
             -r "$rate" \
             --payload-size="$payload_size" \
             -n "$runtime" \
@@ -110,10 +110,10 @@ wg_pid=$!
     # Run ansible playbook to stop a node and start it again after runtime seconds
     downtime=$((runtime / 2))
     cd "$PROD_SRC/ansible"
-    ansible-playbook -i "../env/$testnet/hosts" icos_node_stress.yml \
-        --limit "$(jq_nth_subnet_node 1 0)" \
-        -e ic_action=kill-replica -e downtime_seconds="$downtime" 2>&1 \
-        | tee -a "$experiment_dir/scenario.log"
+    script --quiet --return "$experiment_dir/scenario.log" --command "set -x;
+        ansible-playbook -i '../env/$testnet/hosts' icos_node_stress.yml \
+            --limit '$(jq_nth_subnet_node 1 0)' \
+            -e ic_action=kill-replica -e downtime_seconds='$downtime'" >/dev/null 2>&1 &
 ) &
 scenario_pid=$!
 
@@ -122,6 +122,7 @@ trap 'echo "SIGINT received, killing all jobs"; jobs -p | xargs -rn1 pkill -P >/
 
 # Wait for the workload generator and scenario process to finish
 wait "$wg_pid" "$scenario_pid"
+cat "$experiment_dir/scenario.log"
 
 endtime="$(<"$wg_endtime_file")"
 wg_status="$(<"$wg_status_file")"

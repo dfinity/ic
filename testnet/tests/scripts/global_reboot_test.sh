@@ -90,8 +90,8 @@ export XNET_TEST_CANISTER_WASM_PATH="$MEDIA_CANISTERS_PATH/xnet-test-canister.wa
 
 # These are the hosts that the workload generator will target
 # (all hosts in this test)
-load_urls=$(jq_hostvars 'map(select(.subnet_index==1) | .api_listen_url) | join(",")')
-echo "$load_urls" >"$experiment_dir/load_urls"
+loadhosts=$(jq_hostvars 'map(select(.subnet_index==1) | .api_listen_url) | join(",")')
+echo "$loadhosts" >"$experiment_dir/loadhosts"
 
 # Store the test start time in epoch, so we could query Prometheus later.
 starttime="$(date '+%s')"
@@ -134,7 +134,7 @@ wg_status_file="$experiment_dir/wg_exit_status"
         # After a timeout make sure it's terminated, otherwise we may end up with stale processes
         # on the CI/CD which block the entire pipeline (other job invocations).
         timeout -k 300 $((runtime + 600)) ic-workload-generator \
-            "$load_urls" -u \
+            "$loadhosts" -u \
             -r "$rate" \
             --payload-size="$payload_size" \
             -n "$runtime" \

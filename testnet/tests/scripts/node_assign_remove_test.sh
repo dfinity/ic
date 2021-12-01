@@ -86,7 +86,7 @@ echo "target_subnet: $target_subnet"
 mapfile -d " " -t initially_unassigned_nodes <<<"$(ansible-inventory -i "$HOSTS" --list | jq -r '.subnet_unassigned.hosts | @sh')"
 echo "Unassigned nodes: " "${initially_unassigned_nodes[@]}"
 
-parent_nns_url=$(jq_hostvars 'map(select(.subnet_index==0) | .api_listen_url)[0]')
+parent_nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
 export parent_nns_url
 echo "parent_nns_url: $parent_nns_url"
 

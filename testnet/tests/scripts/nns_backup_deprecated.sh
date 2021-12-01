@@ -51,7 +51,6 @@ starttime="$(date '+%s')"
 echo "Start time: $(dateFromEpoch "$starttime")"
 
 # Determine the URL of the NNS
-hosts_file_path="$PROD_SRC/env/$testnet/hosts"
 HOSTS_INI_ARGUMENTS=()
 
 if [[ -n "${TEST_NNS_URL-}" ]]; then
@@ -62,18 +61,7 @@ else
         --no-boundary-nodes \
         --git-revision "$GIT_REVISION" "${HOSTS_INI_ARGUMENTS[@]}"
 
-    nns_url=$(
-        cd "$PROD_SRC"
-        ansible-inventory -i "$hosts_file_path" --list \
-            | jq -r -L"${PROD_SRC}/jq" 'import "ansible" as ansible;
-            ._meta.hostvars |
-            [
-                with_entries(select(.value.subnet_index==0))[] |
-                ansible::interpolate |
-                .api_listen_url
-            ] |
-            first'
-    )
+    nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
 fi
 
 echo "Testnet deployment successful. Test starts now."

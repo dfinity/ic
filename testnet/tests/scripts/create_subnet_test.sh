@@ -78,7 +78,7 @@ deploy_with_timeout "$testnet" \
 
 echo "Testnet deployment successful. Test starts now."
 
-nns_url=$(jq_hostvars 'map(select(.subnet_index==0) | .api_listen_url)[0]')
+nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
 echo "nns_url: $nns_url"
 
 mapfile -d " " -t node_ids <<<"$(ic-admin --nns-url "$nns_url" get-topology | jq -r '.topology.unassigned_nodes | map_values(.node_id) | join(" ")')"
