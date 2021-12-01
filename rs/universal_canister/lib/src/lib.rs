@@ -16,7 +16,7 @@ use hex_literal::hex;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal_canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("784ec56225e38eff76c3a7ab804c60862efd8f3b93ecc29f86c2362e7610f6aa");
+    hex!("016341dec010df9689cf69be84d7b5af0b1fc198f5e37a1a52aeaba02a43fe04");
 
 /// Operands used in encoding UC payloads.
 enum Ops {

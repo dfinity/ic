@@ -33,7 +33,7 @@ pub fn exceeding_memory_capacity_fails_during_message_execution(
             // canister also takes some space).
             let memory_to_allocate = 1024 * 1024 / WASM_PAGE_SIZE_IN_BYTES; // 1MiB in Wasm pages.
             let mut expected_result = 1;
-            for _ in 0..15 {
+            for _ in 0..14 {
                 let res = canister
                     .update(wasm().stable64_grow(memory_to_allocate).reply_int64())
                     .await
