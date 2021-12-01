@@ -1,4 +1,3 @@
-#![deny(missing_docs)]
 //! The replay tool is to help recover a broken subnet by replaying past blocks
 //! and create a checkpoint of the latest state, which can then be used to
 //! create recovery CatchUpPackage. It is also used to replay the artifacts
@@ -18,7 +17,6 @@ use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
-use ic_canister_client::Agent;
 use ic_config::{
     artifact_pool::ArtifactPoolConfig, registry_client::DataProviderConfig,
     subnet_config::SubnetConfigs, Config,
@@ -41,8 +39,7 @@ use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::{
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    subnet::v1::{CatchUpPackageContents, SubnetRecord},
+    replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord,
 };
 use ic_registry_client::client::{create_data_provider, RegistryClientImpl};
 use ic_registry_common::{
@@ -50,15 +47,10 @@ use ic_registry_common::{
     registry::registry_deltas_to_registry_transport_records,
     values::deserialize_registry_value,
 };
-use ic_registry_keys::{
-    make_blessed_replica_version_key, make_catch_up_package_contents_key, make_replica_version_key,
-    make_subnet_record_key,
-};
+use ic_registry_keys::{make_blessed_replica_version_key, make_subnet_record_key};
 use ic_registry_transport::{
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,
-    deserialize_get_value_response,
-    pb::v1::{registry_mutation, Precondition, RegistryMutation},
-    serialize_atomic_mutate_request, serialize_get_changes_since_request,
+    deserialize_get_value_response, serialize_get_changes_since_request,
     serialize_get_value_request,
 };
 use ic_replica::setup::get_subnet_type;
@@ -70,13 +62,10 @@ use ic_types::{
     ingress::{IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress, UserQuery},
     time::current_time,
-    CanisterId, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
-    UserId,
+    Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
 };
 use ic_utils::ic_features::cow_state_feature;
-use prost::Message;
 use std::{
-    convert::TryFrom,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -84,6 +73,8 @@ use std::{
 use tempfile::TempDir;
 
 mod backup;
+pub mod cmd;
+pub mod ingress;
 
 // Amount of time we are waiting for execution, after batches are delivered.
 const WAIT_DURATION: Duration = Duration::from_millis(200);
@@ -843,129 +834,6 @@ fn write_records_to_local_store(
             local_store.store(v, cle)
         })
         .expect("Writing to the file system failed: Stop.");
-}
-
-/// Applies 'mutations' to the registry.
-pub fn atomic_mutate(
-    agent: &Agent,
-    canister_id: CanisterId,
-    mutations: Vec<RegistryMutation>,
-    pre_conditions: Vec<Precondition>,
-    expiry: Time,
-) -> Result<SignedIngress, String> {
-    let payload = serialize_atomic_mutate_request(mutations, pre_conditions);
-    let nonce = format!("{:?}", std::time::Instant::now())
-        .as_bytes()
-        .to_vec();
-    let (http_body, _request_id) = agent
-        .prepare_update_raw(&canister_id, "atomic_mutate", payload, nonce, expiry)
-        .map_err(|err| format!("Error preparing update message: {:?}", err))?;
-    SignedIngress::try_from(http_body)
-        .map_err(|err| format!("Error converting to SignedIngress: {:?}", err))
-}
-
-/// Add a new catch up content by mutating the registry canister.
-pub fn update_catch_up_package_contents(
-    agent: &Agent,
-    subnet_id: SubnetId,
-    cup_contents: CatchUpPackageContents,
-    context_time: Time,
-) -> Result<SignedIngress, String> {
-    let mut mutation = RegistryMutation::default();
-    mutation.set_mutation_type(registry_mutation::Type::Update);
-    mutation.key = make_catch_up_package_contents_key(subnet_id).into_bytes();
-
-    let mut buf = Vec::new();
-    match cup_contents.encode(&mut buf) {
-        Ok(_) => mutation.value = buf,
-        Err(error) => panic!("Error encoding the value to protobuf: {:?}", error),
-    }
-    atomic_mutate(
-        agent,
-        REGISTRY_CANISTER_ID,
-        vec![mutation],
-        vec![],
-        context_time + Duration::from_secs(60),
-    )
-}
-
-/// Bless a new replica version by mutating the registry canister.
-pub fn bless_replica_version(
-    agent: &Agent,
-    player: &Player,
-    replica_version_id: String,
-    context_time: Time,
-) -> Result<SignedIngress, String> {
-    let mut mutation = RegistryMutation::default();
-    mutation.set_mutation_type(registry_mutation::Type::Upsert);
-    mutation.key = make_blessed_replica_version_key().into_bytes();
-    let mut blessed_versions = player.get_blessed_replica_versions(context_time)?;
-    blessed_versions
-        .blessed_version_ids
-        .push(replica_version_id);
-
-    let mut buf = Vec::new();
-    match blessed_versions.encode(&mut buf) {
-        Ok(_) => mutation.value = buf,
-        Err(error) => panic!("Error encoding the value to protobuf: {:?}", error),
-    }
-    atomic_mutate(
-        agent,
-        REGISTRY_CANISTER_ID,
-        vec![mutation],
-        vec![],
-        context_time + Duration::from_secs(60),
-    )
-}
-
-/// Add a new replica version by mutating the registry canister.
-pub fn add_replica_version(
-    agent: &Agent,
-    replica_version_id: String,
-    record: ReplicaVersionRecord,
-    context_time: Time,
-) -> Result<SignedIngress, String> {
-    let mut mutation = RegistryMutation::default();
-    mutation.set_mutation_type(registry_mutation::Type::Insert);
-    mutation.key = make_replica_version_key(replica_version_id).into_bytes();
-
-    let mut buf = Vec::new();
-    match record.encode(&mut buf) {
-        Ok(_) => mutation.value = buf,
-        Err(error) => panic!("Error encoding the value to protobuf: {:?}", error),
-    }
-    atomic_mutate(
-        agent,
-        REGISTRY_CANISTER_ID,
-        vec![mutation],
-        vec![],
-        context_time + Duration::from_secs(60),
-    )
-}
-
-/// Update subnet record.
-pub fn update_subnet_record(
-    agent: &Agent,
-    subnet_id: SubnetId,
-    record: SubnetRecord,
-    context_time: Time,
-) -> Result<SignedIngress, String> {
-    let mut mutation = RegistryMutation::default();
-    mutation.set_mutation_type(registry_mutation::Type::Update);
-    mutation.key = make_subnet_record_key(subnet_id).as_bytes().to_vec();
-
-    let mut buf = Vec::new();
-    match record.encode(&mut buf) {
-        Ok(_) => mutation.value = buf,
-        Err(error) => panic!("Error encoding the value to protobuf: {:?}", error),
-    }
-    atomic_mutate(
-        agent,
-        REGISTRY_CANISTER_ID,
-        vec![mutation],
-        vec![],
-        context_time + Duration::from_secs(60),
-    )
 }
 
 fn delete_folders_if_consent_given(state_path: &Path, registry_path: &Path) {
