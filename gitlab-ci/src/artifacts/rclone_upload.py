@@ -85,7 +85,9 @@ class RcloneUpload:
                 other_options=["--ignore-existing"],
             )
 
-        self._upload(local_path=local_path, remote_subdir=f"ic/{sha}/{remote_subdir}")
+        self._upload(
+            local_path=local_path, remote_subdir=f"ic/{sha}/{remote_subdir}", other_options=["--ignore-existing"]
+        )
 
 
 def main():
