@@ -125,8 +125,6 @@ behaviour of the Internet Computer. Furthermore, the community will be able to b
 and verify that it derives from the same binary image that is referenced in
 upgrade proposals published via the Network Nervous System (NNS).
 
-Now that the Internet Computer is launched, the source code of the three primary components of the Internet Computer are published: the replica, nodemanager, and the NNS canisters. The build systems, testing infrastructure and the code that defines the Internet Computer Operating System (IC-OS) will be published at a later time.
-
 All code of the Internet Computer is be licensed under the Apache 2.0 license, except for a
 few components licensed under the http://dfinity.org/licenses/IC-1.0[Internet Computer Community
 Source License] and http://dfinity.org/licenses/IC-shared-1.0[Internet Computer Shared Community Source License] which are more restrictive than the Apache 2.0 license to protect the Intellectual Property (IP) of the DFINITY Foundation.
