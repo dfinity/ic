@@ -6,6 +6,7 @@ mod test_retention;
 use super::*;
 use crate::types as csp_types;
 use crate::vault::api::CspVault;
+use crate::vault::local_csp_vault::test_utils::new_csp_vault;
 use crate::vault::test_util;
 use fixtures::*;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg as internal_types;
@@ -27,18 +28,19 @@ proptest! {
 
     #[test]
     fn ni_dkg_should_work_with_all_players_acting_correctly(seed: [u8;32], network_size in MockNetwork::MIN_SIZE..MockNetwork::DEFAULT_MAX_SIZE, num_reshares in 0..4) {
-      test_ni_dkg_should_work_with_all_players_acting_correctly(seed, network_size, num_reshares);
+      test_ni_dkg_should_work_with_all_players_acting_correctly(seed, network_size, num_reshares, new_csp_vault);
     }
 }
 
 /// Verifies that non-interactive DKG works if all players act correctly.
-fn test_ni_dkg_should_work_with_all_players_acting_correctly(
+pub fn test_ni_dkg_should_work_with_all_players_acting_correctly(
     seed: [u8; 32],
     network_size: usize,
     num_reshares: i32,
+    csp_vault_factory: fn() -> Arc<dyn CspVault>,
 ) {
     let mut rng = ChaCha20Rng::from_seed(seed);
-    let network = MockNetwork::random(&mut rng, network_size);
+    let network = MockNetwork::random(&mut rng, network_size, csp_vault_factory);
     let config = MockDkgConfig::from_network(&mut rng, &network, None);
     let mut state = state_with_transcript(&config, network);
     threshold_signatures_should_work(&state.network, &config, &state.transcript, &mut rng);

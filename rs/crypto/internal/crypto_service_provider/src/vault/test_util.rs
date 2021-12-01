@@ -3,8 +3,8 @@ use crate::keygen::public_key_hash_as_key_id;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::types::{CspPublicCoefficients, CspPublicKey, CspSignature, ThresBls12_381_Signature};
 use crate::vault::api::{
-    BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
-    CspMultiSignatureError, CspMultiSignatureKeygenError, CspVault, MultiSignatureCspVault,
+    CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
+    CspMultiSignatureKeygenError, CspVault,
 };
 use crate::Csp;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
@@ -42,7 +42,7 @@ fn multi_sig_verifier() -> impl CspSigner {
     Csp::of(csprng, dummy_key_store)
 }
 
-pub fn should_generate_ed25519_key_pair(csp_vault: &dyn BasicSignatureCspVault) {
+pub fn should_generate_ed25519_key_pair(csp_vault: Arc<dyn CspVault>) {
     let gen_key_result = csp_vault.gen_key_pair(AlgorithmId::Ed25519);
     assert!(gen_key_result.is_ok());
     let (key_id, pk) = gen_key_result.expect("Failed to unwrap key_id");
@@ -53,9 +53,7 @@ pub fn should_generate_ed25519_key_pair(csp_vault: &dyn BasicSignatureCspVault) 
     assert_eq!(key_id, public_key_hash_as_key_id(&pk));
 }
 
-pub fn should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(
-    csp_vault: &dyn BasicSignatureCspVault,
-) {
+pub fn should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(csp_vault: Arc<dyn CspVault>) {
     for algorithm_id in AlgorithmId::iter() {
         if algorithm_id != AlgorithmId::Ed25519 {
             assert_eq!(
@@ -68,9 +66,7 @@ pub fn should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(
     }
 }
 
-pub fn should_sign_and_verify_with_generated_ed25519_key_pair(
-    csp_vault: &dyn BasicSignatureCspVault,
-) {
+pub fn should_sign_and_verify_with_generated_ed25519_key_pair(csp_vault: Arc<dyn CspVault>) {
     let (key_id, csp_pk) = csp_vault
         .gen_key_pair(AlgorithmId::Ed25519)
         .expect("failed to generate keys");
@@ -93,7 +89,7 @@ pub fn should_sign_and_verify_with_generated_ed25519_key_pair(
     assert!(ed25519::verify(&signature_bytes, &msg, &pk_bytes).is_ok());
 }
 
-pub fn should_not_basic_sign_with_unsupported_algorithm_id(csp_vault: &dyn BasicSignatureCspVault) {
+pub fn should_not_basic_sign_with_unsupported_algorithm_id(csp_vault: Arc<dyn CspVault>) {
     let (key_id, _) = csp_vault
         .gen_key_pair(AlgorithmId::Ed25519)
         .expect("failed to generate keys");
@@ -112,7 +108,7 @@ pub fn should_not_basic_sign_with_unsupported_algorithm_id(csp_vault: &dyn Basic
     }
 }
 
-pub fn should_not_basic_sign_with_non_existent_key(csp_vault: &dyn BasicSignatureCspVault) {
+pub fn should_not_basic_sign_with_non_existent_key(csp_vault: Arc<dyn CspVault>) {
     let mut rng = thread_rng();
     let (_, pk_bytes) = ed25519::keypair_from_rng(&mut rng);
 
@@ -122,7 +118,7 @@ pub fn should_not_basic_sign_with_non_existent_key(csp_vault: &dyn BasicSignatur
     assert!(sign_result.is_err());
 }
 
-pub fn should_generate_multi_bls12_381_key_pair(csp_vault: &dyn MultiSignatureCspVault) {
+pub fn should_generate_multi_bls12_381_key_pair(csp_vault: Arc<dyn CspVault>) {
     let gen_key_result = csp_vault.gen_key_pair_with_pop(AlgorithmId::MultiBls12_381);
     assert!(gen_key_result.is_ok());
     let (key_id, pk, _pop) = gen_key_result.expect("Failed to unwrap key_id");
@@ -133,9 +129,7 @@ pub fn should_generate_multi_bls12_381_key_pair(csp_vault: &dyn MultiSignatureCs
     assert_eq!(key_id, public_key_hash_as_key_id(&pk));
 }
 
-pub fn should_fail_to_generate_multi_sig_key_for_wrong_algorithm_id(
-    csp_vault: &dyn MultiSignatureCspVault,
-) {
+pub fn should_fail_to_generate_multi_sig_key_for_wrong_algorithm_id(csp_vault: Arc<dyn CspVault>) {
     for algorithm_id in AlgorithmId::iter() {
         if algorithm_id != AlgorithmId::MultiBls12_381 {
             assert_eq!(
@@ -148,7 +142,7 @@ pub fn should_fail_to_generate_multi_sig_key_for_wrong_algorithm_id(
     }
 }
 
-pub fn should_generate_verifiable_pop(csp_vault: &dyn MultiSignatureCspVault) {
+pub fn should_generate_verifiable_pop(csp_vault: Arc<dyn CspVault>) {
     let (_key_id, public_key, pop) = csp_vault
         .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
         .expect("Failed to generate key pair with PoP");
@@ -159,7 +153,7 @@ pub fn should_generate_verifiable_pop(csp_vault: &dyn MultiSignatureCspVault) {
         .is_ok());
 }
 
-pub fn should_multi_sign_and_verify_with_generated_key(csp_vault: &dyn MultiSignatureCspVault) {
+pub fn should_multi_sign_and_verify_with_generated_key(csp_vault: Arc<dyn CspVault>) {
     let (key_id, csp_pub_key, csp_pop) = csp_vault
         .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
         .expect("failed to generate keys");
@@ -182,7 +176,7 @@ pub fn should_multi_sign_and_verify_with_generated_key(csp_vault: &dyn MultiSign
         .is_ok());
 }
 
-pub fn should_not_multi_sign_with_unsupported_algorithm_id(csp_vault: &dyn MultiSignatureCspVault) {
+pub fn should_not_multi_sign_with_unsupported_algorithm_id(csp_vault: Arc<dyn CspVault>) {
     let (key_id, _csp_pub_key, _csp_pop) = csp_vault
         .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
         .expect("failed to generate keys");
@@ -203,16 +197,7 @@ pub fn should_not_multi_sign_with_unsupported_algorithm_id(csp_vault: &dyn Multi
     }
 }
 
-// NOTE: the trait below is just for "technical" reasons.  The argument
-// `csp_vault` should have type `&(dyn MultiSignatureCspVault +
-// BasicSignatureCspVault)`, but the compiler doesn't like it:
-// error[E0225]:
-//    only auto traits can be used as additional traits in a trait object
-pub trait SignaturesTrait: BasicSignatureCspVault + MultiSignatureCspVault {}
-
-pub fn should_not_multi_sign_if_secret_key_in_store_has_wrong_type(
-    csp_vault: &dyn SignaturesTrait,
-) {
+pub fn should_not_multi_sign_if_secret_key_in_store_has_wrong_type(csp_vault: Arc<dyn CspVault>) {
     let (key_id, _wrong_csp_pub_key) = csp_vault
         .gen_key_pair(AlgorithmId::Ed25519)
         .expect("failed to generate keys");
@@ -491,8 +476,8 @@ pub fn test_threshold_scheme_with_basic_keygen(
 /// keys in the CSP and so on.  Making such a test is hard, so this is just one
 /// sequence of events.
 pub fn sks_should_contain_keys_only_after_generation(
-    csp_vault1: &dyn CspVault,
-    csp_vault2: &dyn CspVault,
+    csp_vault1: Arc<dyn CspVault>,
+    csp_vault2: Arc<dyn CspVault>,
 ) {
     let (key_id1, _public_key) = csp_vault1
         .gen_key_pair(AlgorithmId::Ed25519)

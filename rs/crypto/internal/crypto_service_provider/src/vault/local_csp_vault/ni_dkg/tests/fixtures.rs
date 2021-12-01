@@ -1,7 +1,6 @@
 //! States capturing the stages of the non-interactive DKG protocol.
 
 use super::*;
-use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use crate::threshold::ni_dkg::static_api as ni_dkg_static_api;
 use crate::vault::api::CspVault;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
@@ -14,7 +13,6 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::{Height, NodeId, SubnetId};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
 use rand::seq::IteratorRandom;
-use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use strum::IntoEnumIterator;
 
@@ -53,16 +51,12 @@ pub struct MockNode {
     pub csp_vault: Arc<dyn CspVault>,
 }
 impl MockNode {
-    pub fn random(rng: &mut ChaCha20Rng) -> Self {
+    pub fn random(rng: &mut ChaCha20Rng, csp_vault_factory: fn() -> Arc<dyn CspVault>) -> Self {
         let node_id = node_test_id(rng.gen::<u64>());
-        Self::from_node_id(rng, node_id)
+        Self::from_node_id(node_id, csp_vault_factory)
     }
-    pub fn from_node_id(rng: &mut ChaCha20Rng, node_id: NodeId) -> Self {
-        let csprng = ChaCha20Rng::from_seed(rng.gen::<[u8; 32]>());
-        let csp_vault: Arc<dyn CspVault> = Arc::new(LocalCspVault::new_for_test(
-            csprng,
-            VolatileSecretKeyStore::new(),
-        ));
+    pub fn from_node_id(node_id: NodeId, csp_vault_factory: fn() -> Arc<dyn CspVault>) -> Self {
+        let csp_vault = csp_vault_factory();
         Self {
             node_id,
             fs_key_id: KeyId::from([0; 32]), // dummy value, overwritten during network construction
@@ -109,9 +103,13 @@ impl MockNetwork {
     pub const DEFAULT_MAX_SIZE: usize = 5;
 
     /// Create N nodes.  No particular roles are attached.
-    pub fn random(rng: &mut ChaCha20Rng, size: usize) -> Self {
+    pub fn random(
+        rng: &mut ChaCha20Rng,
+        size: usize,
+        csp_vault_factory: fn() -> Arc<dyn CspVault>,
+    ) -> Self {
         let mut nodes_by_node_id: BTreeMap<NodeId, MockNode> = (0..size)
-            .map(|_| MockNode::random(rng))
+            .map(|_| MockNode::random(rng, csp_vault_factory))
             .map(|node| (node.node_id, node))
             .collect();
 
