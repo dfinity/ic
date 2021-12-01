@@ -174,7 +174,8 @@ mkdir -p "$MEDIA_PATH"
     --output="$MEDIA_PATH" \
     --git-revision=$GIT_REVISION \
     --whitelist="$REPO_ROOT/testnet/env/${deployment}/provisional_whitelist.json" \
-    --dkg-interval-length=$DKG_INTERVAL_LENGTH
+    --dkg-interval-length=$DKG_INTERVAL_LENGTH \
+    --with-testnet-keys
 
 # In case someone wants to deploy with a locally built disk image the following lines contain
 # the necessary commands.

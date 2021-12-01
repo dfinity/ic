@@ -113,6 +113,8 @@ pub fn init_ic<P: AsRef<Path>>(
                 subnet.max_instructions_per_install_code,
                 subnet.features.clone(),
                 subnet.max_number_of_canisters,
+                subnet.ssh_readonly_access.clone(),
+                subnet.ssh_backup_access.clone(),
             ),
         );
     }
@@ -160,6 +162,7 @@ pub fn init_ic<P: AsRef<Path>>(
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,
+        ic.ssh_readonly_access_to_unassigned_nodes,
     );
 
     let init_ic = ic_config.initialize().expect("can't fail");

@@ -209,6 +209,8 @@ impl SubnetConfig {
         max_instructions_per_install_code: Option<u64>,
         features: Option<SubnetFeatures>,
         max_number_of_canisters: Option<u64>,
+        ssh_readonly_access: Vec<String>,
+        ssh_backup_access: Vec<String>,
     ) -> Self {
         let scheduler_config = SchedulerConfig::default_for_subnet_type(subnet_type);
 
@@ -239,8 +241,8 @@ impl SubnetConfig {
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_install_code.get()),
             features: features.unwrap_or_default(),
             max_number_of_canisters: max_number_of_canisters.unwrap_or(0),
-            ssh_readonly_access: vec![],
-            ssh_backup_access: vec![],
+            ssh_readonly_access,
+            ssh_backup_access,
         }
     }
 

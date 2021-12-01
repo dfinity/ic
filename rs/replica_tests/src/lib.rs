@@ -257,6 +257,8 @@ pub fn get_ic_config() -> IcConfig {
             None,
             None,
             None,
+            vec![],
+            vec![],
         ),
     );
 
@@ -280,6 +282,7 @@ pub fn get_ic_config() -> IcConfig {
         /* provisional_whitelist */ Some(provisional_whitelist),
         None,
         None,
+        /* ssh_readonly_access_to_unassgined_nodes */ vec![],
     )
 }
 

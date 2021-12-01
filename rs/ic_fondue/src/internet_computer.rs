@@ -25,6 +25,7 @@ pub struct InternetComputer {
     pub node_provider: Option<PrincipalId>,
     pub experimental_vm_test: bool,
     pub unassigned_nodes: Vec<Node>,
+    pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -96,6 +97,7 @@ impl Default for InternetComputer {
             node_provider: None,
             experimental_vm_test: false,
             unassigned_nodes: vec![],
+            ssh_readonly_access_to_unassigned_nodes: vec![],
         }
     }
 }
@@ -145,6 +147,8 @@ pub struct Subnet {
     pub max_instructions_per_install_code: Option<u64>,
     pub features: Option<SubnetFeatures>,
     pub max_number_of_canisters: Option<u64>,
+    pub ssh_readonly_access: Vec<String>,
+    pub ssh_backup_access: Vec<String>,
 }
 
 impl Subnet {
@@ -167,6 +171,8 @@ impl Subnet {
             features: None,
             max_number_of_canisters: None,
             subnet_type,
+            ssh_readonly_access: vec![],
+            ssh_backup_access: vec![],
         }
     }
 
@@ -341,6 +347,8 @@ impl Default for Subnet {
             max_instructions_per_install_code: None,
             features: None,
             max_number_of_canisters: None,
+            ssh_readonly_access: vec![],
+            ssh_backup_access: vec![],
         }
     }
 }

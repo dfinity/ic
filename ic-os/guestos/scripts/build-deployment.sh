@@ -14,6 +14,7 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 
 # Set argument defaults
 DEBUG=0
+TESTNET_KEYS=""
 
 # Get keyword arguments
 for argument in "${@}"; do
@@ -39,6 +40,7 @@ Arguments:
        --whitelist=           path to provisional whitelist that allows canister creation
        --dkg-interval-length= number of consensus rounds between DKG (-1 if not provided explicitly, which means - default will be used)
   -x,  --debug                enable verbose console output
+       --with-testnet-keys    Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys.
 '
             exit 1
             ;;
@@ -68,6 +70,9 @@ Arguments:
             ;;
         -x | --debug)
             DEBUG=1
+            ;;
+        --with-testnet-keys)
+            TESTNET_KEYS="${REPO_ROOT}/testnet/config/ssh_authorized_keys/admin"
             ;;
         *)
             echo 'Error: Argument is not supported.'
@@ -206,7 +211,9 @@ function generate_subnet_config() {
         "--nodes" ${NODES_NNS[*]} ${NODES_APP[*]} \
         "--provisional-whitelist" "${WHITELIST}" \
         "--initial-node-operator" "${NODE_OPERATOR_ID}" \
-        "--initial-node-provider" "${NODE_OPERATOR_ID}"
+        "--initial-node-provider" "${NODE_OPERATOR_ID}" \
+        "--ssh-readonly-access-file" "${TESTNET_KEYS}" \
+        "--ssh-backup-access-file" "${TESTNET_KEYS}"
     set +x
 }
 
