@@ -78,35 +78,17 @@ echo "Starting Rejoin Test"
 echo "On testnet with identifier $testnet with runtime $runtime (in seconds)."
 
 # Testnet NNS URL: the API endpoint of the first NNS replica.
-nns_url=$(jq_hostvars 'map(select(.subnet_index==0) | .api_listen_url)[0]')
+nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
 
 # Get the list of all node_indices, so we can use that in scenarios
 # shellcheck disable=SC2046
-mapfile -d " " -t node_indices <<<$(
-    cd "$PROD_SRC"
-    ansible-inventory -i "env/$testnet/hosts" --list \
-        | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-               ._meta.hostvars |
-               [
-                 with_entries(select(.value.subnet_index==1))[] |
-                 ansible::interpolate |
-                 .node_index
-               ] | @sh'
-)
+mapfile -d " " -t node_indices <<<$(jq_hostvars 'map(select(.subnet_index==1) | .node_index) | @sh')
 
 echo "${node_indices[@]}" >"$experiment_dir/node_indices"
 
 statesync_node=$(jq_hostvars "with_entries(select(.value.node_index==${node_indices[0]})) | keys[]")
 
-statesync_node_ipv6=$(
-    cd "$PROD_SRC"
-    ansible-inventory -i "env/$testnet/hosts" --list \
-        | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-               ._meta.hostvars |
-                 with_entries(select(.value.node_index == '"${node_indices[0]}"'))[] |
-                 ansible::interpolate |
-                 .ipv6'
-)
+statesync_node_ipv6=$(jq_hostvars "map(select(.node_index==${node_indices[0]}) | .ipv6)[0]")
 
 echo "Node $statesync_node with ipv6 $statesync_node_ipv6 is selected to do state sync."
 
@@ -333,16 +315,7 @@ query_finalization_height_and_rate() {
 
 query_state_sync_duration_and_fetch_size() {
     # Get the state sync duration from the node which is first killed.
-    metricshosts_of_the_first_node=$(
-        cd "$PROD_SRC"
-        ansible-inventory -i "env/$testnet/hosts" --list \
-            | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-                 ._meta.hostvars |
-                   with_entries(select(.value.node_index == '"${node_indices[0]}"'))[] |
-                   ansible::interpolate |
-                   .metrics_listen_addr'
-    )
-    metricshosts_of_the_first_node=$(echo "$metricshosts_of_the_first_node" | escapebracket)
+    metricshosts_of_the_first_node=$(jq_hostvars "map(select(.node_index==${node_indices[0]}) | .metrics_listen_addr)[0]" | escapebracket)
 
     # Get the metrics of state sync duration, summed up until $finaltime.
     # Query the metrics from the first-killed node as it is the only one which conducts state sync.

@@ -155,7 +155,7 @@ starttime="$(date '+%s')"
 echo "Start time of part with NNS load (registry changes): $(dateFromEpoch "$starttime")"
 echo "$starttime" >"$experiment_dir/starttime"
 
-NNS_URL=$(jq_hostvars 'map(select(.subnet_index==0) | .api_listen_url)[0]')
+NNS_URL=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
 
 subnet_index=1
 base=2097152

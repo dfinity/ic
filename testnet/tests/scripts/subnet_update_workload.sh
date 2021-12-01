@@ -64,7 +64,6 @@ fi
 
 exit_code=0
 subnet_index=1
-hosts_file_path="$PROD_SRC/env/$testnet/hosts"
 HOSTS_INI_ARGUMENTS=()
 HOSTS_INI_FILENAME=hosts.ini
 
@@ -88,38 +87,19 @@ fi
 
 # These are the hosts that the workload generator will target.
 # We select all of them.
-install_endpoints=$(
-    cd "$PROD_SRC"
-    ansible-inventory -i "$hosts_file_path" --list \
-        | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-            ._meta.hostvars |
-            [
-                with_entries(select(.value.subnet_index=='"${subnet_index}"'))[] |
-                ansible::interpolate |
-                .api_listen_url
-            ] | join(",")'
-)
+install_endpoints=$(jq_hostvars 'map(select(.subnet_index=='"${subnet_index}"') | .api_listen_url) | join(",")')
 
 if [[ "$load_dest" == "dns" ]]; then
     loadhosts="https://$testnet.dfinity.network/"
 elif [[ "$load_dest" == "replica_nodes" ]]; then
     loadhosts=$install_endpoints
 elif [[ "$load_dest" == "boundary_nodes" ]]; then
-    loadhosts=$(
-        cd "$PROD_SRC"
-        ansible-inventory -i "$hosts_file_path" --list \
-            | jq -L"${PROD_SRC}/jq" -r 'import "ansible" as ansible;
-                ._meta.hostvars |
-                [
-                    with_entries(select(.value.subnet_index=="boundary"))[] |
-                    ansible::interpolate |
-                    .api_listen_url
-                ] | join(",")'
-    )
+    loadhosts=$(jq_hostvars 'map(select(.subnet_index=="boundary") | .api_listen_url) | join(",")')
 else
     exit_usage
 fi
 echo "Using loadhosts = $loadhosts"
+echo "$loadhosts" >"$experiment_dir/loadhosts"
 
 # Results will be stored in $results_dir/$experiment_id -- this will allow us to collect all runs
 # if ever needed.
@@ -127,7 +107,7 @@ echo "Using loadhosts = $loadhosts"
 echo "Creating '$experiment_dir' to store all the data for this run."
 mkdir -p "$experiment_dir"
 echo "Populating '$experiment_dir' with git info and experiment params."
-echo "'$testnet' '$exec_time' '$rate' '$payload_size' '$subnet_type' '$load_dest' '$results_dir' '$hosts_file_path'" >"$experiment_dir/params"
+echo "'$testnet' '$exec_time' '$rate' '$payload_size' '$subnet_type' '$load_dest' '$results_dir'" >"$experiment_dir/params"
 
 mkdir -p "$experiment_dir/data_to_upload"
 echo '
@@ -153,7 +133,6 @@ echo "Testcase Start time: $(dateFromEpoch "$calltime")"
 # re-deploy the testnet
 deploy_with_timeout "$testnet" \
     --git-revision "$GIT_REVISION" "${HOSTS_INI_ARGUMENTS[@]}"
-echo "$loadhosts" >"$experiment_dir/loadhosts"
 
 echo "Testnet deployment successful. Test starts now."
 

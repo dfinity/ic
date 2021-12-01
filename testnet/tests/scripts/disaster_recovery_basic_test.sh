@@ -320,7 +320,7 @@ step 4 Install and run workload generator || time (
     # Start the workload generator in a subshell. This will allow us to have a better
     # control over when it finishes.
     (
-        load_urls=$(for ip in $INITIAL_MEMBER_IPS; do echo "http://[$ip]:8080"; done | xargs | sed -e 's/ /,/g')
+        loadhosts=$(for ip in $INITIAL_MEMBER_IPS; do echo "http://[$ip]:8080"; done | xargs | sed -e 's/ /,/g')
         {
             local_wg_status=0
             rate=30
@@ -328,7 +328,7 @@ step 4 Install and run workload generator || time (
             # After a timeout make sure it's terminated, otherwise we may end up with stale processes
             # on the CI/CD which block the entire pipeline (other job invocations).
             timeout -k 120 100 ic-workload-generator \
-                "$load_urls" -u \
+                "$loadhosts" -u \
                 -r "$rate" \
                 -n 30 \
                 --periodic-output \

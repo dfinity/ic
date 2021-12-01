@@ -62,7 +62,6 @@ calltime="$(date '+%s')"
 echo "Testcase Start time: $(dateFromEpoch "$calltime")"
 
 # Preparatory work
-hosts_file_path="$PROD_SRC/env/$testnet/hosts"
 HOSTS_INI_ARGUMENTS=()
 if [[ "$subnet_type" == "single_node" ]]; then
     # The test will run with a special hosts file creating many single-node app subnets.
@@ -74,22 +73,10 @@ fi
 if [[ -n "${TEST_NNS_URL-}" ]]; then
     nns_url="${TEST_NNS_URL}"
 else
-
     deploy_with_timeout "$testnet" \
         --git-revision "$GIT_REVISION" "${HOSTS_INI_ARGUMENTS[@]}"
 
-    nns_url=$(
-        cd "$PROD_SRC"
-        ansible-inventory -i "$hosts_file_path" --list \
-            | jq -r -L"${PROD_SRC}/jq" 'import "ansible" as ansible;
-            ._meta.hostvars |
-            [
-                with_entries(select(.value.subnet_index==0))[] |
-                ansible::interpolate |
-                .api_listen_url
-            ] |
-            first'
-    )
+    nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
 fi
 
 echo "Testnet deployment successful. Test starts now."

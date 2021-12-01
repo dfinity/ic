@@ -97,12 +97,12 @@ echo "Testnet deployment successful. Test starts now."
 # These are the hosts that the workload generator will target.
 # The code picks the first 1/3 of the nodes, so it does not clash
 # with the nodes that will be killed.
-load_urls_0=$(jq_subnet_nodes_urls_nth_third 0 0)
-load_urls_1=$(jq_subnet_nodes_urls_nth_third 1 0)
+loadhosts_0=$(jq_subnet_nodes_urls_nth_third 0 0)
+loadhosts_1=$(jq_subnet_nodes_urls_nth_third 1 0)
 nodes_0=$(jq_subnet_nodes_nth_third 0 0)
 nodes_1=$(jq_subnet_nodes_nth_third 1 0)
-echo "$load_urls_0" >"$experiment_dir/load_urls_0"
-echo "$load_urls_1" >"$experiment_dir/load_urls_1"
+echo "$loadhosts_0" >"$experiment_dir/loadhosts_0"
+echo "$loadhosts_1" >"$experiment_dir/loadhosts_1"
 for node in ${nodes_0//,/ }; do # replace commas with spaces
     echo "subnet 0 load node $node"
 done
@@ -133,14 +133,14 @@ wg_status_file="$experiment_dir/wg_exit_status"
 
 run_workload_generator() {
     subnet=$1
-    load_urls=$2
+    loadhosts=$2
     local_wg_status=0
 
     # Leave enough extra time for the workload generator to report summary.
     # After a timeout make sure it's terminated, otherwise we may end up with stale processes
     # on the CI/CD which block the entire pipeline (other job invocations).
     timeout -k 300 $((runtime + 300)) ic-workload-generator \
-        "$load_urls" -u \
+        "$loadhosts" -u \
         -r "$rate" \
         --payload-size="$payload_size" \
         -n "$runtime" \
@@ -148,7 +148,7 @@ run_workload_generator() {
         --summary-file "$experiment_dir/${subnet}_workload-summary.json" 2>"$wg_err_log" \
         || local_wg_status=$?
     echo "$local_wg_status" >>"$wg_status_file"
-    echo "finished workload generator for $load_urls"
+    echo "finished workload generator for $loadhosts"
 }
 # Start the workload generator in a subshell. This will allow us to have a better
 # control over when it finishes.
@@ -156,11 +156,11 @@ run_workload_generator() {
 (
     echo "Load nodes on subnet 0: $nodes_0"
     echo "Load nodes on subnet 1: $nodes_1"
-    run_workload_generator 0 "$load_urls_0" 2>&1 | tee -a "$wg_log" &
+    run_workload_generator 0 "$loadhosts_0" 2>&1 | tee -a "$wg_log" &
     # sleep to avoid race conditions
     echo "sleep before second wg call"
     sleep 3
-    run_workload_generator 1 "$load_urls_1" 2>&1 | tee -a "$wg_log" &
+    run_workload_generator 1 "$loadhosts_1" 2>&1 | tee -a "$wg_log" &
     wait
     date '+%s' >"$wg_endtime_file"
     echo "finished workload generation"

@@ -59,7 +59,6 @@ if [[ "$subnet_type" != "normal" ]] && [[ "$subnet_type" != "single_node" ]]; th
     exit_usage
 fi
 
-hosts_file_path="$PROD_SRC/env/$testnet/hosts"
 HOSTS_INI_ARGUMENTS=()
 
 if [[ "$subnet_type" == "single_node" ]]; then
@@ -73,18 +72,7 @@ deploy_with_timeout "$testnet" \
     --git-revision "$GIT_REVISION" "${HOSTS_INI_ARGUMENTS[@]}"
 
 # Testnet NNS URL: the API endpoint of the first NNS replica.
-nns_url=$(
-    cd "$PROD_SRC"
-    ansible-inventory -i "$hosts_file_path" --list \
-        | jq -r -L"${PROD_SRC}/jq" 'import "ansible" as ansible;
-            ._meta.hostvars |
-            [
-                with_entries(select(.value.subnet_index==0))[] |
-                ansible::interpolate |
-                .api_listen_url
-            ] |
-            first'
-)
+nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
 
 echo "Testnet deployment successful. Test starts now."
 
