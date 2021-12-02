@@ -10075,6 +10075,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-types 0.8.0",
  "k256",
+ "lazy_static",
  "p256",
  "paste 1.0.5",
  "rand 0.7.3",

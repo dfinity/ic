@@ -5,7 +5,7 @@ mod secp256k1;
 mod secp256r1;
 mod utils;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum EccFieldElement {
     K256(secp256k1::FieldElement),
     P256(secp256r1::FieldElement),
@@ -93,6 +93,16 @@ impl EccFieldElement {
         match curve {
             EccCurveType::K256 => Self::K256(secp256k1::FieldElement::sswu_z()),
             EccCurveType::P256 => Self::P256(secp256r1::FieldElement::sswu_z()),
+        }
+    }
+
+    /// Return the field element "C2" as specified for the simplified
+    /// SWU map in draft-irtf-cfrg-hash-to-curve-12
+    /// See section F.2.1.2
+    pub fn sswu_c2(curve: EccCurveType) -> Self {
+        match curve {
+            EccCurveType::K256 => Self::K256(secp256k1::FieldElement::sswu_c2()),
+            EccCurveType::P256 => Self::P256(secp256r1::FieldElement::sswu_c2()),
         }
     }
 
@@ -234,6 +244,16 @@ impl EccFieldElement {
         match self {
             Self::K256(x) => Self::K256(x.sqrt()),
             Self::P256(x) => Self::P256(x.sqrt()),
+        }
+    }
+
+    /// Return the progenitor of self
+    ///
+    /// For curves with p == 3 (mod 4) this is equal to self**((p-3)/4)
+    pub fn progenitor(&self) -> Self {
+        match self {
+            Self::K256(x) => Self::K256(x.progenitor()),
+            Self::P256(x) => Self::P256(x.progenitor()),
         }
     }
 

@@ -30,3 +30,9 @@ name = "scalar"
 path = "fuzz_targets/scalar.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "sqrt_ratio"
+path = "fuzz_targets/sqrt_ratio.rs"
+test = false
+doc = false

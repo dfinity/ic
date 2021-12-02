@@ -46,6 +46,15 @@ const SSWU_Z: FieldElement = FieldElement::from_u64x4(
     0xFFFFFFFFFFFFFFF5,
 );
 
+/// The constant `C2` is the square root of `-Z` see
+/// https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-12.html#appendix-F.2.1.2
+const SSWU_C2: FieldElement = FieldElement::from_u64x4(
+    0xDA538E3BE1D89B99,
+    0xC978FC675180AAB2,
+    0x7B8D1FF84C55D5B6,
+    0x2CCD3427E433C47F,
+);
+
 const MODULUS_MINUS_2: [u64; LIMBS] = [
     0xFFFFFFFF00000001,
     0x0000000000000000,
@@ -58,6 +67,13 @@ const MODULUS_PLUS_1_OVER_4: [u64; LIMBS] = [
     0x4000000000000000,
     0x0000000040000000,
     0x0000000000000000,
+];
+
+const MODULUS_MINUS_3_OVER_4: [u64; LIMBS] = [
+    0x3FFFFFFFC0000000,
+    0x4000000000000000,
+    0x000000003FFFFFFF,
+    0xFFFFFFFFFFFFFFFF,
 ];
 
 /// Montgomery param (-p)^-1 mod 2^64
@@ -129,6 +145,15 @@ impl FieldElement {
     /// Return SSWU Z (in Montgomery form)
     pub fn sswu_z() -> Self {
         SSWU_Z.mul(&MONTY_R2)
+    }
+
+    /// Return SSWU C2 (in Montgomery form)
+    pub fn sswu_c2() -> Self {
+        SSWU_C2.mul(&MONTY_R2)
+    }
+
+    pub fn progenitor(&self) -> Self {
+        self.pow_vartime(&MODULUS_MINUS_3_OVER_4)
     }
 
     /// Return the square root of self mod p, or zero if no square root exists.

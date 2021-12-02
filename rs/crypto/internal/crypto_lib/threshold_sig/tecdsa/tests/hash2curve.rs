@@ -87,7 +87,7 @@ fn test_hash2curve_kat_k256() -> Result<(), ThresholdEcdsaError> {
     The following tests are taken from section J.8.1 of the hash to curve draft:
     https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-12.html
 
-    For all tests in the draft, the same domain seperator is used.
+    For all tests in the draft, the same domain separator is used.
     */
 
     let test_vectors = [
