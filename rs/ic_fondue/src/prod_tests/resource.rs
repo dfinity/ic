@@ -10,7 +10,7 @@ use super::farm::{CreateVmRequest, PrimaryImage};
 use crate::prod_tests::farm::FarmResult;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
-const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(16777216); // 16GiB
+const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
 
 /// A declaration of resources needed to instantiate a InternetComputer.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
