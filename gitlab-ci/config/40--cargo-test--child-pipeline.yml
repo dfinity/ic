@@ -193,3 +193,41 @@ ic-ref-test-use-app-subnet:
     USE_APP_SUBNET: "true"
     ALLOW_FAILURE: "true"
   allow_failure: true
+
+
+determinism-binaries:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline
+  allow_failure: true
+  stage: cargo-test
+  needs:
+    - cargo-build-release-linux-native
+    - cargo-build-release-linux-native-determinism
+  script:
+    - |
+      set -eux
+      echo "cargo-build-release-linux-native:"
+      openssl sha256 artifacts/release/*
+      echo "cargo-build-release-linux-native-determinism:"
+      openssl sha256 artifacts/release-determinism/*
+      diff -u artifacts/release/SHA256SUMS artifacts/release-determinism/SHA256SUMS
+      
+
+determinism-canisters:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline
+  allow_failure: true
+  stage: cargo-test
+  needs:
+    - cargo-build-canisters
+    - cargo-build-canisters-determinism
+  script:
+    - |
+      set -eux
+      echo "cargo-build-canisters"
+      openssl sha256 artifacts/canisters/*
+      echo "cargo-build-canisters-determinism"
+      openssl sha256 artifacts/canisters-determinism/*
+      diff -u artifacts/canisters/SHA256SUMS artifacts/canisters/SHA256SUMS
