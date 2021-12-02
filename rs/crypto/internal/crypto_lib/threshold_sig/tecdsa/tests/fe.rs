@@ -78,7 +78,7 @@ fn test_ct_assign_is_conditional() -> Result<(), ThresholdEcdsaError> {
         let fe1 = random_field_element(curve_type);
         let fe2 = random_field_element(curve_type);
 
-        let mut dest = fe1.clone();
+        let mut dest = fe1;
         dest.ct_assign(&fe2, false)?;
         assert_eq!(dest, fe1);
 
@@ -238,6 +238,19 @@ fn test_sswu_z_values_are_correct() -> Result<(), ThresholdEcdsaError> {
 
     assert_eq!(sswu_z_value(EccCurveType::P256), -10);
     assert_eq!(sswu_z_value(EccCurveType::K256), -11);
+
+    Ok(())
+}
+
+#[test]
+fn test_sswu_c2_values_are_correct() -> Result<(), ThresholdEcdsaError> {
+    for curve_type in EccCurveType::all() {
+        let z = EccFieldElement::sswu_z(curve_type);
+        let c2 = EccFieldElement::sswu_c2(curve_type);
+        let neg_z = z.negate()?;
+        let sqrt_neg_z = neg_z.sqrt();
+        assert_eq!(c2, sqrt_neg_z);
+    }
 
     Ok(())
 }

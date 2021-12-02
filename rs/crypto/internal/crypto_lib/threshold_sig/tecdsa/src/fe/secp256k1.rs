@@ -41,6 +41,15 @@ const SSWU_Z: FieldElement = FieldElement::from_u64x4(
     0xFFFFFFFEFFFFFC24,
 );
 
+/// The constant `C2` is the square root of `-Z` see
+/// https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-12.html#appendix-F.2.1.2
+const SSWU_C2: FieldElement = FieldElement::from_u64x4(
+    0x31FDF302724013E5,
+    0x7AD13FB38F842AFE,
+    0xEC184F00A74789DD,
+    0x286729C8303C4A59,
+);
+
 const MODULUS_MINUS_2: [u64; LIMBS] = [
     0xFFFFFFFFFFFFFFFF,
     0xFFFFFFFFFFFFFFFF,
@@ -53,6 +62,13 @@ const MODULUS_PLUS_1_OVER_4: [u64; LIMBS] = [
     0xFFFFFFFFFFFFFFFF,
     0xFFFFFFFFFFFFFFFF,
     0xFFFFFFFFBFFFFF0C,
+];
+
+const MODULUS_MINUS_3_OVER_4: [u64; LIMBS] = [
+    0x3FFFFFFFFFFFFFFF,
+    0xFFFFFFFFFFFFFFFF,
+    0xFFFFFFFFFFFFFFFF,
+    0xFFFFFFFFBFFFFF0B,
 ];
 
 /// Montgomery param (-p)^-1 mod 2^64
@@ -126,10 +142,22 @@ impl FieldElement {
         SSWU_Z.mul(&MONTY_R2)
     }
 
+    /// Return SSWU C2 (in Montgomery form)
+    pub fn sswu_c2() -> Self {
+        SSWU_C2.mul(&MONTY_R2)
+    }
+
+    pub fn progenitor(&self) -> Self {
+        self.pow_vartime(&MODULUS_MINUS_3_OVER_4)
+    }
+
     /// Return the square root of self mod p, or zero if no square root exists.
     pub fn sqrt(&self) -> Self {
         // For p == 3 (mod 4) square root can be computed using x^(p+1)/4
         // See I.1 of draft-irtf-cfrg-hash-to-curve-12
+
+        // This function could be much faster using an improved addition chain:
+        // https://github.com/bitcoin-core/secp256k1/commit/f8ccd9befdb22824ef9a845a90e3db57c1307c11
 
         let sqrt = self.pow_vartime(&MODULUS_PLUS_1_OVER_4);
 
