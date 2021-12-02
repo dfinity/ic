@@ -35,6 +35,10 @@ default:
       - runner_system_failure
 
 variables:
+  TEST_ES_HOSTNAMES: >-
+    elasticsearch-node-0.testnet.dfinity.systems:443,
+    elasticsearch-node-1.testnet.dfinity.systems:443,
+    elasticsearch-node-2.testnet.dfinity.systems:443
   # # Once the verified runners are updated to have
   # #   [runners.custom_build_dir]
   # #      enabled = true
