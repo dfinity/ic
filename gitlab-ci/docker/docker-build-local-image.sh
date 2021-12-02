@@ -11,6 +11,7 @@ cd "$REPO_ROOT"
 
 VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
 SHA1ICBUILD=$("$REPO_ROOT/gitlab-ci/src/docker_image_check/docker_sha.py" Dockerfile)
+SHA1ICBUILDSRC=$("$REPO_ROOT/gitlab-ci/src/docker_image_check/docker_sha.py" Dockerfile.src)
 SHA1ICBUILDNIX=$("$REPO_ROOT/gitlab-ci/src/docker_image_check/docker_sha.py" Dockerfile.withnix)
 
 # Note: This code builds the docker image via a cron job on the trusted builders
@@ -18,6 +19,14 @@ SHA1ICBUILDNIX=$("$REPO_ROOT/gitlab-ci/src/docker_image_check/docker_sha.py" Doc
 # do not change this code with speaking with Ali Piccioni or Sasa Tomic.
 
 cd "$REPO_ROOT/gitlab-ci/docker"
+
+# Build the dependencies image
+DOCKER_BUILDKIT=1 docker build \
+    --tag ic-build-src:"$VERSION" \
+    --tag dfinity/ic-build-src:"$VERSION" \
+    --tag dfinity/ic-build-src:latest \
+    --tag registry.gitlab.com/dfinity-lab/core/docker/ic-build-src:"$VERSION"-"$SHA1ICBUILDSRC" \
+    -f Dockerfile.src .
 
 # Build the container image
 DOCKER_BUILDKIT=1 docker build \

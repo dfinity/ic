@@ -1,0 +1,69 @@
+# There are a lot of third-party tools we download from somewhere and use in CI builds. This Dockerfile is the place to collect all of those.
+# Anything placed in the /opt directory will be copied to the corresponding location in the /usr directory.
+# If you need to build something from source, this is the place to do it (but you probably don't)
+
+FROM ubuntu:20.04
+
+ARG motoko_version=0.5.10
+ARG sdk_version=0.8.0
+ARG protoc_version=3.18.1
+ARG sccache_version=0.2.19-alpha+dfinity
+ARG buildevents_version=0.6.0
+ARG capsule_version=0.1.10
+
+ARG cdk_opt_sha=5807d2f7b523f630eddd69acd4b245a8b129eff9
+ARG rocksdb_sha=0a9a05ae12943b1529ef1eabbca5ce5a71c986bf
+ARG idl2json_sha=bcb27ac567eba7a7c14c9d70aedd3fb777af281b
+
+RUN apt -y update && DEBIAN_FRONTEND=noninteractive apt -y install curl unzip gpg build-essential cmake git
+
+RUN mkdir -p /opt/bin
+
+RUN cd $(mktemp -d) && curl -fLO https://github.com/protocolbuffers/protobuf/releases/download/v${protoc_version}/protoc-${protoc_version}-linux-x86_64.zip && unzip * -d /opt/protoc && chmod -R 755 /opt/protoc/bin && chmod -R u+rwX,go+rX,go-w /opt/protoc/include
+
+RUN curl -fsSL https://gitlab.com/api/v4/projects/30166821/packages/generic/sccache/v${sccache_version}/sccache -o /opt/bin/sccache && \
+    chmod +x /opt/bin/sccache && \
+    # has to match the path in the new dockerfile, not this one
+    ln -s /usr/bin/sccache /opt/bin/sccache-run
+
+RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /opt/bin/buildevents && \
+    chmod +x /opt/bin/buildevents
+
+RUN curl -fsSL https://download.dfinity.systems/motoko/${motoko_version}/x86_64-linux/motoko-${motoko_version}.tar.gz | tar -xz -C /opt/bin && chmod +x /opt/bin/moc
+
+RUN curl -fsSL https://download.dfinity.systems/sdk/dfx/${sdk_version}/x86_64-linux/dfx-${sdk_version}.tar.gz | tar -xz -C /opt/bin && chmod +x /opt/bin/dfx
+
+RUN curl -fsSL https://download.dfinity.systems/idl2json/bcb27ac567eba7a7c14c9d70aedd3fb777af281b/idl2json-linux-amd64.gz | gunzip > /opt/bin/idl2json && chmod +x /opt/bin/idl2json
+
+RUN curl --fail -sL https://download.dfinity.systems/cdk-rs/${cdk_opt_sha}/ic-cdk-optimizer-linux-amd64.gz | gunzip > /opt/bin/ic-cdk-optimizer && \
+    chmod 0755 /opt/bin/ic-cdk-optimizer
+
+RUN curl -fsSL https://gitlab.com/api/v4/projects/29782482/packages/generic/capsule/0.1.10/capsule -o /opt/bin/capsule && \
+    chmod +x /opt/bin/capsule && ln -s /usr/bin/capsule /opt/bin/placebo
+
+RUN mkdir /tmp/rocksdb && curl -fsSL https://github.com/facebook/rocksdb/archive/${rocksdb_sha}.tar.gz | tar -xz -C /tmp/rocksdb --strip-components 1
+WORKDIR /tmp/rocksdb
+
+RUN apt -y install libjemalloc-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev
+
+RUN cmake . -DPORTABLE=1 \
+  -DWITH_JEMALLOC=1 \
+  -DWITH_JNI=0 \
+  -DWITH_BENCHMARK_TOOLS=0 \
+  -DWITH_TESTS=1 \
+  -DWITH_TOOLS=0 \
+  -DWITH_BZ2=1 \
+  -DWITH_LZ4=1 \
+  -DWITH_SNAPPY=1 \
+  -DWITH_ZLIB=1 \
+  -DWITH_ZSTD=1 \
+  -DWITH_GFLAGS=0 \
+  -DUSE_RTTI=1 \
+  -DFORCE_SSE42=1 \
+  -DFAIL_ON_WARNINGS=YES \
+  -DROCKSDB_BUILD_SHARED=0 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/opt
+RUN make install -j$(nproc)
+
+WORKDIR /
