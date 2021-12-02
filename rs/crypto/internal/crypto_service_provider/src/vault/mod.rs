@@ -9,7 +9,7 @@ pub mod api;
 pub mod local_csp_vault;
 pub mod remote_csp_vault;
 #[cfg(test)]
-mod test_util;
+mod test_utils;
 
 impl From<tarpc::client::RpcError> for CspThresholdSignError {
     fn from(e: tarpc::client::RpcError) -> Self {

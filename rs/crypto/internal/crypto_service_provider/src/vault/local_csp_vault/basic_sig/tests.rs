@@ -4,7 +4,7 @@ use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::vault::api::{BasicSignatureCspVault, CspBasicSignatureError};
 use crate::vault::local_csp_vault::{test_utils::new_csp_vault, LocalCspVault};
-use crate::vault::test_util;
+use crate::vault::test_utils;
 use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_SHA_ABC;
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::NumberOfNodes;
@@ -13,12 +13,12 @@ use rand_chacha::ChaChaRng;
 
 #[test]
 fn should_generate_ed25519_public_key() {
-    test_util::should_generate_ed25519_key_pair(new_csp_vault());
+    test_utils::should_generate_ed25519_key_pair(new_csp_vault());
 }
 
 #[test]
 fn should_fail_to_generate_key_for_wrong_algorithm_id() {
-    test_util::should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(new_csp_vault());
+    test_utils::should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(new_csp_vault());
 }
 
 #[test]
@@ -53,17 +53,17 @@ fn should_correctly_sign_compared_to_testvec() {
 
 #[test]
 fn should_sign_verifiably_with_generated_key() {
-    test_util::should_sign_and_verify_with_generated_ed25519_key_pair(new_csp_vault());
+    test_utils::should_sign_and_verify_with_generated_ed25519_key_pair(new_csp_vault());
 }
 
 #[test]
 fn should_fail_to_sign_with_unsupported_algorithm_id() {
-    test_util::should_not_basic_sign_with_unsupported_algorithm_id(new_csp_vault());
+    test_utils::should_not_basic_sign_with_unsupported_algorithm_id(new_csp_vault());
 }
 
 #[test]
 fn should_fail_to_sign_with_non_existent_key() {
-    test_util::should_not_basic_sign_with_non_existent_key(new_csp_vault());
+    test_utils::should_not_basic_sign_with_non_existent_key(new_csp_vault());
 }
 
 #[test]

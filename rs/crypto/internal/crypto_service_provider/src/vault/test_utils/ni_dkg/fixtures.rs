@@ -1,19 +1,28 @@
 //! States capturing the stages of the non-interactive DKG protocol.
 
-use super::*;
+use crate::keygen::forward_secure_key_id;
 use crate::threshold::ni_dkg::static_api as ni_dkg_static_api;
+use crate::types::conversions::key_id_from_csp_pub_coeffs;
+use crate::types::CspPublicCoefficients;
 use crate::vault::api::CspVault;
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
+use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
+use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
+    CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+};
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
-use ic_types::crypto::AlgorithmId;
-use ic_types::{Height, NodeId, SubnetId};
+use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::{Height, NodeId, NodeIndex, NumberOfNodes, SubnetId};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
 use rand::seq::IteratorRandom;
+use rand::Rng;
 use rand_chacha::ChaCha20Rng;
+use std::collections::BTreeMap;
+use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 // Generate random data structures:
@@ -250,6 +259,7 @@ pub struct StateWithDealings {
     pub config: MockDkgConfig,
     pub dealings: BTreeMap<NodeIndex, CspNiDkgDealing>,
 }
+
 impl StateWithDealings {
     /// Each dealer creates a dealing.
     pub fn from_state_with_config(
@@ -304,6 +314,7 @@ pub struct StateWithVerifiedDealings {
         Result<CspNiDkgDealing, ni_dkg_errors::CspDkgVerifyReshareDealingError>,
     >,
 }
+
 impl StateWithVerifiedDealings {
     /// Verifies all dealings
     pub fn from_state_with_dealings(state: StateWithDealings) -> Self {
@@ -369,6 +380,7 @@ pub struct StateWithTranscript {
     pub config: MockDkgConfig,
     pub transcript: CspNiDkgTranscript,
 }
+
 impl StateWithTranscript {
     /// Create a CSP transcript
     pub fn create_transcript(
