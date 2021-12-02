@@ -1,0 +1,55 @@
+build-determinism-binaries:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline
+  allow_failure: true
+  stage: build-determinism-test
+  needs:
+    - cargo-build-release-linux-native
+    - cargo-build-release-linux-native-determinism
+  script:
+    - |
+      set -eux
+      echo "cargo-build-release-linux-native:"
+      openssl sha256 artifacts/release/*
+      echo "cargo-build-release-linux-native-determinism:"
+      openssl sha256 artifacts/release-determinism/*
+      diff -u artifacts/release/SHA256SUMS artifacts/release-determinism/SHA256SUMS
+
+
+build-determinism-canisters:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline
+  allow_failure: true
+  stage: build-determinism-test
+  needs:
+    - cargo-build-canisters
+    - cargo-build-canisters-determinism
+  script:
+    - |
+      set -eux
+      echo "cargo-build-canisters"
+      openssl sha256 artifacts/canisters/*
+      echo "cargo-build-canisters-determinism"
+      openssl sha256 artifacts/canisters-determinism/*
+      diff -u artifacts/canisters/SHA256SUMS artifacts/canisters/SHA256SUMS
+
+
+build-determinism-update-img:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline
+  allow_failure: true
+  stage: build-determinism-test
+  needs:
+    - guest-os-updateimg-build
+    - guest-os-updateimg-build-determinism
+  script:
+    - |
+      set -eux
+      echo "guest-os-updateimg-build"
+      openssl sha256 ic-os/guestos/build-out/update-img/*
+      echo "guest-os-updateimg-build-determinism"
+      openssl sha256 ic-os/guestos/build-out/update-img-determinism/*
+      diff -u ic-os/guestos/build-out/update-img/SHA256SUMS ic-os/guestos/build-out/update-img-determinism/SHA256SUMS
