@@ -844,8 +844,7 @@ impl CanisterManager {
         let execution_state = match self.hypervisor.create_execution_state(
             context.wasm_module,
             layout.raw_path(),
-            system_state.clone(),
-            old_canister.memory_usage(self.config.own_subnet_type),
+            canister_id,
         ) {
             Ok(execution_state) => Some(execution_state),
             Err(err) => {
@@ -987,8 +986,7 @@ impl CanisterManager {
         new_canister.execution_state = match self.hypervisor.create_execution_state(
             context.wasm_module,
             layout.raw_path(),
-            new_canister.system_state.clone(),
-            new_canister.memory_usage(self.config.own_subnet_type),
+            canister_id,
         ) {
             Err(err) => return (instructions_limit, Err((canister_id, err).into())),
             Ok(mut execution_state) => {

@@ -3,29 +3,6 @@ use std::sync::Arc;
 
 use prometheus::{Histogram, IntCounter};
 
-use ic_config::{embedders::Config as EmbeddersConfig, embedders::PersistenceType};
-use ic_cow_state::{CowMemoryManager, MappedState};
-use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats, SystemApi,
-};
-use ic_logger::ReplicaLogger;
-use ic_metrics::buckets::decimal_buckets_with_zero;
-use ic_metrics::MetricsRegistry;
-use ic_replicated_state::{
-    canister_state::execution_state::SandboxExecutionState, EmbedderCache, ExecutionState,
-    SystemState,
-};
-use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
-use ic_system_api::{
-    ApiType, ModificationTracking, StaticSystemState, SystemApiImpl, SystemStateAccessorDirect,
-};
-use ic_types::{
-    methods::{FuncRef, WasmMethod},
-    NumBytes, NumInstructions,
-};
-use ic_wasm_types::BinaryEncodedWasm;
-
 use crate::cow_memory_creator::CowMemoryCreator;
 use crate::{
     wasm_utils::instrumentation::{instrument, InstructionCostTable},
@@ -33,6 +10,27 @@ use crate::{
     wasmtime_embedder::WasmtimeInstance,
     WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
 };
+use ic_config::{embedders::Config as EmbeddersConfig, embedders::PersistenceType};
+use ic_cow_state::{CowMemoryManager, MappedState};
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, InstanceStats, SystemApi,
+};
+use ic_logger::ReplicaLogger;
+use ic_metrics::buckets::decimal_buckets_with_zero;
+use ic_metrics::MetricsRegistry;
+use ic_replicated_state::{
+    canister_state::execution_state::SandboxExecutionState, EmbedderCache, ExecutionState,
+};
+use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
+use ic_system_api::{
+    system_api_empty::SystemApiEmpty, ApiType, ModificationTracking, StaticSystemState,
+    SystemApiImpl, SystemStateAccessorDirect,
+};
+use ic_types::{
+    methods::{FuncRef, WasmMethod},
+    CanisterId, NumInstructions,
+};
+use ic_wasm_types::BinaryEncodedWasm;
 
 struct WasmExecutorMetrics {
     // TODO(EXC-350): Remove this metric once we confirm that no reserved functions are exported.
@@ -345,32 +343,15 @@ impl WasmExecutor {
         &self,
         wasm_binary: Vec<u8>,
         canister_root: PathBuf,
-        system_state: SystemState,
-        canister_current_memory_usage: NumBytes,
-        execution_parameters: ExecutionParameters,
-        cycles_account_manager: Arc<CyclesAccountManager>,
+        canister_id: CanisterId,
     ) -> HypervisorResult<ExecutionState> {
         // Get new ExecutionState not fully initialized.
         let mut execution_state =
             self.wasm_embedder
                 .create_execution_state(wasm_binary, canister_root, &self.config)?;
 
-        let canister_id = system_state.canister_id;
-        let static_system_state =
-            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
-        let system_state_accessor =
-            SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api_type = ApiType::start();
         let modification_tracking = api_type.modification_tracking();
-        let system_api = SystemApiImpl::new(
-            api_type,
-            system_state_accessor,
-            static_system_state,
-            canister_current_memory_usage,
-            execution_parameters,
-            execution_state.stable_memory.clone(),
-            self.log.clone(),
-        );
 
         let memory_creator = if execution_state.mapped_state.is_some() {
             let mapped_state = Arc::as_ref(execution_state.mapped_state.as_ref().unwrap());
@@ -379,6 +360,14 @@ impl WasmExecutor {
             None
         };
 
+        // We are using the wasm instance to initialize the execution state properly.
+        // SystemApi is needed when creating a Wasmtime instance because the Linker
+        // will try to assemble a list of all imports used by the wasm module.
+        //
+        // However, there is no need to initialize a `SystemApiImpl`
+        // as we don't execute any wasm instructions at this point,
+        // so we use an empty SystemApi instead.
+        let system_api = SystemApiEmpty;
         let embedder_cache = self.get_embedder_cache(&execution_state)?;
         let mut instance = match self.wasm_embedder.new_instance(
             canister_id,

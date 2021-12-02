@@ -9,7 +9,7 @@ use ic_embedders::{
     wasm_executor::WasmExecutor, WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, HypervisorResult, SubnetAvailableMemory,
+    ExecutionParameters, HypervisorError, HypervisorResult,
 };
 use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::{debug, fatal, ReplicaLogger};
@@ -28,8 +28,7 @@ use ic_types::{
     ingress::WasmResult,
     messages::Payload,
     methods::{Callback, FuncRef, SystemMethod, WasmMethod},
-    CanisterStatusType, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
-    SubnetId, Time,
+    CanisterId, CanisterStatusType, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
@@ -1048,23 +1047,10 @@ impl Hypervisor {
         &self,
         wasm_binary: Vec<u8>,
         canister_root: PathBuf,
-        system_state: SystemState,
-        memory_usage: NumBytes,
+        canister_id: CanisterId,
     ) -> HypervisorResult<ExecutionState> {
-        self.wasm_executor.create_execution_state(
-            wasm_binary,
-            canister_root,
-            system_state,
-            memory_usage,
-            ExecutionParameters {
-                instruction_limit: NumInstructions::from(0),
-                canister_memory_limit: memory_usage,
-                subnet_available_memory: SubnetAvailableMemory::new(memory_usage.get() as i64),
-                compute_allocation: ComputeAllocation::zero(),
-                subnet_type: self.own_subnet_type,
-            },
-            self.cycles_account_manager.clone(),
-        )
+        self.wasm_executor
+            .create_execution_state(wasm_binary, canister_root, canister_id)
     }
 
     pub fn compile(
