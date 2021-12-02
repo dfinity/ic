@@ -82,6 +82,7 @@ fn process_ingress(
                 .expect("The service must always be able to process requests.")
                 .call(msg)
                 .await
+                .unwrap()
                 .unwrap();
         });
     });

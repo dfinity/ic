@@ -6,6 +6,7 @@ use ic_interfaces::{execution_environment::IngressFilterService, state_manager::
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{canonical_error::CanonicalError, messages::SignedIngressContent};
+use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -42,7 +43,8 @@ impl IngressFilter {
     }
 }
 
-type FutureIngressFilterResult = PendingFutureResult<()>;
+type FutureIngressFilterResult =
+    PendingFutureResult<Result<Result<(), CanonicalError>, Infallible>>;
 
 impl Default for FutureIngressFilterResult {
     fn default() -> Self {
@@ -57,8 +59,8 @@ impl Default for FutureIngressFilterResult {
 }
 
 impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilter {
-    type Response = ();
-    type Error = CanonicalError;
+    type Response = Result<(), CanonicalError>;
+    type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
@@ -80,7 +82,7 @@ impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilter {
                 let state = state_reader.get_latest_state().take();
                 let v =
                     exec_env.should_accept_ingress_message(state, &provisional_whitelist, &ingress);
-                future.resolve(v);
+                future.resolve(Ok(v));
             }
         });
         Box::pin(future)

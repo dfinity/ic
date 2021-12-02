@@ -17,6 +17,7 @@ use ic_types::{
     ComputeAllocation, Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
 use std::sync::{Arc, RwLock};
 use tower::{buffer::Buffer, util::BoxService};
 
@@ -118,7 +119,11 @@ pub type HypervisorResult<T> = Result<T, HypervisorError>;
 // The buffer also dampens usage by reducing the risk of
 // spiky traffic when users retry in case failed requests.
 pub type IngressFilterService = Buffer<
-    BoxService<(ProvisionalWhitelist, SignedIngressContent), (), CanonicalError>,
+    BoxService<
+        (ProvisionalWhitelist, SignedIngressContent),
+        Result<(), CanonicalError>,
+        Infallible,
+    >,
     (ProvisionalWhitelist, SignedIngressContent),
 >;
 
@@ -128,7 +133,7 @@ pub type IngressFilterService = Buffer<
 // The buffer also dampens usage by reducing the risk of
 // spiky traffic when users retry in case failed requests.
 pub type QueryExecutionService = Buffer<
-    BoxService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, CanonicalError>,
+    BoxService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, Infallible>,
     (UserQuery, Option<CertificateDelegation>),
 >;
 

@@ -1,10 +1,9 @@
-use ic_types::canonical_error::CanonicalError;
 use std::future::Future;
 use std::sync::{Arc, Mutex, Weak};
 use std::task::{Poll, Waker};
 
 pub struct PendingFutureResultInternal<T> {
-    pub result: Option<Result<T, CanonicalError>>,
+    pub result: Option<T>,
     pub waker: Option<Waker>,
 }
 
@@ -22,7 +21,7 @@ impl<T> PendingFutureResult<T> {
         Some(Self { inner })
     }
 
-    pub fn resolve(&self, result: Result<T, CanonicalError>) {
+    pub fn resolve(&self, result: T) {
         let mut inner = self.inner.lock().unwrap();
         inner.result = Some(result);
         if let Some(waker) = inner.waker.take() {
@@ -32,7 +31,7 @@ impl<T> PendingFutureResult<T> {
 }
 
 impl<T> Future for PendingFutureResult<T> {
-    type Output = Result<T, CanonicalError>;
+    type Output = T;
 
     fn poll(
         self: std::pin::Pin<&mut Self>,

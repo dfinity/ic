@@ -108,7 +108,7 @@ use std::task::{Context, Poll};
 use std::{
     cmp::max,
     collections::BTreeMap,
-    convert::TryInto,
+    convert::{Infallible, TryInto},
     sync::{Arc, Mutex, RwLock},
     vec::Vec,
 };
@@ -787,8 +787,8 @@ impl IngressEventHandler {
 
 /// `IngressEventHandler` implements the `IngressEventHandler` trait.
 impl Service<SignedIngress> for IngressEventHandler {
-    type Response = ();
-    type Error = CanonicalError;
+    type Response = Result<(), CanonicalError>;
+    type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
@@ -803,9 +803,9 @@ impl Service<SignedIngress> for IngressEventHandler {
         let node_id = self.node_id;
         let jh = self.rt_handle.spawn_blocking(move || {
             if throttler.read().unwrap().exceeds_threshold() {
-                return Err(unavailable_error("Service Unavailable!"));
+                return Ok(Err(unavailable_error("Service Unavailable!")));
             }
-            gossip.on_user_ingress(signed_ingress, node_id)
+            Ok(gossip.on_user_ingress(signed_ingress, node_id))
         });
         Box::pin(async move { jh.await.expect("Ingress ingestion task MUST NOT panic.") })
     }

@@ -22,7 +22,6 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    canonical_error::CanonicalError,
     ingress::WasmResult,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply,
@@ -34,6 +33,7 @@ use ic_types::{
 use query_allocations::QueryAllocationsUsed;
 use serde::Serialize;
 use std::{
+    convert::Infallible,
     future::Future,
     pin::Pin,
     sync::{Arc, Mutex, RwLock},
@@ -206,7 +206,7 @@ impl QueryHandler for HttpQueryHandler {
     }
 }
 
-type FutureQueryResult = PendingFutureResult<HttpQueryResponse>;
+type FutureQueryResult = PendingFutureResult<Result<HttpQueryResponse, Infallible>>;
 
 impl Default for FutureQueryResult {
     fn default() -> Self {
@@ -222,7 +222,7 @@ impl Default for FutureQueryResult {
 
 impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
     type Response = HttpQueryResponse;
-    type Error = CanonicalError;
+    type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
