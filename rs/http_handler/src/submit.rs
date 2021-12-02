@@ -185,36 +185,45 @@ impl Service<Vec<u8>> for CallService {
         let log = self.log.clone();
 
         Box::pin(async move {
-            if let Err(err) = ingress_filter
+            match ingress_filter
                 .ready()
                 .await
                 .expect("The service must always be able to process requests")
                 .call((provisional_whitelist, msg.content().clone()))
                 .await
             {
-                return Ok(map_box_error_to_response(err));
+                Err(err) => {
+                    return Ok(map_box_error_to_response(err));
+                }
+                Ok(Err(err)) => {
+                    return Ok(make_response(err));
+                }
+                Ok(Ok(())) => (),
             }
 
             let ingress_log_entry = msg.log_entry();
-            if let Err(err) = ingress_sender
+            let response = match ingress_sender
                 .ready()
                 .await
                 .expect("The service must always be able to process requests")
                 .call(msg)
                 .await
             {
-                return Ok(map_box_error_to_response(err));
-            }
-
-            // We're pretty much done, just need to send the message to ingress and
-            // make_response to the client
-            info_sample!(
-                "message_id" => &message_id,
-                log,
-                "ingress_message_submit";
-                ingress_message => ingress_log_entry
-            );
-            Ok(make_accepted_response())
+                Err(err) => map_box_error_to_response(err),
+                Ok(Err(err)) => make_response(err),
+                Ok(Ok(())) => {
+                    // We're pretty much done, just need to send the message to ingress and
+                    // make_response to the client
+                    info_sample!(
+                        "message_id" => &message_id,
+                        log,
+                        "ingress_message_submit";
+                        ingress_message => ingress_log_entry
+                    );
+                    make_accepted_response()
+                }
+            };
+            Ok(response)
         })
     }
 }

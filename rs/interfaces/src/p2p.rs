@@ -1,5 +1,6 @@
 //! The P2P public interface.
 use ic_types::{canonical_error::CanonicalError, messages::SignedIngress};
+use std::convert::Infallible;
 use tower::{buffer::Buffer, util::BoxService};
 
 /// This Service can be used to submit an ingress message to P2P event channels
@@ -7,7 +8,7 @@ use tower::{buffer::Buffer, util::BoxService};
 /// artifact and sends it to the P2P `GossipArtifact` channel. It is mainly to
 /// be used by the HTTP handler to submit ingress messages.
 pub type IngressIngestionService =
-    Buffer<BoxService<SignedIngress, (), CanonicalError>, SignedIngress>;
+    Buffer<BoxService<SignedIngress, Result<(), CanonicalError>, Infallible>, SignedIngress>;
 
 /// P2P exposes channels that are used to hold artifacts sent by
 /// the *Transport* layer or the HTTP handler. These channels also hold any
