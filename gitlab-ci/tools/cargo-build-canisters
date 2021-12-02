@@ -11,8 +11,9 @@ export PATH=/opt/cargo/bin:$PATH
 ROOT_DIR=$(git rev-parse --show-toplevel)
 CI_PROJECT_DIR=${CI_PROJECT_DIR:-$ROOT_DIR}
 
-rm -rf "$ROOT_DIR/artifacts/canisters"
-mkdir -p "$ROOT_DIR/artifacts/canisters"
+ARTIFACTS="${ROOT_DIR}/$1"
+rm -rf "${ARTIFACTS}"
+mkdir -p "${ARTIFACTS}"
 cd "$ROOT_DIR/rs" || exit 1
 
 wasm_canister_build_list=(
@@ -46,7 +47,7 @@ cargo build --target wasm32-unknown-unknown --release $(wasm_canisters_cargo_arg
 # Lifeline canister needs special handling:
 cd "$ROOT_DIR/rs/nns/handlers/lifeline" || exit 1
 cargo build --target wasm32-unknown-unknown
-ic-cdk-optimizer -o "$ROOT_DIR/artifacts/canisters/lifeline.wasm" gen/lifeline.wasm
+ic-cdk-optimizer -o "${ARTIFACTS}/lifeline.wasm" gen/lifeline.wasm
 
 echo "Building of Wasm canisters finished"
 
@@ -55,7 +56,7 @@ cd "$ROOT_DIR" || exit 1
 for wasm in "${wasm_canister_build_list[@]}"; do
     src_filename="$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/$wasm.wasm"
     if [[ -r "$src_filename" ]]; then
-        ic-cdk-optimizer -o "artifacts/canisters/$wasm.wasm" "$src_filename"
+        ic-cdk-optimizer -o "${ARTIFACTS}/$wasm.wasm" "$src_filename"
     else
         echo "ERROR: target canister Wasm binary does not exist: ${src_filename}"
         exit 1
@@ -66,15 +67,15 @@ done
 for can in "${!wasm_canister_copy_list[@]}"; do
     src_filename="${wasm_canister_copy_list[$can]}/$can"
     if [[ $can == *.wasm ]]; then
-        ic-cdk-optimizer -o "$ROOT_DIR/artifacts/canisters/$can" "$ROOT_DIR/$src_filename"
+        ic-cdk-optimizer -o "${ARTIFACTS}/$can" "$ROOT_DIR/$src_filename"
     elif [[ $can == *.wat ]]; then
-        cp "$ROOT_DIR/$src_filename" "$ROOT_DIR/artifacts/canisters/$can"
+        cp "$ROOT_DIR/$src_filename" "${ARTIFACTS}/$can"
     else
         echo "ERROR: unknown (not .wat or .wasm) canister type: ${src_filename}"
         exit 1
     fi
 done
 
-sha256sum artifacts/canisters/*
+sha256sum "${ARTIFACTS}"/*
 
-gzip -f --no-name artifacts/canisters/*
+gzip -f --no-name "${ARTIFACTS}"/*
