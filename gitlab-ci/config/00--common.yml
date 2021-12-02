@@ -245,7 +245,8 @@ after_script:
   variables:
     SCCACHE_DIR: /cache/sccache
     RUSTC_WRAPPER: "/usr/bin/sccache-run"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/builds/dfinity/ic"
+    # This MUST match the directory used in our `docker-build-all` script
+    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 
 .macos-nix-native:
   extends:
