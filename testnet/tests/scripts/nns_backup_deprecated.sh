@@ -164,7 +164,7 @@ for ((c = 1; c <= retries; c++)); do
     # Sync the backup again
     rsync -az "backup@[${nns_ip}]:/var/lib/ic/backup/" "${results_dir}/backup/"
     # Recover the state from the artifacts created by the version after the upgrade.
-    ic-replay "$results_dir/ic.json5" --subnet-id "$SUBNET_ID" restore-from-backup "$results_dir/ic_registry_local_store/" "$results_dir/backup" "$VERSION" "$POST_UPGRADE_HEIGHT" --persist-cup-heights-only &>>"$results_dir/backup_post_upgrade.log"
+    ic-replay "$results_dir/ic.json5" --subnet-id "$SUBNET_ID" restore-from-backup "$results_dir/ic_registry_local_store/" "$results_dir/backup" "$VERSION" "$POST_UPGRADE_HEIGHT" &>>"$results_dir/backup_post_upgrade.log"
     # Ensure we were able to find at least one CUP
     if grep -q "Found a CUP" "$results_dir/backup_post_upgrade.log"; then
         SUCCESS=1

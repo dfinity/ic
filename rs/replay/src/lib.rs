@@ -32,7 +32,7 @@ use ic_interfaces::{
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::{MessageRouting, MessageRoutingError},
     registry::{RegistryClient, RegistryTransportRecord},
-    state_manager::{StateHashError, StateManager, StateReader},
+    state_manager::{PermanentStateHashError, StateHashError, StateManager, StateReader},
 };
 use ic_logger::{new_replica_logger, LoggerImpl, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
@@ -94,9 +94,6 @@ pub struct Player {
     _log: ReplicaLogger,
     /// The id of the subnet where the artifacts are taken from.
     pub subnet_id: SubnetId,
-    // This is used during the backup recovery, because we restore from CUP to CUP in a normal
-    // operation mode.
-    persist_cup_heights_only: bool,
     backup_dir: Option<PathBuf>,
     tmp_dir: Option<TempDir>,
     // The target height until which the state will be replayed.
@@ -114,7 +111,6 @@ impl Player {
         registry_local_store_path: &Path,
         subnet_id: SubnetId,
         start_height: u64,
-        persist_cup_heights_only: bool,
     ) -> Self {
         let logger = LoggerImpl::new(&cfg.logger, "ic-replay".to_string());
         let log = new_replica_logger(logger.root.clone(), &cfg.logger);
@@ -199,7 +195,6 @@ impl Player {
         )
         .await;
         player.tmp_dir = Some(tmp_dir);
-        player.persist_cup_heights_only = persist_cup_heights_only;
         player
     }
 
@@ -347,7 +342,6 @@ impl Player {
             backup_dir,
             _log: log,
             tmp_dir: None,
-            persist_cup_heights_only: false,
             replay_target_height: None,
         }
     }
@@ -371,8 +365,17 @@ impl Player {
         if let (Some(consensus_pool), Some(certification_pool)) =
             (&self.consensus_pool, &self.certification_pool)
         {
+            let pool_reader = &PoolReader::new(consensus_pool);
+            let finalized_height = pool_reader.get_finalized_height();
+            let target_height = Some(
+                finalized_height.min(
+                    self.replay_target_height
+                        .map(Height::from)
+                        .unwrap_or_else(|| finalized_height),
+                ),
+            );
             let last_batch_height =
-                self.deliver_batches(&self.message_routing, &PoolReader::new(consensus_pool));
+                self.deliver_batches(&self.message_routing, pool_reader, target_height);
             self.wait_for_state(last_batch_height);
             // We only want to persist the checkpoint after the latest batch.
             self.state_manager.remove_states_below(last_batch_height);
@@ -419,31 +422,30 @@ impl Player {
 
     // Blocks until the state at the given height is committed.
     fn wait_for_state(&self, height: Height) {
-        print!("Waiting for state at height {}", height);
+        print!("Waiting for state at height {}...", height);
         loop {
             let latest_state_height = self.state_manager.latest_state_height();
             if latest_state_height >= height {
                 match self.state_manager.get_state_hash_at(height) {
                     Ok(hash) => {
-                        println!();
                         println!("Latest checkpoint at height: {}", height);
                         println!("Latest state hash: {}", hex::encode(&hash.get().0));
                         break;
                     }
-                    Err(StateHashError::Transient(_)) => {}
-                    Err(StateHashError::Permanent(err)) => {
-                        if !self.persist_cup_heights_only {
-                            panic!("State computation failed: {:?}", err)
-                        } else {
-                            break;
-                        }
+                    Err(StateHashError::Transient(err)) => {
+                        println!("Transient state hash error: {:?}", err);
+                    }
+                    // This only happens for partially certified heights.
+                    Err(StateHashError::Permanent(
+                        PermanentStateHashError::StateNotFullyCertified(h),
+                    )) if h == height => break,
+                    Err(err) => {
+                        panic!("State computation failed: {:?}", err)
                     }
                 }
             }
-            print!(".");
             std::thread::sleep(WAIT_DURATION);
         }
-        println!();
         println!(
             "Latest state height is {}",
             self.state_manager.latest_state_height()
@@ -479,6 +481,7 @@ impl Player {
         &self,
         message_routing: &dyn MessageRouting,
         pool: &PoolReader<'_>,
+        replay_target_height: Option<Height>,
     ) -> Height {
         let expected_batch_height = message_routing.expected_batch_height();
         let last_batch_height = loop {
@@ -490,8 +493,7 @@ impl Player {
                 self.subnet_id,
                 self.replica_version.clone(),
                 &self._log,
-                !self.persist_cup_heights_only,
-                self.replay_target_height,
+                replay_target_height,
                 None,
             ) {
                 Ok(h) => break h,
@@ -749,6 +751,7 @@ impl Player {
             let last_batch_height = self.deliver_batches(
                 &self.message_routing,
                 &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
+                self.replay_target_height.map(Height::from),
             );
             self.wait_for_state(last_batch_height);
             backup::assert_consistency_and_clean_up(

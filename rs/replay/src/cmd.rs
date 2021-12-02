@@ -104,9 +104,6 @@ pub struct RestoreFromBackupCmd {
     pub replica_version: String,
     /// Height from which the restoration should happen
     pub start_height: u64,
-    /// Persist CUP states only
-    #[clap(long)]
-    pub persist_cup_heights_only: bool,
 }
 
 #[derive(Clap)]

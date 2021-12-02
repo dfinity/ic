@@ -35,7 +35,6 @@ fn main() {
                     &cmd.registry_local_store_path,
                     subnet_id,
                     cmd.start_height,
-                    cmd.persist_cup_heights_only,
                 )
                 .await
                 .with_replay_target_height(target_height);

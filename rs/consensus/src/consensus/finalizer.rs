@@ -99,7 +99,6 @@ impl Finalizer {
             self.replica_config.subnet_id,
             ReplicaVersion::default(),
             &self.log,
-            false,
             None,
             Some(&|result,
                    batch_height,
