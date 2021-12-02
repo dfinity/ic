@@ -54,9 +54,10 @@ def _get_sha1(newstr: bytes) -> str:
 def get_dockerfiles_sha_dict(git_root: str) -> dict:
     # Generate sha values for dockerfiles
     dockerfiles_dict = {
-        "Dockerfile": {"files": ["Dockerfile"], "sha": None},
+        "Dockerfile.src": {"files": ["Dockerfile.src"], "sha": None},
+        "Dockerfile": {"files": ["Dockerfile", "Dockerfile.src"], "sha": None},
         "Dockerfile.withnix": {
-            "files": ["Dockerfile", "Dockerfile.withnix"],
+            "files": ["Dockerfile", "Dockerfile.withnix", "Dockerfile.src"],
             "sha": None,
         },
     }

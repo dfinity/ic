@@ -1,8 +1,7 @@
 FROM ubuntu:20.04
 
 # Make sure the motoko_version corresponds to the same version in nix/sources.json
-ARG motoko_version=0.5.10
-ARG sdk_version=0.8.4
+ARG tini_version=0.19.0
 ARG rust_version=1.55.0
 
 # The image expects the following volumes mounted from the host:
@@ -20,15 +19,13 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
     apt -yq update && \
     apt -yqq install --no-install-recommends \
-        build-essential pkg-config libssl-dev llvm-10-dev llvm-dev liblmdb-dev clang-10 cmake libbz2-dev gcc-multilib \
+        build-essential pkg-config libssl-dev llvm-10-dev llvm-dev liblmdb-dev clang-10 cmake libbz2-dev gcc-multilib zlib1g-dev \
         lldb libclang-10-dev liblz4-dev librocksdb-dev libsnappy-dev libzstd-dev vim emacs nano jq \
         zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev \
         qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
         policycoreutils python3 python3-requests python3-pip python3-gflags python3-cbor shellcheck \
         sudo docker-ce-cli ripgrep patchelf asciidoctor plantuml graphviz cpio nodejs npm gosu && \
     gem install asciidoctor-diagram rouge
-
-RUN V=3.18.1; cd `mktemp -d`; curl --fail -LO https://github.com/protocolbuffers/protobuf/releases/download/v$V/protoc-$V-linux-x86_64.zip; unzip * -d /opt/protoc; chmod -R 755 /opt/protoc/bin; chmod -R u+rwX,go+rX,go-w /opt/protoc/include
 
 # Add the `ubuntu` user, and the required folders
 RUN useradd -ms /bin/bash -u 1000 ubuntu && \
@@ -41,25 +38,20 @@ RUN useradd -ms /bin/bash -u 1000 ubuntu && \
 # Sudo is needed to run `ip tun` commands to create a virtual network for e2e tests
 RUN usermod -a -G sudo ubuntu && echo "ubuntu ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-# Install sccache in /usr/bin/sccache
-RUN V=v0.2.19-alpha+dfinity; cd /usr/bin; \
-       curl --fail -L -o /usr/bin/sccache "https://gitlab.com/api/v4/projects/30166821/packages/generic/sccache/$V/sccache" && \
-       chmod 0755 /usr/bin/sccache && ln -s /usr/bin/sccache /usr/bin/sccache-run
-
-# Install buildevents in /usr/bin/
-RUN cd /usr/bin; \
-    curl --fail -L -o buildevents \
-    "https://github.com/honeycombio/buildevents/releases/download/v0.6.0/buildevents-linux-amd64" && \
-    chmod 0755 /usr/bin/buildevents
-
 # Install Rust and Cargo in /opt
 ENV RUSTUP_HOME=/opt/rustup \
     CARGO_HOME=/opt/cargo \
     CARGO_TARGET_DIR=/cargo_target \
     ZSTD_LIB_DIR=/usr/lib \
-    PROTOC=/opt/protoc/bin/protoc \
-    PROTOC_INCLUDE=/opt/protoc/include \
+    PROTOC=/usr/protoc/bin/protoc \
+    PROTOC_INCLUDE=/usr/protoc/include \
     PATH=/opt/cargo/bin:$PATH
+
+# Cargo maintains a local cache of the registry index and of git checkouts of crates at CARGO_HOME
+VOLUME /cargo
+
+COPY --from=dfinity/ic-build-src /opt /tmp/src-artifacts
+RUN rsync -rav /tmp/src-artifacts/ /usr && rm -rf /tmp/src-artifacts
 
 RUN curl --fail https://sh.rustup.rs -sSf \
         | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
@@ -67,46 +59,23 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     rustup target add wasm32-unknown-unknown && \
     chown -R ubuntu.ubuntu ${RUSTUP_HOME} ${CARGO_HOME}
 
-# Cargo maintains a local cache of the registry index and of git checkouts of crates at CARGO_HOME
-# Set this to a host-mounted volume
-ENV CARGO_HOME=/cargo
-
-# Note that motoko is automatically published to our CDN on every release
-# Unpack to a temporary directory instead of directly into /usr/bin, to avoid messing up the perms of /usr/bin
-RUN mkdir -p /tmp/install && curl --fail -L \
-    "https://download.dfinity.systems/motoko/${motoko_version}/x86_64-linux/motoko-${motoko_version}.tar.gz" \
-    | tar -xz -C /tmp/install && chmod +x /tmp/install/moc && mv /tmp/install/moc /usr/bin/moc && rm -rf /tmp/install
-
-RUN mkdir -p /tmp/install && curl --fail -L \
-    "https://download.dfinity.systems/sdk/dfx/${sdk_version}/x86_64-linux/dfx-${sdk_version}.tar.gz" \
-    | tar -xz -C /tmp/install && chmod +x /tmp/install/dfx && mv /tmp/install/dfx /usr/bin/dfx && rm -rf /tmp/install
-
-# Install IC CDK optimizer
-RUN curl --fail -sL \
-    https://download.dfinity.systems/cdk-rs/5807d2f7b523f630eddd69acd4b245a8b129eff9/ic-cdk-optimizer-linux-amd64.gz \
-    -o /opt/cargo/bin/ic-cdk-optimizer.gz && \
-    gunzip /opt/cargo/bin/ic-cdk-optimizer.gz && \
-    chmod 0755 /opt/cargo/bin/ic-cdk-optimizer
-
-# Install IDL2json: https://github.com/dfinity-lab/idl2json
-RUN curl --fail -sL \
-    https://download.dfinity.systems/idl2json/bcb27ac567eba7a7c14c9d70aedd3fb777af281b/idl2json-linux-amd64.gz -o - \
-    | gunzip > /usr/bin/idl2json && \
-    chmod 0755 /usr/bin/idl2json
-
 # Init for reaping zombies and performing signal forwarding (https://github.com/krallin/tini)
-ENV TINI_VERSION v0.19.0
-ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
-ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini.asc /tini.asc
+RUN curl -fsSL https://github.com/krallin/tini/releases/download/v${tini_version}/tini -o /tini && \
+    curl -fsSL https://github.com/krallin/tini/releases/download/v${tini_version}/tini.asc -o /tini.asc && \
+    chmod +x /tini
 RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1B4779EA4DAAEC70B588DFF0527A9B7 && \
     gpg --batch --verify /tini.asc /tini && chmod +x /tini
 
 RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline junit-xml paramiko python-gitlab libhoney
 
-# Install the latest capsule.
-RUN curl --fail -L -o /usr/bin/capsule https://gitlab.com/api/v4/projects/29782482/packages/generic/capsule/0.1.10/capsule && chmod +x /usr/bin/capsule && ln /usr/bin/capsule /usr/bin/placebo
-
 USER 1000
+
+ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
+    SNAPPY_INCLUDE_DIR=/usr/include SNAPPY_LIB_DIR=/usr/lib/x86_64-linux-gnu SNAPPY_STATIC=1 \
+    LZ4_INCLUDE_DIR=/usr/include LZ4_LIB_DIR=/usr/lib/x86_64-linux-gnu LZ4_STATIC=1 \
+    ZSTD_INCLUDE_DIR=/usr/include ZSTD_LIB_DIR=/usr/lib/x86_64-linux-gnu ZSTD_STATIC=1 \
+    Z_INCLUDE_DIR=/usr/include Z_LIB_DIR=/usr/lib/x86_64-linux-gnu Z_STATIC=1 \
+    BZ2_INCLUDE_DIR=/usr/include BZ2_LIB_DIR=/usr/lib/x86_64-linux-gnu BZ2_STATIC=1
 
 # Adds the GitHub and GitLab signatures to known_hosts so that `git pull` calls don't require user approval
 RUN mkdir --mode=0700 /home/ubuntu/.ssh && \
