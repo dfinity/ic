@@ -41,10 +41,10 @@ pub fn deliver_batches(
     subnet_id: SubnetId,
     current_replica_version: ReplicaVersion,
     log: &ReplicaLogger,
-    // This flag is used by the replay tool only.
-    persist_the_last_batch: bool,
-    // Deliver batches until this height or finalized height if set to `None`
-    max_deliver_height: Option<u64>,
+    // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
+    // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
+    // deliver all bathes up to the height `min(h, finalized_height)`.
+    max_batch_height_to_deliver: Option<Height>,
     result_processor: Option<
         &dyn Fn(
             &Result<(), MessageRoutingError>,
@@ -59,11 +59,12 @@ pub fn deliver_batches(
         ),
     >,
 ) -> Result<Height, MessageRoutingError> {
-    // If `max_deliver_height` is specified and smaller than `finalized_height`, we
-    // use it, otherwise we use `finalized_height`.
-    let target_height = max_deliver_height
-        .map(Height::from)
-        .unwrap_or_else(|| pool.get_finalized_height());
+    let finalized_height = pool.get_finalized_height();
+    // If `max_batch_height_to_deliver` is specified and smaller than
+    // `finalized_height`, we use it, otherwise we use `finalized_height`.
+    let target_height = max_batch_height_to_deliver
+        .unwrap_or(finalized_height)
+        .min(finalized_height);
 
     let mut h = message_routing.expected_batch_height();
     if h == Height::from(0) {
@@ -124,7 +125,9 @@ pub fn deliver_batches(
                 let block_height = block.height().get();
 
                 let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
-                let persist_batch = persist_the_last_batch && h == target_height;
+                // This flag can only be true, if we've called deliver_batches with a height
+                // limit.  In this case we also want to have a checkpoint for that last height.
+                let persist_batch = Some(h) == max_batch_height_to_deliver;
                 let batch = Batch {
                     batch_number: h,
                     requires_full_state_hash: block.payload.is_summary() || persist_batch,
