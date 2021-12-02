@@ -144,10 +144,10 @@ pub fn create_sandbox_process(
         Some(path) if Path::exists(Path::new(&path)) => (path.clone(), vec![path]),
         // Detect if we are running tests by checking if the cargo executable exists.
         // If so, run the sandbox using cargo.
-        Some(_) | None => match which::which("cargo") {
-            Ok(path) => {
+        Some(_) | None => match (which::which("cargo"), top_level_cargo_manifest()) {
+            (Ok(path), Some(manifest)) => {
                 let path = path.to_str().unwrap().to_string();
-                let manifest_path = top_level_cargo_manifest();
+                let manifest = manifest.to_str().unwrap().to_string();
                 (
                     path.clone(),
                     [
@@ -155,7 +155,7 @@ pub fn create_sandbox_process(
                         "run",
                         "--quiet",
                         "--manifest-path",
-                        manifest_path.to_str().unwrap(),
+                        &manifest,
                         "--bin",
                         SANDBOX_EXECUTABLE_NAME,
                         "--",
@@ -165,9 +165,7 @@ pub fn create_sandbox_process(
                     .collect(),
                 )
             }
-            Err(_) => {
-                panic!("No canister_sandbox binary found")
-            }
+            _ => panic!("No canister_sandbox binary found"),
         },
     };
 
@@ -239,18 +237,21 @@ pub fn build_sandbox_binary_relative_path(sandbox_executable_name: &str) -> Opti
 }
 
 /// This should only be used for testing purposes.
-/// Finds the topmost cargo manifest in the directory path of the current
-/// manifest.
-fn top_level_cargo_manifest() -> PathBuf {
-    let initial_manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let mut current_manifest = initial_manifest.clone();
-    let mut next_parent = initial_manifest.parent().and_then(|p| p.parent());
-    while let Some(parent) = next_parent {
-        let next: PathBuf = [parent, Path::new("Cargo.toml")].iter().collect();
+/// Finds the top most parent of the folder of the current executable which has
+/// a Cargo.toml file.
+fn top_level_cargo_manifest() -> Option<PathBuf> {
+    let mut pwd = current_binary_folder()?.canonicalize().ok()?;
+    let mut current_manifest = None;
+    loop {
+        let next: PathBuf = [&pwd, Path::new("Cargo.toml")].iter().collect();
         if next.exists() {
-            current_manifest = next;
+            current_manifest = Some(next);
         }
-        next_parent = parent.parent();
+        if let Some(parent) = pwd.parent() {
+            pwd = PathBuf::from(parent);
+            continue;
+        }
+        break;
     }
     current_manifest
 }
