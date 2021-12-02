@@ -34,6 +34,11 @@ include:
     - .macos-nix-native
     - .rules-parent-pipeline-master-only
   stage: cargo-build
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+      when: manual
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
 
 .cargo-crate-test:
   extends:
