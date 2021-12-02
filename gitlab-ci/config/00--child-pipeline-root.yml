@@ -12,6 +12,7 @@ include:
 - local: /gitlab-ci/config/46--guest-os-build--guest-os-diskimg.yml
 - local: /gitlab-ci/config/46--guest-os-build--guest-os-updateimg.yml
 - local: /gitlab-ci/config/47--guest-os-test--guest-os-e2e-test.yml
+- local: /gitlab-ci/config/48--determinism-test.yml
 - local: /gitlab-ci/config/60--prod-test--spawn-hotfix-pipeline.yml
 
 .cargo-build-docker-protected:

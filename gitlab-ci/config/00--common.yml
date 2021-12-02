@@ -10,6 +10,7 @@ stages:             # Files from the given stage should be prefixed with:
   - cargo-test          # 40--
   - guest-os-build      # 46--
   - guest-os-test       # 47--
+  - build-determinism-test  # 48--
   - e2e-tests           # 50--
   - prod-tests          # 60--
     # Shard prod tests into 5 groups, because there are 5 'cdnightly' testnet environments.
