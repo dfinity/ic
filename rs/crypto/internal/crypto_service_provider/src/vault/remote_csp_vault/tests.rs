@@ -6,13 +6,13 @@
 use crate::vault::api::CspVault;
 use crate::vault::remote_csp_vault::tarpc_csp_vault_client::RemoteCspVault;
 use crate::vault::remote_csp_vault::tarpc_csp_vault_server;
-use crate::vault::test_util;
+use crate::vault::test_utils;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 fn start_new_csp_vault_server() -> PathBuf {
-    let socket_path = test_util::get_temp_file_path();
+    let socket_path = test_utils::get_temp_file_path();
     let return_socket_path = socket_path.clone();
     let _ = std::fs::remove_file(&socket_path); // ignore if file doesn't exist
     let sks_dir = mk_temp_dir_with_permissions(0o700);
@@ -29,70 +29,70 @@ fn new_csp_vault() -> Arc<dyn CspVault> {
     Arc::new(RemoteCspVault::new(&socket_path).expect("Could not create RemoteCspVault"))
 }
 
-mod basic_signature_tests {
+mod basic_sig {
     use super::*;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_generate_ed25519_key_pair() {
-        test_util::should_generate_ed25519_key_pair(new_csp_vault());
+        test_utils::should_generate_ed25519_key_pair(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_fail_to_generate_key_for_wrong_algorithm_id() {
-        test_util::should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(new_csp_vault());
+        test_utils::should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_sign_verifiably_with_generated_key() {
-        test_util::should_sign_and_verify_with_generated_ed25519_key_pair(new_csp_vault());
+        test_utils::should_sign_and_verify_with_generated_ed25519_key_pair(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_not_sign_with_unsupported_algorithm_id() {
-        test_util::should_not_basic_sign_with_unsupported_algorithm_id(new_csp_vault());
+        test_utils::should_not_basic_sign_with_unsupported_algorithm_id(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_not_sign_with_non_existent_key() {
-        test_util::should_not_basic_sign_with_non_existent_key(new_csp_vault());
+        test_utils::should_not_basic_sign_with_non_existent_key(new_csp_vault());
     }
 }
 
-mod multi_signature_tests {
+mod multi_sign {
     use super::*;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_generate_key_ok() {
-        test_util::should_generate_multi_bls12_381_key_pair(new_csp_vault());
+        test_utils::should_generate_multi_bls12_381_key_pair(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_fail_to_generate_key_for_wrong_algorithm_id() {
-        test_util::should_fail_to_generate_multi_sig_key_for_wrong_algorithm_id(new_csp_vault());
+        test_utils::should_fail_to_generate_multi_sig_key_for_wrong_algorithm_id(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_generate_verifiable_pop() {
-        test_util::should_generate_verifiable_pop(new_csp_vault());
+        test_utils::should_generate_verifiable_pop(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_multi_sign_and_verify_with_generated_key() {
-        test_util::should_multi_sign_and_verify_with_generated_key(new_csp_vault());
+        test_utils::should_multi_sign_and_verify_with_generated_key(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_fail_to_multi_sign_with_unsupported_algorithm_id() {
-        test_util::should_not_multi_sign_with_unsupported_algorithm_id(new_csp_vault());
+        test_utils::should_not_multi_sign_with_unsupported_algorithm_id(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_fail_to_multi_sign_if_secret_key_in_store_has_wrong_type() {
-        test_util::should_not_multi_sign_if_secret_key_in_store_has_wrong_type(new_csp_vault());
+        test_utils::should_not_multi_sign_if_secret_key_in_store_has_wrong_type(new_csp_vault());
     }
 }
 
-mod threshold_sig_tests {
+mod threshold_sig {
     use super::*;
     use crate::vault::api::CspVault;
     use ic_types::Randomness;
@@ -109,7 +109,7 @@ mod threshold_sig_tests {
                 RemoteCspVault::new(&socket_path).expect("Could not create RemoteCspVault");
             Arc::new(remote_csp_server)
         };
-        test_util::test_threshold_scheme_with_basic_keygen(
+        test_utils::test_threshold_scheme_with_basic_keygen(
             Randomness::from(rng.gen::<[u8; 32]>()),
             csp_vault,
             &message,
@@ -133,11 +133,80 @@ mod threshold_sig_tests {
     }
 }
 
-mod secret_key_store_tests {
+mod secret_key_store {
     use super::*;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn key_should_be_present_only_after_generation() {
-        test_util::sks_should_contain_keys_only_after_generation(new_csp_vault(), new_csp_vault());
+        test_utils::sks_should_contain_keys_only_after_generation(new_csp_vault(), new_csp_vault());
+    }
+}
+
+mod ni_dkg {
+    use super::*;
+    use crate::vault::test_utils;
+    use crate::vault::test_utils::ni_dkg::fixtures::MockNetwork;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_retention() {
+        test_utils::ni_dkg::test_retention(new_csp_vault);
+    }
+
+    // TODO(CRP-1286): make a proptest instead of the manual repetition.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ni_dkg_should_work_with_all_players_acting_correctly_1() {
+        test_utils::ni_dkg::test_ni_dkg_should_work_with_all_players_acting_correctly(
+            [1; 32],
+            MockNetwork::MIN_SIZE,
+            0,
+            new_csp_vault,
+        );
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ni_dkg_should_work_with_all_players_acting_correctly_2() {
+        test_utils::ni_dkg::test_ni_dkg_should_work_with_all_players_acting_correctly(
+            [2; 32],
+            MockNetwork::MIN_SIZE + 1,
+            1,
+            new_csp_vault,
+        );
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ni_dkg_should_work_with_all_players_acting_correctly_3() {
+        test_utils::ni_dkg::test_ni_dkg_should_work_with_all_players_acting_correctly(
+            [3; 32],
+            MockNetwork::MIN_SIZE + 1,
+            2,
+            new_csp_vault,
+        );
+    }
+
+    // TODO(CRP-1286): make a proptest instead of the manual repetition.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn create_dealing_should_detect_errors_1() {
+        test_utils::ni_dkg::test_create_dealing_should_detect_errors(
+            [11; 32],
+            MockNetwork::MIN_SIZE,
+            0,
+            new_csp_vault,
+        );
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn create_dealing_should_detect_errors_2() {
+        test_utils::ni_dkg::test_create_dealing_should_detect_errors(
+            [22; 32],
+            MockNetwork::MIN_SIZE + 2,
+            0,
+            new_csp_vault,
+        );
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn create_dealing_should_detect_errors_3() {
+        test_utils::ni_dkg::test_create_dealing_should_detect_errors(
+            [33; 32],
+            MockNetwork::DEFAULT_MAX_SIZE - 1,
+            0,
+            new_csp_vault,
+        );
     }
 }

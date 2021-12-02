@@ -1,3 +1,5 @@
+pub(crate) mod ni_dkg;
+
 use crate::api::{CspSigner, CspThresholdSignError, ThresholdSignatureCspClient};
 use crate::keygen::public_key_hash_as_key_id;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;

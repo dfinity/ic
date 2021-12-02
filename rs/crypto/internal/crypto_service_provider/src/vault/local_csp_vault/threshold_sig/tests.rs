@@ -4,7 +4,7 @@
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::vault::api::CspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
-use crate::vault::test_util;
+use crate::vault::test_utils;
 use ic_types::Randomness;
 use proptest::prelude::*;
 use rand::{Rng, SeedableRng};
@@ -27,6 +27,6 @@ proptest! {
             let local_csp_server = LocalCspVault::new_for_test(csprng, key_store);
             Arc::new(local_csp_server)
         };
-        test_util::test_threshold_scheme_with_basic_keygen(Randomness::from(rng.gen::<[u8; 32]>()), csp_vault, &message);
+        test_utils::test_threshold_scheme_with_basic_keygen(Randomness::from(rng.gen::<[u8; 32]>()), csp_vault, &message);
     }
 }
