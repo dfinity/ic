@@ -40,7 +40,7 @@ include:
     - .ubuntu-nix-docker
     - .rules-parent-pipeline
   stage: cargo-test
-  needs: []  # don't wait on other jobs by default
+  needs: ["cargo-build-release-linux-native"]
   artifacts:
     reports:
       junit: test_report.xml
@@ -53,6 +53,13 @@ include:
   script:
     - |
       set -eExuo pipefail
+
+      # Setup the cargo canister sandbox
+      cd "${CI_PROJECT_DIR}/rs"
+      mkdir local-bin
+      gunzip -c -d "${CI_PROJECT_DIR}/artifacts/release/canister_sandbox.gz" > "local-bin/canister_sandbox"
+      chmod +x "local-bin/canister_sandbox"
+      export PATH=$PWD/local-bin:$PATH
 
       echo "${CARGO_TEST_FLAGS_EXTRA}"
 
@@ -91,9 +98,17 @@ include:
   stage: cargo-test
   needs:
     - cargo-build-canisters
+    - cargo-build-release-linux-native
   script:
     - |
       set -eExuo pipefail
+
+      # Setup the cargo canister sandbox
+      cd "${CI_PROJECT_DIR}/rs"
+      mkdir local-bin
+      gunzip -c -d "${CI_PROJECT_DIR}/artifacts/release/canister_sandbox.gz" > "local-bin/canister_sandbox"
+      chmod +x "local-bin/canister_sandbox"
+      export PATH=$PWD/local-bin:$PATH
 
       cd "${CI_PROJECT_DIR}/rs"
 
