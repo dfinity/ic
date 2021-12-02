@@ -198,7 +198,7 @@ impl CatchUpPackageProvider {
             .join(format!("cup_{}.types.v1.CatchUpPackage.pb", subnet_id))
     }
 
-    // The path that should be used to save the CUP for the given subnet.
+    // The path that should be used to save the CUP for the assigned subnet.
     // Includes the specific type encoded in the file for future-proofing and
     // ease of debugging.
     fn get_cup_path(&self) -> PathBuf {
@@ -215,7 +215,7 @@ impl CatchUpPackageProvider {
         subnet_id: SubnetId,
     ) -> NodeManagerResult<CUPWithOriginalProtobuf> {
         let registry_version = self.registry.get_latest_version();
-        let local_cup = self.get_local_cup(subnet_id);
+        let local_cup = self.get_local_cup();
 
         // Returns local_cup in case no more recent CUP is found.
         let subnet_cup = self
@@ -239,9 +239,9 @@ impl CatchUpPackageProvider {
             ))
     }
 
-    // Return the CUP has been persisted for the given subnet, if it exists
-    fn get_local_cup(&self, subnet_id: SubnetId) -> Option<CUPWithOriginalProtobuf> {
-        let path = self.get_upgrade_cup_save_path(subnet_id);
+    /// Returns the locally persisted CUP.
+    pub fn get_local_cup(&self) -> Option<CUPWithOriginalProtobuf> {
+        let path = self.get_cup_path();
         match File::open(&path) {
             Ok(reader) => pb::CatchUpPackage::read_from_reader(reader)
                 .and_then(|protobuf| {
