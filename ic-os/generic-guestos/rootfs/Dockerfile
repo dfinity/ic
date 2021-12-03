@@ -7,7 +7,7 @@
 # First build stage:
 # - Construct the actual target image (IC-OS root filesystem)
 #
-FROM dfinity/genericos-base:2021-11-25-2025
+FROM dfinity/genericos-base@sha256:058e1ad7c8de4a482416eac322497b9aa44452a606b407aa4ca5d3cb7edaf27c
 
 RUN mkdir -p /boot/{efi,grub}
 
