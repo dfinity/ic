@@ -17,7 +17,7 @@ path = "src/test_sandbox.rs"
 
 [dependencies]
 bytes = "1.0.1"
-serde-big-array = "0.3.2"
+serde_bytes = "0.11.5"
 serde_cbor = "0.11.1"
 ic-interfaces = { path = "../../interfaces" }
 ic-replicated-state = { path = "../../replicated_state" }

@@ -21,7 +21,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{debug, error, fatal, ReplicaLogger};
 use ic_replicated_state::{
-    EmbedderCache, ExecutionState, Global, NumWasmPages, PageIndex, PageMap,
+    EmbedderCache, ExecutionState, ExportedFunctions, Global, NumWasmPages, PageIndex, PageMap,
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
@@ -196,24 +196,13 @@ impl WasmtimeEmbedder {
     ) -> HypervisorResult<ExecutionState> {
         let wasm_binary = BinaryEncodedWasm::new(wasm_binary);
         validate_wasm_binary(&wasm_binary, config)?;
-
         let instrumentation_output = instrument(&wasm_binary, &InstructionCostTable::new())?;
-
-        // Get all exported methods that are relevant to the IC.
-        // Methods relevant to the IC are:
-        //     - Queries (e.g. canister_query ___)
-        //     - Updates (e.g. canister_update ___)
-        //     - System methods (e.g. canister_init)
-        // Other methods are assumed to be private to the module and are ignored.
-        let exports = instrumentation_output
-            .exports
-            .iter()
-            .filter_map(|export| WasmMethod::try_from(export.to_string()).ok())
-            .collect();
-
-        let pages = instrumentation_output.data.as_pages();
-
-        ExecutionState::new(wasm_binary, canister_root, exports, &pages)
+        ExecutionState::new(
+            wasm_binary,
+            canister_root,
+            ExportedFunctions::new(instrumentation_output.exported_functions),
+            &instrumentation_output.data.as_pages(),
+        )
     }
 
     #[allow(clippy::too_many_arguments)]

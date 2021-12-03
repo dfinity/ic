@@ -28,6 +28,12 @@ pub trait SandboxService: Send + Sync {
     /// Close the indicated execution state. Indicate if the state is
     /// to be committed.
     fn close_execution(&self, req: CloseExecutionRequest) -> Call<CloseExecutionReply>;
+    /// Perform initial parsing and evaluation needed to create the starting
+    /// execution state.
+    fn create_execution_state(
+        &self,
+        req: CreateExecutionStateRequest,
+    ) -> Call<CreateExecutionStateReply>;
 }
 
 impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
@@ -46,6 +52,10 @@ impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
             Request::CloseExecution(req) => {
                 Call::new_wrap(self.close_execution(req), Reply::CloseExecution)
             }
+            Request::CreateExecutionState(req) => Call::new_wrap(
+                self.create_execution_state(req),
+                Reply::CreateExecutionState,
+            ),
         }
     }
 }
