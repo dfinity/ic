@@ -22,7 +22,7 @@ cargo-build-debug-darwin:
 cargo-build-release-linux:
   extends: 
   - .cargo-build-docker
-  - .rules-parent-pipeline-master-only
+  - .rules-parent-pipeline-protected-branch-only
   artifacts:
     paths:
       - artifacts/nix-release/*

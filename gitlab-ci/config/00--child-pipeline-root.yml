@@ -33,13 +33,8 @@ include:
   needs: []  # don't wait on other jobs by default
   extends:
     - .macos-nix-native
-    - .rules-parent-pipeline-master-only
+    - .rules-parent-pipeline-protected-branch-only
   stage: cargo-build
-  rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^rc--/'
-    - if: '$CI_PIPELINE_SOURCE == "trigger"'
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
 
 .cargo-crate-test:
   extends:
