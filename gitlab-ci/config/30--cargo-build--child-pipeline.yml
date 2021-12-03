@@ -103,7 +103,7 @@ cargo-build-canisters:
 
       cd "$CI_PROJECT_DIR"
 
-      gitlab-ci/tools/cargo-build-canisters "artifacts/canisters${ARTIFACT_EXT}"
+      gitlab-ci/tools/cargo-build-canisters "${CI_PROJECT_DIR}/artifacts/canisters${ARTIFACT_EXT}"
 
       gitlab-ci/src/artifacts/openssl-sign.sh "artifacts/canisters${ARTIFACT_EXT}"
 

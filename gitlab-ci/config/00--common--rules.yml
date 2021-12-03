@@ -173,11 +173,9 @@
 
 .rules-docker-build-all:
   rules:
+    - if: '$CI_MERGE_REQUEST_TITLE =~ /\[lessci\]/'
+      when: never
     - if: '$SCHEDULE_NAME == "run-all-master"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
       changes:
-        - gitlab-ci/tools/docker-build-all
-        - gitlab-ci/tools/build-all
-        - gitlab-ci/tools/docker-run
-        - gitlab-ci/src/job_scripts/*
-        - gitlab-ci/docker/docker-build-local-image.sh
+        - gitlab-ci/**/*
