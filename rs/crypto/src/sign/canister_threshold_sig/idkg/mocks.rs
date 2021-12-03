@@ -18,7 +18,7 @@ pub fn create_dealing(
     self_id: &NodeId,
 ) -> Result<IDkgDealing, IDkgCreateDealingError> {
     Ok(IDkgDealing {
-        transcript_id: params.transcript_id,
+        transcript_id: params.transcript_id(),
         dealer_id: *self_id,
         internal_dealing_raw: vec![],
     })
@@ -52,15 +52,15 @@ pub fn create_transcript(
 ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
     let dealings_by_index = dealings
         .iter()
-        .map(|(id, d)| (params.dealers.position(*id).expect("mock"), d.clone()))
+        .map(|(id, d)| (params.dealers().position(*id).expect("mock"), d.clone()))
         .collect();
 
     Ok(IDkgTranscript {
-        transcript_id: params.transcript_id,
-        receivers: params.receivers.clone(),
-        registry_version: params.registry_version,
+        transcript_id: params.transcript_id(),
+        receivers: params.receivers().clone(),
+        registry_version: params.registry_version(),
         verified_dealings: dealings_by_index,
-        transcript_type: match &params.operation_type {
+        transcript_type: match params.operation_type() {
             IDkgTranscriptOperation::Random => {
                 IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random)
             }

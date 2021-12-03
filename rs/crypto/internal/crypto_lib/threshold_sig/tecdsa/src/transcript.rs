@@ -59,6 +59,7 @@ impl CombinedCommitment {
 
 /// IDkg transcript operation information relevant for internal Crypto
 /// operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IDkgTranscriptOperationInternal {
     Random,
     ReshareOfMasked(PolynomialCommitment),

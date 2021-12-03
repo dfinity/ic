@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use tecdsa::*;
 
 #[test]
@@ -86,6 +87,36 @@ fn mega_pair_smoke_test() -> Result<(), ThresholdEcdsaError> {
 
     let ptext_b = mega_decrypt_pair(&ctext, associated_data, dealer_index, 1, &b_sk, &b_pk)?;
     assert_eq!(ptext_b, ptext_for_b);
+
+    Ok(())
+}
+
+#[test]
+fn mega_private_key_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
+    let curve = EccCurveType::K256;
+
+    let mut rng = Seed::from_bytes(&[43; 32]).into_rng();
+
+    let sk = MEGaPrivateKey::generate(curve, &mut rng)?;
+
+    let log = format!("{:?}", sk);
+    assert_eq!("MEGaPrivateKey(EccScalar::K256) - REDACTED", log);
+
+    Ok(())
+}
+
+#[test]
+fn mega_private_key_bytes_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
+    let curve = EccCurveType::K256;
+
+    let mut rng = Seed::from_bytes(&[43; 32]).into_rng();
+
+    let sk = MEGaPrivateKey::generate(curve, &mut rng)?;
+
+    let bytes = MEGaPrivateKeyK256Bytes::try_from(&sk)?;
+
+    let log = format!("{:?}", bytes);
+    assert_eq!("MEGaPrivateKeyK256Bytes - REDACTED", log);
 
     Ok(())
 }

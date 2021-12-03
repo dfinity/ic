@@ -11,8 +11,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier, IDkgProtocol,
-    KeyManager, LoadTranscriptResult, NiDkgAlgorithm, ThresholdSigVerifier,
-    ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    KeyManager, LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier,
+    ThresholdEcdsaSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner, Signable};
 use ic_interfaces::registry::RegistryClient;
@@ -22,6 +22,7 @@ use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::error::*;
 use ic_types::crypto::canister_threshold_sig::idkg::*;
+use ic_types::crypto::canister_threshold_sig::*;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
@@ -398,7 +399,7 @@ impl IDkgProtocol for CryptoReturningOk {
 
         let dealings_by_index = verified_dealings
             .iter()
-            .map(|(id, d)| (params.dealers.position(*id).expect("mock"), d.clone()))
+            .map(|(id, d)| (params.dealers().position(*id).expect("mock"), d.clone()))
             .collect();
 
         Ok(IDkgTranscript {
@@ -464,6 +465,55 @@ impl IDkgProtocol for CryptoReturningOk {
     }
 
     fn retain_active_transcripts(&self, _active_transcripts: &[IDkgTranscript]) {}
+}
+
+impl ThresholdEcdsaSigner for CryptoReturningOk {
+    fn sign_share(
+        &self,
+        _inputs: &ThresholdEcdsaSigInputs,
+    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
+        Ok(ThresholdEcdsaSigShare {
+            sig_share_raw: vec![],
+        })
+    }
+}
+
+impl ThresholdEcdsaSigVerifier for CryptoReturningOk {
+    fn verify_sig_share(
+        &self,
+        _signer: NodeId,
+        _inputs: &ThresholdEcdsaSigInputs,
+        _share: &ThresholdEcdsaSigShare,
+    ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
+        Ok(())
+    }
+
+    fn combine_sig_shares(
+        &self,
+        _inputs: &ThresholdEcdsaSigInputs,
+        _shares: &[ThresholdEcdsaSigShare],
+    ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
+        Ok(ThresholdEcdsaCombinedSignature { signature: vec![] })
+    }
+
+    fn verify_combined_sig(
+        &self,
+        _inputs: &ThresholdEcdsaSigInputs,
+        _signature: &ThresholdEcdsaCombinedSignature,
+    ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
+        Ok(())
+    }
+
+    fn get_public_key(
+        &self,
+        _canister_id: PrincipalId,
+        _key_transcript: IDkgTranscript,
+    ) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError> {
+        Ok(EcdsaPublicKey {
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            public_key: vec![],
+        })
+    }
 }
 
 pub fn mock_random_number_generator() -> Box<dyn RngCore> {

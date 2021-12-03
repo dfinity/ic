@@ -36,7 +36,7 @@ pub fn create_dealings(
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
 ) -> BTreeMap<NodeId, IDkgDealing> {
     params
-        .dealers
+        .dealers()
         .get()
         .iter()
         .map(|node| {
@@ -55,18 +55,18 @@ pub fn multisign_dealing(
     let ecdsa_dealing = EcdsaDealing {
         requested_height: Height::from(1),
         dealer_id,
-        transcript_id: params.transcript_id,
+        transcript_id: params.transcript_id(),
         dealing: dealing.clone(),
     };
 
     let signature = {
         let signatures: BTreeMap<_, _> = params
-            .receivers
+            .receivers()
             .get()
             .iter()
             .map(|signer_id| {
                 let signature = crypto_for(*signer_id, crypto_components)
-                    .sign_multi(&ecdsa_dealing, *signer_id, params.registry_version)
+                    .sign_multi(&ecdsa_dealing, *signer_id, params.registry_version())
                     .expect("failed to generate multi-signature share");
 
                 (*signer_id, signature)
@@ -74,20 +74,20 @@ pub fn multisign_dealing(
             .collect();
 
         let combiner_id = **params
-            .receivers
+            .receivers()
             .get()
             .iter()
             .choose_multiple(&mut thread_rng(), 1)
             .get(0)
             .expect("receivers is empty");
         crypto_for(combiner_id, crypto_components)
-            .combine_multi_sig_individuals(signatures, params.registry_version)
+            .combine_multi_sig_individuals(signatures, params.registry_version())
             .expect("failed to combine individual signatures")
     };
 
     IDkgMultiSignedDealing {
         signature,
-        signers: params.receivers.get().clone(),
+        signers: params.receivers().get().clone(),
         dealing: ecdsa_dealing,
     }
 }
@@ -141,7 +141,7 @@ pub fn load_previous_transcripts_if_needed_and_create_dealing(
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
     loader_id: NodeId,
 ) -> IDkgDealing {
-    match &params.operation_type {
+    match params.operation_type() {
         IDkgTranscriptOperation::Random => (),
         IDkgTranscriptOperation::ReshareOfMasked(transcript)
         | IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
@@ -161,7 +161,7 @@ pub fn load_previous_transcripts_if_needed_and_create_dealings(
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
 ) -> BTreeMap<NodeId, IDkgDealing> {
     params
-        .dealers
+        .dealers()
         .get()
         .iter()
         .map(|node| {
@@ -185,7 +185,7 @@ pub fn run_idkg_and_create_transcript(
     let dealings =
         load_previous_transcripts_if_needed_and_create_dealings(params, crypto_components);
     let multisigned_dealings = multisign_dealings(params, crypto_components, &dealings);
-    let transcript_creator = params.dealers.get().iter().next().unwrap();
+    let transcript_creator = params.dealers().get().iter().next().unwrap();
     create_transcript(
         params,
         crypto_components,
@@ -203,10 +203,10 @@ pub fn build_params_from_previous(
 ) -> IDkgTranscriptParams {
     IDkgTranscriptParams::new(
         random_transcript_id(),
-        previous_params.dealers,
-        previous_params.receivers,
-        previous_params.registry_version,
-        previous_params.algorithm_id,
+        previous_params.dealers().clone(),
+        previous_params.receivers().clone(),
+        previous_params.registry_version(),
+        previous_params.algorithm_id(),
         operation_type,
     )
     .expect("failed to create resharing/multiplication IDkgTranscriptParams")

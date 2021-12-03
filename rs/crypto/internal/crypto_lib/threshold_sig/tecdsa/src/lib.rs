@@ -1,8 +1,9 @@
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaError {
     CurveMismatch,
     InconsistentCommitments,
@@ -55,7 +56,7 @@ pub fn gen_keypair(
     Ok((public_key, private_key))
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IdkgCreateDealingInternalError {
     UnsupportedAlgorithm,
     InvalidRecipients,
@@ -105,7 +106,7 @@ pub fn create_dealing(
     .map_err(|e| e.into())
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IDkgCreateTranscriptInternalError {
     UnsupportedAlgorithm,
     InconsistentCommitments,
@@ -145,7 +146,7 @@ pub fn create_transcript(
     .map_err(|e| e.into())
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IDkgLoadTranscriptInternalError {
     UnsupportedAlgorithm,
     InconsistentCommitments,

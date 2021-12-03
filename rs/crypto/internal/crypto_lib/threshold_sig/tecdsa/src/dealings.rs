@@ -1,4 +1,5 @@
 use crate::*;
+use core::fmt::{self, Debug};
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgMultiSignedDealing;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -6,12 +7,64 @@ use std::convert::TryFrom;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ZkProof {}
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum SecretShares {
     Random,
     ReshareOfUnmasked(EccScalar),
     ReshareOfMasked(EccScalar, EccScalar),
     UnmaskedTimesMasked(EccScalar, (EccScalar, EccScalar)),
+}
+
+impl Debug for SecretShares {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self {
+            Self::Random => write!(f, "SecretShares::Random"),
+            Self::ReshareOfUnmasked(EccScalar::K256(_)) => write!(
+                f,
+                "SecretShares::ReshareOfUnmasked(EccScalar::K256) - REDACTED"
+            ),
+            Self::ReshareOfUnmasked(EccScalar::P256(_)) => write!(
+                f,
+                "SecretShares::ReshareOfUnmasked(EccScalar::P256) - REDACTED"
+            ),
+            Self::ReshareOfMasked(EccScalar::K256(_), EccScalar::K256(_)) => write!(
+                f,
+                "SecretShares::ReshareOfMasked(EccScalar::K256) - REDACTED"
+            ),
+            Self::ReshareOfMasked(EccScalar::P256(_), EccScalar::P256(_)) => write!(
+                f,
+                "SecretShares::ReshareOfMasked(EccScalar::P256) - REDACTED"
+            ),
+            Self::ReshareOfMasked(_, _) => write!(
+                f,
+                "Unsupported curve combination in SecretShares::ReshareOfMasked!"
+            ),
+            Self::UnmaskedTimesMasked(
+                EccScalar::K256(_),
+                (EccScalar::K256(_), EccScalar::K256(_)),
+            ) => {
+                write!(
+                    f,
+                    "SecretShares::UnmaskedTimesMasked(EccScalar::K256) - REDACTED"
+                )
+            }
+            Self::UnmaskedTimesMasked(
+                EccScalar::P256(_),
+                (EccScalar::P256(_), EccScalar::P256(_)),
+            ) => {
+                write!(
+                    f,
+                    "SecretShares::UnmaskedTimesMasked(EccScalar::P256) - REDACTED"
+                )
+            }
+            Self::UnmaskedTimesMasked(_, (_, _)) => {
+                write!(
+                    f,
+                    "Unsupported curve combination in SecretShares::UnmaskedTimesMasked!"
+                )
+            }
+        }
+    }
 }
 
 impl TryFrom<(&CommitmentOpeningBytes, Option<&CommitmentOpeningBytes>)> for SecretShares {

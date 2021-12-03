@@ -300,10 +300,9 @@ pub trait ConsensusCrypto:
         ThresholdSignature<CatchUpContent>,
     > + SignVerify<dkg::DealingContent, BasicSignature<dkg::DealingContent>, RegistryVersion>
     + Crypto
-    + IDkgProtocol
     + Send
     + Sync
 {
 }
 
-impl<C: Crypto + IDkgProtocol + Send + Sync> ConsensusCrypto for C {}
+impl<C: Crypto + Send + Sync> ConsensusCrypto for C {}

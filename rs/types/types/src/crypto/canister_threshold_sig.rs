@@ -96,17 +96,33 @@ impl PreSignatureQuadruple {
             _ => Err(error::PresignatureQuadrupleCreationError::WrongTypes),
         }
     }
+
+    pub fn kappa_unmasked(&self) -> &IDkgTranscript {
+        &self.kappa_unmasked
+    }
+
+    pub fn lambda_masked(&self) -> &IDkgTranscript {
+        &self.lambda_masked
+    }
+
+    pub fn kappa_times_lambda(&self) -> &IDkgTranscript {
+        &self.kappa_times_lambda
+    }
+
+    pub fn key_times_lambda(&self) -> &IDkgTranscript {
+        &self.key_times_lambda
+    }
 }
 
 /// All inputs required to generate a canister threshold signature.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdEcdsaSigInputs {
-    pub caller: PrincipalId,
-    pub derivation_path: Vec<u32>,
-    pub hashed_message: Vec<u8>,
-    pub nonce: Randomness,
-    pub presig_quadruple: PreSignatureQuadruple,
-    pub key_transcript: IDkgTranscript,
+    caller: PrincipalId,
+    derivation_path: Vec<u32>,
+    hashed_message: Vec<u8>,
+    nonce: Randomness,
+    presig_quadruple: PreSignatureQuadruple,
+    key_transcript: IDkgTranscript,
 }
 
 impl ThresholdEcdsaSigInputs {
@@ -138,6 +154,30 @@ impl ThresholdEcdsaSigInputs {
             }),
             _ => Err(error::ThresholdEcdsaSigInputsCreationError::NonmatchingTranscriptIds),
         }
+    }
+
+    pub fn caller(&self) -> PrincipalId {
+        self.caller
+    }
+
+    pub fn derivation_path(&self) -> &[u32] {
+        &self.derivation_path
+    }
+
+    pub fn hashed_message(&self) -> &[u8] {
+        &self.hashed_message
+    }
+
+    pub fn nonce(&self) -> &Randomness {
+        &self.nonce
+    }
+
+    pub fn presig_quadruple(&self) -> &PreSignatureQuadruple {
+        &self.presig_quadruple
+    }
+
+    pub fn key_transcript(&self) -> &IDkgTranscript {
+        &self.key_transcript
     }
 }
 

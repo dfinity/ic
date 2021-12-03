@@ -1,10 +1,11 @@
-use crate::api::CspThresholdSignError;
+use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError,
-    MultiSignatureCspVault, NiDkgCspVault, SecretKeyStoreCspVault, ThresholdSignatureCspVault,
+    IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault, SecretKeyStoreCspVault,
+    ThresholdSignatureCspVault,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::remote_csp_vault::TarpcCspVault;
@@ -23,6 +24,9 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_internal_types::NodeIndex;
 use ic_logger::new_logger;
 use ic_logger::replica_logger::no_op_logger;
+use ic_types::crypto::canister_threshold_sig::error::{
+    IDkgCreateDealingError, IDkgLoadTranscriptError,
+};
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{NodeId, NumberOfNodes};
 use rand::rngs::OsRng;
@@ -34,6 +38,10 @@ use tarpc::server::BaseChannel;
 use tarpc::server::Serve;
 use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{context, serde_transport, server::Channel};
+use tecdsa::{
+    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaPublicKey,
+};
 use tokio::net::UnixListener;
 use tokio_util::codec::length_delimited::LengthDelimitedCodec;
 
@@ -187,6 +195,53 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
     // SecretKeyStoreCspVault-methods.
     async fn sks_contains(self, _: context::Context, key_id: KeyId) -> bool {
         self.local_csp_vault.sks_contains(&key_id)
+    }
+
+    // `IDkgProtocolCspVault`-methods.
+    async fn idkg_create_dealing(
+        self,
+        _: context::Context,
+        algorithm_id: AlgorithmId,
+        context_data: Vec<u8>,
+        dealer_index: NodeIndex,
+        reconstruction_threshold: NumberOfNodes,
+        receiver_keys: Vec<MEGaPublicKey>,
+        transcript_operation: IDkgTranscriptOperationInternal,
+    ) -> Result<IDkgDealingInternal, IDkgCreateDealingError> {
+        self.local_csp_vault.idkg_create_dealing(
+            algorithm_id,
+            &context_data,
+            dealer_index,
+            reconstruction_threshold,
+            &receiver_keys,
+            &transcript_operation,
+        )
+    }
+
+    async fn idkg_load_transcript(
+        self,
+        _: context::Context,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
+        context_data: Vec<u8>,
+        receiver_index: NodeIndex,
+        key_id: KeyId,
+        transcript: IDkgTranscriptInternal,
+    ) -> Result<Vec<IDkgComplaintInternal>, IDkgLoadTranscriptError> {
+        self.local_csp_vault.idkg_load_transcript(
+            &dealings,
+            &context_data,
+            receiver_index,
+            &key_id,
+            &transcript,
+        )
+    }
+
+    async fn idkg_gen_mega_key_pair(
+        self,
+        _: context::Context,
+        algorithm_id: AlgorithmId,
+    ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
+        self.local_csp_vault.idkg_gen_mega_key_pair(algorithm_id)
     }
 }
 

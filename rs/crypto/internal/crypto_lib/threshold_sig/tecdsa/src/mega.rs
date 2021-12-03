@@ -1,6 +1,7 @@
 use crate::group::*;
 use crate::seed::Seed;
 use crate::*;
+use core::fmt::{self, Debug};
 use paste::paste;
 use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
@@ -42,7 +43,7 @@ impl MEGaPublicKey {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Zeroize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize)]
 #[zeroize(drop)]
 pub struct MEGaPrivateKey {
     secret: EccScalar,
@@ -80,6 +81,15 @@ impl MEGaPrivateKey {
 
     pub fn serialize(&self) -> Vec<u8> {
         self.secret.serialize()
+    }
+}
+
+impl Debug for MEGaPrivateKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.secret {
+            EccScalar::K256(_) => write!(f, "MEGaPrivateKey(EccScalar::K256) - REDACTED"),
+            EccScalar::P256(_) => write!(f, "MEGaPrivateKey(EccScalar::P256) - REDACTED"),
+        }
     }
 }
 
@@ -491,13 +501,19 @@ macro_rules! generate_serializable_keyset {
                 }
             }
 
-            #[derive(Clone, Debug, Eq, PartialEq, Zeroize)]
+            #[derive(Clone, Eq, PartialEq, Zeroize)]
             #[zeroize(drop)]
             pub struct [<MEGaPrivateKey $curve Bytes>]([u8; Self::SIZE]);
             ic_crypto_internal_types::derive_serde!([<MEGaPrivateKey $curve Bytes>], [<MEGaPrivateKey $curve Bytes>]::SIZE);
 
             impl [<MEGaPrivateKey $curve Bytes>] {
                 pub const SIZE: usize = $priv_size;
+            }
+
+            impl Debug for [<MEGaPrivateKey $curve Bytes>] {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    write!(f, "{} - REDACTED", stringify!([<MEGaPrivateKey $curve Bytes>]))
+                }
             }
 
             impl TryFrom<&MEGaPrivateKey> for [<MEGaPrivateKey $curve Bytes>] {

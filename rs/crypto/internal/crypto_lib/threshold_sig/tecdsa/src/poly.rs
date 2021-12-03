@@ -1,4 +1,5 @@
 use crate::*;
+use core::fmt::{self, Debug};
 use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -8,10 +9,19 @@ use zeroize::Zeroize;
 ///
 /// The coefficients are stored in little-endian ordering, ie a_0 is
 /// self.coefficients[0]
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Polynomial {
     curve: EccCurveType,
     coefficients: Vec<EccScalar>,
+}
+
+impl Debug for Polynomial {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.curve {
+            EccCurveType::K256 => write!(f, "Polynomial {{curve: K256, coefficients: REDACTED}}"),
+            EccCurveType::P256 => write!(f, "Polynomial {{curve: P256, coefficients: REDACTED}}"),
+        }
+    }
 }
 
 impl Eq for Polynomial {}
@@ -277,10 +287,35 @@ impl Polynomial {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum CommitmentOpening {
     Simple(EccScalar),
     Pedersen(EccScalar, EccScalar),
+}
+
+impl Debug for CommitmentOpening {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self {
+            Self::Simple(EccScalar::K256(_)) => {
+                write!(f, "CommitmentOpening::Simple(K256(REDACTED))")
+            }
+            Self::Simple(EccScalar::P256(_)) => {
+                write!(f, "CommitmentOpening::Simple(P256(REDACTED))")
+            }
+            Self::Pedersen(EccScalar::K256(_), EccScalar::K256(_)) => write!(
+                f,
+                "CommitmentOpening::Pedersen(K256(REDACTED), K256(REDACTED))"
+            ),
+            Self::Pedersen(EccScalar::P256(_), EccScalar::P256(_)) => write!(
+                f,
+                "CommitmentOpening::Pedersen(P256(REDACTED), P256(REDACTED))"
+            ),
+            Self::Pedersen(_, _) => write!(
+                f,
+                "ERROR: Unsupported curve combination in CommitmentOpening!"
+            ),
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Zeroize, Serialize, Deserialize)]

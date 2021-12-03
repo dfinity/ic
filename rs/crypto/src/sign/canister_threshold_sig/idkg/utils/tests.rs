@@ -1,4 +1,4 @@
-use crate::sign::canister_threshold_sig::dkg::utils::{
+use crate::sign::canister_threshold_sig::idkg::utils::{
     get_mega_pubkey, mega_public_key_from_proto,
 };
 use crate::utils::generate_idkg_dealing_encryption_keys;

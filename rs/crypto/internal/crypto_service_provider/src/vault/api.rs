@@ -101,6 +101,7 @@ pub trait CspVault:
     + MultiSignatureCspVault
     + ThresholdSignatureCspVault
     + NiDkgCspVault
+    + IDkgProtocolCspVault
     + SecretKeyStoreCspVault
 {
 }
@@ -111,6 +112,7 @@ impl<T> CspVault for T where
         + MultiSignatureCspVault
         + ThresholdSignatureCspVault
         + NiDkgCspVault
+        + IDkgProtocolCspVault
         + SecretKeyStoreCspVault
 {
 }
