@@ -1,12 +1,16 @@
+use std::{collections::BTreeSet, path::PathBuf};
+
 use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
+use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     page_map::{
         CheckpointSerialization, MappingSerialization, PageAllocatorSerialization,
-        PageDeltaSerialization, PageMapSerialization,
+        PageDeltaSerialization, PageMapSerialization, PageSerialization,
     },
     Global, NumWasmPages,
 };
+use ic_types::{methods::WasmMethod, CanisterId};
 use serde::{Deserialize, Serialize};
 
 use super::id::{ExecId, StateId, WasmId};
@@ -276,6 +280,25 @@ pub struct CloseExecutionReply {
     pub success: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CreateExecutionStateRequest {
+    #[serde(with = "serde_bytes")]
+    pub wasm_binary: Vec<u8>,
+    pub canister_root: PathBuf,
+    pub canister_id: CanisterId,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CreateExecutionStateSuccessReply {
+    pub wasm_memory_pages: Vec<PageSerialization>,
+    pub wasm_memory_size: NumWasmPages,
+    pub exported_globals: Vec<Global>,
+    pub exported_functions: BTreeSet<WasmMethod>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CreateExecutionStateReply(pub HypervisorResult<CreateExecutionStateSuccessReply>);
+
 /// All possible requests to a sandboxed process.
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Clone)]
@@ -287,6 +310,7 @@ pub enum Request {
     CloseState(CloseStateRequest),
     OpenExecution(OpenExecutionRequest),
     CloseExecution(CloseExecutionRequest),
+    CreateExecutionState(CreateExecutionStateRequest),
 }
 
 impl EnumerateInnerFileDescriptors for Request {
@@ -298,7 +322,8 @@ impl EnumerateInnerFileDescriptors for Request {
             | Request::CloseWasm(_)
             | Request::CloseState(_)
             | Request::OpenExecution(_)
-            | Request::CloseExecution(_) => {}
+            | Request::CloseExecution(_)
+            | Request::CreateExecutionState(_) => {}
         }
     }
 }
@@ -314,4 +339,5 @@ pub enum Reply {
     CloseState(CloseStateReply),
     OpenExecution(OpenExecutionReply),
     CloseExecution(CloseExecutionReply),
+    CreateExecutionState(CreateExecutionStateReply),
 }

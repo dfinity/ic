@@ -110,6 +110,7 @@ use super::errors::into_parity_wasm_error;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
+use ic_types::methods::WasmMethod;
 use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 
 use parity_wasm::builder;
@@ -117,7 +118,8 @@ use parity_wasm::elements::{
     BlockType, BulkInstruction, ExportEntry, FuncBody, FunctionType, GlobalEntry, GlobalType,
     InitExpr, Instruction, Instructions, Internal, Local, Module, Section, Type, ValueType,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
+use std::convert::TryFrom;
 
 const UPDATE_AVAILABLE_MEMORY_FN: u32 = 1; // because it's the second import
 
@@ -318,7 +320,7 @@ impl Segments {
     // Takes chunks extracted from data, and creates pages out of them, by mapping
     // them to the corresponding page, leaving uninitialized parts filled with
     // zeros.
-    pub fn as_pages(&self) -> Vec<(PageIndex, Box<PageBytes>)> {
+    pub fn as_pages(self) -> Vec<(PageIndex, PageBytes)> {
         self.0
             .iter()
             // We go over all chunks and split them into multiple chunks if they cross page
@@ -352,7 +354,7 @@ impl Segments {
                 let page_num = offset / PAGE_SIZE;
                 let list = acc
                     .entry(PageIndex::new(page_num as u64))
-                    .or_insert_with(|| Box::new([0; PAGE_SIZE]));
+                    .or_insert_with(|| [0; PAGE_SIZE]);
                 let local_offset = offset % PAGE_SIZE;
                 list[local_offset..local_offset + (bytes.len() as usize)].copy_from_slice(&bytes);
                 acc
@@ -363,8 +365,13 @@ impl Segments {
 }
 
 pub struct InstrumentationOutput {
-    /// A set of all exports.
-    pub exports: HashSet<String>,
+    /// All exported methods that are relevant to the IC.
+    /// Methods relevant to the IC are:
+    ///     - Queries (e.g. canister_query ___)
+    ///     - Updates (e.g. canister_update ___)
+    ///     - System methods (e.g. canister_init)
+    /// Other methods are assumed to be private to the module and are ignored.
+    pub exported_functions: BTreeSet<WasmMethod>,
 
     /// Memory limits (min, max).
     pub limits: (u32, Option<u32>),
@@ -542,12 +549,12 @@ pub fn instrument(
         ))
         .build();
 
-    let exports = module
+    let exported_functions = module
         .export_section()
         .unwrap() // because we definitely push exports above
         .entries()
         .iter()
-        .map(|elem| elem.field().to_string())
+        .filter_map(|export| WasmMethod::try_from(export.field().to_string()).ok())
         .collect();
 
     let limits = match module.memory_section() {
@@ -572,7 +579,7 @@ pub fn instrument(
         WasmInstrumentationError::ParitySerializeError(into_parity_wasm_error(err))
     })?;
     Ok(InstrumentationOutput {
-        exports,
+        exported_functions,
         limits,
         data,
         binary: BinaryEncodedWasm::new(result),

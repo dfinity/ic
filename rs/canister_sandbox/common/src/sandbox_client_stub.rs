@@ -77,4 +77,17 @@ impl SandboxService for SandboxClientStub {
             });
         Call::new(cell)
     }
+
+    fn create_execution_state(
+        &self,
+        req: CreateExecutionStateRequest,
+    ) -> Call<CreateExecutionStateReply> {
+        let cell = self
+            .channel
+            .call(Request::CreateExecutionState(req), |rep| match rep {
+                Reply::CreateExecutionState(rep) => Ok(rep),
+                _ => Err(Error::ServerError),
+            });
+        Call::new(cell)
+    }
 }

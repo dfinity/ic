@@ -23,8 +23,8 @@ use ic_replicated_state::{
 };
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
 use ic_system_api::{
-    system_api_empty::SystemApiEmpty, ApiType, ModificationTracking, StaticSystemState,
-    SystemApiImpl, SystemStateAccessorDirect,
+    system_api_empty::SystemApiEmpty, ModificationTracking, StaticSystemState, SystemApiImpl,
+    SystemStateAccessorDirect,
 };
 use ic_types::{
     methods::{FuncRef, WasmMethod},
@@ -350,9 +350,6 @@ impl WasmExecutor {
             self.wasm_embedder
                 .create_execution_state(wasm_binary, canister_root, &self.config)?;
 
-        let api_type = ApiType::start();
-        let modification_tracking = api_type.modification_tracking();
-
         let memory_creator = if execution_state.mapped_state.is_some() {
             let mapped_state = Arc::as_ref(execution_state.mapped_state.as_ref().unwrap());
             Some(Arc::new(CowMemoryCreator::new(mapped_state)))
@@ -376,7 +373,7 @@ impl WasmExecutor {
             execution_state.wasm_memory.size,
             memory_creator,
             Some(execution_state.wasm_memory.page_map.clone()),
-            modification_tracking,
+            ModificationTracking::Ignore,
             system_api,
         ) {
             Ok(instance) => instance,

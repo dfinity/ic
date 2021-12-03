@@ -11,13 +11,15 @@
 //!
 //! All of the above objects as well as the functionality provided
 //! towards the controller are found in this module.
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt::{Debug, Formatter};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use ic_canister_sandbox_common::protocol::id::{ExecId, StateId, WasmId};
 use ic_canister_sandbox_common::protocol::sbxsvc::{
-    MemoryDeltaSerialization, MemorySerialization, OpenStateRequest, StateSerialization,
+    CreateExecutionStateSuccessReply, MemoryDeltaSerialization, MemorySerialization,
+    OpenStateRequest, StateSerialization,
 };
 use ic_canister_sandbox_common::{
     controller_service::ControllerService,
@@ -25,6 +27,7 @@ use ic_canister_sandbox_common::{
     protocol::logging::{LogLevel, LogRequest},
 };
 use ic_config::embedders::{Config, PersistenceType};
+use ic_embedders::cow_memory_creator::CowMemoryCreator;
 use ic_embedders::{
     wasm_executor::compute_page_delta,
     wasm_utils::{
@@ -33,11 +36,17 @@ use ic_embedders::{
     },
     WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{HypervisorError, InstanceStats, SystemApi};
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, InstanceStats, SystemApi,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::page_map::PageSerialization;
-use ic_replicated_state::{EmbedderCache, Global, Memory, PageMap};
+use ic_replicated_state::{
+    EmbedderCache, ExecutionState, ExportedFunctions, Global, Memory, NumWasmPages, PageMap,
+};
+use ic_system_api::system_api_empty::SystemApiEmpty;
 use ic_system_api::{ModificationTracking, SystemApiImpl};
+use ic_types::CanisterId;
 use ic_types::{
     methods::{FuncRef, SystemMethod, WasmMethod},
     NumInstructions,
@@ -354,13 +363,16 @@ impl CanisterWasm {
         config.persistence_type = PersistenceType::Sigsegv;
 
         let embedder = Arc::new(WasmtimeEmbedder::new(config.clone(), log));
+        let instrumentation_output = validate_wasm_binary(&wasm, &config)
+            .map_err(HypervisorError::from)
+            .and_then(|_| {
+                instrument(&wasm, &InstructionCostTable::new()).map_err(HypervisorError::from)
+            })
+            .unwrap();
+
         let compilate = Arc::new(
-            validate_wasm_binary(&wasm, &config)
-                .map_err(HypervisorError::from)
-                .and_then(|_| {
-                    instrument(&wasm, &InstructionCostTable::new()).map_err(HypervisorError::from)
-                })
-                .and_then(|output| embedder.compile(PersistenceType::Sigsegv, &output.binary))
+            embedder
+                .compile(PersistenceType::Sigsegv, &instrumentation_output.binary)
                 .unwrap(),
         );
         Self {
@@ -567,6 +579,70 @@ impl SandboxManager {
                 false
             }
         }
+    }
+
+    pub fn create_execution_state(
+        &self,
+        wasm_binary: Vec<u8>,
+        canister_root: PathBuf,
+        canister_id: CanisterId,
+    ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
+        let embedder = WasmtimeEmbedder::new(Config::default(), no_op_logger());
+        let wasm_binary = BinaryEncodedWasm::new(wasm_binary);
+        validate_wasm_binary(&wasm_binary, &Config::default())?;
+        let instrumentation_output = instrument(&wasm_binary, &InstructionCostTable::new())?;
+        let wasm_memory_pages = instrumentation_output.data.as_pages();
+        let execution_state = ExecutionState::new(
+            instrumentation_output.binary.clone(),
+            canister_root,
+            ExportedFunctions::new(instrumentation_output.exported_functions),
+            &wasm_memory_pages,
+        )?;
+
+        let memory_creator = if execution_state.mapped_state.is_some() {
+            let mapped_state = Arc::as_ref(execution_state.mapped_state.as_ref().unwrap());
+            Some(Arc::new(CowMemoryCreator::new(mapped_state)))
+        } else {
+            None
+        };
+
+        let compilate = embedder
+            .compile(PersistenceType::Sigsegv, &instrumentation_output.binary)
+            .unwrap();
+
+        // We are using the wasm instance to initialize the execution state properly.
+        // SystemApi is needed when creating a Wasmtime instance because the Linker
+        // will try to assemble a list of all imports used by the wasm module.
+        //
+        // However, there is no need to initialize a `SystemApiImpl`
+        // as we don't execute any wasm instructions at this point,
+        // so we use an empty SystemApi instead.
+        let system_api = SystemApiEmpty;
+        let mut instance = match embedder.new_instance(
+            canister_id,
+            &compilate,
+            &execution_state.exported_globals,
+            NumWasmPages::from(0),
+            memory_creator,
+            Some(PageMap::default()),
+            ModificationTracking::Ignore,
+            system_api,
+        ) {
+            Ok(instance) => instance,
+            Err((err, _system_api)) => {
+                return Err(err);
+            }
+        };
+
+        Ok(CreateExecutionStateSuccessReply {
+            wasm_memory_pages: wasm_memory_pages
+                .into_iter()
+                .map(|(index, bytes)| PageSerialization { index, bytes })
+                .collect(),
+            wasm_memory_size: instance.heap_size(),
+            exported_globals: instance.get_exported_globals(),
+            exported_functions: BTreeSet::clone(execution_state.exports.as_ref()),
+        })
     }
 }
 

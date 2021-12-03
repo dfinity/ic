@@ -124,6 +124,12 @@ impl ExportedFunctions {
     }
 }
 
+impl std::convert::AsRef<BTreeSet<WasmMethod>> for ExportedFunctions {
+    fn as_ref(&self) -> &BTreeSet<WasmMethod> {
+        &self.0
+    }
+}
+
 impl FromIterator<WasmMethod> for ExportedFunctions {
     fn from_iter<T>(iter: T) -> ExportedFunctions
     where
@@ -380,7 +386,7 @@ impl ExecutionState {
         wasm_binary: BinaryEncodedWasm,
         canister_root: PathBuf,
         exports: ExportedFunctions,
-        wasm_memory_pages: &[(PageIndex, Box<PageBytes>)],
+        wasm_memory_pages: &[(PageIndex, PageBytes)],
     ) -> HypervisorResult<Self> {
         let mut wasm_memory = Memory::default();
         wasm_memory.page_map.update(

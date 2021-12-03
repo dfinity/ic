@@ -70,6 +70,18 @@ impl SandboxService for SandboxServer {
         let result = self.manager.close_execution(req.exec_id);
         rpc::Call::new_resolved(Ok(CloseExecutionReply { success: result }))
     }
+
+    fn create_execution_state(
+        &self,
+        req: CreateExecutionStateRequest,
+    ) -> rpc::Call<CreateExecutionStateReply> {
+        let result = self.manager.create_execution_state(
+            req.wasm_binary,
+            req.canister_root,
+            req.canister_id,
+        );
+        rpc::Call::new_resolved(Ok(CreateExecutionStateReply(result)))
+    }
 }
 
 #[cfg(test)]

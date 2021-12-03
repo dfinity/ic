@@ -13,6 +13,7 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-sys = { path = "../../sys" }
 ic-system-api = { path = "../../system_api" }
 ic-types = { path = "../../types/types" }
+ic-wasm-types = { path = "../../types/wasm_types" }
 libc = "0.2.91"
 nix = "0.23.0"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }

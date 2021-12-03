@@ -43,6 +43,13 @@ impl sandbox_service::SandboxService for DummySandboxService {
     ) -> rpc::Call<sbxsvc::CloseExecutionReply> {
         unimplemented!();
     }
+
+    fn create_execution_state(
+        &self,
+        _req: sbxsvc::CreateExecutionStateRequest,
+    ) -> rpc::Call<sbxsvc::CreateExecutionStateReply> {
+        unimplemented!()
+    }
 }
 
 fn main() {

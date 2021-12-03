@@ -1,6 +1,5 @@
 use crate::QueryExecutionType;
 use ic_canister_sandbox_replica_controller2::sandboxed_execution_controller::SandboxedExecutionController;
-use ic_config::embedders::PersistenceType;
 use ic_config::feature_status::FeatureStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cow_state::{error::CowError, CowMemoryManager};
@@ -16,7 +15,6 @@ use ic_logger::{debug, fatal, ReplicaLogger};
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::EmbedderCache;
 use ic_replicated_state::{
     page_map::allocated_pages_count, CallContextAction, CallOrigin, CanisterState, ExecutionState,
     SchedulerState, SystemState,
@@ -30,7 +28,6 @@ use ic_types::{
     methods::{Callback, FuncRef, SystemMethod, WasmMethod},
     CanisterId, CanisterStatusType, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
 };
-use ic_wasm_types::BinaryEncodedWasm;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
@@ -1049,16 +1046,12 @@ impl Hypervisor {
         canister_root: PathBuf,
         canister_id: CanisterId,
     ) -> HypervisorResult<ExecutionState> {
-        self.wasm_executor
-            .create_execution_state(wasm_binary, canister_root, canister_id)
-    }
-
-    pub fn compile(
-        &self,
-        wasm_binary: &BinaryEncodedWasm,
-        persistence_type: PersistenceType,
-    ) -> HypervisorResult<EmbedderCache> {
-        self.wasm_executor.compile(wasm_binary, persistence_type)
+        if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
+            sandbox_executor.create_execution_state(wasm_binary, canister_root, canister_id)
+        } else {
+            self.wasm_executor
+                .create_execution_state(wasm_binary, canister_root, canister_id)
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

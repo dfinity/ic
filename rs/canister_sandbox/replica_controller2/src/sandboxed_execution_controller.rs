@@ -5,16 +5,19 @@ use ic_canister_sandbox_common::protocol::sbxsvc::{
 };
 use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_embedders::{WasmExecutionInput, WasmExecutionOutput};
+use ic_interfaces::execution_environment::HypervisorResult;
 use ic_logger::ReplicaLogger;
 use ic_replicated_state::canister_state::execution_state::{
     SandboxExecutionState, SandboxExecutionStateHandle, SandboxExecutionStateOwner,
     SandboxExecutionStateSynchronization, WasmBinary,
 };
 use ic_replicated_state::page_map::PageAllocatorDelta;
-use ic_replicated_state::{EmbedderCache, ExecutionState, Memory, PageIndex};
+use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageIndex};
 use ic_system_api::{StaticSystemState, SystemStateAccessorDirect};
 use ic_types::CanisterId;
+use ic_wasm_types::BinaryEncodedWasm;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, Mutex,
@@ -286,6 +289,38 @@ impl SandboxedExecutionController {
             execution_state,
             instance_stats: exec_output.instance_stats,
         }
+    }
+
+    pub fn create_execution_state(
+        &self,
+        wasm_binary: Vec<u8>,
+        canister_root: PathBuf,
+        canister_id: CanisterId,
+    ) -> HypervisorResult<ExecutionState> {
+        let sandbox_process = self.get_sandbox_process(&canister_id);
+        let reply = sandbox_process
+            .sandbox_service
+            .create_execution_state(protocol::sbxsvc::CreateExecutionStateRequest {
+                wasm_binary: wasm_binary.clone(),
+                canister_root: canister_root.clone(),
+                canister_id,
+            })
+            .sync()
+            .unwrap()
+            .0?;
+        let mut execution_state = ExecutionState::new(
+            BinaryEncodedWasm::new(wasm_binary),
+            canister_root,
+            ExportedFunctions::new(reply.exported_functions),
+            &reply
+                .wasm_memory_pages
+                .into_iter()
+                .map(|page| (page.index, page.bytes))
+                .collect::<Vec<_>>(),
+        )?;
+        execution_state.wasm_memory.size = reply.wasm_memory_size;
+        execution_state.exported_globals = reply.exported_globals;
+        Ok(execution_state)
     }
 
     pub fn compile_count_for_testing(&self) -> u64 {
