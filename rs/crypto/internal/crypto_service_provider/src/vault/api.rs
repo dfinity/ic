@@ -103,6 +103,7 @@ pub trait CspVault:
     + NiDkgCspVault
     + IDkgProtocolCspVault
     + SecretKeyStoreCspVault
+    + TlsHandshakeCspVault
 {
 }
 // Blanket implementation of `CspVault` for all types that fulfill the
@@ -114,6 +115,7 @@ impl<T> CspVault for T where
         + NiDkgCspVault
         + IDkgProtocolCspVault
         + SecretKeyStoreCspVault
+        + TlsHandshakeCspVault
 {
 }
 
@@ -386,7 +388,7 @@ pub trait TlsHandshakeCspVault: Send + Sync {
     /// The method takes the full message as an argument (rather than
     /// just message digest) to be consistent with
     /// `BasicSignatureCspVault::sign()`-method.
-    fn sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError>;
+    fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError>;
 }
 
 /// Operations of `CspVault` related to I-DKG (cf. `IDkgProtocolCspClient`).
