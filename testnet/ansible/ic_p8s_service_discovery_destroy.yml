@@ -56,13 +56,6 @@
         path: "/opt/dfinity/ic-p8s-service-discovery-{{ ic }}"
         state: absent
 
-    - name: Purge the systemd service file.
-      vars:
-        ic: "{{ inventory_file | dirname | basename }}"
-      file:
-        path: "/etc/systemd-mutable/system/dfinity-p8s-service-discovery-{{ ic }}.service"
-        state: absent
-
     - name: Systemd daemon reload.
       systemd:
         daemon_reload: yes
