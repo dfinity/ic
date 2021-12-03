@@ -24,6 +24,14 @@ fn main() {
 
         let subcmd = &args.subcmd;
         let target_height = args.replay_until_height;
+        if let Some(h) = target_height {
+            let question = format!("The checkpoint created at height {} ", h)
+                + "cannot be used for deterministic state computation if it is not a CUP height.\n"
+                + "Continue?";
+            if !ic_replay::consent_given(&question) {
+                return;
+            }
+        }
 
         if let Some(SubCommand::RestoreFromBackup(cmd)) = subcmd {
             rt.block_on(async {

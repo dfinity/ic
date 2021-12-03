@@ -840,7 +840,6 @@ fn write_records_to_local_store(
 }
 
 fn delete_folders_if_consent_given(state_path: &Path, registry_path: &Path) {
-    use std::io::{stdin, stdout, Write};
     println!("Since we start with the genesis height, it's recommended to delete the following directories:");
     [registry_path, state_path].iter().for_each(|v| {
         println!(
@@ -848,18 +847,22 @@ fn delete_folders_if_consent_given(state_path: &Path, registry_path: &Path) {
             v.to_str().expect("Couldn't convert path to string.")
         )
     });
-    print!("Do you want to delete these directories before the replay? [Y/n] ");
+    if consent_given("Do you want to delete these directories before the replay?") {
+        println!("Cleaning up previous state and registry local store...");
+        std::fs::remove_dir_all(state_path).unwrap_or_default();
+        std::fs::remove_dir_all(registry_path).unwrap_or_default();
+    }
+}
+
+/// Prints a question to the user and returns `true`
+/// if the user replied with a yes.
+pub fn consent_given(question: &str) -> bool {
+    use std::io::{stdin, stdout, Write};
+    println!("{} [Y/n] ", question);
     let _ = stdout().flush();
     let mut s = String::new();
     stdin().read_line(&mut s).expect("Couldn't read user input");
-    match s.as_str() {
-        "\n" | "y\n" | "Y\n" => {
-            println!("Cleaning up previous state and registry local store...");
-            std::fs::remove_dir_all(state_path).unwrap_or_default();
-            std::fs::remove_dir_all(registry_path).unwrap_or_default();
-        }
-        _ => {}
-    }
+    matches!(s.as_str(), "\n" | "y\n" | "Y\n")
 }
 
 fn setup_registry(
