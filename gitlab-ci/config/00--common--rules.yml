@@ -171,6 +171,22 @@
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULE_NAME == "run-all-master"'
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH =~ /^rc--/'
 
+.rules-protected-branch-manual:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_REF_PROTECTED == "true"'
+      when: manual
+      allow_failure: true
+
+.rules-dockerfile-base-changes:
+  rules:
+    - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
+    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH !~ /^rc--.*/'
+    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline"'
+      changes:
+        - ic-os/generic-guestos/rootfs/Dockerfile.base
+        - ic-os/guestos/rootfs/Dockerfile.base
+
 .rules-docker-build-all:
   rules:
     - if: '$CI_MERGE_REQUEST_TITLE =~ /\[lessci\]/'

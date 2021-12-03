@@ -11,6 +11,7 @@ include:
 - local: /gitlab-ci/config/41--guest-os-build--generic-guest-os-diskimg.yml
 - local: /gitlab-ci/config/46--guest-os-build--guest-os-diskimg.yml
 - local: /gitlab-ci/config/46--guest-os-build--guest-os-updateimg.yml
+- local: /gitlab-ci/config/46--guest-os-build--base-image.yml
 - local: /gitlab-ci/config/47--guest-os-test--guest-os-e2e-test.yml
 - local: /gitlab-ci/config/48--determinism-test.yml
 - local: /gitlab-ci/config/60--prod-test--spawn-hotfix-pipeline.yml

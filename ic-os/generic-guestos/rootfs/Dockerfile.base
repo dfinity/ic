@@ -7,7 +7,14 @@
 # First build stage:
 # - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
 # - Install and cache upstream packages from built-in Ubuntu repositories
+
+# NOTE! If you edit this file, you will need to perform the following
+# operations to get your changes deployed.
 #
+# 1. Get your MR approved and merged into master
+# 2. On the next hourly master pipeline, click the "deploy-guest-os-baseimg" job
+# 3. Note the sha256 and update the sha256 reference in the neighboring Dockerfiles.
+
 FROM ubuntu:20.04
 
 ENV SOURCE_DATE_EPOCH=0
@@ -45,7 +52,7 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     python python3-dev \
     rsync \
     sudo \
-    systemd systemd-sysv systemd-journal-gatewayd \
+    systemd systemd-sysv systemd-journal-remote \
     udev \
     usbutils \
     vim \
