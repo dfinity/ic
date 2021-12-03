@@ -20,7 +20,6 @@ use tower::{BoxError, Service};
 // The IC API version reported on status requests.
 const IC_API_VERSION: &str = "0.18.0";
 
-#[derive(Clone)]
 pub(crate) struct StatusService {
     log: ReplicaLogger,
     config: Config,
