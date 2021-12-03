@@ -863,13 +863,15 @@ mod tests {
     use ic_interfaces::ecdsa::MutableEcdsaPool;
     use ic_interfaces::time_source::TimeSource;
     use ic_test_utilities::consensus::fake::*;
+    use ic_test_utilities::crypto::{
+        dummy_idkg_dealing_for_tests, dummy_idkg_transcript_id_for_tests,
+    };
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_test_utilities::with_test_replica_logger;
     use ic_test_utilities::FastForwardTimeSource;
     use ic_types::consensus::MultiSignatureShare;
     use ic_types::crypto::canister_threshold_sig::idkg::{
-        IDkgDealers, IDkgDealing, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptOperation,
-        IDkgTranscriptParams,
+        IDkgDealers, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
     };
     use ic_types::crypto::AlgorithmId;
     use ic_types::{Height, RegistryVersion};
@@ -954,7 +956,7 @@ mod tests {
             requested_height: Height::from(10),
             dealer_id,
             transcript_id,
-            dealing: IDkgDealing::dummy_for_tests(),
+            dealing: dummy_idkg_dealing_for_tests(),
         }
     }
 
@@ -1067,10 +1069,10 @@ mod tests {
     #[test]
     fn test_action() {
         let (id_1, id_2, id_3, id_4) = (
-            IDkgTranscriptId(1),
-            IDkgTranscriptId(2),
-            IDkgTranscriptId(3),
-            IDkgTranscriptId(4),
+            dummy_idkg_transcript_id_for_tests(1),
+            dummy_idkg_transcript_id_for_tests(2),
+            dummy_idkg_transcript_id_for_tests(3),
+            dummy_idkg_transcript_id_for_tests(4),
         );
 
         // The finalized block requests transcripts 1, 2, 3
@@ -1092,11 +1094,19 @@ mod tests {
 
         // Messages for transcripts not being currently requested
         assert_eq!(
-            Action::action(&block_reader, Height::from(100), &IDkgTranscriptId(234)),
+            Action::action(
+                &block_reader,
+                Height::from(100),
+                &dummy_idkg_transcript_id_for_tests(234)
+            ),
             Action::Drop
         );
         assert_eq!(
-            Action::action(&block_reader, Height::from(10), &IDkgTranscriptId(234)),
+            Action::action(
+                &block_reader,
+                Height::from(10),
+                &dummy_idkg_transcript_id_for_tests(234)
+            ),
             Action::Drop
         );
 
@@ -1122,11 +1132,11 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3, id_4, id_5) = (
-                    IDkgTranscriptId(1),
-                    IDkgTranscriptId(2),
-                    IDkgTranscriptId(3),
-                    IDkgTranscriptId(4),
-                    IDkgTranscriptId(5),
+                    dummy_idkg_transcript_id_for_tests(1),
+                    dummy_idkg_transcript_id_for_tests(2),
+                    dummy_idkg_transcript_id_for_tests(3),
+                    dummy_idkg_transcript_id_for_tests(4),
+                    dummy_idkg_transcript_id_for_tests(5),
                 );
 
                 // Set up the ECDSA pool. Pool has dealings for transcripts 1, 2, 3.
@@ -1165,7 +1175,10 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
-                let (id_1, id_2) = (IDkgTranscriptId(1), IDkgTranscriptId(2));
+                let (id_1, id_2) = (
+                    dummy_idkg_transcript_id_for_tests(1),
+                    dummy_idkg_transcript_id_for_tests(2),
+                );
 
                 // transcript 1 has NODE_1 as a dealer
                 let t1 = create_transcript_param(id_1, &[NODE_1], &[NODE_1]);
@@ -1193,10 +1206,10 @@ mod tests {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3, id_4) = (
-                    IDkgTranscriptId(1),
-                    IDkgTranscriptId(2),
-                    IDkgTranscriptId(3),
-                    IDkgTranscriptId(4),
+                    dummy_idkg_transcript_id_for_tests(1),
+                    dummy_idkg_transcript_id_for_tests(2),
+                    dummy_idkg_transcript_id_for_tests(3),
+                    dummy_idkg_transcript_id_for_tests(4),
                 );
 
                 // Set up the transcript creation request
@@ -1265,7 +1278,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
-                let id_2 = IDkgTranscriptId(2);
+                let id_2 = dummy_idkg_transcript_id_for_tests(2);
 
                 // Set up the ECDSA pool
                 // Validated pool has: {transcript 2, dealer = NODE_2}
@@ -1304,7 +1317,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
-                let id_2 = IDkgTranscriptId(2);
+                let id_2 = dummy_idkg_transcript_id_for_tests(2);
 
                 // Set up the ECDSA pool
                 // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100}
@@ -1361,7 +1374,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
-                let id_2 = IDkgTranscriptId(2);
+                let id_2 = dummy_idkg_transcript_id_for_tests(2);
 
                 // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100}
                 let mut dealing = create_dealing(id_2, NODE_2);
@@ -1391,7 +1404,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
-                let id = IDkgTranscriptId(1);
+                let id = dummy_idkg_transcript_id_for_tests(1);
 
                 // We haven't sent support yet, and we are in the receiver list
                 let dealing = create_dealing(id, NODE_2);
@@ -1426,7 +1439,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
-                let id = IDkgTranscriptId(1);
+                let id = dummy_idkg_transcript_id_for_tests(1);
 
                 // We are not in the receiver list for the transcript
                 let dealing = create_dealing(id, NODE_2);
@@ -1449,7 +1462,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
-                let id = IDkgTranscriptId(1);
+                let id = dummy_idkg_transcript_id_for_tests(1);
 
                 let dealing = create_dealing(id, NODE_2);
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
@@ -1473,10 +1486,10 @@ mod tests {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3, id_4) = (
-                    IDkgTranscriptId(1),
-                    IDkgTranscriptId(2),
-                    IDkgTranscriptId(3),
-                    IDkgTranscriptId(4),
+                    dummy_idkg_transcript_id_for_tests(1),
+                    dummy_idkg_transcript_id_for_tests(2),
+                    dummy_idkg_transcript_id_for_tests(3),
+                    dummy_idkg_transcript_id_for_tests(4),
                 );
 
                 // Set up the transcript creation request
@@ -1552,7 +1565,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
-                let id = IDkgTranscriptId(1);
+                let id = dummy_idkg_transcript_id_for_tests(1);
 
                 // Set up the ECDSA pool
                 // Validated pool has: support {transcript 2, dealer = NODE_2, signer = NODE_3}
@@ -1598,7 +1611,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
-                let id = IDkgTranscriptId(1);
+                let id = dummy_idkg_transcript_id_for_tests(1);
 
                 // Set up the ECDSA pool
                 // Unvalidated pool has: support {transcript 2, dealer = NODE_2, signer =
@@ -1663,7 +1676,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
-                let id = IDkgTranscriptId(1);
+                let id = dummy_idkg_transcript_id_for_tests(1);
 
                 // Unvalidated pool has: support {transcript 2, dealer = NODE_2, signer =
                 // NODE_3}
@@ -1695,9 +1708,9 @@ mod tests {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3) = (
-                    IDkgTranscriptId(1),
-                    IDkgTranscriptId(2),
-                    IDkgTranscriptId(3),
+                    dummy_idkg_transcript_id_for_tests(1),
+                    dummy_idkg_transcript_id_for_tests(2),
+                    dummy_idkg_transcript_id_for_tests(3),
                 );
 
                 // Dealing 1: height <= current_height, in_progress (not purged)
@@ -1745,9 +1758,9 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
-                    IDkgTranscriptId(1),
-                    IDkgTranscriptId(2),
-                    IDkgTranscriptId(3),
+                    dummy_idkg_transcript_id_for_tests(1),
+                    dummy_idkg_transcript_id_for_tests(2),
+                    dummy_idkg_transcript_id_for_tests(3),
                 );
 
                 // Dealing 1: height <= current_height, in_progress (not purged)
@@ -1788,9 +1801,9 @@ mod tests {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3) = (
-                    IDkgTranscriptId(1),
-                    IDkgTranscriptId(2),
-                    IDkgTranscriptId(3),
+                    dummy_idkg_transcript_id_for_tests(1),
+                    dummy_idkg_transcript_id_for_tests(2),
+                    dummy_idkg_transcript_id_for_tests(3),
                 );
 
                 // Support 1: height <= current_height, in_progress (not purged)
@@ -1838,9 +1851,9 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) = create_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
-                    IDkgTranscriptId(1),
-                    IDkgTranscriptId(2),
-                    IDkgTranscriptId(3),
+                    dummy_idkg_transcript_id_for_tests(1),
+                    dummy_idkg_transcript_id_for_tests(2),
+                    dummy_idkg_transcript_id_for_tests(3),
                 );
 
                 // Support 1: height <= current_height, in_progress (not purged)

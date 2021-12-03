@@ -3,11 +3,13 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, run_idkg_and_create_transcript, CanisterThresholdSigTestEnvironment,
 };
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
-use ic_test_utilities::crypto::{crypto_for, temp_crypto_components_for};
+use ic_test_utilities::crypto::{
+    crypto_for, dummy_idkg_transcript_id_for_tests, temp_crypto_components_for,
+};
 use ic_test_utilities::types::ids::NODE_1;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgOpening,
-    IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+    IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams,
     IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
 };
 use ic_types::crypto::canister_threshold_sig::{
@@ -168,7 +170,7 @@ fn should_run_verify_dealing_public() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     let params = fake_params_for(NODE_1);
     let dealing = IDkgDealing {
-        transcript_id: IDkgTranscriptId(1),
+        transcript_id: dummy_idkg_transcript_id_for_tests(1),
         dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
         internal_dealing_raw: vec![],
     };
@@ -181,7 +183,7 @@ fn should_run_verify_dealing_private() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     let params = fake_params_for(NODE_1);
     let dealing = IDkgDealing {
-        transcript_id: IDkgTranscriptId(1),
+        transcript_id: dummy_idkg_transcript_id_for_tests(1),
         dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
         internal_dealing_raw: vec![],
     };
@@ -301,7 +303,7 @@ fn fake_params_for(node_id: NodeId) -> IDkgTranscriptParams {
     nodes.insert(node_id);
 
     IDkgTranscriptParams::new(
-        IDkgTranscriptId(1),
+        dummy_idkg_transcript_id_for_tests(1),
         IDkgDealers::new(nodes.clone()).unwrap(),
         IDkgReceivers::new(nodes).unwrap(),
         RegistryVersion::from(1),
@@ -316,7 +318,7 @@ fn fake_transcript() -> IDkgTranscript {
     nodes.insert(NODE_1);
 
     IDkgTranscript {
-        transcript_id: IDkgTranscriptId(1),
+        transcript_id: dummy_idkg_transcript_id_for_tests(1),
         receivers: IDkgReceivers::new(nodes).unwrap(),
         registry_version: RegistryVersion::from(1),
         verified_dealings: BTreeMap::new(),
@@ -328,7 +330,7 @@ fn fake_transcript() -> IDkgTranscript {
 
 fn fake_complaint() -> IDkgComplaint {
     IDkgComplaint {
-        transcript_id: IDkgTranscriptId(1),
+        transcript_id: dummy_idkg_transcript_id_for_tests(1),
         dealer_id: NODE_1,
         internal_complaint_raw: vec![],
     }
@@ -336,7 +338,7 @@ fn fake_complaint() -> IDkgComplaint {
 
 fn fake_opening() -> IDkgOpening {
     IDkgOpening {
-        transcript_id: IDkgTranscriptId(1),
+        transcript_id: dummy_idkg_transcript_id_for_tests(1),
         dealer_id: NODE_1,
         internal_opening_raw: vec![],
     }
@@ -346,10 +348,10 @@ fn fake_key_and_presig_quadruple() -> (IDkgTranscript, PreSignatureQuadruple) {
     let mut nodes = BTreeSet::new();
     nodes.insert(NODE_1);
 
-    let original_kappa_id = IDkgTranscriptId(1);
-    let kappa_id = IDkgTranscriptId(2);
-    let lambda_id = IDkgTranscriptId(3);
-    let key_id = IDkgTranscriptId(4);
+    let original_kappa_id = dummy_idkg_transcript_id_for_tests(1);
+    let kappa_id = dummy_idkg_transcript_id_for_tests(2);
+    let lambda_id = dummy_idkg_transcript_id_for_tests(3);
+    let key_id = dummy_idkg_transcript_id_for_tests(4);
 
     let fake_kappa = IDkgTranscript {
         transcript_id: kappa_id,
@@ -374,7 +376,7 @@ fn fake_key_and_presig_quadruple() -> (IDkgTranscript, PreSignatureQuadruple) {
     };
 
     let fake_kappa_times_lambda = IDkgTranscript {
-        transcript_id: IDkgTranscriptId(40),
+        transcript_id: dummy_idkg_transcript_id_for_tests(40),
         receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
         verified_dealings: BTreeMap::new(),
@@ -391,14 +393,14 @@ fn fake_key_and_presig_quadruple() -> (IDkgTranscript, PreSignatureQuadruple) {
         registry_version: RegistryVersion::from(1),
         verified_dealings: BTreeMap::new(),
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-            IDkgTranscriptId(50),
+            dummy_idkg_transcript_id_for_tests(50),
         )),
         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
         internal_transcript_raw: vec![],
     };
 
     let fake_key_times_lambda = IDkgTranscript {
-        transcript_id: IDkgTranscriptId(50),
+        transcript_id: dummy_idkg_transcript_id_for_tests(50),
         receivers: IDkgReceivers::new(nodes).unwrap(),
         registry_version: RegistryVersion::from(1),
         verified_dealings: BTreeMap::new(),

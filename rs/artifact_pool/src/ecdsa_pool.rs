@@ -259,14 +259,17 @@ mod tests {
     use super::*;
     use ic_interfaces::time_source::TimeSource;
     use ic_metrics::MetricsRegistry;
+    use ic_test_utilities::crypto::{
+        dummy_idkg_dealing_for_tests, dummy_idkg_transcript_id_for_tests,
+    };
     use ic_test_utilities::types::ids::NODE_1;
     use ic_test_utilities::FastForwardTimeSource;
-    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptId};
+    use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::Height;
     use std::collections::BTreeSet;
 
     fn create_ecdsa_dealing(transcript_id: IDkgTranscriptId) -> EcdsaDealing {
-        let dealing = IDkgDealing::dummy_for_tests();
+        let dealing = dummy_idkg_dealing_for_tests();
         EcdsaDealing {
             requested_height: Height::from(10),
             dealer_id: NODE_1,
@@ -346,14 +349,14 @@ mod tests {
         let mut object_pool: EcdsaObjectPool<EcdsaDealing> = EcdsaObjectPool::new(metrics);
 
         let key_1 = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(100));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
             let key = ecdsa_dealing.key();
             assert!(object_pool.get_object(&key).is_none());
             object_pool.insert_object(ecdsa_dealing);
             key
         };
         let key_2 = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
             assert!(object_pool.get_object(&key).is_none());
             object_pool.insert_object(ecdsa_dealing);
@@ -392,7 +395,7 @@ mod tests {
         let time_source = FastForwardTimeSource::new();
 
         let msg_id_1 = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(100));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
             let key = ecdsa_dealing.key();
             let msg_id = EcdsaDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
@@ -403,7 +406,7 @@ mod tests {
             msg_id
         };
         let msg_id_2 = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
             let msg_id = EcdsaDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
@@ -426,7 +429,7 @@ mod tests {
         let time_source = FastForwardTimeSource::new();
 
         let msg_id_1 = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(100));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
             let key = ecdsa_dealing.key();
             let msg_id = EcdsaDealing::key_to_outer_hash(&key);
             let change_set = vec![EcdsaChangeAction::AddToValidated(
@@ -436,7 +439,7 @@ mod tests {
             msg_id
         };
         let msg_id_2 = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
             let msg_id = EcdsaDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
@@ -459,7 +462,7 @@ mod tests {
         let time_source = FastForwardTimeSource::new();
 
         let msg_id_1 = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(100));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
             let key = ecdsa_dealing.key();
             let msg_id = EcdsaDealing::key_to_outer_hash(&key);
             let change_set = vec![EcdsaChangeAction::AddToValidated(
@@ -469,7 +472,7 @@ mod tests {
             msg_id
         };
         let msg_id_2 = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
             let msg_id = EcdsaDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
@@ -494,7 +497,7 @@ mod tests {
         let time_source = FastForwardTimeSource::new();
 
         let msg_id_1 = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(100));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
             let key = ecdsa_dealing.key();
             let msg_id = EcdsaDealing::key_to_outer_hash(&key);
             let change_set = vec![EcdsaChangeAction::AddToValidated(
@@ -504,7 +507,7 @@ mod tests {
             msg_id
         };
         let msg_id_2 = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
             let msg_id = EcdsaDealing::key_to_outer_hash(&key);
             let change_set = vec![EcdsaChangeAction::AddToValidated(
@@ -514,7 +517,7 @@ mod tests {
             msg_id
         };
         let msg_id_3 = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(300));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(300));
             let key = ecdsa_dealing.key();
             let msg_id = EcdsaDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
@@ -546,7 +549,7 @@ mod tests {
         let time_source = FastForwardTimeSource::new();
 
         let msg_id = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
             let msg_id = EcdsaDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
@@ -571,7 +574,7 @@ mod tests {
         let time_source = FastForwardTimeSource::new();
 
         let msg_id = {
-            let ecdsa_dealing = create_ecdsa_dealing(IDkgTranscriptId(200));
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
             let msg_id = EcdsaDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
