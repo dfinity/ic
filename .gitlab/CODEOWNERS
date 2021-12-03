@@ -144,7 +144,6 @@
 /rs/types/types/src/p2p.rs           @dfinity-lab/teams/networking-team
 /rs/universal_canister/              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
 /rs/validator/                       @dfinity-lab/teams/execution-owners
-/rs/wasm_utils/                      @dfinity-lab/teams/execution-owners
 
 [Nix]
 *.nix @dfinity-lab/teams/idx
