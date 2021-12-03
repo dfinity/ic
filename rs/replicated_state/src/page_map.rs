@@ -149,6 +149,11 @@ impl PageDelta {
             })?;
         Ok(())
     }
+
+    /// Returns true if the page delta contains no pages.
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl<I> From<I> for PageDelta
@@ -496,6 +501,19 @@ impl PageMap {
                 .max()
                 .unwrap_or(pages_in_checkpoint),
         )
+    }
+
+    /// Switches the checkpoint file of the current page map to the one provided
+    /// by the given page map. Page deltas of both page maps must be empty.
+    pub fn switch_to_checkpoint(&mut self, checkpointed_page_map: &PageMap) {
+        self.checkpoint = checkpointed_page_map.checkpoint.clone();
+        // Also copy the base height to reflect the height of the new checkpoint.
+        self.base_height = checkpointed_page_map.base_height;
+        assert!(self.page_delta.is_empty());
+        assert!(self.round_delta.is_empty());
+        assert!(checkpointed_page_map.page_delta.is_empty());
+        assert!(checkpointed_page_map.round_delta.is_empty());
+        // Keep the page allocators of the states disjoint.
     }
 
     // Modifies this page map by applying the given page delta to it.
