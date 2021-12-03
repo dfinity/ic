@@ -3,6 +3,7 @@
 set -euo pipefail
 
 DISK_DIR=${1:-/ic/artifacts/icos}
+CANISTERS_DIR=${2:-/ic/artifacts/canisters}
 ROOT_DIR=$(git rev-parse --show-toplevel)
 cd $ROOT_DIR
 sudo setfacl -m u:$(id -u):rwx -R $ROOT_DIR
@@ -67,7 +68,7 @@ export BUILD_EXTRA_ARGS=${BUILD_EXTRA_ARGS:-""}
 echo -e "\n${HEADER_BINARIES}\n"
 gitlab-ci/src/job_scripts/cargo-build-release-linux-native.sh
 echo -e "\n${HEADER_CANISTERS}\n"
-gitlab-ci/tools/cargo-build-canisters
+gitlab-ci/tools/cargo-build-canisters "${CANISTERS_DIR}"
 echo -e "\n${HEADER_ICOS}\n"
 gitlab-ci/src/job_scripts/guest-os-updateimg.sh "${DISK_DIR}"
 
