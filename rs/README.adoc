@@ -19,3 +19,18 @@ To do that simplest of steps:
 
 https://docs.dfinity.systems/cargo-docs[Latest cargo docs].
 
+= Best practices
+
+== Introducing new System API:
+
+1. Specify the new API in the https://github.com/dfinity-lab/ic-ref[Internet Computer Reference] repository and consult the canister os team for any help or review needed.
+2. Ensure that the acceptance test suite is updated: https://github.com/dfinity/ic-hs[Internet Computer Haskell Toolkit]. Inform *@team-testing* of the work required.
+3. Ensure that the Rust CDK is updated: https://github.com/dfinity/cdk-rs[Rust Canister Development Kit]. Inform *@eng-sdk* of the work required.
+4. Implement the new API: `system_api` and `embedders` crates.
+5. Unit tests: functionality and wasm validation code tests.
+6. Update the implementation of the universal canister and replace `universal_canister.wasm` with the newly generated one.
+7. Update the interface of the rust canister and add tests.
+8. Add system tests that cover the new API.
+9. Once the *Public Spec* is released and implementation merged in the master branch, https://github.com/dfinity/motoko[Motoko] can be updated to use the new API. For more details, please contact *@eng-motoko*.
+
+
