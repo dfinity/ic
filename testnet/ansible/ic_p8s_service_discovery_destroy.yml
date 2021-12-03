@@ -34,13 +34,12 @@
         enabled: no
       when: service_status.stat.exists
 
-    - name: "Disable dfinity-p8s-service-discovery-{{ ic }} service"
+    - name: "Remove the service discovery systemd service file"
       vars:
         ic: "{{ inventory_file | dirname | basename }}"
-      service:
-        name: "dfinity-p8s-service-discovery-{{ ic }}.service"
+      file:
+        path: "/etc/systemd-mutable/system/dfinity-p8s-service-discovery-{{ ic }}.service"
         state: absent
-        enabled: no
       when: service_status.stat.exists
 
     - name: Remove stale replica scrape config for {{ ic }}
