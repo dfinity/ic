@@ -3,7 +3,7 @@ use crate::RegistryVersion;
 use std::collections::BTreeSet;
 
 use super::super::*;
-use crate::{NodeId, PrincipalId};
+use crate::{NodeId, PrincipalId, SubnetId};
 
 #[test]
 fn should_create_random() {
@@ -482,5 +482,9 @@ fn transcript_id_generator() -> IDkgTranscriptId {
     let id_pos = TRANSCRIPT_ID_POSITION.load(Ordering::SeqCst);
     TRANSCRIPT_ID_POSITION.fetch_add(1, Ordering::SeqCst);
 
-    IDkgTranscriptId(transcript_ids[id_pos])
+    let id = transcript_ids[id_pos];
+    const SUBNET_ID: u64 = 314159;
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(SUBNET_ID));
+
+    IDkgTranscriptId::new(subnet, id)
 }

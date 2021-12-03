@@ -161,6 +161,35 @@ pub fn empty_ni_dkg_transcripts() -> std::collections::BTreeMap<NiDkgTag, NiDkgT
     empty_ni_dkg_transcripts_with_committee(vec![node_test_id(0)], 0)
 }
 
+pub fn dummy_idkg_transcript_id_for_tests(id: usize) -> IDkgTranscriptId {
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(314159));
+    IDkgTranscriptId::new(subnet, id)
+}
+
+pub fn dummy_idkg_dealing_for_tests() -> IDkgDealing {
+    IDkgDealing {
+        transcript_id: IDkgTranscriptId::new(SubnetId::from(PrincipalId::new_subnet_test_id(1)), 1),
+        dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
+        internal_dealing_raw: vec![],
+    }
+}
+
+pub fn dummy_idkg_complaint_for_tests() -> IDkgComplaint {
+    IDkgComplaint {
+        transcript_id: IDkgTranscriptId::new(SubnetId::from(PrincipalId::new_subnet_test_id(1)), 1),
+        dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
+        internal_complaint_raw: vec![],
+    }
+}
+
+pub fn dummy_idkg_opening_for_tests() -> IDkgOpening {
+    IDkgOpening {
+        transcript_id: IDkgTranscriptId::new(SubnetId::from(PrincipalId::new_subnet_test_id(1)), 1),
+        dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
+        internal_opening_raw: vec![],
+    }
+}
+
 #[derive(Default)]
 pub struct CryptoReturningOk {
     // Here we store the ids of all transcripts, which were loaded by the crypto components.
@@ -370,7 +399,7 @@ impl IDkgProtocol for CryptoReturningOk {
         &self,
         _params: &IDkgTranscriptParams,
     ) -> Result<IDkgDealing, IDkgCreateDealingError> {
-        Ok(IDkgDealing::dummy_for_tests())
+        Ok(dummy_idkg_dealing_for_tests())
     }
 
     fn verify_dealing_public(
@@ -403,7 +432,7 @@ impl IDkgProtocol for CryptoReturningOk {
             .collect();
 
         Ok(IDkgTranscript {
-            transcript_id: IDkgTranscriptId(0),
+            transcript_id: dummy_idkg_transcript_id_for_tests(0),
             receivers: IDkgReceivers::new(receivers).unwrap(),
             registry_version: RegistryVersion::from(1),
             verified_dealings: dealings_by_index,
@@ -443,7 +472,7 @@ impl IDkgProtocol for CryptoReturningOk {
         _transcript: &IDkgTranscript,
         _complaint: &IDkgComplaint,
     ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
-        Ok(IDkgOpening::dummy_for_tests())
+        Ok(dummy_idkg_opening_for_tests())
     }
 
     fn verify_opening(

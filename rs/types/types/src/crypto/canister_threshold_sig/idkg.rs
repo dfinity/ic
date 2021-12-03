@@ -7,6 +7,7 @@ use crate::crypto::canister_threshold_sig::error::{
 };
 use crate::crypto::{AlgorithmId, CombinedMultiSigOf};
 use crate::{NodeId, NumberOfNodes, RegistryVersion};
+use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -20,12 +21,30 @@ mod tests;
 
 /// Unique identifier for an IDkg transcript.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
-pub struct IDkgTranscriptId(pub usize);
+pub struct IDkgTranscriptId {
+    id: usize,
+    subnet: SubnetId,
+}
 
 impl IDkgTranscriptId {
+    pub fn new(subnet: SubnetId, id: usize) -> Self {
+        Self { id, subnet }
+    }
+
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    pub fn subnet(&self) -> &SubnetId {
+        &self.subnet
+    }
+
     /// Return the next value of this id.
-    pub fn increment(self) -> IDkgTranscriptId {
-        IDkgTranscriptId(self.0 + 1)
+    pub fn increment(self) -> Self {
+        Self {
+            id: self.id + 1,
+            subnet: self.subnet,
+        }
     }
 }
 
@@ -319,7 +338,11 @@ impl IDkgTranscriptParams {
 
     /// Contextual data needed for the creation of a dealing.
     pub fn context_data(&self) -> Vec<u8> {
-        context_data(self.transcript_id)
+        context_data(
+            &self.transcript_id,
+            self.registry_version,
+            self.algorithm_id,
+        )
     }
 
     fn ensure_collection_threshold_satisfied(&self) -> Result<(), IDkgParamsValidationError> {
@@ -440,6 +463,7 @@ pub struct IDkgTranscript {
 /// Identifier for the way an IDkg transcript is created.
 ///
 /// If earlier transcripts are used in the creation, these are included here.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum IDkgTranscriptOperation {
     Random,
@@ -474,7 +498,11 @@ impl IDkgTranscript {
 
     /// Contextual data needed for the creation of a dealing.
     pub fn context_data(&self) -> Vec<u8> {
-        context_data(self.transcript_id)
+        context_data(
+            &self.transcript_id,
+            self.registry_version,
+            self.algorithm_id,
+        )
     }
 }
 
@@ -484,18 +512,6 @@ pub struct IDkgDealing {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,
     pub internal_dealing_raw: Vec<u8>,
-}
-
-impl IDkgDealing {
-    pub fn dummy_for_tests() -> Self {
-        use crate::PrincipalId;
-
-        Self {
-            transcript_id: IDkgTranscriptId(1),
-            dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
-            internal_dealing_raw: vec![],
-        }
-    }
 }
 
 /// Dealing of an IDkg sharing, along with a combined multisignature.
@@ -522,16 +538,6 @@ impl IDkgComplaint {
     pub fn serialize(&self) -> Vec<u8> {
         unimplemented!("IDkgComplaint::serialize");
     }
-
-    pub fn dummy_for_tests() -> Self {
-        use crate::PrincipalId;
-
-        Self {
-            transcript_id: IDkgTranscriptId(1),
-            dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
-            internal_complaint_raw: vec![],
-        }
-    }
 }
 
 /// Opening created in response to an IDkgComplaint.
@@ -549,16 +555,6 @@ impl IDkgOpening {
     pub fn serialize(&self) -> Vec<u8> {
         unimplemented!("IDkgOpening::serialize");
     }
-
-    pub fn dummy_for_tests() -> Self {
-        use crate::PrincipalId;
-
-        Self {
-            transcript_id: IDkgTranscriptId(1),
-            dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
-            internal_opening_raw: vec![],
-        }
-    }
 }
 
 fn number_of_nodes_from_usize(number: usize) -> Result<NumberOfNodes, ()> {
@@ -567,7 +563,25 @@ fn number_of_nodes_from_usize(number: usize) -> Result<NumberOfNodes, ()> {
 }
 
 /// Contextual data needed for the creation of a dealing.
-fn context_data(transcript_id: IDkgTranscriptId) -> Vec<u8> {
-    // TODO: Do this correctly (CRP-1266)
-    (transcript_id.0 as u64).to_be_bytes().to_vec()
+///
+/// Returns a byte vector consisting of:
+/// - IDkgTranscriptId::SubnetId, as a byte-string (prefixed with its
+///   64-bit-big-endian-integer length)
+/// - IDkgTranscriptId::id, as a big-endian 64-bit integer
+/// - RegistryVersion, as a big-endian 64-bit integer
+/// - AlgorithmId, as an 8-bit integer value
+fn context_data(
+    transcript_id: &IDkgTranscriptId,
+    registry_version: RegistryVersion,
+    algorithm_id: AlgorithmId,
+) -> Vec<u8> {
+    let mut ret = Vec::with_capacity(8 + transcript_id.subnet().get().as_slice().len() + 8 + 8 + 1);
+
+    ret.extend_from_slice(&(transcript_id.subnet().get().as_slice().len() as u64).to_be_bytes());
+    ret.extend_from_slice(transcript_id.subnet().get().as_slice());
+    ret.extend_from_slice(&(transcript_id.id() as u64).to_be_bytes());
+    ret.extend_from_slice(&(registry_version.get() as u64).to_be_bytes());
+    ret.push(algorithm_id as u8);
+
+    ret
 }

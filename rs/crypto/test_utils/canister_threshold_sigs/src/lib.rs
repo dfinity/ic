@@ -11,7 +11,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
 };
 use ic_types::crypto::{AlgorithmId, KeyPurpose};
-use ic_types::{Height, NodeId, PrincipalId, RegistryVersion};
+use ic_types::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -299,7 +299,12 @@ fn random_registry_version() -> RegistryVersion {
 }
 
 fn random_transcript_id() -> IDkgTranscriptId {
-    IDkgTranscriptId(thread_rng().gen::<usize>())
+    let mut rng = thread_rng();
+
+    let id = rng.gen::<usize>();
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
+
+    IDkgTranscriptId::new(subnet, id)
 }
 
 fn n_random_node_ids(n: usize) -> BTreeSet<NodeId> {
