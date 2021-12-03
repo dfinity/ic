@@ -122,7 +122,7 @@ trap 'echo "SIGINT received, killing all jobs"; jobs -p | xargs -rn1 pkill -P >/
 
 # Wait for the workload generator and scenario process to finish
 wait "$wg_pid" "$scenario_pid"
-cat "$experiment_dir/scenario.log"
+cat "$experiment_dir/scenario.log" || true
 
 endtime="$(<"$wg_endtime_file")"
 wg_status="$(<"$wg_status_file")"
