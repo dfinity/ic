@@ -2,7 +2,7 @@
 
 - name: destroy guests
   shell: |
-    set -exuo pipefail
+    set -euo pipefail
 
     # Destroy (stop) all existing VMs from this deployment running on this node
     VMS=$(virsh list --name)

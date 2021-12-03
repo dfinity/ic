@@ -192,7 +192,7 @@ cd "$REPO_ROOT/testnet/ansible"
 echo "**** Finishing destroy"
 DESTROY_STATUS=0
 wait $DESTROY_PID || DESTROY_STATUS=1
-cat "$DESTROY_OUT"
+cat "$DESTROY_OUT" || true
 if [[ $DESTROY_STATUS -ne 0 ]]; then
     exit $(tail -1 "$DESTROY_OUT" | sed -re "s/.*=\"([0-9]+).*/\1/")
 fi
@@ -227,7 +227,7 @@ if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
     echo "**** Finishing boundary node deployment"
     BOUNDARY_STATUS=0
     wait "$BOUNDARY_PID" || BOUNDARY_STATUS=1
-    cat "$BOUNDARY_OUT"
+    cat "$BOUNDARY_OUT" || true
     if [[ $BOUNDARY_STATUS -ne 0 ]]; then
         exit $(tail -1 "$BOUNDARY_OUT" | sed -re "s/.*=\"([0-9]+).*/\1/")
     fi
