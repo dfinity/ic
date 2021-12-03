@@ -70,7 +70,7 @@
       when: manual
       allow_failure: true  # the pipeline continues running even if the manual job is not run
     - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH == "master"'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH !~ /^rc--.*/'
+    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH =~ /^rc--.*/'
 
 .rules-parent-pipeline-prs-only:
   rules:
@@ -181,7 +181,7 @@
   rules:
     - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
     - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH == "master"'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH !~ /^rc--.*/'
+    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH =~ /^rc--.*/'
     - if: '$CI_PIPELINE_SOURCE == "parent_pipeline"'
       changes:
         - ic-os/generic-guestos/rootfs/Dockerfile.base
