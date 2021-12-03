@@ -20,17 +20,14 @@ pub struct CspServerEd25519SigningKey {
 }
 
 impl CspServerEd25519SigningKey {
-    /// Creates a `CspServerEd25519SigningKey` that uses `tls_csp_server` to
+    /// Creates a `CspServerEd25519SigningKey` that uses `tls_csp_vault` to
     /// create signatures. The `self_cert` is used to derive the key ID of the
     /// private key.
-    pub fn new(
-        self_cert: &TlsPublicKeyCert,
-        tls_csp_server: Arc<dyn TlsHandshakeCspVault>,
-    ) -> Self {
+    pub fn new(self_cert: &TlsPublicKeyCert, tls_csp_vault: Arc<dyn TlsHandshakeCspVault>) -> Self {
         Self {
             signer: CspServerEd25519Signer {
                 key_id: tls_cert_hash_as_key_id(self_cert),
-                tls_csp_server,
+                tls_csp_vault,
             },
         }
     }
@@ -57,14 +54,14 @@ impl rustls::sign::SigningKey for CspServerEd25519SigningKey {
 #[derive(Clone)]
 struct CspServerEd25519Signer {
     key_id: KeyId,
-    tls_csp_server: Arc<dyn TlsHandshakeCspVault>,
+    tls_csp_vault: Arc<dyn TlsHandshakeCspVault>,
 }
 
 impl rustls::sign::Signer for CspServerEd25519Signer {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TLSError> {
         let csp_signature = self
-            .tls_csp_server
-            .sign(message, &self.key_id)
+            .tls_csp_vault
+            .tls_sign(message, &self.key_id)
             .map_err(|e| {
                 TLSError::General(format!(
                     "Failed to create signature during \

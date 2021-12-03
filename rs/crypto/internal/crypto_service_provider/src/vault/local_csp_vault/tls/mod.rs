@@ -34,7 +34,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
         (key_id, x509_pk_cert)
     }
 
-    fn sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
+    fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
         let secret_key: CspSecretKey = self
             .sks_read_lock()
             .get(key_id)

@@ -21,7 +21,7 @@ fn should_produce_same_signature_as_csp_server_if_ed25519_is_chosen() {
     let (key_id, cert) = csp_server.gen_tls_key_pair(NODE_1, NOT_AFTER);
     let msg_to_sign = "some message";
     let expected_sig_bytes = match csp_server
-        .sign(msg_to_sign.as_bytes(), &key_id)
+        .tls_sign(msg_to_sign.as_bytes(), &key_id)
         .expect("failed to sign")
     {
         CspSignature::Ed25519(sig_bytes) => sig_bytes.0.to_vec(),

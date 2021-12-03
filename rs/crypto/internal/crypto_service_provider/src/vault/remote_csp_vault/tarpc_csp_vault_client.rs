@@ -3,10 +3,11 @@ use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError,
-    IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault, SecretKeyStoreCspVault,
-    ThresholdSignatureCspVault,
+    CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault,
+    SecretKeyStoreCspVault, ThresholdSignatureCspVault,
 };
 use crate::vault::remote_csp_vault::TarpcCspVaultClient;
+use crate::TlsHandshakeCspVault;
 use futures::executor::block_on;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
@@ -20,6 +21,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::NodeIndex;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError,
 };
@@ -264,6 +266,17 @@ impl NiDkgCspVault for RemoteCspVault {
                 .retain_threshold_keys_if_present(tarpc::context::current(), active_key_ids),
         )
         .unwrap_or_else(|_| {});
+    }
+}
+
+// TODO(CRP-1252): add the actual implementation.
+impl TlsHandshakeCspVault for RemoteCspVault {
+    fn gen_tls_key_pair(&self, _node: NodeId, _not_after: &str) -> (KeyId, TlsPublicKeyCert) {
+        todo!()
+    }
+
+    fn tls_sign(&self, _message: &[u8], _key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
+        todo!()
     }
 }
 
