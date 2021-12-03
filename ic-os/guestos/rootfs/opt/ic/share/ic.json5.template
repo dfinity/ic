@@ -206,7 +206,7 @@ table ip6 filter {\n\
     icmpv6 type nd-router-advert accept\n\
     icmpv6 type nd-neighbor-solicit accept\n\
     icmpv6 type nd-neighbor-advert accept\n\
-    ip6 saddr $IPV6_PREFIXES ct state { new } tcp dport { 22, 2497, 4100, 8080, 9090, 9091, 9100 } accept\n\
+    ip6 saddr $IPV6_PREFIXES ct state { new } tcp dport { 22, 2497, 4100, 8080, 9090, 9091, 9100, 19531 } accept\n\
   }\n\
 \n\
   chain FORWARD {\n\

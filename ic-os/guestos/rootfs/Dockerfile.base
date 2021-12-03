@@ -42,7 +42,7 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     rsync \
     selinux-policy-default selinux-utils semodule-utils selinux-policy-dev setools \
     sudo \
-    systemd systemd-sysv \
+    systemd systemd-sysv systemd-journal-gatewayd \
     udev \
     usbutils \
     vim \

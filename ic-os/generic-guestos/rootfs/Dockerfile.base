@@ -45,7 +45,7 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     python python3-dev \
     rsync \
     sudo \
-    systemd systemd-sysv \
+    systemd systemd-sysv systemd-journal-gatewayd \
     udev \
     usbutils \
     vim \
