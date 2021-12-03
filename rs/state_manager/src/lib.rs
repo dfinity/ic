@@ -708,32 +708,40 @@ fn strip_page_map_deltas(state: &mut ReplicatedState) {
     }
 }
 
-/// Copy heap and stable memory of the canisters stored in page maps from the
-/// source state to the destination state.
+/// Switches `tip` to the most recent checkpoint file provided by `src`.
 ///
-/// We do this after every checkpoint to release in-memory deltas captured by
-/// page maps and switch to the most recent checkpoint instead.
-///
-/// Precondition: src and dst have exactly the same set of canisters
-fn copy_page_maps(dst: &mut ReplicatedState, src: &ReplicatedState) {
-    for (dst_canister, src_canister) in dst.canisters_iter_mut().zip(src.canisters_iter()) {
+/// Preconditions:
+/// 1) `tip` and `src` mut have exactly the same set of canisters.
+/// 2) The page deltas must be empty in both states.
+/// 3) The memory sizes must match.
+fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
+    for (tip_canister, src_canister) in tip.canisters_iter_mut().zip(src.canisters_iter()) {
         assert_eq!(
-            dst_canister.system_state.canister_id,
+            tip_canister.system_state.canister_id,
             src_canister.system_state.canister_id
         );
         assert_eq!(
-            dst_canister.execution_state.is_some(),
+            tip_canister.execution_state.is_some(),
             src_canister.execution_state.is_some(),
             "execution state of canister {} unexpectedly (dis)appeared after creating a checkpoint",
-            dst_canister.system_state.canister_id
+            tip_canister.system_state.canister_id
         );
-        if let (Some(dst_state), Some(src_state)) = (
-            &mut dst_canister.execution_state,
+        if let (Some(tip_state), Some(src_state)) = (
+            &mut tip_canister.execution_state,
             &src_canister.execution_state,
         ) {
-            dst_state.wasm_memory = src_state.wasm_memory.clone();
-            dst_state.stable_memory = src_state.stable_memory.clone();
-            dst_state.sandbox_state = Arc::clone(&src_state.sandbox_state);
+            tip_state
+                .wasm_memory
+                .page_map
+                .switch_to_checkpoint(&src_state.wasm_memory.page_map);
+            tip_state
+                .stable_memory
+                .page_map
+                .switch_to_checkpoint(&src_state.stable_memory.page_map);
+            assert_eq!(tip_state.wasm_memory.size, src_state.wasm_memory.size);
+            // Reset the sandbox state to force full synchronization on the next message
+            // execution because the checkpoint file of `tip` has changed.
+            tip_state.sandbox_state = SandboxExecutionState::new();
         }
     }
 }
@@ -2186,7 +2194,7 @@ impl StateManager for StateManagerImpl {
                 let elapsed = start.elapsed();
                 match result {
                     Ok(checkpointed_state) => {
-                        copy_page_maps(&mut state, &checkpointed_state);
+                        switch_to_checkpoint(&mut state, &checkpointed_state);
                         info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
                         self.metrics
                             .checkpoint_op_duration
