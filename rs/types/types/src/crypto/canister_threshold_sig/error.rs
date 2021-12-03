@@ -4,6 +4,7 @@ use crate::crypto::{AlgorithmId, CryptoError};
 use crate::registry::RegistryClientError;
 use crate::{NodeId, RegistryVersion};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
+use serde::{Deserialize, Serialize};
 
 macro_rules! impl_display_using_debug {
     ($t:ty) => {
@@ -15,19 +16,19 @@ macro_rules! impl_display_using_debug {
     };
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PresignatureQuadrupleCreationError {
     WrongTypes,
 }
 impl_display_using_debug!(PresignatureQuadrupleCreationError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaSigInputsCreationError {
     NonmatchingTranscriptIds,
 }
 impl_display_using_debug!(ThresholdEcdsaSigInputsCreationError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgParamsValidationError {
     TooManyReceivers { receivers_count: usize },
     TooManyDealers { dealers_count: usize },
@@ -41,15 +42,15 @@ pub enum IDkgParamsValidationError {
 }
 impl_display_using_debug!(IDkgParamsValidationError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaGetPublicKeyError {}
 impl_display_using_debug!(ThresholdEcdsaGetPublicKeyError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgTranscriptParsingError {}
 impl_display_using_debug!(IDkgTranscriptParsingError);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgCreateTranscriptError {
     SerializationError { internal_error: String },
     InternalError { internal_error: String },
@@ -60,15 +61,15 @@ pub enum IDkgCreateTranscriptError {
 }
 impl_display_using_debug!(IDkgCreateTranscriptError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgVerifyTranscriptError {}
 impl_display_using_debug!(IDkgVerifyTranscriptError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgOpenTranscriptError {}
 impl_display_using_debug!(IDkgOpenTranscriptError);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgLoadTranscriptError {
     PublicKeyNotFound {
         node_id: NodeId,
@@ -92,11 +93,11 @@ pub enum IDkgLoadTranscriptError {
 }
 impl_display_using_debug!(IDkgLoadTranscriptError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgLoadTranscriptWithOpeningsError {}
 impl_display_using_debug!(IDkgLoadTranscriptWithOpeningsError);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgCreateDealingError {
     NotADealer {
         node_id: NodeId,
@@ -128,44 +129,44 @@ pub enum IDkgCreateDealingError {
 }
 impl_display_using_debug!(IDkgCreateDealingError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgVerifyDealingPublicError {}
 impl_display_using_debug!(IDkgVerifyDealingPublicError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgVerifyDealingPrivateError {
     NotAReceiver,
 }
 impl_display_using_debug!(IDkgVerifyDealingPrivateError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgComplaintParsingError {}
 impl_display_using_debug!(IDkgComplaintParsingError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgVerifyComplaintError {}
 impl_display_using_debug!(IDkgVerifyComplaintError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgOpeningParsingError {}
 impl_display_using_debug!(IDkgOpeningParsingError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgVerifyOpeningError {}
 impl_display_using_debug!(IDkgVerifyOpeningError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaVerifySigShareError {}
 impl_display_using_debug!(ThresholdEcdsaVerifySigShareError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaSignShareError {}
 impl_display_using_debug!(ThresholdEcdsaSignShareError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaVerifyCombinedSignatureError {}
 impl_display_using_debug!(ThresholdEcdsaVerifyCombinedSignatureError);
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaCombineSigSharesError {}
 impl_display_using_debug!(ThresholdEcdsaCombineSigSharesError);

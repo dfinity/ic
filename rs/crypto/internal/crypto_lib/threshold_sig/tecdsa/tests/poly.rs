@@ -399,3 +399,37 @@ fn poly_point_interpolation_at_zero_fails_with_insufficient_shares() -> Threshol
 
     Ok(())
 }
+
+#[test]
+fn polynomial_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
+    let mut rng = rand::thread_rng();
+
+    for curve in EccCurveType::all() {
+        let constant = EccScalar::random(curve, &mut rng)?;
+        let poly = Polynomial::new(curve, vec![constant])?;
+        let log = format!("{:?}", poly);
+        assert_eq!(
+            format!("Polynomial {{curve: {:?}, coefficients: REDACTED}}", curve),
+            log
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn commitment_opening_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
+    let mut rng = rand::thread_rng();
+
+    for curve in EccCurveType::all() {
+        let scalar = EccScalar::random(curve, &mut rng)?;
+        let opening = CommitmentOpening::Simple(scalar);
+        let log = format!("{:?}", opening);
+        assert_eq!(
+            format!("CommitmentOpening::Simple({:?}(REDACTED))", curve),
+            log
+        );
+    }
+
+    Ok(())
+}

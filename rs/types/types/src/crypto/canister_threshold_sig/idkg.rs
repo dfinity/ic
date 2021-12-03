@@ -215,12 +215,12 @@ impl IDkgDealers {
 /// Parameters used in the creation of IDkg dealings and transcripts.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscriptParams {
-    pub transcript_id: IDkgTranscriptId,
-    pub dealers: IDkgDealers,
-    pub receivers: IDkgReceivers,
-    pub registry_version: RegistryVersion,
-    pub algorithm_id: AlgorithmId,
-    pub operation_type: IDkgTranscriptOperation,
+    transcript_id: IDkgTranscriptId,
+    dealers: IDkgDealers,
+    receivers: IDkgReceivers,
+    registry_version: RegistryVersion,
+    algorithm_id: AlgorithmId,
+    operation_type: IDkgTranscriptOperation,
 }
 
 impl IDkgTranscriptParams {
@@ -265,6 +265,30 @@ impl IDkgTranscriptParams {
         ret.check_consistency_of_input_transcripts()?;
 
         Ok(ret)
+    }
+
+    pub fn transcript_id(&self) -> IDkgTranscriptId {
+        self.transcript_id
+    }
+
+    pub fn dealers(&self) -> &IDkgDealers {
+        &self.dealers
+    }
+
+    pub fn receivers(&self) -> &IDkgReceivers {
+        &self.receivers
+    }
+
+    pub fn registry_version(&self) -> RegistryVersion {
+        self.registry_version
+    }
+
+    pub fn algorithm_id(&self) -> AlgorithmId {
+        self.algorithm_id
+    }
+
+    pub fn operation_type(&self) -> &IDkgTranscriptOperation {
+        &self.operation_type
     }
 
     /// Number of contributions needed to reconstruct a sharing.

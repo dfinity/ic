@@ -1,2 +1,2 @@
-mod dkg;
+mod idkg;
 pub mod mocks;

@@ -1,6 +1,6 @@
 //! Implementations of IDkgProtocol related to dealings
 
-use crate::sign::canister_threshold_sig::dkg::utils::idkg_encryption_keys_from_registry;
+use crate::sign::canister_threshold_sig::idkg::utils::idkg_encryption_keys_from_registry;
 use ic_crypto_internal_csp::api::IDkgProtocolCspClient;
 use ic_interfaces::registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::IDkgCreateDealingError;
@@ -18,17 +18,20 @@ pub fn create_dealing<C: IDkgProtocolCspClient>(
 ) -> Result<IDkgDealing, IDkgCreateDealingError> {
     let self_index = get_dealer_index(self_node_id, params)?;
 
-    let receiver_keys =
-        idkg_encryption_keys_from_registry(&params.receivers, registry, params.registry_version)?;
+    let receiver_keys = idkg_encryption_keys_from_registry(
+        params.receivers(),
+        registry,
+        params.registry_version(),
+    )?;
     let receiver_keys_vec = receiver_keys.iter().map(|(_, k)| *k).collect::<Vec<_>>();
 
-    let csp_operation_type = IDkgTranscriptOperationInternal::try_from(&params.operation_type)
+    let csp_operation_type = IDkgTranscriptOperationInternal::try_from(params.operation_type())
         .map_err(|e| IDkgCreateDealingError::SerializationError {
             internal_error: format!("{:?}", e),
         })?;
 
     let internal_dealing = csp_client.idkg_create_dealing(
-        params.algorithm_id,
+        params.algorithm_id(),
         &params.context_data(),
         self_index,
         params.reconstruction_threshold(),
@@ -44,7 +47,7 @@ pub fn create_dealing<C: IDkgProtocolCspClient>(
             })?;
 
     Ok(IDkgDealing {
-        transcript_id: params.transcript_id,
+        transcript_id: params.transcript_id(),
         dealer_id: *self_node_id,
         internal_dealing_raw,
     })
@@ -58,7 +61,7 @@ fn get_dealer_index(
     params: &IDkgTranscriptParams,
 ) -> Result<NodeIndex, IDkgCreateDealingError> {
     params
-        .dealers
+        .dealers()
         .position(*self_node_id)
         .ok_or(IDkgCreateDealingError::NotADealer {
             node_id: *self_node_id,

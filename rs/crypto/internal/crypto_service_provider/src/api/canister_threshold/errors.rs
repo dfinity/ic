@@ -1,13 +1,15 @@
 //! Errors encountered during CSP canister threshold signature operations.
 use ic_types::crypto::AlgorithmId;
+use serde::{Deserialize, Serialize};
 use tecdsa::ThresholdEcdsaError;
 
 /// Errors encountered during generation of a MEGa encryption key pair.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum CspCreateMEGaKeyError {
     UnsupportedAlgorithm { algorithm_id: AlgorithmId },
     FailedKeyGeneration(ThresholdEcdsaError),
     SerializationError(ThresholdEcdsaError),
+    CspServerError { internal_error: String },
 }
 
 impl std::fmt::Display for CspCreateMEGaKeyError {
@@ -27,6 +29,11 @@ impl std::fmt::Display for CspCreateMEGaKeyError {
                 f,
                 "Error (de)serializing MEGa keypair: Underlying operation failed: {:?}",
                 tecdsa_err
+            ),
+            Self::CspServerError { internal_error } => write!(
+                f,
+                "Error creating MEGa keypair: CSP server operation failed: {:?}",
+                internal_error
             ),
         }
     }

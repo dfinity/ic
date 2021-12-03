@@ -239,6 +239,53 @@ fn invalid_create_dealing_requests() -> Result<(), IdkgCreateDealingInternalErro
     Ok(())
 }
 
+#[test]
+fn secret_shares_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
+    let curve = EccCurveType::K256;
+    let mut rng = rand::thread_rng();
+
+    {
+        let shares = SecretShares::Random;
+        let log = format!("{:?}", shares);
+        assert_eq!("SecretShares::Random", log);
+    }
+
+    {
+        let secret = EccScalar::random(curve, &mut rng)?;
+        let shares = SecretShares::ReshareOfUnmasked(secret);
+        let log = format!("{:?}", shares);
+        assert_eq!(
+            "SecretShares::ReshareOfUnmasked(EccScalar::K256) - REDACTED",
+            log
+        );
+    }
+
+    {
+        let secret = EccScalar::random(curve, &mut rng)?;
+        let mask = EccScalar::random(curve, &mut rng)?;
+        let shares = SecretShares::ReshareOfMasked(secret, mask);
+        let log = format!("{:?}", shares);
+        assert_eq!(
+            "SecretShares::ReshareOfMasked(EccScalar::K256) - REDACTED",
+            log
+        );
+    }
+
+    {
+        let lhs = EccScalar::random(curve, &mut rng)?;
+        let rhs = EccScalar::random(curve, &mut rng)?;
+        let mask = EccScalar::random(curve, &mut rng)?;
+        let shares = SecretShares::UnmaskedTimesMasked(lhs, (rhs, mask));
+        let log = format!("{:?}", shares);
+        assert_eq!(
+            "SecretShares::UnmaskedTimesMasked(EccScalar::K256) - REDACTED",
+            log
+        );
+    }
+
+    Ok(())
+}
+
 fn flip_curve(s: &EccScalar) -> EccScalar {
     let wrong_curve = match s.curve_type() {
         EccCurveType::K256 => EccCurveType::P256,

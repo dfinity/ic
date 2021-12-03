@@ -75,10 +75,10 @@ impl EcdsaPreSignerImpl {
             .filter(|transcript_params| {
                 // Issue a dealing if we are in the dealer list and we haven't
                 //already issued a dealing for this transcript
-                transcript_params.dealers.position(self.node_id).is_some()
+                transcript_params.dealers().position(self.node_id).is_some()
                     && !self.has_dealer_issued_dealing(
                         ecdsa_pool,
-                        &transcript_params.transcript_id,
+                        &transcript_params.transcript_id(),
                         &self.node_id,
                     )
             })
@@ -128,7 +128,7 @@ impl EcdsaPreSignerImpl {
             ) {
                 Action::Process(transcript_params) => {
                     if transcript_params
-                        .dealers
+                        .dealers()
                         .position(dealing.dealer_id)
                         .is_none()
                     {
@@ -180,7 +180,7 @@ impl EcdsaPreSignerImpl {
         // TranscriptId -> TranscriptParams
         let mut trancript_param_map = BTreeMap::new();
         for transcript_params in block_reader.requested_transcripts() {
-            trancript_param_map.insert(transcript_params.transcript_id, transcript_params);
+            trancript_param_map.insert(transcript_params.transcript_id(), transcript_params);
         }
 
         ecdsa_pool
@@ -199,7 +199,7 @@ impl EcdsaPreSignerImpl {
                 // are a receiver for this dealing
                 if let Some(transcript_params) = trancript_param_map.get(&dealing.transcript_id) {
                     transcript_params
-                        .receivers
+                        .receivers()
                         .position(self.node_id)
                         .map(|_| (id, transcript_params, dealing))
                 } else {
@@ -286,7 +286,7 @@ impl EcdsaPreSignerImpl {
             ) {
                 Action::Process(transcript_params) => {
                     if transcript_params
-                        .receivers
+                        .receivers()
                         .position(support.signature.signer)
                         .is_none()
                     {
@@ -345,7 +345,7 @@ impl EcdsaPreSignerImpl {
     ) -> EcdsaChangeSet {
         let mut in_progress = BTreeSet::new();
         for transcript_params in block_reader.requested_transcripts() {
-            in_progress.insert(transcript_params.transcript_id);
+            in_progress.insert(transcript_params.transcript_id());
         }
 
         let mut ret = Vec::new();
@@ -412,7 +412,7 @@ impl EcdsaPreSignerImpl {
             |dealing| {
                 let dealing = EcdsaDealing {
                     requested_height: block_reader.height(),
-                    transcript_id: transcript_params.transcript_id,
+                    transcript_id: transcript_params.transcript_id(),
                     dealer_id: self.node_id,
                     dealing,
                 };
@@ -509,7 +509,7 @@ impl EcdsaPreSignerImpl {
 
         // Generate the multi sig share
         self.crypto
-            .sign(dealing, self.node_id, transcript_params.registry_version)
+            .sign(dealing, self.node_id, transcript_params.registry_version())
             .map_or_else(
                 |error| {
                     debug!(
@@ -546,7 +546,7 @@ impl EcdsaPreSignerImpl {
     ) -> EcdsaChangeSet {
         let dealing = &support.content;
         self.crypto
-            .verify(support, transcript_params.registry_version)
+            .verify(support, transcript_params.registry_version())
             .map_or_else(
                 |error| {
                     self.metrics.pre_sign_errors_inc("verify_dealing_support");
@@ -584,7 +584,7 @@ impl EcdsaPreSignerImpl {
         }
 
         self.crypto
-            .aggregate(signatures, transcript_params.registry_version)
+            .aggregate(signatures, transcript_params.registry_version())
             .map_or_else(
                 |_| {
                     self.metrics
@@ -711,7 +711,7 @@ impl EcdsaPreSigner for EcdsaPreSignerImpl {
         let mut trancript_state_map = BTreeMap::new();
         for transcript_params in block_reader.requested_transcripts() {
             trancript_state_map.insert(
-                transcript_params.transcript_id,
+                transcript_params.transcript_id(),
                 TranscriptState::new(transcript_params),
             );
         }
@@ -794,7 +794,7 @@ impl<'a> Action<'a> {
         }
 
         for transcript_params in block_reader.requested_transcripts() {
-            if *msg_transcript_id == transcript_params.transcript_id {
+            if *msg_transcript_id == transcript_params.transcript_id() {
                 return Action::Process(transcript_params);
             }
         }
@@ -812,7 +812,7 @@ impl<'a> Debug for Action<'a> {
                 write!(
                     f,
                     "Action::Process(): transcript_id = {:?}",
-                    transcript_params.transcript_id
+                    transcript_params.transcript_id()
                 )
             }
             Self::Defer => write!(f, "Action::Defer"),

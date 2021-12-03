@@ -1,4 +1,4 @@
-use crate::api::CspThresholdSignError;
+use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
@@ -11,10 +11,17 @@ use ic_crypto_internal_types::encrypt::forward_secure::{
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
+use ic_types::crypto::canister_threshold_sig::error::{
+    IDkgCreateDealingError, IDkgLoadTranscriptError,
+};
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use tecdsa::{
+    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaPublicKey,
+};
 
 mod tarpc_csp_vault_client;
 mod tarpc_csp_vault_server;
@@ -105,6 +112,31 @@ pub trait TarpcCspVault {
 
     // Corresponds to `SecretKeyStoreCspVault.sks_contains()`.
     async fn sks_contains(key_id: KeyId) -> bool;
+
+    // Corresponds to `IDkgProtocolCspVault.idkg_create_dealing`
+    #[allow(clippy::too_many_arguments)]
+    async fn idkg_create_dealing(
+        algorithm_id: AlgorithmId,
+        context_data: Vec<u8>,
+        dealer_index: NodeIndex,
+        reconstruction_threshold: NumberOfNodes,
+        receiver_keys: Vec<MEGaPublicKey>,
+        transcript_operation: IDkgTranscriptOperationInternal,
+    ) -> Result<IDkgDealingInternal, IDkgCreateDealingError>;
+
+    // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript`
+    async fn idkg_load_transcript(
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
+        context_data: Vec<u8>,
+        receiver_index: NodeIndex,
+        key_id: KeyId,
+        transcript: IDkgTranscriptInternal,
+    ) -> Result<Vec<IDkgComplaintInternal>, IDkgLoadTranscriptError>;
+
+    // Corresponds to `IDkgProtocolCspVault.idkg_gen_mega_key_pair`
+    async fn idkg_gen_mega_key_pair(
+        algorithm_id: AlgorithmId,
+    ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
 }
 
 pub async fn run_csp_vault_server(sks_dir: &Path, socket_path: &Path) {

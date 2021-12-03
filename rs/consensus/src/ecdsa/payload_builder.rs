@@ -20,7 +20,10 @@ use ic_types::{
     crypto::{
         canister_threshold_sig::{
             error::{IDkgParamsValidationError, PresignatureQuadrupleCreationError},
-            idkg::{IDkgDealers, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptOperation},
+            idkg::{
+                IDkgDealers, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptOperation,
+                IDkgTranscriptParams,
+            },
             PreSignatureQuadruple,
         },
         AlgorithmId,
@@ -240,14 +243,14 @@ fn new_random_config(
     *next_unused_transcript_id = transcript_id.increment();
     let dealers = IDkgDealers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
     let receivers = IDkgReceivers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
-    Ok(ecdsa::RandomTranscriptParams {
+    Ok(ecdsa::RandomTranscriptParams::new(
         transcript_id,
         dealers,
         receivers,
-        registry_version: summary_registry_version,
-        algorithm_id: AlgorithmId::EcdsaP256,
-        operation_type: IDkgTranscriptOperation::Random,
-    })
+        summary_registry_version,
+        AlgorithmId::EcdsaP256,
+        IDkgTranscriptOperation::Random,
+    )?)
 }
 
 /// Initialize the next set of quadruples with random configs from the summary
@@ -428,37 +431,51 @@ fn update_quadruples_in_creation(
         if let (Some(kappa_masked), None) =
             (&quadruple.kappa_masked, &quadruple.unmask_kappa_config)
         {
-            let mut unmask_kappa_config = quadruple.kappa_config.clone();
-            unmask_kappa_config.transcript_id = payload.next_unused_transcript_id;
+            let unmask_kappa_config = IDkgTranscriptParams::new(
+                payload.next_unused_transcript_id,
+                quadruple.kappa_config.dealers().clone(),
+                quadruple.kappa_config.receivers().clone(),
+                quadruple.kappa_config.registry_version(),
+                quadruple.kappa_config.algorithm_id(),
+                IDkgTranscriptOperation::ReshareOfMasked(kappa_masked.clone().into_base_type()),
+            )?;
             payload.next_unused_transcript_id = payload.next_unused_transcript_id.increment();
-            unmask_kappa_config.operation_type =
-                IDkgTranscriptOperation::ReshareOfMasked(kappa_masked.clone().into_base_type());
         }
         if let (Some(lambda_masked), None, Some(transcript)) = (
             &quadruple.lambda_masked,
             &quadruple.key_times_lambda_config,
             ecdsa_transcript,
         ) {
-            let mut key_times_lambda_config = quadruple.lambda_config.clone();
-            key_times_lambda_config.transcript_id = payload.next_unused_transcript_id;
+            let key_times_lambda_config = IDkgTranscriptParams::new(
+                payload.next_unused_transcript_id,
+                quadruple.lambda_config.dealers().clone(),
+                quadruple.lambda_config.receivers().clone(),
+                quadruple.lambda_config.registry_version(),
+                quadruple.lambda_config.algorithm_id(),
+                IDkgTranscriptOperation::UnmaskedTimesMasked(
+                    transcript.clone().into_base_type(),
+                    lambda_masked.clone().into_base_type(),
+                ),
+            )?;
             payload.next_unused_transcript_id = payload.next_unused_transcript_id.increment();
-            key_times_lambda_config.operation_type = IDkgTranscriptOperation::UnmaskedTimesMasked(
-                transcript.clone().into_base_type(),
-                lambda_masked.clone().into_base_type(),
-            );
         }
         if let (Some(lambda_masked), Some(kappa_unmasked), None) = (
             &quadruple.lambda_masked,
             &quadruple.kappa_unmasked,
             &quadruple.kappa_times_lambda_config,
         ) {
-            let mut kappa_times_lambda_config = quadruple.lambda_config.clone();
-            kappa_times_lambda_config.transcript_id = payload.next_unused_transcript_id;
+            let kappa_times_lambda_config = IDkgTranscriptParams::new(
+                payload.next_unused_transcript_id,
+                quadruple.lambda_config.dealers().clone(),
+                quadruple.lambda_config.receivers().clone(),
+                quadruple.lambda_config.registry_version(),
+                quadruple.lambda_config.algorithm_id(),
+                IDkgTranscriptOperation::UnmaskedTimesMasked(
+                    kappa_unmasked.clone().into_base_type(),
+                    lambda_masked.clone().into_base_type(),
+                ),
+            )?;
             payload.next_unused_transcript_id = payload.next_unused_transcript_id.increment();
-            kappa_times_lambda_config.operation_type = IDkgTranscriptOperation::UnmaskedTimesMasked(
-                kappa_unmasked.clone().into_base_type(),
-                lambda_masked.clone().into_base_type(),
-            );
         }
         if let (
             Some(kappa_unmasked),

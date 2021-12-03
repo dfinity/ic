@@ -1,5 +1,5 @@
 //! Implementations of IDkgProtocol related to transcripts
-use crate::sign::canister_threshold_sig::dkg::utils::get_mega_pubkey;
+use crate::sign::canister_threshold_sig::idkg::utils::get_mega_pubkey;
 use crate::sign::multi_sig::MultiSigVerifierInternal;
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::api::IDkgProtocolCspClient;
@@ -29,21 +29,23 @@ pub fn create_transcript<C: IDkgProtocolCspClient + CspSigner>(
     ensure_sufficient_dealings_collected(params, dealings)?;
     ensure_dealers_allowed_by_params(params, dealings)?;
     ensure_signers_allowed_by_params(params, dealings)?;
-    verify_multisignatures(csp_client, registry, dealings, params.registry_version)?;
+    verify_multisignatures(csp_client, registry, dealings, params.registry_version())?;
 
     let internal_dealings = internal_dealings_by_index_from_dealings(
         dealings,
-        &params.dealers,
-        &params.operation_type,
+        params.dealers(),
+        params.operation_type(),
     )?;
 
-    let internal_operation_type = IDkgTranscriptOperationInternal::try_from(&params.operation_type)
-        .map_err(|e| IDkgCreateTranscriptError::SerializationError {
-            internal_error: format!("{:?}", e),
+    let internal_operation_type =
+        IDkgTranscriptOperationInternal::try_from(params.operation_type()).map_err(|e| {
+            IDkgCreateTranscriptError::SerializationError {
+                internal_error: format!("{:?}", e),
+            }
         })?;
 
     let internal_transcript = csp_client.idkg_create_transcript(
-        params.algorithm_id,
+        params.algorithm_id(),
         params.reconstruction_threshold(),
         &internal_dealings,
         &internal_operation_type,
@@ -55,18 +57,18 @@ pub fn create_transcript<C: IDkgProtocolCspClient + CspSigner>(
         }
     })?;
 
-    let transcript_type = IDkgTranscriptType::from(&params.operation_type);
+    let transcript_type = IDkgTranscriptType::from(params.operation_type());
 
     let dealings_by_index =
-        dealings_by_index_from_dealings(dealings, &params.dealers, &params.operation_type)?;
+        dealings_by_index_from_dealings(dealings, params.dealers(), params.operation_type())?;
 
     Ok(IDkgTranscript {
-        transcript_id: params.transcript_id,
-        receivers: params.receivers.clone(),
-        registry_version: params.registry_version,
+        transcript_id: params.transcript_id(),
+        receivers: params.receivers().clone(),
+        registry_version: params.registry_version(),
         verified_dealings: dealings_by_index,
         transcript_type,
-        algorithm_id: params.algorithm_id,
+        algorithm_id: params.algorithm_id(),
         internal_transcript_raw,
     })
 }
@@ -132,7 +134,7 @@ fn ensure_dealers_allowed_by_params(
     dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
 ) -> Result<(), IDkgCreateTranscriptError> {
     for id in dealings.keys() {
-        if !params.dealers.get().contains(id) {
+        if !params.dealers().get().contains(id) {
             return Err(IDkgCreateTranscriptError::DealerNotAllowed { node_id: *id });
         }
     }
@@ -146,7 +148,7 @@ fn ensure_signers_allowed_by_params(
 ) -> Result<(), IDkgCreateTranscriptError> {
     for dealing in dealings.values() {
         for signer in &dealing.signers {
-            if !params.receivers.get().contains(signer) {
+            if !params.receivers().get().contains(signer) {
                 return Err(IDkgCreateTranscriptError::SignerNotAllowed { node_id: *signer });
             }
         }

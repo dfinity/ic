@@ -31,7 +31,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "create_dealing",
-            crypto.registry_version => params.registry_version.get(),
+            crypto.registry_version => params.registry_version().get(),
             crypto.dkg_config => format!("{:?}", params),
         );
         debug!(logger;
@@ -97,7 +97,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "create_transcript",
-            crypto.registry_version => params.registry_version.get(),
+            crypto.registry_version => params.registry_version().get(),
             crypto.dkg_config => format!("{:?}", params),
         );
         debug!(logger;
