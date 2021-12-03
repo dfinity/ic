@@ -10,7 +10,6 @@ mod catch_up_package;
 mod common;
 mod dashboard;
 mod metrics;
-mod pass_through;
 mod pprof;
 mod query;
 mod read_state;
@@ -19,21 +18,19 @@ mod submit;
 mod types;
 
 use crate::{
-    body::{BodyReceiverLayer, BodyReceiverService},
+    body::BodyReceiverLayer,
     catch_up_package::CatchUpPackageService,
-    common::{get_cors_headers, make_response},
+    common::{get_cors_headers, map_box_error_to_response},
     dashboard::DashboardService,
     metrics::{
         LABEL_REQUEST_TYPE, LABEL_STATUS, LABEL_TYPE, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS,
     },
-    pass_through::PassThroughLayer,
     query::QueryService,
     read_state::ReadStateService,
     status::StatusService,
     submit::CallService,
     types::*,
 };
-use http::request::Parts;
 use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
 use ic_base_thread::ObservableCountingSemaphore;
 use ic_config::http_handler::Config;
@@ -52,10 +49,7 @@ use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{NodeTopology, ReplicatedState};
 use ic_types::{
-    canonical_error::{
-        internal_error, invalid_argument_error, resource_exhausted_error, unimplemented_error,
-        unknown_error, CanonicalError,
-    },
+    canonical_error::{invalid_argument_error, unknown_error, CanonicalError},
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, CertificateDelegation, HttpReadState, HttpReadStateContent, HttpReadStateResponse,
@@ -77,8 +71,8 @@ use tokio::{
     time::{timeout, Instant},
 };
 use tower::{
-    load_shed::error::Overloaded, service_fn, steer::Steer, util::BoxService, BoxError,
-    ServiceBuilder, ServiceExt,
+    load_shed::LoadShed, service_fn, util::BoxService, BoxError, Service, ServiceBuilder,
+    ServiceExt,
 };
 
 // Constants defining the limits of the HttpHandler.
@@ -139,19 +133,21 @@ const UNKNOWN_LABEL: &str = "unknown";
 #[derive(Clone)]
 struct HttpHandler {
     log: ReplicaLogger,
+    config: Config,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
-    registry_client: Arc<dyn RegistryClient>,
+    subnet_type: SubnetType,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    registry_client: Arc<dyn RegistryClient>,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
 
-    // All handler services receive Body as input.
-    call_service: BodyReceiverService<CallService>,
-    query_service: BodyReceiverService<QueryService>,
-    read_state_service: BodyReceiverService<ReadStateService>,
-    status_service: StatusService,
-    dashboard_service: DashboardService,
-    catch_up_package_service: BodyReceiverService<CatchUpPackageService>,
+    // External services  wrapped by tower::Buffer. It is safe to be
+    // cloned and passed to a single-threaded context.
+    query_execution_service: QueryExecutionService,
+    ingress_sender: IngressIngestionService,
+    ingress_filter: IngressFilterService,
+
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     #[allow(dead_code)]
     backup_spool_path: Option<PathBuf>,
     malicious_flags: MaliciousFlags,
@@ -271,23 +267,24 @@ pub async fn start_server(
     let listen_addr = config.listen_addr;
     let port_file_path = config.port_file_path.clone();
 
-    let http_handler = HttpHandler::new(
+    let http_handler = HttpHandler {
+        log: log.clone(),
         config,
-        metrics.clone(),
-        registry_client,
         subnet_id,
-        subnet_type,
         nns_subnet_id,
-        log.clone(),
-        ingress_filter,
-        ingress_sender,
-        query_execution_service,
+        subnet_type,
         state_reader,
-        ingress_verifier,
+        registry_client,
+        validator: ingress_verifier,
+        query_execution_service,
+        ingress_sender,
+        ingress_filter,
         consensus_pool_cache,
         backup_spool_path,
         malicious_flags,
-    );
+        delegation_from_nns: Arc::new(RwLock::new(None)),
+        health_status: Arc::new(RwLock::new(ReplicaHealthStatus::Starting)),
+    };
 
     info!(log, "Starting HTTP server...");
 
@@ -407,116 +404,19 @@ pub async fn start_server(
     }
 }
 
-impl HttpHandler {
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        config: Config,
-        metrics: HttpHandlerMetrics,
-        registry_client: Arc<dyn RegistryClient>,
-        subnet_id: SubnetId,
-        subnet_type: SubnetType,
-        nns_subnet_id: SubnetId,
-        log: ReplicaLogger,
-        ingress_filter: IngressFilterService,
-        ingress_sender: IngressIngestionService,
-        query_execution_service: QueryExecutionService,
-        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        validator: Arc<dyn IngressSigVerifier + Send + Sync>,
-        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-        backup_spool_path: Option<PathBuf>,
-        malicious_flags: MaliciousFlags,
-    ) -> Self {
-        let body_receiver =
-            BodyReceiverLayer::new(MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES);
-
-        let health_status = Arc::new(RwLock::new(ReplicaHealthStatus::Starting));
-        let delegation_from_nns = Arc::new(RwLock::new(None));
-        let query_service =
-            ServiceBuilder::new()
-                .layer(body_receiver.clone())
-                .service(QueryService::new(
-                    log.clone(),
-                    metrics.clone(),
-                    Arc::clone(&health_status),
-                    Arc::clone(&delegation_from_nns),
-                    Arc::clone(&validator),
-                    Arc::clone(&registry_client),
-                    query_execution_service,
-                    malicious_flags.clone(),
-                ));
-        let status_service = StatusService::new(
-            log.clone(),
-            config.clone(),
-            nns_subnet_id,
-            Arc::clone(&state_reader),
-            Arc::clone(&health_status),
-        );
-        let dashboard_service =
-            DashboardService::new(config, subnet_type, Arc::clone(&state_reader));
-        let catch_up_package_service =
-            ServiceBuilder::new()
-                .layer(body_receiver.clone())
-                .service(CatchUpPackageService::new(
-                    metrics.clone(),
-                    consensus_pool_cache,
-                ));
-        let read_state_service =
-            ServiceBuilder::new()
-                .layer(body_receiver.clone())
-                .service(ReadStateService::new(
-                    log.clone(),
-                    metrics.clone(),
-                    Arc::clone(&health_status),
-                    Arc::clone(&delegation_from_nns),
-                    Arc::clone(&state_reader),
-                    Arc::clone(&validator),
-                    Arc::clone(&registry_client),
-                    malicious_flags.clone(),
-                ));
-        let call_service = ServiceBuilder::new()
-            .layer(body_receiver)
-            .service(CallService::new(
-                log.clone(),
-                metrics,
-                subnet_id,
-                Arc::clone(&registry_client),
-                Arc::clone(&validator),
-                ingress_sender,
-                ingress_filter,
-                malicious_flags.clone(),
-            ));
-        Self {
-            log,
-            subnet_id,
-            nns_subnet_id,
-            registry_client,
-            state_reader,
-            validator,
-            call_service,
-            query_service,
-            read_state_service,
-            status_service,
-            dashboard_service,
-            catch_up_package_service,
-            backup_spool_path,
-            malicious_flags,
-            delegation_from_nns,
-            health_status,
-        }
-    }
-}
-
 fn create_main_service(
     metrics: HttpHandlerMetrics,
     http_handler: HttpHandler,
     app_layer: AppLayer,
 ) -> BoxService<Request<Body>, Response<Body>, CanonicalError> {
     let metrics_for_map_request = metrics.clone();
-    let metrics_for_map_result = metrics.clone();
-    let route_service = make_steer(metrics, http_handler, app_layer);
+    let route_service = service_fn(move |req: RequestWithTimer| {
+        let metrics = metrics.clone();
+        let http_handler = http_handler.clone();
+        async move { Ok::<_, BoxError>(make_router(metrics, http_handler, app_layer, req).await) }
+    });
     BoxService::new(
         ServiceBuilder::new()
-            .load_shed()
             // Attach a timer as soon as we see a request.
             .map_request(move |request| {
                 // Start recording request duration.
@@ -528,23 +428,6 @@ fn create_main_service(
                 (request, request_timer)
             })
             .service(route_service)
-            .map_result(move |result| match result {
-                Ok(response) => Ok(response),
-                Err(err) => {
-                    let request_timer = HistogramVecTimer::start_timer(
-                        metrics_for_map_result.requests,
-                        &REQUESTS_LABEL_NAMES,
-                        [UNKNOWN_LABEL, UNKNOWN_LABEL, UNKNOWN_LABEL],
-                    );
-                    // We may get an error only when the load shedding kicks in.
-                    let mut canonical_error = internal_error("Unexpected internal error.");
-                    if err.is::<Overloaded>() {
-                        canonical_error =
-                            resource_exhausted_error("Some downstream services are overloaded.");
-                    }
-                    Ok::<_, CanonicalError>((make_response(canonical_error), request_timer))
-                }
-            })
             .map_result(move |result| match result {
                 Ok((response, request_timer)) => {
                     let status = response.status();
@@ -627,201 +510,215 @@ type ResponseWithTimer = (
     HistogramVecTimer<'static, REQUESTS_NUM_LABELS>,
 );
 
-fn make_route_entry_with_body(
+fn set_timer_labels(
+    timer: &mut HistogramVecTimer<'static, REQUESTS_NUM_LABELS>,
     req_type: RequestType,
     api_req_type: ApiReqType,
-    s: BoxService<Body, Response<Body>, BoxError>,
-) -> BoxService<RequestWithTimer, ResponseWithTimer, BoxError> {
-    BoxService::new(
-        ServiceBuilder::new()
-            .map_request(move |(req, mut timer): RequestWithTimer| {
-                timer.set_label(LABEL_TYPE, req_type.as_str());
-                timer.set_label(LABEL_REQUEST_TYPE, api_req_type.as_str());
-                (req, timer)
-            })
-            .layer(PassThroughLayer)
-            .map_request(|req: Request<Body>| req.into_body())
-            .service(s),
-    )
+) {
+    timer.set_label(LABEL_TYPE, req_type.as_str());
+    timer.set_label(LABEL_REQUEST_TYPE, api_req_type.as_str());
 }
 
-fn make_route_entry_with_parts(
-    req_type: RequestType,
-    api_req_type: ApiReqType,
-    s: BoxService<Parts, Response<Body>, BoxError>,
-) -> BoxService<RequestWithTimer, ResponseWithTimer, BoxError> {
-    BoxService::new(
-        ServiceBuilder::new()
-            .map_request(move |(req, mut timer): RequestWithTimer| {
-                timer.set_label(LABEL_TYPE, req_type.as_str());
-                timer.set_label(LABEL_REQUEST_TYPE, api_req_type.as_str());
-                (req, timer)
-            })
-            .layer(PassThroughLayer)
-            .map_request(|req: Request<Body>| req.into_parts().0)
-            .service(s),
-    )
-}
-
-fn make_unimplemented_service() -> BoxService<RequestWithTimer, ResponseWithTimer, BoxError> {
-    BoxService::new(service_fn(
-        |(_unused, timer): RequestWithTimer| async move {
-            Ok::<_, BoxError>((
-                common::make_response(unimplemented_error(&format!(""))),
-                timer,
-            ))
-        },
-    ))
-}
-
-fn make_steer(
+async fn make_router(
     metrics: HttpHandlerMetrics,
     http_handler: HttpHandler,
     app_layer: AppLayer,
-) -> BoxService<RequestWithTimer, ResponseWithTimer, BoxError> {
+    (req, mut timer): RequestWithTimer,
+) -> ResponseWithTimer {
     use http::method::Method;
-    let call = make_route_entry_with_body(
-        RequestType::Submit,
-        ApiReqType::Call,
-        BoxService::new(http_handler.call_service),
+
+    let query_service = BoxService::new(
+        ServiceBuilder::new()
+            .layer(BodyReceiverLayer::default())
+            .service(QueryService::new(
+                http_handler.log.clone(),
+                metrics.clone(),
+                Arc::clone(&http_handler.health_status),
+                Arc::clone(&http_handler.delegation_from_nns),
+                Arc::clone(&http_handler.validator),
+                Arc::clone(&http_handler.registry_client),
+                http_handler.query_execution_service.clone(),
+                http_handler.malicious_flags.clone(),
+            )),
     );
-    let query = make_route_entry_with_body(
-        RequestType::Query,
-        ApiReqType::Query,
-        BoxService::new(http_handler.query_service),
+    let status_service = BoxService::new(StatusService::new(
+        http_handler.log.clone(),
+        http_handler.config.clone(),
+        http_handler.nns_subnet_id,
+        Arc::clone(&http_handler.state_reader),
+        Arc::clone(&http_handler.health_status),
+    ));
+    let dashboard_service = BoxService::new(DashboardService::new(
+        http_handler.config,
+        http_handler.subnet_type,
+        Arc::clone(&http_handler.state_reader),
+    ));
+    let catch_up_package_service = BoxService::new(
+        ServiceBuilder::new()
+            .layer(BodyReceiverLayer::default())
+            .service(CatchUpPackageService::new(
+                metrics.clone(),
+                http_handler.consensus_pool_cache,
+            )),
     );
-    let read_state = make_route_entry_with_body(
-        RequestType::ReadState,
-        ApiReqType::ReadState,
-        BoxService::new(http_handler.read_state_service),
+    let read_state_service = BoxService::new(
+        ServiceBuilder::new()
+            .layer(BodyReceiverLayer::default())
+            .service(ReadStateService::new(
+                http_handler.log.clone(),
+                metrics.clone(),
+                Arc::clone(&http_handler.health_status),
+                Arc::clone(&http_handler.delegation_from_nns),
+                Arc::clone(&http_handler.state_reader),
+                Arc::clone(&http_handler.validator),
+                Arc::clone(&http_handler.registry_client),
+                http_handler.malicious_flags.clone(),
+            )),
     );
-    let catch_up_package = make_route_entry_with_body(
-        RequestType::CatchUpPackage,
-        ApiReqType::CatchUpPackage,
-        BoxService::new(http_handler.catch_up_package_service),
-    );
-    let status = make_route_entry_with_body(
-        RequestType::Status,
-        ApiReqType::Status,
-        BoxService::new(http_handler.status_service),
-    );
-    let dashboard = make_route_entry_with_body(
-        RequestType::Dashboard,
-        ApiReqType::Dashboard,
-        BoxService::new(http_handler.dashboard_service),
-    );
-    let redirect_to_dasboard = make_route_entry_with_body(
-        RequestType::RedirectToDashboard,
-        ApiReqType::RedirectToDashboard,
-        BoxService::new(service_fn(|_empty| async move {
-            Ok::<_, BoxError>(redirect_to_dasboard_response())
-        })),
-    );
-    let options = make_route_entry_with_body(
-        RequestType::Options,
-        ApiReqType::Options,
-        BoxService::new(service_fn(|_empty| async move {
-            Ok::<_, BoxError>(no_content_response())
-        })),
-    );
-    let invalid_argument = make_route_entry_with_body(
-        RequestType::InvalidArgument,
-        ApiReqType::InvalidArgument,
-        BoxService::new(service_fn(|_empty| async move {
-            Ok::<_, BoxError>(common::make_response(invalid_argument_error(&format!(""))))
-        })),
-    );
-    let pprof_home = make_route_entry_with_parts(
-        RequestType::PprofHome,
-        ApiReqType::PprofHome,
-        BoxService::new(service_fn(|_parts: Parts| async move {
-            Ok::<_, BoxError>(pprof::home())
-        })),
-    );
-    let pprof_profile = make_route_entry_with_parts(
-        RequestType::PprofProfile,
-        ApiReqType::PprofProfile,
-        BoxService::new(service_fn(|parts: Parts| async move {
-            Ok::<_, BoxError>(pprof::cpu_profile(parts).await)
-        })),
-    );
-    let pprof_flamegraph = make_route_entry_with_parts(
-        RequestType::PprofFlamegraph,
-        ApiReqType::PprofFlamegraph,
-        BoxService::new(service_fn(|parts: Parts| async move {
-            Ok::<_, BoxError>(pprof::cpu_flamegraph(parts).await)
-        })),
+    let call_service = BoxService::new(
+        ServiceBuilder::new()
+            .layer(BodyReceiverLayer::default())
+            .service(CallService::new(
+                http_handler.log.clone(),
+                metrics.clone(),
+                http_handler.subnet_id,
+                Arc::clone(&http_handler.registry_client),
+                Arc::clone(&http_handler.validator),
+                http_handler.ingress_sender,
+                http_handler.ingress_filter,
+                http_handler.malicious_flags.clone(),
+            )),
     );
 
-    let mut s = vec![];
-    for _i in 0..ApiReqType::ApiCount as usize {
-        s.push(make_unimplemented_service());
-    }
-    s[ApiReqType::Call as usize] = call;
-    s[ApiReqType::Query as usize] = query;
-    s[ApiReqType::ReadState as usize] = read_state;
-    s[ApiReqType::Status as usize] = status;
-    s[ApiReqType::CatchUpPackage as usize] = catch_up_package;
-    s[ApiReqType::Dashboard as usize] = dashboard;
-    s[ApiReqType::RedirectToDashboard as usize] = redirect_to_dasboard;
-    s[ApiReqType::Options as usize] = options;
-    s[ApiReqType::InvalidArgument as usize] = invalid_argument;
-    s[ApiReqType::PprofHome as usize] = pprof_home;
-    s[ApiReqType::PprofProfile as usize] = pprof_profile;
-    s[ApiReqType::PprofFlamegraph as usize] = pprof_flamegraph;
-
-    BoxService::new(Steer::new(
-        s,
-        move |(req, _timer): &RequestWithTimer, _services: &[_]| {
-            metrics
-                .protocol_version_total
-                .with_label_values(&[app_layer.as_str(), &format!("{:?}", req.version())])
-                .inc();
-
-            match *req.method() {
-                Method::POST => {
-                    // Check the content-type header
-                    if !req
-                        .headers()
-                        .get_all(http::header::CONTENT_TYPE)
-                        .iter()
-                        .any(|value| {
-                            if let Ok(v) = value.to_str() {
-                                return v.to_lowercase() == CONTENT_TYPE_CBOR;
-                            }
-                            false
-                        })
-                    {
-                        return ApiReqType::InvalidArgument as usize;
+    let invalid_argument_response = common::make_response(invalid_argument_error(&format!("")));
+    metrics
+        .protocol_version_total
+        .with_label_values(&[app_layer.as_str(), &format!("{:?}", req.version())])
+        .inc();
+    let svc = match *req.method() {
+        Method::POST => {
+            // Check the content-type header
+            if !req
+                .headers()
+                .get_all(http::header::CONTENT_TYPE)
+                .iter()
+                .any(|value| {
+                    if let Ok(v) = value.to_str() {
+                        return v.to_lowercase() == CONTENT_TYPE_CBOR;
                     }
+                    false
+                })
+            {
+                set_timer_labels(
+                    &mut timer,
+                    RequestType::InvalidArgument,
+                    ApiReqType::InvalidArgument,
+                );
+                return (invalid_argument_response, timer);
+            }
 
-                    // Check the path
-                    let path = req.uri().path();
-                    match *path.split('/').collect::<Vec<&str>>().as_slice() {
-                        ["", "api", "v2", "canister", _, "call"] => ApiReqType::Call as usize,
-                        ["", "api", "v2", "canister", _, "query"] => ApiReqType::Query as usize,
-                        ["", "api", "v2", "canister", _, "read_state"] => {
-                            ApiReqType::ReadState as usize
-                        }
-                        ["", "_", "catch_up_package"] => ApiReqType::CatchUpPackage as usize,
-                        _ => ApiReqType::InvalidArgument as usize,
-                    }
+            // Check the path
+            let path = req.uri().path();
+            match *path.split('/').collect::<Vec<&str>>().as_slice() {
+                ["", "api", "v2", "canister", _, "call"] => {
+                    set_timer_labels(&mut timer, RequestType::Submit, ApiReqType::Call);
+                    call_service
                 }
-                Method::GET => match req.uri().path() {
-                    "/api/v2/status" => ApiReqType::Status as usize,
-                    "/" | "/_/" => ApiReqType::RedirectToDashboard as usize,
-                    HTTP_DASHBOARD_URL_PATH => ApiReqType::Dashboard as usize,
-
-                    "/_/pprof" => ApiReqType::PprofHome as usize,
-                    "/_/pprof/profile" => ApiReqType::PprofProfile as usize,
-                    "/_/pprof/flamegraph" => ApiReqType::PprofFlamegraph as usize,
-                    _ => ApiReqType::InvalidArgument as usize,
-                },
-                Method::OPTIONS => ApiReqType::Options as usize,
-                _ => ApiReqType::InvalidArgument as usize,
+                ["", "api", "v2", "canister", _, "query"] => {
+                    set_timer_labels(&mut timer, RequestType::Query, ApiReqType::Query);
+                    query_service
+                }
+                ["", "api", "v2", "canister", _, "read_state"] => {
+                    set_timer_labels(&mut timer, RequestType::ReadState, ApiReqType::ReadState);
+                    read_state_service
+                }
+                ["", "_", "catch_up_package"] => {
+                    set_timer_labels(
+                        &mut timer,
+                        RequestType::CatchUpPackage,
+                        ApiReqType::CatchUpPackage,
+                    );
+                    catch_up_package_service
+                }
+                _ => {
+                    set_timer_labels(
+                        &mut timer,
+                        RequestType::InvalidArgument,
+                        ApiReqType::InvalidArgument,
+                    );
+                    return (invalid_argument_response, timer);
+                }
+            }
+        }
+        Method::GET => match req.uri().path() {
+            "/api/v2/status" => {
+                set_timer_labels(&mut timer, RequestType::Status, ApiReqType::Status);
+                status_service
+            }
+            "/" | "/_/" => {
+                set_timer_labels(
+                    &mut timer,
+                    RequestType::RedirectToDashboard,
+                    ApiReqType::RedirectToDashboard,
+                );
+                return (redirect_to_dasboard_response(), timer);
+            }
+            HTTP_DASHBOARD_URL_PATH => {
+                set_timer_labels(&mut timer, RequestType::Dashboard, ApiReqType::Dashboard);
+                dashboard_service
+            }
+            "/_/pprof" => {
+                set_timer_labels(&mut timer, RequestType::PprofHome, ApiReqType::PprofHome);
+                return (pprof::home(), timer);
+            }
+            "/_/pprof/profile" => {
+                set_timer_labels(
+                    &mut timer,
+                    RequestType::PprofProfile,
+                    ApiReqType::PprofProfile,
+                );
+                return (pprof::cpu_profile(req.into_parts().0).await, timer);
+            }
+            "/_/pprof/flamegraph" => {
+                set_timer_labels(
+                    &mut timer,
+                    RequestType::PprofFlamegraph,
+                    ApiReqType::PprofFlamegraph,
+                );
+                return (pprof::cpu_flamegraph(req.into_parts().0).await, timer);
+            }
+            _ => {
+                set_timer_labels(
+                    &mut timer,
+                    RequestType::InvalidArgument,
+                    ApiReqType::InvalidArgument,
+                );
+                return (invalid_argument_response, timer);
             }
         },
-    ))
+        Method::OPTIONS => {
+            set_timer_labels(&mut timer, RequestType::Options, ApiReqType::Options);
+            return (no_content_response(), timer);
+        }
+        _ => {
+            set_timer_labels(
+                &mut timer,
+                RequestType::InvalidArgument,
+                ApiReqType::InvalidArgument,
+            );
+            return (invalid_argument_response, timer);
+        }
+    };
+    (
+        LoadShed::new(svc)
+            .ready()
+            .await
+            .expect("The load shedder must always be ready.")
+            .call(req.into_body())
+            .await
+            .unwrap_or_else(|err| map_box_error_to_response(err)),
+        timer,
+    )
 }
 
 // Fetches a delegation from the NNS subnet to allow this subnet to issue

@@ -19,7 +19,6 @@ use tower::{BoxError, Service};
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 
-#[derive(Clone)]
 pub(crate) struct DashboardService {
     config: Config,
     subnet_type: SubnetType,

@@ -1,4 +1,4 @@
-use crate::common::make_response;
+use crate::{common::make_response, MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES};
 use futures_util::StreamExt;
 use hyper::{Body, Response};
 use ic_types::canonical_error::{out_of_range_error, unknown_error, CanonicalError};
@@ -7,9 +7,8 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::time::timeout;
-use tower::{BoxError, Layer, Service};
+use tower::{Layer, Service};
 
-#[derive(Clone)]
 pub(crate) struct BodyReceiverLayer {
     max_request_receive_duration: Duration,
     max_request_body_size_bytes: usize,
@@ -24,6 +23,12 @@ impl BodyReceiverLayer {
             max_request_receive_duration,
             max_request_body_size_bytes,
         }
+    }
+}
+
+impl Default for BodyReceiverLayer {
+    fn default() -> Self {
+        BodyReceiverLayer::new(MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES)
     }
 }
 
@@ -94,13 +99,13 @@ async fn receive_body(
     }
 }
 
-impl<S> Service<Body> for BodyReceiverService<S>
+impl<S, E> Service<Body> for BodyReceiverService<S>
 where
     S: Service<
             Vec<u8>,
             Response = Response<Body>,
-            Error = BoxError,
-            Future = Pin<Box<dyn Future<Output = Result<Response<Body>, BoxError>> + Send>>,
+            Error = E,
+            Future = Pin<Box<dyn Future<Output = Result<Response<Body>, E>> + Send>>,
         > + Clone
         + Send
         + 'static,
@@ -152,7 +157,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES};
     use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
     #[tokio::test]

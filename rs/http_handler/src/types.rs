@@ -21,8 +21,6 @@ pub(crate) enum ApiReqType {
     PprofProfile,
     PprofFlamegraph,
     InvalidArgument,
-    // Used as placeholder for the number of http request types.
-    ApiCount,
 }
 
 impl ApiReqType {
@@ -41,7 +39,6 @@ impl ApiReqType {
             PprofHome => "pprof_home",
             PprofProfile => "pprof_profile",
             PprofFlamegraph => "pprof_flamegraph",
-            ApiCount => "api_count",
         }
     }
 }
