@@ -1,7 +1,6 @@
 use crate::crypto::ErrorReplication;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgParamsValidationError, IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
-    PresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
@@ -125,80 +124,6 @@ impl ErrorReplication for DkgCreateTranscriptError {
             }
             DkgCreateTranscriptError::MalformedResharingTranscriptInConfig(_) => {
                 // true, coefficients remain malformed when retrying
-                true
-            }
-        }
-    }
-}
-
-impl ErrorReplication for PresignatureQuadrupleCreationError {
-    fn is_replicated(&self) -> bool {
-        // The match below is intentionally explicit on all possible values,
-        // to avoid defaults, which might be error-prone.
-        // Upon addition of any new error this match has to be updated.
-        match self {
-            PresignatureQuadrupleCreationError::WrongTypes => {
-                // Logic error. Everyone is using the wrong types.
-                true
-            }
-        }
-    }
-}
-
-impl ErrorReplication for ThresholdEcdsaSigInputsCreationError {
-    fn is_replicated(&self) -> bool {
-        // The match below is intentionally explicit on all possible values,
-        // to avoid defaults, which might be error-prone.
-        // Upon addition of any new error this match has to be updated.
-        match self {
-            ThresholdEcdsaSigInputsCreationError::NonmatchingTranscriptIds => {
-                // Logic error. Everyone is using the wrong transcripts.
-                true
-            }
-        }
-    }
-}
-
-impl ErrorReplication for IDkgParamsValidationError {
-    fn is_replicated(&self) -> bool {
-        // The match below is intentionally explicit on all possible values,
-        // to avoid defaults, which might be error-prone.
-        // Upon addition of any new error this match has to be updated.
-        match self {
-            IDkgParamsValidationError::TooManyReceivers { .. } => {
-                // Everyone's using bad inputs
-                true
-            }
-            IDkgParamsValidationError::TooManyDealers { .. } => {
-                // Everyone's using bad inputs
-                true
-            }
-            IDkgParamsValidationError::UnsatisfiedVerificationThreshold { .. } => {
-                // Everyone agreed on an insufficient batch
-                true
-            }
-            IDkgParamsValidationError::UnsatisfiedCollectionThreshold { .. } => {
-                // Everyone agreed on an insufficient batch
-                true
-            }
-            IDkgParamsValidationError::ReceiversEmpty => {
-                // Everyone's using bad inputs
-                true
-            }
-            IDkgParamsValidationError::DealersEmpty => {
-                // Everyone's using bad inputs
-                true
-            }
-            IDkgParamsValidationError::UnsupportedAlgorithmId { .. } => {
-                // Everyone's using bad inputs
-                true
-            }
-            IDkgParamsValidationError::WrongTypeForOriginalTranscript => {
-                // Everyone's using bad inputs
-                true
-            }
-            IDkgParamsValidationError::DealersNotContainedInPreviousReceivers => {
-                // Everyone agreed on an incorrect batch
                 true
             }
         }
