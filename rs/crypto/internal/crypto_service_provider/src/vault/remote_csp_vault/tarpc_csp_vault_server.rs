@@ -4,12 +4,12 @@ use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError,
-    IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault, SecretKeyStoreCspVault,
-    ThresholdSignatureCspVault,
+    CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault,
+    NiDkgCspVault, SecretKeyStoreCspVault, ThresholdSignatureCspVault,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::remote_csp_vault::TarpcCspVault;
-use crate::{CANISTER_SKS_DATA_FILENAME, SKS_DATA_FILENAME};
+use crate::{TlsHandshakeCspVault, CANISTER_SKS_DATA_FILENAME, SKS_DATA_FILENAME};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
@@ -22,6 +22,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::NodeIndex;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::new_logger;
 use ic_logger::replica_logger::no_op_logger;
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -195,6 +196,25 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
     // SecretKeyStoreCspVault-methods.
     async fn sks_contains(self, _: context::Context, key_id: KeyId) -> bool {
         self.local_csp_vault.sks_contains(&key_id)
+    }
+
+    // 'TlsHandshakeCspVault'-methods.
+    async fn gen_tls_key_pair(
+        self,
+        _: context::Context,
+        node: NodeId,
+        not_after: String,
+    ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError> {
+        self.local_csp_vault.gen_tls_key_pair(node, &not_after)
+    }
+
+    async fn tls_sign(
+        self,
+        _: context::Context,
+        message: Vec<u8>,
+        key_id: KeyId,
+    ) -> Result<CspSignature, CspTlsSignError> {
+        self.local_csp_vault.tls_sign(&*message, &key_id)
     }
 
     // `IDkgProtocolCspVault`-methods.

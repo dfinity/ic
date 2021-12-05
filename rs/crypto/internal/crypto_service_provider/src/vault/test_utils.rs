@@ -1,4 +1,5 @@
 pub(crate) mod ni_dkg;
+pub(crate) mod tls;
 
 use crate::api::{CspSigner, CspThresholdSignError, ThresholdSignatureCspClient};
 use crate::keygen::public_key_hash_as_key_id;

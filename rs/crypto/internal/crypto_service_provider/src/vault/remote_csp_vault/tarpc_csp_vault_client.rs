@@ -3,8 +3,8 @@ use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError,
-    CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault,
-    SecretKeyStoreCspVault, ThresholdSignatureCspVault,
+    CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault,
+    NiDkgCspVault, SecretKeyStoreCspVault, ThresholdSignatureCspVault,
 };
 use crate::vault::remote_csp_vault::TarpcCspVaultClient;
 use crate::TlsHandshakeCspVault;
@@ -269,14 +269,25 @@ impl NiDkgCspVault for RemoteCspVault {
     }
 }
 
-// TODO(CRP-1252): add the actual implementation.
 impl TlsHandshakeCspVault for RemoteCspVault {
-    fn gen_tls_key_pair(&self, _node: NodeId, _not_after: &str) -> (KeyId, TlsPublicKeyCert) {
-        todo!()
+    fn gen_tls_key_pair(
+        &self,
+        node: NodeId,
+        not_after: &str,
+    ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError> {
+        block_on(self.tarpc_csp_client.gen_tls_key_pair(
+            tarpc::context::current(),
+            node,
+            not_after.to_string(),
+        ))?
     }
 
-    fn tls_sign(&self, _message: &[u8], _key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
-        todo!()
+    fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
+        block_on(self.tarpc_csp_client.tls_sign(
+            tarpc::context::current(),
+            message.to_vec(),
+            *key_id,
+        ))?
     }
 }
 
