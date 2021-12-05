@@ -27,6 +27,8 @@ Maximum number of queries not be below yyy queries per second with less than 20%
 Suggested success criteria (Updates):
 Maximum number of queries not be below xxx queries per second with less than 20% failure and a maximum latency of 10000ms
 """
+import time
+
 import experiment
 import gflags
 
@@ -72,6 +74,95 @@ class Experiment1(experiment.Experiment):
             arguments=arguments,
             duration=duration,
         )
+
+    def run_iterations(self, datapoints=None):
+        """Exercise the experiment with specified iterations."""
+        if datapoints is None:
+            datapoints = []
+
+        self.start_experiment()
+
+        run = True
+        iteration = 0
+        rps_max = 0
+        rps_max_in = None
+        num_succ_per_iteration = []
+        rps = []
+        failure_rate = 0.0
+        t_median = 0.0
+
+        while run:
+
+            load_total = datapoints[iteration]
+            iteration += 1
+
+            rps.append(load_total)
+            print(f"🚀 Testing with load: {load_total} and updates={self.use_updates}")
+
+            t_start = int(time.time())
+            (
+                failure_rate,
+                t_median,
+                t_average,
+                t_max,
+                t_min,
+                total_requests,
+                num_success,
+                num_failure,
+            ) = super().run_experiment(
+                {
+                    "load_total": load_total,
+                    "duration": FLAGS.iter_duration,
+                }
+            )
+
+            num_succ_per_iteration.append(num_success)
+
+            print(f"🚀  ... failure rate for {load_total} rps was {failure_rate} median latency is {t_median}")
+
+            duration = int(time.time()) - t_start
+
+            if len(datapoints) == 1:
+                run = False
+            else:
+                max_t_median = FLAGS.update_max_t_median if self.use_updates else FLAGS.max_t_median
+                if failure_rate < FLAGS.max_failure_rate and t_median < max_t_median:
+                    if num_success / duration > rps_max:
+                        rps_max = num_success / duration
+                        rps_max_in = load_total
+
+                run = (
+                    failure_rate < FLAGS.stop_failure_rate
+                    and t_median < FLAGS.stop_t_median
+                    and iteration < len(datapoints)
+                )
+
+            # Write summary file in each iteration including experiment specific data.
+            self.write_summary_file(
+                "system-baseline-experiment",
+                {
+                    "total_requests": total_requests,
+                    "rps": rps,
+                    "rps_max": rps_max,
+                    "rps_max_in": rps_max_in,
+                    "num_succ_per_iteration": num_succ_per_iteration,
+                    "success_rate": "{:.2f}".format((num_success / total_requests) * 100),
+                    "failure_rate": "{:.2f}".format(failure_rate * 100),
+                    "failure_rate_color": "green" if failure_rate < 0.01 else "red",
+                    "t_median": "{:.2f}".format(t_median),
+                    "t_average": "{:.2f}".format(t_average),
+                    "t_max": "{:.2f}".format(t_max),
+                    "t_min": "{:.2f}".format(t_min),
+                },
+                rps,
+                "requests / s",
+                rtype="update" if self.use_updates else "query",
+                state="running" if run else "done",
+            )
+
+            print(f"🚀  ... measured capacity so far is {rps_max}")
+        self.end_experiment()
+        return (failure_rate, t_median, t_average, t_max, t_min, total_requests, num_success, num_failure)
 
 
 if __name__ == "__main__":

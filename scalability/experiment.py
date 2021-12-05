@@ -32,6 +32,7 @@ gflags.DEFINE_integer("wg_subnet", 0, "Subnet in which to run the workload gener
 gflags.DEFINE_boolean("skip_generate_report", False, "Skip generating report after experiment is finished")
 gflags.DEFINE_integer("wg_connections_per_host", 1, "Number of connections to use per workload generator")
 gflags.DEFINE_boolean("should_deploy_ic", False, "Should the IC be deployed on testnet before the experiment.")
+gflags.DEFINE_string("git_revision", "", "Git revision to be deployed to the testnet")
 gflags.DEFINE_string("canister_id", "", "Use given canister ID instead of installing a new canister")
 gflags.DEFINE_string("target_subnet_id", "", "Subnet ID that is running the canister specified by canister_id")
 gflags.DEFINE_string("artifacts_path", "../artifacts/release", "Path to the artifacts directory")
@@ -52,6 +53,7 @@ gflags.DEFINE_string(
     "",
     "Set the second-level output directory. Default is the UNIX timestamp at benchmark start.",
 )
+
 gflags.DEFINE_boolean("simulate_machine_failures", False, "Simulate machine failures while testing.")
 gflags.DEFINE_string("nns_url", "", "Use the following NNS URL instead of getting it from the testnet configuration")
 
@@ -66,44 +68,49 @@ class Color:
     GREEN = "\033[32m"
 
 
-def try_deploy_ic(testnet: str) -> None:
+def try_deploy_ic(testnet: str, revision: str, out_dir: str) -> None:
     """
     Try to deploy IC on the desired testnet.
 
     Args:
     ----
         testnet (str): name of the testnet, e.g. large01.
+        revision (str): git revision hash to be used to deploy.
+        out_dir (str): directory for storing stdout and stderr into files.
 
     """
     # TODO: command paths should be managed better.
     # Get the newest hash (containing disk image) from master.
-    result_stdout = "stdout_log.txt"
-    result_stderr = "stderr_log.txt"
-    with open(result_stderr, "w") as errfile:
-        try:
-            result_newest_revision = subprocess.run(
-                ["../gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh", "origin/master"],
-                stdout=subprocess.PIPE,
-                stderr=errfile,
-            )
-        except Exception as e:
-            print(f"Getting newest revision failed. See {result_stderr} file for details.")
-            errfile.write(str(e))
-            errfile.write(traceback.format_exc())
-            sys.exit(1)
-        if result_newest_revision.returncode != 0:
-            print(f"Getting newest revision failed. See {result_stderr} file for details.")
-            sys.exit(1)
-    hash_revision = result_newest_revision.stdout.decode("utf-8").strip()
+    result_stdout = f"{out_dir}/stdout_log.txt"
+    result_stderr = f"{out_dir}/stderr_log.txt"
+
+    if revision == "":
+        with open(result_stderr, "w") as errfile:
+            try:
+                result_newest_revision = subprocess.run(
+                    ["../gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh", "origin/master"],
+                    stdout=subprocess.PIPE,
+                    stderr=errfile,
+                )
+            except Exception as e:
+                print(f"Getting newest revision failed. See {result_stderr} file for details.")
+                errfile.write(str(e))
+                errfile.write(traceback.format_exc())
+                sys.exit(1)
+            if result_newest_revision.returncode != 0:
+                print(f"Getting newest revision failed. See {result_stderr} file for details.")
+                sys.exit(1)
+        revision = result_newest_revision.stdout.decode("utf-8").strip()
 
     # Start the IC deployment.
     print(
-        f"{Color.RED}Deploying IC on testnet={testnet}. See the intermediate output in {result_stdout}. This can take some minutes ...{Color.END}"
+        f"{Color.RED}Deploying IC revision {revision} on testnet={testnet}. See the intermediate output in {result_stdout}. This can take some minutes ...{Color.END}"
     )
+
     with open(result_stdout, "w") as outfile, open(result_stderr, "w") as errfile:
         try:
             result_deploy_ic = subprocess.run(
-                ["../testnet/tools/icos_deploy.sh", f"{testnet}", "--git-revision", f"{hash_revision}"],
+                ["../testnet/tools/icos_deploy.sh", "--git-revision", f"{revision}", f"{testnet}"],
                 stdout=outfile,
                 stderr=errfile,
             )
@@ -161,9 +168,6 @@ class Experiment:
         testnet = FLAGS.testnet
         wg_testnet = FLAGS.wg_testnet
 
-        if FLAGS.should_deploy_ic:
-            try_deploy_ic(testnet=testnet)
-
         print(
             (
                 f"➡️  Executing experiment against {testnet} subnet {FLAGS.subnet}"
@@ -179,6 +183,7 @@ class Experiment:
         # Otherwise, consensus cannot have progress in those subnets any more.
         # In the long run we probably don't want to run the workload generators on those machines
         # If users overwrite the workload generator via -wg_subnet, we assume they know what they are doing.
+
         print(f"Workload generator machines are: {FLAGS.workload_generator_machines}")
         if (
             len(FLAGS.workload_generator_machines) == 0
@@ -218,7 +223,11 @@ class Experiment:
         self.t_experiment_start = None
         self.iteration = 0
 
-        self.git_hash = ictools.get_ic_version("http://[{}]:8080/api/v2/status".format(self.target_nodes[0]))
+        self.git_hash = (
+            FLAGS.git_revision
+            if FLAGS.git_revision != ""
+            else ictools.get_ic_version("http://[{}]:8080/api/v2/status".format(self.target_nodes[0]))
+        )
         print(f"Running against an IC {self.target_nodes} with git hash: {self.git_hash} from {self.machines}")
 
         self.out_dir_timestamp = int(time.time())
@@ -228,6 +237,9 @@ class Experiment:
         )
         os.makedirs(self.out_dir, 0o755)
         print(f"📂 Storing output in {self.out_dir}")
+
+        if FLAGS.should_deploy_ic:
+            try_deploy_ic(testnet=testnet, revision=FLAGS.git_revision, out_dir=self.out_dir)
 
         self.subnet_id = (
             FLAGS.target_subnet_id

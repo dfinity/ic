@@ -355,6 +355,58 @@ function jq_subnet_load_third_nodes_urls_for_metrics() {
     jq_subnet_load_urls_for_metrics $1 "[_nwise(3)[:2]] | flatten"
 }
 
+NUM_STEPS_MATCHED=0
+function step() {
+    # Runs a named step if the name matches the env var STEPS.
+    # Optional steps are skipped unless STEPS matches the step name exactly.
+    # Requirements:
+    # - Make it clear which commands have a side-effect in the shell
+    #   - Done by running side-effect free commands in a subshell () vs {}.
+    # - Run just some commands
+
+    STEPS_PATTERN="^(${STEPS:-.*})([.].*|$)"
+    ENV_FILE="${results_dir}/env_vars"
+    echo "ENV_FILE=$ENV_FILE"
+
+    if [[ "$1" == "--optional" ]]; then
+        local optional="1"
+        shift 1
+    else
+        local optional=""
+    fi
+    STEP="$1"
+    if [[ "$STEP" =~ $STEPS_PATTERN ]]; then
+        ((NUM_STEPS_MATCHED++))
+        test -n "${DRY_RUN:-}" || printf "\n\n"
+        echo "#$(echo "$1" | tr -cd '.' | tr . '#')${optional:+ (Optional)} $*"
+        test -e "$ENV_FILE" || touch "$ENV_FILE"
+        # shellcheck disable=SC1090
+        source "$ENV_FILE"
+        # Nothing more to do if:
+        #    this is a dry run
+        # OR the step is optional and doesn't match the filter exactly.
+        if test -n "${DRY_RUN:-}" || { test -n "${optional:-}" && [[ "$STEP" != "${STEPS:-}" ]]; }; then
+            : Skipping step "$STEP"
+        else
+            echo "Start: $(date -u)"
+            echo "$STEP	$(date -u)" >>"$results_dir/step_log"
+
+            false
+        fi
+    else
+        true
+    fi
+}
+
+# Function to preserve vars to be used over multiple steps, so that they are still there if the shell is killed.
+setvar() {
+    printf 'export %s="%s"\n' "$1" "$2" >>"$ENV_FILE"
+}
+
+set_verbosity() {
+    test -z "${VERBOSE:-}" || set -x
+}
+
 if [[ -n "${GITLAB_CI:-}" ]]; then
     echo "Set the trap for collecting the deployment logs on exit with error"
     trap 'if [[ $? -ne 0 ]]; then echo -e "\e[0Ksection_start:$(date +%s):error_trap[collapsed=true]\r\e[0KClick here to see details from the test error handler."; timeout 120 $REPO_ROOT/testnet/tools/icos_collect_debug_info.py --deployment-name=$testnet --out-dir=$experiment_dir/debug_info; echo "Destroying the testnet"; timeout 120 "$REPO_ROOT/testnet/tools/icos_destroy.sh" "$testnet"; echo -e "\e[0Ksection_end:$(date +%s):error_trap\r\e[0K"; fi' EXIT
