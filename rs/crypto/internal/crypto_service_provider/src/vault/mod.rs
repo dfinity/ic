@@ -1,7 +1,8 @@
 use crate::api::CspThresholdSignError;
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError,
+    CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError, CspTlsKeygenError,
+    CspTlsSignError,
 };
 use ic_types::crypto::CryptoError;
 
@@ -54,6 +55,22 @@ impl From<tarpc::client::RpcError> for CspBasicSignatureError {
 impl From<tarpc::client::RpcError> for CspBasicSignatureKeygenError {
     fn from(e: tarpc::client::RpcError) -> Self {
         CspBasicSignatureKeygenError::InternalError {
+            internal_error: e.to_string(),
+        }
+    }
+}
+
+impl From<tarpc::client::RpcError> for CspTlsKeygenError {
+    fn from(e: tarpc::client::RpcError) -> Self {
+        CspTlsKeygenError::InternalError {
+            internal_error: e.to_string(),
+        }
+    }
+}
+
+impl From<tarpc::client::RpcError> for CspTlsSignError {
+    fn from(e: tarpc::client::RpcError) -> Self {
+        CspTlsSignError::InternalError {
             internal_error: e.to_string(),
         }
     }

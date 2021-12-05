@@ -2,7 +2,8 @@ use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError,
+    CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError, CspTlsKeygenError,
+    CspTlsSignError,
 };
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -11,6 +12,7 @@ use ic_crypto_internal_types::encrypt::forward_secure::{
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError,
 };
@@ -112,6 +114,15 @@ pub trait TarpcCspVault {
 
     // Corresponds to `SecretKeyStoreCspVault.sks_contains()`.
     async fn sks_contains(key_id: KeyId) -> bool;
+
+    // Corresponds to `TlsHandshakeCspVault.gen_tls_key_pair()`.
+    async fn gen_tls_key_pair(
+        node: NodeId,
+        not_after: String,
+    ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError>;
+
+    // Corresponds to `TlsHandshakeCspVault.tls_sign()`.
+    async fn tls_sign(message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_create_dealing`
     #[allow(clippy::too_many_arguments)]

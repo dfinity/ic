@@ -94,24 +94,16 @@ mod multi_sign {
 
 mod threshold_sig {
     use super::*;
-    use crate::vault::api::CspVault;
     use ic_types::Randomness;
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaChaRng;
-    use std::sync::Arc;
 
     fn test_threshold_sigs(seed: [u8; 32]) {
         let mut rng = ChaChaRng::from_seed(seed);
         let message = rng.gen::<[u8; 32]>();
-        let csp_vault: Arc<dyn CspVault> = {
-            let socket_path = start_new_csp_vault_server();
-            let remote_csp_server =
-                RemoteCspVault::new(&socket_path).expect("Could not create RemoteCspVault");
-            Arc::new(remote_csp_server)
-        };
         test_utils::test_threshold_scheme_with_basic_keygen(
             Randomness::from(rng.gen::<[u8; 32]>()),
-            csp_vault,
+            new_csp_vault(),
             &message,
         );
     }
@@ -208,5 +200,97 @@ mod ni_dkg {
             0,
             new_csp_vault,
         );
+    }
+}
+
+// TODO(CRP-1302): Add TLS tests with custom SKS setup.
+mod tls_keygen {
+    use super::*;
+    use ic_types_test_utils::ids::node_test_id;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_insert_secret_key_into_key_store() {
+        test_utils::tls::should_insert_secret_key_into_key_store(new_csp_vault());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_return_der_encoded_self_signed_certificate() {
+        test_utils::tls::should_return_der_encoded_self_signed_certificate(new_csp_vault());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_set_cert_subject_cn_as_node_id() {
+        test_utils::tls::should_set_cert_subject_cn_as_node_id(new_csp_vault());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_use_stable_node_id_string_representation_as_subject_cn() {
+        test_utils::tls::should_use_stable_node_id_string_representation_as_subject_cn(
+            new_csp_vault(),
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_set_cert_issuer_cn_as_node_id() {
+        test_utils::tls::should_set_cert_issuer_cn_as_node_id(new_csp_vault());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_not_set_cert_subject_alt_name() {
+        test_utils::tls::should_not_set_cert_subject_alt_name(new_csp_vault());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_set_different_serial_numbers_for_multiple_certs() {
+        test_utils::tls::should_set_different_serial_numbers_for_multiple_certs(new_csp_vault());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_set_cert_not_after_correctly() {
+        test_utils::tls::should_set_cert_not_after_correctly(new_csp_vault());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_fail_on_invalid_not_after_date() {
+        let csp_vault = new_csp_vault();
+        let result = csp_vault.gen_tls_key_pair(
+            node_test_id(test_utils::tls::NODE_1),
+            "invalid_not_after_date",
+        );
+        assert!(result.is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_fail_if_not_after_date_is_in_the_past() {
+        let csp_vault = new_csp_vault();
+        let date_in_the_past = "20211004235959Z";
+
+        let result =
+            csp_vault.gen_tls_key_pair(node_test_id(test_utils::tls::NODE_1), date_in_the_past);
+        assert!(result.is_err());
+    }
+}
+
+mod tls_sign {
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_sign_with_valid_key() {
+        test_utils::tls::should_sign_with_valid_key(new_csp_vault());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_sign_verifiably() {
+        test_utils::tls::should_sign_verifiably(new_csp_vault());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_fail_to_sign_if_secret_key_not_found() {
+        test_utils::tls::should_fail_to_sign_if_secret_key_not_found(new_csp_vault());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
+        test_utils::tls::should_fail_to_sign_if_secret_key_in_store_has_wrong_type(new_csp_vault());
     }
 }

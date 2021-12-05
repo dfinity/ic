@@ -87,11 +87,17 @@ pub enum CspThresholdSignatureKeygenError {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CspTlsKeygenError {
+    InternalError { internal_error: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspTlsSignError {
     SecretKeyNotFound { key_id: KeyId },
     WrongSecretKeyType { algorithm: AlgorithmId },
     MalformedSecretKey { error: String },
     SigningFailed { error: String },
+    InternalError { internal_error: String },
 }
 
 /// `CspVault` offers a selection of operations that involve
@@ -374,7 +380,11 @@ pub trait TlsHandshakeCspVault: Send + Sync {
     /// * if `not_after` is not specified according to RFC 5280 or if
     /// `not_after` is in the past
     /// * if a malformed X509 certificate is generated
-    fn gen_tls_key_pair(&self, node: NodeId, not_after: &str) -> (KeyId, TlsPublicKeyCert);
+    fn gen_tls_key_pair(
+        &self,
+        node: NodeId,
+        not_after: &str,
+    ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError>;
 
     /// Signs the given message using the specified algorithm and key ID.
     ///
