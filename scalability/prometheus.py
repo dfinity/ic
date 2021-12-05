@@ -158,6 +158,7 @@ def get_finalization_rate(testnet, hosts, t_start, t_end):
         "query": "avg(rate({}[{}s]))".format(selector, t_end - t_start),
     }
     r = get_prometheus(payload)
+    print(f"Prometheus response is: {r.text}")
     return json.loads(r.text)
 
 

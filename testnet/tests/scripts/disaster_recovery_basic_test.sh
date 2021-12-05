@@ -55,55 +55,9 @@ source "${HELPERS:-$(dirname "${BASH_SOURCE[0]}")/include/helpers.sh}"
 calltime="$(date '+%s')"
 echo "Testcase call time: $(dateFromEpoch "$calltime")"
 
-STEPS_PATTERN="^(${STEPS:-.*})([.].*|$)"
-ENV_FILE="${results_dir}/env_vars"
 BIN_DIR="${results_dir}/bin"
-
 export PATH="$BIN_DIR:$PATH"
 mkdir -p "$BIN_DIR"
-echo "ENV_FILE=$ENV_FILE"
-NUM_STEPS_MATCHED=0
-step() {
-    # Runs a named step if the name matches the env var STEPS.
-    # Optional steps are skipped unless STEPS matches the step name exactly.
-    if [[ "$1" == "--optional" ]]; then
-        local optional="1"
-        shift 1
-    else
-        local optional=""
-    fi
-    STEP="$1"
-    if [[ "$STEP" =~ $STEPS_PATTERN ]]; then
-        ((NUM_STEPS_MATCHED++))
-        test -n "${DRY_RUN:-}" || printf "\n\n"
-        echo "#$(echo "$1" | tr -cd '.' | tr . '#')${optional:+ (Optional)} $*"
-        test -e "$ENV_FILE" || touch "$ENV_FILE"
-        # shellcheck disable=SC1090
-        source "$ENV_FILE"
-        # Nothing more to do if:
-        #    this is a dry run
-        # OR the step is optional and doesn't match the filter exactly.
-        if test -n "${DRY_RUN:-}" || { test -n "${optional:-}" && [[ "$STEP" != "${STEPS:-}" ]]; }; then
-            : Skipping step "$STEP"
-        else
-            echo "Start: $(date -u)"
-            echo "$STEP	$(date -u)" >>"$results_dir/step_log"
-
-            false
-        fi
-    else
-        true
-    fi
-}
-
-# Function to preserve vars to be used over multiple steps, so that they are still there if the shell is killed.
-setvar() {
-    printf 'export %s="%s"\n' "$1" "$2" >>"$ENV_FILE"
-}
-
-set_verbosity() {
-    test -z "${VERBOSE:-}" || set -x
-}
 
 # Utility function for downloading pre-built artifacts (binaries)
 function download_executable() {

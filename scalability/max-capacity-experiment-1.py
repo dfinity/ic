@@ -1,6 +1,4 @@
 #!/bin/python
-import time
-
 import experiment
 import gflags
 import misc
@@ -45,76 +43,14 @@ gflags.DEFINE_integer("stop_t_median", 120000, "Maximum median latency before ab
 if __name__ == "__main__":
     experiment.parse_command_line_args()
 
-    exp = run_experiment_1.Experiment1()
-    exp.start_experiment()
-
-    failure_rate = 0.0
-    t_median = 0.0
-    rps = []
-    run = True
-
-    rps_max = 0
-    rps_max_in = None
-
-    num_succ_per_iteration = []
-
-    iteration = 0
     datapoints = (
         misc.get_datapoints(
             FLAGS.target_update_load, FLAGS.update_initial_rps, FLAGS.max_update_load, FLAGS.update_rps_increment, 1.5
         )
-        if exp.use_updates
+        if FLAGS.use_updates
         else misc.get_datapoints(
             FLAGS.target_query_load, FLAGS.initial_rps, FLAGS.max_query_load, FLAGS.query_rps_increment, 1.5
         )
     )
-
-    while run:
-
-        load_total = datapoints[iteration]
-        iteration += 1
-
-        rps.append(load_total)
-        print(f"🚀 Testing with load: {load_total} and updates={exp.use_updates}")
-
-        t_start = int(time.time())
-        failure_rate, t_median, _, _, _, _, num_succ, _ = exp.run_experiment(
-            {
-                "load_total": load_total,
-                "duration": FLAGS.iter_duration,
-            }
-        )
-
-        num_succ_per_iteration.append(num_succ)
-
-        print(f"🚀  ... failure rate for {load_total} rps was {failure_rate} median latency is {t_median}")
-
-        duration = int(time.time()) - t_start
-        max_t_median = FLAGS.update_max_t_median if exp.use_updates else FLAGS.max_t_median
-        if failure_rate < FLAGS.max_failure_rate and t_median < max_t_median:
-            if num_succ / duration > rps_max:
-                rps_max = num_succ / duration
-                rps_max_in = load_total
-
-        run = failure_rate < FLAGS.stop_failure_rate and t_median < FLAGS.stop_t_median and iteration < len(datapoints)
-
-        # Write summary file in each iteration including experiment specific data.
-        rtype = "update" if exp.use_updates else "query"
-        state = "running" if run else "done"
-        exp.write_summary_file(
-            "experiment_1",
-            {
-                "rps": rps,
-                "rps_max": rps_max,
-                "rps_max_in": rps_max_in,
-                "num_succ_per_iteration": num_succ_per_iteration,
-            },
-            rps,
-            "requests / s",
-            rtype=rtype,
-            state=state,
-        )
-
-        print(f"🚀  ... maximum capacity so far is {rps_max}")
-
-    exp.end_experiment()
+    exp = run_experiment_1.Experiment1()
+    exp.run_iterations(datapoints)
