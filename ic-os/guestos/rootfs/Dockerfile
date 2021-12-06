@@ -24,8 +24,8 @@ RUN cd /tmp/ && \
 
 # Download and verify node_exporter
 RUN cd /tmp/ && \
-    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.3.0/node_exporter-1.3.0.linux-amd64.tar.gz && \
-    echo "b16d5061d3bc3d0ad8232964071ee3ece7fc104afa817bb5f55570521756125d  node_exporter-1.3.0.linux-amd64.tar.gz" > node_exporter.sha256 && \
+    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz && \
+    echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
     shasum -c node_exporter.sha256
 
 #
@@ -189,17 +189,17 @@ RUN cd /tmp/ && \
     rm /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz
 
 # Install node_exporter
-COPY --from=download /tmp/node_exporter-1.3.0.linux-amd64.tar.gz /tmp/node_exporter-1.3.0.linux-amd64.tar.gz
+COPY --from=download /tmp/node_exporter-1.3.1.linux-amd64.tar.gz /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
 RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
-    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.3.0.linux-amd64.tar.gz node_exporter-1.3.0.linux-amd64/node_exporter && \
+    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.3.1.linux-amd64.tar.gz node_exporter-1.3.1.linux-amd64/node_exporter && \
     chown root:root /etc/node_exporter \
                     /usr/local/bin/node_exporter && \
     chmod 0755 /etc/node_exporter \
                /usr/local/bin/node_exporter && \
     chmod 0644 /etc/default/node_exporter \
                /etc/node_exporter/web.yml && \
-    rm /tmp/node_exporter-1.3.0.linux-amd64.tar.gz
+    rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
 
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
