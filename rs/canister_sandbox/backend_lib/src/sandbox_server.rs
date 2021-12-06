@@ -517,10 +517,6 @@ mod tests {
         let mut wasm_memory = PageMap::default();
         let stable_memory = PageMap::default();
 
-        // Ensure that the page allocator exists before the state is sent to the sandbox
-        // because the sandbox is going to allocate dirty pages and send them back.
-        wasm_memory.ensure_page_allocator();
-
         let state_id = StateId::new();
         let rep = srv
             .open_state(OpenStateRequest {
@@ -812,10 +808,6 @@ mod tests {
         let wasm_memory = PageMap::default();
         let mut stable_memory = PageMap::default();
 
-        // Ensure that the page allocator exists before the state is sent to the sandbox
-        // because the sandbox is going to allocate dirty pages and send them back.
-        stable_memory.ensure_page_allocator();
-
         let state_id = StateId::new();
         let rep = srv
             .open_state(OpenStateRequest {
@@ -955,10 +947,6 @@ mod tests {
         let mut wasm_memory = PageMap::default();
         let stable_memory = PageMap::default();
 
-        // Ensure that the page allocator exists before the state is sent to the sandbox
-        // because the sandbox is going to allocate dirty pages and send them back.
-        wasm_memory.ensure_page_allocator();
-
         let parent_state_id = StateId::new();
         let rep = srv
             .open_state(OpenStateRequest {
@@ -1087,10 +1075,6 @@ mod tests {
 
         let wasm_memory = PageMap::default();
         let mut stable_memory = PageMap::default();
-
-        // Ensure that the page allocator exists before the state is sent to the sandbox
-        // because the sandbox is going to allocate dirty pages and send them back.
-        stable_memory.ensure_page_allocator();
 
         let parent_state_id = StateId::new();
         let rep = srv

@@ -374,18 +374,12 @@ impl PageMap {
         self.apply(page_delta);
     }
 
-    /// Ensures that the page allocator is not empty and properly set up.
-    pub fn ensure_page_allocator(&mut self) {
-        self.page_allocator.ensure_initialized();
-    }
-
     /// Modifies this page map by adding the given dirty pages to it.
     /// Returns a list of dirty page indicies and an indication of whether the
     /// page allocator was created or not, which is used for synchronization
     /// with the sandbox process.
     pub fn update(&mut self, pages: &[(PageIndex, &PageBytes)]) -> Vec<PageIndex> {
-        let initialized = self.page_allocator.ensure_initialized();
-        let page_delta = self.page_allocator.allocate(initialized, pages);
+        let page_delta = self.page_allocator.allocate(pages);
         self.apply(page_delta);
         pages.iter().map(|(index, _)| *index).collect()
     }

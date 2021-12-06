@@ -69,7 +69,7 @@ impl PageAllocatorInner for HeapBasedPageAllocator {
     fn deserialize(serialized_page_allocator: PageAllocatorSerialization) -> Self {
         match serialized_page_allocator {
             PageAllocatorSerialization::Heap => Default::default(),
-            PageAllocatorSerialization::Empty | PageAllocatorSerialization::Mmap(..) => {
+            PageAllocatorSerialization::Mmap(..) => {
                 // This is really unreachable. See `serialize()`.
                 unreachable!("Unexpected serialization of heap-based page allocator.");
             }

@@ -70,11 +70,11 @@ impl PageInner for MmapBasedPage {
 ///
 /// It is exported publicly for benchmarking.
 #[derive(Debug)]
-pub struct MmapBasedPageAllocator(Mutex<MmapBasedPageAllocatorCore>);
+pub struct MmapBasedPageAllocator(Mutex<Option<MmapBasedPageAllocatorCore>>);
 
 impl Default for MmapBasedPageAllocator {
-    fn default() -> MmapBasedPageAllocator {
-        MmapBasedPageAllocator::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -86,7 +86,8 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
         &self,
         pages: &[(PageIndex, &PageBytes)],
     ) -> Vec<(PageIndex, Page<Self::PageInner>)> {
-        let mut core = self.0.lock().unwrap();
+        let mut guard = self.0.lock().unwrap();
+        let core = guard.get_or_insert(MmapBasedPageAllocatorCore::new());
         // It would also be correct to increment the counters after all the
         // allocations, but doing it before gives better performance because
         // the core allocator can memory-map larger chunks.
@@ -104,7 +105,8 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
 
     // See the comments of the corresponding method in `PageAllocator`.
     fn serialize(&self) -> PageAllocatorSerialization {
-        let core = self.0.lock().unwrap();
+        let mut guard = self.0.lock().unwrap();
+        let core = guard.get_or_insert(MmapBasedPageAllocatorCore::new());
         PageAllocatorSerialization::Mmap(FileDescriptor {
             fd: core.file_descriptor,
         })
@@ -114,7 +116,7 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
     fn deserialize(serialized_page_allocator: PageAllocatorSerialization) -> Self {
         match serialized_page_allocator {
             PageAllocatorSerialization::Mmap(file_descriptor) => Self::open(file_descriptor),
-            PageAllocatorSerialization::Heap | PageAllocatorSerialization::Empty => {
+            PageAllocatorSerialization::Heap => {
                 // This is really unreachable. See `serialize()`.
                 unreachable!("Unexpected serialization of MmapBasedPageAllocator");
             }
@@ -130,7 +132,8 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
             .into_iter()
             .map(|(page_index, page)| (page_index, page.0.offset))
             .collect();
-        let core = self.0.lock().unwrap();
+        let mut guard = self.0.lock().unwrap();
+        let core = guard.get_or_insert(MmapBasedPageAllocatorCore::new());
         PageDeltaSerialization::Mmap {
             file_len: core.file_len,
             pages,
@@ -144,7 +147,8 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
     ) -> Vec<(PageIndex, Page<Self::PageInner>)> {
         match page_delta {
             PageDeltaSerialization::Mmap { file_len, pages } => {
-                let mut core = self.0.lock().unwrap();
+                let mut guard = self.0.lock().unwrap();
+                let core = guard.as_mut().unwrap();
                 core.grow_for_deserialization(file_len);
                 // File offsets of all pages are smaller than `file_len`, which means
                 // that the precondition of `deserialize_page()` is fulfilled after
@@ -167,13 +171,13 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
 
 impl MmapBasedPageAllocator {
     fn new() -> Self {
-        Self(Mutex::new(MmapBasedPageAllocatorCore::new()))
+        Self(Mutex::new(None))
     }
 
     fn open(file_descriptor: FileDescriptor) -> Self {
-        Self(Mutex::new(MmapBasedPageAllocatorCore::open(
+        Self(Mutex::new(Some(MmapBasedPageAllocatorCore::open(
             file_descriptor,
-        )))
+        ))))
     }
 }
 
