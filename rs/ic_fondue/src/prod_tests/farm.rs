@@ -2,19 +2,21 @@ use std::{
     collections::HashMap,
     net::IpAddr,
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::internet_computer::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocation};
 use anyhow::Result;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
+use slog::{error, warn, Logger};
 use thiserror::Error;
 use url::Url;
 
 pub type FarmResult<T> = Result<T, FarmError>;
 
 const DEFAULT_REQ_TIMEOUT: Duration = Duration::from_secs(120);
+const MAX_NUMBER_OF_RETRIES: usize = 3;
 
 /// Farm managed resources that make up the Internet Computer under test. The
 /// `Farm`-structure translates abstract requests (for resources) to concrete
@@ -23,22 +25,28 @@ const DEFAULT_REQ_TIMEOUT: Duration = Duration::from_secs(120);
 pub struct Farm {
     pub base_url: Url,
     client: Client,
+    logger: Logger,
 }
 
 impl Farm {
-    pub fn new(base_url: Url) -> Self {
+    pub fn new(base_url: Url, logger: Logger) -> Self {
         let client = reqwest::blocking::ClientBuilder::new()
             .timeout(DEFAULT_REQ_TIMEOUT)
             .build()
             .expect("This should not fail.");
-        Farm { base_url, client }
+        Farm {
+            base_url,
+            client,
+            logger,
+        }
     }
 
     pub fn create_group(&self, group_name: &str, ttl: Duration, spec: GroupSpec) -> FarmResult<()> {
         let path = format!("group/{}", group_name);
         let ttl = ttl.as_secs() as u32;
         let body = CreateGroupRequest { ttl, spec };
-        let _req = Self::json(self.post(&path), &body).send()?;
+        let rb = Self::json(self.post(&path), &body);
+        let _resp = self.retry_until_success(rb)?;
         Ok(())
     }
 
@@ -46,7 +54,8 @@ impl Farm {
     /// IpAddr
     pub fn create_vm(&self, group_name: &str, vm: CreateVmRequest) -> FarmResult<IpAddr> {
         let path = format!("group/{}/vm/{}", group_name, vm.name);
-        let resp = Self::json(self.post(&path), &vm).send()?;
+        let rb = Self::json(self.post(&path), &vm);
+        let resp = self.retry_until_success(rb)?;
         let created_vm = resp.json::<VMCreateResponse>()?;
         Ok(created_vm.ipv6.parse()?)
     }
@@ -63,7 +72,8 @@ impl Farm {
         let form = multipart::Form::new()
             .file(filename.clone(), target_file)
             .expect("could not create multipart for image");
-        let resp = self.post(&url_path).multipart(form).send()?;
+        let rb = self.post(&url_path).multipart(form);
+        let resp = rb.send()?;
         let mut image_ids = resp.json::<ImageUploadResponse>()?.image_ids;
         if image_ids.len() != 1 || !image_ids.contains_key(&filename) {
             return Err(FarmError::InvalidResponse {
@@ -92,36 +102,36 @@ impl Farm {
         let attach_drives_req = AttachDrivesRequest {
             drives: vec![image_spec],
         };
-        let _resp = Self::json(req, &attach_drives_req).send()?;
-
+        let rb = Self::json(req, &attach_drives_req);
+        let _resp = self.retry_until_success(rb)?;
         Ok(())
     }
 
     pub fn start_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
         let path = format!("group/{}/vm/{}/start", group_name, vm_name);
-
-        let req = self.put(&path);
-        let _resp = req.send()?;
+        let rb = self.put(&path);
+        let _resp = self.retry_until_success(rb)?;
         Ok(())
     }
 
     pub fn destroy_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
         let path = format!("group/{}/vm/{}/destroy", group_name, vm_name);
-        let req = self.put(&path);
-        let _resp = req.send()?;
+        let rb = self.put(&path);
+        let _resp = self.retry_until_success(rb)?;
         Ok(())
     }
 
     pub fn reboot_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
         let path = format!("group/{}/vm/{}/reboot", group_name, vm_name);
-        let req = self.put(&path);
-        let _resp = req.send()?;
+        let rb = self.put(&path);
+        let _resp = self.retry_until_success(rb)?;
         Ok(())
     }
 
     pub fn delete_group(&self, group_name: &str) -> FarmResult<()> {
         let path = format!("group/{}", group_name);
-        let _resp = self.delete(&path).send()?;
+        let rb = self.delete(&path);
+        let _resp = self.retry_until_success(rb)?;
         Ok(())
     }
 
@@ -148,6 +158,38 @@ impl Farm {
 
     fn url_from_path(&self, path: &str) -> Url {
         Url::parse(&format!("{}{}", self.base_url, path)).expect("should not fail!")
+    }
+
+    fn retry_until_success(&self, rb: RequestBuilder) -> FarmResult<reqwest::blocking::Response> {
+        let started_at = Instant::now();
+        for _ in 0..MAX_NUMBER_OF_RETRIES {
+            let mut req = rb.try_clone().expect("could not clone a request builder");
+            if let Some(t) = DEFAULT_REQ_TIMEOUT.checked_sub(started_at.elapsed()) {
+                req = req.timeout(t);
+            } else {
+                break;
+            }
+            match req.send() {
+                Err(e) => {
+                    error!(self.logger, "sending a request to Farm failed: {:?}", e);
+                }
+                Ok(r) => {
+                    if r.status().is_success() {
+                        return Ok(r);
+                    }
+                    if r.status().is_server_error() {
+                        error!(self.logger, "unexpected response from Farm: {:?}", r.text());
+                    } else {
+                        warn!(self.logger, "unexpected response from Farm: {:?}", r.text());
+                    }
+                }
+            }
+        }
+        Err(FarmError::TooManyRetries {
+            message: String::from(
+                "sending a request to Farm retried too many times without success",
+            ),
+        })
     }
 }
 
@@ -224,6 +266,9 @@ pub enum FarmError {
 
     #[error("Invalid response: {message}")]
     InvalidResponse { message: String },
+
+    #[error("Retried too many times: {message}")]
+    TooManyRetries { message: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
