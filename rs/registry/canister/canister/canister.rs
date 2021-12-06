@@ -52,6 +52,7 @@ use registry_canister::{
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
+use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 
 fn main() {}
 
@@ -540,6 +541,16 @@ fn update_unassigned_nodes_config() {
         registry_mut().do_update_unassigned_nodes_config(payload);
         recertify_registry();
     });
+}
+
+#[export_name = "canister_query get_node_providers_monthly_xdr_rewards"]
+fn get_node_providers_monthly_xdr_rewards() {
+    over(
+        candid_one,
+        |()| -> Result<NodeProvidersMonthlyXdrRewards, String> {
+            registry().get_node_providers_monthly_xdr_rewards()
+        },
+    );
 }
 
 fn recertify_registry() {

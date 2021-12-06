@@ -117,10 +117,6 @@ pub fn invariant_compliant_mutation() -> Vec<RegistryMutation> {
     let node_pid = node_test_id(TEST_ID);
     let subnet_pid = subnet_test_id(TEST_ID);
 
-    let node_operator = NodeOperatorRecord {
-        node_allowance: 5,
-        ..Default::default()
-    };
     let connection_endpoint = ConnectionEndpoint {
         ip_addr: "128.0.0.1".to_string(),
         port: 12345,
@@ -171,12 +167,6 @@ pub fn invariant_compliant_mutation() -> Vec<RegistryMutation> {
         insert(
             make_routing_table_record_key().as_bytes().to_vec(),
             encode_or_panic(&RoutingTablePB::default()),
-        ),
-        insert(
-            make_node_operator_record_key(node_operator_pid.get())
-                .as_bytes()
-                .to_vec(),
-            encode_or_panic(&node_operator),
         ),
         insert(
             make_node_record_key(node_pid).as_bytes().to_vec(),

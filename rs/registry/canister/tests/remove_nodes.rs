@@ -39,6 +39,10 @@ fn remove_nodes_with_duplicate_endpoints_succeeds() {
             node_allowance: 2,
             ..Default::default()
         };
+        let node_operator2 = NodeOperatorRecord {
+            node_allowance: 5,
+            ..Default::default()
+        };
         let connection_endpoint = ConnectionEndpoint {
             ip_addr: "129.0.0.1".to_string(),
             port: 12345,
@@ -68,6 +72,12 @@ fn remove_nodes_with_duplicate_endpoints_succeeds() {
                                 .as_bytes()
                                 .to_vec(),
                             encode_or_panic(&node_operator),
+                        ),
+                        insert(
+                            make_node_operator_record_key(user_test_id(TEST_ID).get())
+                                .as_bytes()
+                                .to_vec(),
+                            encode_or_panic(&node_operator2),
                         ),
                         insert(
                             make_node_record_key(node_test_id(NO_ID))
@@ -151,6 +161,10 @@ fn remove_nodes_succeeds() {
             node_allowance: 2,
             ..Default::default()
         };
+        let node_operator2 = NodeOperatorRecord {
+            node_allowance: 5,
+            ..Default::default()
+        };
         let connection_endpoint = ConnectionEndpoint {
             ip_addr: "129.0.0.1".to_string(),
             port: 12345,
@@ -163,6 +177,7 @@ fn remove_nodes_succeeds() {
             ..Default::default()
         };
         let (init_mutation, _, mut nodes_to_remove, _) = prepare_registry(1, NUM_NODES.into());
+
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
@@ -174,6 +189,12 @@ fn remove_nodes_succeeds() {
                                 .as_bytes()
                                 .to_vec(),
                             encode_or_panic(&node_operator),
+                        ),
+                        insert(
+                            make_node_operator_record_key(user_test_id(TEST_ID).get())
+                                .as_bytes()
+                                .to_vec(),
+                            encode_or_panic(&node_operator2),
                         ),
                         insert(
                             make_node_record_key(node_test_id(NO_ID))
@@ -313,8 +334,21 @@ fn remove_nodes_fails_with_non_governance_caller() {
 #[test]
 fn nodes_cannot_be_removed_if_any_in_subnet() {
     local_test_on_nns_subnet(|runtime| async move {
-        let (init_mutation, subnet_id, mut nodes_to_remove, _) =
+        let (mut init_mutation, subnet_id, mut nodes_to_remove, _) =
             prepare_registry(NUM_NODES.into(), 1);
+
+        let node_operator = NodeOperatorRecord {
+            node_allowance: 5,
+            ..Default::default()
+        };
+
+        init_mutation.mutations.push(insert(
+            make_node_operator_record_key(user_test_id(TEST_ID).get())
+                .as_bytes()
+                .to_vec(),
+            encode_or_panic(&node_operator),
+        ));
+
         // Prepare the registry with a single node and make it callable by anyone
         let registry = set_up_registry_canister(
             &runtime,

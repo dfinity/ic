@@ -82,3 +82,9 @@ message RegistryCanisterStableStorage {
 
   reserved 1;
 }
+
+// Maps Node Provider IDs to the amount (in 10,000ths of an SDR) they should be
+// rewarded for providing nodes to the Internet Computer for the month.
+message NodeProvidersMonthlyXdrRewards {
+    map<string, uint64> rewards = 1;
+}

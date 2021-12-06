@@ -32,6 +32,11 @@ fn main() {
     config.extern_path(".ic_nns_common.pb.v1", "::ic-nns-common::pb::v1");
     config.out_dir("gen");
 
+    config.type_attribute(
+        "ic_registry_canister.pb.v1.NodeProvidersMonthlyXdrRewards",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+
     println!("cargo:rerun-if-changed={}", proto_file);
     config
         .compile_protos(
