@@ -2,7 +2,7 @@
 
 # scenario test script module.
 # Name: ledger_query_update
-# Args: <testnet_identifier> <duration> <tps> <results_dir>
+# Args: <testnet_identifier> <duration> <tps> <experiment_dir> <test_account_id>
 # Roughly speaking, this script:
 # - queries the balances on the ledger canister installed on the nns subnet
 # - updates the balances on the ledger canister
@@ -14,8 +14,10 @@
 # - script calculates actual_delta of source account before and after all transfer transactions, and
 #   compares it with expected_delta to verify that the difference is within 0.1%
 
-if (($# != 6)); then
-    echo >&2 "Wrong number of arguments, please provide values for <testnet_identifier> <duration> <tps> <results_dir>"
+set -eEuo pipefail
+
+if (($# != 5)); then
+    echo >&2 "ERROR: Wrong number of arguments, please provide values for <testnet_identifier> <duration> <tps> <experiment_dir> <test_account_id>"
     exit 1
 fi
 
