@@ -170,7 +170,9 @@ use crate::consensus::{
     metrics::{timed_call, EcdsaClientMetrics},
     ConsensusCrypto,
 };
-use crate::ecdsa::pre_signer::{EcdsaPreSigner, EcdsaPreSignerImpl};
+use crate::ecdsa::pre_signer::{
+    EcdsaPreSigner, EcdsaPreSignerImpl, EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl,
+};
 
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces::ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaGossip, EcdsaPool};
@@ -179,6 +181,7 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
     consensus::ecdsa::{EcdsaBlockReader, EcdsaBlockReaderImpl},
+    crypto::canister_threshold_sig::idkg::IDkgTranscript,
     Height, NodeId,
 };
 
@@ -306,6 +309,19 @@ fn compute_priority(attr: &EcdsaMessageAttribute, cached_finalized_height: Heigh
             }
         }
     }
+}
+
+/// Payload builder interface to collect the completed transcripts.
+pub(crate) fn get_completed_transcripts(
+    consensus_cache: &dyn ConsensusPoolCache,
+    ecdsa_pool: &dyn EcdsaPool,
+    crypto: &dyn ConsensusCrypto,
+    metrics_registry: MetricsRegistry,
+    logger: ReplicaLogger,
+) -> Vec<IDkgTranscript> {
+    let builder =
+        EcdsaTranscriptBuilderImpl::new(consensus_cache, crypto, metrics_registry, logger);
+    builder.get_completed_transcripts(ecdsa_pool)
 }
 
 #[cfg(test)]

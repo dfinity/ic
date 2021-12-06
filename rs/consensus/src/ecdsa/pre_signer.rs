@@ -18,7 +18,8 @@ use ic_types::consensus::ecdsa::{
 };
 use ic_types::consensus::MultiSignature;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgMultiSignedDealing, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptParams,
+    IDkgMultiSignedDealing, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
+    IDkgTranscriptParams,
 };
 use ic_types::{Height, NodeId};
 
@@ -29,10 +30,6 @@ use std::sync::Arc;
 pub(crate) trait EcdsaPreSigner: Send {
     /// The on_state_change() called from the main ECDSA path.
     fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet;
-
-    /// Returns the transcripts that can be successfully built from
-    /// the current entries in the ECDSA pool
-    fn get_completed_transcripts(&self, ecdsa_pool: &dyn EcdsaPool) -> Vec<IDkgTranscript>;
 }
 
 pub(crate) struct EcdsaPreSignerImpl {
@@ -400,12 +397,22 @@ impl EcdsaPreSignerImpl {
         block_reader: &dyn EcdsaBlockReader,
         transcript_params: &IDkgTranscriptParams,
     ) -> EcdsaChangeSet {
+        if !self.crypto_load_dependencies(transcript_params) {
+            return Default::default();
+        }
+
         IDkgProtocol::create_dealing(&*self.crypto, transcript_params).map_or_else(
             |error| {
                 // TODO: currently, transcript creation will be retried the next time, which
                 // will most likely fail again. This should be signaled up so that the bad
                 // transcript params can be acted on
-                warn!(self.log, "Failed to create dealing: {:?}", error);
+                warn!(
+                    self.log,
+                    "Failed to create dealing: transcript_id = {:?}, type = {:?}, error = {:?}",
+                    transcript_params.transcript_id(),
+                    transcript_params.operation_type(),
+                    error
+                );
                 self.metrics.pre_sign_errors_inc("create_dealing");
                 Default::default()
             },
@@ -416,7 +423,7 @@ impl EcdsaPreSignerImpl {
                     dealer_id: self.node_id,
                     dealing,
                 };
-                self.metrics.pre_sign_metrics_inc("dealings_sent");
+                self.metrics.pre_sign_metrics_inc("dealing_sent");
                 vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaDealing(dealing),
                 )]
@@ -463,7 +470,7 @@ impl EcdsaPreSignerImpl {
                     }
                 },
                 |()| {
-                    self.metrics.pre_sign_metrics_inc("dealings_received");
+                    self.metrics.pre_sign_metrics_inc("dealing_received");
                     vec![EcdsaChangeAction::MoveToValidated(id.clone())]
                 },
             )
@@ -530,6 +537,7 @@ impl EcdsaPreSignerImpl {
                         content: dealing.clone(),
                         signature: multi_sig_share,
                     };
+                    self.metrics.pre_sign_metrics_inc("dealing_support_sent");
                     vec![EcdsaChangeAction::AddToValidated(
                         EcdsaMessage::EcdsaDealingSupport(dealing_support),
                     )]
@@ -563,52 +571,43 @@ impl EcdsaPreSignerImpl {
                         ),
                     )]
                 },
-                |_| vec![EcdsaChangeAction::MoveToValidated(id.clone())],
-            )
-    }
-
-    /// Helper to combine the multi sig shares for a dealing
-    fn crypto_aggregate_dealing_support(
-        &self,
-        transcript_params: &IDkgTranscriptParams,
-        support_shares: &[&EcdsaDealingSupport],
-    ) -> Option<MultiSignature<EcdsaDealing>> {
-        // Check if we have enough shares for aggregation
-        if support_shares.len() < (transcript_params.verification_threshold().get() as usize) {
-            return None;
-        }
-
-        let mut signatures = Vec::new();
-        for support_share in support_shares {
-            signatures.push(&support_share.signature);
-        }
-
-        self.crypto
-            .aggregate(signatures, transcript_params.registry_version())
-            .map_or_else(
                 |_| {
                     self.metrics
-                        .pre_sign_errors_inc("aggregate_dealing_support");
-                    None
+                        .pre_sign_metrics_inc("dealing_support_received");
+                    vec![EcdsaChangeAction::MoveToValidated(id.clone())]
                 },
-                Some,
             )
     }
 
-    /// Helper to create the transcript from the verified dealings
-    fn crypto_create_transcript(
-        &self,
-        transcript_params: &IDkgTranscriptParams,
-        verified_dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
-    ) -> Option<IDkgTranscript> {
-        IDkgProtocol::create_transcript(&*self.crypto, transcript_params, verified_dealings)
-            .map_or_else(
-                |_| {
-                    self.metrics.pre_sign_errors_inc("create_transcript");
-                    None
-                },
-                Some,
-            )
+    /// Helper to load the transcripts the given transcript is dependent on.
+    /// Returns true if the dependencies were loaded successfully.
+    fn crypto_load_dependencies(&self, transcript_params: &IDkgTranscriptParams) -> bool {
+        match &transcript_params.operation_type() {
+            IDkgTranscriptOperation::Random => true,
+            IDkgTranscriptOperation::ReshareOfMasked(t) => self.crypto_load_transcript(t),
+            IDkgTranscriptOperation::ReshareOfUnmasked(t) => self.crypto_load_transcript(t),
+            IDkgTranscriptOperation::UnmaskedTimesMasked(t1, t2) => {
+                self.crypto_load_transcript(t1) && self.crypto_load_transcript(t2)
+            }
+        }
+    }
+
+    /// Helper to load the given transcript.
+    /// Returns true if the transcript was loaded successfully.
+    fn crypto_load_transcript(&self, transcript: &IDkgTranscript) -> bool {
+        if let Err(error) = IDkgProtocol::load_transcript(&*self.crypto, transcript) {
+            warn!(
+                self.log,
+                "Failed to load transcript: transcript_id = {:?}, error = {:?}",
+                transcript.transcript_id,
+                error
+            );
+            self.metrics.pre_sign_errors_inc("load_transcript");
+            false
+        } else {
+            self.metrics.pre_sign_metrics_inc("transcript_loaded");
+            true
+        }
     }
 
     /// Checks if the we have a valid dealing from the dealer for the given
@@ -704,7 +703,106 @@ impl EcdsaPreSigner for EcdsaPreSignerImpl {
         ];
         self.schedule.call_next(&calls)
     }
+}
 
+pub(crate) trait EcdsaTranscriptBuilder: Send {
+    /// Returns the transcripts that can be successfully built from
+    /// the current entries in the ECDSA pool
+    fn get_completed_transcripts(&self, ecdsa_pool: &dyn EcdsaPool) -> Vec<IDkgTranscript>;
+}
+
+pub(crate) struct EcdsaTranscriptBuilderImpl<'a> {
+    consensus_cache: &'a dyn ConsensusPoolCache,
+    crypto: &'a dyn ConsensusCrypto,
+    metrics: EcdsaPreSignerMetrics,
+    log: ReplicaLogger,
+}
+
+impl<'a> EcdsaTranscriptBuilderImpl<'a> {
+    pub(crate) fn new(
+        consensus_cache: &'a dyn ConsensusPoolCache,
+        crypto: &'a dyn ConsensusCrypto,
+        metrics_registry: MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            consensus_cache,
+            crypto,
+            metrics: EcdsaPreSignerMetrics::new(metrics_registry),
+            log,
+        }
+    }
+
+    /// Helper to combine the multi sig shares for a dealing
+    fn crypto_aggregate_dealing_support(
+        &self,
+        transcript_params: &IDkgTranscriptParams,
+        support_shares: &[&EcdsaDealingSupport],
+    ) -> Option<MultiSignature<EcdsaDealing>> {
+        // Check if we have enough shares for aggregation
+        if support_shares.len() < (transcript_params.verification_threshold().get() as usize) {
+            return None;
+        }
+
+        let mut signatures = Vec::new();
+        for support_share in support_shares {
+            signatures.push(&support_share.signature);
+        }
+
+        self.crypto
+            .aggregate(signatures, transcript_params.registry_version())
+            .map_or_else(
+                |error| {
+                    debug!(
+                        self.log,
+                        "Failed to aggregate: transcript_id = {:?}, error = {:?}",
+                        transcript_params.transcript_id(),
+                        error
+                    );
+                    self.metrics
+                        .pre_sign_errors_inc("aggregate_dealing_support");
+                    None
+                },
+                |multi_sig| {
+                    self.metrics
+                        .pre_sign_metrics_inc("dealing_support_aggregated");
+                    Some(multi_sig)
+                },
+            )
+    }
+
+    /// Helper to create the transcript from the verified dealings
+    fn crypto_create_transcript(
+        &self,
+        transcript_params: &IDkgTranscriptParams,
+        verified_dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    ) -> Option<IDkgTranscript> {
+        // Check if we have enough dealings to create transcript
+        if verified_dealings.len() < (transcript_params.collection_threshold().get() as usize) {
+            return None;
+        }
+
+        IDkgProtocol::create_transcript(&*self.crypto, transcript_params, verified_dealings)
+            .map_or_else(
+                |error| {
+                    warn!(
+                        self.log,
+                        "Failed to create transcript: transcript_id = {:?}, error = {:?}",
+                        transcript_params.transcript_id(),
+                        error
+                    );
+                    self.metrics.pre_sign_errors_inc("create_transcript");
+                    None
+                },
+                |transcript| {
+                    self.metrics.pre_sign_metrics_inc("transcript_created");
+                    Some(transcript)
+                },
+            )
+    }
+}
+
+impl<'a> EcdsaTranscriptBuilder for EcdsaTranscriptBuilderImpl<'a> {
     fn get_completed_transcripts(&self, ecdsa_pool: &dyn EcdsaPool) -> Vec<IDkgTranscript> {
         // TranscriptId -> TranscriptParams
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_cache.finalized_block());
