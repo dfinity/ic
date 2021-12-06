@@ -42,7 +42,8 @@ RUN systemctl enable \
     nftables \
     systemd-networkd \
     systemd-networkd-wait-online \
-    systemd-resolved
+    systemd-resolved \
+    systemd-journal-gatewayd
 
 # User which will run the dfinity boundary node service.
 RUN adduser --system --disabled-password --home /var/lib/ic --no-create-home dfinity
