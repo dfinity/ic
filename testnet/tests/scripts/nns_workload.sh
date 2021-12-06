@@ -161,6 +161,7 @@ ledger_pid=$!
     while (((current_batch_starttime - batch_starttime) < duration)); do
         current_batch_starttime="$(date '+%s')"
         p=$((p + 1))
+        to_wait=()
         for ((q = 0; q < batch_size; q++)); do
             (
                 msg="Proposal submission batch $p, proposal $q"
@@ -301,7 +302,11 @@ echo "$nns_reduce_to_threshold_time" >"$experiment_dir/nns_reduce_to_threshold_t
 one_third_going_down_pid=$!
 
 echo "waiting for ledger transfer and subnet creation proposal submission processes to finish before collecting final metrics."
-wait "$one_third_going_down_pid" "$ledger_pid" "$proposals_pid"
+for p in "$one_third_going_down_pid" "$ledger_pid" "$proposals_pid"; do
+    wait "$p"
+done
+# Wait for any other background jobs to terminate
+wait
 
 endtime="$(date '+%s')"
 echo "$endtime"
