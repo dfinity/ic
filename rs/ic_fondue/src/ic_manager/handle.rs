@@ -11,6 +11,7 @@ use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::SubnetId;
+use slog::Logger;
 use std::{
     net::IpAddr,
     time::{Duration, Instant},
@@ -97,49 +98,52 @@ pub struct IcEndpoint {
 }
 
 pub trait IcControl {
-    fn start_node(&self) -> IcEndpoint;
-    fn kill_node(&self);
-    fn restart_node(&self) -> IcEndpoint;
+    fn start_node(&self, logger: Logger) -> IcEndpoint;
+    fn kill_node(&self, logger: Logger);
+    fn restart_node(&self, logger: Logger) -> IcEndpoint;
     fn ip_address(&self) -> Option<IpAddr>;
     fn hostname(&self) -> Option<String>;
 }
 
 impl IcControl for IcEndpoint {
-    fn kill_node(&self) {
+    fn start_node(&self, logger: Logger) -> Self {
         if let RuntimeDescriptor::Vm(info) = &self.runtime_descriptor {
-            let farm = farm::Farm::new(info.url.clone());
-            farm.destroy_vm(&info.group_name, &info.vm_name)
-                .expect("failed to destroy VM");
-        } else {
-            panic!("Cannot kill a node with IcControl that is not hosted by farm.");
-        }
-    }
-
-    fn restart_node(&self) -> Self {
-        if let RuntimeDescriptor::Vm(info) = &self.runtime_descriptor {
-            let farm = farm::Farm::new(info.url.clone());
-            farm.reboot_vm(&info.group_name, &info.vm_name)
-                .expect("failed to reboot VM");
-            Self {
-                started_at: Instant::now(),
-                ..self.clone()
+            let farm = farm::Farm::new(info.url.clone(), logger);
+            if let Err(e) = farm.start_vm(&info.group_name, &info.vm_name) {
+                panic!("failed to start VM: {:?}", e);
             }
-        } else {
-            panic!("Cannot restart a node with IcControl that is not hosted by farm.");
-        }
-    }
-
-    fn start_node(&self) -> Self {
-        if let RuntimeDescriptor::Vm(info) = &self.runtime_descriptor {
-            let farm = farm::Farm::new(info.url.clone());
-            farm.start_vm(&info.group_name, &info.vm_name)
-                .expect("failed to destroy VM");
             Self {
                 started_at: Instant::now(),
                 ..self.clone()
             }
         } else {
             panic!("Cannot start a node with IcControl that is not hosted by farm.");
+        }
+    }
+
+    fn kill_node(&self, logger: Logger) {
+        if let RuntimeDescriptor::Vm(info) = &self.runtime_descriptor {
+            let farm = farm::Farm::new(info.url.clone(), logger);
+            if let Err(e) = farm.destroy_vm(&info.group_name, &info.vm_name) {
+                panic!("failed to destroy VM: {:?}", e);
+            }
+        } else {
+            panic!("Cannot kill a node with IcControl that is not hosted by farm.");
+        }
+    }
+
+    fn restart_node(&self, logger: Logger) -> Self {
+        if let RuntimeDescriptor::Vm(info) = &self.runtime_descriptor {
+            let farm = farm::Farm::new(info.url.clone(), logger);
+            if let Err(e) = farm.reboot_vm(&info.group_name, &info.vm_name) {
+                panic!("failed to reboot VM: {:?}", e);
+            }
+            Self {
+                started_at: Instant::now(),
+                ..self.clone()
+            }
+        } else {
+            panic!("Cannot restart a node with IcControl that is not hosted by farm.");
         }
     }
 

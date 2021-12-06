@@ -38,7 +38,7 @@ pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
     // Wait until the node becomes ready.
     util::block_on(node.assert_ready(ctx));
     // Triggers a restart.
-    let node = node.restart_node();
+    let node = node.restart_node(ctx.logger.clone());
     // Verify that the re-started node eventually becomes ready again.
     util::block_on(node.assert_ready(ctx));
 }

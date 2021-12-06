@@ -74,14 +74,14 @@ pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
     // Kill one NNS node. Three out of four nodes are still operational which is
     // enough for the subnet to make progress and thus complete the transfer
     // successfully.
-    nns_endpoints[1].kill_node();
+    nns_endpoints[1].kill_node(ctx.logger.clone());
     transfer(ctx, &rt, &ledger.clone(), &can1.clone(), &can2.clone(), 100);
 
     // Kill another NNS node. With two malfunctioned nodes, the network is stuck,
     // i.e. all update requests will be rejected.
-    nns_endpoints[2].kill_node();
+    nns_endpoints[2].kill_node(ctx.logger.clone());
     // Start over the node killed first.
-    let _ = nns_endpoints[1].start_node();
+    let _ = nns_endpoints[1].start_node(ctx.logger.clone());
 
     // A transfer request can be started right away, even though the rejoined node
     // is likely not yet ready. Its completion will be delayed until the
