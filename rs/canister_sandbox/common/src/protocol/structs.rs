@@ -16,7 +16,6 @@ pub struct ExecInput {
     pub canister_current_memory_usage: NumBytes,
     pub execution_parameters: ExecutionParameters,
     pub next_state_id: StateId,
-
     /// System state that won't change over the course of executing a single
     /// message.
     pub static_system_state: StaticSystemState,
