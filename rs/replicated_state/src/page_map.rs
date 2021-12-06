@@ -7,8 +7,7 @@ pub use checkpoint::{CheckpointSerialization, MappingSerialization};
 use ic_sys::PageBytes;
 pub use ic_sys::{PageIndex, PAGE_SIZE};
 pub use page_allocator::{
-    allocated_pages_count, PageAllocatorDelta, PageAllocatorSerialization, PageDeltaSerialization,
-    PageSerialization,
+    allocated_pages_count, PageAllocatorSerialization, PageDeltaSerialization, PageSerialization,
 };
 // Exported publicly for benchmarking.
 pub use page_allocator::{DefaultPageAllocatorImpl, HeapBasedPageAllocator, PageAllocatorInner};
@@ -372,22 +371,23 @@ impl PageMap {
     /// representation.
     pub fn deserialize_delta(&mut self, page_delta: PageDeltaSerialization) {
         let page_delta = self.page_allocator.deserialize_page_delta(page_delta);
-        self.page_delta.update(PageDelta::from(page_delta));
+        self.apply(page_delta);
+    }
+
+    /// Ensures that the page allocator is not empty and properly set up.
+    pub fn ensure_page_allocator(&mut self) {
+        self.page_allocator.ensure_initialized();
     }
 
     /// Modifies this page map by adding the given dirty pages to it.
     /// Returns a list of dirty page indicies and an indication of whether the
     /// page allocator was created or not, which is used for synchronization
     /// with the sandbox process.
-    pub fn update(
-        &mut self,
-        pages: &[(PageIndex, &PageBytes)],
-    ) -> (Vec<PageIndex>, PageAllocatorDelta) {
-        let (initialized, allocator_delta) = self.page_allocator.ensure_initialized();
+    pub fn update(&mut self, pages: &[(PageIndex, &PageBytes)]) -> Vec<PageIndex> {
+        let initialized = self.page_allocator.ensure_initialized();
         let page_delta = self.page_allocator.allocate(initialized, pages);
         self.apply(page_delta);
-        let page_indices = pages.iter().map(|(index, _)| *index).collect();
-        (page_indices, allocator_delta)
+        pages.iter().map(|(index, _)| *index).collect()
     }
 
     /// Persists the heap delta contained in this page map to the specified

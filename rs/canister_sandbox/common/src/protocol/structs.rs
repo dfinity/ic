@@ -1,8 +1,10 @@
 use ic_interfaces::execution_environment::{ExecutionParameters, HypervisorResult, InstanceStats};
-use ic_replicated_state::{page_map::PageSerialization, Global, NumWasmPages};
+use ic_replicated_state::{page_map::PageDeltaSerialization, Global, NumWasmPages};
 use ic_system_api::{ApiType, StaticSystemState};
 use ic_types::{ingress::WasmResult, methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
+
+use super::id::StateId;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Round(pub u64);
 
@@ -13,10 +15,18 @@ pub struct ExecInput {
     pub globals: Vec<Global>,
     pub canister_current_memory_usage: NumBytes,
     pub execution_parameters: ExecutionParameters,
+    pub next_state_id: StateId,
 
     /// System state that won't change over the course of executing a single
     /// message.
     pub static_system_state: StaticSystemState,
+}
+
+/// Describes the memory changes performed by execution.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MemoryModifications {
+    pub page_delta: PageDeltaSerialization,
+    pub size: NumWasmPages,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -24,17 +34,11 @@ pub struct StateModifications {
     /// The state of the global variables after execution.
     pub globals: Vec<Global>,
 
-    /// Wasm memory page delta produced by this execution.
-    pub wasm_memory_page_delta: Vec<PageSerialization>,
+    /// Modifications in the Wasm memory.
+    pub wasm_memory: MemoryModifications,
 
-    /// Size of wasm memory.
-    pub wasm_memory_size: NumWasmPages,
-
-    /// Stable memory page delta produced by this execution.
-    pub stable_memory_page_delta: Vec<PageSerialization>,
-
-    /// Size of stable memory.
-    pub stable_memory_size: NumWasmPages,
+    /// Modifications in the stable memory.
+    pub stable_memory: MemoryModifications,
 
     /// The number of free bytes of memory left on the subnet after executing
     /// the message.
