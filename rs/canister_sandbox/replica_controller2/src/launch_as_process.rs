@@ -142,31 +142,10 @@ pub fn create_sandbox_process(
 ) -> Arc<dyn SandboxService> {
     let (exec_path, mut argv) = match build_sandbox_binary_relative_path(SANDBOX_EXECUTABLE_NAME) {
         Some(path) if Path::exists(Path::new(&path)) => (path.clone(), vec![path]),
-        // Detect if we are running tests by checking if the cargo executable exists.
-        // If so, run the sandbox using cargo.
-        Some(_) | None => match (which::which("cargo"), top_level_cargo_manifest()) {
-            (Ok(path), Some(manifest)) => {
-                let path = path.to_str().unwrap().to_string();
-                let manifest = manifest.to_str().unwrap().to_string();
-                (
-                    path.clone(),
-                    [
-                        &path,
-                        "run",
-                        "--quiet",
-                        "--manifest-path",
-                        &manifest,
-                        "--bin",
-                        SANDBOX_EXECUTABLE_NAME,
-                        "--",
-                    ]
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-                )
-            }
-            _ => panic!("No canister_sandbox binary found"),
-        },
+        // If we couldn't build the relative path then we should be in a testing environment.
+        Some(_) | None => {
+            create_path_and_initial_args_for_testing().expect("No canister_sandbox binary found")
+        }
     };
 
     argv.push(canister_id.to_string());
@@ -236,22 +215,66 @@ pub fn build_sandbox_binary_relative_path(sandbox_executable_name: &str) -> Opti
     Some(folder.join(sandbox_executable_name).to_str()?.to_string())
 }
 
-/// This should only be used for testing purposes.
-/// Finds the top most parent of the folder of the current executable which has
-/// a Cargo.toml file.
-fn top_level_cargo_manifest() -> Option<PathBuf> {
-    let mut pwd = current_binary_folder()?.canonicalize().ok()?;
+/// Only for testing purposes.
+/// Gets executable and arguments when running in CI or in a dev environment.
+fn create_path_and_initial_args_for_testing() -> Option<(String, Vec<String>)> {
+    // In CI we expect the sandbox executable to be in our path so this should
+    // succeed
+    if let Ok(exec_path) = which::which(SANDBOX_EXECUTABLE_NAME) {
+        println!("Running sandbox with executable {:?}", exec_path);
+        return Some((
+            exec_path.to_str().unwrap().to_string(),
+            vec![exec_path.to_str().unwrap().to_string()],
+        ));
+    }
+
+    // When running in a dev environment we expect `cargo` to be in our path and
+    // we should be able to find the workspace cargo manifest so this should
+    // succeed
+    match (
+        which::which("cargo"),
+        top_level_cargo_manifest_for_testing(),
+    ) {
+        (Ok(path), Some(manifest_path)) => {
+            println!(
+                "Running sandbox with cargo {:?} and manifest {:?}",
+                path, manifest_path
+            );
+            let path = path.to_str().unwrap().to_string();
+            Some((
+                path.clone(),
+                [
+                    &path,
+                    "run",
+                    "--quiet",
+                    "--manifest-path",
+                    manifest_path.to_str().unwrap(),
+                    "--bin",
+                    SANDBOX_EXECUTABLE_NAME,
+                    "--",
+                ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            ))
+        }
+        _ => None,
+    }
+}
+
+/// Only for testing purposes.
+/// Finds the topmost cargo manifest in the directory path of the current
+/// manifest.
+fn top_level_cargo_manifest_for_testing() -> Option<PathBuf> {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").ok();
+    let mut next_parent = manifest_dir.as_ref().map(Path::new);
     let mut current_manifest = None;
-    loop {
-        let next: PathBuf = [&pwd, Path::new("Cargo.toml")].iter().collect();
+    while let Some(parent) = next_parent {
+        let next: PathBuf = [parent, Path::new("Cargo.toml")].iter().collect();
         if next.exists() {
             current_manifest = Some(next);
         }
-        if let Some(parent) = pwd.parent() {
-            pwd = PathBuf::from(parent);
-            continue;
-        }
-        break;
+        next_parent = parent.parent();
     }
     current_manifest
 }

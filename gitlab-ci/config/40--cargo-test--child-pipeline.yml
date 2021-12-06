@@ -152,10 +152,10 @@ ic-ref-test:
       cd artifacts/release
       BASE_BIN_DIR=$(pwd)
       ls -lah
-      gunzip nodemanager.gz
-      gunzip replica.gz
-      chmod +x nodemanager
-      chmod +x replica
+      for f in replica nodemanager canister_sandbox; do
+        gunzip "$f.gz"
+        chmod +x "$f"
+      done
       popd
 
       cd "${CI_PROJECT_DIR}/artifacts/release"
@@ -163,7 +163,7 @@ ic-ref-test:
       ls -lah
 
       mkdir -p "${CI_PROJECT_DIR}/rs/local-bin"
-      for f in replica nodemanager ic-test-bin; do
+      for f in replica nodemanager ic-test-bin canister_sandbox; do
         gunzip -k "$f.gz"
         chmod +x "$f"
         mv "$f" "${CI_PROJECT_DIR}/rs/local-bin/$f"
