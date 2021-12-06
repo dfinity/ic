@@ -106,7 +106,8 @@ RUN systemctl enable \
     nftables \
     systemd-networkd \
     systemd-networkd-wait-online \
-    systemd-resolved
+    systemd-resolved \
+    systemd-journal-gatewayd
 
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump
 RUN faketime "1970-1-1 0" systemd-sysusers
