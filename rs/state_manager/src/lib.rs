@@ -50,7 +50,6 @@ use ic_types::{
 use ic_utils::{ic_features::*, thread::JoinOnDrop};
 use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use prost::Message;
-use std::convert::{From, TryFrom};
 use std::fmt;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -59,6 +58,10 @@ use std::sync::{
     Arc,
 };
 use std::time::Instant;
+use std::{
+    collections::HashSet,
+    convert::{From, TryFrom},
+};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Mutex,
@@ -70,6 +73,10 @@ pub const NUMBER_OF_CHECKPOINT_THREADS: u32 = 16;
 
 /// Name of the error metric counting unexpectedly corrupted chunks
 const STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_chunks";
+
+/// Name of the error metrics counting checkpoints expected on disk but not
+/// found
+const MISSING_CHECKPOINTS: &str = "state_manager_missing_checkpoints";
 
 #[derive(Clone)]
 pub struct StateManagerMetrics {
@@ -86,6 +93,7 @@ pub struct StateManagerMetrics {
     state_size: IntGauge,
     checkpoint_metrics: CheckpointMetrics,
     manifest_metrics: ManifestMetrics,
+    missing_checkpoints: IntCounter,
 }
 
 #[derive(Clone)]
@@ -194,6 +202,8 @@ impl StateManagerMetrics {
             "Total size of the state on disk in bytes.",
         );
 
+        let missing_checkpoints = metrics_registry.error_counter(MISSING_CHECKPOINTS);
+
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -208,6 +218,7 @@ impl StateManagerMetrics {
             state_size,
             checkpoint_metrics: CheckpointMetrics::new(metrics_registry),
             manifest_metrics: ManifestMetrics::new(metrics_registry),
+            missing_checkpoints,
         }
     }
 }
@@ -1302,6 +1313,7 @@ impl StateManagerImpl {
         };
 
         let mut certifications_metadata = CertificationsMetadata::default();
+        let mut requested_heights = HashSet::new();
 
         // Populate the missing metadata from the higher checkpoints to the lower ones.
         // Then the manifest of the latest checkpoint will be the first one available
@@ -1342,6 +1354,8 @@ impl StateManagerImpl {
                 manifest_delta: None,
             });
 
+            requested_heights.insert(height);
+
             metadata.insert(
                 height,
                 StateMetadata {
@@ -1350,6 +1364,28 @@ impl StateManagerImpl {
                     root_hash: None,
                 },
             );
+        }
+
+        // Delete any metadata for checkpoints that neither have a manifest nor a
+        // manifest computation
+        // TODO: use drain_filter once that's stable rust
+        // metadata.drain_filter(|k,v| { v.manifest.is_none() &&
+        // !requested_heights.contains(k)});
+        let mut metadata_to_remove = Vec::new();
+        for (&h, item) in &*metadata {
+            if item.manifest.is_none() && !requested_heights.contains(&h) {
+                metadata_to_remove.push(h);
+            }
+        }
+        for h in metadata_to_remove {
+            error!(
+                log,
+                "Missing checkpoint at height {} during startup. Incrementing {}.",
+                h,
+                MISSING_CHECKPOINTS
+            );
+            metrics.missing_checkpoints.inc();
+            metadata.remove(&h);
         }
 
         (certifications_metadata, compute_manifest_requests)
@@ -1731,7 +1767,7 @@ impl StateManager for StateManagerImpl {
             Err(StateHashError::Transient(StateNotCommittedYet(_))) => {
                 // Let's see if we already have this state locally.  This might
                 // be the case if we are in disaster recovery mode and
-                // re-introducing some old state with a new hight.
+                // re-introducing some old state with a new height.
                 if let Some((checkpoint_height, manifest)) = self.find_checkpoint_by_root_hash(&root_hash) {
                     info!(self.log,
                           "Copying checkpoint {} with root hash {:?} under new height {}",
