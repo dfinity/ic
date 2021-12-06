@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 /// This module provides the RPC "glue" code to expose the API
 /// functionality of the sandbox towards the controller. There is no
 /// actual "logic" in this module, just bridging the interfaces.
@@ -13,13 +15,15 @@ pub struct SandboxServer {
     /// The SandboxManager contains the business logic (sets up wasm
     /// runtimes, executes things, ...). RPC calls map to methods in
     /// the manager.
-    manager: SandboxManager,
+    manager: Arc<SandboxManager>,
 }
 
 impl SandboxServer {
     /// Creates new sandbox server, taking constructed sandbox manager.
     pub fn new(manager: SandboxManager) -> Self {
-        SandboxServer { manager }
+        SandboxServer {
+            manager: Arc::new(manager),
+        }
     }
 }
 
@@ -59,9 +63,13 @@ impl SandboxService for SandboxServer {
             exec_input,
         } = req;
         rpc::Call::new_resolved({
-            let result = self
-                .manager
-                .open_execution(exec_id, wasm_id, state_id, exec_input);
+            let result = SandboxManager::open_execution(
+                &self.manager,
+                exec_id,
+                wasm_id,
+                state_id,
+                exec_input,
+            );
             Ok(OpenExecutionReply { success: result })
         })
     }
@@ -100,10 +108,7 @@ mod tests {
     use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
     use ic_registry_routing_table::RoutingTable;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        page_map::PageAllocatorDelta, Global, NumWasmPages, PageIndex, PageMap,
-    };
-    use ic_sys::PageBytes;
+    use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
     use ic_system_api::{ApiType, CanisterStatusView, StaticSystemState};
     use ic_test_utilities::types::ids::{canister_test_id, user_test_id};
     use ic_types::{
@@ -138,18 +143,12 @@ mod tests {
         )
     }
 
-    fn memory_for_test(
-        pages: &[(PageIndex, &PageBytes)],
-        num_wasm_pages: NumWasmPages,
-    ) -> MemorySerialization {
-        let mut page_map = PageMap::default();
-        page_map.update(pages);
+    fn serialize_memory(page_map: &PageMap, num_wasm_pages: NumWasmPages) -> MemorySerialization {
         let mut memory = MemorySerialization {
             page_map: page_map.serialize(),
             num_wasm_pages,
         };
         // Duplicate all file descriptors to simulate sending them to another process.
-        // Otherwise, the files will be closed when this function returns.
         let mut fds: Vec<&mut std::os::unix::io::RawFd> = vec![];
         memory.enumerate_fds(&mut fds);
         for fd in fds.into_iter() {
@@ -158,35 +157,11 @@ mod tests {
         memory
     }
 
-    fn memory_delta_for_test(
-        page_map: PageMap,
-        delta: (Vec<PageIndex>, PageAllocatorDelta),
-        num_wasm_pages: NumWasmPages,
-    ) -> MemoryDeltaSerialization {
-        let page_delta = page_map.serialize_delta(&delta.0);
-        let page_allocator = match delta.1 {
-            PageAllocatorDelta::Unchanged => None,
-            PageAllocatorDelta::Created => Some(page_map.serialize_allocator()),
-        };
-        let mut memory_delta = MemoryDeltaSerialization {
-            page_delta,
-            page_allocator,
-            num_wasm_pages,
-        };
-        // Duplicate all file descriptors to simulate sending them to another process.
-        // Otherwise, the files will be closed when this function returns.
-        let mut fds: Vec<&mut std::os::unix::io::RawFd> = vec![];
-        memory_delta.enumerate_fds(&mut fds);
-        for fd in fds.into_iter() {
-            *fd = nix::unistd::dup(*fd).unwrap();
-        }
-        memory_delta
-    }
-
     fn exec_input_for_update(
         method_name: &str,
         incoming_payload: &[u8],
         globals: Vec<Global>,
+        next_state_id: StateId,
     ) -> ExecInput {
         protocol::structs::ExecInput {
             func_ref: FuncRef::Method(WasmMethod::Update(method_name.to_string())),
@@ -205,6 +180,7 @@ mod tests {
             globals,
             canister_current_memory_usage: NumBytes::from(0),
             execution_parameters: execution_parameters(),
+            next_state_id,
             static_system_state: static_system_state(),
         }
     }
@@ -225,6 +201,7 @@ mod tests {
             globals,
             canister_current_memory_usage: NumBytes::from(0),
             execution_parameters: execution_parameters(),
+            next_state_id: StateId::new(),
             static_system_state: static_system_state(),
         }
     }
@@ -448,14 +425,17 @@ mod tests {
             .unwrap();
         assert!(rep.success);
 
+        let wasm_memory = PageMap::default();
+        let stable_memory = PageMap::default();
+
         let state_id = StateId::new();
         let rep = srv
             .open_state(OpenStateRequest {
                 state_id,
-                state: StateSerialization::Full {
+                state: StateSerialization {
                     globals: vec![],
-                    wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(&[], NumWasmPages::new(0)),
+                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
+                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(0)),
                 },
             })
             .sync()
@@ -469,7 +449,7 @@ mod tests {
                 exec_id: exec_id_1,
                 wasm_id,
                 state_id,
-                exec_input: exec_input_for_update("write", &[], vec![]),
+                exec_input: exec_input_for_update("write", &[], vec![], StateId::new()),
             })
             .sync()
             .unwrap();
@@ -534,14 +514,21 @@ mod tests {
             .unwrap();
         assert!(rep.success);
 
+        let mut wasm_memory = PageMap::default();
+        let stable_memory = PageMap::default();
+
+        // Ensure that the page allocator exists before the state is sent to the sandbox
+        // because the sandbox is going to allocate dirty pages and send them back.
+        wasm_memory.ensure_page_allocator();
+
         let state_id = StateId::new();
         let rep = srv
             .open_state(OpenStateRequest {
                 state_id,
-                state: StateSerialization::Full {
+                state: StateSerialization {
                     globals: vec![],
-                    wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(&[], NumWasmPages::new(0)),
+                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
+                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(0)),
                 },
             })
             .sync()
@@ -555,7 +542,12 @@ mod tests {
                 exec_id,
                 wasm_id,
                 state_id,
-                exec_input: exec_input_for_update("write", &[16, 0, 0, 0, 1, 2, 3, 4], vec![]),
+                exec_input: exec_input_for_update(
+                    "write",
+                    &[16, 0, 0, 0, 1, 2, 3, 4],
+                    vec![],
+                    StateId::new(),
+                ),
             })
             .sync()
             .unwrap();
@@ -566,17 +558,10 @@ mod tests {
         let state_modifications = result.exec_output.state_modifications.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
-        // Verify that there is one dirty page, that it is page 0, and
-        // that the data we passed in the message was written into
-        // memory at address 16.
-        assert_eq!(1, state_modifications.wasm_memory_page_delta.len());
-        assert_eq!(
-            PageIndex::from(0),
-            state_modifications.wasm_memory_page_delta[0].index
-        );
+        wasm_memory.deserialize_delta(state_modifications.wasm_memory.page_delta);
         assert_eq!(
             vec![1, 2, 3, 4],
-            state_modifications.wasm_memory_page_delta[0].bytes[16..20].to_vec()
+            wasm_memory.get_page(PageIndex::new(0))[16..20].to_vec()
         );
 
         let rep = srv
@@ -607,22 +592,24 @@ mod tests {
             .unwrap();
         assert!(rep.success);
 
+        let mut wasm_memory = PageMap::default();
+        let stable_memory = PageMap::default();
+
         // Create state setting up initial memory to have a couple
         // bytes set to particular values.
         let mut page_data = [0; 4096];
         page_data[42] = 1;
         page_data[43] = 2;
+        wasm_memory.update(&[(PageIndex::from(0), &page_data)]);
+
         let state_id = StateId::new();
         let rep = srv
             .open_state(OpenStateRequest {
                 state_id,
-                state: StateSerialization::Full {
+                state: StateSerialization {
                     globals: vec![],
-                    wasm_memory: memory_for_test(
-                        &[(PageIndex::from(0), &page_data)],
-                        NumWasmPages::new(1),
-                    ),
-                    stable_memory: memory_for_test(&[], NumWasmPages::new(0)),
+                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(1)),
+                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(0)),
                 },
             })
             .sync()
@@ -686,14 +673,17 @@ mod tests {
             .unwrap();
         assert!(rep.success);
 
+        let wasm_memory = PageMap::default();
+        let stable_memory = PageMap::default();
+
         let state_id = StateId::new();
         let rep = srv
             .open_state(OpenStateRequest {
                 state_id,
-                state: StateSerialization::Full {
+                state: StateSerialization {
                     globals: vec![],
-                    wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(&[], NumWasmPages::new(0)),
+                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
+                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(0)),
                 },
             })
             .sync()
@@ -707,7 +697,7 @@ mod tests {
                 exec_id,
                 wasm_id,
                 state_id,
-                exec_input: exec_input_for_update("write", &[], vec![]),
+                exec_input: exec_input_for_update("write", &[], vec![], StateId::new()),
             })
             .sync()
             .unwrap();
@@ -738,10 +728,10 @@ mod tests {
         let rep = srv
             .open_state(OpenStateRequest {
                 state_id,
-                state: StateSerialization::Full {
+                state: StateSerialization {
                     globals: vec![],
-                    wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(&[], NumWasmPages::new(0)),
+                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
+                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(0)),
                 },
             })
             .sync()
@@ -754,7 +744,7 @@ mod tests {
                 exec_id,
                 wasm_id,
                 state_id,
-                exec_input: exec_input_for_update("write", &[], globals),
+                exec_input: exec_input_for_update("write", &[], globals, StateId::new()),
             })
             .sync()
             .unwrap();
@@ -819,14 +809,21 @@ mod tests {
             .unwrap();
         assert!(rep.success);
 
+        let wasm_memory = PageMap::default();
+        let mut stable_memory = PageMap::default();
+
+        // Ensure that the page allocator exists before the state is sent to the sandbox
+        // because the sandbox is going to allocate dirty pages and send them back.
+        stable_memory.ensure_page_allocator();
+
         let state_id = StateId::new();
         let rep = srv
             .open_state(OpenStateRequest {
                 state_id,
-                state: StateSerialization::Full {
+                state: StateSerialization {
                     globals: vec![],
-                    wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(&[], NumWasmPages::new(1)),
+                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
+                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(1)),
                 },
             })
             .sync()
@@ -844,6 +841,7 @@ mod tests {
                     "write_stable",
                     &[16, 0, 0, 0, 1, 2, 3, 4],
                     vec![],
+                    StateId::new(),
                 ),
             })
             .sync()
@@ -855,17 +853,10 @@ mod tests {
         let state_modifications = result.exec_output.state_modifications.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
-        // Verify that there is one dirty page, that it is page 0, and
-        // that the data we passed in the message was written into
-        // memory at address 16.
-        assert_eq!(1, state_modifications.stable_memory_page_delta.len());
-        assert_eq!(
-            PageIndex::from(0),
-            state_modifications.stable_memory_page_delta[0].index
-        );
+        stable_memory.deserialize_delta(state_modifications.stable_memory.page_delta);
         assert_eq!(
             vec![1, 2, 3, 4],
-            state_modifications.stable_memory_page_delta[0].bytes[16..20].to_vec()
+            stable_memory.get_page(PageIndex::new(0))[16..20].to_vec()
         );
 
         let rep = srv
@@ -896,22 +887,22 @@ mod tests {
             .unwrap();
         assert!(rep.success);
 
+        let wasm_memory = PageMap::default();
+        let mut stable_memory = PageMap::default();
         // Create state setting up initial memory to have a couple
         // bytes set to particular values.
         let mut page_data = [0; 4096];
         page_data[42] = 1;
         page_data[43] = 2;
+        stable_memory.update(&[(PageIndex::new(0), &page_data)]);
         let state_id = StateId::new();
         let rep = srv
             .open_state(OpenStateRequest {
                 state_id,
-                state: StateSerialization::Full {
+                state: StateSerialization {
                     globals: vec![],
-                    wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(
-                        &[(PageIndex::from(0), &page_data)],
-                        NumWasmPages::new(1),
-                    ),
+                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
+                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(1)),
                 },
             })
             .sync()
@@ -961,19 +952,28 @@ mod tests {
             .unwrap();
         assert!(rep.success);
 
+        let mut wasm_memory = PageMap::default();
+        let stable_memory = PageMap::default();
+
+        // Ensure that the page allocator exists before the state is sent to the sandbox
+        // because the sandbox is going to allocate dirty pages and send them back.
+        wasm_memory.ensure_page_allocator();
+
         let parent_state_id = StateId::new();
         let rep = srv
             .open_state(OpenStateRequest {
                 state_id: parent_state_id,
-                state: StateSerialization::Full {
+                state: StateSerialization {
                     globals: vec![],
-                    wasm_memory: memory_for_test(&[], NumWasmPages::new(1)),
-                    stable_memory: memory_for_test(&[], NumWasmPages::new(0)),
+                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(1)),
+                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(0)),
                 },
             })
             .sync()
             .unwrap();
         assert!(rep.success);
+
+        let child_state_id = StateId::new();
 
         // Issue a write of bytes [1, 2, 3, 4] at address 16 in Wasm memory.
         let exec_id_1 = ExecId::new();
@@ -982,7 +982,12 @@ mod tests {
                 exec_id: exec_id_1,
                 wasm_id,
                 state_id: parent_state_id,
-                exec_input: exec_input_for_update("write", &[16, 0, 0, 0, 1, 2, 3, 4], vec![]),
+                exec_input: exec_input_for_update(
+                    "write",
+                    &[16, 0, 0, 0, 1, 2, 3, 4],
+                    vec![],
+                    child_state_id,
+                ),
             })
             .sync()
             .unwrap();
@@ -993,57 +998,14 @@ mod tests {
         let state_modifications = result.exec_output.state_modifications.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
-        // Verify that there is one dirty page, that it is page 0, and
-        // that the data we passed in the message was written into
-        // memory at address 16.
-        assert_eq!(1, state_modifications.wasm_memory_page_delta.len());
-        assert_eq!(
-            PageIndex::from(0),
-            state_modifications.wasm_memory_page_delta[0].index
-        );
+        wasm_memory.deserialize_delta(state_modifications.wasm_memory.page_delta);
         assert_eq!(
             vec![1, 2, 3, 4],
-            state_modifications.wasm_memory_page_delta[0].bytes[16..20].to_vec()
+            wasm_memory.get_page(PageIndex::new(0))[16..20].to_vec()
         );
-
-        let mut wasm_memory_page_map = PageMap::default();
-        let wasm_memory_page_refs: Vec<_> = state_modifications
-            .wasm_memory_page_delta
-            .iter()
-            .map(|page| (page.index, &page.bytes))
-            .collect();
-        let wasm_memory_delta = wasm_memory_page_map.update(&wasm_memory_page_refs[..]);
-
-        let mut stable_memory_page_map = PageMap::default();
-        let stable_memory_delta = stable_memory_page_map.update(&[]);
-
-        let state_delta = StateSerialization::Delta {
-            parent_state_id,
-            globals: vec![],
-            wasm_memory: memory_delta_for_test(
-                wasm_memory_page_map,
-                wasm_memory_delta,
-                state_modifications.wasm_memory_size,
-            ),
-            stable_memory: memory_delta_for_test(
-                stable_memory_page_map,
-                stable_memory_delta,
-                state_modifications.stable_memory_size,
-            ),
-        };
 
         let rep = srv
             .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id: exec_id_1 })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
-
-        let child_state_id = StateId::new();
-        let rep = srv
-            .open_state(OpenStateRequest {
-                state_id: child_state_id,
-                state: state_delta,
-            })
             .sync()
             .unwrap();
         assert!(rep.success);
@@ -1055,7 +1017,12 @@ mod tests {
                 exec_id: exec_id_2,
                 wasm_id,
                 state_id: child_state_id,
-                exec_input: exec_input_for_update("write", &[32, 0, 0, 0, 5, 6, 7, 8], vec![]),
+                exec_input: exec_input_for_update(
+                    "write",
+                    &[32, 0, 0, 0, 5, 6, 7, 8],
+                    vec![],
+                    StateId::new(),
+                ),
             })
             .sync()
             .unwrap();
@@ -1066,21 +1033,14 @@ mod tests {
         let state_modifications = result.exec_output.state_modifications.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
-        // Verify that there is one dirty page, that it is page 0, and
-        // that the data we passed in the message was written into
-        // memory at address 32 and we still have the old data at address 16.
-        assert_eq!(1, state_modifications.wasm_memory_page_delta.len());
-        assert_eq!(
-            PageIndex::from(0),
-            state_modifications.wasm_memory_page_delta[0].index
-        );
+        wasm_memory.deserialize_delta(state_modifications.wasm_memory.page_delta);
         assert_eq!(
             vec![5, 6, 7, 8],
-            state_modifications.wasm_memory_page_delta[0].bytes[32..36].to_vec()
+            wasm_memory.get_page(PageIndex::new(0))[32..36].to_vec()
         );
         assert_eq!(
             vec![1, 2, 3, 4],
-            state_modifications.wasm_memory_page_delta[0].bytes[16..20].to_vec()
+            wasm_memory.get_page(PageIndex::new(0))[16..20].to_vec()
         );
 
         let rep = srv
@@ -1125,19 +1085,28 @@ mod tests {
             .unwrap();
         assert!(rep.success);
 
+        let wasm_memory = PageMap::default();
+        let mut stable_memory = PageMap::default();
+
+        // Ensure that the page allocator exists before the state is sent to the sandbox
+        // because the sandbox is going to allocate dirty pages and send them back.
+        stable_memory.ensure_page_allocator();
+
         let parent_state_id = StateId::new();
         let rep = srv
             .open_state(OpenStateRequest {
                 state_id: parent_state_id,
-                state: StateSerialization::Full {
+                state: StateSerialization {
                     globals: vec![],
-                    wasm_memory: memory_for_test(&[], NumWasmPages::new(0)),
-                    stable_memory: memory_for_test(&[], NumWasmPages::new(1)),
+                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
+                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(1)),
                 },
             })
             .sync()
             .unwrap();
         assert!(rep.success);
+
+        let child_state_id = StateId::new();
 
         // Issue a write of bytes [1, 2, 3, 4] at address 16 in stable memory.
         let exec_id_1 = ExecId::new();
@@ -1150,6 +1119,7 @@ mod tests {
                     "write_stable",
                     &[16, 0, 0, 0, 1, 2, 3, 4],
                     vec![],
+                    child_state_id,
                 ),
             })
             .sync()
@@ -1161,57 +1131,14 @@ mod tests {
         let state_modifications = result.exec_output.state_modifications.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
-        // Verify that there is one dirty page, that it is page 0, and
-        // that the data we passed in the message was written into
-        // memory at address 16.
-        assert_eq!(1, state_modifications.stable_memory_page_delta.len());
-        assert_eq!(
-            PageIndex::from(0),
-            state_modifications.stable_memory_page_delta[0].index
-        );
+        stable_memory.deserialize_delta(state_modifications.stable_memory.page_delta);
         assert_eq!(
             vec![1, 2, 3, 4],
-            state_modifications.stable_memory_page_delta[0].bytes[16..20].to_vec()
+            stable_memory.get_page(PageIndex::new(0))[16..20].to_vec()
         );
-
-        let mut wasm_memory_page_map = PageMap::default();
-        let wasm_memory_delta = wasm_memory_page_map.update(&[]);
-
-        let mut stable_memory_page_map = PageMap::default();
-        let stable_memory_page_refs: Vec<_> = state_modifications
-            .stable_memory_page_delta
-            .iter()
-            .map(|page| (page.index, &page.bytes))
-            .collect();
-        let stable_memory_delta = stable_memory_page_map.update(&stable_memory_page_refs[..]);
-
-        let state_delta = StateSerialization::Delta {
-            parent_state_id,
-            globals: vec![],
-            wasm_memory: memory_delta_for_test(
-                wasm_memory_page_map,
-                wasm_memory_delta,
-                state_modifications.wasm_memory_size,
-            ),
-            stable_memory: memory_delta_for_test(
-                stable_memory_page_map,
-                stable_memory_delta,
-                state_modifications.stable_memory_size,
-            ),
-        };
 
         let rep = srv
             .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id: exec_id_1 })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
-
-        let child_state_id = StateId::new();
-        let rep = srv
-            .open_state(OpenStateRequest {
-                state_id: child_state_id,
-                state: state_delta,
-            })
             .sync()
             .unwrap();
         assert!(rep.success);
@@ -1227,6 +1154,7 @@ mod tests {
                     "write_stable",
                     &[32, 0, 0, 0, 5, 6, 7, 8],
                     vec![],
+                    StateId::new(),
                 ),
             })
             .sync()
@@ -1238,21 +1166,14 @@ mod tests {
         let state_modifications = result.exec_output.state_modifications.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
-        // Verify that there is one dirty page, that it is page 0, and
-        // that the data we passed in the message was written into
-        // memory at address 32 and we still have the old data at address 16.
-        assert_eq!(1, state_modifications.stable_memory_page_delta.len());
-        assert_eq!(
-            PageIndex::from(0),
-            state_modifications.stable_memory_page_delta[0].index
-        );
+        stable_memory.deserialize_delta(state_modifications.stable_memory.page_delta);
         assert_eq!(
             vec![5, 6, 7, 8],
-            state_modifications.stable_memory_page_delta[0].bytes[32..36].to_vec()
+            stable_memory.get_page(PageIndex::new(0))[32..36].to_vec()
         );
         assert_eq!(
             vec![1, 2, 3, 4],
-            state_modifications.stable_memory_page_delta[0].bytes[16..20].to_vec()
+            stable_memory.get_page(PageIndex::new(0))[16..20].to_vec()
         );
 
         let rep = srv

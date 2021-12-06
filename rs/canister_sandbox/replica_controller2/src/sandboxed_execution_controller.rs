@@ -1,18 +1,14 @@
 use ic_canister_sandbox_common::protocol;
 use ic_canister_sandbox_common::protocol::id::{StateId, WasmId};
-use ic_canister_sandbox_common::protocol::sbxsvc::{
-    MemoryDeltaSerialization, MemorySerialization, StateSerialization,
-};
+use ic_canister_sandbox_common::protocol::sbxsvc::{MemorySerialization, StateSerialization};
 use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_embedders::{WasmExecutionInput, WasmExecutionOutput};
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_logger::ReplicaLogger;
 use ic_replicated_state::canister_state::execution_state::{
-    SandboxExecutionState, SandboxExecutionStateHandle, SandboxExecutionStateOwner,
-    SandboxExecutionStateSynchronization, WasmBinary,
+    SandboxExecutionState, SandboxExecutionStateHandle, SandboxExecutionStateOwner, WasmBinary,
 };
-use ic_replicated_state::page_map::PageAllocatorDelta;
-use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageIndex};
+use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_system_api::{StaticSystemState, SystemStateAccessorDirect};
 use ic_types::CanisterId;
 use ic_wasm_types::BinaryEncodedWasm;
@@ -49,10 +45,10 @@ pub struct OpenedState {
 }
 
 impl OpenedState {
-    fn new(sandbox_service: Arc<dyn SandboxService>) -> Self {
+    fn new(sandbox_service: Arc<dyn SandboxService>, state_id: StateId) -> Self {
         Self {
             sandbox_service,
-            state_id: StateId::new(),
+            state_id,
         }
     }
 }
@@ -201,6 +197,7 @@ impl SandboxedExecutionController {
 
         let state_handle = open_remote_state(&sandbox_process.sandbox_service, &execution_state);
         let state_id = StateId::from(state_handle.get_id());
+        let next_state_id = StateId::new();
         let subnet_available_memory = execution_parameters.subnet_available_memory.clone();
 
         sandbox_process
@@ -215,6 +212,7 @@ impl SandboxedExecutionController {
                     globals: execution_state.exported_globals.clone(),
                     canister_current_memory_usage,
                     execution_parameters,
+                    next_state_id,
                     static_system_state,
                 },
             })
@@ -243,35 +241,23 @@ impl SandboxedExecutionController {
                 // TODO: If a canister has broken out of wasm then it might have allocated more
                 // wasm or stable memory then allowed. We should add an additional check here
                 // that thet canister is still within it's allowed memory usage.
-                let wasm_memory_page_refs: Vec<_> = state_modifications
-                    .wasm_memory_page_delta
-                    .iter()
-                    .map(|page| (page.index, &page.bytes))
-                    .collect();
-                let wasm_memory_delta = execution_state
+                execution_state
                     .wasm_memory
                     .page_map
-                    .update(&wasm_memory_page_refs[..]);
-                execution_state.wasm_memory.size = state_modifications.wasm_memory_size;
+                    .deserialize_delta(state_modifications.wasm_memory.page_delta);
+                execution_state.wasm_memory.size = state_modifications.wasm_memory.size;
 
-                let stable_memory_page_refs: Vec<_> = state_modifications
-                    .stable_memory_page_delta
-                    .iter()
-                    .map(|page| (page.index, &page.bytes))
-                    .collect();
-                let stable_memory_delta = execution_state
+                execution_state
                     .stable_memory
                     .page_map
-                    .update(&stable_memory_page_refs[..]);
-                execution_state.stable_memory.size = state_modifications.stable_memory_size;
+                    .deserialize_delta(state_modifications.stable_memory.page_delta);
+                execution_state.stable_memory.size = state_modifications.stable_memory.size;
 
                 execution_state.exported_globals = state_modifications.globals;
 
-                execution_state.sandbox_state = SandboxExecutionState::delta(
-                    state_handle,
-                    wasm_memory_delta,
-                    stable_memory_delta,
-                );
+                let state_handle =
+                    wrap_remote_state(&sandbox_process.sandbox_service, next_state_id);
+                execution_state.sandbox_state = SandboxExecutionState::synced(state_handle);
 
                 // Unconditionally update the subnet available memory.
                 // This value is actually a shared value under a RwLock, and the non-sandbox
@@ -337,80 +323,38 @@ fn open_remote_state(
     let mut guard = execution_state.sandbox_state.lock().unwrap();
     match &*guard {
         SandboxExecutionState::Synced(id) => id.clone(),
-        SandboxExecutionState::Unsynced(synchronisation) => {
+        SandboxExecutionState::Unsynced => {
             let globals = execution_state.exported_globals.clone();
-            let state = match synchronisation {
-                SandboxExecutionStateSynchronization::Full => {
-                    let wasm_memory_page_map = execution_state.wasm_memory.page_map.serialize();
-                    let wasm_memory = MemorySerialization {
-                        page_map: wasm_memory_page_map,
-                        num_wasm_pages: execution_state.wasm_memory.size,
-                    };
-                    let stable_memory_page_map = execution_state.stable_memory.page_map.serialize();
-                    let stable_memory = MemorySerialization {
-                        page_map: stable_memory_page_map,
-                        num_wasm_pages: execution_state.stable_memory.size,
-                    };
-                    StateSerialization::Full {
-                        globals,
-                        wasm_memory,
-                        stable_memory,
-                    }
-                }
-                SandboxExecutionStateSynchronization::Delta {
-                    parent_state_handle,
-                    wasm_memory_pages,
-                    wasm_memory_page_allocator,
-                    stable_memory_pages,
-                    stable_memory_page_allocator,
-                } => {
-                    let wasm_memory = serialize_memory_delta(
-                        &execution_state.wasm_memory,
-                        wasm_memory_pages,
-                        wasm_memory_page_allocator,
-                    );
-                    let stable_memory = serialize_memory_delta(
-                        &execution_state.stable_memory,
-                        stable_memory_pages,
-                        stable_memory_page_allocator,
-                    );
-                    StateSerialization::Delta {
-                        parent_state_id: StateId::from(parent_state_handle.get_id()),
-                        globals,
-                        wasm_memory,
-                        stable_memory,
-                    }
-                }
+            let wasm_memory_page_map = execution_state.wasm_memory.page_map.serialize();
+            let wasm_memory = MemorySerialization {
+                page_map: wasm_memory_page_map,
+                num_wasm_pages: execution_state.wasm_memory.size,
             };
-            let opened_state = OpenedState::new(Arc::clone(sandbox_service));
+            let stable_memory_page_map = execution_state.stable_memory.page_map.serialize();
+            let stable_memory = MemorySerialization {
+                page_map: stable_memory_page_map,
+                num_wasm_pages: execution_state.stable_memory.size,
+            };
+            let state = StateSerialization {
+                globals,
+                wasm_memory,
+                stable_memory,
+            };
+            let state_id = StateId::new();
             sandbox_service
-                .open_state(protocol::sbxsvc::OpenStateRequest {
-                    state_id: StateId::from(opened_state.get_id()),
-                    state,
-                })
+                .open_state(protocol::sbxsvc::OpenStateRequest { state_id, state })
                 .on_completion(|_| {});
-            let id = SandboxExecutionStateHandle::new(Arc::new(opened_state));
-            *guard = SandboxExecutionState::Synced(id.clone());
-            id
+            let handle = wrap_remote_state(sandbox_service, state_id);
+            *guard = SandboxExecutionState::Synced(handle.clone());
+            handle
         }
     }
 }
 
-// Creates a serialization-friendly representation of the memory delta from
-// the list of modified pages and the page allocator delta.
-fn serialize_memory_delta(
-    memory: &Memory,
-    pages: &[PageIndex],
-    page_allocator: &PageAllocatorDelta,
-) -> MemoryDeltaSerialization {
-    let page_delta = memory.page_map.serialize_delta(pages);
-    let page_allocator = match page_allocator {
-        PageAllocatorDelta::Unchanged => None,
-        PageAllocatorDelta::Created => Some(memory.page_map.serialize_allocator()),
-    };
-    MemoryDeltaSerialization {
-        page_delta,
-        page_allocator,
-        num_wasm_pages: memory.size,
-    }
+fn wrap_remote_state(
+    sandbox_service: &Arc<dyn SandboxService>,
+    state_id: StateId,
+) -> SandboxExecutionStateHandle {
+    let opened_state = OpenedState::new(Arc::clone(sandbox_service), state_id);
+    SandboxExecutionStateHandle::new(Arc::new(opened_state))
 }

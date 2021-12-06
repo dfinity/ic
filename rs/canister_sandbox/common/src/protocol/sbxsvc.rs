@@ -6,7 +6,7 @@ use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     page_map::{
         CheckpointSerialization, MappingSerialization, PageAllocatorSerialization,
-        PageDeltaSerialization, PageMapSerialization, PageSerialization,
+        PageMapSerialization, PageSerialization,
     },
     Global, NumWasmPages,
 };
@@ -97,25 +97,6 @@ impl EnumerateInnerFileDescriptors for MemorySerialization {
     }
 }
 
-/// Represents a memory delta that can be sent to the sandbox process.
-/// Note that the page allocator is optional because it is send only if the
-/// parent state has an empty allocator and a new allocator was created for the
-/// current state.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct MemoryDeltaSerialization {
-    pub page_delta: PageDeltaSerialization,
-    pub page_allocator: Option<PageAllocatorSerialization>,
-    pub num_wasm_pages: NumWasmPages,
-}
-
-impl EnumerateInnerFileDescriptors for MemoryDeltaSerialization {
-    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        if let Some(page_allocator) = self.page_allocator.as_mut() {
-            page_allocator.enumerate_fds(fds)
-        }
-    }
-}
-
 // The trait is implemented here to avoid dependency of relicated-state on
 // canister-sandbox.
 impl EnumerateInnerFileDescriptors for PageMapSerialization {
@@ -155,46 +136,18 @@ impl EnumerateInnerFileDescriptors for PageAllocatorSerialization {
 }
 
 /// Contains information that is necessary to create an execution state in
-/// the sandbox process:
-/// - Full: contains snapshots of the Wasm and stable memories.
-/// - Delta: describes the memory delta that should be applied to the given
-///   parent state.
+/// the sandbox process: the globals, the Wasm memory, and the stable memory.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum StateSerialization {
-    Full {
-        globals: Vec<Global>,
-        wasm_memory: MemorySerialization,
-        stable_memory: MemorySerialization,
-    },
-    Delta {
-        parent_state_id: StateId,
-        globals: Vec<Global>,
-        wasm_memory: MemoryDeltaSerialization,
-        stable_memory: MemoryDeltaSerialization,
-    },
+pub struct StateSerialization {
+    pub globals: Vec<Global>,
+    pub wasm_memory: MemorySerialization,
+    pub stable_memory: MemorySerialization,
 }
 
 impl EnumerateInnerFileDescriptors for StateSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        match self {
-            StateSerialization::Full {
-                globals: _,
-                wasm_memory,
-                stable_memory,
-            } => {
-                wasm_memory.enumerate_fds(fds);
-                stable_memory.enumerate_fds(fds);
-            }
-            StateSerialization::Delta {
-                parent_state_id: _,
-                globals: _,
-                wasm_memory,
-                stable_memory,
-            } => {
-                wasm_memory.enumerate_fds(fds);
-                stable_memory.enumerate_fds(fds);
-            }
-        }
+        self.wasm_memory.enumerate_fds(fds);
+        self.stable_memory.enumerate_fds(fds);
     }
 }
 

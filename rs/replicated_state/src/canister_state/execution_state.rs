@@ -1,5 +1,5 @@
 use super::SessionNonce;
-use crate::{num_bytes_try_from, page_map::PageAllocatorDelta, NumWasmPages, PageIndex, PageMap};
+use crate::{num_bytes_try_from, NumWasmPages, PageIndex, PageMap};
 use ic_config::embedders::PersistenceType;
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState, MappedStateImpl};
 use ic_interfaces::execution_environment::HypervisorResult;
@@ -211,57 +211,24 @@ impl Default for Memory {
     }
 }
 
-/// Describes how to synchronize a local execution state in the replica process
-/// with the remote state in the sandbox process. `Full` means that the whole
-/// state needs to be sent to the sandbox process. `Delta` means that the state
-/// can be derived from the given parent state by applying dirty pages and
-/// possibly constructing a new page allocator (if it was empty before).
-/// Note that the dirty pages are represented by their indicies for efficiency.
-/// Their contents will be fetched during the actual synchronization.
-#[derive(Debug)]
-pub enum SandboxExecutionStateSynchronization {
-    Full,
-    Delta {
-        parent_state_handle: SandboxExecutionStateHandle,
-        wasm_memory_pages: Vec<PageIndex>,
-        wasm_memory_page_allocator: PageAllocatorDelta,
-        stable_memory_pages: Vec<PageIndex>,
-        stable_memory_page_allocator: PageAllocatorDelta,
-    },
-}
-
 /// Represents the synchronisation status of the local execution state
 /// in the replica process and the remote execution state in the sandbox
 /// process. If the states are in sync, then it stores the id of the
-/// state in the sandbox process. Otherwise, it stores information on
-/// how to synchronize the states.
+/// state in the sandbox process. Otherwise, it indicates that the snapshot
+/// of the state needs to be sent to the sandbox process.
 #[derive(Debug)]
 pub enum SandboxExecutionState {
     Synced(SandboxExecutionStateHandle),
-    Unsynced(SandboxExecutionStateSynchronization),
+    Unsynced,
 }
 
 impl SandboxExecutionState {
     pub fn new() -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(SandboxExecutionState::Unsynced(
-            SandboxExecutionStateSynchronization::Full,
-        )))
+        Arc::new(Mutex::new(SandboxExecutionState::Unsynced))
     }
 
-    pub fn delta(
-        parent_state_handle: SandboxExecutionStateHandle,
-        wasm_memory_delta: (Vec<PageIndex>, PageAllocatorDelta),
-        stable_memory_delta: (Vec<PageIndex>, PageAllocatorDelta),
-    ) -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(SandboxExecutionState::Unsynced(
-            SandboxExecutionStateSynchronization::Delta {
-                parent_state_handle,
-                wasm_memory_pages: wasm_memory_delta.0,
-                wasm_memory_page_allocator: wasm_memory_delta.1,
-                stable_memory_pages: stable_memory_delta.0,
-                stable_memory_page_allocator: stable_memory_delta.1,
-            },
-        )))
+    pub fn synced(state_handle: SandboxExecutionStateHandle) -> Arc<Mutex<Self>> {
+        Arc::new(Mutex::new(SandboxExecutionState::Synced(state_handle)))
     }
 }
 

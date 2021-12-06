@@ -102,15 +102,9 @@ impl Default for PageAllocator {
 
 impl<A: PageAllocatorInner> PageAllocator<A> {
     /// Ensures that the page allocator is initialized.
-    pub(super) fn ensure_initialized(&mut self) -> (InitializationWitness, PageAllocatorDelta) {
-        let delta = match self.0 {
-            None => {
-                self.0 = Some(Arc::new(A::default()));
-                PageAllocatorDelta::Created
-            }
-            Some(_) => PageAllocatorDelta::Unchanged,
-        };
-        (InitializationWitness(()), delta)
+    pub(super) fn ensure_initialized(&mut self) -> InitializationWitness {
+        self.0.get_or_insert(Arc::new(A::default()));
+        InitializationWitness(())
     }
 
     /// Allocates multiple pages with the given contents.
@@ -189,14 +183,6 @@ impl<A: PageAllocatorInner> PageAllocator<A> {
 /// A helper to ensure that the caller of `allocate_initialized()` does not
 /// forget to call `ensure_initialized()`.
 pub(super) struct InitializationWitness(());
-
-/// Indicates whether the page allocator was created or not. It is used for
-/// synchronization with the sandbox process.
-#[derive(Debug)]
-pub enum PageAllocatorDelta {
-    Unchanged,
-    Created,
-}
 
 /// Exported publicly for benchmarking.
 pub trait PageInner: Debug {
