@@ -34,61 +34,69 @@ mod basic_sig {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_generate_ed25519_key_pair() {
-        test_utils::should_generate_ed25519_key_pair(new_csp_vault());
+        test_utils::basic_sig::should_generate_ed25519_key_pair(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_fail_to_generate_key_for_wrong_algorithm_id() {
-        test_utils::should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(new_csp_vault());
+        test_utils::basic_sig::should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(
+            new_csp_vault(),
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_sign_verifiably_with_generated_key() {
-        test_utils::should_sign_and_verify_with_generated_ed25519_key_pair(new_csp_vault());
+        test_utils::basic_sig::should_sign_and_verify_with_generated_ed25519_key_pair(
+            new_csp_vault(),
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_not_sign_with_unsupported_algorithm_id() {
-        test_utils::should_not_basic_sign_with_unsupported_algorithm_id(new_csp_vault());
+        test_utils::basic_sig::should_not_basic_sign_with_unsupported_algorithm_id(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_not_sign_with_non_existent_key() {
-        test_utils::should_not_basic_sign_with_non_existent_key(new_csp_vault());
+        test_utils::basic_sig::should_not_basic_sign_with_non_existent_key(new_csp_vault());
     }
 }
 
-mod multi_sign {
+mod multi_sig {
     use super::*;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_generate_key_ok() {
-        test_utils::should_generate_multi_bls12_381_key_pair(new_csp_vault());
+        test_utils::multi_sig::should_generate_multi_bls12_381_key_pair(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_fail_to_generate_key_for_wrong_algorithm_id() {
-        test_utils::should_fail_to_generate_multi_sig_key_for_wrong_algorithm_id(new_csp_vault());
+        test_utils::multi_sig::should_fail_to_generate_multi_sig_key_for_wrong_algorithm_id(
+            new_csp_vault(),
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_generate_verifiable_pop() {
-        test_utils::should_generate_verifiable_pop(new_csp_vault());
+        test_utils::multi_sig::should_generate_verifiable_pop(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_multi_sign_and_verify_with_generated_key() {
-        test_utils::should_multi_sign_and_verify_with_generated_key(new_csp_vault());
+        test_utils::multi_sig::should_multi_sign_and_verify_with_generated_key(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_fail_to_multi_sign_with_unsupported_algorithm_id() {
-        test_utils::should_not_multi_sign_with_unsupported_algorithm_id(new_csp_vault());
+        test_utils::multi_sig::should_not_multi_sign_with_unsupported_algorithm_id(new_csp_vault());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn should_fail_to_multi_sign_if_secret_key_in_store_has_wrong_type() {
-        test_utils::should_not_multi_sign_if_secret_key_in_store_has_wrong_type(new_csp_vault());
+        test_utils::multi_sig::should_not_multi_sign_if_secret_key_in_store_has_wrong_type(
+            new_csp_vault(),
+        );
     }
 }
 
@@ -101,7 +109,7 @@ mod threshold_sig {
     fn test_threshold_sigs(seed: [u8; 32]) {
         let mut rng = ChaChaRng::from_seed(seed);
         let message = rng.gen::<[u8; 32]>();
-        test_utils::test_threshold_scheme_with_basic_keygen(
+        test_utils::threshold_sig::test_threshold_scheme_with_basic_keygen(
             Randomness::from(rng.gen::<[u8; 32]>()),
             new_csp_vault(),
             &message,
@@ -130,7 +138,10 @@ mod secret_key_store {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn key_should_be_present_only_after_generation() {
-        test_utils::sks_should_contain_keys_only_after_generation(new_csp_vault(), new_csp_vault());
+        test_utils::sks::sks_should_contain_keys_only_after_generation(
+            new_csp_vault(),
+            new_csp_vault(),
+        );
     }
 }
 
