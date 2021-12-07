@@ -22,7 +22,7 @@ use std::sync::{
 use crate::active_execution_state_registry::ActiveExecutionStateRegistry;
 use crate::controller_service_impl::ControllerServiceImpl;
 use crate::elastic_cache::Cache;
-use crate::launch_as_process::create_sandbox_process;
+use crate::launch_as_process::{create_sandbox_path_and_args, create_sandbox_process};
 use crate::unique_id::UniqueId;
 
 #[derive(Clone)]
@@ -83,16 +83,24 @@ pub struct SandboxedExecutionController {
     backends: Mutex<HashMap<CanisterId, SandboxProcess>>,
     logger: ReplicaLogger,
     compile_count: AtomicU64,
+    /// Path to the `canister_sandbox` executable.
+    sandbox_exec_path: String,
+    /// Arguments to be passed to `canister_sandbox` which are the same for all
+    /// canisters.
+    sandbox_exec_argv: Vec<String>,
 }
 
 impl SandboxedExecutionController {
     /// Create a new sandboxed execution controller. It provides the
-    /// same interface as the
+    /// same interface as the `WasmExecutor`.
     pub fn new(logger: ReplicaLogger) -> Self {
+        let (sandbox_exec_path, sandbox_exec_argv) = create_sandbox_path_and_args();
         Self {
             backends: Mutex::new(HashMap::new()),
             logger,
             compile_count: AtomicU64::new(0),
+            sandbox_exec_path,
+            sandbox_exec_argv,
         }
     }
 
@@ -107,7 +115,12 @@ impl SandboxedExecutionController {
             let reg = Arc::new(ActiveExecutionStateRegistry::new());
             let controller_service =
                 ControllerServiceImpl::new(Arc::clone(&reg), self.logger.clone());
-            let sandbox_service = create_sandbox_process(controller_service, canister_id);
+            let sandbox_service = create_sandbox_process(
+                controller_service,
+                canister_id,
+                &self.sandbox_exec_path,
+                self.sandbox_exec_argv.clone(),
+            );
 
             let sandbox_service_copy = Arc::clone(&sandbox_service);
 

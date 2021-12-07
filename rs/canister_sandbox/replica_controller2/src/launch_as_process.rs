@@ -3,6 +3,7 @@ use nix::unistd::Pid;
 use std::{
     os::unix::{io::AsRawFd, net::UnixStream},
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use ic_canister_sandbox_common::{
@@ -139,23 +140,14 @@ pub fn spawn_canister_sandbox_process(
 pub fn create_sandbox_process(
     controller_service: Arc<dyn rpc::DemuxServer<ctlsvc::Request, ctlsvc::Reply> + Send + Sync>,
     canister_id: &CanisterId,
+    exec_path: &str,
+    mut argv: Vec<String>,
 ) -> Arc<dyn SandboxService> {
-    let (exec_path, mut argv) = match build_sandbox_binary_relative_path(SANDBOX_EXECUTABLE_NAME) {
-        Some(path) if Path::exists(Path::new(&path)) => (path.clone(), vec![path]),
-        // If we couldn't build the relative path then we should be in a testing environment.
-        Some(_) | None => {
-            create_path_and_initial_args_for_testing().expect("No canister_sandbox binary found")
-        }
-    };
-
     argv.push(canister_id.to_string());
 
-    let (sandbox_handle, _pid, _recv_thread_handle) = spawn_canister_sandbox_process(
-        &exec_path,
-        &argv,
-        Arc::clone(&controller_service) as Arc<_>,
-    )
-    .expect("Failed to start sandbox process");
+    let (sandbox_handle, _pid, _recv_thread_handle) =
+        spawn_canister_sandbox_process(exec_path, &argv, Arc::clone(&controller_service) as Arc<_>)
+            .expect("Failed to start sandbox process");
 
     sandbox_handle
 }
@@ -210,14 +202,26 @@ fn current_binary_folder() -> Option<PathBuf> {
 /// Build path to the sandbox executable relative to this executable's
 /// path (using argv[0]). This allows easily locating the sandbox
 /// executable provided it is in the same path as the main replica.
-pub fn build_sandbox_binary_relative_path(sandbox_executable_name: &str) -> Option<String> {
+fn build_sandbox_binary_relative_path(sandbox_executable_name: &str) -> Option<String> {
     let folder = current_binary_folder()?;
     Some(folder.join(sandbox_executable_name).to_str()?.to_string())
 }
 
+pub(super) fn create_sandbox_path_and_args() -> (String, Vec<String>) {
+    match build_sandbox_binary_relative_path(SANDBOX_EXECUTABLE_NAME)
+        .or_else(|| std::env::var("SANDBOX_EXECUTABLE_PATH").ok())
+    {
+        Some(path) if Path::exists(Path::new(&path)) => (path.clone(), vec![path]),
+        // If we couldn't build the relative path then we should be in a testing environment.
+        Some(_) | None => {
+            create_sandbox_path_and_args_for_testing().expect("No canister_sandbox binary found")
+        }
+    }
+}
+
 /// Only for testing purposes.
 /// Gets executable and arguments when running in CI or in a dev environment.
-fn create_path_and_initial_args_for_testing() -> Option<(String, Vec<String>)> {
+fn create_sandbox_path_and_args_for_testing() -> Option<(String, Vec<String>)> {
     // In CI we expect the sandbox executable to be in our path so this should
     // succeed
     if let Ok(exec_path) = which::which(SANDBOX_EXECUTABLE_NAME) {
@@ -230,32 +234,23 @@ fn create_path_and_initial_args_for_testing() -> Option<(String, Vec<String>)> {
 
     // When running in a dev environment we expect `cargo` to be in our path and
     // we should be able to find the workspace cargo manifest so this should
-    // succeed
+    // succeed.
     match (
         which::which("cargo"),
         top_level_cargo_manifest_for_testing(),
     ) {
         (Ok(path), Some(manifest_path)) => {
             println!(
-                "Running sandbox with cargo {:?} and manifest {:?}",
+                "Building sandbox with cargo {:?} and manifest {:?}",
                 path, manifest_path
             );
             let path = path.to_str().unwrap().to_string();
+            build_sandbox_with_cargo(&path, &manifest_path);
+            // Run `canister_sandbox` using `cargo run` so that we don't need to find the
+            // executable in the target folder.
             Some((
                 path.clone(),
-                [
-                    &path,
-                    "run",
-                    "--quiet",
-                    "--manifest-path",
-                    manifest_path.to_str().unwrap(),
-                    "--bin",
-                    SANDBOX_EXECUTABLE_NAME,
-                    "--",
-                ]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
+                make_cargo_args(&path, &manifest_path, CargoCommandType::Run),
             ))
         }
         _ => None,
@@ -277,4 +272,49 @@ fn top_level_cargo_manifest_for_testing() -> Option<PathBuf> {
         next_parent = parent.parent();
     }
     current_manifest
+}
+
+fn build_sandbox_with_cargo(cargo_path: &str, manifest_path: &Path) {
+    let argv = make_cargo_args(cargo_path, manifest_path, CargoCommandType::Build);
+    let output = Command::new(cargo_path)
+        .args(&argv)
+        .output()
+        .expect("Failed to build canister_sandbox with cargo");
+    if !output.status.success() {
+        panic!(
+            "Failed to build canister_sandbox with cargo\nError: {:?}\nstderr: {:?}",
+            output.status, output.stderr
+        )
+    }
+}
+
+enum CargoCommandType {
+    Build,
+    Run,
+}
+
+fn make_cargo_args(
+    cargo_path: &str,
+    manifest_path: &Path,
+    cargo_command_type: CargoCommandType,
+) -> Vec<String> {
+    let common_args = vec![
+        "--quiet",
+        "--message-format",
+        "json",
+        "--manifest-path",
+        manifest_path.to_str().unwrap(),
+        "--bin",
+        SANDBOX_EXECUTABLE_NAME,
+    ];
+    let args = match cargo_command_type {
+        CargoCommandType::Run => vec![vec![cargo_path, "run"], common_args, vec!["--"]],
+        // We end up running this with `std::process::Command` which adds the executable at the
+        // beginning for us.
+        CargoCommandType::Build => vec![vec!["build"], common_args],
+    };
+    args.into_iter()
+        .map(|s| s.into_iter().map(|s| s.to_string()))
+        .flatten()
+        .collect()
 }
