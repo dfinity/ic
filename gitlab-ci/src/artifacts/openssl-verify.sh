@@ -21,14 +21,14 @@ cd "$folder"
 echo
 echo "# Verifying the SHA256 sums of the build artifacts"
 echo
-head -n-1 sign-input.txt >SHA256SUMS
+sed -e '$d' head -n-1 sign-input.txt >SHA256SUMS
 sha256sum -c SHA256SUMS
 
 echo
 echo "# Verifying the validity of the sign-input.txt"
 echo
 # verify the signature
-cat sign.sig | sed -e 's/.*= \([^ ]\+\)$/\1/' | xxd -r -p >sign.sig.bin
+cat sign.sig | sed -e 's/.*= \(.*\)$/\1/' | xxd -r -p >sign.sig.bin
 openssl dgst -sha256 -verify $BASEDIR/trusted-builders-public.key -signature "sign.sig.bin" sign-input.txt
 
 echo
