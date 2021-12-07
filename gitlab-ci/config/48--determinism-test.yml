@@ -33,7 +33,7 @@ build-determinism-canisters:
       openssl sha256 artifacts/canisters/*
       echo "cargo-build-canisters-determinism"
       openssl sha256 artifacts/canisters-determinism/*
-      diff -u artifacts/canisters/SHA256SUMS artifacts/canisters/SHA256SUMS
+      diff -u artifacts/canisters/SHA256SUMS artifacts/canisters-determinism/SHA256SUMS
 
 
 build-determinism-update-img:
