@@ -27,6 +27,6 @@ proptest! {
             let local_csp_server = LocalCspVault::new_for_test(csprng, key_store);
             Arc::new(local_csp_server)
         };
-        test_utils::test_threshold_scheme_with_basic_keygen(Randomness::from(rng.gen::<[u8; 32]>()), csp_vault, &message);
+        test_utils::threshold_sig::test_threshold_scheme_with_basic_keygen(Randomness::from(rng.gen::<[u8; 32]>()), csp_vault, &message);
     }
 }

@@ -96,7 +96,7 @@ fn threshold_signatures_should_work(
     };
     let seed = Randomness::from(rng.gen::<[u8; 32]>());
     let message = b"Tinker tailor soldier spy";
-    test_utils::test_threshold_signatures(
+    test_utils::threshold_sig::test_threshold_signatures(
         &public_coefficients,
         &signatories[..],
         seed,
