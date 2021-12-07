@@ -1178,7 +1178,7 @@ impl Blocks {
             self.last_hash = Some(first.hash);
         }
 
-        let mut n = 0;
+        let mut n = 1; // one block loaded so far (genesis or first from snapshot)
         let mut next_idx = self.last()?.map(|hb| hb.index + 1).unwrap();
         loop {
             let batch = self
