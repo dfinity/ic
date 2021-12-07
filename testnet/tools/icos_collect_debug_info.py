@@ -11,6 +11,7 @@ The collected debug information can be downloaded from the GitLab Web UI or usin
 ${REPO_ROOT}/gitlab-ci/src/artifacts/gitlab_artifacts_download.py --job-id <gitlab-job-id>
 """
 import argparse
+import json
 import logging
 import os
 import pathlib
@@ -40,6 +41,44 @@ def get_deployment_nodes(deployment_name: str):
         ]
     )
     return yaml.load(output, Loader=yaml.FullLoader)
+
+
+def _get_map_node_to_ic_host(deployment_name: str):
+    """Get the mapping {node: phy_node} between the nodes and the raw iron (physical host) behind it."""
+    hosts = subprocess.check_output(
+        [
+            repo_root / "testnet/ansible/inventory/inventory.py",
+            "--deployment",
+            deployment_name,
+            "--list",
+        ]
+    )
+    result = {}
+    for phy_host, host_vars in json.loads(hosts)["_meta"]["hostvars"].items():
+        # Try to get the list of ic_guests on every hostvars. If the list does not exist, fallback to an empty list.
+        for node in host_vars.get("ic_guests", []):
+            # There are some "ic_guests" on this physical node, so create a reverse mapping
+            result[node] = phy_host
+    return result
+
+
+def collect_host_dominfo(nodes: typing.List[str], deployment_name: str):
+    """Iterate through the hosts collecting dominfo for each node and pull the libvirt dominfo for the deployment VMs."""
+    node_to_ic_host = _get_map_node_to_ic_host(deployment_name)
+    for node_name, node_ipv6 in nodes.items():
+        ichost = node_to_ic_host[node_name]
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        command = "sudo virsh dominfo " + node_name
+
+        client.connect(ichost, port=22, username=os.environ.get("USER", "gitlab-runner"), timeout=10)
+
+        (_stdin, _stdout, _stderr) = client.exec_command(f"timeout 10 bash -c '{command}'")
+        logging.info("-------")
+        logging.info("using command _ %s _ on host %s", command, ichost)
+        for line in iter(_stdout.readline, ""):
+            print(line, end="")
 
 
 def _ssh_run_command(node: typing.List, out_dir: pathlib.Path, out_filename: str, command: str):
@@ -147,6 +186,7 @@ def collect_all_debug_info(
     out_dir.mkdir(exist_ok=True, parents=True)
     paramiko.util.log_to_file(out_dir / "paramiko.log", level="WARN")
 
+    collect_host_dominfo(nodes, deployment_name)
     collect_journalctl_logs(nodes, out_dir)
     collect_ic_replica_service_logs(nodes, out_dir)
     collect_replica_api_status(nodes, out_dir)
