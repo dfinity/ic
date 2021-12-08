@@ -8753,7 +8753,7 @@ fn test_wfq_real_data() {
 /// every 20s.
 #[test]
 fn test_wfq_constant_flipping() {
-    let initial_expiration_seconds = 2 * ONE_DAY_SECONDS;
+    let initial_expiration_seconds = 4 * ONE_DAY_SECONDS;
     let mut neuron_votes: Vec<NeuronVote> = vec![NeuronVote {
         vote_and_time: Some((Vote::Yes, 1)),
         stake: 10,
@@ -8767,7 +8767,7 @@ fn test_wfq_constant_flipping() {
             vote = Vote::No;
         }
         neuron_votes.push(NeuronVote {
-            vote_and_time: Some((vote, 40 * i as u64)),
+            vote_and_time: Some((vote, 80 * i as u64)),
             stake: 20,
         })
     }
@@ -8781,10 +8781,10 @@ fn test_wfq_constant_flipping() {
         .unwrap()
         .current_deadline_timestamp_seconds;
 
-    assert!(deadline_after_test <= initial_deadline_seconds + 2 * ONE_DAY_SECONDS);
+    assert!(deadline_after_test <= initial_deadline_seconds + 4 * ONE_DAY_SECONDS);
     // Assert that the deadline is moved by 96 hours.
-    assert!(deadline_after_test <= DEFAULT_TEST_START_TIMESTAMP_SECONDS + 4 * ONE_DAY_SECONDS);
+    assert!(deadline_after_test <= DEFAULT_TEST_START_TIMESTAMP_SECONDS + 8 * ONE_DAY_SECONDS);
     assert!(
-        deadline_after_test >= DEFAULT_TEST_START_TIMESTAMP_SECONDS + 4 * ONE_DAY_SECONDS - 600
+        deadline_after_test >= DEFAULT_TEST_START_TIMESTAMP_SECONDS + 8 * ONE_DAY_SECONDS - 600
     );
 }

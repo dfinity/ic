@@ -75,7 +75,7 @@ const MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO: f64 = 0.03;
 
 // Parameter of the wait for quiet algorithm. This is the maximum amount the
 // deadline can be delayed on each vote.
-pub const WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS: u64 = ONE_DAY_SECONDS;
+pub const WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS: u64 = 2 * ONE_DAY_SECONDS;
 
 // 1 KB - maximum payload size of NNS function calls to keep in listing of
 // proposals

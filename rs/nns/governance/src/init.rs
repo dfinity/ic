@@ -27,7 +27,7 @@ impl GovernanceCanisterInitPayloadBuilder {
         Self {
             proto: Governance {
                 economics: Some(NetworkEconomics::with_default_values()),
-                wait_for_quiet_threshold_seconds: 60 * 60 * 24 * 2, // 2 days
+                wait_for_quiet_threshold_seconds: 60 * 60 * 24 * 4, // 4 days
                 short_voting_period_seconds: 60 * 60 * 12,          // 12 hours
                 ..Default::default()
             },

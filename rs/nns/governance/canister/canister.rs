@@ -373,7 +373,7 @@ fn canister_post_upgrade() {
     }
     .expect("Couldn't upgrade canister.");
 
-    governance_mut().proto.wait_for_quiet_threshold_seconds = 2 * ONE_DAY_SECONDS;
+    governance_mut().proto.wait_for_quiet_threshold_seconds = 4 * ONE_DAY_SECONDS;
 }
 
 #[export_name = "canister_update update_authz"]
