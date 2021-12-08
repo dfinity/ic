@@ -4,7 +4,7 @@
 use ic_crypto::crypto_hash;
 use ic_interfaces::crypto::CryptoHashable;
 use ic_types::consensus::ecdsa::{
-    EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash,
+    EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash, EcdsaSigShare,
 };
 use ic_types::crypto::CryptoHashOf;
 
@@ -81,9 +81,35 @@ impl EcdsaObject for EcdsaDealingSupport {
     }
 }
 
+impl EcdsaObject for EcdsaSigShare {
+    fn into_outer(self) -> EcdsaMessage {
+        EcdsaMessage::EcdsaSigShare(self)
+    }
+
+    fn outer_hash(&self) -> EcdsaMessageHash {
+        EcdsaMessageHash::EcdsaSigShare(self.key())
+    }
+
+    fn key_from_outer_hash(hash: &EcdsaMessageHash) -> CryptoHashOf<Self> {
+        if let EcdsaMessageHash::EcdsaSigShare(hash) = hash {
+            hash.clone()
+        } else {
+            panic!(
+                "EcdsaSigShare::key_from_outer_hash(): unexpected type: {:?}",
+                hash
+            );
+        }
+    }
+
+    fn key_to_outer_hash(inner_hash: &CryptoHashOf<Self>) -> EcdsaMessageHash {
+        EcdsaMessageHash::EcdsaSigShare(inner_hash.clone())
+    }
+}
+
 pub fn ecdsa_msg_hash(msg: &EcdsaMessage) -> EcdsaMessageHash {
     match msg {
         EcdsaMessage::EcdsaDealing(object) => object.outer_hash(),
         EcdsaMessage::EcdsaDealingSupport(object) => object.outer_hash(),
+        EcdsaMessage::EcdsaSigShare(object) => object.outer_hash(),
     }
 }

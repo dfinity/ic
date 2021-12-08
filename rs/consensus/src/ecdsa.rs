@@ -308,6 +308,13 @@ fn compute_priority(attr: &EcdsaMessageAttribute, cached_finalized_height: Heigh
                 Priority::Stash
             }
         }
+        EcdsaMessageAttribute::EcdsaSigShare(height) => {
+            if *height < cached_finalized_height + Height::from(LOOK_AHEAD) {
+                Priority::Fetch
+            } else {
+                Priority::Stash
+            }
+        }
     }
 }
 

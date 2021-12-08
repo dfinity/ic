@@ -34,9 +34,11 @@ use ic_types::crypto::{
 use ic_types::messages::{Delegation, MessageId, WebAuthnEnvelope};
 use ic_types::{
     consensus::{
-        certification::CertificationContent, dkg::DealingContent, ecdsa::EcdsaDealing, Block,
-        CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent, NotarizationContent,
-        RandomBeaconContent, RandomTapeContent,
+        certification::CertificationContent,
+        dkg::DealingContent,
+        ecdsa::{EcdsaDealing, EcdsaSigShare},
+        Block, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
+        NotarizationContent, RandomBeaconContent, RandomTapeContent,
     },
     NodeId, RegistryVersion,
 };
@@ -91,6 +93,7 @@ mod private {
     impl SignatureDomainSeal for NotarizationContent {}
     impl SignatureDomainSeal for FinalizationContent {}
     impl SignatureDomainSeal for EcdsaDealing {}
+    impl SignatureDomainSeal for EcdsaSigShare {}
     impl SignatureDomainSeal for WebAuthnEnvelope {}
     impl SignatureDomainSeal for Delegation {}
     impl SignatureDomainSeal for MessageId {}
@@ -129,6 +132,13 @@ impl SignatureDomain for FinalizationContent {
 impl SignatureDomain for EcdsaDealing {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(DOMAIN_ECDSA_DEALING)
+    }
+}
+
+impl SignatureDomain for EcdsaSigShare {
+    // ECDSA is an external standard, hence no domain is used.
+    fn domain(&self) -> Vec<u8> {
+        vec![]
     }
 }
 
