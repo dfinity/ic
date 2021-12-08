@@ -339,6 +339,13 @@ impl Engine {
         match response {
             Ok(r) => {
                 QUERY_REPLY.with_label_values(&["replied"]).inc();
+
+                if let Ok(f) = env::var("RESULT_FILE") {
+                    let bytes: Vec<u8> = r.clone().unwrap_or_default();
+                    eprintln!("Writing results file: {}", &f);
+                    fs::write(f, bytes).unwrap();
+                }
+
                 Engine::check_query(r, tx, time_query_start, plan).await
             }
             Err(e) => {
