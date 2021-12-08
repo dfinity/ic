@@ -10,7 +10,7 @@ use ic_interfaces::{
     registry::RegistryClient,
     state_manager::{StateManager, StateManagerError},
 };
-use ic_logger::{debug, warn, ReplicaLogger};
+use ic_logger::{warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::EcdsaConfig;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
@@ -24,7 +24,7 @@ use ic_types::{
                 IDkgDealers, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptOperation,
                 IDkgTranscriptParams,
             },
-            PreSignatureQuadruple,
+            PreSignatureQuadruple, ThresholdEcdsaSigInputs,
         },
         AlgorithmId,
     },
@@ -363,24 +363,16 @@ fn update_signing_requests(
         .keys()
         .chain(payload.ongoing_signatures.keys())
         .collect::<BTreeSet<_>>();
-    let new_requests =
-        get_new_signing_requests(state_manager, existing_requests, context.certified_height)?;
+    let new_requests = get_new_signing_requests(
+        state_manager,
+        existing_requests,
+        &mut payload.available_quadruples,
+        context.certified_height,
+    )?;
     let mut count = 0;
-    // For every new signing request we remove a quadruple from the available
-    // quadruples and add to ongoing signatures.
-    for request in new_requests.into_iter() {
-        if let Some(quadruple_id) = payload.available_quadruples.keys().next().cloned() {
-            let quadruple = payload
-                .available_quadruples
-                .remove(&quadruple_id)
-                .expect("key should exist");
-            payload.ongoing_signatures.insert(request, quadruple);
-            payload.available_quadruples.remove(&quadruple_id);
-            count += 1;
-        } else {
-            debug!(log, "Not enough quadruples to sign requests with!");
-            break;
-        }
+    for (request_id, sign_inputs) in new_requests {
+        payload.ongoing_signatures.insert(request_id, sign_inputs);
+        count += 1;
     }
     Ok(count)
 }
@@ -389,8 +381,9 @@ fn update_signing_requests(
 fn get_new_signing_requests(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     existing_requests: BTreeSet<&ecdsa::RequestId>,
+    available_quadruples: &mut BTreeMap<ecdsa::QuadrupleId, PreSignatureQuadruple>,
     height: Height,
-) -> Result<Vec<ecdsa::RequestId>, StateManagerError> {
+) -> Result<Vec<(ecdsa::RequestId, ThresholdEcdsaSigInputs)>, StateManagerError> {
     let state = state_manager.get_state_at(height)?;
     let contexts = &state
         .get_ref()
@@ -399,7 +392,7 @@ fn get_new_signing_requests(
         .sign_with_ecdsa_contexts;
     let new_requests = contexts
         .iter()
-        .map(|(callback_id, context)| {
+        .filter_map(|(callback_id, context)| {
             let SignWithEcdsaContext {
                 request,
                 pseudo_random_id,
@@ -408,11 +401,29 @@ fn get_new_signing_requests(
                 batch_time,
             } = context;
             // request_id is just pseudo_random_id which is guaranteed to be always unique.
-            ecdsa::RequestId::from(pseudo_random_id.to_vec())
+            let request_id = ecdsa::RequestId::from(pseudo_random_id.to_vec());
+            if !existing_requests.contains(&request_id) {
+                Some((request_id, context))
+            } else {
+                None
+            }
         })
-        .filter(|request_id| !existing_requests.contains(&request_id))
         .collect::<Vec<_>>();
-    Ok(new_requests)
+
+    let mut ret = Vec::new();
+    let mut consumed_quadruples = Vec::new();
+    for ((request_id, context), (quadruple_id, quadruple)) in
+        new_requests.iter().zip(available_quadruples.iter())
+    {
+        let sign_inputs = build_sign_inputs(context, quadruple);
+        ret.push((request_id.clone(), sign_inputs));
+        consumed_quadruples.push(*quadruple_id);
+    }
+
+    for quadruple_id in consumed_quadruples {
+        available_quadruples.remove(&quadruple_id);
+    }
+    Ok(ret)
 }
 
 /// Update the quadruples in the payload by:
@@ -514,4 +525,14 @@ fn update_quadruples_in_creation(
 /// Validates a threshold ECDSA payload.
 pub fn validate_payload(_payload: ecdsa::EcdsaPayload) -> Result<(), EcdsaPayloadError> {
     todo!()
+}
+
+/// Helper to build threshold signature inputs from the context and
+/// the pre-signature quadruple
+/// TODO: PrincipalId, key transcript, etc need to figured out
+fn build_sign_inputs(
+    context: &SignWithEcdsaContext,
+    quadruple: &PreSignatureQuadruple,
+) -> ThresholdEcdsaSigInputs {
+    unimplemented!()
 }

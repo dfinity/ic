@@ -19,7 +19,7 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
-    EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash,
+    EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash, EcdsaSigShare,
 };
 use ic_types::crypto::CryptoHashOf;
 
@@ -75,6 +75,7 @@ impl<T: EcdsaObject> EcdsaObjectPool<T> {
 struct EcdsaPoolSectionImpl {
     dealings: EcdsaObjectPool<EcdsaDealing>,
     dealing_support: EcdsaObjectPool<EcdsaDealingSupport>,
+    sig_shares: EcdsaObjectPool<EcdsaSigShare>,
 }
 
 impl EcdsaPoolSectionImpl {
@@ -82,7 +83,8 @@ impl EcdsaPoolSectionImpl {
         let metrics = PoolMetrics::new(metrics_registry, pool, pool_type);
         Self {
             dealings: EcdsaObjectPool::new(metrics.clone()),
-            dealing_support: EcdsaObjectPool::new(metrics),
+            dealing_support: EcdsaObjectPool::new(metrics.clone()),
+            sig_shares: EcdsaObjectPool::new(metrics),
         }
     }
 
@@ -90,6 +92,7 @@ impl EcdsaPoolSectionImpl {
         match message {
             EcdsaMessage::EcdsaDealing(object) => self.dealings.insert_object(object),
             EcdsaMessage::EcdsaDealingSupport(object) => self.dealing_support.insert_object(object),
+            EcdsaMessage::EcdsaSigShare(object) => self.sig_shares.insert_object(object),
         }
     }
 
@@ -103,6 +106,10 @@ impl EcdsaPoolSectionImpl {
                 .dealing_support
                 .get_object(&EcdsaDealingSupport::key_from_outer_hash(id))
                 .map(|object| object.into_outer()),
+            EcdsaMessageHash::EcdsaSigShare(_) => self
+                .sig_shares
+                .get_object(&EcdsaSigShare::key_from_outer_hash(id))
+                .map(|object| object.into_outer()),
         }
     }
 
@@ -115,6 +122,10 @@ impl EcdsaPoolSectionImpl {
             EcdsaMessageHash::EcdsaDealingSupport(_) => self
                 .dealing_support
                 .remove_object(&EcdsaDealingSupport::key_from_outer_hash(id))
+                .map(|object| object.into_outer()),
+            EcdsaMessageHash::EcdsaSigShare(_) => self
+                .sig_shares
+                .remove_object(&EcdsaSigShare::key_from_outer_hash(id))
                 .map(|object| object.into_outer()),
         }
     }
@@ -143,6 +154,14 @@ impl EcdsaPoolSection for EcdsaPoolSectionImpl {
         Box::new(self.dealing_support.iter().map(|(inner_hash, object)| {
             (EcdsaDealingSupport::key_to_outer_hash(inner_hash), object)
         }))
+    }
+
+    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaSigShare)> + '_> {
+        Box::new(
+            self.sig_shares
+                .iter()
+                .map(|(inner_hash, object)| (EcdsaSigShare::key_to_outer_hash(inner_hash), object)),
+        )
     }
 }
 

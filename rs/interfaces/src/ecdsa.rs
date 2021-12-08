@@ -2,7 +2,7 @@
 
 use crate::artifact_pool::UnvalidatedArtifact;
 use ic_types::artifact::{EcdsaMessageAttribute, EcdsaMessageId, PriorityFn};
-use ic_types::consensus::ecdsa::{EcdsaDealing, EcdsaDealingSupport, EcdsaMessage};
+use ic_types::consensus::ecdsa::{EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaSigShare};
 
 // TODO: purge/remove from validated
 #[derive(Debug)]
@@ -31,6 +31,9 @@ pub trait EcdsaPoolSection {
     fn dealing_support(
         &self,
     ) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaDealingSupport)> + '_>;
+
+    /// Iterator for signature share objects.
+    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaSigShare)> + '_>;
 }
 
 /// Artifact pool for the ECDSA messages (query interface)
