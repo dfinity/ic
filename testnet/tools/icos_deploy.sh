@@ -22,6 +22,7 @@ function exit_usage() {
         echo >&2 "    --dkg-interval-length <dil>      Set DKG interval length (-1 if not provided explicitly, which means - default will be used)"
         echo >&2 "    --hosts-ini <hosts_override.ini> Override the default ansible hosts.ini to set different testnet configuration"
         echo >&2 "    --no-boundary-nodes              Do not deploy boundary nodes even if they are declared in the hosts.ini file"
+        echo >&2 "    --with-testnet-keys              Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys"
 
         echo >&2 -e "\nTo get the latest branch revision that has a disk image pre-built, you can use /gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh"
         echo >&2 -e "Example (deploy latest master to small-a):\n"
@@ -36,6 +37,7 @@ GIT_REVISION="${GIT_REVISION:-}"
 ANSIBLE_ARGS=()
 HOSTS_INI_FILENAME="${HOSTS_INI_FILENAME:-hosts.ini}"
 USE_BOUNDARY_NODES="true"
+WITH_TESTNET_KEYS=""
 
 while [ $# -gt 0 ]; do
     case "${1}" in
@@ -64,6 +66,9 @@ while [ $# -gt 0 ]; do
             ;;
         --no-boundary-nodes)
             USE_BOUNDARY_NODES="false"
+            ;;
+        --with-testnet-keys)
+            WITH_TESTNET_KEYS="--with-testnet-keys"
             ;;
         -?*) exit_usage ;;
         *) deployment="$1" ;;
@@ -175,7 +180,7 @@ mkdir -p "$MEDIA_PATH"
     --git-revision=$GIT_REVISION \
     --whitelist="$REPO_ROOT/testnet/env/${deployment}/provisional_whitelist.json" \
     --dkg-interval-length=$DKG_INTERVAL_LENGTH \
-    --with-testnet-keys
+    $WITH_TESTNET_KEYS
 
 # In case someone wants to deploy with a locally built disk image the following lines contain
 # the necessary commands.
