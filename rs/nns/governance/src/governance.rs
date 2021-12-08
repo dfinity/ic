@@ -4958,14 +4958,23 @@ impl Governance {
         caller: &PrincipalId,
         c: &manage_neuron::Configure,
     ) -> Result<(), GovernanceError> {
+        let now_seconds = self.env.now();
+
+        let lock_command = NeuronInFlightCommand {
+            timestamp: now_seconds,
+            command: Some(InFlightCommand::Configure(c.clone())),
+        };
+        let _lock = self.lock_neuron_for_command(id.id, lock_command)?;
+
         if let Some(neuron) = self.proto.neurons.get_mut(&id.id) {
-            let now_seconds = self.env.now();
             neuron.configure(caller, now_seconds, c)?;
-            match c
+
+            let op = c
                 .operation
                 .as_ref()
-                .expect("Configure must have an operation")
-            {
+                .expect("Configure must have an operation");
+
+            match op {
                 manage_neuron::configure::Operation::AddHotKey(k) => {
                     let hot_key = k.new_hot_key.as_ref().expect("Must have a hot key");
                     GovernanceProto::add_neuron_to_principal_in_principal_to_neuron_ids_index(

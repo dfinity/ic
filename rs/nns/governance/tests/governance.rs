@@ -98,12 +98,20 @@ use ledger_canister::Subaccount;
 /// ported to the new 'fixtures' module.
 mod fake;
 
-mod fixtures;
+// Using a `pub mod` works around spurious dead code warnings; see
+// https://github.com/rust-lang/rust/issues/46379
+pub mod fixtures;
 
 use fixtures::{
     principal, prorated_neuron_age, LedgerBuilder, NNSBuilder, NNSStateChange, NeuronBuilder,
     ProposalNeuronBehavior, NNS,
 };
+
+// Using a `pub mod` works around spurious dead code warnings; see
+// https://github.com/rust-lang/rust/issues/46379
+pub mod common;
+
+use common::increase_dissolve_delay_raw;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
@@ -7529,23 +7537,11 @@ fn increase_dissolve_delay(
     neuron_id: u64,
     delay_increase: u32,
 ) {
-    gov.manage_neuron(
+    increase_dissolve_delay_raw(
+        gov,
         &principal(principal_id),
-        &ManageNeuron {
-            id: None,
-            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
-                id: neuron_id,
-            })),
-            command: Some(manage_neuron::Command::Configure(
-                manage_neuron::Configure {
-                    operation: Some(manage_neuron::configure::Operation::IncreaseDissolveDelay(
-                        manage_neuron::IncreaseDissolveDelay {
-                            additional_dissolve_delay_seconds: delay_increase,
-                        },
-                    )),
-                },
-            )),
-        },
+        NeuronId { id: neuron_id },
+        delay_increase,
     )
     .now_or_never()
     .unwrap()

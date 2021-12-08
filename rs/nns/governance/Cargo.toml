@@ -15,6 +15,10 @@ name = "governance-test"
 path = "tests/governance.rs"
 required-features = ["test"]
 
+[[test]]
+name = "governance-interleaving-test"
+path = "tests/interleaving_tests.rs"
+
 [[bench]]
 name = "scale"
 harness = false
@@ -66,6 +70,7 @@ ic-base-types = { path = "../../types/base_types", features = ["test"] }
 ic-nns-common = { path = "../common", features = ["test"] }
 ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
 ic-nns-governance = { path = ".", features = ["test"] }
+tokio-test = "0.4.2"
 
 [features]
 test = ["ic-base-types/test", "ic-nns-common/test", "ledger-canister/test"]

@@ -190,6 +190,7 @@ pub struct NeuronBuilder {
     neuron_fees: u64,
     dissolve_state: Option<neuron::DissolveState>,
     followees: HashMap<i32, neuron::Followees>,
+    kyc_verified: bool,
 }
 
 impl From<Neuron> for NeuronBuilder {
@@ -208,6 +209,7 @@ impl From<Neuron> for NeuronBuilder {
             neuron_fees: neuron.neuron_fees_e8s,
             dissolve_state: neuron.dissolve_state,
             followees: neuron.followees,
+            kyc_verified: neuron.kyc_verified,
         }
     }
 }
@@ -224,6 +226,7 @@ impl NeuronBuilder {
             neuron_fees: 0,
             dissolve_state: None,
             followees: HashMap::new(),
+            kyc_verified: true,
         }
     }
 
@@ -238,6 +241,7 @@ impl NeuronBuilder {
             neuron_fees: 0,
             dissolve_state: None,
             followees: HashMap::new(),
+            kyc_verified: true,
         }
     }
 
@@ -274,6 +278,16 @@ impl NeuronBuilder {
         self
     }
 
+    pub fn set_dissolve_state(mut self, state: Option<DissolveState>) -> Self {
+        self.dissolve_state = state;
+        self
+    }
+
+    pub fn set_kyc_verified(mut self, kyc: bool) -> Self {
+        self.kyc_verified = kyc;
+        self
+    }
+
     pub fn create(self, now: u64, ledger: &mut LedgerBuilder) -> Neuron {
         let subaccount = Self::subaccount(self.owner, self.ident);
         ledger.add_account(neuron_subaccount(subaccount), self.stake);
@@ -294,7 +308,7 @@ impl NeuronBuilder {
             },
             maturity_e8s_equivalent: self.maturity,
             dissolve_state: self.dissolve_state,
-            kyc_verified: true,
+            kyc_verified: self.kyc_verified,
             followees: self.followees,
             ..Neuron::default()
         }
@@ -707,6 +721,7 @@ impl Environment for NNS {
     }
 }
 
+pub type LedgerTransform = Box<dyn FnOnce(Box<dyn Ledger>) -> Box<dyn Ledger>>;
 /// The NNSBuilder permits the declarative construction of an NNS fixture. All
 /// of the methods concern setting or querying what this initial state will
 /// be. Therefore, `get_account_balance` on a builder object will only tell
@@ -717,6 +732,7 @@ pub struct NNSBuilder {
     start_time: u64,
     ledger_builder: LedgerBuilder,
     governance: GovernanceProto,
+    ledger_transforms: Vec<LedgerTransform>,
 }
 
 impl Default for NNSBuilder {
@@ -725,6 +741,7 @@ impl Default for NNSBuilder {
             start_time: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
             ledger_builder: LedgerBuilder::default(),
             governance: GovernanceProto::default(),
+            ledger_transforms: Vec::default(),
         }
     }
 }
@@ -740,13 +757,13 @@ impl NNSBuilder {
             rng: StdRng::seed_from_u64(9539),
             ledger: self.ledger_builder.create(),
         });
+        let mut ledger: Box<dyn Ledger> = Box::new(fixture.clone());
+        for t in self.ledger_transforms {
+            ledger = t(ledger);
+        }
         let mut nns = NNS {
             fixture: fixture.clone(),
-            governance: Governance::new(
-                self.governance,
-                Box::new(fixture.clone()),
-                Box::new(fixture),
-            ),
+            governance: Governance::new(self.governance, Box::new(fixture), ledger),
             initial_state: None,
         };
         nns.capture_state();
@@ -816,6 +833,14 @@ impl NNSBuilder {
     #[allow(dead_code)]
     pub fn get_neuron(&self, ident: u64) -> Option<&Neuron> {
         self.governance.neurons.get(&ident)
+    }
+
+    /// Transform the ledger just before it's built, e.g., to allow blocking on
+    /// its calls for interleaving tests. Multiple transformations can be
+    /// chained; they are applied in the order in which they were added.
+    pub fn add_ledger_transform(mut self, transform: LedgerTransform) -> Self {
+        self.ledger_transforms.push(transform);
+        self
     }
 }
 

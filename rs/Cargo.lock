@@ -4690,6 +4690,7 @@ dependencies = [
  "serde",
  "strum 0.18.0",
  "strum_macros 0.18.0",
+ "tokio-test",
 ]
 
 [[package]]
