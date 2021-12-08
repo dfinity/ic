@@ -158,7 +158,9 @@ before_script:
     git reset --hard HEAD
 
     # Make sure Capsule writes to the correct Honeycomb dataset.
-    export CAPSULE_ARGS="-c ${CI_JOB_NAME} -b honeycomb --honeycomb_dataset=${CAPSULE_HONEYCOMB_DATASET} --honeycomb_token=${CAPSULE_HONEYCOMB_TOKEN} --honeycomb_trace_id=${ROOT_PIPELINE_ID} --honeycomb_kv=branch=${CI_COMMIT_BRANCH:-} -t ${CI_JOB_IMAGE:-docker}"
+    CAPSULE_ID="$(echo "${CI_JOB_NAME}" | tr ' ' '-')"
+    export CAPSULE_ID
+    export CAPSULE_ARGS="-c '${CAPSULE_ID}' -b honeycomb --honeycomb_dataset='${CAPSULE_HONEYCOMB_DATASET}' --honeycomb_token='${CAPSULE_HONEYCOMB_TOKEN}' --honeycomb_trace_id='${ROOT_PIPELINE_ID}' --honeycomb_kv=branch='${CI_COMMIT_BRANCH:-}' -t '${CI_JOB_IMAGE:-docker}'"
   - echo -e "\e[0Ksection_end:$(date +%s):before_script\r\e[0K"
 
 
