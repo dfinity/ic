@@ -59,6 +59,7 @@ else
     # Deploy the testnet
     deploy_with_timeout "$testnet" \
         --no-boundary-nodes \
+        --with-testnet-keys \
         --git-revision "$GIT_REVISION" "${HOSTS_INI_ARGUMENTS[@]}"
 
     nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
