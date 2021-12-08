@@ -57,6 +57,7 @@ type Command_1 = variant {
 type Command_2 = variant {
   Spawn : Spawn;
   Split : Split;
+  Configure : Configure;
   DisburseToNeuron : DisburseToNeuron;
   ClaimOrRefreshNeuron : ClaimOrRefresh;
   MergeMaturity : MergeMaturity;

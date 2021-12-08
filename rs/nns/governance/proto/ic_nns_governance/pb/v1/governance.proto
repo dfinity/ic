@@ -1244,6 +1244,7 @@ message Governance {
       ManageNeuron.DisburseToNeuron disburse_to_neuron = 5;
       ManageNeuron.MergeMaturity merge_maturity = 7;
       ManageNeuron.ClaimOrRefresh claim_or_refresh_neuron = 8;
+      ManageNeuron.Configure configure = 9;
     }
   }
 
