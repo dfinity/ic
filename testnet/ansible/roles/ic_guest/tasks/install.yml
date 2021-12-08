@@ -67,7 +67,7 @@
       {% endif %}
 
       tar xzf "{{ ic_media_path }}"/config.tgz -C "{{ ic_media_path }}" "./$NODE0_NAME"
-      "{{ ic_media_path }}/bin/ic-nns-init" \
+      timeout 600 "{{ ic_media_path }}/bin/ic-nns-init" \
           --url "$NNS_URL" \
           --registry-local-store-dir "{{ ic_media_path }}/$NODE0_NAME/ic_registry_local_store" \
           $GOVERNANCE_PB \
