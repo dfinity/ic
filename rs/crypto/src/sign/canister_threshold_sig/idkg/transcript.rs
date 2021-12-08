@@ -29,6 +29,7 @@ pub fn create_transcript<C: IDkgProtocolCspClient + CspSigner>(
     ensure_sufficient_dealings_collected(params, dealings)?;
     ensure_dealers_allowed_by_params(params, dealings)?;
     ensure_signers_allowed_by_params(params, dealings)?;
+    ensure_sufficient_signatures_collected(params, dealings)?;
     verify_multisignatures(csp_client, registry, dealings, params.registry_version())?;
 
     let internal_dealings = internal_dealings_by_index_from_dealings(
@@ -151,6 +152,29 @@ fn ensure_signers_allowed_by_params(
             if !params.receivers().get().contains(signer) {
                 return Err(IDkgCreateTranscriptError::SignerNotAllowed { node_id: *signer });
             }
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_sufficient_signatures_collected(
+    params: &IDkgTranscriptParams,
+    dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+) -> Result<(), IDkgCreateTranscriptError> {
+    for (dealer, dealing) in dealings {
+        if dealing.signers.len() < params.verification_threshold().get() as usize {
+            return Err(
+                IDkgCreateTranscriptError::UnsatisfiedVerificationThreshold {
+                    threshold: params.verification_threshold().get(),
+                    signature_count: dealing
+                        .signers
+                        .len()
+                        .try_into()
+                        .expect("if this is an error, we know it's small enough for 32 bits"),
+                    dealer_id: *dealer,
+                },
+            );
         }
     }
 

@@ -52,12 +52,30 @@ impl_display_using_debug!(IDkgTranscriptParsingError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgCreateTranscriptError {
-    SerializationError { internal_error: String },
-    InternalError { internal_error: String },
-    DealerNotAllowed { node_id: NodeId },
-    SignerNotAllowed { node_id: NodeId },
-    UnsatisfiedCollectionThreshold { threshold: u32, dealer_count: u32 },
-    InvalidMultisignature { crypto_error: CryptoError },
+    SerializationError {
+        internal_error: String,
+    },
+    InternalError {
+        internal_error: String,
+    },
+    DealerNotAllowed {
+        node_id: NodeId,
+    },
+    SignerNotAllowed {
+        node_id: NodeId,
+    },
+    UnsatisfiedCollectionThreshold {
+        threshold: u32,
+        dealer_count: u32,
+    },
+    UnsatisfiedVerificationThreshold {
+        threshold: u32,
+        signature_count: u32,
+        dealer_id: NodeId,
+    },
+    InvalidMultisignature {
+        crypto_error: CryptoError,
+    },
 }
 impl_display_using_debug!(IDkgCreateTranscriptError);
 
