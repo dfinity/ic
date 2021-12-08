@@ -9,7 +9,10 @@
 // annotated with `#[candid_method(query/update)]` to be able to generate the
 // did definition of the method.
 
-use ic_nns_governance::{governance::ONE_DAY_SECONDS, pb::v1::manage_neuron::NeuronIdOrSubaccount};
+use ic_nns_governance::{
+    governance::ONE_DAY_SECONDS,
+    pb::v1::{manage_neuron::NeuronIdOrSubaccount, RewardNodeProviders},
+};
 use rand::rngs::StdRng;
 use rand_core::{RngCore, SeedableRng};
 use std::boxed::Box;
@@ -629,6 +632,19 @@ fn list_neurons() {
 #[candid_method(query, rename = "list_neurons")]
 fn list_neurons_(req: ListNeurons) -> ListNeuronsResponse {
     governance().list_neurons_by_principal(&req, &caller())
+}
+
+#[export_name = "canister_update get_monthly_node_provider_rewards"]
+fn get_monthly_node_provider_rewards() {
+    println!("{}get_monthly_node_provider_rewards", LOG_PREFIX);
+    over_async(candid, |()| async move {
+        get_monthly_node_provider_rewards_().await
+    })
+}
+
+#[candid_method(update, rename = "get_monthly_node_provider_rewards")]
+async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, GovernanceError> {
+    governance().get_monthly_node_provider_rewards().await
 }
 
 /// DEPRECATED: Always panics. Use manage_neuron instead.

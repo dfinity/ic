@@ -25,6 +25,9 @@ mod cycles_minting_canister;
 mod fuzz;
 
 #[cfg(test)]
+mod get_monthly_node_provider_rewards;
+
+#[cfg(test)]
 mod governance_mem_test;
 
 #[cfg(test)]
