@@ -5,6 +5,7 @@
     - .ubuntu-nix-docker
     - .rules-parent-pipeline
   stage: guest-os-test
+  retry: 2
   # The e2e tests are flaky and impacting developer merges
   # https://dfinity.slack.com/archives/C012RDFNK7U/p1618233620112900
   variables:
@@ -149,6 +150,7 @@ e2e-scalability-suite-test:
 guest-os-upgrade-to-self:
   extends:
     - .e2e-test-base
+  timeout: 20m
   needs:
     - guest-os-diskimg
     - guest-os-updateimg-build
@@ -228,6 +230,7 @@ guest-os-upgrade-to-self:
 guest-os-upgrade-to-master:
   extends:
     - .e2e-test-base
+  timeout: 20m
   needs:
     - guest-os-diskimg
     - guest-os-updateimg-build
@@ -323,6 +326,7 @@ guest-os-upgrade-to-master:
 guest-os-upgrade-from-master:
   extends:
     - .e2e-test-base
+  timeout: 20m
   needs:
     - guest-os-diskimg
     - guest-os-updateimg-build
@@ -425,9 +429,7 @@ guest-os-upgrade-from-master:
 guest-os-upgrade-app-subnet-to-self:
   extends:
     - .e2e-test-base
-  # Test is flaky as of 2021-15-13
-  # Example pipeline: https://gitlab.com/dfinity-lab/core/dfinity/-/pipelines/302297504
-  retry: 1
+  timeout: 20m
   needs:
     - guest-os-diskimg
     - guest-os-updateimg-build
