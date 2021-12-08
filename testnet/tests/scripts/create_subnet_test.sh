@@ -97,22 +97,8 @@ ic-admin \
     --nns-url "$nns_url" \
     propose-to-create-subnet \
     --test-neuron-proposer \
-    --ingress-bytes-per-block-soft-cap 2097152 \
-    --max-ingress-bytes-per-message 2097152 \
-    --max-block-payload-size 0 \
-    --max-ingress-messages-per-block 1000 \
-    --unit-delay-millis 1000 \
     --replica-version-id "$replica_version_id" \
-    --initial-notary-delay-millis 600 \
     --dkg-interval-length 19 \
-    --gossip-max-artifact-streams-per-peer 20 \
-    --gossip-max-chunk-wait-ms 15000 \
-    --gossip-max-duplicity 1 \
-    --gossip-max-chunk-size 4096 \
-    --gossip-receive-check-cache-size 5000 \
-    --gossip-pfn-evaluation-period-ms 3000 \
-    --gossip-registry-poll-period-ms 3000 \
-    --gossip-retransmission-request-ms 60000 \
     --subnet-type application ${node_ids[@]}
 
 target_subnets_num="$((init_subnets_num + 1))" # one more subnet should be created after deployment
