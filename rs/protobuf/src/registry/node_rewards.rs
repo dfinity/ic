@@ -3,6 +3,7 @@ pub mod v2 {
     include!(std::concat!("../../gen/registry/registry.node_rewards.v2.rs"));
     use std::iter::Extend;
     use std::collections::BTreeMap;
+    use std::fmt;
 
     impl UpdateNodeRewardsTableProposalPayload {
         pub fn get_rewards_table(&self) -> NodeRewardsTable {
@@ -41,6 +42,14 @@ pub mod v2 {
                     self.table.insert(region.clone(), new_reward_rates.clone());
                 }
             }
+        }
+    }
+
+    impl fmt::Display for NodeRewardsTable {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            let json = serde_json::to_string_pretty(&self)
+                .unwrap_or_else(|e| format!("Error when serializing: {}", e));
+            writeln!(f, "{}", json)
         }
     }
 

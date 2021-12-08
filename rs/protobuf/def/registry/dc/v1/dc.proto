@@ -2,8 +2,6 @@ syntax = "proto3";
 package registry.dc.v1;
 
 // Identifies a Data Center where IC nodes reside
-//
-// Any changes to this struct should also be reflected in its `Display` impl
 message DataCenterRecord {
   string id = 1;
   string region = 2;
@@ -22,8 +20,6 @@ message Gps {
 }
 
 // The proposal payload used to add or remove data centers to/from the Registry
-//
-// Any changes to this struct should also be reflected in its `Display` impl
 message AddOrRemoveDataCentersProposalPayload {
   repeated DataCenterRecord data_centers_to_add = 1;
   // The IDs of data centers to remove

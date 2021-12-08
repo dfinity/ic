@@ -233,12 +233,12 @@ fn build_registry_proto() {
 
     config.type_attribute(
         ".registry.node_rewards.v2",
-        "#[derive(candid::CandidType, candid::Deserialize)]",
+        "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
     );
 
     config.type_attribute(
         ".registry.dc",
-        "#[derive(candid::CandidType, candid::Deserialize)]",
+        "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
     );
 
     config.type_attribute(
