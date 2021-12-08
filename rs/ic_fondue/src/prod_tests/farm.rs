@@ -15,7 +15,7 @@ use url::Url;
 
 pub type FarmResult<T> = Result<T, FarmError>;
 
-const DEFAULT_REQ_TIMEOUT: Duration = Duration::from_secs(120);
+const DEFAULT_REQ_TIMEOUT: Duration = Duration::from_secs(180);
 const MAX_NUMBER_OF_RETRIES: usize = 3;
 
 /// Farm managed resources that make up the Internet Computer under test. The
