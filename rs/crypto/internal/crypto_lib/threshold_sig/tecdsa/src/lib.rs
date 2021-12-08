@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaError {
     CurveMismatch,
+    InconsistentCiphertext,
     InconsistentCommitments,
     InsufficientDealings,
     InterpolationError,
@@ -13,6 +14,7 @@ pub enum ThresholdEcdsaError {
     InvalidFieldElement,
     InvalidOpening,
     InvalidPoint,
+    InvalidProof,
     InvalidRecipients,
     InvalidScalar,
     InvalidSecretShare,
@@ -182,4 +184,87 @@ pub fn compute_secret_shares(
         public_key,
     )
     .map_err(|e| e.into())
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum IDkgVerifyDealingInternalError {
+    UnsupportedAlgorithm,
+    InvalidCommitment,
+    InvalidProof,
+    InvalidRecipients,
+    InternalError(String),
+}
+
+impl From<ThresholdEcdsaError> for IDkgVerifyDealingInternalError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        match e {
+            ThresholdEcdsaError::InvalidProof => Self::InvalidProof,
+            ThresholdEcdsaError::InconsistentCommitments => Self::InvalidCommitment,
+            ThresholdEcdsaError::InvalidRecipients => Self::InvalidRecipients,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Verify a dealing using public information
+///
+/// Verify that the dealing has the expected type of ciphertext
+/// and commitment (depending on the type of dealing)
+///
+/// When CRP-1158 is completed this will also verify the zero
+/// knowledge proofs
+pub fn publicly_verify_dealing(
+    algorithm_id: AlgorithmId,
+    dealing: &IDkgDealingInternal,
+    transcript_type: &IDkgTranscriptOperationInternal,
+    reconstruction_threshold: NumberOfNodes,
+    dealer_index: NodeIndex,
+    number_of_receivers: NumberOfNodes,
+) -> Result<(), IDkgVerifyDealingInternalError> {
+    let curve = match algorithm_id {
+        AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
+        _ => Err(IDkgVerifyDealingInternalError::UnsupportedAlgorithm),
+    }?;
+
+    dealing
+        .publicly_verify(
+            curve,
+            transcript_type,
+            reconstruction_threshold,
+            dealer_index,
+            number_of_receivers,
+        )
+        .map_err(|e| e.into())
+}
+
+/// Verify a dealing using private information
+///
+/// This private verification must be done after the dealing has been publically
+/// verified. This operation decrypts the dealing and verifies that the
+/// decrypted value is consistent with the commitment in the dealing.
+#[allow(clippy::too_many_arguments)]
+pub fn privately_verify_dealing(
+    algorithm_id: AlgorithmId,
+    dealing: &IDkgDealingInternal,
+    private_key: &MEGaPrivateKey,
+    public_key: &MEGaPublicKey,
+    associated_data: &[u8],
+    dealer_index: NodeIndex,
+    recipient_index: NodeIndex,
+) -> Result<(), IDkgVerifyDealingInternalError> {
+    let curve = match algorithm_id {
+        AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
+        _ => Err(IDkgVerifyDealingInternalError::UnsupportedAlgorithm),
+    }?;
+
+    dealing
+        .privately_verify(
+            curve,
+            private_key,
+            public_key,
+            associated_data,
+            dealer_index,
+            recipient_index,
+        )
+        .map_err(|e| e.into())
 }

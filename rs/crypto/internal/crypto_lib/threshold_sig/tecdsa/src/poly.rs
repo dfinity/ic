@@ -381,14 +381,17 @@ impl SimpleCommitment {
         Ok(Self::new(points))
     }
 
+    pub fn evaluate_at(&self, eval_point: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+        evaluate_at(&self.points, eval_point)
+    }
+
     pub fn check_opening(
         &self,
         eval_point: &EccScalar,
         value: &EccScalar,
     ) -> ThresholdEcdsaResult<bool> {
-        let curve = eval_point.curve();
-        let eval = evaluate_at(&self.points, eval_point)?;
-        let g = curve.generator_g()?;
+        let eval = self.evaluate_at(eval_point)?;
+        let g = eval.curve().generator_g()?;
         Ok(eval == g.scalar_mul(value)?)
     }
 }
@@ -440,6 +443,10 @@ impl PedersenCommitment {
         Ok(Self::new(points))
     }
 
+    pub fn evaluate_at(&self, eval_point: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+        evaluate_at(&self.points, eval_point)
+    }
+
     pub fn check_opening(
         &self,
         eval_point: &EccScalar,
@@ -447,7 +454,7 @@ impl PedersenCommitment {
         mask: &EccScalar,
     ) -> ThresholdEcdsaResult<bool> {
         let curve = eval_point.curve();
-        let eval = evaluate_at(&self.points, eval_point)?;
+        let eval = self.evaluate_at(eval_point)?;
         let g = curve.generator_g()?;
         let h = curve.generator_h()?;
         Ok(eval == g.mul_points(value, &h, mask)?)
@@ -505,8 +512,32 @@ impl PolynomialCommitment {
         }
     }
 
+    pub(crate) fn len(&self) -> usize {
+        self.points().len()
+    }
+
     pub fn constant_term(&self) -> EccPoint {
         self.points()[0]
+    }
+
+    pub fn curve_type(&self) -> EccCurveType {
+        self.constant_term().curve_type()
+    }
+
+    pub fn verify_is(
+        &self,
+        ctype: PolynomialCommitmentType,
+        curve: EccCurveType,
+    ) -> ThresholdEcdsaResult<()> {
+        if self.curve_type() != curve {
+            return Err(ThresholdEcdsaError::CurveMismatch);
+        }
+
+        if self.ctype() != ctype {
+            return Err(ThresholdEcdsaError::InconsistentCommitments);
+        }
+
+        Ok(())
     }
 
     pub fn check_opening(
