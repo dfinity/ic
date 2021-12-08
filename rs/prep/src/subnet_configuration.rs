@@ -33,45 +33,14 @@ use ic_types::{
 use crate::internet_computer::INITIAL_REGISTRY_VERSION;
 use crate::node::{InitializedNode, NodeConfiguration, NodeConfigurationTryFromError, NodeIndex};
 use crate::{initialized_subnet::InitializedSubnet, node::InitializeNodeError};
-
-const SMALL_APP_SUBNET_MAX_SIZE: usize = 13; // for subnets with more than 13 nodes constants for large networks are used
-
-const UNIT_DELAY: Duration = Duration::from_millis(3000);
-const UNIT_DELAY_SMALL_SUBNET: Duration = Duration::from_millis(1000);
-const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(2000);
-const INITIAL_NOTARY_DELAY_SMALL_SUBNET: Duration = Duration::from_millis(600);
-const INGRESS_BYTES_PER_BLOCK_SOFT_CAP: u64 = 2 * 1024 * 1024;
-const MAX_INGRESS_MESSAGES_PER_BLOCK: u64 = 1000;
-const MAX_BLOCK_PAYLOAD_SIZE: u64 = 0;
-
 pub type SubnetIndex = u64;
-
-/// This sets the upper bound on how big a single ingress message can be, as
-/// allowing messages larger than around 3.5MB has various security and
-/// performance impacts on the network.  More specifically, large messages can
-/// allow dishonest block makers to always manage to get their blocks notarized;
-/// and when the consensus protocol is configured for smaller messages, a large
-/// message in the network can cause the finalization rate to drop.
-const KILOBYTE: u64 = 1024;
-const MEGABYTE: u64 = 1024 * KILOBYTE;
-const MAX_INGRESS_BYTES_PER_MESSAGE: u64 = 3 * MEGABYTE + 512 * KILOBYTE;
-const MAX_INGRESS_BYTES_PER_MESSAGE_SMALL_SUBNET: u64 = 2 * MEGABYTE;
-
-/// The default length for a DKG interval. This is the number of rounds we would
-/// have after a DKG summary block, making the total length
-/// `DKG_INTERVAL_LENGTH` + 1.
-const DKG_INTERVAL_LENGTH: Height = Height::new(99);
-const DKG_INTERVAL_LENGTH_SMALL_SUBNET: Height = Height::new(499);
-
-/// The default upper bound for the number of allowed dkg dealings in a block.
-const DKG_DEALINGS_PER_BLOCK: usize = 1;
-
+pub mod constants;
 /// This represents the initial configuration of an NNS subnetwork of an IC
 /// instance.
 #[derive(Clone, Debug, Default)]
 pub struct SubnetConfig {
     /// The subnet id of this subnetwork.
-    pub subnet_index: u64,
+    pub subnet_index: SubnetIndex,
 
     /// The node ids that belong to this subnetwork.
     pub membership: BTreeMap<NodeIndex, NodeConfiguration>,
@@ -163,36 +132,65 @@ pub enum InitializeSubnetError {
     },
 }
 
-struct DynamicConfigParams {
-    unit_delay: Duration,
-    initial_notary_delay: Duration,
-    dkg_interval_length: Height,
-    max_ingress_bytes_per_message: u64,
+pub struct SubnetConfigParams {
+    pub unit_delay: Duration,
+    pub initial_notary_delay: Duration,
+    pub dkg_interval_length: Height,
+    pub max_ingress_bytes_per_message: u64,
+    pub ingress_bytes_per_block_soft_cap: u64,
+    pub max_ingress_messages_per_block: u64,
+    pub max_block_payload_size: u64,
+    pub dkg_dealings_per_block: usize,
 }
 
 /// Returns config parameters, which depend on the type and size of the subnet.
-fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> DynamicConfigParams {
-    if subnet_type == SubnetType::Application && nodes_num <= SMALL_APP_SUBNET_MAX_SIZE {
-        DynamicConfigParams {
-            unit_delay: UNIT_DELAY_SMALL_SUBNET,
-            initial_notary_delay: INITIAL_NOTARY_DELAY_SMALL_SUBNET,
-            dkg_interval_length: DKG_INTERVAL_LENGTH_SMALL_SUBNET,
-            max_ingress_bytes_per_message: MAX_INGRESS_BYTES_PER_MESSAGE_SMALL_SUBNET,
+/// The configuration for app subnets is used for new app subnets with at most
+/// 13 nodes. App subnets with more than 13 nodes will be deployed with the NNS
+/// subnet configs.
+
+pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> SubnetConfigParams {
+    let use_app_config =
+        subnet_type == SubnetType::Application && nodes_num <= constants::SMALL_APP_SUBNET_MAX_SIZE;
+
+    struct DynamicConfig {
+        pub unit_delay: Duration,
+        pub initial_notary_delay: Duration,
+        pub dkg_interval_length: Height,
+        pub max_ingress_bytes_per_message: u64,
+    }
+
+    let dynamic_config = if use_app_config {
+        DynamicConfig {
+            unit_delay: constants::UNIT_DELAY_APP_SUBNET,
+            initial_notary_delay: constants::INITIAL_NOTARY_DELAY_APP_SUBNET,
+            dkg_interval_length: constants::DKG_INTERVAL_LENGTH_APP_SUBNET,
+            max_ingress_bytes_per_message: constants::MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
         }
     } else {
-        DynamicConfigParams {
-            unit_delay: UNIT_DELAY,
-            initial_notary_delay: INITIAL_NOTARY_DELAY,
-            dkg_interval_length: DKG_INTERVAL_LENGTH,
-            max_ingress_bytes_per_message: MAX_INGRESS_BYTES_PER_MESSAGE,
+        DynamicConfig {
+            unit_delay: constants::UNIT_DELAY_NNS_SUBNET,
+            initial_notary_delay: constants::INITIAL_NOTARY_DELAY_NNS_SUBNET,
+            dkg_interval_length: constants::DKG_INTERVAL_LENGTH_NNS_SUBNET,
+            max_ingress_bytes_per_message: constants::MAX_INGRESS_BYTES_PER_MESSAGE_NNS_SUBNET,
         }
+    };
+
+    SubnetConfigParams {
+        unit_delay: dynamic_config.unit_delay,
+        initial_notary_delay: dynamic_config.initial_notary_delay,
+        dkg_interval_length: dynamic_config.dkg_interval_length,
+        max_ingress_bytes_per_message: dynamic_config.max_ingress_bytes_per_message,
+        ingress_bytes_per_block_soft_cap: constants::INGRESS_BYTES_PER_BLOCK_SOFT_CAP,
+        max_ingress_messages_per_block: constants::MAX_INGRESS_MESSAGES_PER_BLOCK,
+        max_block_payload_size: constants::MAX_BLOCK_PAYLOAD_SIZE,
+        dkg_dealings_per_block: constants::DKG_DEALINGS_PER_BLOCK,
     }
 }
 
 impl SubnetConfig {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        subnet_index: u64,
+        subnet_index: SubnetIndex,
         membership: BTreeMap<NodeIndex, NodeConfiguration>,
         replica_version_id: Option<ReplicaVersion>,
         ingress_bytes_per_block_soft_cap: Option<u64>,
@@ -222,16 +220,16 @@ impl SubnetConfig {
             membership,
             replica_version_id: replica_version_id.unwrap_or_else(ReplicaVersion::default),
             ingress_bytes_per_block_soft_cap: ingress_bytes_per_block_soft_cap
-                .unwrap_or(INGRESS_BYTES_PER_BLOCK_SOFT_CAP),
+                .unwrap_or(config.ingress_bytes_per_block_soft_cap),
             max_ingress_bytes_per_message: max_ingress_bytes_per_message
                 .unwrap_or(config.max_ingress_bytes_per_message),
             max_ingress_messages_per_block: max_ingress_messages_per_block
-                .unwrap_or(MAX_INGRESS_MESSAGES_PER_BLOCK),
-            max_block_payload_size: max_block_payload_size.unwrap_or(MAX_BLOCK_PAYLOAD_SIZE),
+                .unwrap_or(config.max_ingress_messages_per_block),
+            max_block_payload_size: max_block_payload_size.unwrap_or(config.max_block_payload_size),
             unit_delay: unit_delay.unwrap_or(config.unit_delay),
             initial_notary_delay: initial_notary_delay.unwrap_or(config.initial_notary_delay),
             dkg_interval_length: dkg_interval_length.unwrap_or(config.dkg_interval_length),
-            dkg_dealings_per_block: dkg_dealings_per_block.unwrap_or(DKG_DEALINGS_PER_BLOCK),
+            dkg_dealings_per_block: dkg_dealings_per_block.unwrap_or(config.dkg_dealings_per_block),
             subnet_type,
             max_instructions_per_message: max_instructions_per_message
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_message.get()),

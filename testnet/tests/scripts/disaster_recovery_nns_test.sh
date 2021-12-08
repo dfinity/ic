@@ -176,24 +176,11 @@ step 3.B "Create the new child nns subnet" || time (
         --nns-url "$NNS_URL" \
         propose-to-create-subnet \
         --test-neuron-proposer \
-        --ingress-bytes-per-block-soft-cap 2097152 \
-        --max-ingress-bytes-per-message 2097152 \
-        --max-ingress-messages-per-block 1000 \
         --unit-delay-millis 2000 \
         --subnet-handler-id "unused" \
         --replica-version-id "$replica_version_id" \
         --subnet-id-override "$ORIGINAL_NNS_ID" \
-        --initial-notary-delay-millis 500 \
-        --dkg-interval-length 20 \
-        --max-block-payload-size 4194304 \
-        --gossip-max-artifact-streams-per-peer 20 \
-        --gossip-max-chunk-wait-ms 15000 \
-        --gossip-max-duplicity 1 \
-        --gossip-max-chunk-size 4096 \
-        --gossip-receive-check-cache-size 5000 \
-        --gossip-pfn-evaluation-period-ms 3000 \
-        --gossip-registry-poll-period-ms 3000 \
-        --gossip-retransmission-request-ms 60000 \
+        --dkg-interval-length 19 \
         --is-halted \
         --subnet-type system ${node_ids[@]} # We want node_ids to expand to multiple arguments
     until "$IC_ADMIN" --nns-url "$NNS_URL" get-subnet "$ORIGINAL_NNS_ID" 2>/dev/null >/dev/null; do

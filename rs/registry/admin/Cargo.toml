@@ -4,6 +4,7 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
+ic-prep = { path = "../../prep" }
 async-trait = "0.1.51"
 regex = "1.3.9"
 bytes = "1.0.1"

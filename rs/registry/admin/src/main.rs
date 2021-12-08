@@ -17,6 +17,8 @@ use ic_crypto_utils_basic_sig::conversions::Ed25519SecretKeyConversions;
 use ic_http_utils::file_downloader::{
     check_file_hash, compute_sha256_hex, extract_tar_gz_into_dir, FileDownloader,
 };
+use ic_prep_lib::subnet_configuration;
+use ic_types::p2p;
 #[macro_use]
 extern crate ic_admin_derive;
 use ic_consensus::dkg::make_registry_cup;
@@ -159,8 +161,52 @@ struct Opts {
     pin: Option<String>,
 }
 
+impl ProposeToCreateSubnetCmd {
+    /// Set fields (that were not provided by the user explicitly) to defaults.
+    fn apply_defaults_for_unset_fields(&mut self) {
+        let subnet_config =
+            subnet_configuration::get_default_config_params(self.subnet_type, self.node_ids.len());
+        let gossip_config = p2p::build_default_gossip_config();
+        // set subnet params
+        self.ingress_bytes_per_block_soft_cap
+            .get_or_insert(subnet_config.ingress_bytes_per_block_soft_cap);
+        self.max_ingress_bytes_per_message
+            .get_or_insert(subnet_config.max_ingress_bytes_per_message);
+        self.max_ingress_messages_per_block
+            .get_or_insert(subnet_config.max_ingress_messages_per_block);
+        self.max_block_payload_size
+            .get_or_insert(subnet_config.max_block_payload_size);
+        self.unit_delay_millis
+            .get_or_insert(subnet_config.unit_delay.as_millis() as u64);
+        self.initial_notary_delay_millis
+            .get_or_insert(subnet_config.initial_notary_delay.as_millis() as u64);
+        self.dkg_dealings_per_block
+            .get_or_insert(subnet_config.dkg_dealings_per_block as u64);
+        self.dkg_interval_length
+            .get_or_insert(subnet_config.dkg_interval_length.get());
+        // set gossip params
+        self.gossip_max_artifact_streams_per_peer
+            .get_or_insert(gossip_config.max_artifact_streams_per_peer);
+        self.gossip_max_chunk_wait_ms
+            .get_or_insert(gossip_config.max_chunk_wait_ms);
+        self.gossip_max_duplicity
+            .get_or_insert(gossip_config.max_duplicity);
+        self.gossip_max_chunk_size
+            .get_or_insert(gossip_config.max_chunk_size);
+        self.gossip_receive_check_cache_size
+            .get_or_insert(gossip_config.receive_check_cache_size);
+        self.gossip_pfn_evaluation_period_ms
+            .get_or_insert(gossip_config.pfn_evaluation_period_ms);
+        self.gossip_registry_poll_period_ms
+            .get_or_insert(gossip_config.registry_poll_period_ms);
+        self.gossip_retransmission_request_ms
+            .get_or_insert(gossip_config.retransmission_request_ms);
+    }
+}
+
 /// List of sub-commands accepted by `ic-admin`.
 #[derive(Clap)]
+#[allow(clippy::large_enum_variant)]
 enum SubCommand {
     /// Get the last version of a node's public key from the registry.
     GetPublicKey(GetPublicKeyCmd),
@@ -687,77 +733,77 @@ struct ProposeToCreateSubnetCmd {
     // Assigns this subnet ID to the newly created subnet
     pub subnet_id_override: Option<PrincipalId>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// Maximum amount of bytes per block. This is a soft cap.
-    pub ingress_bytes_per_block_soft_cap: u64,
+    pub ingress_bytes_per_block_soft_cap: Option<u64>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// Maximum amount of bytes per message. This is a hard cap.
-    pub max_ingress_bytes_per_message: u64,
+    pub max_ingress_bytes_per_message: Option<u64>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// Maximum number of ingress messages per block. This is a hard cap.
-    pub max_ingress_messages_per_block: u64,
+    pub max_ingress_messages_per_block: Option<u64>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// Maximum size in bytes ingress and xnet messages can occupy in a block.
-    pub max_block_payload_size: u64,
+    pub max_block_payload_size: Option<u64>,
 
     // the default is from subnet_configuration.rs from ic-prep
-    #[clap(long, required = true)]
+    #[clap(long)]
     ///  Unit delay for blockmaker (in milliseconds).
-    pub unit_delay_millis: u64,
+    pub unit_delay_millis: Option<u64>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// Initial delay for notary (in milliseconds), to give time to rank-0 block
     /// propagation.
-    pub initial_notary_delay_millis: u64,
+    pub initial_notary_delay_millis: Option<u64>,
 
     #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
     /// ID of the Replica version to run.
     pub replica_version_id: Option<ReplicaVersion>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// The length of all DKG intervals. The DKG interval length is the number
     /// of rounds following the DKG summary.
-    pub dkg_interval_length: u64,
+    pub dkg_interval_length: Option<u64>,
 
-    #[clap(long, required = false, default_value = "1")]
+    #[clap(long)]
     /// The upper bound for the number of allowed DKG dealings in a block.
-    pub dkg_dealings_per_block: u64,
+    pub dkg_dealings_per_block: Option<u64>,
 
     // These are for the GossipConfig sub-struct
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// max outstanding request per peer MIN/DEFAULT/MAX.
-    pub gossip_max_artifact_streams_per_peer: u32,
+    pub gossip_max_artifact_streams_per_peer: Option<u32>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// timeout for a outstanding request.
-    pub gossip_max_chunk_wait_ms: u32,
+    pub gossip_max_chunk_wait_ms: Option<u32>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// max duplicate requests in underutilized networks.
-    pub gossip_max_duplicity: u32,
+    pub gossip_max_duplicity: Option<u32>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// maximum chunk size supported on this subnet.
-    pub gossip_max_chunk_size: u32,
+    pub gossip_max_chunk_size: Option<u32>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// history size for receive check.
-    pub gossip_receive_check_cache_size: u32,
+    pub gossip_receive_check_cache_size: Option<u32>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// period for re evaluating the priority function.
-    pub gossip_pfn_evaluation_period_ms: u32,
+    pub gossip_pfn_evaluation_period_ms: Option<u32>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// period for polling the registry for updates.
-    pub gossip_registry_poll_period_ms: u32,
+    pub gossip_registry_poll_period_ms: Option<u32>,
 
-    #[clap(long, required = true)]
+    #[clap(long)]
     /// period for sending retransmission request.
-    pub gossip_retransmission_request_ms: u32,
+    pub gossip_retransmission_request_ms: Option<u32>,
 
     #[clap(long)]
     /// advert best effort percentage (GossipAdvertConfig in
@@ -831,27 +877,29 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
         CreateSubnetPayload {
             node_ids,
             subnet_id_override: self.subnet_id_override,
-            ingress_bytes_per_block_soft_cap: self.ingress_bytes_per_block_soft_cap,
-            max_ingress_bytes_per_message: self.max_ingress_bytes_per_message,
-            max_ingress_messages_per_block: self.max_ingress_messages_per_block,
-            max_block_payload_size: self.max_block_payload_size,
+            ingress_bytes_per_block_soft_cap: self.ingress_bytes_per_block_soft_cap.unwrap(),
+            max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap(),
+            max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap(),
+            max_block_payload_size: self.max_block_payload_size.unwrap(),
             replica_version_id: self
                 .replica_version_id
                 .clone()
                 .unwrap_or_else(ReplicaVersion::default)
                 .to_string(),
-            unit_delay_millis: self.unit_delay_millis,
-            initial_notary_delay_millis: self.initial_notary_delay_millis,
-            dkg_interval_length: self.dkg_interval_length,
-            dkg_dealings_per_block: self.dkg_dealings_per_block,
-            gossip_max_artifact_streams_per_peer: self.gossip_max_artifact_streams_per_peer,
-            gossip_max_chunk_wait_ms: self.gossip_max_chunk_wait_ms,
-            gossip_max_duplicity: self.gossip_max_duplicity,
-            gossip_max_chunk_size: self.gossip_max_chunk_size,
-            gossip_receive_check_cache_size: self.gossip_receive_check_cache_size,
-            gossip_pfn_evaluation_period_ms: self.gossip_pfn_evaluation_period_ms,
-            gossip_registry_poll_period_ms: self.gossip_registry_poll_period_ms,
-            gossip_retransmission_request_ms: self.gossip_retransmission_request_ms,
+            unit_delay_millis: self.unit_delay_millis.unwrap(),
+            initial_notary_delay_millis: self.initial_notary_delay_millis.unwrap(),
+            dkg_interval_length: self.dkg_interval_length.unwrap(),
+            dkg_dealings_per_block: self.dkg_dealings_per_block.unwrap(),
+            gossip_max_artifact_streams_per_peer: self
+                .gossip_max_artifact_streams_per_peer
+                .unwrap(),
+            gossip_max_chunk_wait_ms: self.gossip_max_chunk_wait_ms.unwrap(),
+            gossip_max_duplicity: self.gossip_max_duplicity.unwrap(),
+            gossip_max_chunk_size: self.gossip_max_chunk_size.unwrap(),
+            gossip_receive_check_cache_size: self.gossip_receive_check_cache_size.unwrap(),
+            gossip_pfn_evaluation_period_ms: self.gossip_pfn_evaluation_period_ms.unwrap(),
+            gossip_registry_poll_period_ms: self.gossip_registry_poll_period_ms.unwrap(),
+            gossip_retransmission_request_ms: self.gossip_retransmission_request_ms.unwrap(),
             advert_best_effort_percentage: self.advert_best_effort_percentage,
             start_as_nns: self.start_as_nns,
             subnet_type: self.subnet_type,
@@ -2298,7 +2346,8 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToCreateSubnet(cmd) => {
+        SubCommand::ProposeToCreateSubnet(mut cmd) => {
+            cmd.apply_defaults_for_unset_fields();
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::CreateSubnet,

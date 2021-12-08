@@ -169,21 +169,7 @@ ledger_pid=$!
                 result=$(ic-admin --nns-url="$NNS_URL" propose-to-create-subnet \
                     "$some_id" \
                     --test-neuron-proposer \
-                    --ingress-bytes-per-block-soft-cap 2097152 \
-                    --max-ingress-bytes-per-message 2097152 \
-                    --max-ingress-messages-per-block 1000 \
-                    --max-block-payload-size 5000000 \
-                    --unit-delay-millis 2000 \
-                    --initial-notary-delay-millis 2500 \
                     --dkg-interval-length 99 \
-                    --gossip-max-artifact-streams-per-peer 20 \
-                    --gossip-max-chunk-wait-ms 15000 \
-                    --gossip-max-duplicity 1 \
-                    --gossip-max-chunk-size 4096 \
-                    --gossip-receive-check-cache-size 5000 \
-                    --gossip-pfn-evaluation-period-ms 3000 \
-                    --gossip-registry-poll-period-ms 3000 \
-                    --gossip-retransmission-request-ms 60000 \
                     --subnet-type "application")
                 echo "$msg result $result"
             ) &
