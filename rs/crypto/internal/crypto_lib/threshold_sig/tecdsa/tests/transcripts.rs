@@ -68,6 +68,14 @@ impl ProtocolSetup {
     fn modify_threshold(&mut self, threshold: usize) {
         self.threshold = NumberOfNodes::from(threshold as u32);
     }
+
+    fn receiver_info(&self) -> Vec<(MEGaPrivateKey, MEGaPublicKey, NodeIndex)> {
+        let mut info = Vec::with_capacity(self.receivers);
+        for i in 0..self.receivers {
+            info.push((self.sk[i].clone(), self.pk[i], i as NodeIndex));
+        }
+        info
+    }
 }
 
 #[derive(Debug)]
@@ -99,7 +107,7 @@ impl ProtocolRound {
         let shares = vec![SecretShares::Random; dealers as usize];
         let mode = IDkgTranscriptOperationInternal::Random;
 
-        let dealings = Self::create_dealings(setup, &shares, dealers);
+        let dealings = Self::create_dealings(setup, &shares, dealers, &mode);
         let transcript = Self::create_transcript(setup, &dealings, &mode)?;
 
         match transcript.combined_commitment {
@@ -129,7 +137,7 @@ impl ProtocolRound {
 
         let mode = IDkgTranscriptOperationInternal::ReshareOfMasked(masked.commitment.clone());
 
-        let dealings = Self::create_dealings(setup, &shares, dealers);
+        let dealings = Self::create_dealings(setup, &shares, dealers, &mode);
         let transcript = Self::create_transcript(setup, &dealings, &mode)?;
 
         match transcript.combined_commitment {
@@ -159,13 +167,19 @@ impl ProtocolRound {
 
         let mode = IDkgTranscriptOperationInternal::ReshareOfUnmasked(unmasked.commitment.clone());
 
-        let dealings = Self::create_dealings(setup, &shares, dealers);
+        let dealings = Self::create_dealings(setup, &shares, dealers, &mode);
         let transcript = Self::create_transcript(setup, &dealings, &mode)?;
 
         match transcript.combined_commitment {
             CombinedCommitment::ByInterpolation(PolynomialCommitment::Simple(_)) => {}
             _ => panic!("Unexpected transcript commitment type"),
         }
+
+        // The two commitments are both simple, so we can verify shared value
+        assert_eq!(
+            transcript.combined_commitment.commitment().constant_term(),
+            unmasked.constant_term()
+        );
 
         Ok(Self::new(setup, dealings, transcript))
     }
@@ -193,7 +207,7 @@ impl ProtocolRound {
             masked.commitment.clone(),
         );
 
-        let dealings = Self::create_dealings(setup, &shares, dealers);
+        let dealings = Self::create_dealings(setup, &shares, dealers, &mode);
         let transcript = Self::create_transcript(setup, &dealings, &mode)?;
 
         match transcript.combined_commitment {
@@ -306,17 +320,22 @@ impl ProtocolRound {
         setup: &ProtocolSetup,
         shares: &[SecretShares],
         dealings_returned: usize,
+        transcript_type: &IDkgTranscriptOperationInternal,
     ) -> BTreeMap<NodeIndex, IDkgDealingInternal> {
         let mut rng = rand::thread_rng();
 
         let mut dealings = BTreeMap::new();
 
-        for (dealer_index, share) in shares.iter().enumerate() {
+        let number_of_receivers = NumberOfNodes::from(setup.receivers as u32);
+
+        for (dealer_index, share) in shares[..setup.receivers].iter().enumerate() {
             let dealing_randomness = Randomness::from(rng.gen::<[u8; 32]>());
+            let dealer_index = dealer_index as u32;
+
             let dealing = create_dealing(
                 setup.alg,
                 &setup.ad,
-                dealer_index as u32,
+                dealer_index,
                 setup.threshold,
                 &setup.pk,
                 share,
@@ -324,7 +343,38 @@ impl ProtocolRound {
             )
             .expect("failed to create dealing");
 
-            dealings.insert(dealer_index as u32, dealing);
+            let publicly_invalid = publicly_verify_dealing(
+                setup.alg,
+                &dealing,
+                transcript_type,
+                setup.threshold,
+                dealer_index,
+                number_of_receivers,
+            )
+            .is_err();
+
+            if publicly_invalid {
+                panic!("Created a publicly invalid dealing");
+            }
+
+            for (private_key, public_key, recipient_index) in setup.receiver_info() {
+                let locally_invalid = privately_verify_dealing(
+                    setup.alg,
+                    &dealing,
+                    &private_key,
+                    &public_key,
+                    &setup.ad,
+                    dealer_index,
+                    recipient_index,
+                )
+                .is_err();
+
+                if locally_invalid {
+                    panic!("Created a locally invalid dealing");
+                }
+            }
+
+            dealings.insert(dealer_index, dealing);
         }
 
         // Potentially remove some of the dealings at random
@@ -385,7 +435,7 @@ fn should_reshare_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
 }
 
 #[test]
-fn should_multiply_trasncripts_correctly() -> Result<(), ThresholdEcdsaError> {
+fn should_multiply_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
     let setup = ProtocolSetup::new(EccCurveType::K256, 4, 2)?;
 
     let dealers = 4;

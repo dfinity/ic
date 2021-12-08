@@ -123,11 +123,58 @@ impl MEGaCiphertextPair {
     }
 }
 
+/// The type of MEGa ciphertext
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub enum MEGaCiphertextType {
+    Single,
+    Pairs,
+}
+
 /// Some type of MEGa ciphertext
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MEGaCiphertext {
     Single(MEGaCiphertextSingle),
     Pairs(MEGaCiphertextPair),
+}
+
+impl MEGaCiphertext {
+    pub fn recipients(&self) -> usize {
+        match self {
+            MEGaCiphertext::Single(c) => c.ctexts.len(),
+            MEGaCiphertext::Pairs(c) => c.ctexts.len(),
+        }
+    }
+
+    pub fn ctype(&self) -> MEGaCiphertextType {
+        match self {
+            MEGaCiphertext::Single(_) => MEGaCiphertextType::Single,
+            MEGaCiphertext::Pairs(_) => MEGaCiphertextType::Pairs,
+        }
+    }
+
+    pub fn verify_is(
+        &self,
+        ctype: MEGaCiphertextType,
+        curve: EccCurveType,
+    ) -> ThresholdEcdsaResult<()> {
+        let curves_ok = match self {
+            MEGaCiphertext::Single(c) => c.ctexts.iter().all(|x| x.curve_type() == curve),
+            MEGaCiphertext::Pairs(c) => c
+                .ctexts
+                .iter()
+                .all(|(x, y)| x.curve_type() == curve && y.curve_type() == curve),
+        };
+
+        if !curves_ok {
+            return Err(ThresholdEcdsaError::CurveMismatch);
+        }
+
+        if self.ctype() != ctype {
+            return Err(ThresholdEcdsaError::InconsistentCiphertext);
+        }
+
+        Ok(())
+    }
 }
 
 impl From<MEGaCiphertextSingle> for MEGaCiphertext {
