@@ -75,6 +75,7 @@ pub fn create_driver_context_from_cli(
         logs_base_dir: cli_args.log_base_dir,
         authorized_ssh_accounts_dir: ssh_key_dir,
         authorized_ssh_accounts: cli_args.authorized_ssh_accounts,
+        journalbeat_hosts: cli_args.journalbeat_hosts,
     }
 }
 
@@ -146,6 +147,7 @@ pub struct DriverContext {
     pub logs_base_dir: Option<PathBuf>,
     pub authorized_ssh_accounts_dir: Arc<TempDir>,
     pub authorized_ssh_accounts: Vec<AuthorizedSshAccount>,
+    pub journalbeat_hosts: Vec<String>,
 }
 
 impl DriverContext {
