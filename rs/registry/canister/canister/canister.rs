@@ -545,6 +545,7 @@ fn update_unassigned_nodes_config() {
 
 #[export_name = "canister_query get_node_providers_monthly_xdr_rewards"]
 fn get_node_providers_monthly_xdr_rewards() {
+    check_caller_is_governance_and_log("get_node_providers_monthly_xdr_rewards");
     over(
         candid_one,
         |()| -> Result<NodeProvidersMonthlyXdrRewards, String> {

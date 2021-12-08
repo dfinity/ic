@@ -262,7 +262,8 @@ type RemoveHotKey = record { hot_key_to_remove : opt principal };
 type Result = variant { Ok; Err : GovernanceError };
 type Result_1 = variant { Error : GovernanceError; NeuronId : NeuronId };
 type Result_2 = variant { Ok : Neuron; Err : GovernanceError };
-type Result_3 = variant { Ok : NeuronInfo; Err : GovernanceError };
+type Result_3 = variant { Ok : RewardNodeProviders; Err : GovernanceError };
+type Result_4 = variant { Ok : NeuronInfo; Err : GovernanceError };
 type RewardEvent = record {
   day_after_genesis : nat64;
   actual_timestamp_seconds : nat64;
@@ -305,10 +306,11 @@ service : (Governance) -> {
   get_full_neuron_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
       Result_2,
     ) query;
+  get_monthly_node_provider_rewards : () -> (Result_3);
   get_neuron_ids : () -> (vec nat64) query;
-  get_neuron_info : (nat64) -> (Result_3) query;
+  get_neuron_info : (nat64) -> (Result_4) query;
   get_neuron_info_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
-      Result_3,
+      Result_4,
     ) query;
   get_pending_proposals : () -> (vec ProposalInfo) query;
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;

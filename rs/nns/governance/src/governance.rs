@@ -24,7 +24,7 @@ use crate::pb::v1::{
     ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
     ManageNeuronResponse, NetworkEconomics, Neuron, NeuronInfo, NeuronState, NnsFunction,
     NodeProvider, Proposal, ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus,
-    RewardEvent, RewardNodeProvider, Tally, Topic, UpdateNodeProvider, Vote,
+    RewardEvent, RewardNodeProvider, RewardNodeProviders, Tally, Topic, UpdateNodeProvider, Vote,
 };
 use candid::Decode;
 use dfn_protobuf::ToProto;
@@ -48,9 +48,13 @@ use dfn_core::println;
 use crate::pb::v1::governance::GovernanceCachedMetrics;
 use crate::pb::v1::manage_neuron_response::MergeMaturityResponse;
 use crate::pb::v1::proposal::Action;
+use crate::pb::v1::reward_node_provider::RewardToAccount;
 use crate::pb::v1::WaitForQuietState;
+use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
+use dfn_candid::candid_one;
 use dfn_core::api::spawn;
 use ledger_canister::{Tokens, TOKEN_SUBDIVIDABLE_BY};
+use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 
 // A few helper constants for durations.
 pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
@@ -5640,6 +5644,45 @@ impl Governance {
 
         Ok(())
     }
+
+    /// Return the monthly rewards that node providers should be awarded
+    ///
+    /// Fetches the map from node provider to monthly XDR rewards from the
+    /// Registry, then fetches the average XDR to ICP conversion rate for
+    /// the last 30 days, then applies this conversion rate to convert each
+    /// node provider's XDR rewards to ICP.
+    pub async fn get_monthly_node_provider_rewards(
+        &self,
+    ) -> Result<RewardNodeProviders, GovernanceError> {
+        let mut rewards = RewardNodeProviders::default();
+
+        // Maps node providers to their rewards in XDR
+        let xdr_permyriad_rewards = get_node_providers_monthly_xdr_rewards().await?;
+
+        // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
+        let xdr_permyriad_per_icp = get_average_icp_xdr_conversion_rate()
+            .await?
+            .data
+            .xdr_permyriad_per_icp;
+
+        // Iterate over all node providers, calculate their rewards, and append them to
+        // `rewards`
+        for np in &self.proto.node_providers {
+            if let Some(np_id) = &np.id {
+                let np_id_str = np_id.to_string();
+                let xdr_permyriad_reward =
+                    *xdr_permyriad_rewards.rewards.get(&np_id_str).unwrap_or(&0);
+
+                if let Some(reward_node_provider) =
+                    get_node_provider_reward(np, xdr_permyriad_reward, xdr_permyriad_per_icp)
+                {
+                    rewards.rewards.push(reward_node_provider);
+                }
+            }
+        }
+
+        Ok(rewards)
+    }
 }
 
 /// Computes the subaccount to which neuron staking transfers are made. This
@@ -5655,4 +5698,99 @@ fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) -> Sub
         state.write(&nonce.to_be_bytes());
         state.finish()
     })
+}
+
+/// A helper for the Registry's get_node_providers_monthly_xdr_rewards method
+async fn get_node_providers_monthly_xdr_rewards(
+) -> Result<NodeProvidersMonthlyXdrRewards, GovernanceError> {
+    let registry_response: Result<
+        Result<NodeProvidersMonthlyXdrRewards, String>,
+        (Option<i32>, String),
+    > = dfn_core::api::call_with_cleanup(
+        REGISTRY_CANISTER_ID,
+        "get_node_providers_monthly_xdr_rewards",
+        candid_one,
+        (),
+    )
+    .await;
+
+    registry_response
+        .map_err(|(code, msg)| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                "Error calling 'get_node_providers_monthly_xdr_rewards': code: {:?}, message: {}",
+                code, msg
+            ),
+            )
+        })?
+        .map_err(|msg| GovernanceError::new_with_message(ErrorType::External, msg))
+}
+
+/// A helper for the CMC's get_average_icp_xdr_conversion_rate method
+async fn get_average_icp_xdr_conversion_rate(
+) -> Result<IcpXdrConversionRateCertifiedResponse, GovernanceError> {
+    let cmc_response: Result<IcpXdrConversionRateCertifiedResponse, (Option<i32>, String)> =
+        dfn_core::api::call_with_cleanup(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_average_icp_xdr_conversion_rate",
+            candid_one,
+            (),
+        )
+        .await;
+
+    cmc_response.map_err(|(code, msg)| {
+        GovernanceError::new_with_message(
+            ErrorType::External,
+            format!(
+                "Error calling 'get_average_icp_xdr_conversion_rate': code: {:?}, message: {}",
+                code, msg
+            ),
+        )
+    })
+}
+
+/// Given the XDR amount that the given node provider should be rewarded, and a
+/// conversion rate from XDR to ICP, returns the ICP amount and wallet address
+/// that should be awarded on behalf of the given node provider.
+///
+/// The simple way to calculate this might be:
+/// xdr_permyriad_reward / xdr_permyriad_per_icp
+/// or more explicitly:
+/// $reward_amount XDR / ( $rate XDR / 1 ICP)
+/// ==
+/// $reward_amount XDR * (1 ICP / $rate XDR)
+/// ==
+/// ($reward_amount / $rate) ICP
+///
+/// However this discards e8s. In order to account for e8s, we convert ICP to
+/// e8s using `TOKEN_SUBDIVIDABLE_BY`:
+/// $reward_amount XDR * (TOKEN_SUBDIVIDABLE_BY e8s / 1 ICP) * (1 ICP / $rate
+/// XDR) ==
+/// $reward_amount XDR * (TOKEN_SUBDIVIDABLE_BY e8s / $rate XDR)
+/// ==
+/// (($reward_amount * TOKEN_SUBDIVIDABLE_BY) / $rate) e8s
+fn get_node_provider_reward(
+    np: &NodeProvider,
+    xdr_permyriad_reward: u64,
+    xdr_permyriad_per_icp: u64,
+) -> Option<RewardNodeProvider> {
+    if let Some(np_id) = np.id.as_ref() {
+        let amount_e8s = ((xdr_permyriad_reward as u128 * TOKEN_SUBDIVIDABLE_BY as u128)
+            / xdr_permyriad_per_icp as u128) as u64;
+
+        let to_account = Some(if let Some(account) = &np.reward_account {
+            account.clone()
+        } else {
+            AccountIdentifier::from(*np_id).into()
+        });
+
+        Some(RewardNodeProvider {
+            node_provider: Some(np.clone()),
+            amount_e8s,
+            reward_mode: Some(RewardMode::RewardToAccount(RewardToAccount { to_account })),
+        })
+    } else {
+        None
+    }
 }
