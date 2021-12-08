@@ -197,19 +197,36 @@ impl Wasm {
                 install = install.with_memory_allocation(memory_allocation);
             }
 
+            let canister_id = canister.canister_id;
+            println!(
+                "Attempting to install wasm into canister with ID: {}",
+                canister_id
+            );
             match install.install(&mut canister, init_payload.clone()).await {
-                Ok(()) => return Ok(()),
-                Err(e) => match backoff.next_backoff() {
-                    Some(interval) => {
-                        std::thread::sleep(interval);
+                Ok(()) => {
+                    println!(
+                        "Successfully installed wasm into canister with ID: {}",
+                        canister_id
+                    );
+                    return Ok(());
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Installation of wasm into cansiter with ID: {} failed with: {}",
+                        canister_id, e
+                    );
+                    match backoff.next_backoff() {
+                        Some(interval) => {
+                            std::thread::sleep(interval);
+                        }
+                        None => {
+                            return Err(format!(
+                                "Canister installation timed out. Last error was: {}",
+                                e
+                            ));
+                        }
                     }
-                    None => {
-                        return Err(format!(
-                            "Canister installation timed out. Last error was: {}",
-                            e
-                        ));
-                    }
-                },
+                }
             }
         }
     }
