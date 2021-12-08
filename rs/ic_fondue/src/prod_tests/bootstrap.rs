@@ -240,7 +240,6 @@ pub fn create_config_disk_images(
         let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
 
         let mut cmd = Command::new("build-bootstrap-config-image.sh");
-
         cmd.arg(img_path.clone())
             .arg("--ic_registry_local_store")
             .arg(&ic_registry_local_store_path)
@@ -248,6 +247,11 @@ pub fn create_config_disk_images(
             .arg(node.crypto_path())
             .arg("--accounts_ssh_authorized_keys")
             .arg(ctx.authorized_ssh_accounts_dir.path());
+
+        if !ctx.journalbeat_hosts.is_empty() {
+            cmd.arg("--journalbeat_hosts")
+                .arg(ctx.journalbeat_hosts.join(","));
+        }
 
         let output = cmd
             .output()

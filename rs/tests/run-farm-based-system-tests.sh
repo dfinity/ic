@@ -83,6 +83,11 @@ if [ -z "${SSH_KEY_DIR:-}" ]; then
     ssh-keygen -t ed25519 -N '' -f "$SSH_KEY_DIR/admin"
 fi
 
+JOURNALBEAT_HOSTS=()
+if [ -n "${TEST_ES_HOSTNAMES:-}" ]; then
+    JOURNALBEAT_HOSTS+=("--journalbeat-hosts" "${TEST_ES_HOSTNAMES//[[:space:]]/}")
+fi
+
 RCLONE_ARGS=("--git-rev" "$GIT_REVISION" "--out=$ARTIFACT_DIR" "--unpack" "--mark-executable")
 # prod-test-driver and (NNS) canisters
 "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=canisters "${RCLONE_ARGS[@]}"
@@ -112,7 +117,8 @@ DEV_IMG_SHA256=$(curl "${DEV_IMG_SHA256_URL}" | sed -E 's/^([0-9a-fA-F]+)\s.*/\1
         --base-img-sha256 "${DEV_IMG_SHA256}" \
         --nns-canister-path "${ARTIFACT_DIR}" \
         --authorized-ssh-accounts "${SSH_KEY_DIR}" \
-        --result-file "${RESULT_FILE}" 2>&1
+        --result-file "${RESULT_FILE}" \
+        "${JOURNALBEAT_HOSTS[@]}" 2>&1
 } && RES=0 || RES=$?
 
 # Export spans to Honeycomb if the script is run by a CI pipeline.

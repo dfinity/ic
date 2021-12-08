@@ -105,6 +105,12 @@ The sha256 hash sum of the base image."#
         (file/file.pub) that are installed on the IC-OS by default."#
     )]
     pub authorized_ssh_accounts: Option<PathBuf>,
+    #[structopt(
+        long = "journalbeat-hosts",
+        help = r#"A comma-separated list of hostname/port-pairs that journalbeat
+        should use as target hosts. (e.g. "host1.target.com:443,host2.target.com:443")"#
+    )]
+    pub journalbeat_hosts: Option<String>,
 }
 
 impl CliArgs {
@@ -145,6 +151,8 @@ impl CliArgs {
             None => vec![],
         };
 
+        let journalbeat_hosts = parse_journalbeat_hosts(self.journalbeat_hosts)?;
+
         Ok(ValidatedCliArgs {
             log_base_dir: self.log_base_dir,
             log_level,
@@ -161,6 +169,7 @@ impl CliArgs {
             ignore_pattern,
             skip_pattern,
             authorized_ssh_accounts,
+            journalbeat_hosts,
         })
     }
 }
@@ -190,6 +199,7 @@ pub struct ValidatedCliArgs {
     pub ignore_pattern: Option<Regex>,
     pub skip_pattern: Option<Regex>,
     pub authorized_ssh_accounts: Vec<AuthorizedSshAccount>,
+    pub journalbeat_hosts: Vec<String>,
 }
 
 pub type PrivateKeyFileContent = Vec<u8>;
@@ -245,12 +255,32 @@ fn is_valid_ssh_key_dir<P: AsRef<Path>>(p: P) -> Result<Vec<AuthorizedSshAccount
     Ok(res)
 }
 
+/// Checks whether the input string as the form [hostname:port{,hostname:port}]
+fn parse_journalbeat_hosts(s: Option<String>) -> Result<Vec<String>> {
+    const HOST_START: &str = r#"^(([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])\.)*"#;
+    const HOST_STOP: &str = r#"([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])"#;
+    const PORT: &str = r#":[[:digit:]]{2,5}$"#;
+    let s = match s {
+        Some(s) => s,
+        None => return Ok(vec![]),
+    };
+    let rgx = format!("{}{}{}", HOST_START, HOST_STOP, PORT);
+    let rgx = Regex::new(&rgx).unwrap();
+    let mut res = vec![];
+    for target in s.trim().split(',') {
+        if !rgx.is_match(target) {
+            bail!("Invalid journalbeat host: '{}'", s);
+        }
+        res.push(target.to_string());
+    }
+    Ok(res)
+}
+
 #[cfg(test)]
 #[cfg(target_os = "linux")]
 mod tests {
+    use super::{is_valid_ssh_key_dir, parse_journalbeat_hosts};
     use std::{fs::OpenOptions, path::Path, process::Command};
-
-    use super::is_valid_ssh_key_dir;
 
     #[test]
     fn valid_key_dir_is_valid_key_dir() {
@@ -293,5 +323,56 @@ mod tests {
             .arg(filename)
             .output()
             .expect("Could not execute ssh-keygen");
+    }
+
+    #[test]
+    fn invalid_journalbeat_hostnames_are_rejected() {
+        let invalid_hostnames = &[
+            "sub.domain.tld:1a23",
+            "sub.domain-.tld:123",
+            "sub.domain-.tld:aaa",
+            "sub.domain-.tld:1a2",
+            "sub.-domain.tld:123",
+            "sub.-domain.tl.:123",
+            ".:123",
+            ":123",
+            "sub.domain.tld:",
+            "sub.domain.tld",
+        ];
+
+        for hostname in invalid_hostnames {
+            let hostname = Some(hostname.to_string());
+            assert!(parse_journalbeat_hosts(hostname).is_err())
+        }
+
+        for i in 0..invalid_hostnames.len() {
+            let s = Some(invalid_hostnames[i..].join(","));
+            assert!(parse_journalbeat_hosts(s).is_err())
+        }
+    }
+
+    #[test]
+    fn valid_journalbeat_hostnames_are_accepted() {
+        let invalid_hostnames = &[
+            "sub.domain.tld:123",
+            "sub.domain.tld:12",
+            "sub.domain.tld:123",
+            "sub.domain.tld:1234",
+            "sub.domain.tld:12345",
+            "sub.do-main.tld:123",
+            "sub.do--main.tld:123",
+            "s-ub.domain.tl:123",
+        ];
+
+        for hostname in invalid_hostnames {
+            let hostname = Some(hostname.to_string());
+            assert!(parse_journalbeat_hosts(hostname).is_ok())
+        }
+
+        for i in 0..invalid_hostnames.len() {
+            let s = Some(invalid_hostnames[i..].join(","));
+            let res = parse_journalbeat_hosts(s).expect("Could not parse journalbeat hosts!");
+            assert_eq!(res.len(), invalid_hostnames.len() - i);
+        }
     }
 }
