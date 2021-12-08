@@ -52,8 +52,8 @@
 /testnet/tests/tools/                                      @dfinity-lab/teams/ic-testing-verification
 # production testnet tests are owned by a team
 /testnet/tests/scripts/create_subnet_test.sh               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team
-/testnet/tests/scripts/disaster_recovery_nns_test.sh       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/testnet/tests/scripts/disaster_recovery_basic_test.sh     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
+/testnet/tests/scripts/disaster_recovery_nns_test.sh       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
+/testnet/tests/scripts/disaster_recovery_basic_test.sh     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/firewall_test.sh                    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /testnet/tests/scripts/generic.sh                          @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/scripts/global_reboot_test.sh               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
@@ -62,7 +62,8 @@
 /testnet/tests/scripts/maximum_capacity_subnet_update.sh   @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /testnet/tests/scripts/maximum_capacity_xnet_slo.sh        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /testnet/tests/scripts/network_reliability_test.sh         @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
-/testnet/tests/scripts/nns-backup.sh                       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
+/testnet/tests/scripts/nns-backup.sh                       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
+/testnet/tests/scripts/nns-backup-deprecated.sh                       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/nns_registry_changes.sh             @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
 /testnet/tests/scripts/nns_workload.sh                     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team
 /testnet/tests/scripts/node_assign_test.sh                 @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team
@@ -106,14 +107,14 @@
 /rs/memory_tracker/                  @dfinity-lab/teams/execution-owners
 /rs/messaging/                       @dfinity-lab/teams/message-routing-owners
 /rs/nns/                             @dfinity-lab/teams/nns-team @granstrom1
-/rs/nodemanager/                     @dfinity-lab/teams/consensus-owners
+/rs/nodemanager/                     @dfinity-lab/teams/orchestrator-owners
 /rs/p2p/                             @dfinity-lab/teams/networking-team
 /rs/registry/admin/                  @dfinity-lab/teams/nns-team
 /rs/registry/canister/               @dfinity-lab/teams/nns-team
 /rs/registry/client/                 @dfinity-lab/teams/node-team
 /rs/registry/common/                 @dfinity-lab/teams/nns-team
 /rs/registry/transport/              @dfinity-lab/teams/nns-team
-/rs/replay/                          @dfinity-lab/teams/consensus-owners
+/rs/replay/                          @dfinity-lab/teams/orchestrator-owners
 /rs/replica/                         @dfinity-lab/teams/networking-team
 /rs/replicated_state/                @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
 /rs/rosetta-api/                     @dfinity-lab/teams/financial-integrations
