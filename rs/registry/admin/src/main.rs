@@ -2067,6 +2067,7 @@ async fn main() {
             SubCommand::ProposeToAddOrRemoveDataCenters(_) => (),
             SubCommand::ProposeToUpdateNodeRewardsTable(_) => (),
             SubCommand::ProposeToUpdateUnassignedNodesConfig(_) => (),
+            SubCommand::ProposeToAddNodeOperator(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
