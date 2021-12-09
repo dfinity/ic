@@ -34,7 +34,8 @@ fn bench_allocator(c: &mut Criterion<ProcessTime>) {
                         scope.execute(|| {
                             let allocator = Arc::new(HeapBasedPageAllocator::default());
                             for _ in 0..NUM_ALLOCATIONS {
-                                let pages = allocator.allocate(&pages[..]);
+                                let pages =
+                                    HeapBasedPageAllocator::allocate(&allocator, &pages[..]);
                                 black_box(pages);
                             }
                         });
@@ -54,7 +55,8 @@ fn bench_allocator(c: &mut Criterion<ProcessTime>) {
                             let allocator = Arc::new(DefaultPageAllocatorImpl::default());
                             // Allocate multiple times to simulate multiple rounds per checkpoint.
                             for _ in 0..NUM_ALLOCATIONS {
-                                let pages = allocator.allocate(&pages[..]);
+                                let pages =
+                                    DefaultPageAllocatorImpl::allocate(&allocator, &pages[..]);
                                 black_box(pages);
                             }
                         });

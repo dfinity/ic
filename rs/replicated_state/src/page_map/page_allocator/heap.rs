@@ -25,16 +25,11 @@ impl Drop for HeapBasedPage {
 impl PageInner for HeapBasedPage {
     type PageAllocatorInner = HeapBasedPageAllocator;
 
-    fn contents<'a>(&'a self, _page_allocator: &'a Self::PageAllocatorInner) -> &'a PageBytes {
+    fn contents(&self) -> &PageBytes {
         &self.0
     }
 
-    fn copy_from_slice<'a>(
-        &'a mut self,
-        offset: usize,
-        slice: &[u8],
-        _page_allocator: &'a Self::PageAllocatorInner,
-    ) {
+    fn copy_from_slice(&mut self, offset: usize, slice: &[u8]) {
         (self.0[offset..offset + slice.len()]).copy_from_slice(slice);
     }
 }
@@ -49,7 +44,7 @@ impl PageAllocatorInner for HeapBasedPageAllocator {
 
     // See the comments of the corresponding method in `PageAllocator`.
     fn allocate(
-        &self,
+        _page_allocator: &Arc<HeapBasedPageAllocator>,
         pages: &[(PageIndex, &PageBytes)],
     ) -> Vec<(PageIndex, Page<Self::PageInner>)> {
         pages
@@ -86,7 +81,7 @@ impl PageAllocatorInner for HeapBasedPageAllocator {
             .into_iter()
             .map(|(index, page)| PageSerialization {
                 index,
-                bytes: *page.0.contents(self),
+                bytes: *page.0.contents(),
             })
             .collect();
         PageDeltaSerialization::Heap(pages)
@@ -94,7 +89,7 @@ impl PageAllocatorInner for HeapBasedPageAllocator {
 
     // See the comments of the corresponding method in `PageAllocator`.
     fn deserialize_page_delta(
-        &self,
+        _page_allocator: &Arc<HeapBasedPageAllocator>,
         page_delta: PageDeltaSerialization,
     ) -> Vec<(PageIndex, Page<Self::PageInner>)> {
         // Allocate all pages on the Rust heap.
