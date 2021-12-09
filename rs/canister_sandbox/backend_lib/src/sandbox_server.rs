@@ -34,25 +34,24 @@ impl SandboxService for SandboxServer {
     }
 
     fn open_wasm(&self, req: OpenWasmRequest) -> rpc::Call<OpenWasmReply> {
-        let result = self
-            .manager
+        self.manager
             .open_wasm(req.wasm_id, req.wasm_file_path.clone(), req.wasm_src);
-        rpc::Call::new_resolved(Ok(OpenWasmReply { success: result }))
+        rpc::Call::new_resolved(Ok(OpenWasmReply { success: true }))
     }
 
     fn close_wasm(&self, req: CloseWasmRequest) -> rpc::Call<CloseWasmReply> {
-        let result = self.manager.close_wasm(req.wasm_id);
-        rpc::Call::new_resolved(Ok(CloseWasmReply { success: result }))
+        self.manager.close_wasm(req.wasm_id);
+        rpc::Call::new_resolved(Ok(CloseWasmReply { success: true }))
     }
 
     fn open_state(&self, req: OpenStateRequest) -> rpc::Call<OpenStateReply> {
-        let result = self.manager.open_state(req);
-        rpc::Call::new_resolved(Ok(OpenStateReply { success: result }))
+        self.manager.open_state(req);
+        rpc::Call::new_resolved(Ok(OpenStateReply { success: true }))
     }
 
     fn close_state(&self, req: CloseStateRequest) -> rpc::Call<CloseStateReply> {
-        let result = self.manager.close_state(req.state_id);
-        rpc::Call::new_resolved(Ok(CloseStateReply { success: result }))
+        self.manager.close_state(req.state_id);
+        rpc::Call::new_resolved(Ok(CloseStateReply { success: true }))
     }
 
     fn open_execution(&self, req: OpenExecutionRequest) -> rpc::Call<OpenExecutionReply> {
@@ -63,20 +62,14 @@ impl SandboxService for SandboxServer {
             exec_input,
         } = req;
         rpc::Call::new_resolved({
-            let result = SandboxManager::open_execution(
-                &self.manager,
-                exec_id,
-                wasm_id,
-                state_id,
-                exec_input,
-            );
-            Ok(OpenExecutionReply { success: result })
+            SandboxManager::open_execution(&self.manager, exec_id, wasm_id, state_id, exec_input);
+            Ok(OpenExecutionReply { success: true })
         })
     }
 
     fn close_execution(&self, req: CloseExecutionRequest) -> rpc::Call<CloseExecutionReply> {
-        let result = self.manager.close_execution(req.exec_id);
-        rpc::Call::new_resolved(Ok(CloseExecutionReply { success: result }))
+        self.manager.close_execution(req.exec_id);
+        rpc::Call::new_resolved(Ok(CloseExecutionReply { success: true }))
     }
 
     fn create_execution_state(

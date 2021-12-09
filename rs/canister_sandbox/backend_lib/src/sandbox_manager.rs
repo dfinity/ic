@@ -312,14 +312,24 @@ impl Execution {
 
     /// Closes the current execution (assuming that it has finished).
     /// Returns true if the close completed successfully.
-    pub(crate) fn close(&self) -> bool {
+    pub(crate) fn close(&self) {
         let mut guard = self.internal.lock().unwrap();
         match *guard {
             ExecutionInner::FinishedOk | ExecutionInner::FinishedError => {
                 *guard = ExecutionInner::Closed;
-                true
             }
-            ExecutionInner::Closed | ExecutionInner::Running => false,
+            ExecutionInner::Closed => {
+                unreachable!(
+                    "Failed to close exec session {}: already closed",
+                    self.exec_id
+                );
+            }
+            ExecutionInner::Running => {
+                unreachable!(
+                    "Failed to close exec session {}: still running",
+                    self.exec_id
+                );
+            }
         }
     }
 }
@@ -415,17 +425,8 @@ impl SandboxManager {
         }
     }
 
-    /// Opens new wasm instance. Note that if a previous wasm canister
-    /// was assigned to this id, we simply update the internal table
-    /// with the new wasm canister, and do NOT complain. This is
-    /// necessary as we might and likely will keep a wasm execution
-    /// open for multiple, requests.
-    pub fn open_wasm(
-        &self,
-        wasm_id: WasmId,
-        wasm_file_path: Option<String>,
-        wasm_src: Vec<u8>,
-    ) -> bool {
+    /// Opens new wasm instance.
+    pub fn open_wasm(&self, wasm_id: WasmId, wasm_file_path: Option<String>, wasm_src: Vec<u8>) {
         log(
             &*self.controller,
             LogRequest(
@@ -438,6 +439,11 @@ impl SandboxManager {
         );
 
         let mut guard = self.repr.lock().unwrap();
+        assert!(
+            !guard.canister_wasms.contains_key(&wasm_id),
+            "Failed to open wasm session {}: id is already in use",
+            wasm_id,
+        );
         // Note that we can override an existing open wasm.
         let wasm = match wasm_file_path.clone() {
             Some(path) => Arc::new(CanisterWasm::new_from_file_path(path.as_ref())),
@@ -456,12 +462,10 @@ impl SandboxManager {
                 ),
             ),
         );
-
-        true
     }
 
     /// Closes previously opened wasm instance, by id.
-    pub fn close_wasm(&self, wasm_id: WasmId) -> bool {
+    pub fn close_wasm(&self, wasm_id: WasmId) {
         let mut guard = self.repr.lock().unwrap();
         log(
             &*self.controller,
@@ -470,13 +474,18 @@ impl SandboxManager {
                 format!("Closing wasm session: {}", wasm_id),
             ),
         );
-        guard.canister_wasms.remove(&wasm_id).is_some()
+        let removed = guard.canister_wasms.remove(&wasm_id);
+        assert!(
+            removed.is_some(),
+            "Failed to close wasm session {}: id not found",
+            wasm_id
+        );
     }
 
     /// Opens a new state requested by the replica process.
-    pub fn open_state(&self, request: OpenStateRequest) -> bool {
+    pub fn open_state(&self, request: OpenStateRequest) {
         let mut guard = self.repr.lock().unwrap();
-        guard.open_state(request)
+        guard.open_state(request);
     }
 
     /// Adds a new state after sandboxed execution.
@@ -486,7 +495,7 @@ impl SandboxManager {
     }
 
     /// Closes previously opened state instance, by id.
-    pub fn close_state(&self, state_id: StateId) -> bool {
+    pub fn close_state(&self, state_id: StateId) {
         let mut guard = self.repr.lock().unwrap();
         log(
             &*self.controller,
@@ -495,7 +504,12 @@ impl SandboxManager {
                 format!("Closing state session: {}", state_id),
             ),
         );
-        guard.states.remove(&state_id).is_some()
+        let removed = guard.states.remove(&state_id);
+        assert!(
+            removed.is_some(),
+            "Failed to close state {}: id not found",
+            state_id
+        );
     }
 
     /// Opens new execution using specific code and state, passing
@@ -510,70 +524,48 @@ impl SandboxManager {
         wasm_id: WasmId,
         state_id: StateId,
         exec_input: protocol::structs::ExecInput,
-    ) -> bool {
-        let mut guard = sandbox_manager.repr.lock().unwrap();
+    ) {
         eprintln!(
             "Opening exec session: {}, {}, {}",
             exec_id, state_id, wasm_id
         );
-
-        if let Some(_exec_id) = guard.active_execs.get(&exec_id) {
-            // This should be unreachable: if we reach this point
-            // we have failed to close an execution.
-            //
-            // Note that we do not have a lot of options regarding the panic. If we
-            // are instructing to start a new execution it means that the replica
-            // controller and the sandbox are now out of sync.
-            eprintln!("Exec session {} error: id is already in use.", exec_id);
-            unreachable!();
-        }
-        let wasm_runner = guard.canister_wasms.get(&wasm_id);
-        if let Some(wasm_runner) = wasm_runner {
-            let state = guard.states.get(&state_id);
-            if let Some(state) = state {
-                let exec = Execution::create(
-                    exec_id,
-                    Arc::clone(wasm_runner),
-                    Arc::clone(state),
-                    Arc::clone(sandbox_manager),
-                    &mut guard.workers,
-                    exec_input,
-                );
-                guard.active_execs.insert(exec_id, exec);
-                true
-            } else {
-                eprintln!(
-                    "Exec session {} error: state {} not found",
-                    exec_id, state_id
-                );
-                false
-            }
-        } else {
-            eprintln!("Exec session {} error: wasm {} not found", exec_id, wasm_id);
-            false
-        }
+        let mut guard = sandbox_manager.repr.lock().unwrap();
+        assert!(
+            !guard.active_execs.contains_key(&exec_id),
+            "Failed to open exec session {}: id is already in use",
+            exec_id
+        );
+        let wasm_runner = guard.canister_wasms.get(&wasm_id).unwrap_or_else(|| {
+            unreachable!(
+                "Failed to open exec session {}: wasm {} not found",
+                exec_id, wasm_id
+            )
+        });
+        let state = guard.states.get(&state_id).unwrap_or_else(|| {
+            unreachable!(
+                "Failed to open exec session {}: state {} not found",
+                exec_id, state_id,
+            )
+        });
+        let exec = Execution::create(
+            exec_id,
+            Arc::clone(wasm_runner),
+            Arc::clone(state),
+            Arc::clone(sandbox_manager),
+            &mut guard.workers,
+            exec_input,
+        );
+        guard.active_execs.insert(exec_id, exec);
     }
 
     /// Closes previously opened execution. Execution must have
     /// finished previously.
-    ///
-    /// If execution has not finished we return false. Disagreement
-    /// between replica and sandbox needs to be handled by the
-    /// replica, as we assume a malicious sandboxed process. For
-    /// stability reasons we should ensure still that sandbox is
-    /// robust.
-    pub fn close_execution(&self, exec_id: ExecId) -> bool {
+    pub fn close_execution(&self, exec_id: ExecId) {
         let mut guard = self.repr.lock().unwrap();
-        match guard.active_execs.remove(&exec_id) {
-            Some(exec) => {
-                // **Attempt** closing the execution object.
-                exec.close()
-            }
-            None => {
-                eprintln!("Failed to close exec session {}: not found", exec_id);
-                false
-            }
-        }
+        let exec = guard.active_execs.remove(&exec_id).unwrap_or_else(|| {
+            unreachable!("Failed to close exec session {}: id not found", exec_id);
+        });
+        exec.close();
     }
 
     pub fn create_execution_state(
@@ -642,18 +634,17 @@ impl SandboxManager {
 }
 
 impl SandboxManagerInt {
-    fn open_state(&mut self, request: OpenStateRequest) -> bool {
-        if self.states.get(&request.state_id).is_some() {
-            eprintln!("Failed to open {}: already exists", request.state_id);
-            return false;
-        }
-
+    fn open_state(&mut self, request: OpenStateRequest) {
+        assert!(
+            !self.states.contains_key(&request.state_id),
+            "Failed to open state {}: id is already in use",
+            request.state_id
+        );
         let globals = request.state.globals;
         let wasm_memory = deserialize_memory(request.state.wasm_memory);
         let stable_memory = deserialize_memory(request.state.stable_memory);
         let state = Arc::new(State::new(globals, wasm_memory, stable_memory));
         self.states.insert(request.state_id, state);
-        true
     }
 
     fn add_state(&mut self, state_id: StateId, state: State) {
