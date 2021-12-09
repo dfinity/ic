@@ -29,6 +29,7 @@ function read_variables() {
     while IFS="=" read -r key value; do
         case "$key" in
             "journalbeat_hosts") journalbeat_hosts="${value}" ;;
+            "journalbeat_tags") journalbeat_tags="${value}" ;;
         esac
     done <"$1"
 }
@@ -61,9 +62,16 @@ if [ "${JOURNALBEAT_CONFIG_FILE}" != "" ] && [ -e "${JOURNALBEAT_CONFIG_FILE}" ]
 fi
 
 JOURNALBEAT_HOSTS="${journalbeat_hosts}"
+JOURNALBEAT_TAGS="${journalbeat_tags}"
 
 if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
     # Covert string into comma separated array
     journalbeat_hosts_array=$(for host in ${JOURNALBEAT_HOSTS}; do echo -n "\"${host}\", "; done | sed -E "s@, \$@@g")
     sed -e "s@{{ journalbeat_hosts }}@${journalbeat_hosts_array}@" "${IN_FILE}" >"${OUT_FILE}"
+fi
+
+if [ "${JOURNALBEAT_TAGS}" != "" ]; then
+    # Covert string into comma separated array
+    journalbeat_tags_array=$(for tag in ${JOURNALBEAT_TAGS}; do echo -n "\"${tag}\", "; done | sed -E "s@, \$@@g")
+    sed -e "s@{{ journalbeat_tags }}@tags: [${journalbeat_tags_array}]@" -i "${OUT_FILE}"
 fi

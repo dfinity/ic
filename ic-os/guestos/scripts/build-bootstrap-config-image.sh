@@ -49,6 +49,11 @@ options may be specified:
     to quote the argument string so it appears as a single argument to the
     script, e.g. --journalbeat_hosts "h1.domain.tld:9220 h2.domain.tld:9230").
 
+  --journalbeat_tags tags
+    Tags to be used by journalbeat. (make sure
+    to quote the argument string so it appears as a single argument to the
+    script, e.g. --journalbeat_tags "testnet1 slo")
+
   --nns_url url
     URL of NNS nodes for sign up or registry access. Can be multiple nodes
     separated by spaces (make sure to quote the argument string in that
@@ -107,6 +112,7 @@ function build_ic_bootstrap_tar() {
     local NNS_URL NNS_PUBLIC_KEY
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
     local JOURNALBEAT_HOSTS
+    local JOURNALBEAT_TAGS
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
     local LOG_DEBUG_OVERRIDES
     local MALICIOUS_BEHAVIOR
@@ -135,6 +141,9 @@ function build_ic_bootstrap_tar() {
                 ;;
             --journalbeat_hosts)
                 JOURNALBEAT_HOSTS="$2"
+                ;;
+            --journalbeat_tags)
+                JOURNALBEAT_TAGS="$2"
                 ;;
             --nns_url)
                 NNS_URL="$2"
@@ -182,6 +191,9 @@ hostname=$HOSTNAME
 EOF
     if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
         echo "journalbeat_hosts=$JOURNALBEAT_HOSTS" >"${BOOTSTRAP_TMPDIR}/journalbeat.conf"
+        if [ "${JOURNALBEAT_TAGS}" != "" ]; then
+            echo "journalbeat_tags=$JOURNALBEAT_TAGS" >>"${BOOTSTRAP_TMPDIR}/journalbeat.conf"
+        fi
     fi
     if [ "${NNS_PUBLIC_KEY}" != "" ]; then
         cp "${NNS_PUBLIC_KEY}" "${BOOTSTRAP_TMPDIR}/nns_public_key.pem"
