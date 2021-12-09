@@ -202,7 +202,7 @@ echo "Firewall config update succeeded on all nodes!"
 for host in $hosts; do
     echo -n Checking port 9090: curling https://["$host"]:9090 and expecting it to hang...
     rc=0
-    timeout 5 curl --insecure --tlsv1.3 https://["$host"]:9090 &>/dev/null || rc=$?
+    timeout 5 curl --insecure --retry 5 --tlsv1.3 https://["$host"]:9090 &>/dev/null || rc=$?
     if [ $rc -ne 124 ]; then
         echo FAILED
         echo "Test failed: successfully established connection to port 9090 on host $host"
@@ -216,7 +216,7 @@ done
 for host in $hosts; do
     echo -n Checking port 8080: curling https://["$host"]:8080 and expecting it to succeed immediately...
     rc=0
-    timeout 5 curl --insecure --tlsv1.3 https://["$host"]:8080 &>/dev/null || rc=$?
+    timeout 10 curl --insecure --retry 5 --tlsv1.3 https://["$host"]:8080 &>/dev/null || rc=$?
     if [ $rc == 124 ]; then
         echo FAILED
         echo "Test failed: could not establish connection to port 8080 on host $host"
@@ -264,7 +264,7 @@ sleep 120
 for host in $hosts; do
     echo -n Checking port 9090: curling https://["$host"]:9090 and expecting it to succeed immediately...
     rc=0
-    timeout 5 curl --insecure --tlsv1.3 https://["$host"]:9090 &>/dev/null || rc=$?
+    timeout 10 curl --insecure --retry 5 --tlsv1.3 https://["$host"]:9090 &>/dev/null || rc=$?
     if [ $rc == 124 ]; then
         echo FAILED
         echo "Test failed: could not establish connection to port 9090 on host $host"
