@@ -34,6 +34,7 @@ criterion-time = { path = "../criterion_time" }
 ic-test-utilities = { path = "../test_utilities" }
 serde_cbor = "0.11.1"
 proptest = "0.9.4"
+scoped_threadpool = "0.1.*"
 
 [[bench]]
 name = "bench_allocator"

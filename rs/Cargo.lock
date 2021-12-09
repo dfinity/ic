@@ -5481,6 +5481,7 @@ dependencies = [
  "nix 0.23.0",
  "phantom_newtype",
  "proptest 0.9.6",
+ "scoped_threadpool",
  "serde",
  "serde_cbor",
  "slog",
