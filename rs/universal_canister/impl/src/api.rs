@@ -30,7 +30,7 @@ mod ic0 {
         pub fn msg_cycles_accept(max_amount: u64) -> u64;
         pub fn msg_cycles_accept128(max_amount_high: u64, max_amount_low: u64, dst: u32) -> ();
         pub fn canister_cycle_balance() -> u64;
-        pub fn canister_cycle_balance128(dst: u32) -> ();
+        pub fn canister_cycles_balance128(dst: u32) -> ();
         pub fn trap(offset: u32, size: u32) -> !;
         pub fn call_new(
             callee_src: u32,
@@ -223,7 +223,7 @@ pub fn balance() -> u64 {
 
 pub fn balance128() -> Vec<u8> {
     let mut bytes = vec![0u8; CYCLES_SIZE];
-    unsafe { ic0::canister_cycle_balance128(bytes.as_mut_ptr() as u32) }
+    unsafe { ic0::canister_cycles_balance128(bytes.as_mut_ptr() as u32) }
     bytes
 }
 
