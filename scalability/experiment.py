@@ -30,7 +30,6 @@ gflags.MarkFlagAsRequired("wg_testnet")
 gflags.DEFINE_integer("subnet", 1, "Subnet from which to choose the target machine")
 gflags.DEFINE_integer("wg_subnet", 0, "Subnet in which to run the workload generator")
 gflags.DEFINE_boolean("skip_generate_report", False, "Skip generating report after experiment is finished")
-gflags.DEFINE_integer("wg_connections_per_host", 1, "Number of connections to use per workload generator")
 gflags.DEFINE_boolean("should_deploy_ic", False, "Should the IC be deployed on testnet before the experiment.")
 gflags.DEFINE_string("git_revision", "", "Git revision to be deployed to the testnet")
 gflags.DEFINE_string("canister_id", "", "Use given canister ID instead of installing a new canister")
@@ -442,7 +441,6 @@ class Experiment:
         cmd = (
             f'./ic-workload-generator "{target_list}" --summary-file wg_summary'
             f" -n {duration} -r {rps_per_machine} -p 9090 --no-status-check"
-            f" --connections-per-host {FLAGS.wg_connections_per_host}"
         )
         cmd += " " + " ".join(arguments)
 
