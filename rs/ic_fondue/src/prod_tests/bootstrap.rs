@@ -232,6 +232,7 @@ pub fn upload_config_disk_images(
 /// directories.
 pub fn create_config_disk_images(
     ctx: &DriverContext,
+    group_name: &str,
     logger: &Logger,
     initialized_ic: &InitializedIc,
 ) {
@@ -246,7 +247,9 @@ pub fn create_config_disk_images(
             .arg("--ic_crypto")
             .arg(node.crypto_path())
             .arg("--accounts_ssh_authorized_keys")
-            .arg(ctx.authorized_ssh_accounts_dir.path());
+            .arg(ctx.authorized_ssh_accounts_dir.path())
+            .arg("--journalbeat_tags")
+            .arg(format!("system_test {}", group_name));
 
         if !ctx.journalbeat_hosts.is_empty() {
             cmd.arg("--journalbeat_hosts")

@@ -145,7 +145,7 @@ fn evaluate_pot(ctx: &DriverContext, pot: Pot, path: TestPath) -> FarmResult<Tes
     let res_group = allocate_resources(ctx, &res_request)?;
     let temp_dir = tempfile::tempdir().expect("Could not create temp directory");
     let (init_ic, mal_beh, node_vms) = init_ic(ctx, temp_dir.path(), pot.config, &res_group);
-    create_config_disk_images(ctx, &logger, &init_ic);
+    create_config_disk_images(ctx, &group_name, &logger, &init_ic);
     let cfg_disk_image_ids = upload_config_disk_images(ctx, &init_ic, &group_name)?;
     attach_config_disk_images(ctx, &res_group, cfg_disk_image_ids)?;
     let ic_handle = create_ic_handle(ctx, &init_ic, &node_vms, &mal_beh);
