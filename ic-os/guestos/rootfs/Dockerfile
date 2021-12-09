@@ -1,13 +1,12 @@
-# GuestOS - Main Image
+# GuestOS - Main Docker Image
 #
 # Build steps:
-# - `docker build -t dfinity/guestos-main -f Dockerfile .`
-# - `docker push dfinity/guestos-main`
+# - `docker build --pull -t dfinity/guestos-main -f Dockerfile .`
 #
 # First build stage:
 # - Download 3rd party tools
 #
-FROM dfinity/guestos-base@sha256:527d3ba8e12931e82350c1b58fe94133d9e1a8d1f6843a2d6e3354447eaddf85 as download
+FROM ubuntu:20.04 as download
 
 ENV TZ=UTC
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
@@ -33,6 +32,7 @@ RUN cd /tmp/ && \
 # - Construct the actual target image (IC-OS root filesystem)
 # - Copy downloaded archives from first build stage into the target image
 #
+# Update below image when new dfinity/guestos-base image gets produced (see deploy-guest-os-baseimg CI job on master/rc).
 FROM dfinity/guestos-base@sha256:527d3ba8e12931e82350c1b58fe94133d9e1a8d1f6843a2d6e3354447eaddf85
 
 RUN mkdir -p /boot/config \

@@ -1,12 +1,12 @@
-# GenericOS - Main Image
+# GenericOS - Main Docker Image
 #
 # Build steps:
-# - `docker build -t dfinity/genericos-main -f Dockerfile .`
-# - `docker push dfinity/genericos-main`
+# - `docker build --pull -t dfinity/genericos-main -f Dockerfile .`
 #
 # First build stage:
 # - Construct the actual target image (IC-OS root filesystem)
 #
+# Update below image when new dfinity/genericos-base image gets produced (see deploy-guest-os-baseimg CI job on master/rc).
 FROM dfinity/genericos-base@sha256:058e1ad7c8de4a482416eac322497b9aa44452a606b407aa4ca5d3cb7edaf27c
 
 RUN mkdir -p /boot/{efi,grub}

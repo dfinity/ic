@@ -27,11 +27,6 @@ guest-os-updateimg-build:
       cd ic-os/guestos
       mkdir -p "${BUILD_OUT}"
 
-      IMAGE=$(grep FROM rootfs/Dockerfile | cut -d' ' -f2 | head -1)
-      if ! (docker image list --format "{{.Repository}}:{{.Tag}}" | grep -q "$IMAGE"); then
-          docker pull "$IMAGE"
-      fi
-
       # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-upgrade-img -- \
       placebo -v -t "$(openssl sha256 <<<${BUILD_EXTRA_ARGS})" -t "${CI_JOB_IMAGE:-docker}" -i "../../artifacts/release/**/*" -i "scripts/**/*" -i "rootfs/**/*" -- \
