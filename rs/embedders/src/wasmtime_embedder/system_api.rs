@@ -716,7 +716,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .unwrap();
 
     linker
-        .func_wrap("ic0", "canister_cycle_balance128", {
+        .func_wrap("ic0", "canister_cycles_balance128", {
             move |caller: Caller<'_, StoreData<S>>, dst: u32| {
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_canister_cycles_balance128(dst, memory)

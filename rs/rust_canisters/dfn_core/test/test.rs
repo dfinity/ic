@@ -1,6 +1,5 @@
 use canister_test::*;
 use dfn_core::bytes;
-use std::convert::TryInto;
 
 #[test]
 fn reverse_test() {
@@ -12,24 +11,6 @@ fn reverse_test() {
         let res = canister.query_("reverse", bytes, vec![0, 1, 2, 3]).await?;
 
         assert_eq!(res, vec![3, 2, 1, 0]);
-        Ok(())
-    })
-}
-
-#[test]
-fn balance128_test() {
-    local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
-
-        let canister = proj.cargo_bin("wasm").install_(&r, Vec::new()).await?;
-
-        let res = canister.query_("balance128", bytes, vec![]).await?;
-
-        let balance = u64::MAX;
-        assert_eq!(
-            u128::from_le_bytes(res.try_into().unwrap()),
-            balance as u128
-        );
         Ok(())
     })
 }

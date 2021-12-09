@@ -52,7 +52,7 @@ async fn add_nns_canister(runtime: &Runtime, upgrade_scenario: UpgradeTestingSce
         wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
         arg: vec![],
         query_allocation: Some(Nat::from(34)),
-        memory_allocation: Some(Nat::from(2771786)),
+        memory_allocation: Some(Nat::from(1234567)),
         compute_allocation: Some(Nat::from(12)),
         initial_cycles: 1 << 45,
         authz_changes: vec![],
