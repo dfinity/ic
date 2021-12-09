@@ -12,8 +12,8 @@ use ic_interfaces::messages::CanisterInputMessage;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_replicated_state::canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE};
 use ic_replicated_state::{
-    canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallOrigin, ExportedFunctions,
 };
@@ -1669,7 +1669,6 @@ fn subnet_messages_respect_instruction_limit_per_round() {
                                 .payment(Cycles::from(cycles))
                                 .build(),
                         ),
-                        InputQueueType::RemoteSubnet,
                     )
                     .unwrap();
             }
@@ -2656,7 +2655,6 @@ fn execution_round_metrics_are_recorded() {
                                 .payment(Cycles::from(cycles))
                                 .build(),
                         ),
-                        InputQueueType::RemoteSubnet,
                     )
                     .unwrap();
             }

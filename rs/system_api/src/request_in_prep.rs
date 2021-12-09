@@ -42,14 +42,14 @@ pub struct RequestInPrep {
     method_payload: Vec<u8>,
     /// The maximum size of a message that will go to a canister on another
     /// subnet.
-    max_size_remote_subnet: NumBytes,
-    /// Multiplying this with `max_size_remote_subnet` results in the maximum
+    max_size_inter_subnet: NumBytes,
+    /// Multiplying this with `max_size_inter_subnet` results in the maximum
     /// size of a message that will go to a canister on the same subnet. This
-    /// could be stored as a `NumBytes` just like `max_size_remote_subnet`
+    /// could be stored as a `NumBytes` just like `max_size_inter_subnet`
     /// however then both limits will have the same type and we could easily mix
     /// them up creating tricky bugs. Storing this an integer means that the two
     /// limits are stored as different types and are more difficult to mix up.
-    multiplier_max_size_local_subnet: u64,
+    multiplier_max_size_intra_subnet: u64,
 }
 
 impl RequestInPrep {
@@ -63,15 +63,15 @@ impl RequestInPrep {
         heap: &[u8],
         on_reply: WasmClosure,
         on_reject: WasmClosure,
-        max_size_remote_subnet: NumBytes,
-        multiplier_max_size_local_subnet: u64,
+        max_size_inter_subnet: NumBytes,
+        multiplier_max_size_intra_subnet: u64,
     ) -> HypervisorResult<Self> {
         let method_name = {
-            let max_size_local_subnet = max_size_remote_subnet * multiplier_max_size_local_subnet;
-            if method_name_len as u64 > max_size_local_subnet.get() {
+            let max_size_intra_subnet = max_size_inter_subnet * multiplier_max_size_intra_subnet;
+            if method_name_len as u64 > max_size_intra_subnet.get() {
                 return Err(HypervisorError::ContractViolation(format!(
-                    "RequestInPrep: size of method_name {} exceeded the allowed limit local-subnet {} remote-subnet {}",
-                    callee_size, max_size_local_subnet, max_size_remote_subnet
+                    "RequestInPrep: size of method_name {} exceeded the allowed limit intra-subnet {} inter-subnet {}",
+                    callee_size, max_size_intra_subnet, max_size_inter_subnet
                 )));
             }
             let method_name = valid_subslice(
@@ -97,8 +97,8 @@ impl RequestInPrep {
             cycles: Cycles::from(0),
             method_name,
             method_payload: Vec::new(),
-            max_size_remote_subnet,
-            multiplier_max_size_local_subnet,
+            max_size_inter_subnet,
+            multiplier_max_size_intra_subnet,
         })
     }
 
@@ -125,12 +125,12 @@ impl RequestInPrep {
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let current_size = self.method_name.len() + self.method_payload.len();
-        let max_size_local_subnet =
-            self.max_size_remote_subnet * self.multiplier_max_size_local_subnet;
-        if size as u64 > max_size_local_subnet.get() - current_size as u64 {
+        let max_size_intra_subnet =
+            self.max_size_inter_subnet * self.multiplier_max_size_intra_subnet;
+        if size as u64 > max_size_intra_subnet.get() - current_size as u64 {
             Err(HypervisorError::ContractViolation(format!(
-                "RequestInPrep: current_size {} exceeded the allowed limit local-subnet {} remote-subnet {}",
-                current_size, max_size_local_subnet, self.max_size_remote_subnet
+                "RequestInPrep: current_size {} exceeded the allowed limit intra-subnet {} inter-subnet {}",
+                current_size, max_size_intra_subnet, self.max_size_inter_subnet
             )))
         } else {
             let data = valid_subslice("ic0.call_data_append", src, size, heap)?;
@@ -158,8 +158,8 @@ pub(crate) fn into_request(
         cycles,
         method_name,
         method_payload,
-        max_size_remote_subnet,
-        multiplier_max_size_local_subnet,
+        max_size_inter_subnet,
+        multiplier_max_size_intra_subnet,
     }: RequestInPrep,
     call_context_id: CallContextId,
     own_subnet_id: SubnetId,
@@ -227,19 +227,19 @@ pub(crate) fn into_request(
 
     let current_size = method_name.len() + method_payload.len();
     {
-        let max_size_local_subnet = max_size_remote_subnet * multiplier_max_size_local_subnet;
-        if current_size > max_size_local_subnet.get() as usize {
+        let max_size_intra_subnet = max_size_inter_subnet * multiplier_max_size_intra_subnet;
+        if current_size > max_size_intra_subnet.get() as usize {
             return Err(HypervisorError::ContractViolation(format!(
-                "RequestInPrep: size of message {} exceeded the allowed remote-subnet limit {}",
-                current_size, max_size_remote_subnet
+                "RequestInPrep: size of message {} exceeded the allowed intra-subnet limit {}",
+                current_size, max_size_inter_subnet
             )));
         }
     }
 
-    if destination_subnet != own_subnet_id && current_size > max_size_remote_subnet.get() as usize {
+    if destination_subnet != own_subnet_id && current_size > max_size_inter_subnet.get() as usize {
         return Err(HypervisorError::ContractViolation(format!(
             "RequestInPrep: size of message {} destined to another subnet cannot exceed {}",
-            current_size, max_size_remote_subnet
+            current_size, max_size_inter_subnet
         )));
     }
 

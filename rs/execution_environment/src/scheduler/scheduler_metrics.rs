@@ -149,7 +149,7 @@ impl SchedulerMetrics {
             ),
             queues_oversized_requests_extra_bytes: metrics_registry.int_gauge(
                 "execution_queues_oversized_requests_extra_bytes",
-                "Total bytes above `MAX_RESPONSE_COUNT_BYTES` across oversized local-subnet requests.",
+                "Total bytes above `MAX_RESPONSE_COUNT_BYTES` across oversized intra-subnet requests.",
             ),
             streams_response_bytes: metrics_registry.int_gauge(
                 "execution_streams_response_size_bytes",

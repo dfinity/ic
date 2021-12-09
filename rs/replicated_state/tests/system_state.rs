@@ -4,7 +4,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{DEFAULT_QUEUE_CAPACITY, ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
     testing::{CanisterQueuesTesting, SystemStateTesting},
-    InputQueueType, SystemState,
+    SystemState,
 };
 use ic_test_utilities::types::{
     ids::{canister_test_id, user_test_id},
@@ -41,7 +41,7 @@ fn correct_charging_target_canister_for_a_response() {
     // Enqueue the Request.
     system_state
         .queues_mut()
-        .push_input(QueueIndex::from(0), request, InputQueueType::RemoteSubnet)
+        .push_input(QueueIndex::from(0), request)
         .unwrap();
 
     // Assume it was processed and enqueue a Response.
@@ -177,11 +177,7 @@ fn induct_messages_to_self_respects_memory_limit_impl(
     );
     system_state
         .queues_mut()
-        .push_input(
-            QUEUE_INDEX_NONE,
-            request.clone().into(),
-            InputQueueType::RemoteSubnet,
-        )
+        .push_input(QUEUE_INDEX_NONE, request.clone().into())
         .unwrap();
     system_state.queues_mut().pop_input().unwrap();
 
@@ -209,15 +205,15 @@ fn induct_messages_to_self_respects_memory_limit_impl(
     // Expect the response and first request to have been inducted.
     assert_eq!(
         Some(CanisterInputMessage::Response(response)),
-        system_state.queues_mut().pop_input()
+        system_state.pop_input()
     );
     assert_eq!(
         Some(CanisterInputMessage::Request(request.clone())),
-        system_state.queues_mut().pop_input()
+        system_state.pop_input()
     );
 
     if ENFORCE_MESSAGE_MEMORY_USAGE {
-        assert_eq!(None, system_state.queues_mut().pop_input());
+        assert_eq!(None, system_state.pop_input());
 
         // Expect the second request to still be in the output queue.
         assert_eq!(
@@ -227,9 +223,9 @@ fn induct_messages_to_self_respects_memory_limit_impl(
     } else {
         assert_eq!(
             Some(CanisterInputMessage::Request(request)),
-            system_state.queues_mut().pop_input()
+            system_state.pop_input()
         );
-        assert_eq!(None, system_state.queues_mut().pop_input());
+        assert_eq!(None, system_state.pop_input());
 
         // Expect the output queue to be empty.
         assert!(!system_state.queues().has_output());

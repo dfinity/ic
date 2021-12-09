@@ -24,8 +24,8 @@ use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::{
     canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
-    CallContextManager, CallOrigin, CanisterState, CanisterStatus, InputQueueType, ReplicatedState,
-    SchedulerState, SystemState,
+    CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState, SchedulerState,
+    SystemState,
 };
 use ic_test_utilities::state::get_stopping_canister_on_nns;
 use ic_test_utilities::{
@@ -340,7 +340,7 @@ fn inject_request(system_state: &mut SystemState) {
         .into();
     system_state
         .queues_mut()
-        .push_input(QueueIndex::from(0), msg, InputQueueType::RemoteSubnet)
+        .push_input(QueueIndex::from(0), msg)
         .unwrap();
 }
 
@@ -361,7 +361,7 @@ fn inject_response(system_state: &mut SystemState, cb_id: CallbackId) {
     system_state.push_output_request(request).unwrap();
     system_state
         .queues_mut()
-        .push_input(QueueIndex::from(0), response, InputQueueType::RemoteSubnet)
+        .push_input(QueueIndex::from(0), response)
         .unwrap();
 }
 
@@ -778,9 +778,9 @@ fn test_response_message_side_effects_1() {
         .into();
     system_state
         .queues_mut()
-        .push_input(QueueIndex::from(0), req, InputQueueType::RemoteSubnet)
+        .push_input(QueueIndex::from(0), req)
         .unwrap();
-    system_state.queues_mut().pop_input().unwrap();
+    system_state.pop_input().unwrap();
 
     inject_response(&mut system_state, cb_id);
     test_outgoing_messages(
@@ -895,11 +895,7 @@ fn stopping_canister_rejects_requests() {
             canister
                 .system_state
                 .queues_mut()
-                .push_input(
-                    QueueIndex::from(0),
-                    RequestOrResponse::Request(req),
-                    InputQueueType::RemoteSubnet,
-                )
+                .push_input(QueueIndex::from(0), RequestOrResponse::Request(req))
                 .unwrap();
 
             state.put_canister_state(canister);
@@ -1030,11 +1026,7 @@ fn stopped_canister_rejects_requests() {
             canister
                 .system_state
                 .queues_mut()
-                .push_input(
-                    QueueIndex::from(0),
-                    RequestOrResponse::Request(req),
-                    InputQueueType::RemoteSubnet,
-                )
+                .push_input(QueueIndex::from(0), RequestOrResponse::Request(req))
                 .unwrap();
 
             // Stop the canister. Here we manually stop the canister as opposed
@@ -1294,7 +1286,6 @@ fn test_canister_status_helper(
                         .payment(Cycles::from(cycles))
                         .build(),
                 ),
-                InputQueueType::RemoteSubnet,
             )
             .unwrap();
 
@@ -1351,7 +1342,6 @@ fn test_request_nonexistent_canister(method: Method) {
                         .payment(Cycles::from(cycles))
                         .build(),
                 ),
-                InputQueueType::RemoteSubnet,
             )
             .unwrap();
 
@@ -1504,7 +1494,6 @@ fn start_canister_from_another_canister() {
                         .payment(Cycles::from(cycles))
                         .build(),
                 ),
-                InputQueueType::RemoteSubnet,
             )
             .unwrap();
 
@@ -1573,7 +1562,6 @@ fn stop_canister_from_another_canister() {
                         .payment(Cycles::from(cycles))
                         .build(),
                 ),
-                InputQueueType::RemoteSubnet,
             )
             .unwrap();
 
@@ -1747,7 +1735,6 @@ fn subnet_canister_request_unknown_method() {
                         .payment(Cycles::from(cycles))
                         .build(),
                 ),
-                InputQueueType::RemoteSubnet,
             )
             .unwrap();
 
@@ -1853,7 +1840,6 @@ fn subnet_canister_request_bad_candid_payload() {
                         .payment(Cycles::from(cycles))
                         .build(),
                 ),
-                InputQueueType::RemoteSubnet,
             )
             .unwrap();
 
@@ -1972,7 +1958,6 @@ fn execute_create_canister_request(
                     .payment(Cycles::from(cycles.get()))
                     .build(),
             ),
-            InputQueueType::RemoteSubnet,
         )
         .unwrap();
 
@@ -2193,7 +2178,6 @@ fn execute_setup_initial_dkg_request(
                     .payment(Cycles::from(cycles.get()))
                     .build(),
             ),
-            InputQueueType::RemoteSubnet,
         )
         .unwrap();
 
@@ -2578,11 +2562,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
             canister
                 .system_state
                 .queues_mut()
-                .push_input(
-                    QueueIndex::from(0),
-                    RequestOrResponse::Request(req),
-                    InputQueueType::RemoteSubnet,
-                )
+                .push_input(QueueIndex::from(0), RequestOrResponse::Request(req))
                 .unwrap();
 
             let msg = canister.pop_input().unwrap();

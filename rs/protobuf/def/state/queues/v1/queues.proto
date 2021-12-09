@@ -79,18 +79,20 @@ message CanisterQueues {
     reserved 1; // this is from canisterId
     reserved "canister_id";
     repeated ingress.v1.Ingress ingress_queue = 2;
+    /// Note: ATM we deserialize intra- and inter- subnet messages into this
+    /// queue to support the downgrade path.
+    /// Next release it will be split into intra- and inter-subnet messages.
     repeated QueueEntry input_queues = 3;
-    // Upgrade: input_schedule is mapped to local_subnet_input_schedule
     repeated types.v1.CanisterId input_schedule = 4;
     repeated QueueEntry output_queues = 5;
     enum NextInputQueue {
         NEXT_INPUT_QUEUE_UNSPECIFIED = 0;
-        NEXT_INPUT_QUEUE_LOCAL_SUBNET = 1;
+        NEXT_INPUT_QUEUE_INTER_CANISTER = 1;
         NEXT_INPUT_QUEUE_INGRESS = 2;
-        NEXT_INPUT_QUEUE_REMOTE_SUBNET = 3;
+        reserved 3;
     }
     NextInputQueue next_input_queue = 6;
-    // Downgrade: both queues are mapped back to input_schedule in the current release
-    repeated types.v1.CanisterId local_subnet_input_schedule = 7;
-    repeated types.v1.CanisterId remote_subnet_input_schedule = 8;
+    /// Note: Those schedules are added to support the downgrade path.
+    repeated types.v1.CanisterId intra_subnet_input_schedule = 7;
+    repeated types.v1.CanisterId inter_subnet_input_schedule = 8;
 }

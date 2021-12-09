@@ -18,7 +18,7 @@ fn large_methods_rejected() {
     let method_name_source = 0;
     let method_name_len = 100;
     let callback = WasmClosure::new(0, 0);
-    let max_size_remote_subnet = NumBytes::from(10);
+    let max_size_inter_subnet = NumBytes::from(10);
     RequestInPrep::new(
         sender,
         callee_source,
@@ -28,7 +28,7 @@ fn large_methods_rejected() {
         &heap,
         callback.clone(),
         callback,
-        max_size_remote_subnet,
+        max_size_inter_subnet,
         1,
     )
     .unwrap_err();
@@ -43,7 +43,7 @@ fn large_callee_rejected() {
     let method_name_source = 0;
     let method_name_len = 1;
     let callback = WasmClosure::new(0, 0);
-    let max_size_remote_subnet = NumBytes::from(10);
+    let max_size_inter_subnet = NumBytes::from(10);
     RequestInPrep::new(
         sender,
         callee_source,
@@ -53,7 +53,7 @@ fn large_callee_rejected() {
         &heap,
         callback.clone(),
         callback,
-        max_size_remote_subnet,
+        max_size_inter_subnet,
         1,
     )
     .unwrap_err();
@@ -68,7 +68,7 @@ fn payloads_larger_than_intra_limit_rejected() {
     let method_name_source = 0;
     let method_name_len = 1;
     let callback = WasmClosure::new(0, 0);
-    let max_size_remote_subnet = NumBytes::from(10);
+    let max_size_inter_subnet = NumBytes::from(10);
     let mut req_in_prep = RequestInPrep::new(
         sender,
         callee_source,
@@ -78,7 +78,7 @@ fn payloads_larger_than_intra_limit_rejected() {
         &heap,
         callback.clone(),
         callback,
-        max_size_remote_subnet,
+        max_size_inter_subnet,
         1,
     )
     .unwrap();
@@ -136,7 +136,7 @@ fn payloads_larger_than_inter_limit_rejected() {
     let method_name_source = 0;
     let method_name_len = 1;
     let callback = WasmClosure::new(0, 0);
-    let max_size_remote_subnet = NumBytes::from(10);
+    let max_size_inter_subnet = NumBytes::from(10);
     let mut req_in_prep = RequestInPrep::new(
         sender,
         callee_source,
@@ -146,7 +146,7 @@ fn payloads_larger_than_inter_limit_rejected() {
         &heap,
         callback.clone(),
         callback,
-        max_size_remote_subnet,
+        max_size_inter_subnet,
         10,
     )
     .unwrap();
@@ -208,7 +208,7 @@ fn application_subnet_cannot_send_cycles_to_verified_subnet() {
     let method_name_source = 0;
     let method_name_len = 1;
     let callback = WasmClosure::new(0, 0);
-    let max_size_remote_subnet = NumBytes::from(1024);
+    let max_size_inter_subnet = NumBytes::from(1024);
     let mut req_in_prep = RequestInPrep::new(
         sender,
         callee_source,
@@ -218,7 +218,7 @@ fn application_subnet_cannot_send_cycles_to_verified_subnet() {
         &heap,
         callback.clone(),
         callback,
-        max_size_remote_subnet,
+        max_size_inter_subnet,
         10,
     )
     .unwrap();

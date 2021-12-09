@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
@@ -12,7 +9,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::state::{arb_replicated_state_with_queues, assert_next_eq};
 use ic_test_utilities::types::{
-    ids::{subnet_test_id, user_test_id},
+    ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
@@ -278,129 +275,6 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
             assert_eq!(initial_available_memory, subnet_available_memory);
         }
     })
-}
-
-#[test]
-fn push_input_queues_respects_local_remote_subnet() {
-    // Local and remote ids
-    let local_canister_id = CanisterId::from_u64(1);
-    let local_canister_subnet_id = subnet_test_id(2);
-    let remote_canister_id = CanisterId::from_u64(0x101);
-    let remote_canister_subnet_id = subnet_test_id(0x102);
-    let unknown_canister_id = CanisterId::from_u64(0x201);
-
-    // Create replicated state
-    let scheduler_state = SchedulerState::default();
-    let system_state = SystemState::new_running(
-        local_canister_id,
-        user_test_id(24).get(),
-        INITIAL_CYCLES,
-        NumSeconds::from(100_000),
-    );
-    let canister_state = CanisterState::new(system_state, None, scheduler_state);
-    let mut state = ReplicatedState::new_rooted_at(
-        local_canister_subnet_id,
-        SubnetType::Application,
-        "unused".into(),
-    );
-    state.put_canister_state(canister_state);
-
-    // Assert the queues are empty
-    assert_eq!(
-        state
-            .canister_state_mut(&local_canister_id)
-            .unwrap()
-            .system_state
-            .queues_mut()
-            .pop_input(),
-        None
-    );
-    assert_eq!(state.canister_state(&remote_canister_id), None);
-
-    // Populate routing table.
-    let routing_table = RoutingTable(maplit::btreemap! {
-        CanisterIdRange {
-            start: CanisterId::from(0x00),
-            end: CanisterId::from(0xff),
-        } => local_canister_subnet_id,
-        CanisterIdRange {
-                start: CanisterId::from(0x100),
-                end: CanisterId::from(0x1ff),
-            } => remote_canister_subnet_id
-    });
-    routing_table.well_formed().unwrap();
-    state.metadata.network_topology.routing_table = Arc::new(routing_table);
-
-    // Pushing message from the remote canister, should be in the remote subnet
-    // queue
-    state
-        .push_input(
-            QueueIndex::from(0),
-            RequestBuilder::default()
-                .sender(remote_canister_id)
-                .receiver(local_canister_id)
-                .build()
-                .into(),
-            (u64::MAX / 2).into(),
-            &mut (i64::MAX / 2),
-        )
-        .unwrap();
-    assert_eq!(
-        state
-            .canister_state(&local_canister_id)
-            .unwrap()
-            .system_state
-            .queues()
-            .get_remote_subnet_input_schedule()
-            .len(),
-        1
-    );
-    // Pushing message from the local canister, should be in the local subnet queue
-    state
-        .push_input(
-            QueueIndex::from(0),
-            RequestBuilder::default()
-                .sender(local_canister_id)
-                .receiver(local_canister_id)
-                .build()
-                .into(),
-            (u64::MAX / 2).into(),
-            &mut (i64::MAX / 2),
-        )
-        .unwrap();
-    assert_eq!(
-        state
-            .canister_state(&local_canister_id)
-            .unwrap()
-            .system_state
-            .queues()
-            .get_local_subnet_input_schedule()
-            .len(),
-        1
-    );
-    // Pushing message from unknown canister, should be in the local subnet queue
-    state
-        .push_input(
-            QueueIndex::from(0),
-            RequestBuilder::default()
-                .sender(unknown_canister_id)
-                .receiver(local_canister_id)
-                .build()
-                .into(),
-            (u64::MAX / 2).into(),
-            &mut (i64::MAX / 2),
-        )
-        .unwrap();
-    assert_eq!(
-        state
-            .canister_state(&local_canister_id)
-            .unwrap()
-            .system_state
-            .queues()
-            .get_local_subnet_input_schedule()
-            .len(),
-        2
-    );
 }
 
 proptest! {

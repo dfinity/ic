@@ -28,31 +28,6 @@ use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// Input queue type: Local or Remote Subnet
-pub enum InputQueueType {
-    /// Local Subnet input messages
-    LocalSubnet,
-    /// Remote Subnet input messages
-    RemoteSubnet,
-}
-
-/// Next input queue: round-robin across Local, Ingress, and Remote Subnet
-#[derive(Clone, Copy, Eq, Debug, PartialEq)]
-pub enum NextInputQueue {
-    /// Local Subnet input messages
-    LocalSubnet,
-    /// Ingress messages
-    Ingress,
-    /// Remote Subnet input messages
-    RemoteSubnet,
-}
-
-impl Default for NextInputQueue {
-    fn default() -> Self {
-        NextInputQueue::LocalSubnet
-    }
-}
-
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum StateError {
     /// Message enqueuing failed due to no matching canister ID.
@@ -483,10 +458,6 @@ impl ReplicatedState {
     /// Pushes a `RequestOrResponse` into the induction pool (canister or subnet
     /// input queue).
     ///
-    /// The messages from the same subnet get pushed into the local subnet
-    /// queue, while the messages form the other subnets get pushed to the inter
-    /// subnet queues.
-    ///
     /// On failure (queue full, canister not found, out of memory), returns the
     /// corresponding error and the original message.
     ///
@@ -499,16 +470,6 @@ impl ReplicatedState {
         subnet_available_memory: &mut i64,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
-        let input_queue_type = match self.find_subnet_id(*msg.sender().get_ref()) {
-            Ok(sender_subnet_id) => {
-                if self.metadata.own_subnet_id == sender_subnet_id {
-                    InputQueueType::LocalSubnet
-                } else {
-                    InputQueueType::RemoteSubnet
-                }
-            }
-            Err(_) => InputQueueType::LocalSubnet, // unknown sender is local subnet
-        };
         match self.canister_state_mut(&msg.receiver()) {
             Some(receiver_canister) => receiver_canister.push_input(
                 index,
@@ -516,7 +477,6 @@ impl ReplicatedState {
                 max_canister_memory_size,
                 subnet_available_memory,
                 own_subnet_type,
-                input_queue_type,
             ),
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
@@ -529,7 +489,6 @@ impl ReplicatedState {
                         *subnet_available_memory,
                         subnet_available_memory,
                         own_subnet_type,
-                        input_queue_type,
                     )
                 } else {
                     Err((StateError::CanisterNotFound(msg.receiver()), msg))

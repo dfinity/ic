@@ -49,7 +49,6 @@ fn enqueuing_unexpected_response_does_not_panic() {
                 .receiver(this)
                 .build()
                 .into(),
-            InputQueueType::RemoteSubnet,
         )
         .unwrap();
     // Now `other` sends an unexpected `Response`.  We should return an error not
@@ -62,7 +61,6 @@ fn enqueuing_unexpected_response_does_not_panic() {
                 .originator(this)
                 .build()
                 .into(),
-            InputQueueType::RemoteSubnet,
         )
         .unwrap_err();
 }
@@ -81,7 +79,6 @@ fn can_push_output_response_after_input_request() {
                 .receiver(this)
                 .build()
                 .into(),
-            InputQueueType::RemoteSubnet,
         )
         .unwrap();
     queues.push_output_response(
@@ -101,7 +98,6 @@ fn can_push_input_request() {
         .push_input(
             QueueIndex::from(0),
             RequestBuilder::default().receiver(this).build().into(),
-            InputQueueType::RemoteSubnet,
         )
         .unwrap();
 }
@@ -116,7 +112,6 @@ fn cannot_push_input_response_without_output_request() {
         .push_input(
             QueueIndex::from(0),
             ResponseBuilder::default().originator(this).build().into(),
-            InputQueueType::RemoteSubnet,
         )
         .unwrap_err();
 }
@@ -144,7 +139,6 @@ fn can_push_input_response_after_output_request() {
                 .originator(this)
                 .build()
                 .into(),
-            InputQueueType::RemoteSubnet,
         )
         .unwrap();
 }
@@ -202,7 +196,6 @@ fn test_message_picking_round_robin_on_one_queue() {
                     .receiver(this)
                     .build()
                     .into(),
-                InputQueueType::RemoteSubnet,
             )
             .expect("could not push");
     }
@@ -239,7 +232,6 @@ fn test_message_picking_round_robin() {
                     .receiver(this)
                     .build()
                     .into(),
-                InputQueueType::RemoteSubnet,
             )
             .expect("could not push");
     }
@@ -262,20 +254,6 @@ fn test_message_picking_round_robin() {
                 .originator(this)
                 .build()
                 .into(),
-            InputQueueType::LocalSubnet,
-        )
-        .expect("could not push");
-
-    // Another high-priority request
-    queues
-        .push_input(
-            QueueIndex::from(1),
-            RequestBuilder::default()
-                .sender(other_2)
-                .receiver(this)
-                .build()
-                .into(),
-            InputQueueType::LocalSubnet,
         )
         .expect("could not push");
 
@@ -289,22 +267,8 @@ fn test_message_picking_round_robin() {
     });
 
     /* POPPING */
-    // Due to the round-robin across Local, Ingress, and Remote Subnet messages,
-    // the popping order should be:
-    // 1. Local Subnet response (other_2)
-    // 3. Ingress message
-    // 2. Remote Subnet request (other_1)
-    // 1. Local Subnet request (other_2)
-    // 4. Remote Subnet request (other_3)
-    // 2. Remote Subnet request (other_1)
 
-    // Pop response from other_2
-    match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Response(msg) => assert_eq!(msg.respondent, other_2),
-        msg => panic!("unexpected message popped: {:?}", msg),
-    }
-
-    // Pop ingress
+    // Pop ingress first due to the round-robin across ingress and x-net messages
     match queues.pop_input().expect("could not pop a message") {
         CanisterInputMessage::Ingress(msg) => assert_eq!(msg.source, user_test_id(77)),
         msg => panic!("unexpected message popped: {:?}", msg),
@@ -316,15 +280,15 @@ fn test_message_picking_round_robin() {
         msg => panic!("unexpected message popped: {:?}", msg),
     }
 
-    // Pop request from other_1
-    match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, other_2),
-        msg => panic!("unexpected message popped: {:?}", msg),
-    }
-
     // Pop request from other_3
     match queues.pop_input().expect("could not pop a message") {
         CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, other_3),
+        msg => panic!("unexpected message popped: {:?}", msg),
+    }
+
+    // Pop response from other_2
+    match queues.pop_input().expect("could not pop a message") {
+        CanisterInputMessage::Response(msg) => assert_eq!(msg.respondent, other_2),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
 
@@ -359,13 +323,12 @@ fn test_input_scheduling() {
                     .receiver(this)
                     .build()
                     .into(),
-                InputQueueType::RemoteSubnet,
             )
             .expect("could not push");
     };
 
     let assert_schedule = |queues: &CanisterQueues, expected_schedule: &[&CanisterId]| {
-        let schedule: Vec<&CanisterId> = queues.remote_subnet_input_schedule.iter().collect();
+        let schedule: Vec<&CanisterId> = queues.input_schedule.iter().collect();
         assert_eq!(expected_schedule, schedule.as_slice());
     };
 
@@ -463,19 +426,15 @@ fn encode_roundtrip() {
         .push_input(
             QueueIndex::from(0),
             RequestBuilder::default().sender(this).build().into(),
-            InputQueueType::RemoteSubnet,
         )
         .unwrap();
     queues
         .push_input(
             QueueIndex::from(0),
             RequestBuilder::default().sender(other).build().into(),
-            InputQueueType::RemoteSubnet,
         )
         .unwrap();
-    queues
-        .pop_canister_input(InputQueueType::RemoteSubnet)
-        .unwrap();
+    queues.pop_canister_input().unwrap();
     queues.push_ingress(IngressBuilder::default().receiver(this).build());
 
     let encoded: pb_queues::CanisterQueues = (&queues).into();
@@ -512,7 +471,7 @@ fn test_stats() {
             .into();
         msg_size[i] = msg.count_bytes();
         queues
-            .push_input(QUEUE_INDEX_NONE, msg, InputQueueType::RemoteSubnet)
+            .push_input(QUEUE_INDEX_NONE, msg)
             .expect("could not push");
 
         // Added a new input queue and `msg`.
@@ -621,7 +580,7 @@ fn test_stats() {
         .into();
     msg_size[5] = msg.count_bytes();
     queues
-        .push_input(QUEUE_INDEX_NONE, msg, InputQueueType::RemoteSubnet)
+        .push_input(QUEUE_INDEX_NONE, msg)
         .expect("could not push");
     // Added a new input message.
     expected_iq_stats += InputQueuesStats {
