@@ -34,7 +34,9 @@ use std::convert::TryFrom;
 use std::mem::size_of;
 pub use webauthn::{WebAuthnEnvelope, WebAuthnSignature};
 
-const MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64: u64 = 2 * 1024 * 1024; // 2 MiB
+/// Same as [MAX_INTER_CANISTER_PAYLOAD_IN_BYTES], but of a primitive type
+/// that can be used for computation in const context.
+pub const MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64: u64 = 2 * 1024 * 1024; // 2 MiB
 
 /// This sets the upper bound on how big a single inter-canister request or
 /// response can be.  We know that allowing messages larger than around 2MB has

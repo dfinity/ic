@@ -140,6 +140,23 @@ impl Registry {
         Some(value)
     }
 
+    /// Computes the number of deltas with version greater than `since_version`
+    /// that fit into the specified byte limit.
+    ///
+    /// This function is used to determine the number of deltas to include into
+    /// a response to avoid the going beyond the max response size limit.
+    pub fn count_fitting_deltas(&self, since_version: Version, max_bytes: usize) -> usize {
+        self.changelog()
+            .iter()
+            .skip(since_version as usize)
+            .scan(0, |size, (key, value)| {
+                *size += value.len() + key.as_ref().len();
+                Some(*size)
+            })
+            .take_while(|size| *size < max_bytes)
+            .count()
+    }
+
     /// Returns the last RegistryValue, if any, for the given key.
     ///
     /// As we keep track of deletions in the registry, this value
@@ -661,6 +678,37 @@ mod tests {
         );
 
         serialize_then_deserialize(registry);
+    }
+
+    #[test]
+    fn test_count_fitting_deltas() {
+        let mut registry = Registry::new();
+
+        let mutation1 = upsert(&[90; 50], &[1; 50]);
+        let mutation2 = upsert(&[90; 100], &[1; 100]);
+        let mutation3 = upsert(&[89; 200], &[1; 200]);
+
+        for mutation in [&mutation1, &mutation2, &mutation3] {
+            assert_empty!(apply_mutations_skip_invariant_checks(
+                &mut registry,
+                vec![mutation.clone()]
+            ));
+        }
+
+        assert_eq!(registry.count_fitting_deltas(0, 100), 0);
+        assert_eq!(registry.count_fitting_deltas(0, 150), 1);
+        assert_eq!(registry.count_fitting_deltas(0, 400), 2);
+        assert_eq!(registry.count_fitting_deltas(0, 2000000), 3);
+
+        assert_eq!(registry.count_fitting_deltas(1, 150), 0);
+        assert_eq!(registry.count_fitting_deltas(1, 400), 1);
+        assert_eq!(registry.count_fitting_deltas(1, 2000000), 2);
+
+        assert_eq!(registry.count_fitting_deltas(2, 300), 0);
+        assert_eq!(registry.count_fitting_deltas(2, 1000), 1);
+
+        assert_eq!(registry.count_fitting_deltas(3, 2000000), 0);
+        assert_eq!(registry.count_fitting_deltas(4, 2000000), 0);
     }
 
     #[test]
