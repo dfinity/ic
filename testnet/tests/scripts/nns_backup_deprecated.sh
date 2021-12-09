@@ -141,8 +141,10 @@ nns_ip=${nns_ip/]:8080/}
 # Retrieve all data required for the backup recovery.
 ssh-keygen -R "$nns_ip"
 scp -o StrictHostKeyChecking=no -r "admin@[${nns_ip}]:/run/ic-node/config/ic.json5" "${results_dir}"
+set +e
 rsync -az "backup@[${nns_ip}]:/var/lib/ic/backup/" "${results_dir}/backup/"
 rsync -az "admin@[${nns_ip}]:/var/lib/ic/data/ic_registry_local_store/" "${results_dir}/ic_registry_local_store/"
+set -e
 
 sed -i "s#/var/lib/ic/#$results_dir/restored/var/lib/ic/#" "$results_dir/ic.json5"
 mkdir -p "$results_dir/restored/var/lib/ic/data/"
@@ -163,7 +165,9 @@ SUCCESS=0
 retries=25
 for ((c = 1; c <= retries; c++)); do
     # Sync the backup again
+    set +e
     rsync -az "backup@[${nns_ip}]:/var/lib/ic/backup/" "${results_dir}/backup/"
+    set -e
     # Recover the state from the artifacts created by the version after the upgrade.
     ic-replay "$results_dir/ic.json5" --subnet-id "$SUBNET_ID" restore-from-backup "$results_dir/ic_registry_local_store/" "$results_dir/backup" "$VERSION" "$POST_UPGRADE_HEIGHT" &>>"$results_dir/backup_post_upgrade.log"
     # Ensure we were able to find at least one CUP
