@@ -250,7 +250,7 @@ pub fn create_config_disk_images(
 
         if !ctx.journalbeat_hosts.is_empty() {
             cmd.arg("--journalbeat_hosts")
-                .arg(ctx.journalbeat_hosts.join(","));
+                .arg(ctx.journalbeat_hosts.join(" "));
         }
 
         let output = cmd
