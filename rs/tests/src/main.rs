@@ -62,7 +62,6 @@ fn all_pots() -> Vec<fondue::pot::Pot<IcManager>> {
     vec![
         pot1(),
         pot1_2(),
-        basic_pot_with_all_features_enabled(),
         inter_canister_queries_pot(),
         canister_lifecycle_memory_capacity_pot(),
         cycles_restrictions_pot(),
@@ -298,17 +297,6 @@ fn system_subnets_pot() -> pot::Pot<IcManager> {
         steps! {
             execution::nns_shielding::non_nns_canister_attempt_to_create_canister_on_another_subnet_fails,
             execution::nns_shielding::nns_canister_attempt_to_create_canister_on_another_subnet_succeeds
-        }
-    )
-}
-
-/// Basic pot where all features are enabled.
-fn basic_pot_with_all_features_enabled() -> pot::Pot<IcManager> {
-    composable!(
-        "basic_pot_with_all_features_enabled",
-        feature_flags::basic_config_with_all_features_enabled(),
-        steps! {
-            feature_flags::mock_ecdsa_signatures_are_supported
         }
     )
 }
