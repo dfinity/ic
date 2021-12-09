@@ -37,10 +37,6 @@ use ic_test_identity::{get_pair, TEST_IDENTITY_KEYPAIR, TEST_IDENTITY_KEYPAIR_HA
 use ic_types::{messages::Blob, CanisterId, PrincipalId, UserId};
 use stats::Summary;
 
-// The default is how many boundary nodes we have in production. In production a
-// single boundary node has a single connection to a replica.
-const CONNECTIONS_PER_HOST: &str = "5";
-
 #[cfg(build = "debug")]
 fn get_logger() -> slog::Logger {
     let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
@@ -230,21 +226,16 @@ async fn main() {
                 .help("If specified, use the given pem-file instead of the default principal's pem file."),
         )
         .arg(
-            Arg::with_name("connections-per-host")
-                .long("connections-per-host")
-                .default_value(CONNECTIONS_PER_HOST)
-                .takes_value(true)
-                .help(format!("If specified, that many connections will be opened per host when sending the load. Default : {}", CONNECTIONS_PER_HOST).as_str()),
-        )
-        .arg(
             Arg::with_name("http2-only")
                 .long("http2-only")
+                .default_value("false")
                 .takes_value(true)
                 .help("If specified, sets this option when building the hyper http client."),
         )
         .arg(
             Arg::with_name("pool-max-idle-per-host")
                 .long("pool-max-idle-per-host")
+                .default_value("20000")
                 .takes_value(true)
                 .help("If specified, sets this option when building the hyper http client."),
         )
@@ -300,12 +291,6 @@ async fn main() {
     let rps = matches.value_of("rps").unwrap().parse::<usize>().unwrap();
 
     let evaluate_max_rps = matches.is_present("evaluate-max-rps");
-
-    let connections_per_host = matches
-        .value_of("connections-per-host")
-        .unwrap()
-        .parse::<u32>()
-        .unwrap();
 
     let principal_id = matches
         .value_of("principal-id")
@@ -432,13 +417,7 @@ async fn main() {
                 }
                 _ => {}
             }
-            let eng = engine::Engine::new(
-                sender.clone(),
-                sender_field,
-                &url,
-                connections_per_host,
-                http_client_config,
-            );
+            let eng = engine::Engine::new(sender.clone(), sender_field, &url, http_client_config);
 
             if !matches.is_present("no-status-check") {
                 eng.wait_for_all_agents_to_be_healthy().await;
