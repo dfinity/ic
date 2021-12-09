@@ -8,11 +8,6 @@ fn reverse() {
     })
 }
 
-#[export_name = "canister_query balance128"]
-fn balance128() {
-    over(bytes, |_| dfn_core::api::canister_cycle_balance128())
-}
-
 #[export_name = "canister_update set_certified_data"]
 fn set_certified_data() {
     over(bytes, |bytes| {
