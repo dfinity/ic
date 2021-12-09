@@ -86,23 +86,20 @@ impl Engine {
         agent_sender: AgentSender,
         sender_field: Blob,
         urls: &[String],
-        connections_per_host: u32,
         http_client_config: HttpClientConfig,
     ) -> Engine {
-        let mut agents = Vec::with_capacity(urls.len() * connections_per_host as usize);
-        for _ in 0..connections_per_host {
-            let current_batch = urls.iter().map(|url| {
-                let mut agent = Agent::new_with_http_client_config(
-                    Url::parse(url.as_str()).unwrap(),
-                    agent_sender.clone(),
-                    http_client_config,
-                );
-                agent.sender_field = sender_field.clone();
-                agent
-            });
+        let mut agents = Vec::with_capacity(urls.len());
+        let current_batch = urls.iter().map(|url| {
+            let mut agent = Agent::new_with_http_client_config(
+                Url::parse(url.as_str()).unwrap(),
+                agent_sender.clone(),
+                http_client_config,
+            );
+            agent.sender_field = sender_field.clone();
+            agent
+        });
 
-            agents.extend(current_batch);
-        }
+        agents.extend(current_batch);
         Engine {
             agents,
             sender: agent_sender,
