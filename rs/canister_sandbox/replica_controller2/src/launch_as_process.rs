@@ -1,22 +1,22 @@
-use ic_types::CanisterId;
-use nix::unistd::Pid;
 use std::{
     os::unix::{io::AsRawFd, net::UnixStream},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Child, Command},
 };
+
+use ic_types::CanisterId;
+use std::os::unix::process::CommandExt;
+use std::sync::Arc;
 
 use ic_canister_sandbox_common::{
     protocol, protocol::ctlsvc, rpc, sandbox_client_stub::SandboxClientStub,
     sandbox_service::SandboxService, transport,
 };
 
-use std::sync::Arc;
-
 const SANDBOX_EXECUTABLE_NAME: &str = "canister_sandbox";
 
 pub struct SocketedProcess {
-    pub pid: libc::pid_t,
+    pub child_handle: Child,
     pub control_stream: UnixStream,
 }
 
@@ -30,55 +30,32 @@ pub fn spawn_socketed_process(
 ) -> std::io::Result<SocketedProcess> {
     let (sock_controller, sock_sandbox) = std::os::unix::net::UnixStream::pair()?;
 
-    let exec_path = std::ffi::CString::new(exec_path.as_bytes())?;
+    let mut cmd = Command::new(exec_path);
 
-    // Copy full current environment to sandbox process. This particularly
-    // includes things such as Rust backtrace flags. It might be advisable
-    // to filter/configure that (in case there might be information in
+    cmd.args(argv);
+
+    // In case of Command we inherit the current process's environment. This should
+    // particularly include things such as Rust backtrace flags. It might be
+    // advisable to filter/configure that (in case there might be information in
     // env that the sandbox process should not be privy to).
-    let mut env = collect_env();
-    let envp = make_null_terminated_string_array(&mut env);
 
-    let mut argv = collect_argv(argv);
-    let argvp = make_null_terminated_string_array(&mut argv);
+    // The following block duplicates sock_sandbox fd under fd 3, errors are
+    // handled.
+    unsafe {
+        cmd.pre_exec(move || {
+            let fd = libc::dup2(sock_sandbox.as_raw_fd(), 3);
 
-    let pid = unsafe {
-        // Unsafe section required due to raw call to libc posix_spawn function
-        // as well as raw handling of raw file descriptor.
-        // Safety is assured, cf. posix_spawn API.
-        let mut pid = std::mem::MaybeUninit::<libc::pid_t>::uninit();
-        let mut file_actions = std::mem::MaybeUninit::<libc::posix_spawn_file_actions_t>::uninit();
-        let mut attr = std::mem::MaybeUninit::<libc::posix_spawnattr_t>::uninit();
-
-        libc::posix_spawn_file_actions_init(file_actions.as_mut_ptr());
-        libc::posix_spawn_file_actions_adddup2(
-            file_actions.as_mut_ptr(),
-            sock_sandbox.as_raw_fd(),
-            3,
-        );
-        libc::posix_spawnattr_init(attr.as_mut_ptr());
-
-        let spawn_result = libc::posix_spawn(
-            pid.as_mut_ptr(),
-            exec_path.as_ptr(),
-            file_actions.as_mut_ptr(),
-            attr.as_mut_ptr(),
-            argvp.as_ptr(),
-            envp.as_ptr(),
-        );
-
-        libc::posix_spawn_file_actions_destroy(file_actions.as_mut_ptr());
-        libc::posix_spawnattr_destroy(attr.as_mut_ptr());
-
-        if spawn_result != 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-
-        pid.assume_init()
+            if fd != 3 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        })
     };
 
+    let child_handle = cmd.spawn()?;
+
     Ok(SocketedProcess {
-        pid,
+        child_handle,
         control_stream: sock_controller,
     })
 }
@@ -96,9 +73,9 @@ pub fn spawn_canister_sandbox_process(
     exec_path: &str,
     argv: &[String],
     controller_service: Arc<dyn rpc::DemuxServer<ctlsvc::Request, ctlsvc::Reply> + Send + Sync>,
-) -> std::io::Result<(Arc<dyn SandboxService>, Pid, std::thread::JoinHandle<()>)> {
+) -> std::io::Result<(Arc<dyn SandboxService>, Child, std::thread::JoinHandle<()>)> {
     let SocketedProcess {
-        pid,
+        child_handle,
         control_stream: socket,
     } = spawn_socketed_process(exec_path, argv)?;
 
@@ -134,7 +111,7 @@ pub fn spawn_canister_sandbox_process(
         );
     });
 
-    Ok((svc, Pid::from_raw(pid), thread_handle))
+    Ok((svc, child_handle, thread_handle))
 }
 
 pub fn create_sandbox_process(
@@ -142,54 +119,13 @@ pub fn create_sandbox_process(
     canister_id: &CanisterId,
     exec_path: &str,
     mut argv: Vec<String>,
-) -> Arc<dyn SandboxService> {
+) -> std::io::Result<(Arc<dyn SandboxService>, Child)> {
     argv.push(canister_id.to_string());
 
-    let (sandbox_handle, _pid, _recv_thread_handle) =
+    let (sandbox_handle, child_handle, _recv_thread_handle) =
         spawn_canister_sandbox_process(exec_path, &argv, Arc::clone(&controller_service) as Arc<_>)
             .expect("Failed to start sandbox process");
-
-    sandbox_handle
-}
-
-// Collects environment variables as vector of strings of "key=value"
-// pairs (as is expected on process spawn).
-fn collect_env() -> Vec<std::ffi::CString> {
-    use std::os::unix::ffi::OsStrExt;
-    std::env::vars_os()
-        .map(|(key, value)| {
-            std::ffi::CString::new(
-                [
-                    key.as_os_str().as_bytes(),
-                    &[b'='],
-                    value.as_os_str().as_bytes(),
-                ]
-                .concat(),
-            )
-            .unwrap()
-        })
-        .collect::<Vec<std::ffi::CString>>()
-}
-
-// Collects strings as FFI strings (for use to convert argv array).
-fn collect_argv(argv: &[String]) -> Vec<std::ffi::CString> {
-    argv.iter()
-        .map(|s| std::ffi::CString::new(s.as_bytes()).unwrap())
-        .collect::<Vec<std::ffi::CString>>()
-}
-
-// Produces a null-terminated array of pointers from strings
-// (i.e. "char* const*" for use in execve-like calls).
-fn make_null_terminated_string_array(
-    strings: &mut Vec<std::ffi::CString>,
-) -> Vec<*mut libc::c_char> {
-    let mut result = Vec::<*mut libc::c_char>::new();
-    for s in strings {
-        result.push(s.as_ptr() as *mut libc::c_char);
-    }
-    result.push(std::ptr::null::<libc::c_char>() as *mut libc::c_char);
-
-    result
+    Ok((sandbox_handle, child_handle))
 }
 
 /// Get the folder of the current running binary.
@@ -226,10 +162,7 @@ fn create_sandbox_path_and_args_for_testing() -> Option<(String, Vec<String>)> {
     // succeed
     if let Ok(exec_path) = which::which(SANDBOX_EXECUTABLE_NAME) {
         println!("Running sandbox with executable {:?}", exec_path);
-        return Some((
-            exec_path.to_str().unwrap().to_string(),
-            vec![exec_path.to_str().unwrap().to_string()],
-        ));
+        return Some((exec_path.to_str().unwrap().to_string(), vec![]));
     }
 
     // When running in a dev environment we expect `cargo` to be in our path and
