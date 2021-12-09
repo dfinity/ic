@@ -59,7 +59,7 @@ enum ConnectionState {
         stream: TlsStream,
         peer: AuthenticatedPeer,
     },
-    /// An unecrypted TCP stream, MUST ONLY BE USED IN TESTS.
+    /// An unencrypted TCP stream, MUST ONLY BE USED IN TESTS.
     Unencrypted(TcpStream),
 }
 
