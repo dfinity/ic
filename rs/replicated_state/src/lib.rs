@@ -5,6 +5,7 @@ pub mod replicated_state;
 pub mod testing {
     pub use super::canister_state::system_state::testing::SystemStateTesting;
     pub use super::canister_state::testing::CanisterQueuesTesting;
+    pub use super::canister_state::testing::CanisterStateTesting;
     pub use super::replicated_state::testing::ReplicatedStateTesting;
 }
 pub use canister_state::{
@@ -19,4 +20,4 @@ pub use canister_state::{
 };
 pub use metadata_state::{NetworkTopology, NodeTopology, Stream, SubnetTopology, SystemMetadata};
 pub use page_map::{PageIndex, PageMap};
-pub use replicated_state::{InputQueueType, NextInputQueue, ReplicatedState, StateError};
+pub use replicated_state::{ReplicatedState, StateError};

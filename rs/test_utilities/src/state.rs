@@ -17,9 +17,9 @@ use ic_replicated_state::{
     },
     metadata_state::Stream,
     page_map::PageMap,
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
+    testing::{ReplicatedStateTesting, SystemStateTesting},
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
-    InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
+    Memory, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse},
@@ -242,7 +242,7 @@ impl CanisterStateBuilder {
         for input in self.inputs {
             system_state
                 .queues_mut()
-                .push_input(QUEUE_INDEX_NONE, input, InputQueueType::RemoteSubnet)
+                .push_input(QUEUE_INDEX_NONE, input)
                 .unwrap();
         }
 

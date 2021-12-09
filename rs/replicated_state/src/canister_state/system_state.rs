@@ -3,7 +3,7 @@ mod call_context_manager;
 pub use super::queues::memory_required_to_push_request;
 use super::{queues::can_push, ENFORCE_MESSAGE_MEMORY_USAGE};
 pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::{CanisterQueues, InputQueueType, StateError};
+use crate::{CanisterQueues, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
 use ic_interfaces::messages::CanisterInputMessage;
@@ -369,7 +369,7 @@ impl SystemState {
     }
 
     /// Extracts the next inter-canister or ingress message (round-robin).
-    pub(crate) fn pop_input(&mut self) -> Option<CanisterInputMessage> {
+    pub fn pop_input(&mut self) -> Option<CanisterInputMessage> {
         self.queues.pop_input()
     }
 
@@ -415,7 +415,6 @@ impl SystemState {
         canister_available_memory: i64,
         subnet_available_memory: &mut i64,
         own_subnet_type: SubnetType,
-        input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         assert_eq!(
             msg.receiver(),
@@ -445,7 +444,6 @@ impl SystemState {
                 canister_available_memory,
                 subnet_available_memory,
                 own_subnet_type,
-                input_queue_type,
             ),
         }
     }
@@ -605,7 +603,7 @@ impl SystemState {
 /// Returns `StateError::OutOfMemory` if pushing the message would require more
 /// memory than `queues_available_memory.min(subnet_available_memory)`.
 ///
-/// `subnet_available_memory` is updated to reflect the change in memory usage
+/// `subnet_available_memory` is updated to reflect thechange in memory usage
 /// after a successful push; and left unmodified if the push failed.
 ///
 /// See `CanisterQueues::push_input()` for further details.
@@ -616,10 +614,9 @@ pub(crate) fn push_input(
     queues_available_memory: i64,
     subnet_available_memory: &mut i64,
     own_subnet_type: SubnetType,
-    input_queue_type: InputQueueType,
 ) -> Result<(), (StateError, RequestOrResponse)> {
     if !ENFORCE_MESSAGE_MEMORY_USAGE || own_subnet_type == SubnetType::System {
-        return queues.push_input(index, msg, input_queue_type);
+        return queues.push_input(index, msg);
     }
 
     let available_memory = queues_available_memory.min(*subnet_available_memory);
@@ -637,7 +634,7 @@ pub(crate) fn push_input(
     // memory_usage_after`. Defer to `CanisterQueues` for the accounting, to avoid
     // duplication (and the possibility of divergence).
     *subnet_available_memory += queues.memory_usage() as i64;
-    let res = queues.push_input(index, msg, input_queue_type);
+    let res = queues.push_input(index, msg);
     *subnet_available_memory -= queues.memory_usage() as i64;
     res
 }
@@ -645,7 +642,6 @@ pub(crate) fn push_input(
 pub mod testing {
     use super::SystemState;
     use crate::CanisterQueues;
-    use ic_interfaces::messages::CanisterInputMessage;
     use ic_types::CanisterId;
 
     /// Exposes `SystemState` internals for use in other crates' unit tests.
@@ -658,9 +654,6 @@ pub mod testing {
 
         /// Testing only: Sets `self.queues` to the given `queues`
         fn put_queues(&mut self, queues: CanisterQueues);
-
-        /// Testing only: pops next input message
-        fn pop_input(&mut self) -> Option<CanisterInputMessage>;
     }
 
     impl SystemStateTesting for SystemState {
@@ -674,10 +667,6 @@ pub mod testing {
 
         fn put_queues(&mut self, queues: CanisterQueues) {
             self.queues = queues;
-        }
-
-        fn pop_input(&mut self) -> Option<CanisterInputMessage> {
-            self.pop_input()
         }
     }
 }

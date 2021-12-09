@@ -6,7 +6,7 @@ mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{CanisterStatus, SystemState};
-use crate::{InputQueueType, StateError};
+use crate::StateError;
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_registry_subnet_type::SubnetType;
@@ -108,9 +108,6 @@ impl CanisterState {
     /// specific memory limit we compute the canister's available memory and
     /// pass that to `SystemState::push_input()` (which doesn't have all the
     /// data necessary to compute it itself).
-    ///
-    /// The function is public as we push directly to the Canister state in
-    /// `SchedulerImpl::induct_messages_on_same_subnet()`
     pub fn push_input(
         &mut self,
         index: QueueIndex,
@@ -118,7 +115,6 @@ impl CanisterState {
         max_canister_memory_size: NumBytes,
         subnet_available_memory: &mut i64,
         own_subnet_type: SubnetType,
-        input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         let canister_available_memory = self.memory_limit(max_canister_memory_size).get() as i64
             - self.memory_usage(own_subnet_type).get() as i64;
@@ -128,14 +124,10 @@ impl CanisterState {
             canister_available_memory,
             subnet_available_memory,
             own_subnet_type,
-            input_queue_type,
         )
     }
 
     /// See `SystemState::pop_input` for documentation.
-    ///
-    /// The function is public as we pop directly from the Canister state in
-    /// `SchedulerImpl::execute_canisters_on_thread()`
     pub fn pop_input(&mut self) -> Option<CanisterInputMessage> {
         self.system_state.pop_input()
     }
@@ -343,7 +335,6 @@ pub mod testing {
                 (i64::MAX as u64 / 2).into(),
                 &mut (i64::MAX / 2),
                 SubnetType::Application,
-                InputQueueType::RemoteSubnet,
             )
         }
     }

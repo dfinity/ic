@@ -39,7 +39,7 @@ use std::{
 pub use system_state_accessor::SystemStateAccessor;
 pub use system_state_accessor_direct::SystemStateAccessorDirect;
 
-const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
+const MULTIPLIER_MAX_SIZE_INTRA_SUBNET: u64 = 5;
 const MAX_NON_REPLICATED_QUERY_REPLY_SIZE: NumBytes = NumBytes::new(3 << 20);
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -1656,7 +1656,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                     WasmClosure::new(reply_fun, reply_env),
                     WasmClosure::new(reject_fun, reject_env),
                     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-                    MULTIPLIER_MAX_SIZE_LOCAL_SUBNET,
+                    MULTIPLIER_MAX_SIZE_INTRA_SUBNET,
                 )?;
                 *outgoing_request = Some(req);
                 Ok(())

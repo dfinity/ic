@@ -16,8 +16,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::QUEUE_INDEX_NONE, CanisterState, CanisterStatus, InputQueueType,
-    ReplicatedState,
+    canister_state::QUEUE_INDEX_NONE, CanisterState, CanisterStatus, ReplicatedState,
 };
 use ic_types::{
     ic00::{EmptyBlob, InstallCodeArgs, Payload as _, IC_00},
@@ -792,7 +791,6 @@ impl SchedulerImpl {
                             max_canister_memory_size,
                             &mut subnet_available_memory,
                             state.metadata.own_subnet_type,
-                            InputQueueType::LocalSubnet,
                         )
                         .map_err(|_| ()),
 

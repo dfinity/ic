@@ -67,8 +67,10 @@ fn reject_local_request() {
             .queues_mut()
             .pop_canister_output(&msg.receiver)
             .unwrap();
+
+        let mut expected_canister_state = canister_state.clone();
+
         state.put_canister_state(canister_state);
-        let mut expected_state = state.clone();
 
         // Reject the message.
         let reject_message = "Reject response";
@@ -80,7 +82,9 @@ fn reject_local_request() {
         );
 
         // Which should result in a reject Response being enqueued onto the input queue.
-        expected_state
+        expected_canister_state
+            .system_state
+            .queues_mut()
             .push_input(
                 QUEUE_INDEX_NONE,
                 Response {
@@ -94,13 +98,11 @@ fn reject_local_request() {
                     }),
                 }
                 .into(),
-                (u64::MAX / 2).into(),
-                &mut (i64::MAX / 2),
             )
             .unwrap();
 
         assert_eq!(
-            expected_state.canister_state(&canister_id).unwrap(),
+            &expected_canister_state,
             state.canister_state(&canister_id).unwrap()
         );
     });
@@ -131,7 +133,7 @@ fn reject_local_request_for_subnet() {
             .pop_canister_output(&msg.receiver)
             .unwrap();
 
-        let mut expected_state = state.clone();
+        let mut expected_subnet_queues = state.subnet_queues().clone();
 
         // Reject the message.
         let reject_message = "Reject response";
@@ -144,7 +146,7 @@ fn reject_local_request_for_subnet() {
 
         // Which should result in a reject Response being enqueued onto the subnet
         // queue.
-        expected_state
+        expected_subnet_queues
             .push_input(
                 QUEUE_INDEX_NONE,
                 Response {
@@ -158,12 +160,10 @@ fn reject_local_request_for_subnet() {
                     }),
                 }
                 .into(),
-                (u64::MAX / 2).into(),
-                &mut (i64::MAX / 2),
             )
             .unwrap();
 
-        assert_eq!(expected_state.subnet_queues(), state.subnet_queues());
+        assert_eq!(&expected_subnet_queues, state.subnet_queues());
     });
 }
 

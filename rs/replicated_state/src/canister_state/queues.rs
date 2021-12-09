@@ -2,11 +2,11 @@ mod queue;
 #[cfg(test)]
 mod tests;
 
-use crate::{InputQueueType, NextInputQueue, StateError};
+use crate::StateError;
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
-    state::queues::{v1 as pb_queues, v1::canister_queues::NextInputQueue as ProtoNextInputQueue},
+    state::queues::{v1 as pb_queues, v1::canister_queues::NextInputQueue},
     types::v1 as pb_types,
 };
 use ic_types::{
@@ -47,15 +47,13 @@ pub struct CanisterQueues {
     /// Per-sender input (canister-to-canister message) queues.
     input_queues: BTreeMap<CanisterId, InputQueue>,
 
-    /// FIFO queue of Local Subnet sender canister IDs ensuring round-robin
-    /// consumption of input messages. Only senders with non-empty queues
-    /// are scheduled.
-    local_subnet_input_schedule: VecDeque<CanisterId>,
-
-    /// FIFO queue of Remote Subnet sender canister IDs ensuring round-robin
-    /// consumption of input messages. Only senders with non-empty queues
-    /// are scheduled.
-    remote_subnet_input_schedule: VecDeque<CanisterId>,
+    /// FIFO queue of sender canister IDs ensuring round-robin consumption of
+    /// input messages. Only senders with non-empty queues are scheduled.
+    ///
+    /// Note: ATM we deserialize intra- and inter- subnet messages into this
+    /// queue to support the downgrade path.
+    /// Next release it will be split into intra- and inter-subnet messages.
+    input_schedule: VecDeque<CanisterId>,
 
     /// Per-receiver output (canister-to-canister message) queues.
     output_queues: BTreeMap<CanisterId, OutputQueue>,
@@ -275,11 +273,10 @@ impl CanisterQueues {
     ///
     ///  * `QueueFull` if pushing a `Response` and the receiving canister is not
     ///  expecting one.
-    pub(super) fn push_input(
+    pub fn push_input(
         &mut self,
         index: QueueIndex,
         msg: RequestOrResponse,
-        input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         let sender = msg.sender();
         let input_queue = match msg {
@@ -309,10 +306,7 @@ impl CanisterQueues {
         // Sender was not scheduled iff its input queue was empty before the push (i.e.
         // queue size is 1 after the push).
         if input_queue.num_messages() == 1 {
-            match input_queue_type {
-                InputQueueType::LocalSubnet => self.local_subnet_input_schedule.push_back(sender),
-                InputQueueType::RemoteSubnet => self.remote_subnet_input_schedule.push_back(sender),
-            }
+            self.input_schedule.push_back(sender);
         }
 
         self.input_queues_stats += iq_stats_delta;
@@ -327,19 +321,15 @@ impl CanisterQueues {
     /// Note: We pop senders from the head of `input_schedule` and insert them
     /// to the back, which allows us to handle messages from different
     /// originators in a round-robin fashion.
-    fn pop_canister_input(&mut self, input_queue: InputQueueType) -> Option<RequestOrResponse> {
-        let input_schedule = match input_queue {
-            InputQueueType::LocalSubnet => &mut self.local_subnet_input_schedule,
-            InputQueueType::RemoteSubnet => &mut self.remote_subnet_input_schedule,
-        };
-        if let Some(sender) = input_schedule.pop_front() {
+    fn pop_canister_input(&mut self) -> Option<RequestOrResponse> {
+        if let Some(sender) = self.input_schedule.pop_front() {
             // Get the message queue of this canister.
             let input_queue = self.input_queues.get_mut(&sender).unwrap();
             let msg = input_queue.pop().unwrap();
             // If the queue still isn't empty, re-add sender canister ID to the end of the
             // input schedule queue.
             if input_queue.num_messages() != 0 {
-                input_schedule.push_back(sender);
+                self.input_schedule.push_back(sender);
             }
 
             self.input_queues_stats -= InputQueuesStats::stats_delta(&msg);
@@ -370,50 +360,23 @@ impl CanisterQueues {
             .any(|(_, queue)| queue.num_messages() > 0)
     }
 
-    /// Extracts the next ingress, priority, or normal message (round-robin).
-    ///
-    /// We define three buckets of queues: messages from canisters on the same
-    /// subnet (local subnet), ingress, and messages from canisters on other
-    /// subnets (remote subnet).
-    ///
-    /// Each time this function is called, we round robin between these three
-    /// buckets. We also round robin between the queues in the local subnet and
-    /// remote subnet buckets when we pop messages from those buckets.
-    pub(crate) fn pop_input(&mut self) -> Option<CanisterInputMessage> {
-        // Try all 3 input: Ingress, Local, and Remote subnets
-        for _ in 0..3 {
-            let cur_input_queue = self.next_input_queue;
-            // Switch to the next input queue
-            self.next_input_queue = match self.next_input_queue {
-                NextInputQueue::LocalSubnet => NextInputQueue::Ingress,
-                NextInputQueue::Ingress => NextInputQueue::RemoteSubnet,
-                NextInputQueue::RemoteSubnet => NextInputQueue::LocalSubnet,
-            };
-
-            let next_input = match cur_input_queue {
-                NextInputQueue::Ingress => self.pop_ingress().map(CanisterInputMessage::Ingress),
-
-                NextInputQueue::RemoteSubnet => self
-                    .pop_canister_input(InputQueueType::RemoteSubnet)
-                    .map(|msg| match msg {
-                        RequestOrResponse::Request(msg) => CanisterInputMessage::Request(msg),
-                        RequestOrResponse::Response(msg) => CanisterInputMessage::Response(msg),
-                    }),
-
-                NextInputQueue::LocalSubnet => self
-                    .pop_canister_input(InputQueueType::LocalSubnet)
-                    .map(|msg| match msg {
-                        RequestOrResponse::Request(msg) => CanisterInputMessage::Request(msg),
-                        RequestOrResponse::Response(msg) => CanisterInputMessage::Response(msg),
-                    }),
-            };
-
-            if next_input.is_some() {
-                return next_input;
-            }
+    /// Extracts the next inter-canister or ingress message (round-robin).
+    pub fn pop_input(&mut self) -> Option<CanisterInputMessage> {
+        self.next_input_queue = match self.next_input_queue {
+            NextInputQueue::Unspecified | NextInputQueue::InterCanister => NextInputQueue::Ingress,
+            NextInputQueue::Ingress => NextInputQueue::InterCanister,
+        };
+        if self.next_input_queue == NextInputQueue::Ingress && !self.input_schedule.is_empty()
+            || self.next_input_queue == NextInputQueue::InterCanister
+                && self.ingress_queue.is_empty()
+        {
+            self.pop_canister_input().map(|msg| match msg {
+                RequestOrResponse::Request(msg) => CanisterInputMessage::Request(msg),
+                RequestOrResponse::Response(msg) => CanisterInputMessage::Response(msg),
+            })
+        } else {
+            self.pop_ingress().map(CanisterInputMessage::Ingress)
         }
-
-        None
     }
 
     /// Pushes a `Request` type message into the relevant output queue. Also
@@ -484,12 +447,8 @@ impl CanisterQueues {
             .and_then(OutputQueue::peek)
             .ok_or(())?;
 
-        self.push_input(
-            QUEUE_INDEX_NONE,
-            (*msg).clone(),
-            InputQueueType::LocalSubnet,
-        )
-        .map_err(|_| ())?;
+        self.push_input(QUEUE_INDEX_NONE, (*msg).clone())
+            .map_err(|_| ())?;
 
         let msg = self
             .output_queues
@@ -658,6 +617,15 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
                     queue: Some(input_queue.into()),
                 })
                 .collect(),
+            input_schedule: item
+                .input_schedule
+                .iter()
+                .map(|canid| pb_types::CanisterId::from(*canid))
+                .collect(),
+            /// Note: next release those two schedules will be used instead of
+            /// a single `input_schedule`
+            intra_subnet_input_schedule: [].into(),
+            inter_subnet_input_schedule: [].into(),
             output_queues: item
                 .output_queues
                 .iter()
@@ -666,23 +634,7 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
                     queue: Some(output_queue.into()),
                 })
                 .collect(),
-            // TODO: input_schedule is deprecated and should be removed next release
-            input_schedule: [].into(),
-            next_input_queue: match item.next_input_queue {
-                NextInputQueue::LocalSubnet => ProtoNextInputQueue::LocalSubnet,
-                NextInputQueue::Ingress => ProtoNextInputQueue::Ingress,
-                NextInputQueue::RemoteSubnet => ProtoNextInputQueue::RemoteSubnet,
-            } as i32,
-            local_subnet_input_schedule: item
-                .local_subnet_input_schedule
-                .iter()
-                .map(|canid| pb_types::CanisterId::from(*canid))
-                .collect(),
-            remote_subnet_input_schedule: item
-                .remote_subnet_input_schedule
-                .iter()
-                .map(|canid| pb_types::CanisterId::from(*canid))
-                .collect(),
+            next_input_queue: item.next_input_queue as i32,
         }
     }
 }
@@ -729,40 +681,32 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
         }
         let memory_usage_stats = Self::calculate_memory_usage_stats(&input_queues, &output_queues);
 
-        let next_input_queue =
-            match ProtoNextInputQueue::from_i32(item.next_input_queue).unwrap_or_default() {
-                ProtoNextInputQueue::Unspecified | ProtoNextInputQueue::LocalSubnet => {
-                    NextInputQueue::LocalSubnet
-                }
-                ProtoNextInputQueue::Ingress => NextInputQueue::Ingress,
-                ProtoNextInputQueue::RemoteSubnet => NextInputQueue::RemoteSubnet,
-            };
-
-        let mut local_subnet_input_schedule = VecDeque::new();
-        // Upgrade: input_schedule is mapped to local_subnet_input_schedule
+        let mut input_schedule = VecDeque::new();
         for can_id in item.input_schedule.into_iter() {
             let c = CanisterId::try_from(can_id)?;
-            local_subnet_input_schedule.push_back(c);
+            input_schedule.push_back(c);
         }
-        for can_id in item.local_subnet_input_schedule.into_iter() {
+        // Note: this is just a downgrade path to deserialize the intra- and
+        // inter-subnet messages into a single `input_schedule` queue
+        for can_id in item.intra_subnet_input_schedule.into_iter() {
             let c = CanisterId::try_from(can_id)?;
-            local_subnet_input_schedule.push_back(c);
+            input_schedule.push_back(c);
         }
-        let mut remote_subnet_input_schedule = VecDeque::new();
-        for can_id in item.remote_subnet_input_schedule.into_iter() {
+        for can_id in item.inter_subnet_input_schedule.into_iter() {
             let c = CanisterId::try_from(can_id)?;
-            remote_subnet_input_schedule.push_back(c);
+            input_schedule.push_back(c);
         }
+
+        let next_input_queue = NextInputQueue::from_i32(item.next_input_queue).unwrap_or_default();
 
         Ok(Self {
             ingress_queue: IngressQueue::try_from(item.ingress_queue)?,
+            input_schedule,
             input_queues,
             output_queues,
             input_queues_stats,
             memory_usage_stats,
             next_input_queue,
-            local_subnet_input_schedule,
-            remote_subnet_input_schedule,
         })
     }
 }
@@ -835,7 +779,7 @@ struct MemoryUsageStats {
     reserved_slots: i64,
 
     /// Sum total of bytes above `MAX_RESPONSE_COUNT_BYTES` per oversized
-    /// request. Execution allows local-subnet requests larger than
+    /// request. Execution allows intra-subnet requests larger than
     /// `MAX_RESPONSE_COUNT_BYTES`.
     oversized_requests_extra_bytes: usize,
 
@@ -964,8 +908,6 @@ enum QueueOp {
 
 pub mod testing {
     use super::CanisterQueues;
-    use crate::{InputQueueType, StateError};
-    use ic_interfaces::messages::CanisterInputMessage;
     use ic_types::{
         messages::{Request, RequestOrResponse},
         CanisterId, QueueIndex,
@@ -991,23 +933,6 @@ pub mod testing {
 
         /// Returns the number of messages in `output_queues`.
         fn output_message_count(&self) -> usize;
-
-        /// Publicly exposes `CanisterQueues::push_input()`.
-        fn push_input(
-            &mut self,
-            index: QueueIndex,
-            msg: RequestOrResponse,
-            input_queue_type: InputQueueType,
-        ) -> Result<(), (StateError, RequestOrResponse)>;
-
-        /// Publicly exposes `CanisterQueues::pop_input()`.
-        fn pop_input(&mut self) -> Option<CanisterInputMessage>;
-
-        /// Publicly exposes the local subnet input_schedule.
-        fn get_local_subnet_input_schedule(&self) -> &VecDeque<CanisterId>;
-
-        /// Publicly exposes the remote subnet input_schedule.
-        fn get_remote_subnet_input_schedule(&self) -> &VecDeque<CanisterId>;
     }
 
     impl CanisterQueuesTesting for CanisterQueues {
@@ -1031,27 +956,6 @@ pub mod testing {
 
         fn output_message_count(&self) -> usize {
             self.output_queues.values().map(|q| q.num_messages()).sum()
-        }
-
-        fn push_input(
-            &mut self,
-            index: QueueIndex,
-            msg: RequestOrResponse,
-            input_queue_type: InputQueueType,
-        ) -> Result<(), (StateError, RequestOrResponse)> {
-            self.push_input(index, msg, input_queue_type)
-        }
-
-        fn pop_input(&mut self) -> Option<CanisterInputMessage> {
-            self.pop_input()
-        }
-
-        fn get_local_subnet_input_schedule(&self) -> &VecDeque<CanisterId> {
-            &self.local_subnet_input_schedule
-        }
-
-        fn get_remote_subnet_input_schedule(&self) -> &VecDeque<CanisterId> {
-            &self.remote_subnet_input_schedule
         }
     }
 
