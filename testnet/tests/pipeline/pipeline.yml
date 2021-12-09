@@ -580,7 +580,7 @@ network-reliability-test-slo:
 
       $SHELL_WRAPPER ./testnet/tests/scripts/network_reliability_test.sh "$TESTNET" 900 100 1k normal "$CI_JOB_STAGE/$CI_JOB_NAME"
 
-# SCENARIO TEST subnet_query_workload: 30 min 1k @ 300 query calls per second
+# SCENARIO TEST subnet_query_workload: 30 min 1k @ 1000 query calls per second
 subnet-query-workload-slo-300-1kb:
   extends: .prod-slo-test
   script:
@@ -590,7 +590,7 @@ subnet-query-workload-slo-300-1kb:
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
       export GIT_REVISION
 
-      $SHELL_WRAPPER ./testnet/tests/scripts/subnet_query_workload.sh "$TESTNET" 1800 300 1k replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
+      $SHELL_WRAPPER ./testnet/tests/scripts/subnet_query_workload.sh "$TESTNET" 1800 1000 1k replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
 
 # SCENARIO TEST xnet_slo_test: 20min @ 10 XNet requests * 1 KB / round
 # Install 1 xnet-test-canister instance onto each of 2 subnets, have them message each other for 20 minutes
