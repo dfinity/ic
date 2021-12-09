@@ -38,11 +38,6 @@ if [ -z "$CI_JOB_ID" ]; then
         -cvzf "${BUILD_OUT}/disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt
     ls -lah "$BUILD_TMP"
 else
-    IMAGE=$(grep FROM ./rootfs/Dockerfile | cut -d' ' -f2 | head -1)
-    if ! (docker image list --format "{{.Repository}}:{{.Tag}}" | grep -q "$IMAGE"); then
-        docker pull "$IMAGE"
-    fi
-
     buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-img -- \
         ./scripts/build-disk-image.sh -o "${BUILD_TMP}/disk.img" -v "$VERSION" -x ../../artifacts/release/ "$BUILD_EXTRA_ARGS"
     buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" tar-build-out -- \

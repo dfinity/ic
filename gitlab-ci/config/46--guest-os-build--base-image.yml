@@ -19,6 +19,11 @@ deploy-guest-os-baseimg:
     docker build -q -t dfinity/genericos-base:"$TAG" -t dfinity/genericos-base:latest -f Dockerfile.base .
     docker push dfinity/genericos-base:"$TAG"
 
+    echo "Use the image with it's SHA256 DIGEST below for IC-OS Dockerfile"
+    docker inspect --format='{{index .RepoDigests 0}}' dfinity/guestos-base:"$TAG"
+    echo "Use the image with it's SHA256 DIGEST below for GENERIC IC-OS Dockerfile"
+    docker inspect --format='{{index .RepoDigests 0}}' dfinity/genericos-base:"$TAG"
+
 build-guest-os-baseimg:
   extends:
     - .cargo-build-docker

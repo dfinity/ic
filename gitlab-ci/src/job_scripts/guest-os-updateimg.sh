@@ -27,10 +27,5 @@ cd "$ROOT_DIR"/ic-os/guestos || exit 1
 mkdir -p "$BUILD_OUT" "$BUILD_TMP"
 echo "$VERSION" >"${BUILD_TMP}/version.txt"
 
-IMAGE=$(grep FROM ./rootfs/Dockerfile | cut -d' ' -f2 | head -1)
-if ! (docker image list --format "{{.Repository}}:{{.Tag}}" | grep -q "$IMAGE"); then
-    docker pull "$IMAGE"
-fi
-
 ./scripts/build-update-image.sh -o "${BUILD_OUT}/update-img.tar.gz" -v "$VERSION" -x ../../artifacts/release/ "$BUILD_EXTRA_ARGS"
 ls -lah "$BUILD_OUT"
