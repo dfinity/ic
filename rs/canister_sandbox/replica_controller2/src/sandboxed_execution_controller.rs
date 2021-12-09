@@ -21,9 +21,7 @@ use std::sync::{
 
 use crate::active_execution_state_registry::ActiveExecutionStateRegistry;
 use crate::controller_service_impl::ControllerServiceImpl;
-use crate::elastic_cache::Cache;
 use crate::launch_as_process::{create_sandbox_path_and_args, create_sandbox_process};
-use crate::unique_id::UniqueId;
 use std::process::Child;
 use std::process::ExitStatus;
 use std::thread;
@@ -36,9 +34,39 @@ pub struct SandboxProcess {
 
     /// Handle for IPC down to sandbox.
     sandbox_service: Arc<dyn SandboxService>,
+}
 
-    // Cache compiled objects on the sandbox process.
-    compilation_cache: Arc<Cache<UniqueId, WasmId>>,
+/// Manages the lifetime of a remote compiled Wasm and provides its id.
+pub struct OpenedWasm {
+    sandbox_service: Arc<dyn SandboxService>,
+    wasm_id: WasmId,
+}
+
+impl OpenedWasm {
+    fn new(sandbox_service: Arc<dyn SandboxService>, wasm_id: WasmId) -> Self {
+        Self {
+            sandbox_service,
+            wasm_id,
+        }
+    }
+}
+
+impl Drop for OpenedWasm {
+    fn drop(&mut self) {
+        self.sandbox_service
+            .close_wasm(protocol::sbxsvc::CloseWasmRequest {
+                wasm_id: self.wasm_id,
+            })
+            .on_completion(|_| {});
+    }
+}
+
+impl std::fmt::Debug for OpenedWasm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenedWasm")
+            .field("wasm_id", &self.wasm_id)
+            .finish()
+    }
 }
 
 /// Manages the lifetime of a remote execution state and provides its id.
@@ -85,12 +113,12 @@ impl std::fmt::Debug for OpenedState {
 pub struct SandboxedExecutionController {
     backends: Arc<Mutex<HashMap<CanisterId, SandboxProcess>>>,
     logger: ReplicaLogger,
-    compile_count: AtomicU64,
     /// Path to the `canister_sandbox` executable.
     sandbox_exec_path: String,
     /// Arguments to be passed to `canister_sandbox` which are the same for all
     /// canisters.
     sandbox_exec_argv: Vec<String>,
+    compile_count_for_testing: AtomicU64,
 }
 
 impl SandboxedExecutionController {
@@ -101,7 +129,7 @@ impl SandboxedExecutionController {
         Self {
             backends: Arc::new(Mutex::new(HashMap::new())),
             logger,
-            compile_count: AtomicU64::new(0),
+            compile_count_for_testing: AtomicU64::new(0),
             sandbox_exec_path,
             sandbox_exec_argv,
         }
@@ -128,23 +156,9 @@ impl SandboxedExecutionController {
             )
             .unwrap();
 
-            let sandbox_service_copy = Arc::clone(&sandbox_service);
-
-            // Set up compilation cache. Set up "deleter" in cache to issue
-            // CloseWasmRequest when we drop something from cache.
-            let compilation_cache = Cache::new(
-                move |_key, wasm_id: WasmId| {
-                    sandbox_service_copy
-                        .close_wasm(protocol::sbxsvc::CloseWasmRequest { wasm_id })
-                        .on_completion(|_| {});
-                },
-                2,
-            );
-
             let sandbox_process = SandboxProcess {
                 execution_states: reg,
                 sandbox_service,
-                compilation_cache,
             };
             (*guard).insert(*canister_id, sandbox_process.clone());
 
@@ -165,18 +179,6 @@ impl SandboxedExecutionController {
             // exits for now.
             panic_due_to_sandbox_exit(output, canister_id, pid);
         });
-    }
-
-    fn get_wasm_binary_key(&self, wasm_binary: &WasmBinary) -> UniqueId {
-        let mut embedder_cache = wasm_binary.embedder_cache.lock().unwrap();
-        if let Some(cache) = embedder_cache.as_ref() {
-            if let Some(unique_id) = cache.downcast::<UniqueId>() {
-                return unique_id.clone();
-            }
-        }
-        let unique_id = UniqueId::new();
-        *embedder_cache = Some(EmbedderCache::new(unique_id.clone()));
-        unique_id
     }
 
     pub fn process(
@@ -214,22 +216,15 @@ impl SandboxedExecutionController {
 
         // Now set up resources on the sandbox to drive the execution.
 
-        // Get compiled wasm object in sandbox. Ask cache first, upload + compile if
-        // needed.
-        let wasm_key = self.get_wasm_binary_key(&*execution_state.wasm_binary);
-        let wasm_id = *sandbox_process.compilation_cache.get(&wasm_key, |_key| {
-            let wasm_id = WasmId::new();
-            sandbox_process
-                .sandbox_service
-                .open_wasm(protocol::sbxsvc::OpenWasmRequest {
-                    wasm_id,
-                    wasm_file_path: None,
-                    wasm_src: execution_state.wasm_binary.binary.as_slice().to_vec(),
-                })
-                .on_completion(|_| {});
-            self.compile_count.fetch_add(1, Ordering::Relaxed);
-            wasm_id
-        });
+        let (wasm_id, compile_count) = open_wasm(
+            &sandbox_process.sandbox_service,
+            &*execution_state.wasm_binary,
+        );
+
+        if compile_count > 0 {
+            self.compile_count_for_testing
+                .fetch_add(compile_count, Ordering::Relaxed);
+        }
 
         let state_handle = open_remote_state(&sandbox_process.sandbox_service, &execution_state);
         let state_id = StateId::from(state_handle.get_id());
@@ -346,8 +341,30 @@ impl SandboxedExecutionController {
     }
 
     pub fn compile_count_for_testing(&self) -> u64 {
-        self.compile_count.load(Ordering::Relaxed)
+        self.compile_count_for_testing.load(Ordering::Relaxed)
     }
+}
+
+// Get compiled wasm object in sandbox. Ask cache first, upload + compile if
+// needed.
+fn open_wasm(sandbox_service: &Arc<dyn SandboxService>, wasm_binary: &WasmBinary) -> (WasmId, u64) {
+    let mut embedder_cache = wasm_binary.embedder_cache.lock().unwrap();
+    if let Some(cache) = embedder_cache.as_ref() {
+        if let Some(opened_wasm) = cache.downcast::<OpenedWasm>() {
+            return (opened_wasm.wasm_id, 0);
+        }
+    }
+    let wasm_id = WasmId::new();
+    sandbox_service
+        .open_wasm(protocol::sbxsvc::OpenWasmRequest {
+            wasm_id,
+            wasm_file_path: None,
+            wasm_src: wasm_binary.binary.as_slice().to_vec(),
+        })
+        .on_completion(|_| {});
+    let opened_wasm = OpenedWasm::new(Arc::clone(sandbox_service), wasm_id);
+    *embedder_cache = Some(EmbedderCache::new(opened_wasm));
+    (wasm_id, 1)
 }
 
 // Returns the id of the remote state after making sure that
