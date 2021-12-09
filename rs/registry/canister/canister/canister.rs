@@ -27,6 +27,7 @@ use ic_registry_transport::{
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
     serialize_get_value_response,
 };
+use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as MAX_RESPONSE_SIZE;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
     common::LOG_PREFIX,
@@ -51,6 +52,7 @@ use registry_canister::{
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 
@@ -59,6 +61,9 @@ fn main() {}
 static mut REGISTRY: Option<Registry> = None;
 
 const MAX_VERSIONS_PER_QUERY: usize = 1000;
+// The maximum size of deltas that the registry will attempt to send.
+// We reserve ⅓ of the response buffer capacity for encoding overhead.
+const MAX_REGISTRY_DELTAS_SIZE: usize = (MAX_RESPONSE_SIZE - MAX_RESPONSE_SIZE / 3) as usize;
 
 fn registry() -> &'static Registry {
     registry_mut()
@@ -193,10 +198,15 @@ fn get_changes_since() {
     let response_pb = match deserialize_get_changes_since_request(arg_data()) {
         Ok(version) => {
             let registry = registry();
+
+            let max_versions = registry
+                .count_fitting_deltas(version, MAX_REGISTRY_DELTAS_SIZE)
+                .min(MAX_VERSIONS_PER_QUERY);
+
             RegistryGetChangesSinceResponse {
                 error: None,
                 version: registry.latest_version(),
-                deltas: registry.get_changes_since(version, Some(MAX_VERSIONS_PER_QUERY)),
+                deltas: registry.get_changes_since(version, Some(max_versions)),
             }
         }
         Err(error) => RegistryGetChangesSinceResponse {
@@ -211,6 +221,7 @@ fn get_changes_since() {
     };
     let bytes =
         serialize_get_changes_since_response(response_pb).expect("Error serializing response");
+
     reply(&bytes);
 }
 
@@ -220,11 +231,14 @@ fn get_certified_changes_since() {
         protobuf,
         |req: RegistryGetChangesSinceRequest| -> CertifiedResponse {
             use ic_certified_map::{fork, labeled, labeled_hash};
-
             let latest_version = registry().latest_version();
             let from_version = EncodedVersion::from(req.version.saturating_add(1));
-            let to_version =
-                EncodedVersion::from(req.version.saturating_add(MAX_VERSIONS_PER_QUERY as u64));
+
+            let max_versions = registry()
+                .count_fitting_deltas(req.version, MAX_REGISTRY_DELTAS_SIZE)
+                .min(MAX_VERSIONS_PER_QUERY);
+
+            let to_version = EncodedVersion::from(req.version.saturating_add(max_versions as u64));
             let delta_tree = registry()
                 .changelog()
                 .value_range(from_version.as_ref(), to_version.as_ref());
@@ -237,6 +251,7 @@ fn get_certified_changes_since() {
                     HashTree::Pruned(labeled_hash(b"delta", &registry().changelog().root_hash()))
                 },
             );
+
             certified_response(hash_tree)
         },
     )
