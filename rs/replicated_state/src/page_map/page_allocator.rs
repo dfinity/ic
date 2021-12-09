@@ -60,8 +60,8 @@ impl Page {
     /// The given `page_allocator` must be the same as the one used for
     /// allocating this page. It serves as a witness that the content of the
     /// page is still valid.
-    pub(super) fn contents<'a>(&'a self, page_allocator: &'a PageAllocator) -> &'a PageBytes {
-        (self.0).contents(page_allocator.0.as_ref())
+    pub(super) fn contents(&self) -> &PageBytes {
+        self.0.contents()
     }
 }
 
@@ -113,7 +113,7 @@ impl<A: PageAllocatorInner> PageAllocator<A> {
         &self,
         pages: &[(PageIndex, &PageBytes)],
     ) -> Vec<(PageIndex, Page<A::PageInner>)> {
-        self.0.allocate(pages)
+        A::allocate(&self.0, pages)
     }
 
     /// Returns a serialization-friendly representation of the page allocator.
@@ -142,7 +142,7 @@ impl<A: PageAllocatorInner> PageAllocator<A> {
         &self,
         page_delta: PageDeltaSerialization,
     ) -> Vec<(PageIndex, Page<A::PageInner>)> {
-        self.0.deserialize_page_delta(page_delta)
+        A::deserialize_page_delta(&self.0, page_delta)
     }
 }
 
@@ -150,14 +150,9 @@ impl<A: PageAllocatorInner> PageAllocator<A> {
 pub trait PageInner: Debug {
     type PageAllocatorInner;
 
-    fn contents<'a>(&'a self, _page_allocator: &'a Self::PageAllocatorInner) -> &'a PageBytes;
+    fn contents(&self) -> &PageBytes;
 
-    fn copy_from_slice<'a>(
-        &'a mut self,
-        offset: usize,
-        slice: &[u8],
-        _page_allocator: &'a Self::PageAllocatorInner,
-    );
+    fn copy_from_slice(&mut self, offset: usize, slice: &[u8]);
 }
 
 /// Exported publicly for benchmarking.
@@ -166,7 +161,7 @@ pub trait PageAllocatorInner: Debug + Default {
 
     /// See the comments of the corresponding method in `PageAllocator`.
     fn allocate(
-        &self,
+        page_allocator: &Arc<Self>,
         pages: &[(PageIndex, &PageBytes)],
     ) -> Vec<(PageIndex, Page<Self::PageInner>)>;
 
@@ -183,7 +178,7 @@ pub trait PageAllocatorInner: Debug + Default {
 
     /// See the comments of the corresponding method in `PageAllocator`.
     fn deserialize_page_delta(
-        &self,
+        page_allocator: &Arc<Self>,
         page_delta: PageDeltaSerialization,
     ) -> Vec<(PageIndex, Page<Self::PageInner>)>;
 }

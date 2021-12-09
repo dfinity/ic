@@ -8,10 +8,20 @@ use cvt::cvt_r;
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
 use libc::{c_void, close, ftruncate64};
 use nix::sys::memfd::{memfd_create, MemFdCreateFlag};
-use nix::sys::mman::{mmap, munmap, MapFlags, ProtFlags};
+use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
 use std::ffi::CString;
 use std::os::unix::io::RawFd;
 use std::sync::{Arc, Mutex};
+
+const MIN_PAGES_TO_FREE: usize = 10000;
+
+// The start address of a page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct PagePtr(*mut u8);
+
+// SAFETY: All shared pages are immutable.
+unsafe impl Sync for PagePtr {}
+unsafe impl Send for PagePtr {}
 
 /// A memory-mapped page of size 4KiB starting at the address specified by the
 /// `ptr` field. It is mostly immutable after creation with the only exception
@@ -25,34 +35,34 @@ use std::sync::{Arc, Mutex};
 /// It is exported publicly for benchmarking.
 #[derive(Clone, Debug)]
 pub struct MmapBasedPage {
-    ptr: *mut u8,
+    ptr: PagePtr,
     offset: FileOffset,
+    page_allocator: Arc<MmapBasedPageAllocator>,
 }
 
-// SAFETY: All shared pages are immutable.
-unsafe impl Sync for MmapBasedPage {}
-unsafe impl Send for MmapBasedPage {}
+impl Drop for MmapBasedPage {
+    fn drop(&mut self) {
+        self.page_allocator.add_dropped_page(self.ptr);
+    }
+}
 
 impl PageInner for MmapBasedPage {
     type PageAllocatorInner = MmapBasedPageAllocator;
 
-    fn contents<'a>(&'a self, _page_allocator: &'a Self::PageAllocatorInner) -> &'a PageBytes {
+    fn contents(&self) -> &PageBytes {
         // SAFETY: The provided reference to the page allocator is a witness that the
         // underlying memory is still valid.
-        unsafe { page_bytes_from_ptr(self, self.ptr) }
+        unsafe { page_bytes_from_ptr(self, self.ptr.0) }
     }
 
-    fn copy_from_slice<'a>(
-        &'a mut self,
-        offset: usize,
-        slice: &[u8],
-        _page_allocator: &'a Self::PageAllocatorInner,
-    ) {
+    fn copy_from_slice<'a>(&mut self, offset: usize, slice: &[u8]) {
         assert!(offset + slice.len() <= PAGE_SIZE);
         // SAFETY: The provided reference to the page allocator is a witness that the
         // underlying memory is still valid. The mutable reference to self shows that
         // the page is privately owned.
-        unsafe { std::ptr::copy_nonoverlapping(slice.as_ptr(), self.ptr.add(offset), slice.len()) };
+        unsafe {
+            std::ptr::copy_nonoverlapping(slice.as_ptr(), self.ptr.0.add(offset), slice.len())
+        };
     }
 }
 
@@ -83,10 +93,10 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
 
     // See the comments of the corresponding method in `PageAllocator`.
     fn allocate(
-        &self,
+        page_allocator: &Arc<Self>,
         pages: &[(PageIndex, &PageBytes)],
     ) -> Vec<(PageIndex, Page<Self::PageInner>)> {
-        let mut guard = self.0.lock().unwrap();
+        let mut guard = page_allocator.0.lock().unwrap();
         let core = guard.get_or_insert(MmapBasedPageAllocatorCore::new());
         // It would also be correct to increment the counters after all the
         // allocations, but doing it before gives better performance because
@@ -96,8 +106,8 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
         pages
             .iter()
             .map(|(page_index, contents)| {
-                let mut page = core.allocate_page();
-                page.copy_from_slice(0, *contents, self);
+                let mut page = core.allocate_page(page_allocator);
+                page.copy_from_slice(0, *contents);
                 (*page_index, Page(Arc::new(page)))
             })
             .collect()
@@ -142,12 +152,12 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
 
     // See the comments of the corresponding method in `PageAllocator`.
     fn deserialize_page_delta(
-        &self,
+        page_allocator: &Arc<MmapBasedPageAllocator>,
         page_delta: PageDeltaSerialization,
     ) -> Vec<(PageIndex, Page<Self::PageInner>)> {
         match page_delta {
             PageDeltaSerialization::Mmap { file_len, pages } => {
-                let mut guard = self.0.lock().unwrap();
+                let mut guard = page_allocator.0.lock().unwrap();
                 let core = guard.as_mut().unwrap();
                 core.grow_for_deserialization(file_len);
                 // File offsets of all pages are smaller than `file_len`, which means
@@ -156,7 +166,7 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
                 pages
                     .into_iter()
                     .map(|(page_index, file_offset)| {
-                        let page = core.deserialize_page(file_offset);
+                        let page = core.deserialize_page(file_offset, page_allocator);
                         (page_index, Page(Arc::new(page)))
                     })
                     .collect()
@@ -178,6 +188,25 @@ impl MmapBasedPageAllocator {
         Self(Mutex::new(Some(MmapBasedPageAllocatorCore::open(
             file_descriptor,
         ))))
+    }
+
+    // Adds the given page to the list of dropped pages that will be freed on the
+    // next allocation.
+    fn add_dropped_page(&self, page_ptr: PagePtr) {
+        let dropped_pages = {
+            let mut guard = self.0.lock().unwrap();
+            let core = guard.as_mut().unwrap();
+            core.dropped_pages.push(page_ptr);
+            if core.dropped_pages.len() > MIN_PAGES_TO_FREE {
+                Some(std::mem::take(&mut core.dropped_pages))
+            } else {
+                None
+            }
+        };
+
+        if let Some(dropped_pages) = dropped_pages {
+            free_pages(dropped_pages);
+        }
     }
 }
 
@@ -222,13 +251,20 @@ impl AllocationArea {
 
     // SAFETY: The caller must ensure that `self.start` and `self.end`
     // are backed a valid mutable memory.
-    unsafe fn allocate_page(&mut self) -> MmapBasedPage {
+    unsafe fn allocate_page(
+        &mut self,
+        page_allocator: &Arc<MmapBasedPageAllocator>,
+    ) -> MmapBasedPage {
         assert!(!self.is_empty());
-        let ptr = self.start;
+        let ptr = PagePtr(self.start);
         let offset = self.offset;
         self.start = self.start.add(PAGE_SIZE);
         self.offset += PAGE_SIZE as FileOffset;
-        MmapBasedPage { ptr, offset }
+        MmapBasedPage {
+            ptr,
+            offset,
+            page_allocator: Arc::clone(page_allocator),
+        }
     }
 }
 
@@ -257,6 +293,8 @@ struct MmapBasedPageAllocatorCore {
     file_len: FileOffset,
     // The memory-mapped chunks. We need to remember them so that we can unmap them on drop.
     chunks: Vec<Chunk>,
+    // Pages that are not longer used.
+    dropped_pages: Vec<PagePtr>,
 }
 
 impl Drop for MmapBasedPageAllocatorCore {
@@ -296,10 +334,11 @@ impl MmapBasedPageAllocatorCore {
             file_descriptor: file_descriptor.fd,
             file_len: 0,
             chunks: vec![],
+            dropped_pages: vec![],
         }
     }
 
-    fn allocate_page(&mut self) -> MmapBasedPage {
+    fn allocate_page(&mut self, page_allocator: &Arc<MmapBasedPageAllocator>) -> MmapBasedPage {
         if self.allocation_area.is_empty() {
             // Slow path of allocation.
             self.allocation_area = self.new_allocation_area();
@@ -308,7 +347,7 @@ impl MmapBasedPageAllocatorCore {
         // Fast path of allocation.
         // SAFETY: the allocation area is backed by the most recently
         // allocated `Chunk`. We also know that it is not empty.
-        unsafe { self.allocation_area.allocate_page() }
+        unsafe { self.allocation_area.allocate_page(page_allocator) }
     }
 
     // Returns the number of pages that should be memory-mapped in the slow path of
@@ -383,14 +422,14 @@ impl MmapBasedPageAllocatorCore {
         let mmap_file_offset = self.file_len;
         self.file_len = file_len;
 
-        // The mapping is read-only because all pages are already initialized in the
-        // file and are immutable.
+        // The mapping is read/write because freeing of pages uses `madvise()` with
+        // `MADV_REMOVE`, which requires writable mapping.
         // SAFETY: The parameters are valid.
         let mmap_ptr = unsafe {
             mmap(
                 std::ptr::null_mut(),
                 mmap_size,
-                ProtFlags::PROT_READ,
+                ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                 MapFlags::MAP_SHARED,
                 self.file_descriptor,
                 mmap_file_offset,
@@ -414,7 +453,11 @@ impl MmapBasedPageAllocatorCore {
     // Returns a page that starts at the given file offset.
     // Precondition: the chunk containing the file offset must be already
     // memory-mapped in `grow_for_deserialization()`.
-    fn deserialize_page(&self, file_offset: FileOffset) -> MmapBasedPage {
+    fn deserialize_page(
+        &self,
+        file_offset: FileOffset,
+        page_allocator: &Arc<MmapBasedPageAllocator>,
+    ) -> MmapBasedPage {
         // Find the memory-mapped chunk that contains the given file offset.
         // For a file of length N bytes, there will be O(lg(N)) chunks because
         // allocation ensures that the chunk size increases exponentially.
@@ -434,8 +477,9 @@ impl MmapBasedPageAllocatorCore {
                 // address range.
                 let page_start = unsafe { chunk.ptr.add((file_offset - chunk.offset) as usize) };
                 return MmapBasedPage {
-                    ptr: page_start,
+                    ptr: PagePtr(page_start),
                     offset: file_offset,
+                    page_allocator: Arc::clone(page_allocator),
                 };
             }
         }
@@ -445,4 +489,58 @@ impl MmapBasedPageAllocatorCore {
             file_offset, self.file_len
         );
     }
+}
+
+// Free the memory of given range and punch a hole in the backing file.
+// Preconditions:
+// - the range is mapped as shared and writable.
+// - the range is not empty.
+unsafe fn madvise_remove(start_ptr: *mut u8, end_ptr: *mut u8) {
+    let ptr = start_ptr as *mut c_void;
+    let size = end_ptr.offset_from(start_ptr);
+    assert!(size > 0);
+    // SAFETY: the range is mapped as shared and writable by precondition.
+    madvise(ptr, size as usize, MmapAdvise::MADV_REMOVE).unwrap_or_else(|err| {
+        panic!(
+            "Failed to madvise a page range {:?}..{:?}:
+        {}",
+            start_ptr, end_ptr, err
+        )
+    });
+}
+
+// Frees the memory used by the given pages.
+// Precondition:
+// - each page is mapped as shared and writable.
+fn free_pages(mut pages: Vec<PagePtr>) {
+    if pages.is_empty() {
+        return;
+    }
+
+    // Sort the pages to find contiguous page ranges.
+    pages.sort_unstable();
+
+    // The start and end of the current contiguous page range.
+    let mut start_ptr = pages[0].0;
+    // SAFETY: the page is valid.
+    let mut end_ptr = unsafe { start_ptr.add(PAGE_SIZE) };
+
+    for page_ptr in pages.into_iter() {
+        if page_ptr.0 == end_ptr {
+            // Extend the current page range.
+            // SAFETY: the page is valid.
+            end_ptr = unsafe { end_ptr.add(PAGE_SIZE) };
+        } else {
+            // Free the current page range and a start a new one.
+            // SAFETY: the range consists of pages that mapped as shared and writable.
+            unsafe { madvise_remove(start_ptr, end_ptr) }
+            start_ptr = page_ptr.0;
+            // SAFETY: the page is valid.
+            end_ptr = unsafe { start_ptr.add(PAGE_SIZE) };
+        }
+    }
+
+    // Free the last page range.
+    // SAFETY: the range consists of pages that mapped as shared and writable.
+    unsafe { madvise_remove(start_ptr, end_ptr) }
 }

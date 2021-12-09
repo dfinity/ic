@@ -35,14 +35,8 @@ impl PageDelta {
     /// The given `page_allocator` must be the same as the one used for
     /// allocating pages in this `PageDelta`. It serves as a witness that
     /// the contents of the page is still valid.
-    fn get_page<'a>(
-        &'a self,
-        page_index: PageIndex,
-        page_allocator: &'a PageAllocator,
-    ) -> Option<&'a PageBytes> {
-        self.0
-            .get(page_index.get())
-            .map(|p| p.contents(page_allocator))
+    fn get_page(&self, page_index: PageIndex) -> Option<&PageBytes> {
+        self.0.get(page_index.get()).map(|p| p.contents())
     }
 
     /// Returns a reference to the page at the specified index.
@@ -68,16 +62,7 @@ impl PageDelta {
 
     /// Applies this delta to the specified file.
     /// Precondition: `file` is seekable and writeable.
-    ///
-    /// The given `page_allocator` must be the same as the one used for
-    /// allocating pages in this `PageDelta`. It serves as a witness that
-    /// the contents of the page is still valid.
-    fn apply_to_file(
-        &self,
-        file: &mut File,
-        path: &Path,
-        page_allocator: &PageAllocator,
-    ) -> Result<(), PersistenceError> {
+    fn apply_to_file(&self, file: &mut File, path: &Path) -> Result<(), PersistenceError> {
         use std::io::{Seek, SeekFrom};
 
         for (index, page) in self.iter() {
@@ -89,7 +74,7 @@ impl PageDelta {
                     internal_error: err.to_string(),
                 }
             })?;
-            let mut contents = page.contents(page_allocator) as &[u8];
+            let mut contents = page.contents() as &[u8];
             std::io::copy(&mut contents, file).map_err(|err| {
                 PersistenceError::FileSystemError {
                     path: path.display().to_string(),
@@ -102,11 +87,7 @@ impl PageDelta {
     }
 
     /// Persists this delta to the specified destination.
-    ///
-    /// The given `page_allocator` must be the same as the one used for
-    /// allocating pages in this `PageDelta`. It serves as a witness that
-    /// the contents of the page is still valid.
-    fn persist(&self, dst: &Path, page_allocator: &PageAllocator) -> Result<(), PersistenceError> {
+    fn persist(&self, dst: &Path) -> Result<(), PersistenceError> {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -116,20 +97,12 @@ impl PageDelta {
                 context: "Failed to open file".to_string(),
                 internal_error: err.to_string(),
             })?;
-        self.apply_to_file(&mut file, dst, page_allocator)?;
+        self.apply_to_file(&mut file, dst)?;
         Ok(())
     }
 
     /// Persists this delta to the specified destination and flushes it.
-    ///
-    /// The given `page_allocator` must be the same as the one used for
-    /// allocating pages in this `PageDelta`. It serves as a witness that
-    /// the contents of the page is still valid.
-    fn persist_and_sync(
-        &self,
-        dst: &Path,
-        page_allocator: &PageAllocator,
-    ) -> Result<(), PersistenceError> {
+    fn persist_and_sync(&self, dst: &Path) -> Result<(), PersistenceError> {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -139,7 +112,7 @@ impl PageDelta {
                 context: "Failed to open file".to_string(),
                 internal_error: err.to_string(),
             })?;
-        self.apply_to_file(&mut file, dst, page_allocator)?;
+        self.apply_to_file(&mut file, dst)?;
         file.sync_all()
             .map_err(|err| PersistenceError::FileSystemError {
                 path: dst.display().to_string(),
@@ -387,19 +360,19 @@ impl PageMap {
     /// Persists the heap delta contained in this page map to the specified
     /// destination.
     pub fn persist_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.page_delta.persist(dst, &self.page_allocator)
+        self.page_delta.persist(dst)
     }
 
     /// Persists the heap delta contained in this page map to the specified
     /// destination and fsync the file to disk.
     pub fn persist_and_sync_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.page_delta.persist_and_sync(dst, &self.page_allocator)
+        self.page_delta.persist_and_sync(dst)
     }
 
     /// Persists the round delta contained in this page map to the specified
     /// destination.
     pub fn persist_round_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.round_delta.persist(dst, &self.page_allocator)
+        self.round_delta.persist(dst)
     }
 
     /// Returns the iterator over host pages managed by this `PageMap`.
@@ -412,7 +385,7 @@ impl PageMap {
 
     /// Returns the page with the specified `page_index`.
     pub fn get_page(&self, page_index: PageIndex) -> &PageBytes {
-        match self.page_delta.get_page(page_index, &self.page_allocator) {
+        match self.page_delta.get_page(page_index) {
             Some(page) => page,
             None => self.checkpoint.get_page(page_index),
         }
@@ -421,7 +394,7 @@ impl PageMap {
     /// Returns the largest contiguous range of pages that contains the given
     /// page such that all pages share the same backing store.
     pub fn get_memory_region(&self, page_index: PageIndex) -> MemoryRegion {
-        match self.page_delta.get_page(page_index, &self.page_allocator) {
+        match self.page_delta.get_page(page_index) {
             Some(page) => MemoryRegion::BackedByPage(page),
             None => {
                 let (start, end) = self.page_delta.bounds(page_index);
