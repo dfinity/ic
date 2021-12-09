@@ -24,6 +24,9 @@ use crate::controller_service_impl::ControllerServiceImpl;
 use crate::elastic_cache::Cache;
 use crate::launch_as_process::{create_sandbox_path_and_args, create_sandbox_process};
 use crate::unique_id::UniqueId;
+use std::process::Child;
+use std::process::ExitStatus;
+use std::thread;
 
 #[derive(Clone)]
 pub struct SandboxProcess {
@@ -80,7 +83,7 @@ impl std::fmt::Debug for OpenedState {
 /// Manages sandboxed processes, forwards requests to the appropriate
 /// process.
 pub struct SandboxedExecutionController {
-    backends: Mutex<HashMap<CanisterId, SandboxProcess>>,
+    backends: Arc<Mutex<HashMap<CanisterId, SandboxProcess>>>,
     logger: ReplicaLogger,
     compile_count: AtomicU64,
     /// Path to the `canister_sandbox` executable.
@@ -96,7 +99,7 @@ impl SandboxedExecutionController {
     pub fn new(logger: ReplicaLogger) -> Self {
         let (sandbox_exec_path, sandbox_exec_argv) = create_sandbox_path_and_args();
         Self {
-            backends: Mutex::new(HashMap::new()),
+            backends: Arc::new(Mutex::new(HashMap::new())),
             logger,
             compile_count: AtomicU64::new(0),
             sandbox_exec_path,
@@ -106,6 +109,7 @@ impl SandboxedExecutionController {
 
     fn get_sandbox_process(&self, canister_id: &CanisterId) -> SandboxProcess {
         let mut guard = self.backends.lock().unwrap();
+
         if let Some(sandbox_process) = (*guard).get(canister_id) {
             // Sandbox backend running for this canister already.
             sandbox_process.clone()
@@ -115,12 +119,14 @@ impl SandboxedExecutionController {
             let reg = Arc::new(ActiveExecutionStateRegistry::new());
             let controller_service =
                 ControllerServiceImpl::new(Arc::clone(&reg), self.logger.clone());
-            let sandbox_service = create_sandbox_process(
+
+            let (sandbox_service, child_handle) = create_sandbox_process(
                 controller_service,
                 canister_id,
                 &self.sandbox_exec_path,
                 self.sandbox_exec_argv.clone(),
-            );
+            )
+            .unwrap();
 
             let sandbox_service_copy = Arc::clone(&sandbox_service);
 
@@ -134,14 +140,31 @@ impl SandboxedExecutionController {
                 },
                 2,
             );
+
             let sandbox_process = SandboxProcess {
                 execution_states: reg,
                 sandbox_service,
                 compilation_cache,
             };
             (*guard).insert(*canister_id, sandbox_process.clone());
+
+            self.observe_sandbox_process(child_handle, *canister_id);
+
             sandbox_process
         }
+    }
+
+    // Observes the exit of a sandbox process and cleans up the entry in backends
+    fn observe_sandbox_process(&self, mut child_handle: Child, canister_id: CanisterId) {
+        // We spawn a thread to wait for the exit notification of a sandbox process
+        thread::spawn(move || {
+            let pid = child_handle.id();
+            let output = child_handle.wait().unwrap();
+
+            // Panic due to the fact that we do not expect that a sandbox process ever
+            // exits for now.
+            panic_due_to_sandbox_exit(output, canister_id, pid);
+        });
     }
 
     fn get_wasm_binary_key(&self, wasm_binary: &WasmBinary) -> UniqueId {
@@ -370,4 +393,52 @@ fn wrap_remote_state(
 ) -> SandboxExecutionStateHandle {
     let opened_state = OpenedState::new(Arc::clone(sandbox_service), state_id);
     SandboxExecutionStateHandle::new(Arc::new(opened_state))
+}
+
+fn panic_due_to_sandbox_exit(output: ExitStatus, canister_id: CanisterId, pid: u32) {
+    match output.code() {
+        Some(code) => panic!(
+            "Canister {}, pid {} exited with status code: {}",
+            canister_id, pid, code
+        ),
+        None => panic!(
+            "Canister {}, pid {} exited due to signal!",
+            canister_id, pid
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_logger::replica_logger::no_op_logger;
+    use libc::kill;
+    use std::convert::TryInto;
+
+    #[test]
+    #[should_panic(expected = "exited due to signal!")]
+    fn controller_handles_killed_sandbox_process() {
+        let (sandbox_exec_path, sandbox_exec_argv) = create_sandbox_path_and_args();
+        let logger = no_op_logger();
+        let canister_id = CanisterId::from_u64(42);
+        let reg = Arc::new(ActiveExecutionStateRegistry::new());
+
+        let controller_service = ControllerServiceImpl::new(Arc::clone(&reg), logger);
+
+        let (_sandbox_service, mut child_handle) = create_sandbox_process(
+            controller_service,
+            &canister_id,
+            &sandbox_exec_path,
+            sandbox_exec_argv,
+        )
+        .unwrap();
+
+        let pid = child_handle.id();
+
+        unsafe {
+            kill(pid.try_into().unwrap(), libc::SIGKILL);
+        }
+        let output = child_handle.wait().unwrap();
+        panic_due_to_sandbox_exit(output, canister_id, pid);
+    }
 }
