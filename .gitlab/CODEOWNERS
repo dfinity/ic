@@ -109,6 +109,12 @@
 /rs/nns/                             @dfinity-lab/teams/nns-team @granstrom1
 /rs/nodemanager/                     @dfinity-lab/teams/orchestrator-owners
 /rs/p2p/                             @dfinity-lab/teams/networking-team
+/rs/protobuf/def/crypto              @dfinity-lab/teams/crypto-owners
+/rs/protobuf/def/messaging           @dfinity-lab/teams/message-routing-owners
+/rs/protobuf/def/p2p                 @dfinity-lab/teams/networking-team
+/rs/protobuf/def/registry            @dfinity-lab/teams/nns-team
+/rs/protobuf/def/state               @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
+/rs/protobuf/def/types               @dfinity-lab/teams/interface-owners
 /rs/registry/admin/                  @dfinity-lab/teams/nns-team
 /rs/registry/canister/               @dfinity-lab/teams/nns-team
 /rs/registry/client/                 @dfinity-lab/teams/node-team
