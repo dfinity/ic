@@ -4155,6 +4155,7 @@ version = "0.8.0"
 dependencies = [
  "clap 2.33.3",
  "hex",
+ "ic-canister-sandbox-backend-lib",
  "ic-config",
  "ic-cycles-account-manager",
  "ic-execution-environment",
@@ -5279,6 +5280,7 @@ dependencies = [
  "hex",
  "ic-artifact-pool",
  "ic-canister-client",
+ "ic-canister-sandbox-backend-lib",
  "ic-config",
  "ic-consensus",
  "ic-consensus-message",

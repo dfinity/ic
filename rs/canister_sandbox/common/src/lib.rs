@@ -17,6 +17,10 @@ pub mod protocol {
 }
 pub mod fdenum;
 
+/// This command line flag switches some binaries (ic-replica, drun) into the
+/// canister sandbox mode.
+pub const RUN_AS_CANISTER_SANDBOX_FLAG: &str = "--run-as-canister-sandbox";
+
 // Declare how messages are multiplexed on controller->sandbox channel.
 
 impl transport::MessageDemux<protocol::sbxsvc::Request, protocol::ctlsvc::Reply>

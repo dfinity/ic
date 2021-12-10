@@ -1,6 +1,7 @@
 //! The main function of ic-replay processes command line arguments.
 use clap::Clap;
 use ic_canister_client::{Agent, Sender};
+use ic_canister_sandbox_backend_lib::{canister_sandbox_main, RUN_AS_CANISTER_SANDBOX_FLAG};
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_replay::cmd::{CliArgs, SubCommand};
@@ -10,6 +11,18 @@ use ic_types::ReplicaVersion;
 use std::convert::TryFrom;
 
 fn main() {
+    // Check if `ic-replay` is running in the canister sandbox mode where it waits
+    // for commands from the parent process. This check has to be performed
+    // before the arguments are parsed because the parent process does not pass
+    // all the normally required arguments of `ic-replay`.
+    if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
+        canister_sandbox_main();
+    } else {
+        ic_replay_main();
+    }
+}
+
+fn ic_replay_main() {
     let args: CliArgs = CliArgs::parse();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     Config::run_with_temp_config(|default_config| {
