@@ -16,6 +16,7 @@ use url::Url;
 pub type FarmResult<T> = Result<T, FarmError>;
 
 const DEFAULT_REQ_TIMEOUT: Duration = Duration::from_secs(180);
+const LINEAR_BACKOFF_RETRY_DELAY: Duration = Duration::from_millis(1500);
 const MAX_NUMBER_OF_RETRIES: usize = 3;
 
 /// Farm managed resources that make up the Internet Computer under test. The
@@ -184,6 +185,7 @@ impl Farm {
                     }
                 }
             }
+            std::thread::sleep(LINEAR_BACKOFF_RETRY_DELAY);
         }
         Err(FarmError::TooManyRetries {
             message: String::from(
