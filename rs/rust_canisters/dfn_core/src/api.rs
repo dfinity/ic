@@ -3,7 +3,7 @@ pub use self::futures::spawn;
 use self::futures::{CallFuture, FutureResult, RefCounted, TopLevelFuture};
 pub use ic_base_types::{CanisterId, PrincipalId};
 use on_wire::{FromWire, IntoWire, NewType};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{cell::RefCell, future::Future};
 
@@ -70,6 +70,7 @@ pub mod ic0 {
         pub fn call_data_append(src: u32, size: u32);
         pub fn call_on_cleanup(fun: usize, env: u32);
         pub fn call_cycles_add(amount: u64);
+        pub fn call_cycles_add128(amount_high: u64, amount_low: u64);
         pub fn call_perform() -> i32;
         pub fn stable_size() -> u32;
         pub fn stable_grow(additional_pages: u32) -> i32;
@@ -81,9 +82,13 @@ pub mod ic0 {
         pub fn stable64_write(offset: u64, src: u64, size: u64);
         pub fn time() -> u64;
         pub fn canister_cycle_balance() -> u64;
+        pub fn canister_cycle_balance128(dst: i32);
         pub fn msg_cycles_available() -> u64;
+        pub fn msg_cycles_available128(dst: i32);
         pub fn msg_cycles_refunded() -> u64;
+        pub fn msg_cycles_refunded128(dst: i32);
         pub fn msg_cycles_accept(amount: u64) -> u64;
+        pub fn msg_cycles_accept128(max_amount_high: i64, max_amount_low: i64, dst: i32);
         pub fn certified_data_set(src: u32, size: u32);
         pub fn data_certificate_present() -> u32;
         pub fn data_certificate_size() -> u32;
@@ -199,6 +204,10 @@ pub mod ic0 {
         wrong_arch("call_cycles_add")
     }
 
+    pub unsafe fn call_cycles_add128(_amount_high: u64, _amount_low: u64) {
+        wrong_arch("call_cycles_add128")
+    }
+
     pub unsafe fn call_perform() -> i32 {
         wrong_arch("call_perform")
     }
@@ -246,16 +255,32 @@ pub mod ic0 {
         wrong_arch("canister_cycle_balance")
     }
 
+    pub unsafe fn canister_cycle_balance128(_dst: i32) {
+        wrong_arch("canister_cycle_balance128")
+    }
+
     pub unsafe fn msg_cycles_available() -> u64 {
         wrong_arch("msg_cycles_available")
+    }
+
+    pub unsafe fn msg_cycles_available128(_dst: i32) {
+        wrong_arch("msg_cycles_available128")
     }
 
     pub unsafe fn msg_cycles_refunded() -> u64 {
         wrong_arch("msg_cycles_refunded")
     }
 
+    pub unsafe fn msg_cycles_refunded128(_dst: i32) {
+        wrong_arch("msg_cycles_refunded128")
+    }
+
     pub unsafe fn msg_cycles_accept(_amount: u64) -> u64 {
         wrong_arch("msg_cycles_accept")
+    }
+
+    pub unsafe fn msg_cycles_accept128(_amount_high: i64, _amount_low: i64, _dst: i32) {
+        wrong_arch("msg_cycles_accept128")
     }
 
     pub unsafe fn certified_data_set(_src: u32, _size: u32) {
@@ -617,6 +642,12 @@ pub fn call_cycles_add(amount: u64) {
     }
 }
 
+pub fn call_cycles_add128(amount_high: u64, amount_low: u64) {
+    unsafe {
+        ic0::call_cycles_add128(amount_high, amount_low);
+    }
+}
+
 /// Safe wrapper around an unsafe function
 pub fn arg_size() -> u32 {
     unsafe { ic0::msg_arg_data_size() }
@@ -745,23 +776,65 @@ impl From<TokenUnit> for Vec<u8> {
 }
 
 /// Returns the amount of cycles in the canister's account.
+/// This API supports only 64-bit values.
 pub fn canister_cycle_balance() -> u64 {
     unsafe { ic0::canister_cycle_balance() }
 }
 
+/// Returns the amount of cycles in the canister's account.
+pub fn canister_cycle_balance128() -> Vec<u8> {
+    let size = 16;
+    let mut buf = vec![0u8; size];
+    unsafe { ic0::canister_cycle_balance128(buf.as_mut_ptr() as i32) }
+    buf
+}
+
 /// Returns the cycles available in this current message.
+/// This API supports only 64-bit values.
 pub fn msg_cycles_available() -> u64 {
     unsafe { ic0::msg_cycles_available() }
 }
 
+/// Returns the cycles available in this current message.
+pub fn msg_cycles_available128() -> u128 {
+    let size = 16;
+    let mut buf = vec![0u8; size];
+    unsafe { ic0::msg_cycles_available128(buf.as_mut_ptr() as i32) }
+    u128::from_le_bytes(buf.try_into().unwrap())
+}
+
 /// Returns the amount of cycles refunded with a response.
+/// This API supports only 64-bit values.
 pub fn msg_cycles_refunded() -> u64 {
     unsafe { ic0::msg_cycles_refunded() }
 }
 
+/// Returns the amount of cycles refunded with a response.
+pub fn msg_cycles_refunded128() -> u128 {
+    let size = 16;
+    let mut buf = vec![0u8; size];
+    unsafe { ic0::msg_cycles_refunded128(buf.as_mut_ptr() as i32) }
+    u128::from_le_bytes(buf.try_into().unwrap())
+}
+
 /// Indicates that `amount` of cycles should be accepted in the current message.
+/// This API supports only 64-bit values.
 pub fn msg_cycles_accept(amount: u64) -> u64 {
     unsafe { ic0::msg_cycles_accept(amount) }
+}
+
+/// Indicates that `amount` of cycles should be accepted in the current message.
+pub fn msg_cycles_accept128(amount_high: u64, amount_low: u64) -> u128 {
+    let size = 16;
+    let mut buf = vec![0u8; size];
+    unsafe {
+        ic0::msg_cycles_accept128(
+            amount_high as i64,
+            amount_low as i64,
+            buf.as_mut_ptr() as i32,
+        )
+    }
+    u128::from_le_bytes(buf.try_into().unwrap())
 }
 
 /// Sets the certified data of this canister.
