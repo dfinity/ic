@@ -58,6 +58,7 @@ if [[ -n "${TEST_NNS_URL-}" ]]; then
 else
     # Deploy the testnet
     deploy_with_timeout "$testnet" \
+        --dkg-interval-length 19 \
         --no-boundary-nodes \
         --with-testnet-keys \
         --git-revision "$GIT_REVISION" "${HOSTS_INI_ARGUMENTS[@]}"
