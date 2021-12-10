@@ -1,13 +1,13 @@
-docker-build-all:
+docker-build-ic:
   extends:
     - .ubuntu-nix-docker
-    - .rules-docker-build-all
+    - .rules-parent-pipeline
   needs: []
   stage: test
   artifacts:
     paths:
-      - build
+      - artifacts
   script:
     - |
       set -euo pipefail
-      ./gitlab-ci/tools/docker-build-all
+      gitlab-ci/tools/docker-build-ic

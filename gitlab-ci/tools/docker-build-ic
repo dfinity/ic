@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+set -exuo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+VERSION=$(git rev-parse --verify HEAD)
+
+"$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
+
+cd "$REPO_ROOT"
+docker image build -t ic-build-src:$VERSION -f- . <<EOF
+FROM dfinity/ic-build:latest
+COPY --chown=ubuntu:ubuntu . /ic
+EOF
+
+export IMAGE=ic-build-src:$VERSION
+"$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-ic
+
+if docker volume inspect "ic-artifacts${CI_JOB_ID:-}" 2>&1; then
+    mkdir -p artifacts
+    cd artifacts
+
+    # docker doesn't seem to provide means of getting data from the volume directly
+    # we need to run a container with that volume and copy the data from the container
+    DID=$(docker run --rm -it -d -v "ic-artifacts${CI_JOB_ID:-}":/artifacts $IMAGE sleep 300)
+    docker cp $DID:/artifacts docker-build-ic
+    docker rm -f $DID
+    docker volume rm -f "ic-artifacts${CI_JOB_ID:-}"
+fi

@@ -51,7 +51,7 @@ else
         buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rsync-disk-img -- \
             "$CI_PROJECT_DIR"/gitlab-ci/tools/copy-disk "$CDPRNET"
     fi
-    if [ "$CI_JOB_NAME" != "docker-build-all" ]; then
+    if [ "$CI_JOB_NAME" != "docker-build-ic" ]; then
         buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rclone -- \
             "$ROOT_DIR"/gitlab-ci/src/artifacts/rclone_upload.py "$BUILD_OUT" "$UPLOAD_TARGET"
     fi

@@ -6,15 +6,19 @@ build-determinism-binaries:
   stage: build-determinism-test
   needs:
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-determinism
+    - docker-build-ic
   script:
     - |
       set -eux
       echo "cargo-build-release-linux-native:"
-      openssl sha256 artifacts/release/*
-      echo "cargo-build-release-linux-native-determinism:"
-      openssl sha256 artifacts/release-determinism/*
-      diff -u artifacts/release/SHA256SUMS artifacts/release-determinism/SHA256SUMS
+      cd artifacts/release
+      sha256sum ./*.gz | tee SHAS
+      cd -
+      echo "docker-build-ic:"
+      cd artifacts/docker-build-ic/release
+      sha256sum ./*.gz | tee SHAS
+      cd -
+      diff -u artifacts/release/SHAS artifacts/docker-build-ic/release/SHAS
 
 
 build-determinism-canisters:
@@ -25,15 +29,19 @@ build-determinism-canisters:
   stage: build-determinism-test
   needs:
     - cargo-build-canisters
-    - cargo-build-canisters-determinism
+    - docker-build-ic
   script:
     - |
       set -eux
-      echo "cargo-build-canisters"
-      openssl sha256 artifacts/canisters/*
-      echo "cargo-build-canisters-determinism"
-      openssl sha256 artifacts/canisters-determinism/*
-      diff -u artifacts/canisters/SHA256SUMS artifacts/canisters-determinism/SHA256SUMS
+      echo "cargo-build-canisters:"
+      cd artifacts/canisters
+      sha256sum ./*.gz | tee SHAS
+      cd -
+      echo "docker-build-ic:"
+      cd artifacts/docker-build-ic/canisters
+      sha256sum ./*.gz | tee SHAS
+      cd -
+      diff -u artifacts/canisters/SHAS artifacts/docker-build-ic/canisters/SHAS
 
 
 build-determinism-update-img:
@@ -44,12 +52,16 @@ build-determinism-update-img:
   stage: build-determinism-test
   needs:
     - guest-os-updateimg-build
-    - guest-os-updateimg-build-determinism
+    - docker-build-ic
   script:
     - |
       set -eux
-      echo "guest-os-updateimg-build"
-      openssl sha256 ic-os/guestos/build-out/update-img/*
-      echo "guest-os-updateimg-build-determinism"
-      openssl sha256 ic-os/guestos/build-out/update-img-determinism/*
-      diff -u ic-os/guestos/build-out/update-img/SHA256SUMS ic-os/guestos/build-out/update-img-determinism/SHA256SUMS
+      echo "guest-os-updateimg-build:"
+      cd ic-os/guestos/build-out/update-img
+      sha256sum update-img.tar.gz | tee SHAS
+      cd -
+      echo "docker-build-ic:"
+      cd artifacts/docker-build-ic/icos
+      sha256sum update-img.tar.gz | tee SHAS
+      cd -
+      diff -u ic-os/guestos/build-out/update-img/SHAS artifacts/docker-build-ic/icos/SHAS

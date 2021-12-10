@@ -32,6 +32,10 @@ if [ ! -e /.dockerenv ]; then
     DOCKER_RUN_ARGS+=(
         --mount type=bind,source="$REPO_ROOT",target=$WORKDIR
     )
+else
+    DOCKER_RUN_ARGS+=(
+        --mount type=volume,source="ic-artifacts${CI_JOB_ID:-}",destination=/ic/artifacts
+    )
 fi
 
 if [ -z "${CI_DISPOSABLE_ENVIRONMENT:-}" ]; then
