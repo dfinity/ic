@@ -8,8 +8,8 @@ use crate::utils;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_registry_client::helper::subnet::SubnetRegistry;
+use ic_registry_client::helper::unassigned_nodes::UnassignedNodeRegistry;
 use ic_registry_common::local_store::LocalStoreImpl;
-use ic_registry_keys::make_unassigned_nodes_replica_version;
 use ic_types::consensus::catchup::CUPWithOriginalProtobuf;
 use ic_types::{
     crypto::threshold_sig::{ni_dkg::NiDkgTag, ThresholdSigPublicKey},
@@ -85,11 +85,12 @@ impl ReleasePackage {
         let (latest_subnet_id, subnet_record) =
             match self.registry.get_own_subnet_record(latest_registry_version) {
                 Ok(val) => val,
-                // TODO (cm): uncomment this part once the registry field can be updated and the
-                // code is ready to be tested.
-                // Err(NodeManagerError::NodeUnassignedError(_, _)) => {
-                //     return self.upgrade_as_unassigned().await
-                // }
+                Err(NodeManagerError::NodeUnassignedError(_, _)) => {
+                    return self
+                        .upgrade_as_unassigned()
+                        .await
+                        .map(|version| (version, None))
+                }
                 Err(err) => return Err(err),
             };
 
@@ -325,22 +326,26 @@ impl ReleasePackage {
         self.download_and_upgrade(new_replica_version).await
     }
 
-    #[allow(dead_code)]
-    async fn upgrade_as_unassigned<T>(&self) -> NodeManagerResult<T> {
+    async fn upgrade_as_unassigned(&self) -> NodeManagerResult<ReplicaVersion> {
         let registry = &self.registry.registry_client;
-        match registry.get_value(
-            &make_unassigned_nodes_replica_version(),
-            registry.get_latest_version(),
-        ) {
-            Ok(Some(bytes)) => {
-                let version = String::from_utf8_lossy(bytes.as_ref());
-                let replica_version =
-                    ReplicaVersion::try_from(version.as_ref()).map_err(|err| {
+        match registry.get_unassigned_nodes_config(registry.get_latest_version()) {
+            Ok(Some(record)) => {
+                let replica_version = ReplicaVersion::try_from(record.replica_version.as_ref())
+                    .map_err(|err| {
                         NodeManagerError::UpgradeError(format!(
                             "Couldn't parse the replica version: {}",
                             err
                         ))
                     })?;
+                if self.replica_version == replica_version {
+                    return Ok(replica_version);
+                }
+                info!(
+                    self.logger,
+                    "Replica upgrade on unassigned node detected: old version {}, new version {}",
+                    self.replica_version,
+                    replica_version
+                );
                 self.download_and_upgrade(&replica_version).await
             }
             _ => Err(NodeManagerError::UpgradeError(
