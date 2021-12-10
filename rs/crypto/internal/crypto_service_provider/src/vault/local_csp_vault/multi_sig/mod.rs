@@ -13,7 +13,7 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> MultiSignatureCspVault
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> MultiSignatureCspVault
     for LocalCspVault<R, S, C>
 {
     fn multi_sign(

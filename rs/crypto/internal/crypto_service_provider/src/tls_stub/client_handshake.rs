@@ -9,6 +9,7 @@ use ic_crypto_tls_interfaces::TlsStream;
 use openssl::ssl::ConnectConfiguration;
 use rand::{CryptoRng, Rng};
 use std::pin::Pin;
+use std::sync::Arc;
 use tokio::net::TcpStream;
 
 #[cfg(test)]
@@ -64,7 +65,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
         trusted_server_cert: TlsPublicKeyCert,
     ) -> Result<ConnectConfiguration, CspTlsClientHandshakeError> {
         Ok(ic_crypto_internal_tls::tls_connector(
-            &key_from_secret_key_store(&*self.sks_read_lock(), &self_cert)?,
+            &key_from_secret_key_store(Arc::clone(&self.csp_vault), &self_cert)?,
             self_cert.as_x509(),
             trusted_server_cert.as_x509(),
         )?)

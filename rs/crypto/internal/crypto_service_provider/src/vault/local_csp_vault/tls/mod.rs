@@ -102,7 +102,9 @@ fn ed25519_secret_key_bytes_from_der(
     ))
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
+    LocalCspVault<R, S, C>
+{
     pub(super) fn store_tls_secret_key(
         &self,
         cert: &TlsPublicKeyCert,

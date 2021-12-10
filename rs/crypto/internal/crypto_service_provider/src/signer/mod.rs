@@ -3,9 +3,7 @@ use super::types::{CspPop, CspPublicKey, CspSignature};
 use super::Csp;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::MultiBls12_381_Signature;
-use crate::vault::api::{
-    BasicSignatureCspVault, CspBasicSignatureError, CspMultiSignatureError, MultiSignatureCspVault,
-};
+use crate::vault::api::{CspBasicSignatureError, CspMultiSignatureError};
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
@@ -17,7 +15,9 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> CspSigner for Csp<R, S, C> {
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> CspSigner
+    for Csp<R, S, C>
+{
     fn sign(
         &self,
         algorithm_id: AlgorithmId,

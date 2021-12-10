@@ -52,8 +52,8 @@ impl From<CspThresholdSignatureKeygenError> for CryptoError {
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdSignatureCspVault
-    for LocalCspVault<R, S, C>
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
+    ThresholdSignatureCspVault for LocalCspVault<R, S, C>
 {
     /// See the trait for documentation.
     ///
