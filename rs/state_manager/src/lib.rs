@@ -100,6 +100,7 @@ pub struct StateManagerMetrics {
 pub struct ManifestMetrics {
     hashed_chunk_bytes: IntCounter,
     reused_chunk_bytes: IntCounter,
+    hashed_and_compared_chunk_bytes: IntCounter,
     reused_chunk_hash_error_count: IntCounter,
 }
 
@@ -228,11 +229,17 @@ impl ManifestMetrics {
         Self {
             hashed_chunk_bytes: metrics_registry.int_counter(
                 "state_manager_manifest_hashed_chunk_bytes",
-                "Size of chunks hashed during the manifest computation.",
+                "Size of chunks hashed during the manifest computation because no previously \
+		 computed hash was available.",
             ),
             reused_chunk_bytes: metrics_registry.int_counter(
                 "state_manager_manifest_reused_chunk_bytes",
-                "Size of chunks that we didn't need to hash during the manifest computation.",
+                "Size of chunks that we didn't hash during the manifest computation.",
+            ),
+            hashed_and_compared_chunk_bytes: metrics_registry.int_counter(
+                "state_manager_manifest_hashed_and_compared_chunk_bytes",
+                "Size of chunks that we hashed during the manifest computation in order to compare \
+		 it to a previously computed hash.",
             ),
             // Count of the chunks which have a mismatch between the recomputed hash and the reused
             // one.
@@ -2351,6 +2358,7 @@ impl StateManager for StateManagerImpl {
                         Some(manifest::ManifestDelta {
                             base_manifest,
                             base_height,
+                            target_height: height,
                             dirty_memory_pages,
                         })
                     });
@@ -2365,10 +2373,14 @@ impl StateManager for StateManagerImpl {
                         },
                     );
 
+                    // On the NNS subnet we never allow incremental manifest computation
+                    let is_nns =
+                        self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
+
                     self.compute_manifest_request_sender
                         .send(ComputeManifestRequest {
                             checkpoint_ref,
-                            manifest_delta,
+                            manifest_delta: if is_nns { None } else { manifest_delta },
                         })
                         .expect("failed to send ComputeManifestRequest message");
                     self.persist_metadata_or_die(&states.states_metadata);

@@ -5746,6 +5746,7 @@ dependencies = [
  "proptest-derive",
  "prost",
  "rand 0.7.3",
+ "rand_chacha 0.2.2",
  "scoped_threadpool",
  "serde",
  "serde_bytes",

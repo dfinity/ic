@@ -635,8 +635,62 @@ fn test_hash_plan() {
         PathBuf::from("subdir").join("memory") => dirty_chunks_memory,
     };
 
-    let chunk_actions = hash_plan(&manifest_old, &files, dirty_file_chunks, max_chunk_size);
     let reused_hash = manifest_old.chunk_table[1].hash;
+
+    let build_manifest_from_hash_plan = |hash_plan| {
+        let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
+        let (file_table, chunk_table) = build_chunk_table_parallel(
+            &mut thread_pool,
+            &manifest_metrics,
+            &no_op_logger(),
+            root,
+            files.clone(),
+            max_chunk_size,
+            hash_plan,
+        );
+
+        Manifest {
+            version: CURRENT_STATE_SYNC_VERSION,
+            file_table,
+            chunk_table,
+        }
+    };
+
+    // Hash plan with recompute_period == 1
+    let chunk_actions = hash_plan(
+        &manifest_old,
+        &files,
+        dirty_file_chunks.clone(),
+        max_chunk_size,
+        0,
+        1,
+    );
+
+    assert_eq!(
+        chunk_actions,
+        vec![
+            ChunkAction::Recompute,
+            ChunkAction::RecomputeAndCompare(reused_hash),
+            ChunkAction::Recompute,
+            ChunkAction::Recompute,
+            ChunkAction::Recompute,
+            ChunkAction::Recompute
+        ]
+    );
+
+    let incremental_manifest = build_manifest_from_hash_plan(chunk_actions);
+
+    assert_eq!(manifest_new, incremental_manifest);
+
+    // Hash plan with recompute_period == 0
+    let chunk_actions = hash_plan(
+        &manifest_old,
+        &files,
+        dirty_file_chunks.clone(),
+        max_chunk_size,
+        0,
+        u64::MAX,
+    );
 
     assert_eq!(
         chunk_actions,
@@ -650,24 +704,59 @@ fn test_hash_plan() {
         ]
     );
 
-    let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
-    let (file_table, chunk_table) = build_chunk_table_parallel(
-        &mut thread_pool,
-        &manifest_metrics,
-        &no_op_logger(),
-        root,
-        files,
-        max_chunk_size,
-        chunk_actions,
-    );
-
-    let incremental_manifest = Manifest {
-        version: CURRENT_STATE_SYNC_VERSION,
-        file_table,
-        chunk_table,
-    };
+    let incremental_manifest = build_manifest_from_hash_plan(chunk_actions);
 
     assert_eq!(manifest_new, incremental_manifest);
+
+    // Hash plan with recompute_period == 2
+    // We loop several times and check that we recompute the chunk between 40% and
+    // 60%
+    let repetitions = 1000;
+    let mut seen_used = 0;
+    for seed in 0..repetitions {
+        let chunk_actions = hash_plan(
+            &manifest_old,
+            &files,
+            dirty_file_chunks.clone(),
+            max_chunk_size,
+            seed,
+            2,
+        );
+
+        // It's random, so there could be two possible hash plans
+        if let ChunkAction::UseHash(_) = chunk_actions[1] {
+            seen_used += 1;
+            assert_eq!(
+                chunk_actions,
+                vec![
+                    ChunkAction::Recompute,
+                    ChunkAction::UseHash(reused_hash),
+                    ChunkAction::Recompute,
+                    ChunkAction::Recompute,
+                    ChunkAction::Recompute,
+                    ChunkAction::Recompute
+                ]
+            );
+        } else {
+            assert_eq!(
+                chunk_actions,
+                vec![
+                    ChunkAction::Recompute,
+                    ChunkAction::RecomputeAndCompare(reused_hash),
+                    ChunkAction::Recompute,
+                    ChunkAction::Recompute,
+                    ChunkAction::Recompute,
+                    ChunkAction::Recompute
+                ]
+            );
+        }
+
+        let incremental_manifest = build_manifest_from_hash_plan(chunk_actions);
+
+        assert_eq!(manifest_new, incremental_manifest);
+    }
+    assert!(seen_used as f64 >= 0.4 * repetitions as f64);
+    assert!(seen_used as f64 <= 0.6 * repetitions as f64);
 }
 
 #[test]
