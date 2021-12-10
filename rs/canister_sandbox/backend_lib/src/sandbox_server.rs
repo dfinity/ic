@@ -28,8 +28,7 @@ impl SandboxServer {
 }
 
 impl SandboxService for SandboxServer {
-    fn terminate(&self, req: TerminateRequest) -> rpc::Call<TerminateReply> {
-        eprintln!("Wasm Sandbox: Recv'd  TerminateRequest {:?}.", req);
+    fn terminate(&self, _req: TerminateRequest) -> rpc::Call<TerminateReply> {
         rpc::Call::new_resolved(Ok(TerminateReply {}))
     }
 

@@ -21,11 +21,7 @@ use ic_canister_sandbox_common::protocol::sbxsvc::{
     CreateExecutionStateSuccessReply, MemorySerialization, OpenStateRequest,
 };
 use ic_canister_sandbox_common::protocol::structs::MemoryModifications;
-use ic_canister_sandbox_common::{
-    controller_service::ControllerService,
-    protocol,
-    protocol::logging::{LogLevel, LogRequest},
-};
+use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
 use ic_config::embedders::{Config, PersistenceType};
 use ic_embedders::cow_memory_creator::CowMemoryCreator;
 use ic_embedders::{
@@ -50,7 +46,6 @@ use ic_types::CanisterId;
 use ic_types::NumInstructions;
 use ic_wasm_types::BinaryEncodedWasm;
 
-use crate::logging::log;
 use crate::system_state_accessor_rpc::SystemStateAccessorRPC;
 
 /// This represents the "state" object as it is used in the RPC protocol.
@@ -427,17 +422,6 @@ impl SandboxManager {
 
     /// Opens new wasm instance.
     pub fn open_wasm(&self, wasm_id: WasmId, wasm_file_path: Option<String>, wasm_src: Vec<u8>) {
-        log(
-            &*self.controller,
-            LogRequest(
-                LogLevel::Debug,
-                format!(
-                    "Opening wasm session: {}; wasm file path: {:?}",
-                    wasm_id, wasm_file_path
-                ),
-            ),
-        );
-
         let mut guard = self.repr.lock().unwrap();
         assert!(
             !guard.canister_wasms.contains_key(&wasm_id),
@@ -445,35 +429,17 @@ impl SandboxManager {
             wasm_id,
         );
         // Note that we can override an existing open wasm.
-        let wasm = match wasm_file_path.clone() {
+        let wasm = match wasm_file_path {
             Some(path) => Arc::new(CanisterWasm::new_from_file_path(path.as_ref())),
             None => Arc::new(CanisterWasm::new_from_src(wasm_src)),
         };
 
         guard.canister_wasms.insert(wasm_id, wasm);
-
-        log(
-            &*self.controller,
-            LogRequest(
-                LogLevel::Debug,
-                format!(
-                    "Opened wasm session: {}; wasm file path: {:?}",
-                    wasm_id, wasm_file_path
-                ),
-            ),
-        );
     }
 
     /// Closes previously opened wasm instance, by id.
     pub fn close_wasm(&self, wasm_id: WasmId) {
         let mut guard = self.repr.lock().unwrap();
-        log(
-            &*self.controller,
-            LogRequest(
-                LogLevel::Debug,
-                format!("Closing wasm session: {}", wasm_id),
-            ),
-        );
         let removed = guard.canister_wasms.remove(&wasm_id);
         assert!(
             removed.is_some(),
@@ -497,13 +463,6 @@ impl SandboxManager {
     /// Closes previously opened state instance, by id.
     pub fn close_state(&self, state_id: StateId) {
         let mut guard = self.repr.lock().unwrap();
-        log(
-            &*self.controller,
-            LogRequest(
-                LogLevel::Debug,
-                format!("Closing state session: {}", state_id),
-            ),
-        );
         let removed = guard.states.remove(&state_id);
         assert!(
             removed.is_some(),
@@ -525,10 +484,6 @@ impl SandboxManager {
         state_id: StateId,
         exec_input: protocol::structs::ExecInput,
     ) {
-        eprintln!(
-            "Opening exec session: {}, {}, {}",
-            exec_id, state_id, wasm_id
-        );
         let mut guard = sandbox_manager.repr.lock().unwrap();
         assert!(
             !guard.active_execs.contains_key(&exec_id),
