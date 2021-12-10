@@ -8,7 +8,6 @@ message UnassignedNodesConfigRecord {
   // in case it is necessary to perform disaster recovery.
   repeated string ssh_readonly_access = 1;
 
-  // The list of public keys whose owners have "backup" SSH access to unassigned nodes
-  // to make sure they can be backed up.
+  // The replica version that the unassigned nodes are supposed to run.
   string replica_version = 2;
 }

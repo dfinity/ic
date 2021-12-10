@@ -473,7 +473,7 @@ impl IcConfig {
         write_registry_entry(
             &data_provider,
             self.target_dir.as_path(),
-            make_replica_version_key(self.initial_replica_version_id).as_ref(),
+            make_replica_version_key(self.initial_replica_version_id.clone()).as_ref(),
             version,
             replica_version_record,
         );
@@ -519,7 +519,7 @@ impl IcConfig {
         }
 
         let unassigned_nodes_config = UnassignedNodesConfigRecord {
-            replica_version: String::new(),
+            replica_version: self.initial_replica_version_id.to_string(),
             ssh_readonly_access: self.ssh_readonly_access_to_unassigned_nodes,
         };
 
