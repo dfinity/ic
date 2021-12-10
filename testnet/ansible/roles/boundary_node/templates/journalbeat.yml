@@ -56,8 +56,8 @@ setup.ilm.enabled: false
 setup.template.name: "boundary-journal"
 setup.template.pattern: "boundary-journal-%{[agent.version]}-%{+yyyy.MM.dd}"
 setup.template.settings:
-  index.number_of_shards: 6
-  index.number_of_replicas: 2
+  index.number_of_shards: 1
+  index.number_of_replicas: 1
   #index.codec: best_compression
   #_source.enabled: false
 

@@ -3,9 +3,3 @@
     daemon_reload: true
     name: journalbeat
     state: restarted
-
-- name: restart metricbeat
-  systemd:
-    daemon_reload: true
-    name: metricbeat
-    state: restarted
