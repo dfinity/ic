@@ -1,6 +1,8 @@
 #!/bin/python
 import glob
 import json
+import os
+import subprocess
 from datetime import datetime
 
 import pybars
@@ -8,13 +10,14 @@ import pybars
 TEMPLATE_PATH = "templates/cd-overview.html.hb"
 
 
-def convert_date(ts):
+def convert_date(ts: int):
     # Also works in plotly: https://plotly.com/javascript/time-series/
     return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def find_results(experiment_name, experiment_type, threshold, testnet="cdslo"):
+def find_results(experiment_names, experiment_type, threshold, testnet="cdslo"):
     """Find and collect data from all experiments for the given testnet and experiment type."""
+    meta_data = []
     raw_data = []
     # Find all experiments
     for result in glob.glob("*/*/experiment.json"):
@@ -22,11 +25,17 @@ def find_results(experiment_name, experiment_type, threshold, testnet="cdslo"):
             try:
                 data = json.loads(resultfile.read())
                 # Match testnet name, experiment name and experiment type in order to decide whether to include results
-                if (
-                    data["testnet"] == testnet
-                    and data["experiment_name"] == experiment_name
-                    and data["type"] == experiment_type
-                ):
+                if data["testnet"] == testnet and data["type"] == experiment_type:
+
+                    include = False
+                    for experiment in experiment_names:
+                        include = include or data["experiment_name"] == experiment
+                    if not include:
+                        continue
+
+                    githash, timestamp, _ = tuple(result.split("/"))
+                    meta_data.append({"timestamp": timestamp, "date": convert_date(int(timestamp)), "githash": githash})
+
                     print(result)
                     print(
                         "  {:40} {:30} {:10.3f}".format(
@@ -36,13 +45,24 @@ def find_results(experiment_name, experiment_type, threshold, testnet="cdslo"):
                         )
                     )
                     raw_data.append((data["t_experiment_start"], data["experiment_details"]["rps_max"]))
+
+                    try:
+                        if os.path.isfile(f"{githash}/{timestamp}/report.html"):
+                            print("✅ Report exists")
+                        else:
+                            print("⚠️  Report does not exists yet, generating")
+                            subprocess.check_output(["python3", "generate_report.py", githash, timestamp])
+                    except Exception as e:
+                        print(f"❌ Failed to generate report: {e}")
+
             except Exception as e:
-                print(f"Failed to check ${resultfile} - error: {e}")
+                print(f"Failed to check ${result} - error: {e}")
 
     if len(raw_data) < 1:
-        raise Exception(f"Could not find any data for: {testnet} {experiment_name} {experiment_type}")
+        raise Exception(f"Could not find any data for: {testnet} {experiment_names} {experiment_type}")
 
     raw_data = sorted(raw_data)
+    meta_data = sorted(meta_data, key=lambda x: x["timestamp"])
 
     xdata = [e[0] for e in raw_data]
     ydata = [e[1] for e in raw_data]
@@ -71,7 +91,7 @@ def find_results(experiment_name, experiment_type, threshold, testnet="cdslo"):
         ],
     }
 
-    return {"plot": plots, "layout": layout}
+    return {"plot": plots, "layout": layout, "data": meta_data}
 
 
 if __name__ == "__main__":
@@ -84,14 +104,15 @@ if __name__ == "__main__":
         data = {}
 
         print("Experiment 1")
-        data["plot_exp1_query"] = find_results("experiment_1", "query", 1300)
-        data["plot_exp1_update"] = find_results("experiment_1", "update", 500)
+        data["plot_exp1_query"] = find_results(["experiment_1", "system-baseline-experiment"], "query", 1300)
+        data["plot_exp1_update"] = find_results(["experiment_1", "system-baseline-experiment"], "update", 500)
 
         print("Experiment 2")
-        data["plot_exp2_query"] = find_results("experiment_2", "query", 100)
-        data["plot_exp2_update"] = find_results("experiment_2", "update", 100)
+        data["plot_exp2_query"] = find_results(["experiment_2"], "query", 100)
+        data["plot_exp2_update"] = find_results(["experiment_2"], "update", 100)
 
         print(data)
 
         with open("cd-overview.html", "w") as outfile:
             outfile.write(template(data))
+            print("🎉 Report written")

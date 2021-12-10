@@ -28,6 +28,14 @@
       }, false);
     </script>
 
+    <h3>Reports</h3>
+
+    <ul>
+    {{#each plot_exp1_query.data}}
+      <li><a href="{{this.githash}}/{{this.timestamp}}/report.html">{{this.date}}</a></li>
+    {{/each}}
+    </ul>
+    
     <h2>Update calls</h2>
 
     <div id="plot-exp1-update" class="plot"></div>
@@ -37,7 +45,13 @@
           Plotly.newPlot( plot, {{{plot_exp1_update.plot}}},  {{{plot_exp1_update.layout}}});
       }, false);
     </script>
-
+    
+    <h3>Reports</h3>
+    <ul>
+    {{#each plot_exp1_update.data}}
+      <li><a href="{{this.githash}}/{{this.timestamp}}/report.html">{{this.date}}</a></li>
+    {{/each}}
+    </ul>
 
     <h2>Experiment 2: Memory under load</h2>
 
@@ -54,5 +68,12 @@
       }, false);
     </script>
 
+    <h3>Reports</h3>
+    <ul>
+    {{#each plot_exp2_update.data}}
+      <li><a href="{{this.githash}}/{{this.timestamp}}/report.html">{{this.date}}</a></li>
+    {{/each}}
+    </ul>
+    
   </div>
 </body>
