@@ -536,7 +536,7 @@ fn get_valid_system_apis(
                 )],
             ),
             (
-                "canister_cycles_balance128",
+                "canister_cycle_balance128",
                 vec![(
                     API_VERSION_IC0,
                     FunctionSignature {
