@@ -1864,6 +1864,11 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         assert_eq!(
             PAGE_SIZE as u64 * 301,
             fetch_int_counter(metrics, "state_manager_manifest_reused_chunk_bytes").unwrap()
+                + fetch_int_counter(
+                    metrics,
+                    "state_manager_manifest_hashed_and_compared_chunk_bytes"
+                )
+                .unwrap()
         );
 
         let checkpoint_root = state_manager
