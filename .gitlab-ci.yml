@@ -15,7 +15,6 @@ include:
   - local: /gitlab-ci/config/20--test--gitlab-runners.yml
   - local: /gitlab-ci/config/20--test--python.yml
   - local: /gitlab-ci/config/20--test--docker-autobuild.yml
-  - local: /gitlab-ci/config/20--test--docker-build-all.yml
   - local: /gitlab-ci/config/20--test--crash-safety.yml
   - local: /gitlab-ci/config/20--test--dependencies.yml
   - local: /gitlab-ci/config/20--test--shellcheck.yml

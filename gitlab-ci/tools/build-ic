@@ -76,10 +76,6 @@ echo
 echo -e "\n${HEADER_BUILD}\n"
 echo Release Binaries
 cd /ic/artifacts/release
-# only binaries listed below are shipped to ic-os ~ we rm everything else
-ls -1 *.gz \
-    | grep -v -E '(replica|nodemanager|canister_sandbox|vsock_agent|state-tool|ic-consensus-pool-util|ic-crypto-csp|ic-regedit).gz' \
-    | xargs -P0 rm -f
 
 ls -1 *.gz | xargs -n1 sha256sum | tee /tmp/binaries.txt
 echo

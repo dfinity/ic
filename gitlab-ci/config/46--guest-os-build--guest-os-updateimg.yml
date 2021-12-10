@@ -55,10 +55,3 @@ guest-os-updateimg-build-dev:
   variables:
       BUILD_EXTRA_ARGS: "-p root"
       BUILD_EXTRA_SUFFIX: "-dev"
-
-# Build another copy of the update image for non-determinism detection.
-guest-os-updateimg-build-determinism:
-  extends:
-    - guest-os-updateimg-build
-  variables:
-      BUILD_EXTRA_SUFFIX: "-determinism"

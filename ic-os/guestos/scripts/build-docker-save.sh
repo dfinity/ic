@@ -5,11 +5,10 @@
 #
 # Arguments to this script are passed verbatim to "docker build".
 
-CI_JOB_NAME=${CI_JOB_NAME:-}
 # We implicitly pull dependent image.
 ARGS=(--pull)
-if [ "$CI_JOB_NAME" == "guest-os-updateimg-build-determinism" ]; then
-    # Don't use cache when in CI.
+if [ "${CI_JOB_NAME:-}" == "docker-build-ic" ]; then
+    # Don't use cache in "docker-build-ic" CI job.
     ARGS+=(--no-cache)
 fi
 

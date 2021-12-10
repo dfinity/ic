@@ -5,6 +5,7 @@
 
 include:
 - local: /gitlab-ci/config/00--common.yml
+- local: /gitlab-ci/config/20--test--docker-build-ic.yml
 - local: /gitlab-ci/config/20--test--after-script.yml
 - local: /gitlab-ci/config/30--cargo-build--child-pipeline.yml
 - local: /gitlab-ci/config/40--cargo-test--child-pipeline.yml

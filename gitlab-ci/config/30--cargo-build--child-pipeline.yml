@@ -73,12 +73,6 @@ cargo-build-release-linux-native:
       "$RUSTC_WRAPPER" --show-stats
       echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
 
-cargo-build-release-linux-native-determinism:
-  extends:
-    - cargo-build-release-linux-native
-  variables:
-    ARTIFACT_EXT: "-determinism"
-
 cargo-build-release-linux-native-malicious:
   extends: cargo-build-release-linux-native
   variables:
@@ -113,10 +107,4 @@ cargo-build-canisters:
       echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
       "$RUSTC_WRAPPER" --show-stats
       echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
-
-cargo-build-canisters-determinism:
-  extends:
-    - cargo-build-canisters
-  variables:
-    ARTIFACT_EXT: "-determinism"
 

@@ -253,7 +253,7 @@ after_script:
   variables:
     SCCACHE_DIR: /cache/sccache
     RUSTC_WRAPPER: "/usr/bin/sccache-run"
-    # This MUST match the directory used in our `docker-build-all` script
+    # This MUST match the directory used in our `docker-build-ic` script
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 
 .macos-nix-native:

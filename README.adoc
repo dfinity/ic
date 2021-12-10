@@ -96,7 +96,7 @@ To see what dependencies the Docker image pulls in, check https://github.com/dfi
 
 ----
 $ ./gitlab-ci/docker/docker-build-local-image.sh
-$ ./gitlab-ci/tools/docker-run ./gitlab-ci/tools/build-all
+$ ./gitlab-ci/tools/docker-run ./gitlab-ci/tools/build-ic
 ----
 
 This builds:
