@@ -1,7 +1,7 @@
 //! Implementations of IDkgProtocol related to dealings
 
 use crate::sign::canister_threshold_sig::idkg::utils::idkg_encryption_keys_from_registry;
-use ic_crypto_internal_csp::api::IDkgProtocolCspClient;
+use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_interfaces::registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::IDkgCreateDealingError;
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptParams};
@@ -10,7 +10,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use tecdsa::IDkgTranscriptOperationInternal;
 
-pub fn create_dealing<C: IDkgProtocolCspClient>(
+pub fn create_dealing<C: CspIDkgProtocol>(
     csp_client: &C,
     self_node_id: &NodeId,
     registry: &Arc<dyn RegistryClient>,

@@ -459,7 +459,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentFatClient
         debug!(logger;
             crypto.description => "start",
         );
-        let result = canister_threshold_sig::mocks::sign_share(inputs);
+        let result = canister_threshold_sig::ecdsa::sign_share(&self.csp, &self.node_id, inputs);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
@@ -495,7 +495,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
     fn combine_sig_shares(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
-        shares: &[ThresholdEcdsaSigShare],
+        shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
     ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "ThresholdEcdsaSigVerifier",
@@ -504,7 +504,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
         debug!(logger;
             crypto.description => "start",
         );
-        let result = canister_threshold_sig::mocks::combine_sig_shares(inputs, shares);
+        let result = canister_threshold_sig::ecdsa::combine_sig_shares(&self.csp, inputs, shares);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

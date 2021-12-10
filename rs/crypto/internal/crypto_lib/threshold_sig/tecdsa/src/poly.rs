@@ -287,7 +287,7 @@ impl Polynomial {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum CommitmentOpening {
     Simple(EccScalar),
     Pedersen(EccScalar, EccScalar),
@@ -314,6 +314,22 @@ impl Debug for CommitmentOpening {
                 f,
                 "ERROR: Unsupported curve combination in CommitmentOpening!"
             ),
+        }
+    }
+}
+
+impl TryFrom<&CommitmentOpeningBytes> for CommitmentOpening {
+    type Error = ThresholdEcdsaError;
+
+    fn try_from(bytes: &CommitmentOpeningBytes) -> Result<Self, ThresholdEcdsaError> {
+        match bytes {
+            CommitmentOpeningBytes::Simple(scalar_bytes) => {
+                Ok(Self::Simple(EccScalar::try_from(scalar_bytes)?))
+            }
+            CommitmentOpeningBytes::Pedersen(scalar_bytes_1, scalar_bytes_2) => Ok(Self::Pedersen(
+                EccScalar::try_from(scalar_bytes_1)?,
+                EccScalar::try_from(scalar_bytes_2)?,
+            )),
         }
     }
 }

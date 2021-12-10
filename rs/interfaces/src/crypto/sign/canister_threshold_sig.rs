@@ -185,7 +185,7 @@ pub trait ThresholdEcdsaSigVerifier {
     fn combine_sig_shares(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
-        shares: &[ThresholdEcdsaSigShare],
+        shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
     ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError>;
 
     /// Verify that a combined signature was properly created from the inputs.

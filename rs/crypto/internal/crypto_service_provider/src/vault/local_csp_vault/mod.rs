@@ -3,6 +3,7 @@ mod idkg;
 mod multi_sig;
 mod ni_dkg;
 mod secret_key_store;
+mod tecdsa;
 #[cfg(test)]
 mod test_utils;
 #[cfg(test)]

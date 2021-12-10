@@ -10,6 +10,8 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealers, IDkgDealing, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript,
     IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
 };
+use ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple;
+use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
 use ic_types::crypto::{AlgorithmId, KeyPurpose};
 use ic_types::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use rand::prelude::*;
@@ -136,7 +138,35 @@ pub fn load_transcript(
         });
 }
 
-pub fn load_previous_transcripts_if_needed_and_create_dealing(
+pub fn load_input_transcripts(
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    loader_id: NodeId,
+    inputs: &ThresholdEcdsaSigInputs,
+) {
+    load_transcript(
+        inputs.presig_quadruple().kappa_unmasked(),
+        crypto_components,
+        loader_id,
+    );
+    load_transcript(
+        inputs.presig_quadruple().lambda_masked(),
+        crypto_components,
+        loader_id,
+    );
+    load_transcript(
+        inputs.presig_quadruple().kappa_times_lambda(),
+        crypto_components,
+        loader_id,
+    );
+    load_transcript(
+        inputs.presig_quadruple().key_times_lambda(),
+        crypto_components,
+        loader_id,
+    );
+    load_transcript(inputs.key_transcript(), crypto_components, loader_id);
+}
+
+pub fn load_previous_transcripts_and_create_dealing(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
     loader_id: NodeId,
@@ -156,7 +186,7 @@ pub fn load_previous_transcripts_if_needed_and_create_dealing(
     create_dealing(params, crypto_components, loader_id)
 }
 
-pub fn load_previous_transcripts_if_needed_and_create_dealings(
+pub fn load_previous_transcripts_and_create_dealings(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
 ) -> BTreeMap<NodeId, IDkgDealing> {
@@ -165,11 +195,8 @@ pub fn load_previous_transcripts_if_needed_and_create_dealings(
         .get()
         .iter()
         .map(|node| {
-            let dealing = load_previous_transcripts_if_needed_and_create_dealing(
-                params,
-                crypto_components,
-                *node,
-            );
+            let dealing =
+                load_previous_transcripts_and_create_dealing(params, crypto_components, *node);
             (*node, dealing)
         })
         .collect()
@@ -182,8 +209,7 @@ pub fn run_idkg_and_create_transcript(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
 ) -> IDkgTranscript {
-    let dealings =
-        load_previous_transcripts_if_needed_and_create_dealings(params, crypto_components);
+    let dealings = load_previous_transcripts_and_create_dealings(params, crypto_components);
     let multisigned_dealings = multisign_dealings(params, crypto_components, &dealings);
     let transcript_creator = params.dealers().get().iter().next().unwrap();
     create_transcript(
@@ -192,6 +218,78 @@ pub fn run_idkg_and_create_transcript(
         &multisigned_dealings,
         *transcript_creator,
     )
+}
+
+pub fn generate_key_transcript(
+    env: &CanisterThresholdSigTestEnvironment,
+    algorithm_id: AlgorithmId,
+) -> IDkgTranscript {
+    let masked_key_params = env.params_for_random_sharing(algorithm_id);
+
+    let masked_key_transcript =
+        run_idkg_and_create_transcript(&masked_key_params, &env.crypto_components);
+
+    let unmasked_key_params = build_params_from_previous(
+        masked_key_params,
+        IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
+    );
+
+    run_idkg_and_create_transcript(&unmasked_key_params, &env.crypto_components)
+}
+
+pub fn generate_presig_quadruple(
+    env: &CanisterThresholdSigTestEnvironment,
+    algorithm_id: AlgorithmId,
+    key_transcript: &IDkgTranscript,
+) -> PreSignatureQuadruple {
+    let lambda_params = env.params_for_random_sharing(algorithm_id);
+    let lambda_transcript = run_idkg_and_create_transcript(&lambda_params, &env.crypto_components);
+
+    let kappa_transcript = {
+        let masked_kappa_params = env.params_for_random_sharing(algorithm_id);
+
+        let masked_kappa_transcript =
+            run_idkg_and_create_transcript(&masked_kappa_params, &env.crypto_components);
+
+        let unmasked_kappa_params = build_params_from_previous(
+            masked_kappa_params,
+            IDkgTranscriptOperation::ReshareOfMasked(masked_kappa_transcript),
+        );
+
+        run_idkg_and_create_transcript(&unmasked_kappa_params, &env.crypto_components)
+    };
+
+    let kappa_times_lambda_transcript = {
+        let kappa_times_lambda_params = build_params_from_previous(
+            lambda_params.clone(),
+            IDkgTranscriptOperation::UnmaskedTimesMasked(
+                kappa_transcript.clone(),
+                lambda_transcript.clone(),
+            ),
+        );
+
+        run_idkg_and_create_transcript(&kappa_times_lambda_params, &env.crypto_components)
+    };
+
+    let key_times_lambda_transcript = {
+        let key_times_lambda_params = build_params_from_previous(
+            lambda_params,
+            IDkgTranscriptOperation::UnmaskedTimesMasked(
+                key_transcript.clone(),
+                lambda_transcript.clone(),
+            ),
+        );
+
+        run_idkg_and_create_transcript(&key_times_lambda_params, &env.crypto_components)
+    };
+
+    PreSignatureQuadruple::new(
+        kappa_transcript,
+        lambda_transcript,
+        kappa_times_lambda_transcript,
+        key_times_lambda_transcript,
+    )
+    .unwrap_or_else(|error| panic!("failed to create pre-signature quadruple: {:?}", error))
 }
 
 /// Creates a new `IDkgTranscriptParams` with all information copied from a
@@ -260,6 +358,10 @@ impl CanisterThresholdSigTestEnvironment {
         .expect("failed to create resharing/multiplication IDkgTranscriptParams")
     }
 
+    pub fn receivers(&self) -> BTreeSet<NodeId> {
+        self.crypto_components.keys().cloned().collect()
+    }
+
     fn create_crypto_component_with_mega_and_multisign_keys_in_registry(
         &mut self,
         node_id: NodeId,
@@ -292,6 +394,42 @@ impl CanisterThresholdSigTestEnvironment {
             )
             .expect("Could not add MEGa public key to registry");
     }
+}
+
+pub fn random_receiver_for_inputs(inputs: &ThresholdEcdsaSigInputs) -> NodeId {
+    **inputs
+        .receivers()
+        .get()
+        .iter()
+        .choose_multiple(&mut thread_rng(), 1)
+        .get(0)
+        .expect("receivers is empty")
+}
+
+/// Returns a randomly-generate `NodeId` that is *not* in `exclusions`.
+pub fn random_node_id_excluding(exclusions: &BTreeSet<NodeId>) -> NodeId {
+    *random_node_ids_excluding(exclusions, 1)
+        .iter()
+        .next()
+        .expect("we know this is non-empty")
+}
+
+/// Returns `n` randomly-generate `NodeId`s that are *not* in `exclusions`.
+pub fn random_node_ids_excluding(exclusions: &BTreeSet<NodeId>, n: usize) -> BTreeSet<NodeId> {
+    let rng = &mut thread_rng();
+    let mut node_ids = BTreeSet::new();
+    while node_ids.len() < n {
+        let candidate = node_id(rng.gen());
+        if !exclusions.contains(&candidate) {
+            node_ids.insert(candidate);
+        }
+    }
+    assert!(node_ids.is_disjoint(exclusions));
+    node_ids
+}
+
+fn node_id(id: u64) -> NodeId {
+    NodeId::from(PrincipalId::new_node_test_id(id))
 }
 
 fn random_registry_version() -> RegistryVersion {

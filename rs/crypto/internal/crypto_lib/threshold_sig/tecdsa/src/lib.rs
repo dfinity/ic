@@ -1,3 +1,4 @@
+use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
@@ -267,4 +268,84 @@ pub fn privately_verify_dealing(
             recipient_index,
         )
         .map_err(|e| e.into())
+}
+
+// MERGEME: Merge into the appropriate places from here to the "REMOVEME"
+
+impl From<&ExtendedDerivationPath> for DerivationPath {
+    fn from(extended_derivation_path: &ExtendedDerivationPath) -> Self {
+        Self::new_with_principal(
+            extended_derivation_path.caller,
+            &extended_derivation_path.bip32_derivation_path,
+        )
+    }
+}
+
+impl ThresholdEcdsaSigShareInternal {
+    pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
+        serde_cbor::to_vec(self)
+            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    }
+
+    pub fn deserialize(raw: &[u8]) -> ThresholdEcdsaResult<Self> {
+        serde_cbor::from_slice::<Self>(raw)
+            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    }
+}
+
+// REMOVEME: Remove here to EOF
+
+pub struct DerivationPath {}
+
+use ic_types::PrincipalId;
+
+impl DerivationPath {
+    pub fn new_with_principal(_principal: PrincipalId, _bip32: &[u32]) -> Self {
+        Self {}
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ThresholdEcdsaSigShareInternal {
+    pub foo: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEcdsaGenerateSigShareInternalError {}
+#[allow(clippy::too_many_arguments)]
+pub fn sign_share(
+    _derivation_path: &DerivationPath,
+    _hashed_message: &[u8],
+    _nonce: Randomness,
+    _presig_transcript: &IDkgTranscriptInternal,
+    _lambda: &CommitmentOpening,
+    _kappa_times_lambda: &CommitmentOpening,
+    _key_times_lambda: &CommitmentOpening,
+    _algorithm_id: AlgorithmId,
+) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaGenerateSigShareInternalError> {
+    Ok(ThresholdEcdsaSigShareInternal { foo: vec![3, 1, 4] })
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ThresholdEcdsaCombinedSigInternal {
+    pub foo: Vec<u8>,
+}
+impl ThresholdEcdsaCombinedSigInternal {
+    pub fn serialize(&self) -> Vec<u8> {
+        self.foo.clone()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEcdsaCombineSigSharesInternalError {}
+#[allow(clippy::too_many_arguments)]
+pub fn combine_sig_shares(
+    _derivation_path: &DerivationPath,
+    _nonce: Randomness,
+    _presig_transcript: &IDkgTranscriptInternal,
+    _reconstruction_threshold: NumberOfNodes,
+    _sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
+    _algorithm_id: AlgorithmId,
+) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesInternalError> {
+    Ok(ThresholdEcdsaCombinedSigInternal { foo: vec![1, 3, 7] })
 }

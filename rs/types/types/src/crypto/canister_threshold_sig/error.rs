@@ -19,12 +19,16 @@ macro_rules! impl_display_using_debug {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PresignatureQuadrupleCreationError {
     WrongTypes,
+    InconsistentAlgorithms,
+    InconsistentReceivers,
 }
 impl_display_using_debug!(PresignatureQuadrupleCreationError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaSigInputsCreationError {
     NonmatchingTranscriptIds,
+    InconsistentAlgorithms,
+    InconsistentReceivers,
 }
 impl_display_using_debug!(ThresholdEcdsaSigInputsCreationError);
 
@@ -66,11 +70,11 @@ pub enum IDkgCreateTranscriptError {
     },
     UnsatisfiedCollectionThreshold {
         threshold: u32,
-        dealer_count: u32,
+        dealer_count: usize,
     },
     UnsatisfiedVerificationThreshold {
         threshold: u32,
-        signature_count: u32,
+        signature_count: usize,
         dealer_id: NodeId,
     },
     InvalidMultisignature {
@@ -178,7 +182,12 @@ pub enum ThresholdEcdsaVerifySigShareError {}
 impl_display_using_debug!(ThresholdEcdsaVerifySigShareError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaSignShareError {}
+pub enum ThresholdEcdsaSignShareError {
+    InternalError { internal_error: String },
+    NotAReceiver,
+    SerializationError { internal_error: String },
+    SecretSharesNotFound { commitment_string: String },
+}
 impl_display_using_debug!(ThresholdEcdsaSignShareError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -186,5 +195,10 @@ pub enum ThresholdEcdsaVerifyCombinedSignatureError {}
 impl_display_using_debug!(ThresholdEcdsaVerifyCombinedSignatureError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaCombineSigSharesError {}
+pub enum ThresholdEcdsaCombineSigSharesError {
+    InternalError { internal_error: String },
+    UnsatisfiedReconstructionThreshold { threshold: u32, share_count: usize },
+    SerializationError { internal_error: String },
+    SignerNotAllowed { node_id: NodeId },
+}
 impl_display_using_debug!(ThresholdEcdsaCombineSigSharesError);

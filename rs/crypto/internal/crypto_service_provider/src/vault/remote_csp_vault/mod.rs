@@ -14,15 +14,16 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, ThresholdEcdsaSignShareError,
 };
+use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
-use ic_types::{NodeId, NodeIndex, NumberOfNodes};
+use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use tecdsa::{
     IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey,
+    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 
 mod tarpc_csp_vault_client;
@@ -148,6 +149,19 @@ pub trait TarpcCspVault {
     async fn idkg_gen_mega_key_pair(
         algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
+
+    // Corresponds to `ThresholdEcdsaSignerCspVault.ecdsa_sign_share`
+    #[allow(clippy::too_many_arguments)]
+    async fn ecdsa_sign_share(
+        derivation_path: ExtendedDerivationPath,
+        hashed_message: Vec<u8>,
+        nonce: Randomness,
+        kappa_unmasked: IDkgTranscriptInternal,
+        lambda_masked: IDkgTranscriptInternal,
+        kappa_times_lambda: IDkgTranscriptInternal,
+        key_times_lambda: IDkgTranscriptInternal,
+        algorithm_id: AlgorithmId,
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
 }
 
 pub async fn run_csp_vault_server(sks_dir: &Path, socket_path: &Path) {

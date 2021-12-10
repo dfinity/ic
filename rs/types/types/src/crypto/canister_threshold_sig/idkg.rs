@@ -12,6 +12,7 @@ use ic_crypto_internal_types::NodeIndex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
+use std::hash::{Hash, Hasher};
 
 pub mod conversions;
 pub use conversions::*;
@@ -49,7 +50,7 @@ impl IDkgTranscriptId {
 }
 
 /// A set of receivers for IDkg.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IDkgReceivers {
     receivers: BTreeSet<NodeId>,
 
@@ -156,6 +157,22 @@ impl IDkgReceivers {
         let faulty = number_of_nodes_from_usize(get_faults_tolerated(self.count().get() as usize))
             .expect("by construction, this fits in a u32");
         self.reconstruction_threshold() + faulty
+    }
+}
+
+impl PartialEq for IDkgReceivers {
+    /// Equality is determined by comparison of the set of nodes
+    /// *and* their indices.
+    fn eq(&self, rhs: &Self) -> bool {
+        self.iter().collect::<BTreeMap<_, _>>() == rhs.iter().collect()
+    }
+}
+
+impl Eq for IDkgReceivers {}
+
+impl Hash for IDkgReceivers {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.iter().collect::<BTreeMap<_, _>>().hash(state)
     }
 }
 

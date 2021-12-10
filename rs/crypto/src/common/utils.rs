@@ -1,6 +1,6 @@
 //! Static crypto utility methods.
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::{CspKeyGenerator, IDkgProtocolCspClient, NiDkgCspClient};
+use ic_crypto_internal_csp::api::{CspIDkgProtocol, CspKeyGenerator, NiDkgCspClient};
 use ic_crypto_internal_csp::keygen::public_key_hash_as_key_id;
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};

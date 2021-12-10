@@ -5,7 +5,8 @@ use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError,
     CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault,
-    NiDkgCspVault, SecretKeyStoreCspVault, ThresholdSignatureCspVault,
+    NiDkgCspVault, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
+    ThresholdSignatureCspVault,
 };
 use crate::vault::remote_csp_vault::TarpcCspVaultClient;
 use crate::TlsHandshakeCspVault;
@@ -24,10 +25,11 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, ThresholdEcdsaSignShareError,
 };
+use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
-use ic_types::{NodeId, NumberOfNodes};
+use ic_types::{NodeId, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -35,7 +37,7 @@ use tarpc::serde_transport;
 use tarpc::tokio_serde::formats::Bincode;
 use tecdsa::{
     IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey,
+    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use tokio::net::UnixStream;
 use tokio_util::codec::length_delimited::LengthDelimitedCodec;
@@ -364,6 +366,37 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         )
         .unwrap_or_else(|e| {
             Err(CspCreateMEGaKeyError::CspServerError {
+                internal_error: e.to_string(),
+            })
+        })
+    }
+}
+
+impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
+    fn ecdsa_sign_share(
+        &self,
+        derivation_path: &ExtendedDerivationPath,
+        hashed_message: &[u8],
+        nonce: &Randomness,
+        kappa_unmasked: &IDkgTranscriptInternal,
+        lambda_masked: &IDkgTranscriptInternal,
+        kappa_times_lambda: &IDkgTranscriptInternal,
+        key_times_lambda: &IDkgTranscriptInternal,
+        algorithm_id: AlgorithmId,
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
+        block_on(self.tarpc_csp_client.ecdsa_sign_share(
+            tarpc::context::current(),
+            derivation_path.clone(),
+            hashed_message.to_vec(),
+            *nonce,
+            kappa_unmasked.clone(),
+            lambda_masked.clone(),
+            kappa_times_lambda.clone(),
+            key_times_lambda.clone(),
+            algorithm_id,
+        ))
+        .unwrap_or_else(|e| {
+            Err(ThresholdEcdsaSignShareError::InternalError {
                 internal_error: e.to_string(),
             })
         })

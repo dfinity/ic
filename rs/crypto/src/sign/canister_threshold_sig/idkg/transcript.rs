@@ -1,8 +1,8 @@
 //! Implementations of IDkgProtocol related to transcripts
 use crate::sign::canister_threshold_sig::idkg::utils::get_mega_pubkey;
 use crate::sign::multi_sig::MultiSigVerifierInternal;
+use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_crypto_internal_csp::api::CspSigner;
-use ic_crypto_internal_csp::api::IDkgProtocolCspClient;
 use ic_interfaces::registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateTranscriptError, IDkgLoadTranscriptError,
@@ -13,14 +13,14 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 };
 use ic_types::{NodeId, NodeIndex, RegistryVersion};
 use std::collections::BTreeMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::sync::Arc;
 use tecdsa::{
     IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal,
 };
 
-pub fn create_transcript<C: IDkgProtocolCspClient + CspSigner>(
+pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,
     registry: &Arc<dyn RegistryClient>,
     params: &IDkgTranscriptParams,
@@ -74,7 +74,7 @@ pub fn create_transcript<C: IDkgProtocolCspClient + CspSigner>(
     })
 }
 
-pub fn load_transcript<C: IDkgProtocolCspClient>(
+pub fn load_transcript<C: CspIDkgProtocol>(
     csp_client: &C,
     self_node_id: &NodeId,
     registry: &Arc<dyn RegistryClient>,
@@ -120,10 +120,7 @@ fn ensure_sufficient_dealings_collected(
     if dealings.len() < params.collection_threshold().get() as usize {
         Err(IDkgCreateTranscriptError::UnsatisfiedCollectionThreshold {
             threshold: params.collection_threshold().get(),
-            dealer_count: dealings
-                .len()
-                .try_into()
-                .expect("this was checked in the ctor"),
+            dealer_count: dealings.len(),
         })
     } else {
         Ok(())
@@ -167,11 +164,7 @@ fn ensure_sufficient_signatures_collected(
             return Err(
                 IDkgCreateTranscriptError::UnsatisfiedVerificationThreshold {
                     threshold: params.verification_threshold().get(),
-                    signature_count: dealing
-                        .signers
-                        .len()
-                        .try_into()
-                        .expect("if this is an error, we know it's small enough for 32 bits"),
+                    signature_count: dealing.signers.len(),
                     dealer_id: *dealer,
                 },
             );
@@ -181,7 +174,7 @@ fn ensure_sufficient_signatures_collected(
     Ok(())
 }
 
-fn verify_multisignatures<C: IDkgProtocolCspClient + CspSigner>(
+fn verify_multisignatures<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,
     registry: &Arc<dyn RegistryClient>,
     dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,

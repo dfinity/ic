@@ -11,15 +11,16 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, ThresholdEcdsaSignShareError,
 };
+use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
-use ic_types::{NodeId, NodeIndex, NumberOfNodes};
+use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use tecdsa::{
     IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey,
+    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -109,6 +110,7 @@ pub trait CspVault:
     + ThresholdSignatureCspVault
     + NiDkgCspVault
     + IDkgProtocolCspVault
+    + ThresholdEcdsaSignerCspVault
     + SecretKeyStoreCspVault
     + TlsHandshakeCspVault
 {
@@ -121,6 +123,7 @@ impl<T> CspVault for T where
         + ThresholdSignatureCspVault
         + NiDkgCspVault
         + IDkgProtocolCspVault
+        + ThresholdEcdsaSignerCspVault
         + SecretKeyStoreCspVault
         + TlsHandshakeCspVault
 {
@@ -413,7 +416,7 @@ pub trait TlsHandshakeCspVault: Send + Sync {
     fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError>;
 }
 
-/// Operations of `CspVault` related to I-DKG (cf. `IDkgProtocolCspClient`).
+/// Operations of `CspVault` related to I-DKG (cf. `CspIDkgProtocol`).
 pub trait IDkgProtocolCspVault {
     /// Generate an IDkg dealing.
     fn idkg_create_dealing(
@@ -442,4 +445,22 @@ pub trait IDkgProtocolCspVault {
         &self,
         algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
+}
+
+/// Operations of `CspVault` related to threshold-ECDSA (cf.
+/// `CspThresholdEcdsaSigner`).
+pub trait ThresholdEcdsaSignerCspVault {
+    /// Generate a signature share.
+    #[allow(clippy::too_many_arguments)]
+    fn ecdsa_sign_share(
+        &self,
+        derivation_path: &ExtendedDerivationPath,
+        hashed_message: &[u8],
+        nonce: &Randomness,
+        kappa_unmasked: &IDkgTranscriptInternal,
+        lambda_masked: &IDkgTranscriptInternal,
+        kappa_times_lambda: &IDkgTranscriptInternal,
+        key_times_lambda: &IDkgTranscriptInternal,
+        algorithm_id: AlgorithmId,
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
 }
