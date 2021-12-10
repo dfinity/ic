@@ -10,7 +10,9 @@ use ic_types::crypto::canister_threshold_sig::{
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, PrincipalId};
+use std::collections::BTreeMap;
 
+#[allow(dead_code)]
 pub fn sign_share(
     _inputs: &ThresholdEcdsaSigInputs,
 ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
@@ -27,9 +29,10 @@ pub fn verify_sig_share(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn combine_sig_shares(
     _inputs: &ThresholdEcdsaSigInputs,
-    _shares: &[ThresholdEcdsaSigShare],
+    _shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
 ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
     Ok(ThresholdEcdsaCombinedSignature { signature: vec![] })
 }

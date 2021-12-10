@@ -5,7 +5,8 @@ use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError,
     CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault,
-    NiDkgCspVault, SecretKeyStoreCspVault, ThresholdSignatureCspVault,
+    NiDkgCspVault, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
+    ThresholdSignatureCspVault,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::remote_csp_vault::TarpcCspVault;
@@ -26,10 +27,11 @@ use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::new_logger;
 use ic_logger::replica_logger::no_op_logger;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, ThresholdEcdsaSignShareError,
 };
+use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
-use ic_types::{NodeId, NumberOfNodes};
+use ic_types::{NodeId, NumberOfNodes, Randomness};
 use rand::rngs::OsRng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -41,7 +43,7 @@ use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{context, serde_transport, server::Channel};
 use tecdsa::{
     IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey,
+    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use tokio::net::UnixListener;
 use tokio_util::codec::length_delimited::LengthDelimitedCodec;
@@ -262,6 +264,31 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
         algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
         self.local_csp_vault.idkg_gen_mega_key_pair(algorithm_id)
+    }
+
+    // `ThresholdEcdsaSignerCspVault`-methods
+    async fn ecdsa_sign_share(
+        self,
+        _: context::Context,
+        derivation_path: ExtendedDerivationPath,
+        hashed_message: Vec<u8>,
+        nonce: Randomness,
+        kappa_unmasked: IDkgTranscriptInternal,
+        lambda_masked: IDkgTranscriptInternal,
+        kappa_times_lambda: IDkgTranscriptInternal,
+        key_times_lambda: IDkgTranscriptInternal,
+        algorithm_id: AlgorithmId,
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
+        self.local_csp_vault.ecdsa_sign_share(
+            &derivation_path,
+            &hashed_message,
+            &nonce,
+            &kappa_unmasked,
+            &lambda_masked,
+            &kappa_times_lambda,
+            &key_times_lambda,
+            algorithm_id,
+        )
     }
 }
 

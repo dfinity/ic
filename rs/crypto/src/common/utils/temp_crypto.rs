@@ -503,7 +503,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for TempCryptoComponent
     fn combine_sig_shares(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
-        shares: &[ThresholdEcdsaSigShare],
+        shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
     ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
         self.crypto_component.combine_sig_shares(inputs, shares)
     }

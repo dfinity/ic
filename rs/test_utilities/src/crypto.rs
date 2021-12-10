@@ -520,7 +520,7 @@ impl ThresholdEcdsaSigVerifier for CryptoReturningOk {
     fn combine_sig_shares(
         &self,
         _inputs: &ThresholdEcdsaSigInputs,
-        _shares: &[ThresholdEcdsaSigShare],
+        _shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
     ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
         Ok(ThresholdEcdsaCombinedSignature { signature: vec![] })
     }

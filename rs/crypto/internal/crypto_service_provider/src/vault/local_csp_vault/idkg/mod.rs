@@ -200,7 +200,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
     }
 }
 
-fn commitment_key_id(commitment: &PolynomialCommitment) -> KeyId {
+pub(crate) fn commitment_key_id(commitment: &PolynomialCommitment) -> KeyId {
     let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(
         COMMITMENT_KEY_ID_DOMAIN.to_string(),
     ));

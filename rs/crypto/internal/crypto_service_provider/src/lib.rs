@@ -21,9 +21,10 @@ pub use crate::vault::local_csp_vault::LocalCspVault;
 pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 
 use crate::api::{
-    CspKeyGenerator, CspSecretKeyStoreChecker, CspSigner, CspTlsClientHandshake,
-    CspTlsHandshakeSignerProvider, CspTlsServerHandshake, IDkgProtocolCspClient, NiDkgCspClient,
-    NodePublicKeyData, ThresholdSignatureCspClient,
+    CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker, CspSigner,
+    CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspTlsClientHandshake,
+    CspTlsHandshakeSignerProvider, CspTlsServerHandshake, NiDkgCspClient, NodePublicKeyData,
+    ThresholdSignatureCspClient,
 };
 use crate::keygen::{forward_secure_key_id, public_key_hash_as_key_id};
 use crate::public_key_store::read_node_public_keys;
@@ -55,7 +56,9 @@ pub trait CryptoServiceProvider:
     + CspKeyGenerator
     + ThresholdSignatureCspClient
     + NiDkgCspClient
-    + IDkgProtocolCspClient
+    + CspIDkgProtocol
+    + CspThresholdEcdsaSigner
+    + CspThresholdEcdsaSigVerifier
     + CspSecretKeyStoreChecker
     + CspTlsServerHandshake
     + CspTlsClientHandshake
@@ -68,7 +71,9 @@ impl<T> CryptoServiceProvider for T where
     T: CspSigner
         + CspKeyGenerator
         + ThresholdSignatureCspClient
-        + IDkgProtocolCspClient
+        + CspIDkgProtocol
+        + CspThresholdEcdsaSigner
+        + CspThresholdEcdsaSigVerifier
         + NiDkgCspClient
         + CspSecretKeyStoreChecker
         + CspTlsServerHandshake
