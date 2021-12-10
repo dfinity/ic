@@ -47,6 +47,7 @@ class Experiment1(experiment.Experiment):
         super().__init__(
             num_workload_gen=FLAGS.num_workload_generators, request_type="call" if FLAGS.use_updates else "query"
         )
+        self.init()
         self.use_updates = FLAGS.use_updates
         print(f"Update calls: {self.use_updates}")
         self.init_experiment()
