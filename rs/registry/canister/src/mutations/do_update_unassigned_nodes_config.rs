@@ -1,4 +1,8 @@
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    mutations::common::{check_replica_version_is_blessed, encode_or_panic},
+    registry::Registry,
+};
 
 use candid::{CandidType, Deserialize};
 use ic_nns_common::registry::decode_or_panic;
@@ -39,6 +43,8 @@ impl Registry {
                 None => current_replica_version,
             },
         };
+
+        check_replica_version_is_blessed(self, &config.replica_version);
 
         let mutations = vec![RegistryMutation {
             mutation_type: registry_mutation::Type::Upsert as i32,

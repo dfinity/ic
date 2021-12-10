@@ -1,6 +1,6 @@
 use crate::{
     common::LOG_PREFIX,
-    mutations::common::{decode_registry_value, encode_or_panic},
+    mutations::common::{check_replica_version_is_blessed, decode_registry_value, encode_or_panic},
     registry::Registry,
 };
 
@@ -9,10 +9,8 @@ use candid::{CandidType, Deserialize};
 use dfn_core::println;
 
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_protobuf::registry::{
-    replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord,
-};
-use ic_registry_keys::{make_blessed_replica_version_key, make_subnet_record_key};
+use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_registry_keys::make_subnet_record_key;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 
 impl Registry {
@@ -22,36 +20,7 @@ impl Registry {
             LOG_PREFIX, payload
         );
 
-        let blessed_replica_key = make_blessed_replica_version_key();
-        // Get the current list of blessed replica versions
-        if let Some(RegistryValue {
-            value: blessed_list_vec,
-            version,
-            deletion_marker: _,
-        }) = self.get(blessed_replica_key.as_bytes(), self.latest_version())
-        {
-            let blessed_list =
-                decode_registry_value::<BlessedReplicaVersions>(blessed_list_vec.clone());
-            // Verify that the new one is blessed
-            assert!(
-                blessed_list
-                    .blessed_version_ids
-                    .iter()
-                    .any(|v| v == &payload.replica_version_id),
-                "Attempt to change the replica version of subnet {} to '{}' is rejected, \
-                because that version is NOT blessed. The list of blessed replica versions, at version {}, \
-                is: {}.",
-                payload.subnet_id,
-                payload.replica_version_id,
-                version,
-                blessed_versions_to_string(&blessed_list)
-            );
-        } else {
-            panic!(
-                "Error while fetching the list of blessed replica versions record: {}",
-                payload.replica_version_id
-            )
-        }
+        check_replica_version_is_blessed(self, &payload.replica_version_id);
 
         // Get the subnet record
         let subnet_key = make_subnet_record_key(SubnetId::from(payload.subnet_id));
@@ -90,8 +59,4 @@ pub struct UpdateSubnetReplicaVersionPayload {
     pub subnet_id: PrincipalId, // SubnetId See NNS-73
     /// The new Replica version to use.
     pub replica_version_id: String,
-}
-
-fn blessed_versions_to_string(blessed: &BlessedReplicaVersions) -> String {
-    format!("[{}]", blessed.blessed_version_ids.join(", "))
 }
