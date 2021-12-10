@@ -27,7 +27,7 @@ fn test_submit_update_unassigned_nodes_config_proposal() {
         let ssh_keys = Some(vec!["key0".to_string(), "key1".to_string()]);
         // A registry invariant guards against exceeding the max number of keys.
         let ssh_keys_invalid = Some(vec!["key_invalid".to_string(); MAX_NUM_SSH_KEYS + 1]);
-        let replica_version = Some("replica_version".to_string());
+        let replica_version = Some("version_42".to_string());
 
         let payload = UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: ssh_keys.clone(),

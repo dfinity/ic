@@ -50,7 +50,7 @@ impl Registry {
         // Endpoint invariants
         result = result.and(check_endpoint_invariants(&snapshot, false));
 
-        // Unassigned node SSH keys invariants
+        // Unassigned node invariants
         result = result.and(check_unassigned_nodes_config_invariants(&snapshot));
 
         if let Err(e) = result {

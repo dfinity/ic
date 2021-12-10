@@ -113,7 +113,3 @@ pub struct BlessReplicaVersionPayload {
     /// 'release_package_url'
     pub release_package_sha256_hex: String,
 }
-
-pub fn blessed_versions_to_string(blessed: &BlessedReplicaVersions) -> String {
-    format!("[{}]", blessed.blessed_version_ids.join(", "))
-}
