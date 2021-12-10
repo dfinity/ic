@@ -9,6 +9,7 @@ clap = "3.0.0-beta.2"
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-canister-client = { path = "../canister_client" }
+ic-canister-sandbox-backend-lib = { path = "../canister_sandbox/backend_lib" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-message = { path = "../consensus/message" }

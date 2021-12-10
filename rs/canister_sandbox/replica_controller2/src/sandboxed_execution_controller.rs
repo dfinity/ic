@@ -21,7 +21,7 @@ use std::sync::{
 
 use crate::active_execution_state_registry::ActiveExecutionStateRegistry;
 use crate::controller_service_impl::ControllerServiceImpl;
-use crate::launch_as_process::{create_sandbox_path_and_args, create_sandbox_process};
+use crate::launch_as_process::{create_sandbox_argv, create_sandbox_process};
 use std::process::Child;
 use std::process::ExitStatus;
 use std::thread;
@@ -113,10 +113,8 @@ impl std::fmt::Debug for OpenedState {
 pub struct SandboxedExecutionController {
     backends: Arc<Mutex<HashMap<CanisterId, SandboxProcess>>>,
     logger: ReplicaLogger,
-    /// Path to the `canister_sandbox` executable.
-    sandbox_exec_path: String,
-    /// Arguments to be passed to `canister_sandbox` which are the same for all
-    /// canisters.
+    /// Executuable and arguments to be passed to `canister_sandbox` which are
+    /// the same for all canisters.
     sandbox_exec_argv: Vec<String>,
     compile_count_for_testing: AtomicU64,
 }
@@ -125,12 +123,11 @@ impl SandboxedExecutionController {
     /// Create a new sandboxed execution controller. It provides the
     /// same interface as the `WasmExecutor`.
     pub fn new(logger: ReplicaLogger) -> Self {
-        let (sandbox_exec_path, sandbox_exec_argv) = create_sandbox_path_and_args();
+        let sandbox_exec_argv = create_sandbox_argv().expect("No canister_sandbox binary found");
         Self {
             backends: Arc::new(Mutex::new(HashMap::new())),
             logger,
             compile_count_for_testing: AtomicU64::new(0),
-            sandbox_exec_path,
             sandbox_exec_argv,
         }
     }
@@ -151,7 +148,6 @@ impl SandboxedExecutionController {
             let (sandbox_service, child_handle) = create_sandbox_process(
                 controller_service,
                 canister_id,
-                &self.sandbox_exec_path,
                 self.sandbox_exec_argv.clone(),
             )
             .unwrap();
@@ -435,20 +431,15 @@ mod tests {
     #[test]
     #[should_panic(expected = "exited due to signal!")]
     fn controller_handles_killed_sandbox_process() {
-        let (sandbox_exec_path, sandbox_exec_argv) = create_sandbox_path_and_args();
+        let sandbox_exec_argv = create_sandbox_argv().unwrap();
         let logger = no_op_logger();
         let canister_id = CanisterId::from_u64(42);
         let reg = Arc::new(ActiveExecutionStateRegistry::new());
 
         let controller_service = ControllerServiceImpl::new(Arc::clone(&reg), logger);
 
-        let (_sandbox_service, mut child_handle) = create_sandbox_process(
-            controller_service,
-            &canister_id,
-            &sandbox_exec_path,
-            sandbox_exec_argv,
-        )
-        .unwrap();
+        let (_sandbox_service, mut child_handle) =
+            create_sandbox_process(controller_service, &canister_id, sandbox_exec_argv).unwrap();
 
         let pid = child_handle.id();
 
