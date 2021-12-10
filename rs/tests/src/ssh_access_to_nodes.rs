@@ -52,7 +52,7 @@ pub fn root_cannot_authenticate(handle: IcHandle, ctx: &fondue::pot::Context) {
     let unassigned_node = get_random_unassigned_node_endpoint(&handle, &mut rng);
     block_on(nns_node.assert_ready(ctx));
     block_on(app_node.assert_ready(ctx));
-    //block_on(unassigned_node.assert_ready(ctx));
+    block_on(unassigned_node.assert_ready(ctx));
 
     let nns_node_ip: IpAddr = nns_node.ip_address().unwrap();
     let app_node_ip: IpAddr = app_node.ip_address().unwrap();

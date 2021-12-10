@@ -13,7 +13,7 @@ use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::SubnetId;
 use slog::Logger;
 use std::{
-    net::IpAddr,
+    net::{IpAddr, TcpStream},
     time::{Duration, Instant},
 };
 use tokio::time;
@@ -261,8 +261,6 @@ impl<'a> IcEndpoint {
             .send()
             .await;
 
-        // Do not fail, as an error may be retriable.
-        // Keep trying until the time limit is not exceeded.
         if let Err(ref e) = response {
             println!("Response error: {:?}", e);
             return false;
@@ -282,9 +280,10 @@ impl<'a> IcEndpoint {
         Some(ReplicaHealthStatus::Healthy) == status.replica_health_status
     }
 
-    /// Returns [IcEndpoint] as soon as it's ready, panics if it didn't come up
-    /// before a given deadline. Readiness is check through active polling
-    /// of the public API.
+    /// Returns as soon as [IcEndpoint] is ready, panics if it didn't come up
+    /// before a given deadline. Readiness of assigned nodes is checked through
+    /// active polling of the public API. Readiness of unassigned nodes is
+    /// checked via establishing a connection to port 22.
     pub async fn assert_ready(&self, ctx: &fondue::pot::Context) {
         let mut interval = time::interval(Duration::from_secs(1));
         loop {
@@ -293,7 +292,18 @@ impl<'a> IcEndpoint {
                 "Checking readiness of [{:?}]...",
                 self.url.as_str()
             );
-            if self.healthy().await {
+
+            // If the node is a member of the subnet, check if it is healthy. Otherwise,
+            // check if it is reachable.
+            let ready = match &self.subnet {
+                Some(_) => self.healthy().await,
+                None => {
+                    let ip_str = format!("[{}]:22", self.ip_address().unwrap());
+                    TcpStream::connect(ip_str).is_ok()
+                }
+            };
+
+            if ready {
                 info!(ctx.logger, "Node [{:?}] is ready!", self.url.as_str());
                 return;
             }
