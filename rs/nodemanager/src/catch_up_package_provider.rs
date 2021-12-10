@@ -67,8 +67,8 @@ impl CatchUpPackageProvider {
         // Randomize the order of peer_urls
         peer_urls.shuffle(&mut rand::thread_rng());
 
-        let param = latest_cup.as_ref().map(CatchUpPackageParam::from);
         for url in peer_urls.into_iter().flatten() {
+            let param = latest_cup.as_ref().map(CatchUpPackageParam::from);
             let cup = self
                 .fetch_verify_and_deserialize_catch_up_package(url, param, subnet_id)
                 .await;
