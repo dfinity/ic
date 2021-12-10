@@ -13,6 +13,7 @@ use openssl::ssl::{Ssl, SslAcceptor};
 use rand::{CryptoRng, Rng};
 use std::collections::HashSet;
 use std::pin::Pin;
+use std::sync::Arc;
 use tokio::net::TcpStream;
 
 #[cfg(test)]
@@ -59,7 +60,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
     /// Creates an Acceptor for TLS. This allows to set up a TLS connection as a
     /// server. The `self_cert` is used as server certificate and the
     /// corresponding private key must be in the secret key store.
@@ -82,7 +83,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
             None => ClientAuthentication::NoAuthentication,
         };
         Ok(tls_acceptor(
-            &key_from_secret_key_store(&*self.sks_read_lock(), &self_cert)?,
+            &key_from_secret_key_store(Arc::clone(&self.csp_vault), &self_cert)?,
             self_cert.as_x509(),
             trusted_client_certs_x509,
         )?)

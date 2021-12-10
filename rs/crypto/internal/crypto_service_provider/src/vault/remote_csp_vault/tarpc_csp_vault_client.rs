@@ -1,5 +1,6 @@
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
-use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
+use crate::secret_key_store::{Scope, SecretKeyStoreError};
+use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSecretKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError,
@@ -170,6 +171,19 @@ impl SecretKeyStoreCspVault for RemoteCspVault {
                 .sks_contains(tarpc::context::current(), *key_id),
         )
         .unwrap_or(false)
+    }
+
+    fn insert_secret_key(
+        &self,
+        _id: KeyId,
+        _key: CspSecretKey,
+        _scope: Option<Scope>,
+    ) -> Result<(), SecretKeyStoreError> {
+        unimplemented!("RemoteCspVault does not support insertion of external secret keys")
+    }
+
+    fn get_secret_key(&self, _id: &KeyId) -> Option<CspSecretKey> {
+        unimplemented!("RemoteCspVault does not support retrieval of secret keys")
     }
 }
 

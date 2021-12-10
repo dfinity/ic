@@ -30,6 +30,7 @@ use crate::public_key_store::read_node_public_keys;
 use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspPublicKey;
+use crate::vault::api::CspVault;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
@@ -121,12 +122,14 @@ impl PublicKeyData {
 }
 
 /// Implements the CryptoServiceProvider for an RNG and a SecretKeyStore.
-pub struct Csp<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> {
+pub struct Csp<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> {
     // CSPRNG stands for cryptographically secure random number generator.
     csprng: CspRwLock<R>,
-    csp_vault: Arc<LocalCspVault<R, S, C>>,
+    csp_vault: Arc<dyn CspVault>,
     public_key_data: PublicKeyData,
     logger: ReplicaLogger,
+    // TODO(CRP-1325): remove S, C generics.
+    _marker: std::marker::PhantomData<(S, C)>,
 }
 
 /// This lock provides the option to add metrics about lock acquisition times.
@@ -183,17 +186,9 @@ impl<T> CspRwLock<T> {
 }
 
 // CRP-1248: inline the following methods
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
     fn rng_write_lock(&self) -> RwLockWriteGuard<'_, R> {
         self.csprng.write()
-    }
-
-    fn sks_write_lock(&self) -> RwLockWriteGuard<'_, S> {
-        self.csp_vault.sks_write_lock()
-    }
-
-    fn sks_read_lock(&self) -> RwLockReadGuard<'_, S> {
-        self.csp_vault.sks_read_lock()
     }
 }
 
@@ -231,11 +226,14 @@ impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
                 new_logger!(&logger),
             )),
             logger,
+            _marker: std::marker::PhantomData,
         }
     }
 }
 
-impl<R: Rng + CryptoRng + Clone> Csp<R, ProtoSecretKeyStore, VolatileSecretKeyStore> {
+impl<R: 'static + Rng + CryptoRng + Send + Sync + Clone>
+    Csp<R, ProtoSecretKeyStore, VolatileSecretKeyStore>
+{
     /// Creates a crypto service provider for testing.
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the random
@@ -254,11 +252,12 @@ impl<R: Rng + CryptoRng + Clone> Csp<R, ProtoSecretKeyStore, VolatileSecretKeySt
                 ProtoSecretKeyStore::open(&config.crypto_root, SKS_DATA_FILENAME, None),
             )),
             logger: no_op_logger(),
+            _marker: std::marker::PhantomData,
         }
     }
 }
 
-impl<R: Rng + CryptoRng> Csp<R, VolatileSecretKeyStore, VolatileSecretKeyStore> {
+impl<R: Rng + CryptoRng + Send + Sync> Csp<R, VolatileSecretKeyStore, VolatileSecretKeyStore> {
     /// Resets public key data according to the given `NodePublicKeys`.
     ///
     /// Note: This is for testing only and MUST NOT be used in production.
@@ -267,7 +266,9 @@ impl<R: Rng + CryptoRng> Csp<R, VolatileSecretKeyStore, VolatileSecretKeyStore> 
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NodePublicKeyData for Csp<R, S, C> {
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NodePublicKeyData
+    for Csp<R, S, C>
+{
     fn node_public_keys(&self) -> NodePublicKeys {
         self.public_key_data.node_public_keys.clone()
     }
@@ -289,7 +290,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NodePublicKeyData
     }
 }
 
-impl<R: Rng + CryptoRng + Clone, S: SecretKeyStore> Csp<R, S, VolatileSecretKeyStore> {
+impl<R: 'static + Rng + CryptoRng + Send + Sync + Clone, S: 'static + SecretKeyStore>
+    Csp<R, S, VolatileSecretKeyStore>
+{
     /// Creates a crypto service provider for testing.
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the secret
@@ -303,6 +306,7 @@ impl<R: Rng + CryptoRng + Clone, S: SecretKeyStore> Csp<R, S, VolatileSecretKeyS
             public_key_data,
             csp_vault: Arc::new(LocalCspVault::new_for_test(csprng, secret_key_store)),
             logger: no_op_logger(),
+            _marker: std::marker::PhantomData,
         }
     }
 }

@@ -8,7 +8,6 @@ use crate::api::{NiDkgCspClient, NodePublicKeyData};
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
-use crate::vault::api::NiDkgCspVault;
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as clib;
@@ -37,7 +36,9 @@ pub const NIDKG_FS_SCOPE: Scope = Scope::Const(ConstScope::NiDkgFsEncryptionKeys
 /// Non-interactive distributed key generation client
 ///
 /// Please see the trait definition for full documentation.
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspClient for Csp<R, S, C> {
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspClient
+    for Csp<R, S, C>
+{
     /// Creates a key pair for encrypting threshold key shares in transmission
     /// from dealers to receivers.
     fn create_forward_secure_key_pair(

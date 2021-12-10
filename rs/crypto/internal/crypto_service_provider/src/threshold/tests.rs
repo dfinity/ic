@@ -17,7 +17,6 @@ use strum::IntoEnumIterator;
 pub mod util {
     use super::*;
     use crate::api::CspThresholdSignError;
-    use crate::vault::api::ThresholdSignatureCspVault;
     use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_csp_pub_coeffs;
 
     /// Test that a set of threshold signatures behaves correctly.
@@ -37,7 +36,11 @@ pub mod util {
     ///   provider, which contains the secret key, and the key identifier.
     /// * `seed` is a source of randomness.
     /// * `message` is a test message.
-    pub fn test_threshold_signatures<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore>(
+    pub fn test_threshold_signatures<
+        R: Rng + CryptoRng + Send + Sync,
+        S: SecretKeyStore,
+        C: SecretKeyStore,
+    >(
         public_coefficients: &CspPublicCoefficients,
         signers: &[(&Csp<R, S, C>, KeyId)],
         seed: Randomness,

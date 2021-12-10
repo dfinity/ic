@@ -7,7 +7,6 @@
 use crate::api::{CspCreateMEGaKeyError, IDkgProtocolCspClient};
 use crate::keygen::mega_key_id;
 use crate::secret_key_store::SecretKeyStore;
-use crate::vault::api::IDkgProtocolCspVault;
 use crate::Csp;
 use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;
@@ -29,7 +28,7 @@ pub const IDKG_MEGA_SCOPE: Scope = Scope::Const(ConstScope::IDkgMEGaEncryptionKe
 /// Interactive distributed key generation client
 ///
 /// Please see the trait definition for full documentation.
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> IDkgProtocolCspClient
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDkgProtocolCspClient
     for Csp<R, S, C>
 {
     /// Generate a share of a dealing for a single receiver.

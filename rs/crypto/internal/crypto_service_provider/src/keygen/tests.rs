@@ -35,7 +35,7 @@ fn should_retrieve_newly_generated_secret_key_from_store() {
     let csp = Csp::of(csprng, volatile_key_store());
     let (key_id, _) = csp.gen_key_pair(AlgorithmId::Ed25519).unwrap();
 
-    let retrieved_sk = csp.sks_read_lock().get(&key_id);
+    let retrieved_sk = csp.csp_vault.get_secret_key(&key_id);
 
     assert_eq!(
         retrieved_sk,
@@ -153,9 +153,11 @@ mod multi {
 mod tls {
     use super::*;
     use crate::secret_key_store::test_utils::MockSecretKeyStore;
+    use crate::vault::api::CspVault;
     use openssl::pkey::{Id, PKey};
     use openssl::x509::X509VerifyResult;
     use std::collections::BTreeSet;
+    use std::sync::Arc;
 
     const NODE_1: u64 = 4241;
     const FIXED_SEED: u64 = 42;
@@ -168,7 +170,7 @@ mod tls {
 
         let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
-        let secret_key = secret_key_from_store(&mut csp, cert.as_x509().clone());
+        let secret_key = secret_key_from_store(Arc::clone(&csp.csp_vault), cert.as_x509().clone());
         if let CspSecretKey::TlsEd25519(sk_der_bytes) = secret_key {
             let private_key = PKey::private_key_from_der(&sk_der_bytes.bytes)
                 .expect("unable to parse DER secret key");
@@ -311,15 +313,12 @@ mod tls {
         csprng_seeded_with(42)
     }
 
-    fn secret_key_from_store(
-        csp: &mut Csp<impl CryptoRng + Rng, impl SecretKeyStore, impl SecretKeyStore>,
-        x509_cert: X509,
-    ) -> CspSecretKey {
+    fn secret_key_from_store(csp_vault: Arc<dyn CspVault>, x509_cert: X509) -> CspSecretKey {
         let cert = TlsPublicKeyCert::new_from_x509(x509_cert)
             .expect("failed to convert X509 into TlsPublicKeyCert");
         let key_id = tls_keygen::tls_cert_hash_as_key_id(&cert);
-        csp.sks_read_lock()
-            .get(&key_id)
+        csp_vault
+            .get_secret_key(&key_id)
             .expect("secret key not found")
     }
 

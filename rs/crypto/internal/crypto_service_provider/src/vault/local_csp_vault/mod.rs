@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 /// An implementation of `CspVault`-trait that runs in-process
 /// and uses local secret key stores.
-pub struct LocalCspVault<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> {
+pub struct LocalCspVault<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> {
     // CSPRNG stands for cryptographically secure random number generator.
     csprng: CspRwLock<R>,
     node_secret_key_store: CspRwLock<S>,
@@ -80,7 +80,9 @@ impl<S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<OsRng, S, C> {
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> LocalCspVault<R, S, VolatileSecretKeyStore> {
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore>
+    LocalCspVault<R, S, VolatileSecretKeyStore>
+{
     /// Creates a local CSP vault for testing.
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the secret
@@ -103,24 +105,26 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore> LocalCspVault<R, S, VolatileSecretKe
 }
 
 // CRP-1248: inline the following methods
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
+    LocalCspVault<R, S, C>
+{
     fn rng_write_lock(&self) -> RwLockWriteGuard<'_, R> {
         self.csprng.write()
     }
 
-    pub fn sks_write_lock(&self) -> RwLockWriteGuard<'_, S> {
+    fn sks_write_lock(&self) -> RwLockWriteGuard<'_, S> {
         self.node_secret_key_store.write()
     }
 
-    pub fn sks_read_lock(&self) -> RwLockReadGuard<'_, S> {
+    fn sks_read_lock(&self) -> RwLockReadGuard<'_, S> {
         self.node_secret_key_store.read()
     }
 
-    pub fn canister_sks_write_lock(&self) -> RwLockWriteGuard<'_, C> {
+    fn canister_sks_write_lock(&self) -> RwLockWriteGuard<'_, C> {
         self.canister_secret_key_store.write()
     }
 
-    pub fn canister_sks_read_lock(&self) -> RwLockReadGuard<'_, C> {
+    fn canister_sks_read_lock(&self) -> RwLockReadGuard<'_, C> {
         self.canister_secret_key_store.read()
     }
 
