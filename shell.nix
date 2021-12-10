@@ -6,7 +6,7 @@
 }:
 pkgs.mkCompositeShell {
   buildInputs = [
-    # These are used in pre-commit.
+    # These are used in pre-commit..
     pkgs.ansible-lint
     pkgs.nixpkgs-fmt
     pkgs.shfmt
