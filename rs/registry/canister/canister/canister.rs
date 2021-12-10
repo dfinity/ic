@@ -53,6 +53,7 @@ use registry_canister::{
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
+use ic_protobuf::registry::node_operator::v1::RemoveNodeOperatorsPayload;
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 
@@ -494,6 +495,15 @@ fn update_node_operator_config() {
     check_caller_is_governance_and_log("update_node_operator_config");
     over(candid_one, |payload: UpdateNodeOperatorConfigPayload| {
         registry_mut().do_update_node_operator_config(payload);
+        recertify_registry();
+    });
+}
+
+#[export_name = "canister_update remove_node_operators"]
+fn remove_node_operators() {
+    check_caller_is_governance_and_log("remove_node_operators");
+    over(candid_one, |payload: RemoveNodeOperatorsPayload| {
+        registry_mut().do_remove_node_operators(payload);
         recertify_registry();
     });
 }

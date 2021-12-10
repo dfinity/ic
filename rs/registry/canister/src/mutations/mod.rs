@@ -10,6 +10,7 @@ pub mod do_create_subnet;
 pub mod do_delete_subnet;
 pub mod do_recover_subnet;
 pub mod do_remove_node_directly;
+pub mod do_remove_node_operators;
 pub mod do_remove_nodes;
 pub mod do_remove_nodes_from_subnet;
 pub mod do_set_firewall_config;

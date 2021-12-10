@@ -448,6 +448,8 @@ enum NnsFunction {
   NNS_FUNCTION_ADD_OR_REMOVE_DATA_CENTERS = 21;
   // Update the config for all unassigned nodes.
   NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG = 22;
+  // Remove Node Operator from the registry.
+  NNS_FUNCTION_REMOVE_NODE_OPERATORS = 23;
 }
 
 // Payload of a proposal that calls a function on another NNS

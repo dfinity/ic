@@ -27,3 +27,8 @@ message NodeOperatorRecord {
   // Provider should be rewarded.
   map<string, uint32> rewardable_nodes = 5;
 }
+
+/// The payload of a request to remove Node Operator records from the Registry
+message RemoveNodeOperatorsPayload {
+  repeated bytes node_operators_to_remove = 1;
+}

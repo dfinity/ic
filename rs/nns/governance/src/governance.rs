@@ -453,6 +453,7 @@ impl NnsFunction {
             NnsFunction::UpdateUnassignedNodesConfig => {
                 (REGISTRY_CANISTER_ID, "update_unassigned_nodes_config")
             }
+            NnsFunction::RemoveNodeOperators => (REGISTRY_CANISTER_ID, "remove_node_operators"),
         };
         Ok((canister_id, method))
     }
@@ -1040,6 +1041,7 @@ impl Proposal {
                             NnsFunction::Unspecified => Topic::Unspecified,
                             NnsFunction::AssignNoid
                             | NnsFunction::UpdateNodeOperatorConfig
+                            | NnsFunction::RemoveNodeOperators
                             | NnsFunction::RemoveNodes
                             | NnsFunction::UpdateUnassignedNodesConfig => Topic::NodeAdmin,
                             NnsFunction::CreateSubnet
