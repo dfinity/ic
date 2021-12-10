@@ -215,7 +215,10 @@ impl CatchUpPackageProvider {
         subnet_id: SubnetId,
     ) -> NodeManagerResult<CUPWithOriginalProtobuf> {
         let registry_version = self.registry.get_latest_version();
-        let local_cup = self.get_local_cup();
+        let local_cup = match self.get_local_cup() {
+            None => self.get_local_cup_deprecated(subnet_id),
+            other => other,
+        };
 
         // Returns local_cup in case no more recent CUP is found.
         let subnet_cup = self
@@ -237,6 +240,25 @@ impl CatchUpPackageProvider {
                 subnet_id,
                 registry_version,
             ))
+    }
+
+    fn get_local_cup_deprecated(&self, subnet_id: SubnetId) -> Option<CUPWithOriginalProtobuf> {
+        let path = self.get_upgrade_cup_save_path(subnet_id);
+        match File::open(&path) {
+            Ok(reader) => pb::CatchUpPackage::read_from_reader(reader)
+                .and_then(|protobuf| {
+                    Ok(CUPWithOriginalProtobuf {
+                        cup: CatchUpPackage::try_from(&protobuf)?,
+                        protobuf,
+                    })
+                })
+                .map_err(|e| warn!(self.logger, "Failed to read CUP from file {:?}", e))
+                .ok(),
+            Err(err) => {
+                warn!(self.logger, "Couldn't open file {:?}: {:?}", path, err);
+                None
+            }
+        }
     }
 
     /// Returns the locally persisted CUP.
