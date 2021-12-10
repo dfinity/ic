@@ -111,25 +111,14 @@ fn evaluate_pot_and_propagate_result(
 fn evaluate_pot(ctx: &DriverContext, pot: Pot, path: TestPath) -> FarmResult<TestResultNode> {
     if pot.execution_mode == ExecutionMode::Skip {
         return Ok(TestResultNode {
-            name: pot.name.clone(),
+            name: pot.name,
             succeeded: true,
             ..TestResultNode::default()
         });
     }
 
-    let started_at = Instant::now();
-    let (no_threads, all_tests) = match pot.testset {
-        TestSet::Sequence(tests) => (1, tests),
-        TestSet::Parallel(tests) => (N_THREADS_PER_POT, tests),
-    };
-    let tests: Vec<Test> = all_tests
-        .into_iter()
-        .filter(|t| t.execution_mode != ExecutionMode::Ignore)
-        .collect();
-    let tests_num = tests.len();
-
     // set up the group
-    let pot_path = path.join(pot.name.clone());
+    let pot_path = path.join(&pot.name);
     let logger = ctx.logger();
     let group_name = format!("{}-{}", pot_path.url_string(), ctx.job_id)
         .replace(":", "_")
@@ -141,12 +130,39 @@ fn evaluate_pot(ctx: &DriverContext, pot: Pot, path: TestPath) -> FarmResult<Tes
     // create group with ttl of 10 minutes
     ctx.farm
         .create_group(&group_name, Duration::from_secs(600), spec)?;
-    let res_request = get_resource_request(ctx, &pot.config, &group_name);
+    let res = evaluate_pot_with_group(ctx, pot, pot_path, &group_name);
+    if let Err(e) = ctx.farm.delete_group(&group_name) {
+        warn!(ctx.logger, "Could not delete group {}: {:?}", group_name, e);
+    }
+
+    res
+}
+
+#[allow(clippy::mutex_atomic)]
+fn evaluate_pot_with_group(
+    ctx: &DriverContext,
+    pot: Pot,
+    pot_path: TestPath,
+    group_name: &str,
+) -> FarmResult<TestResultNode> {
+    let logger = ctx.logger();
+    let started_at = Instant::now();
+    let (no_threads, all_tests) = match pot.testset {
+        TestSet::Sequence(tests) => (1, tests),
+        TestSet::Parallel(tests) => (N_THREADS_PER_POT, tests),
+    };
+    let tests: Vec<Test> = all_tests
+        .into_iter()
+        .filter(|t| t.execution_mode != ExecutionMode::Ignore)
+        .collect();
+    let tests_num = tests.len();
+
+    let res_request = get_resource_request(ctx, &pot.config, group_name);
     let res_group = allocate_resources(ctx, &res_request)?;
     let temp_dir = tempfile::tempdir().expect("Could not create temp directory");
     let (init_ic, mal_beh, node_vms) = init_ic(ctx, temp_dir.path(), pot.config, &res_group);
-    create_config_disk_images(ctx, &group_name, &logger, &init_ic);
-    let cfg_disk_image_ids = upload_config_disk_images(ctx, &init_ic, &group_name)?;
+    create_config_disk_images(ctx, group_name, &logger, &init_ic);
+    let cfg_disk_image_ids = upload_config_disk_images(ctx, &init_ic, group_name)?;
     attach_config_disk_images(ctx, &res_group, cfg_disk_image_ids)?;
     let ic_handle = create_ic_handle(ctx, &init_ic, &node_vms, &mal_beh);
     info!(logger, "temp_dir: {:?}", temp_dir.path());
@@ -176,10 +192,6 @@ fn evaluate_pot(ctx: &DriverContext, pot: Pot, path: TestPath) -> FarmResult<Tes
         jh.join().expect("waiting for thread failed!");
     }
     let children = collect_n_children(receiver, tests_num);
-
-    if let Err(e) = ctx.farm.delete_group(&group_name) {
-        warn!(ctx.logger, "Could not delete group {}: {:?}", group_name, e);
-    }
 
     Ok(TestResultNode {
         name: pot.name.clone(),
