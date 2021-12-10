@@ -39,6 +39,7 @@ class Experiment3(experiment.Experiment):
     def __init__(self):
         """Construct experiment 3."""
         super().__init__(num_workload_gen=1)
+        self.init()
         self.num_canisters = self.get_num_canisters()
 
     def get_num_canisters(self):

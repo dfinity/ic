@@ -48,6 +48,7 @@ class Experiment2(experiment.Experiment):
     def __init__(self):
         """Construct experiment 2."""
         super().__init__(num_workload_gen=1)
+        self.init()
         self.use_updates = FLAGS.use_updates
         if self.use_updates:
             self.request_type = "call"
