@@ -56,8 +56,8 @@ setup.ilm.enabled: false
 setup.template.name: "boundary-journal"
 setup.template.pattern: "boundary-journal-%{[agent.version]}-%{+yyyy.MM.dd}"
 setup.template.settings:
-  index.number_of_shards: 6
-  index.number_of_replicas: 2
+  index.number_of_shards: 1
+  index.number_of_replicas: 1
   #index.codec: best_compression
   #_source.enabled: false
 
@@ -74,8 +74,8 @@ setup.template.settings:
 
 # Optional fields that you can specify to add additional information to the
 # output.
-#fields:
-#  env: staging
+fields:
+  testnet: "{{ testnet }}"
 
 # ================================= Dashboards =================================
 # These settings control loading the sample dashboards to the Kibana index. Loading
@@ -137,8 +137,8 @@ output.elasticsearch:
 
   # Authentication credentials - either API key or username/password.
   #api_key: "id:api_key"
-  #username: "{{ journalbeat_username }}"
-  #password: "{{ journalbeat_password }}"
+  #username: "elastic"
+  #password: "changeme"
 
 # ------------------------------ Logstash Output -------------------------------
 #output.logstash:
