@@ -79,7 +79,7 @@ e2e-scalability-suite-test:
     - cargo-build-canisters
   artifacts:
     paths:
-    - ic-os/guestos/test-out/e2e
+    - ic-os/guestos/test-out/e2e-scalability-suite-test
   script:
     - |
       # Make sure the host has mounted necessary devices into the docker container.
@@ -128,6 +128,8 @@ e2e-scalability-suite-test:
       mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e"
       # Actual test script, sets up VMs and drives the test.
 
+      mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-scalability-suite-test"
+
       GUESTOS_IMG="$(pwd)/disk.img"
       cd "${CI_PROJECT_DIR}/scalability"
       # Actual test script, sets up VMs and drives the test.
@@ -143,6 +145,7 @@ e2e-scalability-suite-test:
           --ic_prep_bin "${CI_PROJECT_DIR}/artifacts/release/ic-prep" \
           --install_nns_bin "${CI_PROJECT_DIR}/artifacts/release/ic-nns-init" \
           --artifacts_path "${CI_PROJECT_DIR}/artifacts/release/" \
+          --log_directory "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-scalability-suite-test" \
           --testnet none \
           --wg_testnet none
 
