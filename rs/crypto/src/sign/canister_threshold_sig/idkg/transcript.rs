@@ -120,7 +120,7 @@ fn ensure_sufficient_dealings_collected(
     if dealings.len() < params.collection_threshold().get() as usize {
         Err(IDkgCreateTranscriptError::UnsatisfiedCollectionThreshold {
             threshold: params.collection_threshold().get(),
-            dealer_count: dealings.len(),
+            dealing_count: dealings.len(),
         })
     } else {
         Ok(())

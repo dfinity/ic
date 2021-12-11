@@ -70,7 +70,7 @@ pub enum IDkgCreateTranscriptError {
     },
     UnsatisfiedCollectionThreshold {
         threshold: u32,
-        dealer_count: usize,
+        dealing_count: usize,
     },
     UnsatisfiedVerificationThreshold {
         threshold: u32,
