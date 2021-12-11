@@ -459,3 +459,23 @@ fn crypto_for<T>(node_id: NodeId, crypto_components: &BTreeMap<NodeId, T>) -> &T
         .get(&node_id)
         .unwrap_or_else(|| panic!("missing crypto component for {:?}", node_id))
 }
+
+pub fn random_receiver_id(params: &IDkgTranscriptParams) -> NodeId {
+    **params
+        .receivers()
+        .get()
+        .iter()
+        .choose_multiple(&mut thread_rng(), 1)
+        .get(0)
+        .expect("receivers is empty")
+}
+
+pub fn random_dealer_id(params: &IDkgTranscriptParams) -> NodeId {
+    **params
+        .dealers()
+        .get()
+        .iter()
+        .choose_multiple(&mut thread_rng(), 1)
+        .get(0)
+        .expect("dealers is empty")
+}
