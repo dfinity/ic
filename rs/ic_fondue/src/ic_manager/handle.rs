@@ -3,6 +3,7 @@ use rand::Rng;
 use url::{Host, Url};
 
 use crate::prod_tests::{cli::AuthorizedSshAccount, farm};
+use anyhow::Result;
 use fondue::{
     log::info,
     util::{InfStreamOf, PermOf},
@@ -13,10 +14,13 @@ use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::SubnetId;
 use slog::Logger;
 use std::{
-    net::{IpAddr, TcpStream},
+    net::IpAddr,
     time::{Duration, Instant},
 };
-use tokio::time;
+use tokio::{net::TcpStream, time};
+
+pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(120);
+pub const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 
 /// A handle used by tests to interact with the IC.
 ///
@@ -247,9 +251,9 @@ impl<'a> IcEndpoint {
     /// Returns true if [IcEndpoint] is healthy, i.e. up and running and ready
     /// for interaction. A status of the endpoint is requested from the
     /// public API.
-    pub async fn healthy(&self) -> bool {
+    pub async fn healthy(&self) -> Result<bool> {
         let response = reqwest::Client::builder()
-            .timeout(Duration::from_secs(4))
+            .timeout(READY_RESPONSE_TIMEOUT)
             .build()
             .expect("cannot build a reqwest client")
             .get(
@@ -259,16 +263,10 @@ impl<'a> IcEndpoint {
                     .expect("failed to join URLs"),
             )
             .send()
-            .await;
-
-        if let Err(ref e) = response {
-            println!("Response error: {:?}", e);
-            return false;
-        }
+            .await?;
 
         let cbor_response = serde_cbor::from_slice(
             &response
-                .expect("failed to get a response")
                 .bytes()
                 .await
                 .expect("failed to convert a response to bytes")
@@ -277,13 +275,22 @@ impl<'a> IcEndpoint {
         .expect("response is not encoded as cbor");
         let status = serde_cbor::value::from_value::<HttpStatusResponse>(cbor_response)
             .expect("failed to deserialize a response to HttpStatusResponse");
-        Some(ReplicaHealthStatus::Healthy) == status.replica_health_status
+        Ok(Some(ReplicaHealthStatus::Healthy) == status.replica_health_status)
+    }
+
+    /// Returns `Ok(true)` if a TCP-connection to port 22 can be established.
+    pub async fn ssh_open(&self) -> Result<bool> {
+        let ip_str = format!("[{}]:22", self.ip_address().unwrap());
+        TcpStream::connect(ip_str)
+            .await
+            .map(|_| true)
+            .map_err(anyhow::Error::new)
     }
 
     /// Returns as soon as [IcEndpoint] is ready, panics if it didn't come up
     /// before a given deadline. Readiness of assigned nodes is checked through
-    /// active polling of the public API. Readiness of unassigned nodes is
-    /// checked via establishing a connection to port 22.
+    /// either active polling of the public API or--in the case of unassiged
+    /// nodes--via establishing a connection to port 22.
     pub async fn assert_ready(&self, ctx: &fondue::pot::Context) {
         let mut interval = time::interval(Duration::from_secs(1));
         loop {
@@ -294,26 +301,34 @@ impl<'a> IcEndpoint {
             );
 
             // If the node is a member of the subnet, check if it is healthy. Otherwise,
-            // check if it is reachable.
+            // check if it is reachable on port 22.
             let ready = match &self.subnet {
                 Some(_) => self.healthy().await,
-                None => {
-                    let ip_str = format!("[{}]:22", self.ip_address().unwrap());
-                    TcpStream::connect(ip_str).is_ok()
-                }
+                None => self.ssh_open().await,
             };
 
-            if ready {
-                info!(ctx.logger, "Node [{:?}] is ready!", self.url.as_str());
-                return;
+            match ready {
+                Ok(true) => {
+                    info!(ctx.logger, "Node [{:?}] is ready!", self.url.as_str());
+                    return;
+                }
+                Ok(false) => {
+                    info!(
+                        ctx.logger,
+                        "Node [{:?}] is responsive but reports 'unhealthy'.",
+                        self.url.as_str()
+                    );
+                }
+                Err(e) => {
+                    info!(
+                        ctx.logger,
+                        "Node [{:?}] is not yet ready and/or unreachable: {:?}",
+                        self.url.as_str(),
+                        e
+                    );
+                }
             }
-
-            info!(
-                ctx.logger,
-                "Node [{:?}] is not yet ready.",
-                self.url.as_str()
-            );
-            if Instant::now().duration_since(self.started_at) > Duration::from_secs(90) {
+            if Instant::now().duration_since(self.started_at) > READY_WAIT_TIMEOUT {
                 panic!("the IcEndpoint didn't come up within a time limit");
             }
             interval.tick().await;
