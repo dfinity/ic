@@ -108,9 +108,11 @@ echo "➡️  Triggering upgrade of unassigned nodes and adding of ssh keys"
 UNASSIGNED_NODE_ID="$(ic-admin --nns-url "$nns_url" get-topology | jq -r '.topology.unassigned_nodes[0].node_id')"
 UNASSIGNED_NODE_IP="$(ic-admin --nns-url "$nns_url" get-node "$UNASSIGNED_NODE_ID" | sed -n 's/.*ip_addr: "\([^"]*\)".*/\1/p')"
 
+SSH_OPTIONS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
 n=0
 while true; do
-    DETECTED_VERSION="$(ssh "readonly@$UNASSIGNED_NODE_IP" 'cat /opt/ic/share/version.txt')"
+    DETECTED_VERSION="$(ssh "$SSH_OPTIONS" "readonly@$UNASSIGNED_NODE_IP" 'cat /opt/ic/share/version.txt')"
     if [[ "$DETECTED_VERSION" == "$VERSION" ]]; then
         echo "✅ SUCCESS! Unassigned node $UNASSIGNED_NODE_IP has the ssh readonly access enabled and is runnig version $VERSION."
         break
