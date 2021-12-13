@@ -5,16 +5,23 @@ mod test {
     use ic_crypto_tree_hash::{flatmap, lookup_path, Label, LabeledTree, MixedHashTree};
     use ic_interfaces::registry::RegistryTransportRecord;
     use ic_nns_common::registry::encode_or_panic;
+    use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
     use ic_nns_constants::GOVERNANCE_CANISTER_ID;
     use ic_nns_test_utils::itest_helpers::{
         forward_call_via_universal_canister, set_up_universal_canister,
     };
+    use ic_nns_test_utils::registry::get_value;
     use ic_nns_test_utils::{
         itest_helpers::{local_test_on_nns_subnet, maybe_upgrade_to_self, UpgradeTestingScenario},
         registry::invariant_compliant_mutation_as_atomic_req,
     };
     use ic_nns_test_utils_macros::parameterized_upgrades;
+    use ic_protobuf::registry::conversion_rate::v1::IcpXdrConversionRateRecord;
+    use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
     use ic_registry_common::certification::decode_hash_tree;
+    use ic_registry_keys::{
+        make_blessed_replica_version_key, make_icp_xdr_conversion_rate_record_key,
+    };
     use ic_registry_transport::{
         insert,
         pb::v1::{
@@ -404,6 +411,76 @@ mod test {
                 .bytes(b"This is not legal candid".to_vec())
                 .await,
                 Err(msg) if msg.contains("must be a Candid-encoded RegistryCanisterInitPayload"));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_pruning_deletes_only_target_correct_record() {
+        local_test_on_nns_subnet(|runtime| async move {
+            let mut registry = install_registry_canister(
+                &runtime,
+                RegistryCanisterInitPayloadBuilder::new()
+                    .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                    .build(),
+            )
+            .await;
+
+            let fake_governance_canister = set_up_universal_canister(&runtime).await;
+            assert_eq!(
+                fake_governance_canister.canister_id(),
+                ic_nns_constants::GOVERNANCE_CANISTER_ID
+            );
+
+            let payload = UpdateIcpXdrConversionRatePayload {
+                data_source: "".to_string(),
+                timestamp_seconds: 0,
+                xdr_permyriad_per_icp: 1234,
+            };
+
+            assert!(
+                forward_call_via_universal_canister(
+                    &fake_governance_canister,
+                    &registry,
+                    "update_icp_xdr_conversion_rate",
+                    Encode!(&payload).unwrap()
+                )
+                .await
+            );
+
+            assert_eq!(
+                get_value::<IcpXdrConversionRateRecord>(
+                    &registry,
+                    make_icp_xdr_conversion_rate_record_key().as_bytes()
+                )
+                .await,
+                payload.into()
+            );
+
+            // Go through an upgrade cycle, and verify that it still works the same
+            registry.upgrade_to_self_binary(vec![]).await.unwrap();
+
+            assert_eq!(
+                get_value::<IcpXdrConversionRateRecord>(
+                    &registry,
+                    make_icp_xdr_conversion_rate_record_key().as_bytes()
+                )
+                .await,
+                IcpXdrConversionRateRecord::default()
+            );
+
+            // Check that other records still exist
+            assert_eq!(
+                get_value::<BlessedReplicaVersions>(
+                    &registry,
+                    make_blessed_replica_version_key().as_bytes()
+                )
+                .await,
+                BlessedReplicaVersions {
+                    blessed_version_ids: vec!["version_42".to_string()]
+                }
+            );
+
             Ok(())
         });
     }
