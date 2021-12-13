@@ -76,8 +76,9 @@ impl SandboxService for SandboxServer {
         req: CreateExecutionStateRequest,
     ) -> rpc::Call<CreateExecutionStateReply> {
         let result = self.manager.create_execution_state(
+            req.wasm_id,
             req.wasm_binary,
-            req.canister_root,
+            req.wasm_page_map,
             req.canister_id,
         );
         rpc::Call::new_resolved(Ok(CreateExecutionStateReply(result)))

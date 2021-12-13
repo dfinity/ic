@@ -1,12 +1,10 @@
 use criterion::Criterion;
-use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
-use ic_embedders::WasmtimeEmbedder;
+use ic_config::execution_environment::Config;
 use ic_execution_environment::Hypervisor;
 use ic_interfaces::{
     execution_environment::{ExecutionParameters, SubnetAvailableMemory},
     messages::RequestOrIngress,
 };
-use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -64,19 +62,22 @@ struct ExecuteUpdateArgs(
     ExecutionParameters,
 );
 
-fn setup_update<W>(wat: W, canister_root: std::path::PathBuf) -> ExecuteUpdateArgs
+fn setup_update<W>(
+    hypervisor: &Hypervisor,
+    wat: W,
+    canister_root: std::path::PathBuf,
+) -> ExecuteUpdateArgs
 where
     W: AsRef<str>,
 {
     let mut features = wabt::Features::new();
     features.enable_multi_value();
 
-    let wasm_embedder = WasmtimeEmbedder::new(EmbeddersConfig::new(), no_op_logger());
-    let execution_state = wasm_embedder
+    let execution_state = hypervisor
         .create_execution_state(
             wabt::wat2wasm_with_features(wat.as_ref(), features).unwrap(),
             canister_root,
-            &EmbeddersConfig::default(),
+            CanisterId::from(0),
         )
         .expect("Failed to create execution state");
     let mut canister_state = canister_from_exec_state(execution_state);
@@ -135,7 +136,7 @@ where
                     routing_table,
                     subnet_records,
                     execution_parameters,
-                ) = setup_update(wat.as_ref(), tmp_path);
+                ) = setup_update(&hypervisor, wat.as_ref(), tmp_path);
 
                 hypervisor.execute_update(
                     canister_state,
@@ -159,7 +160,7 @@ where
                     routing_table,
                     subnet_records,
                     execution_parameters,
-                ) = setup_update(wat, tmp_path);
+                ) = setup_update(&hypervisor, wat, tmp_path);
                 group
                     .throughput(criterion::Throughput::Elements(expected_instructions))
                     .bench_function(id.as_ref(), |b| {

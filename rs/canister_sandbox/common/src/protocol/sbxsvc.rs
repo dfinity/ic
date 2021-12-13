@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, path::PathBuf};
+use std::collections::BTreeSet;
 
 use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
@@ -6,14 +6,17 @@ use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     page_map::{
         CheckpointSerialization, MappingSerialization, PageAllocatorSerialization,
-        PageMapSerialization, PageSerialization,
+        PageMapSerialization,
     },
     Global, NumWasmPages,
 };
 use ic_types::{methods::WasmMethod, CanisterId};
 use serde::{Deserialize, Serialize};
 
-use super::id::{ExecId, StateId, WasmId};
+use super::{
+    id::{ExecId, StateId, WasmId},
+    structs::MemoryModifications,
+};
 
 /// This defines the RPC service methods offered by the sandbox process
 /// (used by the controller) as well as the expected replies.
@@ -235,16 +238,16 @@ pub struct CloseExecutionReply {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CreateExecutionStateRequest {
+    pub wasm_id: WasmId,
     #[serde(with = "serde_bytes")]
     pub wasm_binary: Vec<u8>,
-    pub canister_root: PathBuf,
+    pub wasm_page_map: PageMapSerialization,
     pub canister_id: CanisterId,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CreateExecutionStateSuccessReply {
-    pub wasm_memory_pages: Vec<PageSerialization>,
-    pub wasm_memory_size: NumWasmPages,
+    pub wasm_memory: MemoryModifications,
     pub exported_globals: Vec<Global>,
     pub exported_functions: BTreeSet<WasmMethod>,
 }

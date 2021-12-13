@@ -1,13 +1,11 @@
 use super::SessionNonce;
-use crate::{num_bytes_try_from, NumWasmPages, PageIndex, PageMap};
+use crate::{num_bytes_try_from, NumWasmPages, PageMap};
 use ic_config::embedders::PersistenceType;
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState, MappedStateImpl};
-use ic_interfaces::execution_environment::HypervisorResult;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
 };
-use ic_sys::PageBytes;
 use ic_types::{methods::WasmMethod, ExecutionRound, NumBytes};
 use ic_utils::ic_features::cow_state_feature;
 use ic_wasm_types::BinaryEncodedWasm;
@@ -350,19 +348,13 @@ impl ExecutionState {
     /// The state will be created with empty stable memory, but may have wasm
     /// memory from data sections in the wasm module.
     pub fn new(
-        wasm_binary: BinaryEncodedWasm,
         canister_root: PathBuf,
+        wasm_binary: Arc<WasmBinary>,
         exports: ExportedFunctions,
-        wasm_memory_pages: &[(PageIndex, PageBytes)],
-    ) -> HypervisorResult<Self> {
-        let mut wasm_memory = Memory::default();
-        wasm_memory.page_map.update(
-            &wasm_memory_pages
-                .iter()
-                .map(|(index, bytes)| (*index, bytes as &PageBytes))
-                .collect::<Vec<(PageIndex, &PageBytes)>>(),
-        );
-
+        wasm_memory: Memory,
+        stable_memory: Memory,
+        exported_globals: Vec<Global>,
+    ) -> Self {
         let cow_mem_mgr = Arc::new(CowMemoryManagerImpl::open_readwrite(canister_root.clone()));
         if cow_state_feature::is_enabled(cow_state_feature::cow_state) {
             let mapped_state = cow_mem_mgr.get_map();
@@ -381,25 +373,20 @@ impl ExecutionState {
         } else {
             None
         };
-        let session_nonce = None;
 
-        let wasm_binary = WasmBinary::new(wasm_binary);
-
-        let execution_state = ExecutionState {
+        Self {
             canister_root,
-            session_nonce,
+            session_nonce: None,
             wasm_binary,
             exports,
             wasm_memory,
-            stable_memory: Memory::default(),
-            exported_globals: vec![],
+            stable_memory,
+            exported_globals,
             last_executed_round: ExecutionRound::from(0),
             cow_mem_mgr,
             mapped_state,
             sandbox_state: SandboxExecutionState::new(),
-        };
-
-        Ok(execution_state)
+        }
     }
 
     // Checks whether the given method is exported by the Wasm module or not.

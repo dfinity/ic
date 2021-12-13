@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use ic_replicated_state::canister_state::execution_state::WasmBinary;
+use ic_replicated_state::{ExportedFunctions, Memory, NumWasmPages, PageMap};
 use prometheus::{Histogram, IntCounter};
 
 use crate::cow_memory_creator::CowMemoryCreator;
@@ -161,11 +163,8 @@ impl WasmExecutor {
             .and_then(|output| self.wasm_embedder.compile(persistence_type, &output.binary))
     }
 
-    fn get_embedder_cache(
-        &self,
-        execution_state: &ExecutionState,
-    ) -> HypervisorResult<EmbedderCache> {
-        let mut guard = execution_state.wasm_binary.embedder_cache.lock().unwrap();
+    fn get_embedder_cache(&self, wasm_binary: &WasmBinary) -> HypervisorResult<EmbedderCache> {
+        let mut guard = wasm_binary.embedder_cache.lock().unwrap();
         if let Some(embedder_cache) = &*guard {
             Ok(embedder_cache.clone())
         } else {
@@ -173,10 +172,7 @@ impl WasmExecutor {
             // instrumented so instrument it before compiling. Further, due to
             // IC upgrades, it is possible that the `validate_wasm_binary()`
             // function has changed, so also validate the binary.
-            match self.compile(
-                &execution_state.wasm_binary.binary,
-                execution_state.persistence_type(),
-            ) {
+            match self.compile(&wasm_binary.binary, PersistenceType::Sigsegv) {
                 Ok(cache) => {
                     *guard = Some(cache.clone());
                     Ok(cache)
@@ -204,7 +200,7 @@ impl WasmExecutor {
         let system_state_accessor =
             SystemStateAccessorDirect::new(system_state, cycles_account_manager);
 
-        let embedder_cache = self.get_embedder_cache(&execution_state);
+        let embedder_cache = self.get_embedder_cache(&execution_state.wasm_binary);
         match embedder_cache {
             Ok(_) => (),
             Err(err) => {
@@ -341,22 +337,33 @@ impl WasmExecutor {
 
     pub fn create_execution_state(
         &self,
-        wasm_binary: Vec<u8>,
+        wasm_source: Vec<u8>,
         canister_root: PathBuf,
         canister_id: CanisterId,
     ) -> HypervisorResult<ExecutionState> {
-        // Get new ExecutionState not fully initialized.
-        let mut execution_state =
-            self.wasm_embedder
-                .create_execution_state(wasm_binary, canister_root, &self.config)?;
+        // Step 1: Compile Wasm binary and cache it.
+        let binary_encoded_wasm = BinaryEncodedWasm::new(wasm_source);
+        let wasm_binary = WasmBinary::new(binary_encoded_wasm.clone());
+        let embedder_cache = self.get_embedder_cache(&wasm_binary)?;
 
-        let memory_creator = if execution_state.mapped_state.is_some() {
-            let mapped_state = Arc::as_ref(execution_state.mapped_state.as_ref().unwrap());
-            Some(Arc::new(CowMemoryCreator::new(mapped_state)))
-        } else {
-            None
-        };
+        // Step 2. Get data from instrumentation output.
+        validate_wasm_binary(&binary_encoded_wasm, &self.config)?;
+        let instrumentation_output =
+            instrument(&binary_encoded_wasm, &InstructionCostTable::new())?;
+        let exported_functions = instrumentation_output.exported_functions;
+        let wasm_memory_pages = instrumentation_output.data.as_pages();
 
+        // Step 3. Apply the initial memory pages to the page map.
+        let mut wasm_page_map = PageMap::default();
+        wasm_page_map.update(
+            &wasm_memory_pages
+                .iter()
+                .map(|(index, bytes)| (*index, bytes as &PageBytes))
+                .collect::<Vec<(PageIndex, &PageBytes)>>(),
+        );
+
+        // Step 4. Instantiate the Wasm module to get the globals and the memory size.
+        //
         // We are using the wasm instance to initialize the execution state properly.
         // SystemApi is needed when creating a Wasmtime instance because the Linker
         // will try to assemble a list of all imports used by the wasm module.
@@ -365,25 +372,33 @@ impl WasmExecutor {
         // as we don't execute any wasm instructions at this point,
         // so we use an empty SystemApi instead.
         let system_api = SystemApiEmpty;
-        let embedder_cache = self.get_embedder_cache(&execution_state)?;
         let mut instance = match self.wasm_embedder.new_instance(
             canister_id,
             &embedder_cache,
-            &execution_state.exported_globals,
-            execution_state.wasm_memory.size,
-            memory_creator,
-            Some(execution_state.wasm_memory.page_map.clone()),
+            &[],
+            NumWasmPages::from(0),
+            None,
+            Some(wasm_page_map.clone()),
             ModificationTracking::Ignore,
             system_api,
         ) {
             Ok(instance) => instance,
-            Err((err, _)) => {
+            Err((err, _system_api)) => {
                 return Err(err);
             }
         };
 
-        execution_state.wasm_memory.size = instance.heap_size();
-        execution_state.exported_globals = instance.get_exported_globals();
+        // Step 5. Create the execution state.
+        let wasm_memory = Memory::new(wasm_page_map, instance.heap_size());
+        let stable_memory = Memory::default();
+        let execution_state = ExecutionState::new(
+            canister_root,
+            wasm_binary,
+            ExportedFunctions::new(exported_functions),
+            wasm_memory,
+            stable_memory,
+            instance.get_exported_globals(),
+        );
         Ok(execution_state)
     }
 
