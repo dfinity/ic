@@ -4,11 +4,8 @@ mod system_api;
 pub mod system_api_charges;
 
 use std::convert::TryInto;
+use std::sync::{Arc, Mutex};
 use std::{collections::HashMap, convert::TryFrom};
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
 
 use ic_system_api::ModificationTracking;
 use wasmtime::{unix::StoreExt, Memory, Mutability, Store, Val, ValType};
@@ -20,9 +17,7 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
 use ic_logger::{debug, error, fatal, ReplicaLogger};
-use ic_replicated_state::{
-    EmbedderCache, ExecutionState, ExportedFunctions, Global, NumWasmPages, PageIndex, PageMap,
-};
+use ic_replicated_state::{EmbedderCache, Global, NumWasmPages, PageIndex, PageMap};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
@@ -32,10 +27,7 @@ use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
-use crate::wasm_utils::{
-    instrumentation::{instrument, InstructionCostTable},
-    validation::{ensure_determinism, validate_wasm_binary},
-};
+use crate::wasm_utils::validation::ensure_determinism;
 
 use crate::cow_memory_creator::{CowMemoryCreator, CowMemoryCreatorProxy};
 
@@ -146,29 +138,6 @@ impl WasmtimeEmbedder {
         // important because EmbedderCache is cloned frequently, and that must
         // not be an expensive operation.
         Ok(EmbedderCache::new((module, cached_mem_creator)))
-    }
-
-    /// Initializes a new execution state for a canister.
-    ///
-    /// The wasm_binary is validated and instrumented to detect instrumentation
-    /// errors however just the validated binary is stored.  The expectation is
-    /// that the binary will be instrumented before compiling.  This is done
-    /// to support IC upgrades where the instrumentation changes.
-    pub fn create_execution_state(
-        &self,
-        wasm_binary: Vec<u8>,
-        canister_root: PathBuf,
-        config: &EmbeddersConfig,
-    ) -> HypervisorResult<ExecutionState> {
-        let wasm_binary = BinaryEncodedWasm::new(wasm_binary);
-        validate_wasm_binary(&wasm_binary, config)?;
-        let instrumentation_output = instrument(&wasm_binary, &InstructionCostTable::new())?;
-        ExecutionState::new(
-            wasm_binary,
-            canister_root,
-            ExportedFunctions::new(instrumentation_output.exported_functions),
-            &instrumentation_output.data.as_pages(),
-        )
     }
 
     #[allow(clippy::too_many_arguments)]

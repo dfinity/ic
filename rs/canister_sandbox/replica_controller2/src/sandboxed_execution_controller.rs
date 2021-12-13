@@ -8,7 +8,7 @@ use ic_logger::ReplicaLogger;
 use ic_replicated_state::canister_state::execution_state::{
     SandboxExecutionState, SandboxExecutionStateHandle, SandboxExecutionStateOwner, WasmBinary,
 };
-use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions};
+use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
 use ic_system_api::{StaticSystemState, SystemStateAccessorDirect};
 use ic_types::CanisterId;
 use ic_wasm_types::BinaryEncodedWasm;
@@ -306,33 +306,47 @@ impl SandboxedExecutionController {
 
     pub fn create_execution_state(
         &self,
-        wasm_binary: Vec<u8>,
+        wasm_source: Vec<u8>,
         canister_root: PathBuf,
         canister_id: CanisterId,
     ) -> HypervisorResult<ExecutionState> {
         let sandbox_process = self.get_sandbox_process(&canister_id);
+
+        // Step 1: Compile Wasm binary and cache it.
+        let binary_encoded_wasm = BinaryEncodedWasm::new(wasm_source.clone());
+        let wasm_binary = WasmBinary::new(binary_encoded_wasm);
+        let (wasm_id, compile_count) = open_wasm(&sandbox_process.sandbox_service, &wasm_binary);
+        if compile_count > 0 {
+            self.compile_count_for_testing
+                .fetch_add(compile_count, Ordering::Relaxed);
+        }
+
+        // Steps 2, 3, 4 are performed by the sandbox process.
+        let mut wasm_page_map = PageMap::default();
         let reply = sandbox_process
             .sandbox_service
             .create_execution_state(protocol::sbxsvc::CreateExecutionStateRequest {
-                wasm_binary: wasm_binary.clone(),
-                canister_root: canister_root.clone(),
+                wasm_id,
+                wasm_binary: wasm_source,
+                wasm_page_map: wasm_page_map.serialize(),
                 canister_id,
             })
             .sync()
             .unwrap()
             .0?;
-        let mut execution_state = ExecutionState::new(
-            BinaryEncodedWasm::new(wasm_binary),
+
+        // Step 5. Create the execution state.
+        wasm_page_map.deserialize_delta(reply.wasm_memory.page_delta);
+        let wasm_memory = Memory::new(wasm_page_map, reply.wasm_memory.size);
+        let stable_memory = Memory::default();
+        let execution_state = ExecutionState::new(
             canister_root,
+            wasm_binary,
             ExportedFunctions::new(reply.exported_functions),
-            &reply
-                .wasm_memory_pages
-                .into_iter()
-                .map(|page| (page.index, page.bytes))
-                .collect::<Vec<_>>(),
-        )?;
-        execution_state.wasm_memory.size = reply.wasm_memory_size;
-        execution_state.exported_globals = reply.exported_globals;
+            wasm_memory,
+            stable_memory,
+            reply.exported_globals,
+        );
         Ok(execution_state)
     }
 

@@ -11,9 +11,8 @@
 //!
 //! All of the above objects as well as the functionality provided
 //! towards the controller are found in this module.
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use ic_canister_sandbox_common::protocol::id::{ExecId, StateId, WasmId};
@@ -23,7 +22,6 @@ use ic_canister_sandbox_common::protocol::sbxsvc::{
 use ic_canister_sandbox_common::protocol::structs::MemoryModifications;
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
 use ic_config::embedders::{Config, PersistenceType};
-use ic_embedders::cow_memory_creator::CowMemoryCreator;
 use ic_embedders::{
     wasm_executor::compute_page_delta,
     wasm_utils::{
@@ -36,10 +34,9 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, SystemApi,
 };
 use ic_logger::replica_logger::no_op_logger;
-use ic_replicated_state::page_map::PageSerialization;
-use ic_replicated_state::{
-    EmbedderCache, ExecutionState, ExportedFunctions, Global, Memory, NumWasmPages, PageMap,
-};
+use ic_replicated_state::page_map::PageMapSerialization;
+use ic_replicated_state::{EmbedderCache, Global, Memory, NumWasmPages, PageIndex, PageMap};
+use ic_sys::PageBytes;
 use ic_system_api::system_api_empty::SystemApiEmpty;
 use ic_system_api::{ModificationTracking, SystemApiImpl};
 use ic_types::CanisterId;
@@ -352,9 +349,11 @@ impl CanisterWasm {
     /// Creates new wasm object for given binary encoded wasm.
     pub fn new(wasm: BinaryEncodedWasm) -> Self {
         let log = ic_logger::replica_logger::no_op_logger();
+        // TODO(EXC-755): Use the proper embedder config.
         let mut config = Config::new();
         config.persistence_type = PersistenceType::Sigsegv;
 
+        // TODO(EXC-756): Cache WasmtimeEmbedder instance.
         let embedder = Arc::new(WasmtimeEmbedder::new(config.clone(), log));
         let instrumentation_output = validate_wasm_binary(&wasm, &config)
             .map_err(HypervisorError::from)
@@ -525,33 +524,47 @@ impl SandboxManager {
 
     pub fn create_execution_state(
         &self,
-        wasm_binary: Vec<u8>,
-        canister_root: PathBuf,
+        wasm_id: WasmId,
+        wasm_source: Vec<u8>,
+        wasm_page_map: PageMapSerialization,
         canister_id: CanisterId,
     ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
+        // TODO(EXC-755): Use the proper embedder config.
+        // TODO(EXC-756): Cache WasmtimeEmbedder instance.
         let embedder = WasmtimeEmbedder::new(Config::default(), no_op_logger());
-        let wasm_binary = BinaryEncodedWasm::new(wasm_binary);
-        validate_wasm_binary(&wasm_binary, &Config::default())?;
-        let instrumentation_output = instrument(&wasm_binary, &InstructionCostTable::new())?;
-        let wasm_memory_pages = instrumentation_output.data.as_pages();
-        let execution_state = ExecutionState::new(
-            instrumentation_output.binary.clone(),
-            canister_root,
-            ExportedFunctions::new(instrumentation_output.exported_functions),
-            &wasm_memory_pages,
-        )?;
 
-        let memory_creator = if execution_state.mapped_state.is_some() {
-            let mapped_state = Arc::as_ref(execution_state.mapped_state.as_ref().unwrap());
-            Some(Arc::new(CowMemoryCreator::new(mapped_state)))
-        } else {
-            None
+        // Step 1: Get the compiled binary from the cache.
+        let binary_encoded_wasm = BinaryEncodedWasm::new(wasm_source);
+        let embedder_cache = {
+            let guard = self.repr.lock().unwrap();
+            let canister_wasm = guard.canister_wasms.get(&wasm_id).unwrap_or_else(|| {
+                unreachable!(
+                    "Failed to create execution state for {}: wasm {} not found",
+                    canister_id, wasm_id
+                )
+            });
+            Arc::clone(&canister_wasm.compilate)
         };
 
-        let compilate = embedder
-            .compile(PersistenceType::Sigsegv, &instrumentation_output.binary)
-            .unwrap();
+        // Step 2. Get data from instrumentation output.
+        // TODO(EXC-755): Use the proper embedder config.
+        validate_wasm_binary(&binary_encoded_wasm, &Config::default())?;
+        let instrumentation_output =
+            instrument(&binary_encoded_wasm, &InstructionCostTable::new())?;
+        let exported_functions = instrumentation_output.exported_functions;
+        let wasm_memory_pages = instrumentation_output.data.as_pages();
 
+        // Step 3. Apply the initial memory pages to the page map.
+        let mut wasm_page_map = PageMap::deserialize(wasm_page_map).unwrap();
+        let wasm_memory_delta = wasm_page_map.update(
+            &wasm_memory_pages
+                .iter()
+                .map(|(index, bytes)| (*index, bytes as &PageBytes))
+                .collect::<Vec<(PageIndex, &PageBytes)>>(),
+        );
+
+        // Step 4. Instantiate the Wasm module to get the globals and the memory size.
+        //
         // We are using the wasm instance to initialize the execution state properly.
         // SystemApi is needed when creating a Wasmtime instance because the Linker
         // will try to assemble a list of all imports used by the wasm module.
@@ -562,11 +575,11 @@ impl SandboxManager {
         let system_api = SystemApiEmpty;
         let mut instance = match embedder.new_instance(
             canister_id,
-            &compilate,
-            &execution_state.exported_globals,
+            &embedder_cache,
+            &[],
             NumWasmPages::from(0),
-            memory_creator,
-            Some(PageMap::default()),
+            None,
+            Some(wasm_page_map.clone()),
             ModificationTracking::Ignore,
             system_api,
         ) {
@@ -576,14 +589,16 @@ impl SandboxManager {
             }
         };
 
+        // Step 5. Send all necessary data for creating the execution state to replica.
+        let wasm_memory = MemoryModifications {
+            page_delta: wasm_page_map.serialize_delta(&wasm_memory_delta),
+            size: instance.heap_size(),
+        };
+
         Ok(CreateExecutionStateSuccessReply {
-            wasm_memory_pages: wasm_memory_pages
-                .into_iter()
-                .map(|(index, bytes)| PageSerialization { index, bytes })
-                .collect(),
-            wasm_memory_size: instance.heap_size(),
+            wasm_memory,
             exported_globals: instance.get_exported_globals(),
-            exported_functions: BTreeSet::clone(execution_state.exports.as_ref()),
+            exported_functions,
         })
     }
 }
