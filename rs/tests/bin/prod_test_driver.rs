@@ -127,18 +127,10 @@ fn resolve_execution_mode(
 fn get_test_suites() -> HashMap<String, Suite> {
     let mut m = HashMap::new();
     m.insert(
-        "main_suite".to_string(),
+        "pre_master".to_string(),
         suite(
-            "main_suite",
+            "pre_master",
             vec![
-                pot(
-                    "basic_health_pot",
-                    basic_health_test::config(),
-                    par(vec![
-                        t("basic_health_test", basic_health_test),
-                        t("basic_health_test2", basic_health_test),
-                    ]),
-                ),
                 execution::upgraded_pots::general_execution_pot(),
                 execution::upgraded_pots::cycles_restrictions_pot(),
                 execution::upgraded_pots::inter_canister_queries(),
@@ -254,6 +246,23 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         ),
                     ]),
                 ),
+            ],
+        ),
+    );
+
+    m.insert(
+        "hourly".to_string(),
+        suite(
+            "hourly",
+            vec![
+                pot(
+                    "basic_health_pot",
+                    basic_health_test::config(),
+                    par(vec![
+                        t("basic_health_test", basic_health_test),
+                        t("basic_health_test2", basic_health_test),
+                    ]),
+                ),
                 pot(
                     "nns_fault_tolerance_pot",
                     nns_fault_tolerance_test::config(),
@@ -263,11 +272,9 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 ),
                 pot(
-                    "upgrade_reject", 
+                    "upgrade_reject",
                     upgrade_reject::config(),
-                    par(vec![
-                        t("upgrade_reject", upgrade_reject),
-                    ]),
+                    par(vec![t("upgrade_reject", upgrade_reject)]),
                 ),
                 pot(
                     "basic_pot_with_all_features_enabled",
@@ -280,12 +287,23 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ],
         ),
     );
+
+    // TODO: uncomment when we have some nightly system tests:
+    // m.insert(
+    //     "nightly".to_string(),
+    //     suite(
+    //         "nightly",
+    //         vec![
+    //         ],
+    //     ),
+    // );
+
+    // The tests in this suite require canisters to be build prior to
+    // running the tests which is why we separate it out.
     m.insert(
         "wasm_generator_suite".to_string(),
         suite(
             "wasm_generator_suite",
-            // This pot, unlike all pots from the main suite, requires an additional step,
-            // which has to be completed before running a driver binary.
             vec![pot(
                 "wasm_generator_pot",
                 wasm_generator_test::config(),

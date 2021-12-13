@@ -510,7 +510,7 @@ system-baseline-performance-test-nightly:
       GIT_REVISION=$PRE_GIT_REVISION
       export GIT_REVISION
 
-      # Run system baseline performance evaluation with old version and new version 
+      # Run system baseline performance evaluation with old version and new version
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
       $SHELL_WRAPPER timeout 1h python3 ./system-baseline-test.py --testnet "$TESTNET" --wg_testnet "$WG_TESTNET" --iter_duration 60 --skip_generate_report=True --should_deploy_ic=True --target_query_load=600 --target_update_load=40 --base_revision="$PRE_GIT_REVISION" --upgrade_revision="$POST_GIT_REVISION"
@@ -874,7 +874,7 @@ icos-continuous-upgrade-nightly:
           --version "$GIT_REVISION" \
           --is_upgrade_test
 
-.farm-based-test:
+.system-tests:
   extends: .prod-test
   needs: []  # allow starting immediately
   artifacts:
@@ -898,14 +898,14 @@ icos-continuous-upgrade-nightly:
       | tee "${BASE_DIR}/unstructured-logs.log" \
       | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
 
-main-suite-hourly:
-  extends: .farm-based-test
+system-tests-hourly:
+  extends: .system-tests
   variables:
-    SUITE_NAME: "main_suite"
+    SUITE_NAME: "hourly"
     cd_target_env: "HOURLY"
 
-.wasm-generator-farm-based:
-  extends: .farm-based-test
+.system-tests-wasm-generator:
+  extends: .system-tests
   variables:
     SUITE_NAME: "wasm_generator_suite"
   before_script:
@@ -916,14 +916,14 @@ main-suite-hourly:
       $SHELL_WRAPPER "${TEST_MODULES}/wasm-generator/wasm-generator.sh" 20 "${NUMBER_OF_CANISTERS}"
 
 wasm-generator-hourly:
-  extends: .wasm-generator-farm-based
+  extends: .system-tests-wasm-generator
   variables:
     SUITE_NAME: "wasm_generator_suite"
     cd_target_env: "HOURLY"
     NUMBER_OF_CANISTERS: 20
 
 wasm-generator-nightly:
-  extends: .wasm-generator-farm-based
+  extends: .system-tests-wasm-generator
   stage: prod-tests-04
   variables:
     SUITE_NAME: "wasm_generator_suite"
@@ -932,7 +932,7 @@ wasm-generator-nightly:
   timeout: 3 hours
 
 wasm-generator-slo:
-  extends: .wasm-generator-farm-based
+  extends: .system-tests-wasm-generator
   variables:
     SUITE_NAME: "wasm_generator_suite"
     NUMBER_OF_CANISTERS: 100
