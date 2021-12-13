@@ -37,7 +37,7 @@ pub const DEFAULT_CHUNK_SIZE: u32 = 1 << 20; // 1 MiB.
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
 /// have a hash computed earlier by this replica process.
-const REHASH_EVERY_NTH_CHUNK: u64 = 1;
+const REHASH_EVERY_NTH_CHUNK: u64 = 10;
 
 #[derive(Debug, PartialEq)]
 pub enum ManifestValidationError {
