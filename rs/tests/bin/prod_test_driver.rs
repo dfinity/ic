@@ -8,6 +8,7 @@ use ic_tests::nns_voting_test::{self, test as voting_test};
 use ic_tests::node_restart_test::{self, test as node_restart_test};
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::token_balance_test::{self, test as token_balance_test};
+use ic_tests::upgrade_reject::{self, upgrade_reject};
 use ic_tests::{
     basic_health_test::{self, basic_health_test},
     execution,
@@ -262,6 +263,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 ),
                 pot(
+                    "upgrade_reject", 
+                    upgrade_reject::config(),
+                    par(vec![
+                        t("upgrade_reject", upgrade_reject),
+                    ]),
+                ),
+                pot(
                     "basic_pot_with_all_features_enabled",
                     feature_flags::basic_config_with_all_features_enabled(),
                     par(vec![t(
@@ -269,7 +277,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         feature_flags::mock_ecdsa_signatures_are_supported,
                     )]),
                 ),
-
             ],
         ),
     );

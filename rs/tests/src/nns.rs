@@ -1,5 +1,5 @@
 //! Contains methods and structs that support settings up the NNS.
-use crate::util::{block_on, create_agent, get_random_application_node_endpoint, runtime_from_url};
+use crate::util::{block_on, create_agent, runtime_from_url};
 use candid::CandidType;
 use canister_test::{Canister, RemoteTestRuntime, Runtime};
 use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
@@ -10,7 +10,10 @@ use fondue::{
 };
 use ic_base_types::NodeId;
 use ic_canister_client::{Agent, Sender};
-use ic_fondue::{ic_manager::IcHandle, node_software_version::NodeSoftwareVersion};
+use ic_fondue::{
+    ic_manager::{IcEndpoint, IcHandle},
+    node_software_version::NodeSoftwareVersion,
+};
 use ic_interfaces::registry::ZERO_REGISTRY_VERSION;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{
@@ -21,7 +24,8 @@ use ic_nns_governance::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
     ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
 };
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
+use ic_nns_test_utils::governance::submit_external_update_proposal_allowing_error;
+use ic_nns_test_utils::{governance::get_proposal_info, ids::TEST_NEURON_1_ID};
 use ic_nns_test_utils::{
     governance::{submit_external_update_proposal, wait_for_final_state},
     itest_helpers::{NnsCanisters, NnsInitPayloadsBuilder},
@@ -147,7 +151,13 @@ pub trait NnsExt {
     ///
     /// This method assumes that only one application subnet is present and that
     /// that subnet is being updated.
-    fn await_software_version(&self, handle: &IcHandle, version: ReplicaVersion) -> bool;
+    fn await_status_change(
+        &self,
+        endpoint: &IcEndpoint,
+        retry_delay: Duration,
+        timeout: Duration,
+        acceptance_criterium: impl Fn(&ic_agent::agent::status::Status) -> bool,
+    ) -> bool;
 
     /// A function to remove a node from a subnet.
     fn remove_node(&self, handle: &IcHandle, node_id: NodeId);
@@ -188,6 +198,20 @@ impl NnsExt for fondue::pot::Context {
             );
             *is_installed = true;
         }
+    }
+
+    fn await_status_change(
+        &self,
+        endpoint: &IcEndpoint,
+        retry_delay: Duration,
+        timeout: Duration,
+        acceptance_criterium: impl Fn(&ic_agent::agent::status::Status) -> bool,
+    ) -> bool {
+        block_on(async move {
+            endpoint.assert_ready(self).await;
+            await_replica_status_change(self, endpoint, retry_delay, timeout, acceptance_criterium)
+                .await
+        })
     }
 
     fn bless_replica_version(
@@ -282,44 +306,6 @@ impl NnsExt for fondue::pot::Context {
         let rt = tokio::runtime::Runtime::new().expect("Tokio runtime failed to create");
         rt.block_on(async move {
             remove_node(handle, node_id).await.unwrap();
-        })
-    }
-
-    fn await_software_version(&self, handle: &IcHandle, version: ReplicaVersion) -> bool {
-        let mut rng = self.rng.clone();
-        let endpoint = get_random_application_node_endpoint(handle, &mut rng);
-        block_on(async move {
-            endpoint.assert_ready(self).await;
-            for _i in 0..24usize {
-                let agent = match create_agent(&endpoint.url.to_string()).await {
-                    Ok(v) => v,
-                    Err(e) => {
-                        info!(self.logger, "creating the agent timed out {:?}", e);
-                        sleep(Duration::from_secs(10)).await;
-                        continue;
-                    }
-                };
-                let status = match agent.status().await {
-                    Ok(s) => s,
-                    Err(e) => {
-                        info!(self.logger, "fetch status timed out {:?}", e);
-                        sleep(Duration::from_secs(10)).await;
-                        continue;
-                    }
-                };
-                info!(
-                    self.logger,
-                    "Reported impl_version: {:?}", status.impl_version
-                );
-                if let Some(v) = status.impl_version {
-                    if v.contains(&version.to_string()) {
-                        info!(self.logger, "Successfully upgraded!");
-                        return true;
-                    }
-                }
-                sleep(Duration::from_secs(10)).await;
-            }
-            false
         })
     }
 }
@@ -418,6 +404,158 @@ async fn update_subnet_replica_version(
 
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
     Ok(())
+}
+
+/// Detect whether a proposal is executed within `timeout`.
+///
+/// # Arguments
+///
+/// * `ctx`         - Fondue context
+/// * `governance`  - Governance canister
+/// * `proposal_id` - ID of a proposal to be executed
+/// * `retry_delay` - Duration between polling attempts
+/// * `timeout`     - Duration after which we give up (returning false)
+///
+/// Eventually returns whether the proposal has been executed.
+pub async fn await_proposal_execution(
+    ctx: &fondue::pot::Context,
+    governance: &Canister<'_>,
+    proposal_id: ProposalId,
+    retry_delay: Duration,
+    timeout: Duration,
+) -> bool {
+    let mut i = 0usize;
+    let start_time = std::time::Instant::now();
+    loop {
+        i += 1;
+        info!(
+            ctx.logger,
+            "Attempt #{} of obtaining final execution status for {:?}", i, proposal_id
+        );
+
+        let proposal_info = get_proposal_info(governance, proposal_id)
+            .await
+            .unwrap_or_else(|| panic!("could not obtain proposal status"));
+
+        match ProposalStatus::from_i32(proposal_info.status).unwrap() {
+            ProposalStatus::Open => {
+                // This proposal is still open
+                info!(ctx.logger, "{:?} is open...", proposal_id,)
+            }
+            ProposalStatus::Adopted => {
+                // This proposal is adopted but not yet executed
+                info!(ctx.logger, "{:?} is adopted...", proposal_id,)
+            }
+            ProposalStatus::Executed => {
+                // This proposal is already executed
+                info!(ctx.logger, "{:?} has been executed.", proposal_id,);
+                return true;
+            }
+            other_status => {
+                // This proposal will not be executed
+                info!(
+                    ctx.logger,
+                    "{:?} could not be adopted: {:?}", proposal_id, other_status
+                );
+                return false;
+            }
+        }
+
+        if std::time::Instant::now()
+            .duration_since(start_time)
+            .gt(&timeout)
+        {
+            // Give up
+            return false;
+        } else {
+            // Continue polling with delay
+            sleep(retry_delay).await;
+        }
+    }
+}
+
+/// Detect whether a replica's status becomes acceptable within `timeout`.
+///
+/// # Arguments
+///
+/// * `ctx`                  - Fondue context
+/// * `endpoint`             - Endpoint of
+/// * `retry_delay`          - Duration between polling attempts
+/// * `timeout`              - Duration after which we give up (returning false)
+/// * `acceptance_criterium` - Predicate determining whether the current status
+///   is accepted
+///
+/// Eventually returns whether the replica status has changed as specified via
+/// `acceptance_criterium`.
+pub async fn await_replica_status_change(
+    ctx: &fondue::pot::Context,
+    endpoint: &IcEndpoint,
+    retry_delay: Duration,
+    timeout: Duration,
+    acceptance_criterium: impl Fn(&ic_agent::agent::status::Status) -> bool,
+) -> bool {
+    let start_time = std::time::Instant::now();
+    let mut i = 0usize;
+    loop {
+        i += 1;
+        info!(
+            ctx.logger,
+            "Attempt #{} of detecting replica status change", i
+        );
+
+        let status = get_replica_status(endpoint)
+            .await
+            .expect("Could not obtain new agent status");
+
+        if acceptance_criterium(&status) {
+            info!(
+                ctx.logger,
+                " status change has been accepted.\nNew status:\n{:?}", status
+            );
+            return true;
+        }
+
+        if std::time::Instant::now()
+            .duration_since(start_time)
+            .gt(&timeout)
+        {
+            // Give up
+            info!(
+                ctx.logger,
+                " did not detect status change within {:?}.\nStatus remains:\n{:?}",
+                timeout,
+                status
+            );
+            return false;
+        } else {
+            // Continue polling with delay
+            sleep(retry_delay).await;
+        }
+    }
+}
+
+/// Obtain the status of a replica via its `endpoint`.
+///
+/// Eventually returns the status of the replica.
+async fn get_replica_status(
+    endpoint: &IcEndpoint,
+) -> Result<ic_agent::agent::status::Status, ic_agent::AgentError> {
+    match create_agent(&endpoint.url.to_string()).await {
+        Ok(agent) => agent.status().await,
+        Err(e) => Err(e),
+    }
+}
+
+/// Obtain the software version of a replica via its `endpoint`.
+///
+/// Eventually returns the replica software version.
+pub async fn get_software_version(endpoint: &IcEndpoint) -> Option<ReplicaVersion> {
+    match get_replica_status(endpoint).await {
+        Ok(status) => status
+            .impl_version
+            .map(|v| ReplicaVersion::try_from(v).unwrap()),
+        Err(_) => None,
+    }
 }
 
 /// Adds the given `ReplicaVersionRecord` to the registry and returns the
@@ -612,4 +750,101 @@ pub async fn submit_external_proposal_with_test_id<T: CandidType>(
         "".to_string(),
     )
     .await
+}
+
+/// Submits a proposal for blessing a replica software version.
+///
+/// # Arguments
+///
+/// * `governance`  - Governance canister
+/// * `sender`      - Sender of the proposal
+/// * `neuron_id`   - ID of the proposing neuron. This neuron will automatically
+///   vote in favor of the proposal.
+/// * `version`     - Replica software version
+/// * `sha256`      - Claimed SHA256 of the replica image file
+/// * `upgrade_url` - URL leading to the replica image file
+///
+/// Note: The existing replica *may or may not* check that the
+/// provided `sha256` corresponds to the image checksum. In case
+/// this proposal is adopted, the replica *assumes* that the file
+/// under `upgrade_url` has the provided `sha256`. If there has
+/// been a mismatch (or if the image has been forged after blessing),
+/// the replica will reject the follow-up proposal for updating the
+/// replica version.
+///
+/// Eventually returns the identifier of the newly submitted proposal.
+pub async fn submit_bless_replica_version_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    version: ReplicaVersion,
+    sha256: String,
+    upgrade_url: String,
+) -> ProposalId {
+    submit_external_update_proposal_allowing_error(
+        governance,
+        sender,
+        neuron_id,
+        NnsFunction::BlessReplicaVersion,
+        BlessReplicaVersionPayload {
+            replica_version_id: String::from(version.clone()),
+            binary_url: String::default(),
+            sha256_hex: String::default(),
+            node_manager_binary_url: String::default(),
+            node_manager_sha256_hex: String::default(),
+            release_package_url: upgrade_url,
+            release_package_sha256_hex: sha256.clone(),
+        },
+        format!(
+            "Bless replica version: {} with hash: {}",
+            String::from(version),
+            sha256
+        ),
+        "".to_string(),
+    )
+    .await
+    .expect("submit_bless_replica_version_proposal failed")
+}
+
+/// Submits a proposal for updating a subnet replica software version.
+///
+/// # Arguments
+///
+/// * `governance`  - Governance canister
+/// * `sender`      - Sender of the proposal
+/// * `neuron_id`   - ID of the proposing neuron. This neuron will automatically
+///   vote in favor of the proposal.
+/// * `version`     - Replica software version
+/// * `subnet_id`   - ID of the subnet to be updated
+///
+/// Note: The existing replica *must* check that the new replica image
+/// has the expected SHA256. If there is a mismatch, then this proposal
+/// must eventually fail.
+///
+/// Eventually returns the identifier of the newly submitted proposal.
+pub async fn submit_update_subnet_replica_version_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    version: ReplicaVersion,
+    subnet_id: SubnetId,
+) -> ProposalId {
+    submit_external_update_proposal_allowing_error(
+        governance,
+        sender,
+        neuron_id,
+        NnsFunction::UpdateSubnetReplicaVersion,
+        UpdateSubnetReplicaVersionPayload {
+            subnet_id: subnet_id.get(),
+            replica_version_id: String::from(version.clone()),
+        },
+        format!(
+            "Update {} subnet's replica version to: {}",
+            subnet_id,
+            String::from(version)
+        ),
+        "".to_string(),
+    )
+    .await
+    .expect("submit_update_subnet_replica_version_proposal failed")
 }
