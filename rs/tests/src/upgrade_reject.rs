@@ -142,7 +142,7 @@ pub fn upgrade_reject(handle: IcHandle, ctx: &fondue::pot::Context) {
             ctx,
             endpoint,
             Duration::from_secs(20),
-            Duration::from_secs(8 * 60),
+            Duration::from_secs(6 * 60 + 30),
             |new_status: &ic_agent::agent::status::Status| {
                 new_status
                 .impl_version
