@@ -2,7 +2,6 @@ build-determinism-binaries:
   extends:
     - .ubuntu-nix-docker
     - .rules-parent-pipeline
-  allow_failure: true
   stage: build-determinism-test
   needs:
     - cargo-build-release-linux-native
@@ -12,12 +11,30 @@ build-determinism-binaries:
       set -eux
       echo "cargo-build-release-linux-native:"
       cd artifacts/release
-      sha256sum ./*.gz | tee SHAS
+      # Build Determinism for GLOBIGNORE files will be handled by NNS and Testing & Verification team
+      (
+          GLOBIGNORE="ic-nns-init.gz:prod-test-driver.gz:e2e-test-driver.gz:ic-test-bin.gz:system-tests.gz"
+          sha256sum -- *.gz | tee SHAS
+      )
       cd -
       echo "docker-build-ic:"
       cd artifacts/docker-build-ic/release
-      sha256sum ./*.gz | tee SHAS
+      (
+          GLOBIGNORE="ic-nns-init.gz:prod-test-driver.gz:e2e-test-driver.gz:ic-test-bin.gz:system-tests.gz"
+          sha256sum -- *.gz | tee SHAS
+      )
       cd -
+      if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
+          set +x
+          echo "Build determinism check compares two binaries built on a separate CI jobs:"
+          echo " - cargo-build-release-linux-native"
+          echo " - docker-build-ic"
+          echo "Difference indicates that this MR introduced changes that break Build Determinism."
+          echo -e "If this job fails, please identify the cause of breaking Build Determinism and fix it. \xF0\x9F\x99\x8F"
+          set -x
+      else
+          echo "Difference indicates that Build Determinism is broken for binaries that differ!"
+      fi
       diff -u artifacts/release/SHAS artifacts/docker-build-ic/release/SHAS
 
 
@@ -25,7 +42,6 @@ build-determinism-canisters:
   extends:
     - .ubuntu-nix-docker
     - .rules-parent-pipeline
-  allow_failure: true
   stage: build-determinism-test
   needs:
     - cargo-build-canisters
@@ -35,12 +51,23 @@ build-determinism-canisters:
       set -eux
       echo "cargo-build-canisters:"
       cd artifacts/canisters
-      sha256sum ./*.gz | tee SHAS
+      sha256sum -- *.gz | tee SHAS
       cd -
       echo "docker-build-ic:"
       cd artifacts/docker-build-ic/canisters
-      sha256sum ./*.gz | tee SHAS
+      sha256sum -- *.gz | tee SHAS
       cd -
+      if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
+          set +x
+          echo "Build determinism check compares two canister binaries built on a separate CI jobs:"
+          echo " - cargo-build-canisters"
+          echo " - docker-build-ic"
+          echo "Difference indicates that this MR introduced changes that break Build Determinism."
+          echo -e "If this job fails, please identify the cause of breaking Build Determinism and fix it. \xF0\x9F\x99\x8F"
+          set -x
+      else
+          echo "Difference indicates that Build Determinism is broken for canister binaries that differ!"
+      fi
       diff -u artifacts/canisters/SHAS artifacts/docker-build-ic/canisters/SHAS
 
 
@@ -48,7 +75,6 @@ build-determinism-update-img:
   extends:
     - .ubuntu-nix-docker
     - .rules-parent-pipeline
-  allow_failure: true
   stage: build-determinism-test
   needs:
     - guest-os-updateimg-build
@@ -64,4 +90,15 @@ build-determinism-update-img:
       cd artifacts/docker-build-ic/icos
       sha256sum update-img.tar.gz | tee SHAS
       cd -
+      if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
+          set +x
+          echo "Build determinism check compares two IC-OS guest update images built on a separate CI jobs:"
+          echo " - guest-os-updateimg-build"
+          echo " - docker-build-ic"
+          echo "Difference indicates that this MR introduced changes that break Build Determinism for IC-OS guest image."
+          echo -e "If this job fails, please identify the cause of breaking Build Determinism and fix it. \xF0\x9F\x99\x8F"
+          set -x
+      else
+          echo "Difference indicates that Build Determinism is broken IC-OS guest image!"
+      fi
       diff -u ic-os/guestos/build-out/update-img/SHAS artifacts/docker-build-ic/icos/SHAS
