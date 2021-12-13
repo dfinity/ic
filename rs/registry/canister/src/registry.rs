@@ -157,6 +157,51 @@ impl Registry {
             .count()
     }
 
+    /// Garbage-collects the Registry. This method deletes a record (along with
+    /// its associated mutations in the changelog), bypassing the need for
+    /// deleting via mutations. It also carries out the Registry's standard
+    /// invariant checks.
+    ///
+    /// Should only be called from `canister_post_upgrade`! Records are pruned
+    /// on a "best effort" basis; if the key does not exist then it is
+    /// skipped without a panic.
+    pub fn prune_stale_records(&mut self, record_keys: Vec<String>) {
+        let record_keys = record_keys
+            .into_iter()
+            .map(|key| key.as_bytes().to_vec())
+            .collect::<Vec<_>>();
+
+        let mut removed_records = vec![];
+        record_keys.iter().for_each(|record_key| {
+            if self.store.remove(record_key).is_some() {
+                removed_records.push(record_key);
+            }
+        });
+
+        let cl_clone = self.changelog.clone();
+        cl_clone.iter().for_each(|(key, encoded_atomic_mutation)| {
+            let mut atomic_mutation =
+                RegistryAtomicMutateRequest::decode(&encoded_atomic_mutation[..]).unwrap();
+            atomic_mutation
+                .mutations
+                .retain(|registry_mutation| !removed_records.contains(&&registry_mutation.key));
+
+            let mut buf = vec![];
+            atomic_mutation.encode(&mut buf).unwrap();
+
+            if !atomic_mutation.mutations.is_empty() {
+                self.changelog
+                    .modify(key.as_ref(), |encoded_atomic_mutation| {
+                        *encoded_atomic_mutation = buf;
+                    });
+            } else {
+                self.changelog.delete(key.as_ref());
+            }
+        });
+
+        self.check_global_invariants(&[]);
+    }
+
     /// Returns the last RegistryValue, if any, for the given key.
     ///
     /// As we keep track of deletions in the registry, this value
