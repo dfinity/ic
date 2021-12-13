@@ -119,6 +119,9 @@ class RcloneDownload:
             cmd = [
                 "rclone",
                 f"--config={self.config}",
+                "--transfers=100",
+                "--multi-thread-cutoff=1M",
+                "--multi-thread-streams=100",
                 "--checksum",
                 "--include",
                 include or "*",

@@ -103,15 +103,57 @@ fi
 # Load INPUT
 CONFIG="$(cat ${INPUT})"
 
-DEPLOYMENT=$(echo ${CONFIG} | jq -r -c '.deployment')
-NAME_SERVERS=$(echo ${CONFIG} | jq -r -c '.name_servers | join(" ")')
-NAME_SERVERS_FALLBACK=$(echo ${CONFIG} | jq -r -c '.name_servers_fallback | join(" ")')
-JOURNALBEAT_HOSTS=$(echo ${CONFIG} | jq -r -c '.journalbeat_hosts | join(" ")')
+# Read all the top-level values out in one swoop
+VALUES=$(echo ${CONFIG} | jq -r -c '[
+    .deployment,
+    (.name_servers | join(" ")),
+    (.name_servers_fallback | join(" ")),
+    (.journalbeat_hosts | join(" "))
+] | join("\u0001")')
+IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS NAME_SERVERS_FALLBACK JOURNALBEAT_HOSTS < <(echo $VALUES)
+
+# Read all the node info out in one swoop
+NODES=0
+VALUES=$(echo ${CONFIG} \
+    | jq -r -c '.datacenters[]
+| .aux_nodes[] += { "type": "aux" } | .boundary_nodes[] += {"type": "boundary"} | .nodes[] += { "type": "replica" }
+| [.aux_nodes[], .boundary_nodes[], .nodes[]][] + { "ipv6_prefix": .ipv6_prefix, "ipv6_subnet": .ipv6_subnet } | [
+    .ipv6_prefix,
+    .ipv6_subnet,
+    .ipv6_address,
+    .hostname,
+    .subnet_type,
+    .subnet_idx,
+    .node_idx,
+    .use_hsm,
+    .type
+] | join("\u0001")')
+while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address hostname subnet_type subnet_idx node_idx use_hsm type; do
+    eval "declare -A __RAW_NODE_$NODES=(
+        ['ipv6_prefix']=$ipv6_prefix
+        ['ipv6_subnet']=$ipv6_subnet
+        ['ipv6_address']=$ipv6_address
+        ['subnet_type']=$subnet_type
+        ['hostname']=$hostname
+        ['subnet_idx']=$subnet_idx
+        ['node_idx']=$node_idx
+        ['use_hsm']=$use_hsm
+        ['type']=$type
+    )"
+    NODES=$((NODES + 1))
+done < <(printf "%s\n" "${VALUES[@]}")
+NODES=${!__RAW_NODE_@}
 
 function prepare_build_directories() {
-    IC_PREP_DIR="$(mktemp -d)"
-    CONFIG_DIR="$(mktemp -d)"
-    TARBALL_DIR="$(mktemp -d)"
+    TEMPDIR=$(mktemp -d /tmp/build-deployment.sh.XXXXXXXXXX)
+
+    IC_PREP_DIR="$TEMPDIR/IC_PREP"
+    CONFIG_DIR="$TEMPDIR/CONFIG"
+    TARBALL_DIR="$TEMPDIR/TARBALL"
+
+    mkdir -p "${IC_PREP_DIR}"
+    mkdir -p "${CONFIG_DIR}"
+    mkdir -p "${TARBALL_DIR}"
 
     if [ ! -d "${OUTPUT}" ]; then
         mkdir -p "${OUTPUT}"
@@ -127,9 +169,8 @@ function download_registry_canisters() {
     "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
         --git-rev "$GIT_REVISION" --remote-path=canisters --out="${IC_PREP_DIR}/canisters"
 
-    for f in "${IC_PREP_DIR}"/canisters/*.gz; do
-        gunzip -f "$f"
-    done
+    find "${IC_PREP_DIR}/canisters/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {}"
+
     rsync -a --delete "${IC_PREP_DIR}/canisters/" "$OUTPUT/canisters/"
 }
 
@@ -137,55 +178,46 @@ function download_binaries() {
     "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
         --git-rev "$GIT_REVISION" --remote-path=release --out="${IC_PREP_DIR}/bin"
 
-    for f in "${IC_PREP_DIR}"/bin/*.gz; do
-        gunzip -f "$f"
-        chmod +x "${IC_PREP_DIR}/bin/$(basename $f .gz)"
-    done
+    find "${IC_PREP_DIR}/bin/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {} && basename {} .gz | xargs -I[] chmod +x ${IC_PREP_DIR}/bin/[]"
+
     mkdir -p "$OUTPUT/bin"
     rsync -a --delete "${IC_PREP_DIR}/bin/" "$OUTPUT/bin/"
 }
 
 function generate_subnet_config() {
+    # Start hashing in the background
+    mkfifo "$TEMPDIR/REPLICA_HASH"
+    mkfifo "$TEMPDIR/NM_HASH"
+    sha256sum "${IC_PREP_DIR}/bin/replica" | cut -d " " -f 1 >"$TEMPDIR/REPLICA_HASH" &
+    sha256sum "${IC_PREP_DIR}/bin/nodemanager" | cut -d " " -f 1 >"$TEMPDIR/NM_HASH" &
+
     cp -a ${IC_PREP_DIR}/bin/replica "$REPO_ROOT/ic-os/guestos/rootfs/opt/ic/bin/replica"
     cp -a ${IC_PREP_DIR}/bin/nodemanager "$REPO_ROOT/ic-os/guestos/rootfs/opt/ic/bin/nodemanager"
     cp -a ${IC_PREP_DIR}/bin/boundary-node-control-plane "$REPO_ROOT/ic-os/generic-guestos/rootfs/opt/dfinity/boundary-node-control-plane"
-    REPLICA_HASH=$(sha256sum "$REPO_ROOT/ic-os/guestos/rootfs/opt/ic/bin/replica" | cut -d " " -f 1)
-    NM_HASH=$(sha256sum "$REPO_ROOT/ic-os/guestos/rootfs/opt/ic/bin/nodemanager" | cut -d " " -f 1)
 
     NODES_NNS=()
     NODES_APP=()
-    # Query and list all NNS node addresses in subnet
-    for datacenter in $(echo ${CONFIG} | jq -c '.datacenters[]'); do
-        local ipv6_prefix=$(echo ${datacenter} | jq -r '.ipv6_prefix')
-        for nodes in $(echo ${datacenter} | jq -c '.nodes[]'); do
-            for nns_node in $(echo ${nodes} | jq -c 'select(.subnet_type|test("root_subnet"))'); do
-                local ipv6_address=$(echo "${nns_node}" | jq -r '.ipv6_address')
-                local subnet_idx=$(echo ${nns_node} | jq -r '.subnet_idx')
-                local node_idx=$(echo ${nns_node} | jq -r '.node_idx')
+    # Query and list all NNS and APP node addresses in subnet
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" -ne "replica" ]]; then
+            continue
+        fi
+        local ipv6_address=${NODE["ipv6_address"]}
+        local subnet_idx=${NODE["subnet_idx"]}
+        local node_idx=${NODE["node_idx"]}
+        local subnet_type=${NODE["subnet_type"]}
 
-                NODES_NNS+=("$node_idx-$subnet_idx-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
-            done
-
-        done
-    done
-
-    # Query and list all APP node addresses in subnet
-    for datacenter in $(echo ${CONFIG} | jq -c '.datacenters[]'); do
-        local ipv6_prefix=$(echo ${datacenters} | jq -r '.ipv6_prefix')
-        for nodes in $(echo ${datacenter} | jq -c '.nodes[]'); do
-            for app_node in $(echo ${nodes} | jq -c 'select(.subnet_type|test("app_subnet"))'); do
-                local ipv6_address=$(echo "${app_node}" | jq -r '.ipv6_address')
-                local subnet_idx=$(echo ${app_node} | jq -r '.subnet_idx')
-                local node_idx=$(echo ${app_node} | jq -r '.node_idx')
-
-                if [[ "$subnet_idx" == "x" ]]; then
-                    # Unassigned nodes (nodes not assigned to any subnet) have an empty subnet_idx
-                    # in the line submitted to ic-prep.
-                    subnet_idx=""
-                fi
-                NODES_APP+=("$node_idx-$subnet_idx-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
-            done
-        done
+        if [[ "$subnet_type" == "root_subnet" ]]; then
+            NODES_NNS+=("$node_idx-$subnet_idx-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
+        elif [[ "$subnet_type" == "app_subnet" ]]; then
+            if [[ "$subnet_idx" == "x" ]]; then
+                # Unassigned nodes (nodes not assigned to any subnet) have an empty subnet_idx
+                # in the line submitted to ic-prep.
+                subnet_idx=""
+            fi
+            NODES_APP+=("$node_idx-$subnet_idx-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
+        fi
     done
 
     # The principal id below is the one corresponding to the hardcoded key in
@@ -194,6 +226,10 @@ function generate_subnet_config() {
     #
     # It is used for both the node operator and its corresponding provider.
     NODE_OPERATOR_ID="5o66h-77qch-43oup-7aaui-kz5ty-tww4j-t2wmx-e3lym-cbtct-l3gpw-wae"
+
+    # Get the hash results
+    REPLICA_HASH=$(cat "$TEMPDIR/REPLICA_HASH")
+    NM_HASH=$(cat "$TEMPDIR/NM_HASH")
 
     set -x
     # Generate key material for assigned nodes
@@ -218,186 +254,169 @@ function generate_subnet_config() {
 }
 
 function create_tarball_structure() {
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        echo ${datacenters} | jq -c '[.nodes[],.boundary_nodes[],.aux_nodes[]][]' | while read nodes; do
-            local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
-            local node_idx=$(echo ${nodes} | jq -r '.node_idx')
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            mkdir -p "${CONFIG_DIR}/$NODE_PREFIX/node/replica_config"
-        done
+    for n in $NODES; do
+        declare -n NODE=$n
+        local subnet_idx=${NODE["subnet_idx"]}
+        local node_idx=${NODE["node_idx"]}
+        NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+        mkdir -p "${CONFIG_DIR}/$NODE_PREFIX/node/replica_config"
     done
 }
 
 function generate_journalbeat_config() {
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        echo ${datacenters} | jq -c '[.nodes[],.boundary_nodes[],.aux_nodes[]][]' | while read nodes; do
+    for n in $NODES; do
+        declare -n NODE=$n
+        local subnet_idx=${NODE["subnet_idx"]}
+        local node_idx=${NODE["node_idx"]}
 
-            local hostname=$(echo ${nodes} | jq -r '.hostname')
-            local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
-            local node_idx=$(echo ${nodes} | jq -r '.node_idx')
+        # Define hostname
+        NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
 
-            # Define hostname
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-
-            if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
-                echo "journalbeat_hosts=${JOURNALBEAT_HOSTS}" >"${CONFIG_DIR}/$NODE_PREFIX/journalbeat.conf"
-            fi
-        done
+        if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
+            echo "journalbeat_hosts=${JOURNALBEAT_HOSTS}" >"${CONFIG_DIR}/$NODE_PREFIX/journalbeat.conf"
+        fi
     done
 }
 
 function generate_node_config() {
     # Query and list all NNS nodes in subnet
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        local ipv6_prefix=$(echo ${datacenters} | jq -r '.ipv6_prefix')
-        echo ${datacenters} | jq -c '.nodes[]' | while read nodes; do
-            NNS_DC_URL=$(echo ${nodes} | jq -c 'select(.subnet_type|test("root_subnet"))' | while read nns_node; do
-                local ipv6_address=$(echo "${nns_node}" | jq -r '.ipv6_address')
-                echo -n "http://[${ipv6_address}]:8080"
-            done)
-            echo ${NNS_DC_URL} >>"${IC_PREP_DIR}/NNS_URL"
-        done
-    done
-    NNS_URL="$(cat ${IC_PREP_DIR}/NNS_URL | awk '$1=$1' ORS=',' | sed 's@,$@@g')"
-    rm -f "${IC_PREP_DIR}/NNS_URL)"
-
     # Populate NNS specific configuration
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        echo ${datacenters} | jq -c '.nodes[]' | while read nodes; do
+    NNS_URL=()
+    for n in $NODES; do
+        declare -n NODE=$n
 
-            local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
-            local node_idx=$(echo ${nodes} | jq -r '.node_idx')
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+        local ipv6_address=${NODE["ipv6_address"]}
+        local subnet_idx=${NODE["subnet_idx"]}
+        local node_idx=${NODE["node_idx"]}
+        local subnet_type=${NODE["subnet_type"]}
 
-            echo ${nodes} | jq -c 'select(.subnet_type|test("root_subnet"))' | while read nns_node; do
-                # Copy initial NNS
-                cp -r "${IC_PREP_DIR}/ic_registry_local_store" "${CONFIG_DIR}/$NODE_PREFIX/"
-            done
-        done
+        if [[ "${NODE["type"]}" -ne "replica" ]]; then
+            continue
+        fi
+        if [[ "$subnet_type" -ne "root_subnet" ]]; then
+            continue
+        fi
+
+        # Copy initial NNS
+        NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+        cp -r "${IC_PREP_DIR}/ic_registry_local_store" "${CONFIG_DIR}/$NODE_PREFIX/"
+
+        NNS_URL+=("http://[${ipv6_address}]:8080")
     done
+    NNS_URL=$(
+        IFS=,
+        echo "${NNS_URL[*]}"
+    )
 
     # Populate generic configuration
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        local ipv6_prefix=$(echo ${datacenters} | jq -r '.ipv6_prefix')
-        echo ${datacenters} | jq -c '.nodes[]' | while read nodes; do
+    for n in $NODES; do
+        declare -n NODE=$n
+        local ipv6_address=${NODE["ipv6_address"]}
+        local subnet_type=${NODE["subnet_type"]}
+        local type=${NODE["type"]}
+        local subnet_idx=${NODE["subnet_idx"]}
+        local node_idx=${NODE["node_idx"]}
+        NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
 
-            local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
-            local node_idx=$(echo ${nodes} | jq -r '.node_idx')
-            local use_hsm=$(echo ${nodes} | jq -r '.use_hsm')
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+        if [[ "$type" == "replica" ]]; then
+            local use_hsm=${NODE["use_hsm"]}
 
+            # Update crypto setup
             if ! [[ "${use_hsm}" == "true" || "${use_hsm}" == "1" ]]; then
-                # Update crypto setup
                 cp -r "${IC_PREP_DIR}/node-$node_idx/crypto/" "${CONFIG_DIR}/$NODE_PREFIX/ic_crypto/"
             fi
 
             # Copy the NNS public key in the correct place
             cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/$NODE_PREFIX/nns_public_key.pem"
             echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/$NODE_PREFIX/nns.conf"
-        done
-    done
 
-    # nns config for boundary nodes
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        local ipv6_prefix=$(echo ${datacenters} | jq -r '.ipv6_prefix')
-        echo ${datacenters} | jq -c '.boundary_nodes[]' | while read nodes; do
-            local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
-            local node_idx=$(echo ${nodes} | jq -r '.node_idx')
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+        elif [[ "$type" == "boundary" ]]; then
             # Copy the NNS public key in the correct place
             cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/$NODE_PREFIX/nns_public_key.pem"
             echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/$NODE_PREFIX/nns.conf"
-        done
+        fi
     done
 }
 
 function generate_network_config() {
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        local ipv6_prefix=$(echo ${datacenters} | jq -r '.ipv6_prefix')
-        local ipv6_subnet=$(echo ${datacenters} | jq -r '.ipv6_subnet')
-        local ipv6_gateway="${ipv6_prefix}"::1
-        echo ${datacenters} | jq -c '[.nodes[],.boundary_nodes[],.aux_nodes[]][]' | while read nodes; do
+    for n in $NODES; do
+        declare -n NODE=$n
+        local hostname=${NODE["hostname"]}
+        local subnet_idx=${NODE["subnet_idx"]}
+        local node_idx=${NODE["node_idx"]}
 
-            local hostname=$(echo ${nodes} | jq -r '.hostname')
-            local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
-            local node_idx=$(echo ${nodes} | jq -r '.node_idx')
+        # Define hostname
+        NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+        echo "hostname=${hostname}" >"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
 
-            # Define hostname
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            echo "hostname=${hostname}" >"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
+        # Set name servers
+        echo "name_servers=${NAME_SERVERS}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
+        echo "name_servers_fallback=${NAME_SERVERS_FALLBACK}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
 
-            # Set name servers
-            echo "name_servers=${NAME_SERVERS}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
-            echo "name_servers_fallback=${NAME_SERVERS_FALLBACK}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
-
-            # IPv6 network configuration is obtained from the Router Advertisement.
-        done
+        # IPv6 network configuration is obtained from the Router Advertisement.
     done
 }
 
 function copy_ssh_keys() {
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        echo ${datacenters} | jq -c '[.nodes[],.boundary_nodes[],.aux_nodes[]][]' | while read nodes; do
-            local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
-            local node_idx=$(echo ${nodes} | jq -r '.node_idx')
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+    for n in $NODES; do
+        declare -n NODE=$n
+        local subnet_idx=${NODE["subnet_idx"]}
+        local node_idx=${NODE["node_idx"]}
 
-            # Copy the contents of the directory, but make sure that we do not
-            # copy/create symlinks (but rather dereference file contents).
-            # Symlinks must be refused by the config injection script (they
-            # can lead to confusion and side effects when overwriting one
-            # file changes another).
-            cp -Lr "${SSH}" "${CONFIG_DIR}/$NODE_PREFIX/accounts_ssh_authorized_keys"
-        done
+        NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+
+        # Copy the contents of the directory, but make sure that we do not
+        # copy/create symlinks (but rather dereference file contents).
+        # Symlinks must be refused by the config injection script (they
+        # can lead to confusion and side effects when overwriting one
+        # file changes another).
+        cp -r "${SSH}" "${CONFIG_DIR}/$NODE_PREFIX/accounts_ssh_authorized_keys"
     done
 }
 
 function build_tarball() {
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        echo ${datacenters} | jq -c '[.nodes[],.boundary_nodes[],.aux_nodes[]][]' | while read nodes; do
+    for n in $NODES; do
+        declare -n NODE=$n
+        local subnet_idx=${NODE["subnet_idx"]}
+        local node_idx=${NODE["node_idx"]}
 
-            local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
-            local node_idx=$(echo ${nodes} | jq -r '.node_idx')
-
-            # Create temporary tarball directory per node
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            mkdir -p "${TARBALL_DIR}/$NODE_PREFIX"
-            (
-                cd "${CONFIG_DIR}/$NODE_PREFIX"
-                tar c .
-            ) >${TARBALL_DIR}/$NODE_PREFIX/ic-bootstrap.tar
-        done
+        # Create temporary tarball directory per node
+        NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+        mkdir -p "${TARBALL_DIR}/$NODE_PREFIX"
+        (
+            cd "${CONFIG_DIR}/$NODE_PREFIX"
+            tar c .
+        ) >${TARBALL_DIR}/$NODE_PREFIX/ic-bootstrap.tar
     done
     tar czf "${OUTPUT}/config.tgz" -C "${CONFIG_DIR}" .
 }
 
 function build_removable_media() {
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        echo ${datacenters} | jq -c '[.nodes[],.boundary_nodes[],.aux_nodes[]][]' | while read nodes; do
-            local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
-            local node_idx=$(echo ${nodes} | jq -r '.node_idx')
+    for n in $NODES; do
+        declare -n NODE=$n
+        local subnet_idx=${NODE["subnet_idx"]}
+        local node_idx=${NODE["node_idx"]}
 
-            #echo "${DEPLOYMENT}.$subnet_idx.$node_idx"
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            truncate --size 4M "${OUTPUT}/$NODE_PREFIX.img"
-            mkfs.vfat "${OUTPUT}/$NODE_PREFIX.img"
-            mcopy -i "${OUTPUT}/$NODE_PREFIX.img" -o -s ${TARBALL_DIR}/$NODE_PREFIX/ic-bootstrap.tar ::
-        done
+        #echo "${DEPLOYMENT}.$subnet_idx.$node_idx"
+        NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+        truncate --size 4M "${OUTPUT}/$NODE_PREFIX.img"
+        mkfs.vfat "${OUTPUT}/$NODE_PREFIX.img"
+        mcopy -i "${OUTPUT}/$NODE_PREFIX.img" -o -s ${TARBALL_DIR}/$NODE_PREFIX/ic-bootstrap.tar ::
     done
 }
 
 function remove_temporary_directories() {
-    rm -rf ${IC_PREP_DIR}
-    rm -rf ${CONFIG_DIR}
-    rm -rf ${TARBALL_DIR}
+    rm -rf ${TEMPDIR}
 }
 
 # See how we were called
 if [ ${DEBUG} -eq 1 ]; then
     cleanup_rootfs
     prepare_build_directories
-    download_binaries
+    download_binaries &
+    DOWNLOAD_PID=$!
     download_registry_canisters
+    wait $DOWNLOAD_PID
     generate_subnet_config
     create_tarball_structure
     generate_journalbeat_config
@@ -411,8 +430,10 @@ if [ ${DEBUG} -eq 1 ]; then
 else
     cleanup_rootfs >/dev/null 2>&1
     prepare_build_directories >/dev/null 2>&1
-    download_binaries >/dev/null 2>&1
+    download_binaries >/dev/null 2>&1 &
+    DOWNLOAD_PID=$!
     download_registry_canisters >/dev/null 2>&1
+    wait $DOWNLOAD_PID
     generate_subnet_config >/dev/null 2>&1
     create_tarball_structure >/dev/null 2>&1
     generate_journalbeat_config >/dev/null 2>&1
