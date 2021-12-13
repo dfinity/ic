@@ -13,7 +13,7 @@ use ic_tests::{
     execution,
 };
 use ic_tests::{
-    cycles_minting_test, nns_canister_upgrade_test, registry_authentication_test,
+    cycles_minting_test, feature_flags, nns_canister_upgrade_test, registry_authentication_test,
     ssh_access_to_nodes, subnet_creation, transaction_ledger_correctness_test, wasm_generator_test,
 };
 use regex::Regex;
@@ -261,6 +261,15 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         nns_fault_tolerance_test::test,
                     )]),
                 ),
+                pot(
+                    "basic_pot_with_all_features_enabled",
+                    feature_flags::basic_config_with_all_features_enabled(),
+                    par(vec![t(
+                        "mock_ecdsa_signatures_are_supported",
+                        feature_flags::mock_ecdsa_signatures_are_supported,
+                    )]),
+                ),
+
             ],
         ),
     );
