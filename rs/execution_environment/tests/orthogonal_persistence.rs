@@ -10,9 +10,9 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CallContextAction, CanisterState};
 use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, execution_state::ExecutionStateBuilder,
-    mock_time, state::SystemStateBuilder, types::ids::subnet_test_id, types::ids::user_test_id,
-    types::messages::IngressBuilder, with_test_replica_logger,
+    cycles_account_manager::CyclesAccountManagerBuilder, mock_time, state::SystemStateBuilder,
+    types::ids::subnet_test_id, types::ids::user_test_id, types::messages::IngressBuilder,
+    with_test_replica_logger,
 };
 use ic_types::{
     ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId,
@@ -61,7 +61,13 @@ impl HypervisorTest {
         );
         let wasm_binary = wabt::wat2wasm(wast).unwrap();
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let execution_state = ExecutionStateBuilder::new(wasm_binary, tmpdir.path().into()).build();
+        let execution_state = hypervisor
+            .create_execution_state(
+                wasm_binary,
+                tmpdir.path().to_path_buf(),
+                CanisterId::from(0),
+            )
+            .unwrap();
 
         let canister = CanisterState {
             system_state: SystemStateBuilder::default()

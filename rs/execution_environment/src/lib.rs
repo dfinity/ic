@@ -14,7 +14,7 @@ mod util;
 
 pub use execution_environment::{ExecutionEnvironment, ExecutionEnvironmentImpl};
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
-pub use hypervisor::{execute, Hypervisor, HypervisorMetrics};
+pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
