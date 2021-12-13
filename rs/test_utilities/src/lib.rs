@@ -23,7 +23,6 @@ pub mod types;
 pub mod xnet_payload_builder;
 pub use ic_universal_canister as universal_canister;
 
-pub mod execution_state;
 mod logger;
 mod util;
 

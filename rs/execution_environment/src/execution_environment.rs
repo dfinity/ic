@@ -1941,6 +1941,12 @@ impl ExecutionEnvironmentImpl {
         );
         user_error
     }
+
+    /// For testing purposes only.
+    #[doc(hidden)]
+    pub fn hypervisor_for_testing(&self) -> &Hypervisor {
+        &*self.hypervisor
+    }
 }
 
 fn get_canister_mut(

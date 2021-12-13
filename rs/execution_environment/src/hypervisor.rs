@@ -190,17 +190,13 @@ impl Hypervisor {
             routing_table,
             subnet_records,
         );
-        let output = execute(
+        let output = self.execute(
             api_type,
             system_state.clone(),
             memory_usage,
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
-            Arc::clone(&self.cycles_account_manager),
-            Arc::clone(&self.metrics),
-            Arc::clone(&self.wasm_executor),
-            self.sandbox_executor.clone(),
         );
 
         let (mut system_state, heap_delta) = if output.wasm_result.is_ok() {
@@ -296,17 +292,13 @@ impl Hypervisor {
                 // unmodified version of the canister. Hence, execute on clones
                 // of system and execution states so that we have the original
                 // versions.
-                let output = execute(
+                let output = self.execute(
                     api_type,
                     system_state.clone(),
                     memory_usage,
                     execution_parameters,
                     FuncRef::Method(method),
                     execution_state.clone(),
-                    Arc::clone(&self.cycles_account_manager),
-                    Arc::clone(&self.metrics),
-                    Arc::clone(&self.wasm_executor),
-                    self.sandbox_executor.clone(),
                 );
 
                 let canister =
@@ -345,17 +337,13 @@ impl Hypervisor {
                 // As we are executing the query in non-replicated mode, we can
                 // modify the canister as the caller is not going to be able to
                 // commit modifications to the canister anyway.
-                let output = execute(
+                let output = self.execute(
                     api_type,
                     system_state,
                     memory_usage,
                     execution_parameters,
                     FuncRef::Method(method),
                     execution_state.clone(),
-                    Arc::clone(&self.cycles_account_manager),
-                    Arc::clone(&self.metrics),
-                    Arc::clone(&self.wasm_executor),
-                    self.sandbox_executor.clone(),
                 );
 
                 let new_execution_state = match query_kind {
@@ -478,21 +466,15 @@ impl Hypervisor {
             }
         };
 
-        let output = execute(
+        let output = self.execute(
             api_type,
             canister.system_state.clone(),
             canister.memory_usage(self.own_subnet_type),
             execution_parameters.clone(),
             func_ref,
             canister.execution_state.take().unwrap(),
-            Arc::clone(&self.cycles_account_manager),
-            Arc::clone(&self.metrics),
-            Arc::clone(&self.wasm_executor),
-            self.sandbox_executor.clone(),
         );
 
-        let cycles_account_manager = Arc::clone(&self.cycles_account_manager);
-        let metrics = Arc::clone(&self.metrics);
         let canister_current_memory_usage = canister.memory_usage(self.own_subnet_type);
         let call_origin = call_origin.clone();
 
@@ -527,7 +509,7 @@ impl Hypervisor {
                                 FuncRef::QueryClosure(cleanup_closure)
                             }
                         };
-                        let cleanup_output = execute(
+                        let cleanup_output = self.execute(
                             ApiType::Cleanup { time },
                             canister.system_state.clone(),
                             canister_current_memory_usage,
@@ -537,10 +519,6 @@ impl Hypervisor {
                             },
                             func_ref,
                             canister.execution_state.take().unwrap(),
-                            cycles_account_manager,
-                            metrics,
-                            Arc::clone(&self.wasm_executor),
-                            self.sandbox_executor.clone(),
                         );
 
                         canister.execution_state = Some(cleanup_output.execution_state);
@@ -624,17 +602,13 @@ impl Hypervisor {
             );
         }
 
-        let output = execute(
+        let output = self.execute(
             ApiType::start(),
             SystemState::new_for_start(canister_id),
             memory_usage,
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
-            Arc::clone(&self.cycles_account_manager),
-            Arc::clone(&self.metrics),
-            Arc::clone(&self.wasm_executor),
-            self.sandbox_executor.clone(),
         );
 
         self.system_execution_result_with_old_system_state(output, system_state, scheduler_state)
@@ -685,17 +659,13 @@ impl Hypervisor {
             );
         }
 
-        let output = execute(
+        let output = self.execute(
             ApiType::pre_upgrade(time, caller),
             system_state.clone(),
             memory_usage,
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
-            Arc::clone(&self.cycles_account_manager),
-            Arc::clone(&self.metrics),
-            Arc::clone(&self.wasm_executor),
-            self.sandbox_executor.clone(),
         );
         self.system_execution_result(output, system_state, scheduler_state)
     }
@@ -746,17 +716,13 @@ impl Hypervisor {
             );
         }
 
-        let output = execute(
+        let output = self.execute(
             ApiType::init(time, payload.to_vec(), caller),
             system_state.clone(),
             memory_usage,
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
-            Arc::clone(&self.cycles_account_manager),
-            Arc::clone(&self.metrics),
-            Arc::clone(&self.wasm_executor),
-            self.sandbox_executor.clone(),
         );
         self.system_execution_result(output, system_state, scheduler_state)
     }
@@ -807,17 +773,13 @@ impl Hypervisor {
             );
         }
 
-        let output = execute(
+        let output = self.execute(
             ApiType::init(time, payload.to_vec(), caller),
             system_state.clone(),
             memory_usage,
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
-            Arc::clone(&self.cycles_account_manager),
-            Arc::clone(&self.metrics),
-            Arc::clone(&self.wasm_executor),
-            self.sandbox_executor.clone(),
         );
         self.system_execution_result(output, system_state, scheduler_state)
     }
@@ -853,17 +815,13 @@ impl Hypervisor {
 
         let system_api = ApiType::inspect_message(sender, method_name, method_payload, time);
         let log = self.log.clone();
-        let output = execute(
+        let output = self.execute(
             system_api,
             system_state,
             memory_usage,
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
-            Arc::clone(&self.cycles_account_manager),
-            Arc::clone(&self.metrics),
-            Arc::clone(&self.wasm_executor),
-            self.sandbox_executor.clone(),
         );
         match output.wasm_result {
             Ok(maybe_wasm_result) => match maybe_wasm_result {
@@ -957,17 +915,13 @@ impl Hypervisor {
             subnet_records,
         );
 
-        let output = execute(
+        let output = self.execute(
             api_type,
             system_state.clone(),
             memory_usage,
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
-            Arc::clone(&self.cycles_account_manager),
-            Arc::clone(&self.metrics),
-            Arc::clone(&self.wasm_executor),
-            self.sandbox_executor.clone(),
         );
 
         {
@@ -1103,55 +1057,43 @@ impl Hypervisor {
             self.wasm_executor.compile_count_for_testing()
         }
     }
-}
 
-/// Executes a Wasm function.
-///
-/// The function returns an updated execution state as well as an updated
-/// system state and WasmResult using the SystemApi.
-//
-/// If the method is not found or if execution fails, an error is returned
-/// via the system API.
-///
-/// NOTE: this is public to enable integration testing.
-#[allow(clippy::too_many_arguments)]
-#[doc(hidden)]
-pub fn execute(
-    api_type: ApiType,
-    system_state: SystemState,
-    canister_current_memory_usage: NumBytes,
-    execution_parameters: ExecutionParameters,
-    func_ref: FuncRef,
-    execution_state: ExecutionState,
-    cycles_account_manager: Arc<CyclesAccountManager>,
-    metrics: Arc<HypervisorMetrics>,
-    wasm_executor: Arc<WasmExecutor>,
-    sandbox_executor: Option<Arc<SandboxedExecutionController>>,
-) -> WasmExecutionOutput {
-    let api_type_str = api_type.as_str();
+    /// Wrapper around the standalone `execute`.
+    /// NOTE: this is public to enable integration testing.
+    #[doc(hidden)]
+    pub fn execute(
+        &self,
+        api_type: ApiType,
+        system_state: SystemState,
+        canister_current_memory_usage: NumBytes,
+        execution_parameters: ExecutionParameters,
+        func_ref: FuncRef,
+        execution_state: ExecutionState,
+    ) -> WasmExecutionOutput {
+        let api_type_str = api_type.as_str();
 
-    let result = if let Some(sandbox_executor) = sandbox_executor {
-        sandbox_executor.process(WasmExecutionInput {
-            api_type: api_type.clone(),
-            system_state,
-            canister_current_memory_usage,
-            execution_parameters,
-            func_ref,
-            execution_state,
-            cycles_account_manager,
-        })
-    } else {
-        wasm_executor.process(WasmExecutionInput {
-            api_type: api_type.clone(),
-            system_state,
-            canister_current_memory_usage,
-            execution_parameters,
-            func_ref,
-            execution_state,
-            cycles_account_manager,
-        })
-    };
-
-    metrics.observe(api_type_str, &result);
-    result
+        let result = if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
+            sandbox_executor.process(WasmExecutionInput {
+                api_type: api_type.clone(),
+                system_state,
+                canister_current_memory_usage,
+                execution_parameters,
+                func_ref,
+                execution_state,
+                cycles_account_manager: Arc::clone(&self.cycles_account_manager),
+            })
+        } else {
+            self.wasm_executor.process(WasmExecutionInput {
+                api_type: api_type.clone(),
+                system_state,
+                canister_current_memory_usage,
+                execution_parameters,
+                func_ref,
+                execution_state,
+                cycles_account_manager: Arc::clone(&self.cycles_account_manager),
+            })
+        };
+        self.metrics.observe(api_type_str, &result);
+        result
+    }
 }

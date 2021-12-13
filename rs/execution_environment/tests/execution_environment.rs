@@ -1,9 +1,7 @@
 use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::NumSeconds;
-use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::{execution_environment, subnet_config::CyclesAccountManagerConfig};
-use ic_embedders::WasmtimeEmbedder;
 use ic_execution_environment::{
     ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor, IngressHistoryWriterImpl,
 };
@@ -14,7 +12,6 @@ use ic_interfaces::{
     },
     messages::CanisterInputMessage,
 };
-use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -31,7 +28,6 @@ use ic_test_utilities::state::get_stopping_canister_on_nns;
 use ic_test_utilities::{
     crypto::mock_random_number_generator,
     cycles_account_manager::CyclesAccountManagerBuilder,
-    execution_state::ExecutionStateBuilder,
     history::MockIngressHistory,
     metrics::{fetch_histogram_vec_count, metric_vec},
     mock_time,
@@ -201,7 +197,13 @@ fn test_outgoing_messages(
         let wasm_binary = wabt::wat2wasm(wat).unwrap();
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
-        let execution_state = ExecutionStateBuilder::new(wasm_binary, tmpdir.path().into()).build();
+        let execution_state = hypervisor
+            .create_execution_state(
+                wasm_binary,
+                tmpdir.path().to_path_buf(),
+                CanisterId::from(0),
+            )
+            .unwrap();
         let mut canister = CanisterState {
             system_state,
             execution_state: Some(execution_state),
@@ -496,12 +498,12 @@ fn test_allocate_memory_for_output_requests() {
             let wasm_binary = wabt::wat2wasm(CALL_SIMPLE_WAT).unwrap();
             let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
-            let wasm_embedder = WasmtimeEmbedder::new(EmbeddersConfig::new(), no_op_logger());
-            let execution_state = wasm_embedder
+            let execution_state = exec_env
+                .hypervisor_for_testing()
                 .create_execution_state(
                     wasm_binary,
-                    tmpdir.path().into(),
-                    &EmbeddersConfig::default(),
+                    tmpdir.path().to_path_buf(),
+                    CanisterId::from(0),
                 )
                 .unwrap();
 
@@ -3013,12 +3015,12 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
             let wasm_binary = wabt::wat2wasm(MEMORY_ALLOCATION_WAT).unwrap();
             let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
-            let wasm_embedder = WasmtimeEmbedder::new(EmbeddersConfig::new(), no_op_logger());
-            let execution_state = wasm_embedder
+            let execution_state = exec_env
+                .hypervisor_for_testing()
                 .create_execution_state(
                     wasm_binary,
-                    tmpdir.path().into(),
-                    &EmbeddersConfig::default(),
+                    tmpdir.path().to_path_buf(),
+                    CanisterId::from(0),
                 )
                 .unwrap();
 
@@ -3069,12 +3071,12 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
             let wasm_binary = wabt::wat2wasm(MEMORY_ALLOCATION_WAT).unwrap();
             let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
-            let wasm_embedder = WasmtimeEmbedder::new(EmbeddersConfig::new(), no_op_logger());
-            let execution_state = wasm_embedder
+            let execution_state = exec_env
+                .hypervisor_for_testing()
                 .create_execution_state(
                     wasm_binary,
-                    tmpdir.path().into(),
-                    &EmbeddersConfig::default(),
+                    tmpdir.path().to_path_buf(),
+                    CanisterId::from(0),
                 )
                 .unwrap();
 
