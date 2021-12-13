@@ -4,6 +4,7 @@ ic_cores: 4
 
 ic_disk_gb: 100
 
+# Value is in GiB (Gibibytes)
 ic_memory_gb: 16
 
 ic_disk_path: ""

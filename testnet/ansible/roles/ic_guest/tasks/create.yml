@@ -84,7 +84,7 @@
 
 - name: Prepare the Guest template file
   vars:
-    ic_memory_kb: "{{ ic_memory_gb | int * (1024 | pow(2)) }}"
+    ic_memory_kib: "{{ ic_memory_gb | int * (1024 | pow(2)) }}"
     mac_address: "{{ hostvars[item].mac_address }}"
   template:
     src: "../ic_guest/templates/guest.xml"
