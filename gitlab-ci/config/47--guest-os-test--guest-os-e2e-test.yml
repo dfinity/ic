@@ -510,7 +510,7 @@ guest-os-upgrade-app-subnet-to-self:
           --ic_workload_generator_bin "$(pwd)/ic-workload-generator" \
           --is_upgrade_test
 
-.upgraded-system-tests:
+.system-tests:
   extends:
     - .e2e-test-base
   needs:
@@ -522,7 +522,6 @@ guest-os-upgrade-app-subnet-to-self:
       - "test-results.json"
       - "logs/"
   timeout: 30m
-  allow_failure: true
   script:
     - |
       BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
@@ -539,7 +538,7 @@ guest-os-upgrade-app-subnet-to-self:
       | tee "${BASE_DIR}/unstructured-logs.log" \
       | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
 
-upgraded-system-tests-main-suite:
-  extends: .upgraded-system-tests
+system-tests-pre-master:
+  extends: .system-tests
   variables:
-    SUITE_NAME: "main_suite"
+    SUITE_NAME: "pre_master"

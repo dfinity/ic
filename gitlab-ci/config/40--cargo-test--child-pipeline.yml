@@ -1,4 +1,4 @@
-system-tests:
+legacy-system-tests:
   extends: .cargo-build-docker
   # System tests are very flaky due to replica non-determinism.
   retry: 2
@@ -181,7 +181,7 @@ ic-ref-test:
       export PATH="${CI_PROJECT_DIR}/rs/local-bin:$PATH"
       export LANG=C.UTF-8
 
-      # IDX generally limits the nix-shell to only provide tool-chain dependencies. However, the ic-ref tests are 
+      # IDX generally limits the nix-shell to only provide tool-chain dependencies. However, the ic-ref tests are
       # grandfathered into GitLab CI. Please speak with IDX team [#eng-idx] for guidance on how to plumb
       #  binary or code artifacts
       $SHELL_WRAPPER nix-shell -p "(import ./nix {}).ic-ref-$IC_REF_VERSION" --run ./tests/ic-ref-test/run
@@ -193,4 +193,3 @@ ic-ref-test-use-app-subnet:
     USE_APP_SUBNET: "true"
     ALLOW_FAILURE: "true"
   allow_failure: true
-

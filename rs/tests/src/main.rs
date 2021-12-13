@@ -27,7 +27,6 @@ use ic_registry_subnet_type::SubnetType;
 
 use ic_tests::basic_health_test;
 use ic_tests::cow_safety_test;
-use ic_tests::cycles_minting_test;
 use ic_tests::execution;
 use ic_tests::feature_flags;
 use ic_tests::malicious_input_test;
@@ -44,8 +43,6 @@ use ic_tests::rosetta_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::security::system_api_security_test;
 use ic_tests::subnet_creation;
-use ic_tests::token_balance_test;
-use ic_tests::transaction_ledger_correctness_test;
 use ic_tests::util::CYCLES_LIMIT_PER_CANISTER;
 
 mod cli;
@@ -61,35 +58,23 @@ fn all_pots() -> Vec<fondue::pot::Pot<IcManager>> {
     // HAVE YOU READ THE README AT THE TOP?
     vec![
         pot1(),
-        pot1_2(),
-        inter_canister_queries_pot(),
         canister_lifecycle_memory_capacity_pot(),
-        cycles_restrictions_pot(),
         canister_lifecycle_memory_size_pot(),
-        compute_allocation_pot(),
         max_number_of_canisters_pot(),
         node_removal_pot(),
         basic_health_pot(),
         consensus_liveness_with_equivocation_pot(),
         consensus_safety_pot(),
-        certified_registry_pot(),
         cow_safety_pot(),
         rosetta_pot(),
-        cycles_minting_pot(),
-        token_balance_pot(),
         execution_config_is_none_pot(),
-        nns_follow_pot(),
         nns_uninstall_pot(),
-        nns_voting_pot(),
-        nns_voting_fuzzing_poc_pot(),
-        nns_canister_upgrade_pot(),
         nns_subnet_creation_pot(),
         replica_determinism_pot(),
         max_payload_pot(),
         dual_workload_pot(),
         subnet_capacity_pot(),
         system_subnets_pot(),
-        transaction_ledger_correctness_pot(),
         request_auth_malicious_replica_pot(),
         system_api_security_pot(),
     ]
@@ -125,88 +110,15 @@ fn cow_safety_pot() -> pot::Pot<IcManager> {
     isolated_test!(cow_safety_test)
 }
 
-// Defines a composable pot with a given configuration and a number of steps.
-//
-// WARNING: The order in which the steps are declared does NOT correspond to
-// the order they are executed.
-//
-// Given that this pot contains tests from various components, it's labeled
-// pot1, for lack of a better name.
-fn pot1() -> pot::Pot<IcManager> {
-    composable!(
-        "pot1",
-        pot1_config(),
-        steps! {
-            request_signature_test::test,
-            malicious_input_test::test,
-            execution::api_tests::test_raw_rand_api,
-            execution::big_stable_memory::can_access_big_heap_and_big_stable_memory,
-            execution::big_stable_memory::can_access_big_stable_memory,
-            execution::big_stable_memory::can_handle_overflows_when_indexing_stable_memory,
-            execution::big_stable_memory::can_handle_out_of_bounds_access,
-            execution::big_stable_memory::canister_traps_if_32_bit_api_used_on_big_memory,
-            execution::canister_lifecycle::create_canister_via_ingress_fails,
-            execution::canister_lifecycle::create_canister_via_canister_succeeds,
-            execution::canister_lifecycle::create_canister_with_controller_and_controllers_fails,
-            execution::canister_lifecycle::create_canister_with_one_controller,
-            execution::canister_lifecycle::create_canister_with_no_controllers,
-            execution::canister_lifecycle::create_canister_with_multiple_controllers,
-            execution::canister_lifecycle::create_canister_with_too_many_controllers_fails,
-            execution::canister_lifecycle::create_canister_with_empty_settings,
-            execution::canister_lifecycle::create_canister_with_none_settings_field,
-            execution::canister_lifecycle::create_canister_with_empty_settings,
-            execution::canister_lifecycle::create_canister_with_settings,
-            execution::canister_lifecycle::create_canister_with_freezing_threshold,
-            execution::canister_lifecycle::create_canister_with_invalid_freezing_threshold_fails,
-            execution::canister_lifecycle::managing_a_canister_with_wrong_controller_fails,
-            execution::canister_lifecycle::delete_stopped_canister_succeeds,
-            execution::canister_lifecycle::delete_running_canister_fails,
-            execution::canister_lifecycle::canister_can_manage_other_canister,
-            execution::canister_lifecycle::canister_can_manage_other_canister_batched,
-            execution::canister_lifecycle::canister_large_wasm_small_memory_allocation,
-            execution::canister_lifecycle::canister_large_initial_memory_small_memory_allocation,
-            execution::canister_lifecycle::refunds_after_uninstall_are_refunded,
-            execution::canister_lifecycle::update_settings_with_controller_and_controllers_fails,
-            execution::canister_lifecycle::update_settings_multiple_controllers,
-            execution::cycles_transfer::can_transfer_cycles_from_a_canister_to_another,
-            execution::ingress_rate_limiting::canister_accepts_ingress_by_default,
-            execution::ingress_rate_limiting::empty_canister_inspect_rejects_all_messages,
-            execution::ingress_rate_limiting::canister_can_accept_ingress,
-            execution::ingress_rate_limiting::canister_only_accepts_ingress_with_payload,
-            execution::ingress_rate_limiting::canister_rejects_ingress_only_from_one_caller
-        }
-    )
-}
-
 /// In order to parallelize execution of the large number of execution related
 /// system tests, we declare a second pot with the same configuration.
-fn pot1_2() -> pot::Pot<IcManager> {
+fn pot1() -> pot::Pot<IcManager> {
     composable!(
         "pot2",
         pot1_config(),
         steps! {
-            execution::queries::query_reply_sizes,
-            execution::nns_shielding::mint_cycles_supported_on_system_subnet,
-            execution::nns_shielding::mint_cycles_not_supported_on_application_subnet,
-            execution::nns_shielding::no_cycle_balance_limit_on_nns_subnet,
-            execution::nns_shielding::max_cycles_per_canister_system_subnet,
-            execution::nns_shielding::max_cycles_per_canister_application_subnet,
-            execution::nns_shielding::app_canister_attempt_initiating_dkg_fails,
-            execution::canister_heartbeat::canister_heartbeat_is_called_at_regular_intervals,
-            execution::canister_heartbeat::stopping_a_canister_with_a_heartbeat_succeeds,
-            execution::canister_heartbeat::canister_heartbeat_can_call_another_canister,
-            execution::canister_heartbeat::canister_heartbeat_can_call_multiple_canisters_xnet,
-            execution::canister_heartbeat::canister_heartbeat_can_stop,
-            execution::canister_heartbeat::canister_heartbeat_cannot_reply
+            execution::nns_shielding::max_cycles_per_canister_application_subnet
         }
-    )
-}
-
-fn compute_allocation_pot() -> pot::Pot<IcManager> {
-    composable!(
-        "compute_allocation_pot",
-        execution::canister_lifecycle::config_compute_allocation(),
-        steps! {execution::canister_lifecycle::total_compute_allocation_cannot_be_exceeded}
     )
 }
 
@@ -236,48 +148,12 @@ fn subnet_capacity_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn cycles_restrictions_pot() -> pot::Pot<IcManager> {
-    composable!(
-        "cycles_restrictions_pot",
-        execution::config_system_verified_application_subnets(),
-        steps! {
-            execution::cycles_transfer::cannot_send_cycles_from_application_to_verified_subnets,
-            execution::canister_lifecycle::controller_and_controllee_on_different_subnets,
-            execution::instructions_limit::can_use_more_instructions_during_install_code
-        }
-    )
-}
-
 fn max_number_of_canisters_pot() -> pot::Pot<IcManager> {
     composable!(
         "max_number_of_canisters_pot",
         execution::canister_lifecycle::config_max_number_of_canisters(),
         steps! {
             execution::canister_lifecycle::creating_canisters_fails_if_limit_of_allowed_canisters_is_reached
-        }
-    )
-}
-
-fn inter_canister_queries_pot() -> pot::Pot<IcManager> {
-    composable!(
-        "inter_canister_queries_pot",
-        execution::config_system_verified_subnets(),
-        steps! {
-            execution::inter_canister_queries::intermediate_canister_does_not_reply,
-            execution::inter_canister_queries::cannot_query_xnet_canister,
-            execution::inter_canister_queries::simple_query,
-            execution::inter_canister_queries::self_loop_fails,
-            execution::inter_canister_queries::canisters_loop_fails,
-            execution::inter_canister_queries::query_two_canisters,
-            execution::inter_canister_queries::query_three_canisters,
-            execution::inter_canister_queries::canister_queries_non_existent,
-            execution::inter_canister_queries::canister_queries_does_not_reply,
-            execution::inter_canister_queries::inter_canister_query_first_canister_multiple_request,
-            execution::call_on_cleanup::is_called_if_reply_traps,
-            execution::call_on_cleanup::is_called_if_reject_traps,
-            execution::call_on_cleanup::changes_are_discarded_if_trapped,
-            execution::call_on_cleanup::changes_are_discarded_in_query,
-            execution::call_on_cleanup::is_called_in_query
         }
     )
 }
@@ -319,46 +195,6 @@ fn consensus_safety_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn certified_registry_pot() -> pot::Pot<IcManager> {
-    composable!(
-        "certified_registry_pot",
-        registry_authentication_test::config(),
-        steps! {registry_authentication_test::test => "registry_authentication_test"}
-    )
-}
-
-fn nns_canister_upgrade_pot() -> pot::Pot<IcManager> {
-    composable!(
-        "nns_canister_upgrade_pot",
-        nns_canister_upgrade_test::config(),
-        steps! {nns_canister_upgrade_test::test => "nns_canister_upgrade_test"}
-    )
-}
-
-fn nns_follow_pot() -> pot::Pot<IcManager> {
-    composable!(
-        "nns_follow_pot",
-        nns_follow_test::config(),
-        steps! {nns_follow_test::test => "nns_follow_test"}
-    )
-}
-
-fn nns_voting_pot() -> pot::Pot<IcManager> {
-    composable!(
-        "nns_voting_pot",
-        nns_voting_test::config(),
-        steps! {nns_voting_test::test => "nns_voting_test"}
-    )
-}
-
-fn nns_voting_fuzzing_poc_pot() -> pot::Pot<IcManager> {
-    composable!(
-        "nns_voting_fuzzing_poc_pot",
-        nns_voting_fuzzing_poc_test::config(),
-        steps! {nns_voting_fuzzing_poc_test::test => "nns_voting_fuzzing_poc_test"}
-    )
-}
-
 fn nns_uninstall_pot() -> pot::Pot<IcManager> {
     composable!(
         "nns_uninstall_pot",
@@ -382,24 +218,6 @@ fn rosetta_pot() -> pot::Pot<IcManager> {
         steps! {
             rosetta_test::test_everything
         }
-    )
-}
-
-fn cycles_minting_pot() -> pot::Pot<IcManager> {
-    composable!(
-        "cycles_minting_pot",
-        cycles_minting_test::config(),
-        steps! {
-            cycles_minting_test::test
-        }
-    )
-}
-
-fn token_balance_pot() -> pot::Pot<IcManager> {
-    composable!(
-        "token_balance_pot",
-        token_balance_test::config(),
-        steps! {token_balance_test::test => "token_balance_test"}
     )
 }
 
@@ -438,14 +256,6 @@ fn max_payload_pot() -> pot::Pot<IcManager> {
             consensus::payload_builder_test::max_ingress_payload_size_test,
             consensus::payload_builder_test::max_xnet_payload_size_test
         }
-    )
-}
-
-fn transaction_ledger_correctness_pot() -> pot::Pot<IcManager> {
-    composable!(
-        "transaction_ledger_correctness_pot",
-        transaction_ledger_correctness_test::config(),
-        steps! {transaction_ledger_correctness_test::test => "transaction_ledger_correctness_test"}
     )
 }
 
