@@ -436,8 +436,8 @@ impl Environment for NNSFixture {
 /// The NNSState is used to capture all of the salient details of the NNS
 /// environment, so that we can compute the "delta", or what changed between
 /// actions.
-#[derive(comparable::Comparable, Clone)]
-#[compare_default]
+#[derive(Clone)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
 pub struct NNSState {
     now: u64,
     accounts: LedgerMap,
@@ -740,7 +740,10 @@ impl Default for NNSBuilder {
         NNSBuilder {
             start_time: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
             ledger_builder: LedgerBuilder::default(),
-            governance: GovernanceProto::default(),
+            governance: GovernanceProto {
+                wait_for_quiet_threshold_seconds: 1,
+                ..Default::default()
+            },
             ledger_transforms: Vec::default(),
         }
     }
