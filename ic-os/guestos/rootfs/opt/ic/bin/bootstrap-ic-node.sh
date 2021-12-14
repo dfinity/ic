@@ -58,10 +58,12 @@ function process_bootstrap() {
 
     # take injected config bits and move them to state directories
     if [ -e "${TMPDIR}/ic_crypto" ]; then
+        echo "Installing initial crypto material"
         cp -r -T "${TMPDIR}/ic_crypto" "${STATE_ROOT}/crypto"
     fi
     for DIR in ic_registry_local_store nns_public_key.pem; do
         if [ -e "${TMPDIR}/${DIR}" ]; then
+            echo "Setting up initial ${DIR}"
             cp -r -T "${TMPDIR}/${DIR}" "${STATE_ROOT}/data/${DIR}"
         fi
     done
@@ -69,11 +71,13 @@ function process_bootstrap() {
     # stash a couple of things away to config store
     for FILE in journalbeat.conf network.conf nns.conf backup.conf; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
+            echo "Setting up ${FILE}"
             cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"
         fi
     done
     for DIR in accounts_ssh_authorized_keys; do
         if [ -e "${TMPDIR}/${DIR}" ]; then
+            echo "Setting up accounts_ssh_authorized_keys"
             cp -r "${TMPDIR}/${DIR}" "${CONFIG_ROOT}/${DIR}"
         fi
     done
@@ -93,12 +97,14 @@ while [ ! -f /boot/config/CONFIGURED ]; do
     # is there already -- this might be useful when operating this thing as a
     # docker container instead of full-blown VM.
     if [ "${DEV}" != "" ]; then
+        echo "Found removable device at ${DEV}"
         mount -t vfat -o ro "${DEV}" /mnt
     fi
 
     if [ -e /mnt/ic-bootstrap.tar ]; then
         echo "Processing bootstrap config"
         process_bootstrap /mnt/ic-bootstrap.tar /boot/config /var/lib/ic
+        echo "Successfully processed bootstrap config"
         touch /boot/config/CONFIGURED
     else
         MAX_TRIES=$(("${MAX_TRIES}" - 1))
