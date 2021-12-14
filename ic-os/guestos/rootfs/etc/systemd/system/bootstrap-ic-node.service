@@ -12,6 +12,8 @@ After=var-lib-ic-backup.mount
 WantedBy=multi-user.target
 
 [Service]
+StandardOutput=journal+console
+StandardError=journal+console
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/bootstrap-ic-node.sh
