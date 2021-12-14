@@ -710,6 +710,9 @@ message ManageNeuron {
     // If not set, the spawned neuron will have the same controller as
     // this neuron.
     ic_base_types.pb.v1.PrincipalId new_controller = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+
+    // The nonce with which to create the subaccount.
+    optional uint64 nonce = 2;
   }
 
   // Merge the maturity of a neuron into the current stake.
@@ -733,7 +736,7 @@ message ManageNeuron {
     uint64 dissolve_delay_seconds = 3;
     // Whether the new neuron has been kyc verified.
     bool kyc_verified = 4;
-    // The nonce with whitch to create the subaccount.
+    // The nonce with which to create the subaccount.
     uint64 nonce = 5;
   }
 

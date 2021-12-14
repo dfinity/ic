@@ -2765,7 +2765,12 @@ impl Governance {
         }
 
         let child_nid = self.new_neuron_id();
-        let to_subaccount = Subaccount(self.env.random_byte_array());
+
+        // use provided sub-account if any, otherwise generate a random one.
+        let to_subaccount = match spawn.nonce {
+            None => Subaccount(self.env.random_byte_array()),
+            Some(nonce_val) => compute_neuron_spawn_subaccount(*child_controller, nonce_val),
+        };
 
         // Make sure there isn't already a neuron with the same sub-account.
         if self
@@ -5683,6 +5688,17 @@ impl Governance {
 
         Ok(rewards)
     }
+}
+
+fn compute_neuron_spawn_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
+    Subaccount({
+        let mut state = Sha256::new();
+        state.write(&[0x0c]);
+        state.write(b"neuron-spawn");
+        state.write(controller.as_slice());
+        state.write(&nonce.to_be_bytes());
+        state.finish()
+    })
 }
 
 /// Computes the subaccount to which neuron staking transfers are made. This

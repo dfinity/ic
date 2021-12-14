@@ -286,7 +286,7 @@ type SetDefaultFollowees = record {
   default_followees : vec record { int32; Followees };
 };
 type SetDissolveTimestamp = record { dissolve_timestamp_seconds : nat64 };
-type Spawn = record { new_controller : opt principal };
+type Spawn = record { new_controller : opt principal; nonce : opt nat64 };
 type SpawnResponse = record { created_neuron_id : opt NeuronId };
 type Split = record { amount_e8s : nat64 };
 type Tally = record {
