@@ -36,6 +36,10 @@ crate_test_name_override:
 
 # Crates with config override.
 crates_config_override:
+  ic-nns-governance:
+    extends: .cargo-crate-test
+    variables:
+      CARGO_TEST_FLAGS_EXTRA: "--features test"
   ic-nns-integration-tests:
     extends: .cargo-crate-tests-process-per-test
     retry: 1

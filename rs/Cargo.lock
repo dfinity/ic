@@ -4676,7 +4676,6 @@ dependencies = [
  "ic-crypto-sha",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-protobuf",
  "ic-types 0.8.0",
  "ledger-canister",

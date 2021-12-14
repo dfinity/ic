@@ -13,7 +13,6 @@ path = "src/lib.rs"
 [[test]]
 name = "governance-test"
 path = "tests/governance.rs"
-required-features = ["test"]
 
 [[test]]
 name = "governance-interleaving-test"
@@ -69,7 +68,6 @@ pretty_assertions = "1.0"
 ic-base-types = { path = "../../types/base_types", features = ["test"] }
 ic-nns-common = { path = "../common", features = ["test"] }
 ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
-ic-nns-governance = { path = ".", features = ["test"] }
 tokio-test = "0.4.2"
 
 [features]

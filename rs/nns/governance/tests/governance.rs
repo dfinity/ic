@@ -5,6 +5,7 @@
 
 use assert_matches::assert_matches;
 use candid::Encode;
+#[cfg(feature = "test")]
 #[cfg(test)]
 use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
 use futures::future::FutureExt;
@@ -14,6 +15,7 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::ids::{TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+#[cfg(feature = "test")]
 #[cfg(test)]
 use ic_nns_governance::pb::v1::{
     governance::GovernanceCachedMetricsChange, proposal::ActionDesc, BallotChange,
@@ -102,8 +104,10 @@ mod fake;
 // https://github.com/rust-lang/rust/issues/46379
 pub mod fixtures;
 
+use fixtures::principal;
+#[cfg(feature = "test")]
 use fixtures::{
-    principal, prorated_neuron_age, LedgerBuilder, NNSBuilder, NNSStateChange, NeuronBuilder,
+    prorated_neuron_age, LedgerBuilder, NNSBuilder, NNSStateChange, NeuronBuilder,
     ProposalNeuronBehavior, NNS,
 };
 
@@ -115,6 +119,7 @@ use common::increase_dissolve_delay_raw;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
+#[cfg(feature = "test")]
 fn check_proposal_status_after_voting_and_after_expiration_new(
     neurons: impl IntoIterator<Item = Neuron>,
     behavior: impl Into<ProposalNeuronBehavior>,
@@ -173,6 +178,7 @@ const NOTDISSOLVING_MAX_DISSOLVE_DELAY: Option<DissolveState> = Some(
     DissolveState::DissolveDelaySeconds(MAX_DISSOLVE_DELAY_SECONDS),
 );
 
+#[cfg(feature = "test")]
 #[test]
 fn test_single_neuron_proposal_new() {
     let mut nns = check_proposal_status_after_voting_and_after_expiration_new(
@@ -636,6 +642,7 @@ fn test_two_neuron_disagree_identical_stake_older_wins() {
 ///   on topic Unknown = all topics without specific override
 ///
 /// - Neurons 1, 5, 6 have a controller set and can vote.
+#[cfg(feature = "test")]
 fn fixture_for_following_new() -> NNS {
     NNSBuilder::new()
         .set_economics(NetworkEconomics::with_default_values())
@@ -695,6 +702,7 @@ fn fixture_for_following_new() -> NNS {
 ///
 /// - As neuron 2 follows neurons 1 and 3 on the Governance topic, 2 should vote
 ///   yes as 1 votes implicitly by proposing and 3 votes by following 5 and 6.
+#[cfg(feature = "test")]
 #[test]
 fn test_cascade_following_new() {
     let mut nns = fixture_for_following_new();
@@ -863,7 +871,7 @@ fn test_cascade_following_new() {
                     ProposalDataChange::WaitForQuietState(OptionChange::Different(
                         None,
                         Some(WaitForQuietStateDesc {
-                            current_deadline_timestamp_seconds: 999111000,
+                            current_deadline_timestamp_seconds: 999111001,
                         }),
                     )),
                 ],
@@ -1043,6 +1051,7 @@ fn fixture_for_following() -> GovernanceProto {
     };
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
+        wait_for_quiet_threshold_seconds: 1,
         neurons: [
             (
                 1,
@@ -1583,6 +1592,7 @@ fn fixture_for_manage_neuron() -> GovernanceProto {
     };
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
+        short_voting_period_seconds: 1,
         neurons: [
             (
                 1,
@@ -6857,6 +6867,7 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
     test_can_follow_by(|n| NeuronIdOrSubaccount::Subaccount(n.account.to_vec()));
 }
 
+#[cfg(feature = "test")]
 fn assert_merge_maturity_executes_as_expected_new(
     nns: &mut NNS,
     id: &NeuronId,
@@ -6895,6 +6906,7 @@ fn assert_merge_maturity_executes_as_expected_new(
 
 proptest! {
 
+#[cfg(feature = "test")]
 #[test]
 fn test_merge_maturity_of_neuron_new(start in 56u64..56_000_000,
                                      supply in 100_000_000u64..400_000_000,
