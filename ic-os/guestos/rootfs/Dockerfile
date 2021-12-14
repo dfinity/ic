@@ -121,13 +121,15 @@ RUN echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninte
 # allowing backup read access.
 RUN addgroup --system nonconfidential && \
     addgroup --system confidential && \
-    addgroup --system vsock
+    addgroup --system vsock && \
+    addgroup --system ic-registry-local-store
 
 # User which will run the replica service.
 RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-home ic-replica && \
     adduser ic-replica backup && \
     adduser ic-replica nonconfidential && \
     adduser ic-replica confidential && \
+    adduser ic-replica ic-registry-local-store && \
     adduser ic-replica vsock && \
     adduser ic-replica sudo
 
@@ -139,13 +141,15 @@ RUN chsh -s /bin/bash backup && \
     mkdir /var/lib/backup && \
     chown backup:backup /var/lib/backup && \
     usermod -d /var/lib/backup backup && \
-    adduser backup systemd-journal
+    adduser backup systemd-journal && \
+    adduser backup ic-registry-local-store
 
 # The "read-only" user account. May read everything besides crypto.
 RUN adduser --system --disabled-password --home /var/lib/readonly --shell /bin/bash readonly && \
     adduser readonly backup && \
     adduser readonly nonconfidential && \
-    adduser readonly systemd-journal
+    adduser readonly systemd-journal && \
+    adduser readonly ic-registry-local-store
 
 # The omnipotent "admin" account. May read everything and crucially can also
 # arbitrarily change system state via sudo.
@@ -153,6 +157,7 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     chown admin:staff /var/lib/admin && \
     adduser admin backup && \
     adduser admin nonconfidential && \
+    adduser admin ic-registry-local-store && \
     adduser admin systemd-journal && \
     adduser admin vsock && \
     adduser admin sudo
@@ -229,4 +234,3 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
 COPY boot /boot
 # Update POSIX permissions in /boot/
 RUN chmod 0644 /boot/extra_boot_args /boot/version.txt
-
