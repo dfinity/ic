@@ -259,9 +259,9 @@ cd ic/
 ./testnet/tools/icos_deploy.sh <testnet> --git-revision d53b551dc677a82c8420a939b5fee2d38f6f1e8b
 ```
 
-You can get the latest git sha for a branch (e.g. master) by running:
+You can get the latest git sha with disk image for a branch (e.g. master) by running:
 ```
-gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master
+./gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master
 ```
 
 ### List-Inventory

@@ -71,8 +71,8 @@ This has multiple advantages:
  3. Testnet machines are scrape targets for Prometheus, so we can immediately monitor the client side without additional setup.
 
   ```
-  $ testnet/tools/icos_deploy.sh $TESTNET --git-revision $(git rev-parse origin/master)
-  $ testnet/tools/icos_deploy.sh $WG_TESTNET --git-revision $(git rev-parse origin/master)
+  $ testnet/tools/icos_deploy.sh $TESTNET --git-revision $(./gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)
+  $ testnet/tools/icos_deploy.sh $WG_TESTNET --git-revision $(./gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)
   ```
 
 # Run the benchmark (experiment)
