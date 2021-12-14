@@ -9,10 +9,12 @@ use ic_protobuf::{
 use ic_types::{methods::WasmMethod, ExecutionRound, NumBytes};
 use ic_utils::ic_features::cow_state_feature;
 use ic_wasm_types::BinaryEncodedWasm;
+use maplit::btreemap;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::{
     collections::BTreeSet,
-    convert::TryFrom,
+    convert::{From, TryFrom},
     iter::FromIterator,
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -310,6 +312,9 @@ pub struct ExecutionState {
     /// A set of the functions that a Wasm module exports.
     pub exports: ExportedFunctions,
 
+    /// Metadata extracted from the Wasm module.
+    pub metadata: WasmMetadata,
+
     /// Round number at which canister executed
     /// update type operation.
     pub last_executed_round: ExecutionRound,
@@ -382,6 +387,7 @@ impl ExecutionState {
             wasm_memory,
             stable_memory,
             exported_globals,
+            metadata: WasmMetadata::new(),
             last_executed_round: ExecutionRound::from(0),
             cow_mem_mgr,
             mapped_state,
@@ -419,5 +425,144 @@ impl ExecutionState {
         } else {
             PersistenceType::Sigsegv
         }
+    }
+}
+
+/// An enum that represents the possible visibility levels a custom section
+/// defined in the wasm module can have.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum CustomSectionType {
+    Public,
+    Private,
+}
+
+impl From<&CustomSectionType> for pb::CustomSectionType {
+    fn from(item: &CustomSectionType) -> Self {
+        match item {
+            CustomSectionType::Public => pb::CustomSectionType::Public,
+            CustomSectionType::Private => pb::CustomSectionType::Private,
+        }
+    }
+}
+
+impl TryFrom<pb::CustomSectionType> for CustomSectionType {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb::CustomSectionType) -> Result<Self, Self::Error> {
+        match item {
+            pb::CustomSectionType::Public => Ok(CustomSectionType::Public),
+            pb::CustomSectionType::Private => Ok(CustomSectionType::Private),
+            pb::CustomSectionType::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "CustomSectionType::Unspecified",
+                err: "Encountered error while decoding CustomSection type".to_string(),
+            }),
+        }
+    }
+}
+
+/// Represents the data a custom section holds.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CustomSection {
+    pub visibility: CustomSectionType,
+    pub content: Vec<u8>,
+}
+
+impl CustomSection {
+    pub fn new(visibility: CustomSectionType, content: Vec<u8>) -> Self {
+        Self {
+            visibility,
+            content,
+        }
+    }
+}
+
+impl From<&CustomSection> for pb::WasmCustomSection {
+    fn from(item: &CustomSection) -> Self {
+        Self {
+            visibility: pb::CustomSectionType::from(&item.visibility).into(),
+            content: item.content.clone(),
+        }
+    }
+}
+
+impl TryFrom<pb::WasmCustomSection> for CustomSection {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb::WasmCustomSection) -> Result<Self, Self::Error> {
+        let visibility = CustomSectionType::try_from(
+            pb::CustomSectionType::from_i32(item.visibility).unwrap_or_default(),
+        )?;
+        Ok(Self {
+            visibility,
+            content: item.content,
+        })
+    }
+}
+
+/// A struct that holds all the custom sections exported by the Wasm module.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WasmMetadata {
+    /// Arc is used to make cheap clones of this during snapshots.
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    custom_sections: Arc<BTreeMap<String, CustomSection>>,
+}
+
+impl WasmMetadata {
+    pub fn new() -> Self {
+        Self {
+            custom_sections: Arc::new(btreemap![]),
+        }
+    }
+
+    pub fn custom_sections(&self) -> &BTreeMap<String, CustomSection> {
+        &self.custom_sections
+    }
+}
+
+impl Default for WasmMetadata {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl From<&WasmMetadata> for pb::WasmMetadata {
+    fn from(item: &WasmMetadata) -> Self {
+        let custom_sections = item
+            .custom_sections
+            .iter()
+            .map(|(name, custom_section)| {
+                (name.clone(), pb::WasmCustomSection::from(custom_section))
+            })
+            .collect();
+        Self { custom_sections }
+    }
+}
+
+impl FromIterator<(std::string::String, CustomSection)> for WasmMetadata {
+    fn from_iter<T>(iter: T) -> WasmMetadata
+    where
+        T: IntoIterator<Item = (String, CustomSection)>,
+    {
+        WasmMetadata {
+            custom_sections: Arc::new(BTreeMap::from_iter(iter)),
+        }
+    }
+}
+
+impl TryFrom<pb::WasmMetadata> for WasmMetadata {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb::WasmMetadata) -> Result<Self, Self::Error> {
+        let custom_sections = item
+            .custom_sections
+            .into_iter()
+            .map(
+                |(name, custom_section)| match CustomSection::try_from(custom_section) {
+                    Ok(custom_section) => Ok((name, custom_section)),
+                    Err(err) => Err(err),
+                },
+            )
+            .collect::<Result<_, _>>()?;
+        Ok(WasmMetadata {
+            custom_sections: Arc::new(custom_sections),
+        })
     }
 }

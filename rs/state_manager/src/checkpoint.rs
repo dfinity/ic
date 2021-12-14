@@ -116,6 +116,7 @@ fn serialize_canister_to_tip(
                 heap_size: execution_state.wasm_memory.size,
                 exports: execution_state.exports.clone(),
                 last_executed_round: execution_state.last_executed_round,
+                metadata: execution_state.metadata.clone(),
             })
         }
         None => None,
@@ -269,6 +270,7 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
                 stable_memory,
                 exported_globals: execution_state_bits.exported_globals,
                 exports: execution_state_bits.exports,
+                metadata: execution_state_bits.metadata,
                 last_executed_round: execution_state_bits.last_executed_round,
                 cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readonly(
                     canister_layout.raw_path(),
@@ -401,9 +403,9 @@ mod tests {
     use ic_base_types::NumSeconds;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        canister_state::execution_state::WasmBinary, page_map, testing::ReplicatedStateTesting,
-        CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages,
-        PageIndex,
+        canister_state::execution_state::WasmBinary, canister_state::execution_state::WasmMetadata,
+        page_map, testing::ReplicatedStateTesting, CallContextManager, CanisterStatus,
+        ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
     };
     use ic_sys::PAGE_SIZE;
     use ic_test_utilities::{
@@ -604,6 +606,7 @@ mod tests {
                 stable_memory,
                 exported_globals: vec![],
                 exports: ExportedFunctions::new(BTreeSet::new()),
+                metadata: WasmMetadata::new(),
                 last_executed_round: ExecutionRound::from(0),
                 cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(
                     can_layout.unwrap().raw_path(),

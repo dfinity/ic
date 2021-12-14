@@ -11,7 +11,8 @@ use ic_protobuf::{
     },
 };
 use ic_replicated_state::{
-    CallContextManager, CanisterStatus, ExportedFunctions, Global, NumWasmPages,
+    canister_state::execution_state::WasmMetadata, CallContextManager, CanisterStatus,
+    ExportedFunctions, Global, NumWasmPages,
 };
 use ic_types::{
     nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation, Cycles,
@@ -155,6 +156,7 @@ pub struct ExecutionStateBits {
     pub heap_size: NumWasmPages,
     pub exports: ExportedFunctions,
     pub last_executed_round: ExecutionRound,
+    pub metadata: WasmMetadata,
 }
 
 /// This struct contains bits of the `CanisterState` that are not already
@@ -1104,6 +1106,7 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
                 .expect("Canister heap size didn't fit into 32 bits"),
             exports: (&item.exports).into(),
             last_executed_round: item.last_executed_round.get(),
+            metadata: Some((&item.metadata).into()),
         }
     }
 }
@@ -1120,6 +1123,8 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
             heap_size: (value.heap_size as usize).into(),
             exports: value.exports.try_into()?,
             last_executed_round: value.last_executed_round.into(),
+            metadata: try_from_option_field(value.metadata, "ExecutionStateBits::metadata")
+                .unwrap_or_default(),
         })
     }
 }

@@ -90,11 +90,27 @@ message WasmMethod {
   }
 }
 
+enum CustomSectionType {
+    CUSTOM_SECTION_TYPE_UNSPECIFIED = 0;
+    CUSTOM_SECTION_TYPE_PUBLIC = 1;
+    CUSTOM_SECTION_TYPE_PRIVATE = 2;
+}
+
+message WasmCustomSection {
+    CustomSectionType visibility = 1;
+    bytes content = 2;
+}
+
+message WasmMetadata {
+    map<string, WasmCustomSection> custom_sections = 1;
+}
+
 message ExecutionStateBits {
   repeated Global exported_globals = 1;
   uint32 heap_size = 2;
   repeated WasmMethod exports = 3;
   uint64 last_executed_round = 4;
+  WasmMetadata metadata = 5;
 }
 
 message StopCanisterContext {
