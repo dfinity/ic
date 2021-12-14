@@ -43,7 +43,9 @@ include:
     - .ubuntu-nix-docker
     - .rules-parent-pipeline
   stage: cargo-test
-  needs: ["cargo-build-release-linux-native"]
+  needs:
+    - cargo-build-release-linux-native
+    - cargo-build-canisters
   artifacts:
     reports:
       junit: test_report.xml
@@ -78,6 +80,9 @@ include:
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" nix-shell -- \
       timeout -k 10 "${CARGO_TEST_TIMEOUT}" nix-shell --run "
         set -euo pipefail
+
+        source \"$CI_PROJECT_DIR/gitlab-ci/src/canisters/wasm-build-functions.sh\"
+        export_wasm_canister_paths \"${CI_PROJECT_DIR}/artifacts/canisters\"
         buildevents cmd ${ROOT_PIPELINE_ID} ${CI_JOB_ID} cargo-test -- cargo test -p ${CI_JOB_NAME} ${CARGO_TEST_FLAGS_EXTRA} -- --report-time -Z unstable-options --format=json | tee ci_output.json
       "
     # Test that benchmarks work properly (no stats are recorded)
@@ -86,6 +91,9 @@ include:
       if [ "$CI_JOB_NAME" != "ic-nns-governance" ]; then
         buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" nix-shell -- timeout -k 10 "${CARGO_TEST_TIMEOUT}" nix-shell --run "
           set -euo pipefail
+
+          source \"$CI_PROJECT_DIR/gitlab-ci/src/canisters/wasm-build-functions.sh\"
+          export_wasm_canister_paths \"${CI_PROJECT_DIR}/artifacts/canisters\"
           buildevents cmd ${ROOT_PIPELINE_ID} ${CI_JOB_ID} cargo-test -- cargo test --benches -p ${CI_JOB_NAME} ${CARGO_TEST_FLAGS_EXTRA}
         "
       fi
@@ -106,6 +114,8 @@ include:
     - |
       set -eExuo pipefail
 
+      TARGET_CRATE="${TARGET_CRATE:-$CI_JOB_NAME}"
+
       # Setup the cargo canister sandbox
       cd "${CI_PROJECT_DIR}/rs"
       mkdir local-bin
@@ -118,7 +128,7 @@ include:
       $SHELL_WRAPPER timeout -k 10 "${CARGO_TEST_TIMEOUT}" nix-shell --run "
         set -eExuo pipefail
         # Build the test binary.
-        buildevents cmd \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" cargo-build -- cargo test -p ${CI_JOB_NAME} --no-run --release
+        buildevents cmd \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" cargo-build -- cargo test -p \"${TARGET_CRATE}\" --no-run --release
       "
 
       $SHELL_WRAPPER timeout -k 10 "${CARGO_TEST_TIMEOUT}" nix-shell --run "
@@ -127,8 +137,8 @@ include:
         export_wasm_canister_paths \"${CI_PROJECT_DIR}/artifacts/canisters\"
 
         # Run each test in a separate process
-        cargo test -p ${CI_JOB_NAME} --release -- --list | grep ': test' | sed 's/: test$//' > /tmp/test-list.txt
-        parallel -a /tmp/test-list.txt --halt now,fail=1 --eta --results ci_output -t --joblog ci_joblog buildevents cmd \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" '{}' -- cargo test -p ${CI_JOB_NAME} --release '{}' -- --report-time -Z unstable-options --format=json
+        cargo test -p \"${TARGET_CRATE}\" --release -- --list | grep ': test' | sed 's/: test$//' > /tmp/test-list.txt
+        parallel -a /tmp/test-list.txt --halt now,fail=1 --eta --results ci_output -t --joblog ci_joblog buildevents cmd \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" '{}' -- cargo test -p \"${TARGET_CRATE}\" --release '{}' -- --report-time -Z unstable-options --format=json
       "
 
       set +x

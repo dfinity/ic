@@ -38,6 +38,8 @@ crate_test_name_override:
 crates_config_override:
   ic-nns-integration-tests:
     extends: .cargo-crate-tests-process-per-test
+    variables:
+      TARGET_CRATE: ic-nns-integration-tests
     retry: 1
   ic-nns-handler-root:
     extends: .cargo-crate-tests-process-per-test
