@@ -147,6 +147,8 @@ def build_ic_prep_inject_config(machine, ic_config, index, extra_config={}):
 
 def nns_install(ic_config, ic_url):
     cmd = [
+        "timeout",
+        "120",
         FLAGS.install_nns_bin,
         "--url",
         ic_url,
