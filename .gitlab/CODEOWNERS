@@ -84,6 +84,7 @@
 /rs/canister_sandbox/                @dfinity-lab/teams/execution-owners
 /rs/canonical_state/                 @dfinity-lab/teams/message-routing-owners
 /rs/certified_vars/                  @dfinity-lab/teams/message-routing-owners
+/rs/config/                          @dfinity-lab/teams/interface-owners
 /rs/consensus/                       @dfinity-lab/teams/consensus-owners
 /rs/crypto/                          @dfinity-lab/teams/crypto-owners
 /rs/cycles_account_manager/          @dfinity-lab/teams/execution-owners
