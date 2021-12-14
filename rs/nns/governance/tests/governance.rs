@@ -4180,6 +4180,7 @@ fn test_neuron_spawn() {
             &from,
             &Spawn {
                 new_controller: Some(child_controller),
+                nonce: None,
             },
         )
         .now_or_never()
@@ -4209,6 +4210,7 @@ fn test_neuron_spawn() {
             &from,
             &Spawn {
                 new_controller: Some(child_controller),
+                nonce: None,
             },
         )
         .now_or_never()
@@ -4225,6 +4227,139 @@ fn test_neuron_spawn() {
         .expect("The child neuron is missing");
     let parent_neuron = gov.get_neuron(&id).expect("The parent neuron is missing");
     let child_subaccount = child_neuron.account.clone();
+
+    // Maturity on the parent neuron should be reset.
+    assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
+
+    assert_eq!(
+        child_neuron,
+        &Neuron {
+            id: Some(child_nid.clone()),
+            account: child_subaccount,
+            controller: Some(child_controller),
+            cached_neuron_stake_e8s: parent_maturity_e8s_equivalent,
+            created_timestamp_seconds: driver.now(),
+            aging_since_timestamp_seconds: driver.now(),
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                gov.proto
+                    .economics
+                    .as_ref()
+                    .unwrap()
+                    .neuron_spawn_dissolve_delay_seconds
+            )),
+            kyc_verified: true,
+            ..Default::default()
+        }
+    );
+}
+
+#[test]
+fn test_neuron_spawn_with_subaccount() {
+    let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    // Compute the subaccount to which the transfer would have been made
+    let nonce = 1234u64;
+
+    let block_height = 543212234;
+    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let neuron_stake_e8s = 1_000_000_000;
+
+    let (mut driver, mut gov, id, _) = governance_with_staked_neuron(
+        dissolve_delay_seconds,
+        neuron_stake_e8s,
+        block_height,
+        from,
+        nonce,
+    );
+
+    let neuron = gov.get_neuron_mut(&id).expect("Neuron did not exist");
+
+    assert_eq!(
+        neuron.get_neuron_info(driver.now()).state(),
+        NeuronState::NotDissolving
+    );
+
+    // Starts with too little maturity
+    neuron.maturity_e8s_equivalent = 187;
+    assert!(
+        neuron.maturity_e8s_equivalent
+            < NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
+    );
+    let child_controller = *TEST_NEURON_2_OWNER_PRINCIPAL;
+
+    // An attempt to spawn a neuron should simply return an error and
+    // change nothing.
+    let neuron_before = neuron.clone();
+    let spawn_res = gov
+        .spawn_neuron(
+            &id,
+            &from,
+            &Spawn {
+                new_controller: Some(child_controller),
+                nonce: None,
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    assert_matches!(
+        spawn_res,
+        Err(GovernanceError{error_type: code, error_message: msg})
+            if code == InsufficientFunds as i32 && msg.to_lowercase().contains("maturity"));
+    assert_eq!(*gov.get_neuron(&id).unwrap(), neuron_before);
+
+    // Artificially set the neuron's maturity to sufficient value
+    let neuron = gov.get_neuron_mut(&id).expect("Neuron did not exist");
+    let parent_maturity_e8s_equivalent: u64 = 123_456_789;
+    assert!(
+        parent_maturity_e8s_equivalent
+            > NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
+    );
+    neuron.maturity_e8s_equivalent = parent_maturity_e8s_equivalent;
+
+    // Advance the time so that we can check that the spawned neuron has the age
+    // and the right creation timestamp
+    driver.advance_time_by(1);
+
+    // Nonce used for spawn (given as input).
+    let nonce_spawn = driver.random_u64();
+
+    let child_nid = gov
+        .spawn_neuron(
+            &id,
+            &from,
+            &Spawn {
+                new_controller: Some(child_controller),
+                nonce: Some(nonce_spawn),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    // We should now have 2 neurons.
+    assert_eq!(gov.proto.neurons.len(), 2);
+    // And we should have two ledger accounts.
+    driver.assert_num_neuron_accounts_exist(2);
+
+    let child_neuron = gov
+        .get_neuron(&child_nid)
+        .expect("The child neuron is missing");
+    let parent_neuron = gov.get_neuron(&id).expect("The parent neuron is missing");
+    let child_subaccount = child_neuron.account.clone();
+
+    // Verify that the sub-account was created according to spawn input.
+    let expected_subaccount = {
+        let mut state = Sha256::new();
+        state.write(&[0x0c]);
+        state.write(b"neuron-spawn");
+        state.write(child_controller.as_slice());
+        state.write(&nonce_spawn.to_be_bytes());
+        state.finish()
+    };
+
+    assert_eq!(
+        child_subaccount, expected_subaccount,
+        "Sub-account doesn't match expected sub-account (with nonce)."
+    );
 
     // Maturity on the parent neuron should be reset.
     assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
@@ -4282,6 +4417,7 @@ fn test_neuron_with_non_self_authenticating_controller_cannot_be_spawned() {
             &from,
             &Spawn {
                 new_controller: Some(non_self_authenticating_principal_id),
+                nonce: None,
             },
         )
         .now_or_never()
