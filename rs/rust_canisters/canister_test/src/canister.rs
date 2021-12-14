@@ -70,22 +70,14 @@ impl Wasm {
                 Some(Wasm::from_file(path))
             }
             Err(env::VarError::NotPresent) => {
-                if env::var("IN_NIX_SHELL").is_err() && env::var("NIX_BUILD_TOP").is_ok() {
-                    match bin_name {
-                        "lifeline" => {
-                            // Nothing needed here. As opposed to other canisters which are
-                            // compiled in nix and then passed through env vars to the testing
-                            // system, the lifeline is compiled in a build.rs and available to
-                            // tests through an include_bytes! macro.
-                        },
-                        _ => eprintln!(
-                            "*** WARNING\n\
-                             *** this is a nix build, but I can't find an environment variable for the `{0}` canister in the `{1}` crate.\n\
-                             *** this will probably fail! please update the `canistersForTests` block in rs/check.nix. you can probably add something like:\n\n    {1} = [ \"{0}\" ];\n",
-                            bin_name,
-                            env::var("CARGO_PKG_NAME").unwrap_or_else(|_| "(CARGO_PKG_NAME not set)".to_string())
-                        ),
-                    }
+                if env::var("CI").is_ok() {
+                    panic!(
+                        "Running on CI and expected canister env var {0}\n\
+                         Please add {1} to the following locations:\n\
+                        \tgitlab-ci/tools/cargo-build-canisters\n\
+                        \tgitlab-ci/src/canisters/wasm-build-functions.sh",
+                        var_name, bin_name
+                    )
                 }
                 None
             }

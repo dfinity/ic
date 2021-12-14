@@ -5,14 +5,30 @@
 set -exuo pipefail
 
 wasm_canister_list=(
-    registry-canister
-    governance-canister
-    root-canister
-    genesis-token-canister
-    ledger-canister
     cycles-minting-canister
+    genesis-token-canister
+    governance-canister
+    governance-mem-test-canister
     identity-canister
+    inter_canister_error_handling
+    json
+    ledger-archive-node-canister
+    ledger-canister
+    lifeline
+    mem-utils-test-canister
+    memory-test-canister
+    nan_canonicalized
     nns-ui-canister
+    panics
+    pmap_canister
+    registry-canister
+    root-canister
+    stable
+    statesync-test-canister
+    test-notified
+    time
+    upgrade-test-canister
+    wasm
 )
 
 function export_wasm_canister_paths() {
