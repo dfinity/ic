@@ -529,13 +529,9 @@ impl SandboxManager {
         wasm_page_map: PageMapSerialization,
         canister_id: CanisterId,
     ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
-        // TODO(EXC-755): Use the proper embedder config.
-        // TODO(EXC-756): Cache WasmtimeEmbedder instance.
-        let embedder = WasmtimeEmbedder::new(Config::default(), no_op_logger());
-
         // Step 1: Get the compiled binary from the cache.
         let binary_encoded_wasm = BinaryEncodedWasm::new(wasm_source);
-        let embedder_cache = {
+        let (embedder_cache, embedder) = {
             let guard = self.repr.lock().unwrap();
             let canister_wasm = guard.canister_wasms.get(&wasm_id).unwrap_or_else(|| {
                 unreachable!(
@@ -543,7 +539,10 @@ impl SandboxManager {
                     canister_id, wasm_id
                 )
             });
-            Arc::clone(&canister_wasm.compilate)
+            (
+                Arc::clone(&canister_wasm.compilate),
+                Arc::clone(&canister_wasm.embedder),
+            )
         };
 
         // Step 2. Get data from instrumentation output.

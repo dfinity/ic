@@ -127,9 +127,12 @@ pub fn create_sandbox_process(
     assert!(!argv.is_empty());
     argv.push(canister_id.to_string());
 
-    let (sandbox_handle, child_handle, _recv_thread_handle) =
-        spawn_canister_sandbox_process(&argv[0], &argv, Arc::clone(&controller_service) as Arc<_>)
-            .expect("Failed to start sandbox process");
+    let (sandbox_handle, child_handle, _recv_thread_handle) = spawn_canister_sandbox_process(
+        &argv[0],
+        &argv[1..],
+        Arc::clone(&controller_service) as Arc<_>,
+    )
+    .expect("Failed to start sandbox process");
     Ok((sandbox_handle, child_handle))
 }
 
@@ -224,8 +227,8 @@ fn top_level_cargo_manifest_for_testing() -> Option<PathBuf> {
 /// Only for testing purposes.
 fn build_sandbox_with_cargo_for_testing(cargo_path: &str, manifest_path: &Path) {
     let argv = make_cargo_argv_for_testing(cargo_path, manifest_path, CargoCommandType::Build);
-    let output = Command::new(cargo_path)
-        .args(&argv)
+    let output = Command::new(&argv[0])
+        .args(&argv[1..])
         .output()
         .expect("Failed to build canister_sandbox with cargo");
     if !output.status.success() {
@@ -249,8 +252,6 @@ fn make_cargo_argv_for_testing(
 ) -> Vec<String> {
     let common_args = vec![
         "--quiet",
-        "--message-format",
-        "json",
         "--manifest-path",
         manifest_path.to_str().unwrap(),
         "--bin",
@@ -258,9 +259,7 @@ fn make_cargo_argv_for_testing(
     ];
     let argv = match cargo_command_type {
         CargoCommandType::Run => vec![vec![cargo_path, "run"], common_args, vec!["--"]],
-        // We end up running this with `std::process::Command` which adds the executable at the
-        // beginning for us.
-        CargoCommandType::Build => vec![vec!["build"], common_args],
+        CargoCommandType::Build => vec![vec![cargo_path, "build"], common_args],
     };
     argv.into_iter()
         .map(|s| s.into_iter().map(|s| s.to_string()))

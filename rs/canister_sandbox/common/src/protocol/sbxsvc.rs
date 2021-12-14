@@ -245,6 +245,12 @@ pub struct CreateExecutionStateRequest {
     pub canister_id: CanisterId,
 }
 
+impl EnumerateInnerFileDescriptors for CreateExecutionStateRequest {
+    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
+        self.wasm_page_map.enumerate_fds(fds);
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CreateExecutionStateSuccessReply {
     pub wasm_memory: MemoryModifications,
@@ -273,13 +279,13 @@ impl EnumerateInnerFileDescriptors for Request {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         match self {
             Request::OpenState(request) => request.enumerate_fds(fds),
+            Request::CreateExecutionState(request) => request.enumerate_fds(fds),
             Request::Terminate(_)
             | Request::OpenWasm(_)
             | Request::CloseWasm(_)
             | Request::CloseState(_)
             | Request::OpenExecution(_)
-            | Request::CloseExecution(_)
-            | Request::CreateExecutionState(_) => {}
+            | Request::CloseExecution(_) => {}
         }
     }
 }
