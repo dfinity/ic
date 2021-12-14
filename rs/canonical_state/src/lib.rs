@@ -1,4 +1,13 @@
 //! Conversion, filtering and encoding of Replicated State as Canonical State.
+//!
+//! Version history:
+//!
+//!   0. Initial version.
+//!   1. Added canister module hash and controller.
+//!   2. Added support for multiple canister controllers.
+//!   3. Added subnet to canister ID ranges routing tables.
+//!   4. Added optional `Request::cycles_payment` and `Response::cycles_refund`
+//!      fields that are not yet populated.
 
 pub mod encoding;
 pub mod hash_tree;
@@ -18,15 +27,16 @@ pub use lazy_tree::conversion::LabelLike;
 pub use traversal::traverse;
 pub use visitor::{Control, Visitor};
 
+/// Maximum supported certification version. The replica will panic if requested
+/// to certify using a version higher than this.
+///
+/// Must be greater than or equal to `CURRENT_CERTIFICATION_VERSION`.
+///
+/// For virtually all certification version changes must be bumped at least one
+/// release before bumping `CURRENT_CERTIFICATION_VERSION` in order to ensure
+/// forwards compatibility in the case of a replica downgrade.
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: u32 = 4;
+
 /// The Canonical State certification version that should be used for newly
 /// computed states.
-///
-/// Version history:
-///
-///   0. Initial version.
-///   1. Added canister module hash and controller.
-///   2. Added support for multiple canister controllers.
-///   3. Added subnet to canister ID ranges routing tables.
-///   4. Added optional `Request::cycles_payment` and `Response::cycles_refund`
-///      fields that are not yet populated.
 pub const CURRENT_CERTIFICATION_VERSION: u32 = 4;
