@@ -6,6 +6,7 @@ use std::{
 
 use ic_canister_sandbox_backend_lib::RUN_AS_CANISTER_SANDBOX_FLAG;
 use ic_types::CanisterId;
+use once_cell::sync::OnceCell;
 use std::os::unix::process::CommandExt;
 use std::sync::Arc;
 
@@ -181,6 +182,8 @@ fn create_sandbox_argv_for_testing() -> Option<Vec<String>> {
         return Some(vec![exec_path.to_str().unwrap().to_string()]);
     }
 
+    static SANDBOX_COMPILED: OnceCell<()> = OnceCell::new();
+
     // When running in a dev environment we expect `cargo` to be in our path and
     // we should be able to find the workspace cargo manifest so this should
     // succeed.
@@ -194,7 +197,8 @@ fn create_sandbox_argv_for_testing() -> Option<Vec<String>> {
                 path, manifest_path
             );
             let path = path.to_str().unwrap().to_string();
-            build_sandbox_with_cargo_for_testing(&path, &manifest_path);
+            SANDBOX_COMPILED
+                .get_or_init(|| build_sandbox_with_cargo_for_testing(&path, &manifest_path));
             // Run `canister_sandbox` using `cargo run` so that we don't need to find the
             // executable in the target folder.
             Some(make_cargo_argv_for_testing(
