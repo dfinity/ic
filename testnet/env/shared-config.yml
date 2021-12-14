@@ -13,145 +13,21 @@ prometheus:
     prometheus.dfinity.systems:
 
 data_centers:
-  an1:
-    vars:
-      ipv6_prefix: "2001:920:401a:1708"
-      ipv6_subnet: "/64"
-  at1:
-    vars:
-      ipv6_prefix: "2607:f758:1220"
-      ipv6_subnet: "/64"
-  at2:
-    vars:
-      ipv6_prefix: "2604:3fc0:2001:0"
-      ipv6_subnet: "/64"
-  aw1:
-    vars:
-      ipv6_prefix: "2604:7e00:30:3"
-      ipv6_subnet: "/64"
-  bc1:
-    vars:
-      ipv6_prefix: "2001:438:fffd:11c"
-      ipv6_subnet: "/64"
-  br1:
-    vars:
-      ipv6_prefix: "2001:920:401a:1710"
-      ipv6_subnet: "/64"
-  br2:
-    vars:
-      ipv6_prefix: "2001:920:401a:1706"
-      ipv6_subnet: "/64"
-  bu1:
-    vars:
-      ipv6_prefix: "2a04:9dc0:0:108"
-      ipv6_subnet: "/64"
   ch1:
     vars:
       ipv6_prefix: "2607:f6f0:3004:1"
-      ipv6_subnet: "/64"
-  ch2:
-    vars:
-      ipv6_prefix: "2604:7e00:50"
-      ipv6_subnet: "/64"
-  ch3:
-    vars:
-      ipv6_prefix: "2607:ff70:3:2"
-      ipv6_subnet: "/64"
-  dl1:
-    vars:
-      ipv6_prefix: "2600:3000:6100:200"
-      ipv6_subnet: "/64"
-  fm1:
-    vars:
-      ipv6_prefix: "2001:470:1:c76"
       ipv6_subnet: "/64"
   fr1:
     vars:
       ipv6_prefix: "2001:4d78:40d"
       ipv6_subnet: "/64"
-  fr2:
-    vars:
-      ipv6_prefix: "2604:1380:4091:3000"
-      ipv6_subnet: "/64"
-  ge1:
-    vars:
-      ipv6_prefix: "2a0f:cd00:2:1"
-      ipv6_subnet: "/64"
-  ge2:
-    vars:
-      ipv6_prefix: "2a00:fa0:3:0"
-      ipv6_subnet: "/64"
-  hu1:
-    vars:
-      ipv6_prefix: "2604:B900:4001:76"
-      ipv6_subnet: "/64"
-  jv1:
-    vars:
-      ipv6_prefix: "2600:2c01:21"
-      ipv6_subnet: "/64"
-  lj1:
-    vars:
-      ipv6_prefix: "2a02:800:2:2003"
-      ipv6_subnet: "/64"
-  lv1:
-    vars:
-      ipv6_prefix: "2600:3006:1400:1500"
-      ipv6_subnet: "/64"
-  mu1:
-    vars:
-      ipv6_prefix: "2a01:138:900a:0"
-      ipv6_subnet: "/64"
-  ny1:
-    vars:
-      ipv6_prefix: "2607:f1d0:10:1"
-      ipv6_subnet: "/64"
-  or1:
-    vars:
-      ipv6_prefix: "2604:3fc0:3002:0"
-      ipv6_subnet: "/64"
-  ph1:
-    vars:
-      ipv6_prefix: "2610:190:6000:1"
-      ipv6_subnet: "/64"
-  pl1:
-    vars:
-      ipv6_prefix: "2600:3004:1200:1200"
-      ipv6_subnet: "/64"
   sf1:
     vars:
       ipv6_prefix: "2607:fb58:9005:42"
       ipv6_subnet: "/64"
-  sg1:
-    vars:
-      ipv6_prefix: "2401:3f00:1000:24"
-      ipv6_subnet: "/64"
-  sg2:
-    vars:
-      ipv6_prefix: "2401:3f00:1000:22"
-      ipv6_subnet: "/64"
-  sg3:
-    vars:
-      ipv6_prefix: "2401:3f00:1000:23"
-      ipv6_subnet: "/64"
-  sj1:
-    vars:
-      ipv6_prefix: "2600:c02:b002:15"
-      ipv6_subnet: "/64"
-  st1:
-    vars:
-      ipv6_prefix: "2610:190:df01:5"
-      ipv6_subnet: "/64"
-  tp1:
-    vars:
-      ipv6_prefix: "2607:f758:c300:0"
-      ipv6_subnet: "/64"
   zh1:
     vars:
       ipv6_prefix: "2a00:fb01:400:42"
-      ipv6_subnet: "/64"
-  zh2:
-    vars:
-      ipv6_prefix: "2a00:fb01:400:100"
       ipv6_subnet: "/64"
 
 physical_hosts:
