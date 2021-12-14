@@ -1,9 +1,12 @@
 //! Conversion from `ReplicatedState` to `LazyTree`.
 
 use super::{blob, fork, num, string, Lazy, LazyFork, LazyTree};
-use crate::encoding::{
-    encode_controllers, encode_message, encode_metadata, encode_stream_header,
-    encode_subnet_canister_ranges,
+use crate::{
+    encoding::{
+        encode_controllers, encode_message, encode_metadata, encode_stream_header,
+        encode_subnet_canister_ranges,
+    },
+    MAX_SUPPORTED_CERTIFICATION_VERSION,
 };
 use ic_crypto_tree_hash::Label;
 use ic_registry_routing_table::RoutingTable;
@@ -202,6 +205,13 @@ fn invert_routing_table(
 /// Converts replicated state into a lazy tree.
 fn state_as_tree(state: &ReplicatedState) -> LazyTree<'_> {
     let certification_version = state.metadata.certification_version;
+    assert!(
+        certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,
+        "Unable to certify state with version {}. Maximum supported certification version is {}",
+        certification_version,
+        MAX_SUPPORTED_CERTIFICATION_VERSION
+    );
+
     fork(
         FiniteMap::default()
             .with("metadata", move || metadata_as_tree(&state.metadata))
