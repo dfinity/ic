@@ -124,11 +124,3 @@ while [ ! -f /boot/config/CONFIGURED ]; do
         umount /mnt
     fi
 done
-
-# HACK: This workaround configures Journalbeat in mainnet. Will be removed once
-#       applied to all guests.
-if [ ! -f /boot/config/journalbeat.conf ]; then
-    cat >/boot/config/journalbeat.conf <<EOF
-journalbeat_hosts=elasticsearch.mercury.dfinity.systems:443
-EOF
-fi
