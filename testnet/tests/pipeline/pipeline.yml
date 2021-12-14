@@ -893,6 +893,7 @@ icos-continuous-upgrade-nightly:
       # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
       # Hence, the fourth column can be used to distinguish structured from unstructerd logs.
       $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh" \
+        --git-use-current-commit \
         --suite "${SUITE_NAME}" \
         --log-base-dir "${BASE_DIR}" \
       | tee "${BASE_DIR}/unstructured-logs.log" \
