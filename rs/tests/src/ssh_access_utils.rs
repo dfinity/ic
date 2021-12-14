@@ -85,7 +85,7 @@ pub(crate) fn wait_until_authentication_is_granted(ip: &IpAddr, username: &str, 
     // The node manager updates the access keys every 10 seconds. If we are lucky,
     // this call succeeds at the first trial. If we are unlucky, it starts
     // succeeding after 10 secs.
-    let deadline = current_time() + Duration::from_secs(22);
+    let deadline = current_time() + Duration::from_secs(30);
     loop {
         match SshSession::new().login(ip, username, mean) {
             Ok(_) => return,
@@ -99,7 +99,7 @@ pub(crate) fn wait_until_authentication_fails(ip: &IpAddr, username: &str, mean:
     // The node manager updates the access keys every 10 seconds. If we are lucky,
     // this call succeeds at the first trial. If we are unlucky, it starts
     // succeeding after 10 secs.
-    let deadline = current_time() + Duration::from_secs(22);
+    let deadline = current_time() + Duration::from_secs(30);
     loop {
         match SshSession::new().login(ip, username, mean) {
             Err(_) => return,
