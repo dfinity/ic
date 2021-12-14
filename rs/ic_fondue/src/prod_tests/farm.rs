@@ -9,7 +9,7 @@ use crate::internet_computer::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocation};
 use anyhow::Result;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
-use slog::{error, warn, Logger};
+use slog::{error, info, warn, Logger};
 use thiserror::Error;
 use url::Url;
 
@@ -112,6 +112,11 @@ impl Farm {
         let path = format!("group/{}/vm/{}/start", group_name, vm_name);
         let rb = self.put(&path);
         let _resp = self.retry_until_success(rb)?;
+        info!(
+            self.logger,
+            "Interact with the serial console of the VM via: {}",
+            self.url_from_path(&format!("group/{}/vm/{}/console/", group_name, vm_name)[..])
+        );
         Ok(())
     }
 
