@@ -34,7 +34,8 @@ use ic_nns_constants::{
 };
 use ic_nns_governance::pb::v1::{
     add_or_remove_node_provider::Change, manage_neuron::Command, proposal::Action,
-    AddOrRemoveNodeProvider, ManageNeuron, NodeProvider, Proposal,
+    AddOrRemoveNodeProvider, GovernanceError, ManageNeuron, NodeProvider, Proposal,
+    RewardNodeProviders,
 };
 use ic_nns_governance::{
     pb::v1::NnsFunction,
@@ -314,6 +315,8 @@ enum SubCommand {
     ProposeToUpdateUnassignedNodesConfig(ProposeToUpdateUnassignedNodesConfigCmd),
     /// Get the SSH key access lists for unassigned nodes
     GetUnassignedNodes,
+    /// Get the monthly Node Provider rewards
+    GetMonthlyNodeProviderRewards,
 }
 
 /// Indicates whether a value should be added or removed.
@@ -2596,6 +2599,17 @@ async fn main() {
             )
             .await;
         }
+        SubCommand::GetMonthlyNodeProviderRewards => {
+            let canister_client = GovernanceCanisterClient(make_canister_client(
+                opts.nns_url.clone(),
+                GOVERNANCE_CANISTER_ID,
+                sender,
+                None,
+            ));
+
+            let response = canister_client.get_monthly_node_provider_rewards().await;
+            println!("{:?}", response);
+        }
     }
 }
 
@@ -3375,6 +3389,22 @@ impl GovernanceCanisterClient {
             .ok_or_else(|| "submit_proposal replied nothing.".to_string())?;
 
         decode_make_proposal_response(response)
+    }
+
+    pub async fn get_monthly_node_provider_rewards(
+        &self,
+    ) -> Result<RewardNodeProviders, GovernanceError> {
+        let serialized = Encode!(&()).unwrap();
+
+        let response = self
+            .0
+            .execute_update("get_monthly_node_provider_rewards", serialized)
+            .await
+            .unwrap()
+            .ok_or_else(|| "get_monthly_node_provider_rewards replied nothing.".to_string())
+            .unwrap();
+
+        Decode!(&response, Result<RewardNodeProviders, GovernanceError>).unwrap()
     }
 }
 
