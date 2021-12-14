@@ -267,6 +267,21 @@ impl From<PeerNotAllowedError> for TlsClientHandshakeError {
 }
 
 /// A stream over a secure connection protected by TLS.
+///
+/// The main usage of this stream (or its halves obtained by
+/// [splitting](`Self::split()`) the stream) is via the methods provided by the
+/// `tokio::io::AsyncRead` and `tokio::io::AsyncWrite` traits.
+///
+/// Note that the Rustls variant of this stream behaves like a `BufWriter`. This
+/// means that data written with `poll_write` are not guaranteed to be written
+/// to the underlying (TCP) stream and one must call `poll_flush` at appropriate
+/// times, such as when a period of `poll_write` writes is complete and there is
+/// no more data to write. See also [tokio-rustls' documentation] on [Why do I
+/// need to call poll_flush?] and the documentation of `tokio::io::BufWriter`
+/// and `std::io::BufWriter`.
+///
+/// [tokio-rustls' documentation]: https://docs.rs/tokio-rustls/latest/tokio_rustls/
+/// [Why do I need to call poll_flush?]: https://docs.rs/tokio-rustls/latest/tokio_rustls/#why-do-i-need-to-call-poll_flush
 pub enum TlsStream {
     OpenSsl(tokio_openssl::SslStream<TcpStream>),
     // The Box exists to address the `large_enum_variant` Clippy lint
@@ -375,6 +390,9 @@ impl AsyncRead for TlsReadHalf {
 }
 
 /// The write half of a stream over a secure connection protected by TLS.
+///
+/// See also the documentation of [`TlsStream`], especially the part on correct
+/// flushing for the Rustls variant.
 pub enum TlsWriteHalf {
     OpenSsl(WriteHalf<tokio_openssl::SslStream<TcpStream>>),
     Rustls(WriteHalf<tokio_rustls::TlsStream<TcpStream>>),
