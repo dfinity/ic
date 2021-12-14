@@ -20,7 +20,7 @@ Success::
 .. 95% of successful queries are completed within 600ms of their submission
    (measured on the node receiving the query) -- use 95% so that we allow for
    variability due to failing nodes and uniformity across scenario tests, and
-.. <= 5% of requests issued by the workload generator fail.
+.. all requests issued by the workload generator return status OK
 
 end::catalog[]
 DOC
@@ -263,39 +263,22 @@ else
     failure "Fewer than 90% of requests completed in under 2s, check '$experiment_dir/metrics/replica_http_request_duration_seconds.json'"
 fi
 
+echo "Max completion time ok $max_ok."
+
 # Use values from the workload generator to calculate the number of failures
-# 202 is the status of good message, everything else is a faulty one
-status_44_timeout="$(jq -r '.[0].status_counts."44" // 0' <"$experiment_dir/workload-summary.json")"
-status_33_rejected="$(jq -r '.[0].status_counts."33" // 0' <"$experiment_dir/workload-summary.json")"
-status_11_update_send_failed="$(jq -r '.[0].status_counts."11" // 0' <"$experiment_dir/workload-summary.json")"
-status_0_not_sent="$(jq -r '.[0].status_counts."0" // 0' <"$experiment_dir/workload-summary.json")"
+
+# 200 is the status of good message, everything else is a faulty one
 status_200_good="$(jq -r '.[0].status_counts."200" // 0' <"$experiment_dir/workload-summary.json")"
-status_bad=$((status_44_timeout + status_33_rejected + status_11_update_send_failed + status_0_not_sent))
+# total number of messages
+status_total="$(jq -r '.[0].status_counts | add' <"$experiment_dir/workload-summary.json")"
 
-if [[ $((status_200_good + status_bad)) != "0" ]]; then
-    bad_percentage=$(((100 * (status_bad)) / (status_200_good + status_bad)))
-else
-    bad_percentage=100
-fi
-
-# In addition, ensure we don't have any HTTP failures -- these are the signal
-# the experiment was bad. HTTP failures are detected when return codes are
-# different from timeout, rejected, not_sent, or good.
-has_http_failure="$(jq -r '.[0].status_counts | keys | inside(["0", "11", "33", "44", "200"]) | not' <"$experiment_dir/workload-summary.json")"
-
-sed -i "s/failed_requests_percentage/$bad_percentage/g" "$experiment_dir/data_to_upload/FailedRequestsPercentage.json"
-
-if [[ $has_http_failure == "true" ]]; then
-    failure "There existed http failure, check '$experiment_dir/workload-summary.json'"
-elif [[ $status_200_good == "0" ]]; then
+if [[ $status_200_good == "0" ]]; then
     failure "There were no good requests, check '$experiment_dir/workload-summary.json'"
-elif [[ $bad_percentage -le "5" ]]; then
-    success "No more than 5% of requests failed."
+elif [[ $status_total -eq $status_200_good ]]; then
+    success "All requests returned status OK."
 else
-    failure "More than 5% of requests failed, check '$experiment_dir/workload-summary.json'"
+    failure "Not all requests returned Status OK, check '$experiment_dir/workload-summary.json'"
 fi
-
-echo "Max completion time ok $max_ok, failures happened $has_http_failure, bad percentage $bad_percentage"
 
 finaltime="$(date '+%s')"
 echo "Ending tests *** $(dateFromEpoch "$finaltime") (start time was $(dateFromEpoch "$calltime"))"
