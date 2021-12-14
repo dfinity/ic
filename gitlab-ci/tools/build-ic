@@ -2,11 +2,79 @@
 
 set -euo pipefail
 
-DISK_DIR=${1:-/ic/artifacts/icos}
-CANISTERS_DIR=${2:-/ic/artifacts/canisters}
+DISK_DIR=/ic/artifacts/icos
+CANISTERS_DIR=/ic/artifacts/canisters
 ROOT_DIR=$(git rev-parse --show-toplevel)
+BUILD_BINARIES=true
+BUILD_CANISTERS=true
+BUILD_IMAGES=true
 cd $ROOT_DIR
 sudo setfacl -m u:$(id -u):rwx -R $ROOT_DIR
+
+usage() {
+    echo "by default, this script builds everything including the Binaries, Canisters and the IC OS Image."
+    echo " "
+    echo "options:"
+    echo "-h, --help                    show brief help"
+    echo "-dd, --disk-dir=\"dir\"       specify the disk build directory"
+    echo "-cd, --canisters-dir=\"dir\"  specify the canisters build directory"
+    echo "-a, --artifacts=\"b,c,i\"     chose which artifacts you want to build separated by a comma"
+    echo "                              options: b or binaries, c or canisters, i or image"
+    exit 0
+}
+
+# Process flags
+while test $# -gt 0; do
+    case "$1" in
+        -h | --help) usage ;;
+        -a* | --artifacts*)
+            if [[ "$1" == *"="* ]]; then
+                value=$(echo "$1" | sed -e 's/^[^=]*=//g')
+            else
+                shift
+                value="$1"
+            fi
+
+            BUILD_BINARIES=false
+            BUILD_CANISTERS=false
+            BUILD_IMAGES=false
+
+            # Iterate through the given artificats and sets the states
+            IFS=',' read -ra options <<<"$value"
+            for option in "${options[@]}"; do
+                case "$option" in
+                    b | binaries) BUILD_BINARIES=true ;;
+                    c | canisters) BUILD_CANISTERS=true ;;
+                    i | image)
+                        BUILD_BINARIES=true
+                        BUILD_CANISTERS=true
+                        BUILD_IMAGES=true
+                        ;;
+                esac
+            done
+
+            shift
+            ;;
+        -dd* | --disk-dir*)
+            if [[ "$1" == *"="* ]]; then
+                DISK_DIR=$(echo "$1" | sed -e 's/^[^=]*=//g')
+            else
+                shift
+                DISK_DIR="$1"
+            fi
+            shift
+            ;;
+        -cd* | --canisters-dir*)
+            if [[ "$1" == *"="* ]]; then
+                CANISTERS_DIR=$(echo "$1" | sed -e 's/^[^=]*=//g')
+            else
+                shift
+                CANISTERS_DIR="$1"
+            fi
+            shift
+            ;;
+    esac
+done
 
 HEADER_BINARIES=$(
     cat <<"EOF"
@@ -65,34 +133,51 @@ export CI_PROJECT_DIR=${CI_PROJECT_DIR:-$ROOT_DIR}
 export BUILD_EXTRA_SUFFIX=${BUILD_EXTRA_SUFFIX:-""}
 export BUILD_EXTRA_ARGS=${BUILD_EXTRA_ARGS:-""}
 
-echo -e "\n${HEADER_BINARIES}\n"
-gitlab-ci/src/job_scripts/cargo-build-release-linux-native.sh
-echo -e "\n${HEADER_CANISTERS}\n"
-gitlab-ci/tools/cargo-build-canisters "${CANISTERS_DIR}"
-echo -e "\n${HEADER_ICOS}\n"
-gitlab-ci/src/job_scripts/guest-os-updateimg.sh "${DISK_DIR}"
+if [ "$BUILD_BINARIES" == "true" ]; then
+    echo -e "\n${HEADER_BINARIES}\n"
+    gitlab-ci/src/job_scripts/cargo-build-release-linux-native.sh
+fi
+if [ "$BUILD_CANISTERS" == "true" ]; then
+    echo -e "\n${HEADER_CANISTERS}\n"
+    gitlab-ci/tools/cargo-build-canisters "${CANISTERS_DIR}"
+fi
+if [ "$BUILD_IMAGES" == "true" ] && [ "$BUILD_BINARIES" == "true" ] && [ "$BUILD_CANISTERS" == "true" ]; then
+    echo -e "\n${HEADER_ICOS}\n"
+    gitlab-ci/src/job_scripts/guest-os-updateimg.sh "${DISK_DIR}"
+fi
 
 echo
 echo -e "\n${HEADER_BUILD}\n"
-echo Release Binaries
-cd /ic/artifacts/release
+if [ "$BUILD_BINARIES" == "true" ]; then
+    echo Release Binaries
+    cd /ic/artifacts/release
+    ls -1 *.gz | xargs -n1 sha256sum | tee /tmp/binaries.txt
+    echo
+fi
 
-ls -1 *.gz | xargs -n1 sha256sum | tee /tmp/binaries.txt
-echo
+if [ "$BUILD_CANISTERS" == "true" ]; then
+    echo Canister Binaries
+    cd /ic/artifacts/canisters
+    ls -1 *.gz | xargs -n1 sha256sum | tee /tmp/canisters.txt
+    echo
+fi
 
-echo Canister Binaries
-cd /ic/artifacts/canisters
-ls -1 *.gz | xargs -n1 sha256sum | tee /tmp/canisters.txt
-echo
-
-echo IC-OS Image
-cd "$DISK_DIR"
-ls -1 update-img.tar.gz | xargs -n1 sha256sum | tee /tmp/update-img.txt
-echo
+if [ "$BUILD_IMAGES" == "true" ] && [ "$BUILD_BINARIES" == "true" ] && [ "$BUILD_CANISTERS" == "true" ]; then
+    echo IC-OS Image
+    cd "$DISK_DIR"
+    ls -1 update-img.tar.gz | xargs -n1 sha256sum | tee /tmp/update-img.txt
+    echo
+fi
 
 cd /tmp
 echo SHA256SUMS
-sha256sum binaries.txt
-sha256sum canisters.txt
-sha256sum update-img.txt
+if [ "$BUILD_BINARIES" == "true" ]; then
+    sha256sum binaries.txt
+fi
+if [ "$BUILD_CANISTERS" == "true" ]; then
+    sha256sum canisters.txt
+fi
+if [ "$BUILD_IMAGES" == "true" ] && [ "$BUILD_BINARIES" == "true" ] && [ "$BUILD_CANISTERS" == "true" ]; then
+    sha256sum update-img.txt
+fi
 echo
