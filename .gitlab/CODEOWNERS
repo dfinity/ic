@@ -155,6 +155,13 @@
 /rs/universal_canister/              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
 /rs/validator/                       @dfinity-lab/teams/execution-owners
 
+# Scalability suite is currently owned by both node-team and testing team
+# Most individual benchmarks are owned by individual teams
+/scalability                         @dfinity-lab/teams/node-team @dfinity-lab/teams/ic-testing-verification
+/scalability/max-capacity-experiment-2.py                         @dfinity-lab/teams/execution-owners
+/scalability/run_experiment_2.py                                  @dfinity-lab/teams/execution-owners
+/scalability/run_experiment_4.py                                  @dfinity-lab/teams/networking-team
+
 [Nix]
 *.nix @dfinity-lab/teams/idx
 /nix/                     @dfinity-lab/teams/idx
