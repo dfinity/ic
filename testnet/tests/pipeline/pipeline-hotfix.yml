@@ -58,6 +58,7 @@ nns-workload-hotfix:
       export GIT_REVISION
 
       $SHELL_WRAPPER ./testnet/tests/scripts/nns_workload.sh "$TESTNET" 180 5 10 normal 0.25 "$CI_JOB_STAGE/$CI_JOB_NAME"
+  retry: 3
 
 xnet-slo-hotfix:
   extends: .prod-hotfix-test-group-2
