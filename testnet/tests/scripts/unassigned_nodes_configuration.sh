@@ -110,7 +110,9 @@ UNASSIGNED_NODE_IP="$(ic-admin --nns-url "$nns_url" get-node "$UNASSIGNED_NODE_I
 
 n=0
 while true; do
+    set +e
     DETECTED_VERSION="$(ssh -o StrictHostKeyChecking=no "readonly@$UNASSIGNED_NODE_IP" 'cat /opt/ic/share/version.txt')"
+    set -e
     if [[ "$DETECTED_VERSION" == "$VERSION" ]]; then
         echo "✅ SUCCESS! Unassigned node $UNASSIGNED_NODE_IP has the ssh readonly access enabled and is runnig version $VERSION."
         break
