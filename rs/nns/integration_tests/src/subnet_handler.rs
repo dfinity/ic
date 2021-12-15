@@ -21,9 +21,9 @@ use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_types::p2p::{
-    build_default_gossip_config, MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_SIZE, MAX_CHUNK_WAIT_MS,
-    MAX_DUPLICITY, PFN_EVALUATION_PERIOD_MS, RECEIVE_CHECK_PEER_SET_SIZE, REGISTRY_POLL_PERIOD_MS,
-    RETRANSMISSION_REQUEST_MS,
+    build_default_gossip_config, ADVERT_BEST_EFFORT_PERCENTAGE, MAX_ARTIFACT_STREAMS_PER_PEER,
+    MAX_CHUNK_SIZE, MAX_CHUNK_WAIT_MS, MAX_DUPLICITY, PFN_EVALUATION_PERIOD_MS,
+    RECEIVE_CHECK_PEER_SET_SIZE, REGISTRY_POLL_PERIOD_MS, RETRANSMISSION_REQUEST_MS,
 };
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 
@@ -100,7 +100,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 pfn_evaluation_period_ms: Some(PFN_EVALUATION_PERIOD_MS),
                 registry_poll_period_ms: Some(REGISTRY_POLL_PERIOD_MS),
                 retransmission_request_ms: Some(RETRANSMISSION_REQUEST_MS),
-                advert_best_effort_percentage: None,
+                advert_best_effort_percentage: Some(ADVERT_BEST_EFFORT_PERCENTAGE),
                 set_gossip_config_to_default: false,
                 start_as_nns: None,
                 subnet_type: None,
