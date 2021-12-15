@@ -20,7 +20,7 @@ impl sandbox_service::SandboxService for DummySandboxService {
     }
     fn open_wasm(&self, _req: sbxsvc::OpenWasmRequest) -> rpc::Call<sbxsvc::OpenWasmReply> {
         println!("Sandbox: Received 'open_wasm' request");
-        rpc::Call::new_resolved(Ok(sbxsvc::OpenWasmReply { success: true }))
+        rpc::Call::new_resolved(Ok(sbxsvc::OpenWasmReply(Ok(()))))
     }
     fn close_wasm(&self, _req: sbxsvc::CloseWasmRequest) -> rpc::Call<sbxsvc::CloseWasmReply> {
         unimplemented!();

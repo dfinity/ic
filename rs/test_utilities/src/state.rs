@@ -406,10 +406,14 @@ pub fn initial_execution_state(p: Option<std::path::PathBuf>) -> ExecutionState 
     }
 }
 
-pub fn canister_from_exec_state(execution_state: ExecutionState) -> CanisterState {
+pub fn canister_from_exec_state(
+    execution_state: ExecutionState,
+    canister_id: CanisterId,
+) -> CanisterState {
     CanisterState {
         system_state: SystemStateBuilder::new()
             .memory_allocation(NumBytes::new(8 * 1024 * 1024 * 1024)) // 8GiB
+            .canister_id(canister_id)
             .build(),
         execution_state: Some(execution_state),
         scheduler_state: Default::default(),

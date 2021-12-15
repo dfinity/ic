@@ -346,8 +346,9 @@ struct CanisterWasm {
 }
 
 impl CanisterWasm {
-    /// Creates new wasm object for given binary encoded wasm.
-    pub fn new(wasm: BinaryEncodedWasm) -> Self {
+    /// Validates and compiles the given Wasm binary.
+    pub fn compile(wasm_src: Vec<u8>) -> HypervisorResult<Self> {
+        let wasm = BinaryEncodedWasm::new(wasm_src);
         let log = ic_logger::replica_logger::no_op_logger();
         // TODO(EXC-755): Use the proper embedder config.
         let mut config = Config::new();
@@ -359,33 +360,15 @@ impl CanisterWasm {
             .map_err(HypervisorError::from)
             .and_then(|_| {
                 instrument(&wasm, &InstructionCostTable::new()).map_err(HypervisorError::from)
-            })
-            .unwrap();
+            })?;
+        let compilate =
+            embedder.compile(PersistenceType::Sigsegv, &instrumentation_output.binary)?;
+        let compilate = Arc::new(compilate);
 
-        let compilate = Arc::new(
-            embedder
-                .compile(PersistenceType::Sigsegv, &instrumentation_output.binary)
-                .unwrap(),
-        );
-        Self {
+        Ok(Self {
             embedder,
             compilate,
-        }
-    }
-
-    /// Creates new wasm object from file.
-    pub fn new_from_file_path(wasm_file_path: &str) -> Self {
-        let wasm =
-            BinaryEncodedWasm::new_from_file(std::path::PathBuf::from(wasm_file_path)).unwrap();
-
-        CanisterWasm::new(wasm)
-    }
-
-    /// Creates new wasm object from inline data (binary encoded wasm).
-    pub fn new_from_src(wasm_src: Vec<u8>) -> Self {
-        let wasm = BinaryEncodedWasm::new(wasm_src);
-
-        CanisterWasm::new(wasm)
+        })
     }
 }
 
@@ -419,21 +402,18 @@ impl SandboxManager {
         }
     }
 
-    /// Opens new wasm instance.
-    pub fn open_wasm(&self, wasm_id: WasmId, wasm_file_path: Option<String>, wasm_src: Vec<u8>) {
+    /// Compiles the given Wasm binary and registers it under the given id.
+    /// The function may fail if the Wasm binary is invalid.
+    pub fn open_wasm(&self, wasm_id: WasmId, wasm_src: Vec<u8>) -> HypervisorResult<()> {
         let mut guard = self.repr.lock().unwrap();
         assert!(
             !guard.canister_wasms.contains_key(&wasm_id),
             "Failed to open wasm session {}: id is already in use",
             wasm_id,
         );
-        // Note that we can override an existing open wasm.
-        let wasm = match wasm_file_path {
-            Some(path) => Arc::new(CanisterWasm::new_from_file_path(path.as_ref())),
-            None => Arc::new(CanisterWasm::new_from_src(wasm_src)),
-        };
-
-        guard.canister_wasms.insert(wasm_id, wasm);
+        let wasm = CanisterWasm::compile(wasm_src)?;
+        guard.canister_wasms.insert(wasm_id, Arc::new(wasm));
+        Ok(())
     }
 
     /// Closes previously opened wasm instance, by id.

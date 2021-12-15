@@ -45,7 +45,6 @@ fn main() {
     println!("Controller: Sending 'open_wasm' request");
     let wasm_id = WasmId::new();
     sbx.open_wasm(sbxsvc::OpenWasmRequest {
-        wasm_file_path: None,
         wasm_id,
         wasm_src: Vec::new(),
     })

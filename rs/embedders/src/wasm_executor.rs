@@ -194,20 +194,14 @@ impl WasmExecutor {
             cycles_account_manager,
         }: WasmExecutionInput,
     ) -> WasmExecutionOutput {
-        let static_system_state =
-            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
-        let canister_id = system_state.canister_id;
-        let system_state_accessor =
-            SystemStateAccessorDirect::new(system_state, cycles_account_manager);
-
-        let embedder_cache = self.get_embedder_cache(&execution_state.wasm_binary);
-        match embedder_cache {
-            Ok(_) => (),
+        // Ensure that Wasm is compiled.
+        let embedder_cache = match self.get_embedder_cache(&execution_state.wasm_binary) {
+            Ok(embedder_cache) => embedder_cache,
             Err(err) => {
                 return WasmExecutionOutput {
                     wasm_result: Err(err),
                     num_instructions_left: NumInstructions::from(0),
-                    system_state: system_state_accessor.release_system_state(),
+                    system_state,
                     execution_state,
                     instance_stats: InstanceStats {
                         accessed_pages: 0,
@@ -215,9 +209,13 @@ impl WasmExecutor {
                     },
                 };
             }
-        }
-        // We have verified that it is not an error, so safe to unwrap now.
-        let embedder_cache = embedder_cache.unwrap();
+        };
+
+        let static_system_state =
+            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+        let canister_id = system_state.canister_id;
+        let system_state_accessor =
+            SystemStateAccessorDirect::new(system_state, cycles_account_manager);
 
         // TODO(EXC-176): we should combine this with the hypervisor so that
         // we make the decision of whether or not to commit modifications in

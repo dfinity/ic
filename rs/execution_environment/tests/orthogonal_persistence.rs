@@ -61,18 +61,19 @@ impl HypervisorTest {
         );
         let wasm_binary = wabt::wat2wasm(wast).unwrap();
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+        let system_state = SystemStateBuilder::default()
+            .memory_allocation(NumBytes::new(8 * 1024 * 1024 * 1024)) // 8GiB
+            .build();
         let execution_state = hypervisor
             .create_execution_state(
                 wasm_binary,
                 tmpdir.path().to_path_buf(),
-                CanisterId::from(0),
+                system_state.canister_id(),
             )
             .unwrap();
 
         let canister = CanisterState {
-            system_state: SystemStateBuilder::default()
-                .memory_allocation(NumBytes::new(8 * 1024 * 1024 * 1024)) // 8GiB
-                .build(),
+            system_state,
             execution_state: Some(execution_state),
             scheduler_state: Default::default(),
         };

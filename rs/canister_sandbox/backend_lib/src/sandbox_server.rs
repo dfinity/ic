@@ -33,9 +33,8 @@ impl SandboxService for SandboxServer {
     }
 
     fn open_wasm(&self, req: OpenWasmRequest) -> rpc::Call<OpenWasmReply> {
-        self.manager
-            .open_wasm(req.wasm_id, req.wasm_file_path.clone(), req.wasm_src);
-        rpc::Call::new_resolved(Ok(OpenWasmReply { success: true }))
+        let result = self.manager.open_wasm(req.wasm_id, req.wasm_src);
+        rpc::Call::new_resolved(Ok(OpenWasmReply(result)))
     }
 
     fn close_wasm(&self, req: CloseWasmRequest) -> rpc::Call<CloseWasmReply> {
@@ -411,12 +410,11 @@ mod tests {
         let rep = srv
             .open_wasm(OpenWasmRequest {
                 wasm_id,
-                wasm_file_path: None,
                 wasm_src: make_counter_canister_wasm(),
             })
             .sync()
             .unwrap();
-        assert!(rep.success);
+        assert!(rep.0.is_ok());
 
         let wasm_memory = PageMap::default();
         let stable_memory = PageMap::default();
@@ -500,12 +498,11 @@ mod tests {
         let rep = srv
             .open_wasm(OpenWasmRequest {
                 wasm_id,
-                wasm_file_path: None,
                 wasm_src: make_memory_canister_wasm(),
             })
             .sync()
             .unwrap();
-        assert!(rep.success);
+        assert!(rep.0.is_ok());
 
         let mut wasm_memory = PageMap::default();
         let stable_memory = PageMap::default();
@@ -574,12 +571,11 @@ mod tests {
         let rep = srv
             .open_wasm(OpenWasmRequest {
                 wasm_id,
-                wasm_file_path: None,
                 wasm_src: make_memory_canister_wasm(),
             })
             .sync()
             .unwrap();
-        assert!(rep.success);
+        assert!(rep.0.is_ok());
 
         let mut wasm_memory = PageMap::default();
         let stable_memory = PageMap::default();
@@ -655,12 +651,11 @@ mod tests {
         let rep = srv
             .open_wasm(OpenWasmRequest {
                 wasm_id,
-                wasm_file_path: None,
                 wasm_src: make_counter_canister_wasm(),
             })
             .sync()
             .unwrap();
-        assert!(rep.success);
+        assert!(rep.0.is_ok());
 
         let wasm_memory = PageMap::default();
         let stable_memory = PageMap::default();
@@ -791,12 +786,11 @@ mod tests {
         let rep = srv
             .open_wasm(OpenWasmRequest {
                 wasm_id,
-                wasm_file_path: None,
                 wasm_src: make_memory_canister_wasm(),
             })
             .sync()
             .unwrap();
-        assert!(rep.success);
+        assert!(rep.0.is_ok());
 
         let wasm_memory = PageMap::default();
         let mut stable_memory = PageMap::default();
@@ -865,12 +859,11 @@ mod tests {
         let rep = srv
             .open_wasm(OpenWasmRequest {
                 wasm_id,
-                wasm_file_path: None,
                 wasm_src: make_memory_canister_wasm(),
             })
             .sync()
             .unwrap();
-        assert!(rep.success);
+        assert!(rep.0.is_ok());
 
         let wasm_memory = PageMap::default();
         let mut stable_memory = PageMap::default();
@@ -930,12 +923,11 @@ mod tests {
         let rep = srv
             .open_wasm(OpenWasmRequest {
                 wasm_id,
-                wasm_file_path: None,
                 wasm_src: make_memory_canister_wasm(),
             })
             .sync()
             .unwrap();
-        assert!(rep.success);
+        assert!(rep.0.is_ok());
 
         let mut wasm_memory = PageMap::default();
         let stable_memory = PageMap::default();
@@ -1059,12 +1051,11 @@ mod tests {
         let rep = srv
             .open_wasm(OpenWasmRequest {
                 wasm_id,
-                wasm_file_path: None,
                 wasm_src: make_memory_canister_wasm(),
             })
             .sync()
             .unwrap();
-        assert!(rep.success);
+        assert!(rep.0.is_ok());
 
         let wasm_memory = PageMap::default();
         let mut stable_memory = PageMap::default();
