@@ -6,7 +6,7 @@ nix-shell:
   stage: test
   script:
     - |
-      shellfiles=(gitlab-ci/src/shell.nix gitlab-ci/shell.nix hs/analyzer/shell.nix hs/consensus-model/shell.nix hs/simple-ltl/shell.nix outsource/shell.nix testnet/shell.nix rs/shell.nix tests/shell.nix shell.nix)
+      shellfiles=(gitlab-ci/src/shell.nix gitlab-ci/shell.nix hs/analyzer/shell.nix hs/consensus-model/shell.nix hs/simple-ltl/shell.nix outsource/shell.nix testnet/shell.nix rs/shell.nix tests/shell.nix)
       echo "Using these files for the build: ${shellfiles[*]}"
 
       join() {
