@@ -19,7 +19,15 @@ use fondue::pot::Context;
 pub const N_THREADS_PER_SUITE: usize = 6;
 pub const N_THREADS_PER_POT: usize = 8;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TestResult {
+    Passed,
+    Failed,
+    Skipped,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 /// A tree-like structure containing statistics on how much time it took to
 /// complete a node and all its children, i.e. threads spawned from the node.
 pub struct TestResultNode {
@@ -27,9 +35,7 @@ pub struct TestResultNode {
     #[serde(with = "serde_millis")]
     pub started_at: Instant,
     pub duration: Duration,
-    // TODO(VER-1260): increase expressiveness by replacing with an enum
-    // to properly handle skipped tests.
-    pub succeeded: bool,
+    pub result: TestResult,
     pub children: Vec<TestResultNode>,
 }
 
@@ -39,9 +45,20 @@ impl Default for TestResultNode {
             name: String::default(),
             started_at: Instant::now(),
             duration: Duration::default(),
-            succeeded: false,
+            result: TestResult::Skipped,
             children: vec![],
         }
+    }
+}
+
+pub fn infer_result(tests: &[TestResultNode]) -> TestResult {
+    if tests.iter().all(|t| t.result == TestResult::Skipped) {
+        return TestResult::Skipped;
+    }
+    if tests.iter().any(|t| t.result == TestResult::Failed) {
+        TestResult::Failed
+    } else {
+        TestResult::Passed
     }
 }
 
@@ -83,7 +100,7 @@ pub fn evaluate(ctx: &DriverContext, ts: Suite) -> TestResultNode {
         name: ts.name,
         started_at,
         duration: started_at.elapsed(),
-        succeeded: children.iter().all(|t| t.succeeded),
+        result: infer_result(children.as_slice()),
         children,
     }
 }
@@ -112,7 +129,6 @@ fn evaluate_pot(ctx: &DriverContext, pot: Pot, path: TestPath) -> FarmResult<Tes
     if pot.execution_mode == ExecutionMode::Skip {
         return Ok(TestResultNode {
             name: pot.name,
-            succeeded: true,
             ..TestResultNode::default()
         });
     }
@@ -197,7 +213,7 @@ fn evaluate_pot_with_group(
         name: pot.name.clone(),
         started_at,
         duration: started_at.elapsed(),
-        succeeded: children.iter().all(|t| t.succeeded),
+        result: infer_result(children.as_slice()),
         children,
     })
 }
@@ -230,9 +246,10 @@ fn evaluate_test(
         } else {
             warn!(test_ctx.logger, "{} FAILED (): {:?}", path, panic_res);
         }
+        result.result = TestResult::Failed;
     } else {
         info!(test_ctx.logger, "{} SUCCESS.", path);
-        result.succeeded = true;
+        result.result = TestResult::Passed;
     }
 
     result.duration = result.started_at.elapsed();

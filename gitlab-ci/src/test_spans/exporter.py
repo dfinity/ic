@@ -32,18 +32,18 @@ def to_millis(secs, nanos):
 class Span:
     """Span represents a single pushable Honeycomb span."""
 
-    def __init__(self, started_at, duration, name, succeeded, service_name="cmd"):
+    def __init__(self, started_at, duration, name, result, service_name="cmd"):
         """Create a Span instance."""
         self.started_at = started_at
         self.duration = duration
         self.name = name
-        self.succeeded = succeeded
+        self.result = result
         self.service_name = service_name
 
     @classmethod
     def from_dict(cls, d):
         """Create a Span instance from a dictionary."""
-        return cls(d.get("started_at"), d.get("duration"), d.get("name"), d.get("succeeded"))
+        return cls(d.get("started_at"), d.get("duration"), d.get("name"), d.get("result"))
 
     def push(self, trace_id, parent_id):
         """Pushes a span to Honeycomb and returns its ID, randomly generated on the fly within the function."""
@@ -60,7 +60,7 @@ class Span:
         ev.add_field("trace.span_id", span_id)
         ev.add_field("trace.trace_id", trace_id)
         ev.add_field("ci_provider", "GitLab-CI")
-        ev.add_field("execution_result", "passed" if self.succeeded else "failed")
+        ev.add_field("execution_result", self.result)
         ev.send()
         return span_id
 

@@ -1,6 +1,6 @@
 use ic_fondue::prod_tests::cli::CliArgs;
 use ic_fondue::prod_tests::driver_setup::create_driver_context_from_cli;
-use ic_fondue::prod_tests::evaluation::evaluate;
+use ic_fondue::prod_tests::evaluation::{evaluate, TestResult};
 use ic_fondue::prod_tests::pot_dsl::*;
 use ic_tests::nns_fault_tolerance_test;
 use ic_tests::nns_follow_test::{self, test as follow_test};
@@ -53,7 +53,7 @@ fn main() -> anyhow::Result<()> {
         serde_json::to_writer_pretty(&mut w, &result)?;
     }
 
-    if !result.succeeded {
+    if result.result == TestResult::Failed {
         anyhow::bail!(format!("Test suite {} failed", result.name))
     } else {
         Ok(())
