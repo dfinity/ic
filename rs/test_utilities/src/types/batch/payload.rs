@@ -71,6 +71,7 @@ fn payload_serialize_then_deserialize() {
         (
             BatchPayload::default(),
             dkg::Dealings::new_empty(Height::from(0)),
+            None,
         )
             .into(),
     );
@@ -95,7 +96,12 @@ fn payload_serialize_then_deserialize() {
     };
     let payload_0 = Payload::new(
         ic_crypto::crypto_hash,
-        (batch_payload_0, dkg::Dealings::new_empty(Height::from(0))).into(),
+        (
+            batch_payload_0,
+            dkg::Dealings::new_empty(Height::from(0)),
+            None,
+        )
+            .into(),
     );
     let vec = serde_cbor::ser::to_vec(&payload_0).unwrap();
     let payload_1: Payload = serde_cbor::de::from_slice(&vec).unwrap();

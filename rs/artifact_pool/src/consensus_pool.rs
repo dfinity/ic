@@ -809,7 +809,7 @@ mod tests {
                     CryptoHashOf::from(CryptoHash(Vec::new())),
                     Payload::new(
                         ic_crypto::crypto_hash,
-                        ic_types::consensus::dkg::Summary::fake().into(),
+                        (ic_types::consensus::dkg::Summary::fake(), None).into(),
                     ),
                     Height::from(4),
                     Rank(456),
@@ -1072,7 +1072,7 @@ mod tests {
                     CryptoHashOf::from(CryptoHash(Vec::new())),
                     Payload::new(
                         ic_crypto::crypto_hash,
-                        ic_types::consensus::dkg::Summary::fake().into(),
+                        (ic_types::consensus::dkg::Summary::fake(), None).into(),
                     ),
                     Height::from(4),
                     Rank(456),

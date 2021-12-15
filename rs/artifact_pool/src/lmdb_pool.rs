@@ -839,6 +839,7 @@ impl PoolArtifact for ConsensusMessage {
                     (
                         BatchPayload::default(),
                         dkg::Dealings::new_empty(start_height),
+                        None,
                     )
                         .into()
                 }),

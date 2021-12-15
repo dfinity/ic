@@ -460,10 +460,9 @@ pub fn validate_payload(
             validation_context,
             ic_logger::replica_logger::no_op_logger(),
         )?;
-        let expected_payload = expected_summary.into();
-        if payload != &expected_payload {
+        if payload.as_summary().dkg != expected_summary {
             return Err(PermanentError::MismatchedDkgSummary(
-                expected_payload.as_summary().dkg.clone(),
+                expected_summary,
                 payload.as_summary().dkg.clone(),
             )
             .into());
@@ -1360,6 +1359,7 @@ pub fn make_registry_cup(
         }
     };
     let dkg_summary = make_genesis_summary(registry, subnet_id, Some(registry_version));
+    let ecdsa_summary = None;
     let cup_height = Height::new(cup_contents.height);
 
     let low_dkg_id = dkg_summary
@@ -1371,7 +1371,7 @@ pub fn make_registry_cup(
     let block = Block::new_with_replica_version(
         replica_version.clone(),
         Id::from(CryptoHash(Vec::new())),
-        Payload::new(crypto_hash, dkg_summary.into()),
+        Payload::new(crypto_hash, (dkg_summary, ecdsa_summary).into()),
         cup_height,
         Rank(0),
         ValidationContext {

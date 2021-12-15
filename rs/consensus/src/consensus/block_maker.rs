@@ -269,7 +269,7 @@ impl BlockMaker {
                 dkg::Payload::Summary(summary) => {
                     // Summary block does not have batch payload.
                     self.metrics.report_byte_estimate_metrics(0, 0);
-                    summary.into()
+                    (summary, None).into()
                 }
                 dkg::Payload::Dealings(dealings) => {
                     let batch_payload = match self.build_batch_payload(
@@ -291,13 +291,13 @@ impl BlockMaker {
                             batch_payload.xnet.count_bytes(),
                             batch_payload.ingress.count_bytes(),
                         );
-                        (batch_payload, new_dealings).into()
+                        (batch_payload, new_dealings, None).into()
                     } else {
                         self.metrics.report_byte_estimate_metrics(
                             batch_payload.xnet.count_bytes(),
                             batch_payload.ingress.count_bytes(),
                         );
-                        (batch_payload, dealings).into()
+                        (batch_payload, dealings, None).into()
                     }
                 }
             },

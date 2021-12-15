@@ -25,14 +25,6 @@ use phantom_newtype::Id;
 
 pub type EcdsaSignature = CombinedMultiSigOf<IDkgDealing>;
 
-/// Refers to any EcdsaPayload type
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-#[allow(clippy::large_enum_variant)]
-pub enum EcdsaPayload {
-    Data(EcdsaDataPayload),
-    Summary(EcdsaSummaryPayload),
-}
-
 /// The payload information necessary for ECDSA threshold signatures, that is
 /// published on every consensus round. It represents the current state of
 /// the protocol since the summary block.
@@ -194,7 +186,7 @@ pub trait HasTranscriptType {
 
 impl HasTranscriptType for IDkgTranscript {
     fn get_type(&self) -> &IDkgTranscriptType {
-        todo!()
+        &self.transcript_type
     }
 }
 

@@ -202,7 +202,7 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
     let high_dkg_id = summary.current_transcript(&NiDkgTag::HighThreshold).dkg_id;
     let block = Block::new(
         Id::from(CryptoHash(Vec::new())),
-        Payload::new(crypto_hash, summary.into()),
+        Payload::new(crypto_hash, (summary, None).into()),
         height,
         Rank(0),
         ValidationContext {
