@@ -213,10 +213,11 @@ fn execute_update_with_cycles_memory_time(
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
 
     let wasm_binary = wabt::wat2wasm(wast).unwrap();
+    let canister_id = canister_test_id(42);
     let execution_state = hypervisor
-        .create_execution_state(wasm_binary, canister_root, CanisterId::from(0))
+        .create_execution_state(wasm_binary, canister_root, canister_id)
         .unwrap();
-    let mut canister = canister_from_exec_state(execution_state);
+    let mut canister = canister_from_exec_state(execution_state, canister_id);
     canister.system_state.memory_allocation = MemoryAllocation::try_from(bytes).unwrap();
 
     let req = IngressBuilder::new()
@@ -255,11 +256,12 @@ fn execute_update_for_request(
     let caller = CanisterId::new(caller.unwrap_or_else(|| canister_test_id(24).get())).unwrap();
 
     let wasm_binary = wabt::wat2wasm(wast).unwrap();
+    let canister_id = canister_test_id(42);
     let execution_state = hypervisor
-        .create_execution_state(wasm_binary, canister_root, CanisterId::from(0))
+        .create_execution_state(wasm_binary, canister_root, canister_id)
         .unwrap();
 
-    let canister = canister_from_exec_state(execution_state);
+    let canister = canister_from_exec_state(execution_state, canister_id);
 
     let req = RequestBuilder::new()
         .method_name(method.to_string())
@@ -295,7 +297,7 @@ fn execute(
     with_hypervisor(move |hypervisor, tmp_path| {
         let wasm_binary = wabt::wat2wasm(wast).unwrap();
         let execution_state = hypervisor
-            .create_execution_state(wasm_binary, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm_binary, tmp_path, system_state.canister_id)
             .unwrap();
         let execution_parameters = ExecutionParameters {
             instruction_limit: MAX_NUM_INSTRUCTIONS,
@@ -401,10 +403,11 @@ fn start_noop() {
                           (start 0))"#,
         )
         .unwrap();
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(binary, tmp_path, CanisterId::from(0))
+            .create_execution_state(binary, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         hypervisor
@@ -2027,11 +2030,12 @@ fn test_execute_update_msg_caller() {
 fn test_execute_query_msg_caller() {
     with_hypervisor(|hypervisor, tmp_path| {
         let wasm_binary = wabt::wat2wasm(MSG_CALLER_WAT).unwrap();
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm_binary, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm_binary, tmp_path, canister_id)
             .unwrap();
         let _system_state = SystemStateBuilder::default().build();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let id = user_test_id(12);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (canister, _, result) = hypervisor.execute_query(
@@ -3430,10 +3434,11 @@ fn grow_memory() {
                         "#,
         )
         .unwrap();
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         hypervisor
@@ -3464,11 +3469,12 @@ fn memory_access_between_min_and_max_canister_start() {
                         "#,
         )
         .unwrap();
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
 
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         assert_eq!(
             hypervisor
@@ -3533,11 +3539,12 @@ fn test_system_method_is_callable(system_method: SystemMethod) {
                 )"#;
 
         let binary = wabt::wat2wasm(wat).unwrap();
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(binary, tmp_path, CanisterId::from(0))
+            .create_execution_state(binary, tmp_path, canister_id)
             .unwrap();
 
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         // Run the system method to increment the counter.
         let (canister, instructions, res) = match system_method {
@@ -3619,11 +3626,12 @@ fn test_non_existing_system_method(system_method: SystemMethod) {
     with_hypervisor(|hypervisor, tmp_path| {
         let wat = "(module)";
         let binary = wabt::wat2wasm(wat).unwrap();
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(binary, tmp_path, CanisterId::from(0))
+            .create_execution_state(binary, tmp_path, canister_id)
             .unwrap();
 
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (_, _, _, routing_table, subnet_records) = setup();
         // Run the non-existing system method.
@@ -3718,10 +3726,11 @@ fn canister_init_can_set_mutable_globals() {
         )
         .unwrap();
 
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (canister, _, _) = hypervisor.execute_canister_init(
             canister,
@@ -3758,10 +3767,11 @@ fn grow_memory_beyond_max_size_1() {
         )
         .unwrap();
 
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (_, _, res) = hypervisor.execute_canister_init(
             canister,
@@ -3792,10 +3802,11 @@ fn memory_access_between_min_and_max_canister_init() {
         )
         .unwrap();
 
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (_, _, res) = hypervisor.execute_canister_init(
             canister,
@@ -3831,10 +3842,11 @@ fn grow_memory_beyond_max_size_2() {
         )
         .unwrap();
 
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (_, _, res) = hypervisor.execute_canister_init(
             canister,
@@ -3885,10 +3897,11 @@ where
                 (export "canister_post_upgrade" (func $test)))"#;
 
         let wasm = wabt::wat2wasm(wat).unwrap();
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
 
         let (canister, _, res) = execute_method(&hypervisor, canister);
 
@@ -4172,10 +4185,11 @@ fn canister_heartbeat() {
         )
         .unwrap();
 
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let (_, _, _, routing_table, subnet_records) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
@@ -4209,10 +4223,11 @@ fn execute_canister_heartbeat_produces_heap_delta() {
         )
         .unwrap();
 
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let (_, _, _, routing_table, subnet_records) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
@@ -4245,10 +4260,11 @@ fn execute_update_produces_heap_delta() {
         )
         .unwrap();
 
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let (_, _, _, routing_table, subnet_records) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
@@ -4288,10 +4304,11 @@ fn execute_canister_start_produces_heap_delta() {
         )
         .unwrap();
 
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let (_, _, result) = hypervisor.execute_canister_start(canister, execution_parameters);
@@ -4316,10 +4333,11 @@ fn execute_system_produces_heap_delta() {
         )
         .unwrap();
 
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let (_, _, result) = hypervisor.execute_canister_init(
@@ -4448,12 +4466,13 @@ impl MemoryAccessor {
     fn new(wasm_pages: i32, hypervisor: Hypervisor, tmp_path: PathBuf) -> Self {
         let wat = memory_module_wat(wasm_pages);
         let wasm = wabt::wat2wasm(wat).unwrap();
+        let canister_id = canister_test_id(42);
         let mut execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, CanisterId::from(0))
+            .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
         execution_state.wasm_memory.page_map = PageMap::default();
 
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
         let (_, _, _, routing_table, subnet_records) = setup();
         Self {
@@ -4798,11 +4817,12 @@ fn account_for_size_of_memory_fill_instruction() {
             features,
         )
         .unwrap();
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(binary, tmp_path, CanisterId::from(0))
+            .create_execution_state(binary, tmp_path, canister_id)
             .unwrap();
 
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let (_, num_instructions, result) =
@@ -4832,10 +4852,11 @@ fn memory_fill_can_trigger_out_of_instructions() {
             features,
         )
         .unwrap();
+        let canister_id = canister_test_id(42);
         let execution_state = hypervisor
-            .create_execution_state(binary, tmp_path, CanisterId::from(0))
+            .create_execution_state(binary, tmp_path, canister_id)
             .unwrap();
-        let canister = canister_from_exec_state(execution_state);
+        let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let (_, _, result) = hypervisor.execute_canister_start(canister, execution_parameters);
@@ -4848,7 +4869,7 @@ fn broken_wasm_results_in_compilation_error() {
     with_hypervisor(|hypervisor, tmp_path| {
         let binary = vec![0xca, 0xfe, 0xba, 0xbe];
 
-        let result = hypervisor.create_execution_state(binary, tmp_path, CanisterId::from(0));
+        let result = hypervisor.create_execution_state(binary, tmp_path, canister_test_id(0));
 
         match result {
             Err(HypervisorError::InvalidWasm(_)) => (),
@@ -4876,7 +4897,7 @@ fn can_extract_exported_functions() {
                 )
                 .unwrap(),
                 tmp_path,
-                CanisterId::from(0),
+                canister_test_id(0),
             )
             .unwrap();
         let mut expected_exports = BTreeSet::new();

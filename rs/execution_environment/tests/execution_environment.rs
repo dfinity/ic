@@ -201,7 +201,7 @@ fn test_outgoing_messages(
             .create_execution_state(
                 wasm_binary,
                 tmpdir.path().to_path_buf(),
-                CanisterId::from(0),
+                system_state.canister_id,
             )
             .unwrap();
         let mut canister = CanisterState {
@@ -498,18 +498,18 @@ fn test_allocate_memory_for_output_requests() {
             let wasm_binary = wabt::wat2wasm(CALL_SIMPLE_WAT).unwrap();
             let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
+            let system_state = SystemStateBuilder::default()
+                .freeze_threshold(NumSeconds::from(0))
+                .build();
+
             let execution_state = exec_env
                 .hypervisor_for_testing()
                 .create_execution_state(
                     wasm_binary,
                     tmpdir.path().to_path_buf(),
-                    CanisterId::from(0),
+                    system_state.canister_id(),
                 )
                 .unwrap();
-
-            let system_state = SystemStateBuilder::default()
-                .freeze_threshold(NumSeconds::from(0))
-                .build();
 
             let mut canister = CanisterState {
                 system_state,
@@ -3015,18 +3015,18 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
             let wasm_binary = wabt::wat2wasm(MEMORY_ALLOCATION_WAT).unwrap();
             let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
+            let system_state = SystemStateBuilder::default()
+                .freeze_threshold(NumSeconds::from(0))
+                .build();
+
             let execution_state = exec_env
                 .hypervisor_for_testing()
                 .create_execution_state(
                     wasm_binary,
                     tmpdir.path().to_path_buf(),
-                    CanisterId::from(0),
+                    system_state.canister_id(),
                 )
                 .unwrap();
-
-            let system_state = SystemStateBuilder::default()
-                .freeze_threshold(NumSeconds::from(0))
-                .build();
 
             let mut canister = CanisterState {
                 system_state,
@@ -3071,18 +3071,18 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
             let wasm_binary = wabt::wat2wasm(MEMORY_ALLOCATION_WAT).unwrap();
             let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
+            let system_state = SystemStateBuilder::default()
+                .freeze_threshold(NumSeconds::from(0))
+                .build();
+
             let execution_state = exec_env
                 .hypervisor_for_testing()
                 .create_execution_state(
                     wasm_binary,
                     tmpdir.path().to_path_buf(),
-                    CanisterId::from(0),
+                    system_state.canister_id(),
                 )
                 .unwrap();
-
-            let system_state = SystemStateBuilder::default()
-                .freeze_threshold(NumSeconds::from(0))
-                .build();
 
             let mut canister = CanisterState {
                 system_state,

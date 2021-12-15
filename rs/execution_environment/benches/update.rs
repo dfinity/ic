@@ -10,8 +10,11 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CallContextAction, CanisterState};
 use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, mock_time,
-    state::canister_from_exec_state, types::ids::subnet_test_id, types::messages::IngressBuilder,
+    cycles_account_manager::CyclesAccountManagerBuilder,
+    mock_time,
+    state::canister_from_exec_state,
+    types::ids::{canister_test_id, subnet_test_id},
+    types::messages::IngressBuilder,
     with_test_replica_logger,
 };
 use ic_types::{
@@ -73,14 +76,15 @@ where
     let mut features = wabt::Features::new();
     features.enable_multi_value();
 
+    let canister_id = canister_test_id(0);
     let execution_state = hypervisor
         .create_execution_state(
             wabt::wat2wasm_with_features(wat.as_ref(), features).unwrap(),
             canister_root,
-            CanisterId::from(0),
+            canister_id,
         )
         .expect("Failed to create execution state");
-    let mut canister_state = canister_from_exec_state(execution_state);
+    let mut canister_state = canister_from_exec_state(execution_state, canister_id);
     canister_state.system_state.memory_allocation =
         MemoryAllocation::try_from(NumBytes::from(0)).unwrap();
     let request = RequestOrIngress::Ingress(

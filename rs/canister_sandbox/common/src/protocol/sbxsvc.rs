@@ -44,28 +44,18 @@ pub struct OpenWasmRequest {
     /// per sandbox instance.
     pub wasm_id: WasmId,
 
-    /// Path to the wasm file that defines the executable of the
-    /// canister.
-    /// NB:
-    /// - it would actually be preferable to transfer the code by other means
-    ///   (either as "data" or by "file descriptor passing") instead of passing
-    ///   a file name; this way, filesystem access permission to sandbox can be
-    ///   limited further
-    /// - it would actually be preferable to move the compilation into native
-    ///   code outside the sandbox itself; this way, the sandbox can be further
-    ///   constrained such that it is impossible to generate and execute custom
-    ///   code and will hamper an attackers ability to exploit wasm jailbreak
-    ///   flaws
-    pub wasm_file_path: Option<String>,
     /// Contains wasm source code as a sequence of bytes.
+    /// It would actually be preferable to move the compilation into native
+    /// code outside the sandbox itself; this way, the sandbox can be further
+    /// constrained such that it is impossible to generate and execute custom
+    /// code and will hamper an attackers ability to exploit wasm jailbreak
+    /// flaws
     pub wasm_src: Vec<u8>,
 }
 
 /// Reply to an `OpenWasmRequest`.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OpenWasmReply {
-    pub success: bool,
-}
+pub struct OpenWasmReply(pub HypervisorResult<()>);
 
 /// Request to close the indicated wasm object.
 #[derive(Debug, Serialize, Deserialize, Clone)]
