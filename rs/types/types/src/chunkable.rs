@@ -18,7 +18,8 @@
 use crate::{
     artifact::{Artifact, StateSyncMessage},
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, ConsensusMessage,
+        certification::CertificationMessage, dkg::Message as DkgMessage, ecdsa::EcdsaMessage,
+        ConsensusMessage,
     },
     crypto::CryptoHash,
     messages::SignedIngress,
@@ -128,6 +129,9 @@ chunkable_artifact_impl! {CertificationMessage, |self|
 }
 chunkable_artifact_impl! {DkgMessage, |self|
     ArtifactChunkData::UnitChunkData(Artifact::DkgMessage(*self))
+}
+chunkable_artifact_impl! {EcdsaMessage, |self|
+    ArtifactChunkData::UnitChunkData(Artifact::EcdsaMessage(*self))
 }
 
 impl ChunkableArtifact for StateSyncMessage {

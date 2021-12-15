@@ -522,8 +522,15 @@ fn update_quadruples_in_creation(
     Ok(())
 }
 
-/// Validates a threshold ECDSA payload.
-pub fn validate_payload(_payload: ecdsa::EcdsaPayload) -> Result<(), EcdsaPayloadError> {
+/// Validates a threshold ECDSA summary payload.
+pub fn validate_summary_payload(
+    payload: ecdsa::EcdsaSummaryPayload,
+) -> Result<(), EcdsaPayloadError> {
+    todo!()
+}
+
+/// Validates a threshold ECDSA data payload.
+pub fn validate_data_payload(payload: ecdsa::EcdsaDataPayload) -> Result<(), EcdsaPayloadError> {
     todo!()
 }
 

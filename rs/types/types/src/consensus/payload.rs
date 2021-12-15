@@ -26,6 +26,7 @@ pub struct SummaryPayload {
 }
 
 /// Block payload is either summary or a data payload).
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum BlockPayload {
     /// A BlockPayload::Summary contains only a DKG Summary
@@ -207,16 +208,16 @@ impl From<Payload> for BlockPayload {
     }
 }
 
-impl From<dkg::Summary> for BlockPayload {
-    fn from(dkg: dkg::Summary) -> BlockPayload {
-        let ecdsa = ecdsa::Summary::default();
+impl From<(dkg::Summary, ecdsa::Summary)> for BlockPayload {
+    fn from((dkg, ecdsa): (dkg::Summary, ecdsa::Summary)) -> BlockPayload {
         BlockPayload::Summary(SummaryPayload { dkg, ecdsa })
     }
 }
 
-impl From<(BatchPayload, dkg::Dealings)> for BlockPayload {
-    fn from((batch, dealings): (BatchPayload, dkg::Dealings)) -> BlockPayload {
-        let ecdsa = ecdsa::Payload::default();
+impl From<(BatchPayload, dkg::Dealings, ecdsa::Payload)> for BlockPayload {
+    fn from(
+        (batch, dealings, ecdsa): (BatchPayload, dkg::Dealings, ecdsa::Payload),
+    ) -> BlockPayload {
         BlockPayload::Data(DataPayload {
             batch,
             dealings,
@@ -228,7 +229,7 @@ impl From<(BatchPayload, dkg::Dealings)> for BlockPayload {
 impl From<dkg::Payload> for BlockPayload {
     fn from(payload: dkg::Payload) -> BlockPayload {
         match payload {
-            dkg::Payload::Summary(summary) => summary.into(),
+            dkg::Payload::Summary(summary) => (summary, None).into(),
             dkg::Payload::Dealings(dealings) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dealings,

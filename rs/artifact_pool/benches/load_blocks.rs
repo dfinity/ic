@@ -60,6 +60,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
             (
                 BatchPayload::new(ingress, xnet, self_validating),
                 dkg::Dealings::new_empty(parent.payload.as_ref().dkg_interval_start_height()),
+                None,
             )
                 .into(),
         );

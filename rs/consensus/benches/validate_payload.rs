@@ -250,6 +250,7 @@ fn add_past_blocks(
             (
                 BatchPayload::new(ingress, xnet, self_validating),
                 dkg::Dealings::new_empty(block.payload.as_ref().dkg_interval_start_height()),
+                None,
             )
                 .into(),
         );
@@ -314,6 +315,7 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
                     (
                         BatchPayload::new(ingress, xnet, self_validating),
                         dkg::Dealings::new_empty(tip.payload.as_ref().dkg_interval_start_height()),
+                        None,
                     )
                         .into(),
                 );

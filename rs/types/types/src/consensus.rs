@@ -1290,7 +1290,7 @@ impl TryFrom<pb::Block> for Block {
                     ecdsa: ecdsa::Summary::default(),
                 })
             }
-            dkg::Payload::Dealings(dealings) => (batch, dealings).into(),
+            dkg::Payload::Dealings(dealings) => (batch, dealings, None).into(),
         };
         Ok(Block {
             version: ReplicaVersion::try_from(block.version.as_str())

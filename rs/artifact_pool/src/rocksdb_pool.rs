@@ -425,7 +425,11 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                 block.payload.get_hash().clone(),
                                 block.payload.payload_type(),
                                 Box::new(move || {
-                                    (BatchPayload::default(), Dealings::new_empty(start_height))
+                                    (
+                                        BatchPayload::default(),
+                                        Dealings::new_empty(start_height),
+                                        None,
+                                    )
                                         .into()
                                 }),
                             );

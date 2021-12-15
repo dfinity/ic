@@ -206,7 +206,12 @@ impl FromParent for Block {
             ic_crypto::crypto_hash(parent),
             Payload::new(
                 ic_crypto::crypto_hash,
-                (BatchPayload::default(), Dealings::new_empty(dkg_start)).into(),
+                (
+                    BatchPayload::default(),
+                    Dealings::new_empty(dkg_start),
+                    None,
+                )
+                    .into(),
             ),
             parent.height.increment(),
             Rank(0),
@@ -257,6 +262,7 @@ fn test_fake_block_is_binary_compatible() {
             (
                 batch::BatchPayload::default(),
                 ic_types::consensus::dkg::Dealings::new_empty(Height::from(1)),
+                None,
             )
                 .into(),
         ),
@@ -284,6 +290,7 @@ fn test_fake_block() {
             (
                 batch::BatchPayload::default(),
                 ic_types::consensus::dkg::Dealings::new_empty(Height::from(1)),
+                None,
             )
                 .into(),
         ),
