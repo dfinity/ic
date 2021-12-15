@@ -370,7 +370,7 @@ function copy_ssh_keys() {
         # Symlinks must be refused by the config injection script (they
         # can lead to confusion and side effects when overwriting one
         # file changes another).
-        cp -r "${SSH}" "${CONFIG_DIR}/$NODE_PREFIX/accounts_ssh_authorized_keys"
+        cp -Lr "${SSH}" "${CONFIG_DIR}/$NODE_PREFIX/accounts_ssh_authorized_keys"
     done
 }
 
