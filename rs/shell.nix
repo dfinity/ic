@@ -3,27 +3,6 @@
 }:
 
 let
-  rustdocs = pkgs.lib.writeCheckedShellScriptBin "rustdocs" [] ''
-    doc=''${1:-std}
-    file="${pkgs.rustc.doc}/share/doc/rust/html/$doc/index.html"
-    if [[ -f "$file" ]]; then
-        exec ${pkgs.xdg_utils}/bin/xdg-open "$file"
-    fi
-    echo "$doc Rust documentation not found"
-    exit 1
-  '';
-
-  # We need to apply special linker flags when compiling the binaries listed in ./shared-crates.
-  # Setting of these flags is done using a wrapper around rustc which we define here
-  # and put in the PATH below.
-  rustc = pkgs.rustBuilder.rustLib.wrapRustc {
-    inherit (pkgs) rustc;
-    exename = "rustc";
-  };
-  rustdoc = pkgs.rustBuilder.rustLib.wrapRustc {
-    inherit (pkgs) rustc;
-    exename = "rustdoc";
-  };
   crateEnv = import ./crate-environment.nix { inherit pkgs; };
 in
 (
@@ -46,30 +25,15 @@ in
         pkgs.gnuplot
 
         pkgs.jo
-        rustdocs
 
         pkgs.nix-prefetch-git
 
-        pkgs.rustfmt
-        pkgs.clippy
-        pkgs.cargo-audit
-        pkgs.rls
-        pkgs.rust-analyzer
+        # useful cargo utilities
         pkgs.cargo-flamegraph
         pkgs.cargo-expand
 
         # used by rosetta-api
         pkgs.rosetta-cli
-
-        # We bundle rustc and cargo and rustfmt because some tools (like intellij)
-        # expect a "toolchain" containing all three.
-        (
-          pkgs.symlinkJoin {
-            name = "rust-toolchain";
-            paths = [ rustc pkgs.cargo pkgs.rustfmt ];
-          }
-        )
-        rustdoc
 
         # Protobuf conformance checking
         pkgs.buf
@@ -117,13 +81,6 @@ in
             source "$checkout_root/dshell/load"
           fi
           ulimit -n 8192
-        '' + # We set CARGO_HOME different from ~/.cargo
-        # to prevent bad interactions with other Rust installations (rustup).
-        # We do set it to a central location to allow different
-        # dfinity git worktrees to share the same cache.
-        ''
-          CARGO_HOME="''${CARGO_HOME:-"$HOME"/.cargo/dfinity}"
-          export CARGO_HOME
         '';
     }
   )

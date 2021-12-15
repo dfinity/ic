@@ -212,10 +212,5 @@
       }
   )
   (import ./haskell.nix)
-  (import ./rustdoc.nix)
   (import ./motoko.nix)
-
-  # the cargo2nix overlays
-  (self: super: import ./cargo2nix/overlay self super)
-  (import ./cargo2nix.nix)
 ]
