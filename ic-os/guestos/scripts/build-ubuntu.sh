@@ -143,7 +143,7 @@ fi
 truncate --size 0 "${BOOT_IMG}"
 truncate --size 0 "${ROOT_IMG}"
 truncate --size 100M "${BOOT_IMG}"
-truncate --size 2G "${ROOT_IMG}"
+truncate --size 3G "${ROOT_IMG}"
 
 if [ "${IN_FILE}" != "" ]; then
     build_ubuntu_from_tar "${ROOT_IMG}" "${BOOT_IMG}" <"${IN_FILE}"
