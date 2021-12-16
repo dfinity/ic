@@ -136,9 +136,6 @@ before_script:
 
     export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
 
-    # forget original timestamp/timestamp when compressing ~ important for reproducibility
-    export GZIP=-n
-
     if [ "${CI_DISPOSABLE_ENVIRONMENT:-false}" = "true" ]; then
       # Linux + docker builds
 

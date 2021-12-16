@@ -1,4 +1,4 @@
-after_script_test:
+after-script-test:
   extends:
     - .ubuntu-nix-docker
     - .rules-after-script-test
