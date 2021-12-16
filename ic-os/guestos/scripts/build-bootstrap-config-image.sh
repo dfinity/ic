@@ -176,7 +176,7 @@ function build_ic_bootstrap_tar() {
         shift 2
     done
 
-    [[ "$HOSTNAME" == "" ]] || [[ "$HOSTNAME" == [a-zA-Z]*([a-zA-Z0-9])*(-+([a-zA-Z0-9])) ]] || {
+    [[ "$HOSTNAME" == "" ]] || [[ "$HOSTNAME" =~ [a-zA-Z]*([a-zA-Z0-9])*(-+([a-zA-Z0-9])) ]] || {
         echo "Invalid hostname: '$HOSTNAME'" >&2
         exit 1
     }
