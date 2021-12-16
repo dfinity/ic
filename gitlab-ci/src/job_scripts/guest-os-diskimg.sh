@@ -18,6 +18,7 @@ ls -lah /var/run/docker.sock
 groups
 
 cd "$ROOT_DIR" || exit 1
+# When you change the list below, please update ic-os/guestos/Capsule.toml accordingly!
 for f in replica nodemanager canister_sandbox vsock_agent state-tool ic-consensus-pool-util ic-crypto-csp ic-regedit; do
     gunzip -c -d artifacts/release/$f.gz >artifacts/release/$f
 done
@@ -50,9 +51,5 @@ else
     if [[ "$BUILD_EXTRA_SUFFIX" == "-dev" ]]; then
         buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rsync-disk-img -- \
             "$CI_PROJECT_DIR"/gitlab-ci/tools/copy-disk "$CDPRNET"
-    fi
-    if [ "$CI_JOB_NAME" != "docker-build-ic" ]; then
-        buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rclone -- \
-            "$ROOT_DIR"/gitlab-ci/src/artifacts/rclone_upload.py "$BUILD_OUT" "$UPLOAD_TARGET"
     fi
 fi
