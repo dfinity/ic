@@ -1,6 +1,7 @@
 use crate::*;
 use fe::EccFieldElement;
 use hex_literal::hex;
+use ic_types::NodeIndex;
 use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::{TryFrom, TryInto};
@@ -402,6 +403,17 @@ impl EccScalar {
         }
     }
 
+    /// Return true iff self is >= order / 2
+    pub fn is_high(&self) -> bool {
+        match self {
+            Self::K256(s) => bool::from(s.is_high()),
+            Self::P256(s) => {
+                let s2 = s.double();
+                s2 < *s
+            }
+        }
+    }
+
     /// Negation within the scalar field
     ///
     /// Effectively this returns p - self where p is the primefield
@@ -445,6 +457,11 @@ impl EccScalar {
             EccCurveType::K256 => Self::K256(k256::Scalar::from(n)),
             EccCurveType::P256 => Self::P256(p256::Scalar::from(n)),
         }
+    }
+
+    /// Return a small scalar value corresponding to the `index+1`
+    pub fn from_node_index(curve: EccCurveType, index: NodeIndex) -> Self {
+        Self::from_u64(curve, 1 + (index as u64))
     }
 
     /// Return a small scalar value
@@ -722,6 +739,20 @@ impl EccPoint {
         let field_bytes = curve_type.field_bytes();
         let z = self.serialize_uncompressed();
         EccFieldElement::from_bytes(curve_type, &z[1 + field_bytes..])
+    }
+
+    /// Return true if this is the point at infinity
+    pub fn is_infinity(&self) -> ThresholdEcdsaResult<bool> {
+        match self {
+            Self::K256(p) => {
+                use k256::elliptic_curve::Group;
+                Ok(bool::from(p.is_identity()))
+            }
+            Self::P256(p) => {
+                use p256::elliptic_curve::Group;
+                Ok(bool::from(p.is_identity()))
+            }
+        }
     }
 
     /// Deserialize a point. Either compressed or uncompressed points are

@@ -12,6 +12,7 @@ pub enum ThresholdEcdsaError {
     InsufficientDealings,
     InterpolationError,
     InvalidArguments(String),
+    InvalidDerivationPath,
     InvalidFieldElement,
     InvalidOpening,
     InvalidPoint,
@@ -25,13 +26,16 @@ pub enum ThresholdEcdsaError {
 
 pub type ThresholdEcdsaResult<T> = std::result::Result<T, ThresholdEcdsaError>;
 
+pub mod bip32;
 mod dealings;
+mod ecdsa;
 mod fe;
 mod group;
 mod hash2curve;
 mod mega;
 mod poly;
 mod seed;
+pub mod sign;
 mod transcript;
 mod xmd;
 
@@ -43,6 +47,9 @@ pub use poly::*;
 pub use seed::*;
 pub use transcript::*;
 pub use xmd::*;
+
+pub use bip32::DerivationPath;
+pub use sign::{ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal};
 
 /// Create MEGa encryption keypair
 pub fn gen_keypair(
@@ -270,8 +277,6 @@ pub fn privately_verify_dealing(
         .map_err(|e| e.into())
 }
 
-// MERGEME: Merge into the appropriate places from here to the "REMOVEME"
-
 impl From<&ExtendedDerivationPath> for DerivationPath {
     fn from(extended_derivation_path: &ExtendedDerivationPath) -> Self {
         Self::new_with_principal(
@@ -293,59 +298,241 @@ impl ThresholdEcdsaSigShareInternal {
     }
 }
 
-// REMOVEME: Remove here to EOF
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEcdsaGenerateSigShareInternalError {
+    UnsupportedAlgorithm,
+    InconsistentCommitments,
+    InternalError(String),
+}
 
-pub struct DerivationPath {}
-
-use ic_types::PrincipalId;
-
-impl DerivationPath {
-    pub fn new_with_principal(_principal: PrincipalId, _bip32: &[u32]) -> Self {
-        Self {}
+impl From<ThresholdEcdsaError> for ThresholdEcdsaGenerateSigShareInternalError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        match e {
+            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ThresholdEcdsaSigShareInternal {
-    pub foo: Vec<u8>,
+fn signature_parameters(algorithm_id: AlgorithmId) -> Option<(EccCurveType, usize)> {
+    match algorithm_id {
+        AlgorithmId::ThresholdEcdsaSecp256k1 => {
+            Some((EccCurveType::K256, EccCurveType::K256.scalar_bytes()))
+        }
+        _ => None,
+    }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaGenerateSigShareInternalError {}
+/// Create a new threshold ECDSA signature share
+///
+/// The derivation_path
+///
+/// The nonce should be random and shared by all nodes, for instance
+/// by deriving a value from the random tape.
+///
+/// The presig_transcript is the transcript of the pre-signature (kappa)
+///
+/// lambda, kappa_times_lambda, and key_times_lambda are our openings
+/// of the commitments in the associated transcripts.
+///
+/// The hashed message must have the same size as the underlying curve
+/// order, for instance for P-256 a 256-bit hash function must be
+/// used.
 #[allow(clippy::too_many_arguments)]
 pub fn sign_share(
-    _derivation_path: &DerivationPath,
-    _hashed_message: &[u8],
-    _nonce: Randomness,
-    _presig_transcript: &IDkgTranscriptInternal,
-    _lambda: &CommitmentOpening,
-    _kappa_times_lambda: &CommitmentOpening,
-    _key_times_lambda: &CommitmentOpening,
-    _algorithm_id: AlgorithmId,
+    derivation_path: &DerivationPath,
+    hashed_message: &[u8],
+    nonce: Randomness,
+    presig_transcript: &IDkgTranscriptInternal,
+    lambda: &CommitmentOpening,
+    kappa_times_lambda: &CommitmentOpening,
+    key_times_lambda: &CommitmentOpening,
+    algorithm_id: AlgorithmId,
 ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaGenerateSigShareInternalError> {
-    Ok(ThresholdEcdsaSigShareInternal { foo: vec![3, 1, 4] })
+    let (curve_type, hash_len) = signature_parameters(algorithm_id)
+        .ok_or(ThresholdEcdsaGenerateSigShareInternalError::UnsupportedAlgorithm)?;
+
+    if hashed_message.len() != hash_len {
+        return Err(ThresholdEcdsaGenerateSigShareInternalError::UnsupportedAlgorithm);
+    }
+
+    ThresholdEcdsaSigShareInternal::new(
+        derivation_path,
+        hashed_message,
+        nonce,
+        presig_transcript,
+        lambda,
+        kappa_times_lambda,
+        key_times_lambda,
+        curve_type,
+    )
+    .map_err(|e| e.into())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ThresholdEcdsaCombinedSigInternal {
-    pub foo: Vec<u8>,
+pub enum ThresholdEcdsaVerifySigShareInternalError {
+    UnsupportedAlgorithm,
+    InconsistentCommitments,
+    InvalidSignatureShare,
+    InternalError(String),
 }
-impl ThresholdEcdsaCombinedSigInternal {
-    pub fn serialize(&self) -> Vec<u8> {
-        self.foo.clone()
+
+impl From<ThresholdEcdsaError> for ThresholdEcdsaVerifySigShareInternalError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        match e {
+            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaCombineSigSharesInternalError {}
+/// Verify a signature share
+///
+/// The values provided must be consistent with when the signature share
+/// was created
 #[allow(clippy::too_many_arguments)]
-pub fn combine_sig_shares(
-    _derivation_path: &DerivationPath,
-    _nonce: Randomness,
-    _presig_transcript: &IDkgTranscriptInternal,
-    _reconstruction_threshold: NumberOfNodes,
-    _sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
-    _algorithm_id: AlgorithmId,
-) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesInternalError> {
-    Ok(ThresholdEcdsaCombinedSigInternal { foo: vec![1, 3, 7] })
+pub fn verify_signature_share(
+    sig_share: &ThresholdEcdsaSigShareInternal,
+    derivation_path: &DerivationPath,
+    hashed_message: &[u8],
+    randomness: Randomness,
+    signer_index: NodeIndex,
+    presig_transcript: &IDkgTranscriptInternal,
+    lambda: &IDkgTranscriptInternal,
+    kappa_times_lambda: &IDkgTranscriptInternal,
+    key_times_lambda: &IDkgTranscriptInternal,
+    algorithm_id: AlgorithmId,
+) -> Result<(), ThresholdEcdsaVerifySigShareInternalError> {
+    let (curve_type, hash_len) = signature_parameters(algorithm_id)
+        .ok_or(ThresholdEcdsaVerifySigShareInternalError::UnsupportedAlgorithm)?;
+
+    if hashed_message.len() != hash_len {
+        return Err(ThresholdEcdsaVerifySigShareInternalError::UnsupportedAlgorithm);
+    }
+
+    let accept = sig_share.verify(
+        derivation_path,
+        hashed_message,
+        randomness,
+        signer_index,
+        presig_transcript,
+        lambda,
+        kappa_times_lambda,
+        key_times_lambda,
+        curve_type,
+    )?;
+
+    if !accept {
+        return Err(ThresholdEcdsaVerifySigShareInternalError::InvalidSignatureShare);
+    }
+
+    Ok(())
 }
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEcdsaCombineSigSharesInternalError {
+    UnsupportedAlgorithm,
+    InconsistentCommitments,
+    InsufficientShares,
+    InternalError(String),
+}
+
+impl From<ThresholdEcdsaError> for ThresholdEcdsaCombineSigSharesInternalError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        match e {
+            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InsufficientDealings => Self::InsufficientShares,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Combine sufficient signature shares into an ECDSA signature
+///
+/// The signature shares must be verified prior to use, and there must
+/// be at least reconstruction_threshold many of them.
+pub fn combine_sig_shares(
+    derivation_path: &DerivationPath,
+    randomness: Randomness,
+    presig_transcript: &IDkgTranscriptInternal,
+    reconstruction_threshold: NumberOfNodes,
+    sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
+    algorithm_id: AlgorithmId,
+) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesInternalError> {
+    let curve_type = match algorithm_id {
+        AlgorithmId::ThresholdEcdsaSecp256k1 => EccCurveType::K256,
+        _ => return Err(ThresholdEcdsaCombineSigSharesInternalError::UnsupportedAlgorithm),
+    };
+
+    sign::ThresholdEcdsaCombinedSigInternal::new(
+        derivation_path,
+        randomness,
+        presig_transcript,
+        reconstruction_threshold,
+        sig_shares,
+        curve_type,
+    )
+    .map_err(|e| e.into())
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEcdsaVerifySignatureInternalError {
+    InvalidSignature,
+    UnsupportedAlgorithm,
+    InconsistentCommitments,
+    InternalError(String),
+}
+
+impl From<ThresholdEcdsaError> for ThresholdEcdsaVerifySignatureInternalError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        match e {
+            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Verify a threshold ECDSA signature
+///
+/// In addition to checking that the ECDSA signature itself is
+/// consistent with the provided message and the public key associated
+/// with `derivation_path`, this function also verifies that the
+/// signature was generated correctly with regards to the provided
+/// presignature transcript and randomness.
+pub fn verify_threshold_signature(
+    signature: &ThresholdEcdsaCombinedSigInternal,
+    derivation_path: &DerivationPath,
+    hashed_message: &[u8],
+    randomness: Randomness,
+    presig_transcript: &IDkgTranscriptInternal,
+    key_transcript: &IDkgTranscriptInternal,
+    algorithm_id: AlgorithmId,
+) -> Result<(), ThresholdEcdsaVerifySignatureInternalError> {
+    let (curve_type, hash_len) = signature_parameters(algorithm_id)
+        .ok_or(ThresholdEcdsaVerifySignatureInternalError::UnsupportedAlgorithm)?;
+
+    if hashed_message.len() != hash_len {
+        return Err(ThresholdEcdsaVerifySignatureInternalError::UnsupportedAlgorithm);
+    }
+
+    let accept = signature.verify(
+        derivation_path,
+        hashed_message,
+        randomness,
+        presig_transcript,
+        key_transcript,
+        curve_type,
+    )?;
+
+    if !accept {
+        return Err(ThresholdEcdsaVerifySignatureInternalError::InvalidSignature);
+    }
+
+    Ok(())
+}
+
+pub use sign::derive_public_key;

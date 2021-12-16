@@ -4,7 +4,8 @@ use rand::Rng;
 use std::collections::BTreeMap;
 use tecdsa::*;
 
-struct ProtocolSetup {
+#[derive(Debug, Clone)]
+pub struct ProtocolSetup {
     alg: AlgorithmId,
     threshold: NumberOfNodes,
     receivers: usize,
@@ -14,7 +15,7 @@ struct ProtocolSetup {
 }
 
 impl ProtocolSetup {
-    fn new(
+    pub fn new(
         curve: EccCurveType,
         receivers: usize,
         threshold: usize,
@@ -52,7 +53,7 @@ impl ProtocolSetup {
         })
     }
 
-    fn remove_nodes(&mut self, removing: usize) {
+    pub fn remove_nodes(&mut self, removing: usize) {
         assert!(self.receivers >= removing);
 
         self.receivers -= removing;
@@ -65,11 +66,11 @@ impl ProtocolSetup {
         }
     }
 
-    fn modify_threshold(&mut self, threshold: usize) {
+    pub fn modify_threshold(&mut self, threshold: usize) {
         self.threshold = NumberOfNodes::from(threshold as u32);
     }
 
-    fn receiver_info(&self) -> Vec<(MEGaPrivateKey, MEGaPublicKey, NodeIndex)> {
+    pub fn receiver_info(&self) -> Vec<(MEGaPrivateKey, MEGaPublicKey, NodeIndex)> {
         let mut info = Vec::with_capacity(self.receivers);
         for i in 0..self.receivers {
             info.push((self.sk[i].clone(), self.pk[i], i as NodeIndex));
@@ -78,15 +79,16 @@ impl ProtocolSetup {
     }
 }
 
-#[derive(Debug)]
-struct ProtocolRound {
+#[derive(Debug, Clone)]
+pub struct ProtocolRound {
     pub commitment: PolynomialCommitment,
+    pub transcript: IDkgTranscriptInternal,
     pub openings: Vec<CommitmentOpening>,
 }
 
 impl ProtocolRound {
     // Internal constructor
-    fn new(
+    pub fn new(
         setup: &ProtocolSetup,
         dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
         transcript: IDkgTranscriptInternal,
@@ -97,13 +99,14 @@ impl ProtocolRound {
 
         Self {
             commitment,
+            transcript,
             openings,
         }
     }
 
     /// Runs a `ProtocolRound` for a `Random` transcript with `dealers` many
     /// distinct dealers.
-    fn random(setup: &ProtocolSetup, dealers: usize) -> ThresholdEcdsaResult<Self> {
+    pub fn random(setup: &ProtocolSetup, dealers: usize) -> ThresholdEcdsaResult<Self> {
         let shares = vec![SecretShares::Random; dealers as usize];
         let mode = IDkgTranscriptOperationInternal::Random;
 
@@ -120,7 +123,7 @@ impl ProtocolRound {
 
     /// Runs a `ProtocolRound` for a `ReshareOfMasked` transcript with `dealers`
     /// many distinct dealers.
-    fn reshare_of_masked(
+    pub fn reshare_of_masked(
         setup: &ProtocolSetup,
         masked: &ProtocolRound,
         dealers: usize,
@@ -150,7 +153,7 @@ impl ProtocolRound {
 
     /// Runs a `ProtocolRound` for a `ReshareOfUnmasked` transcript with
     /// `dealers` many distinct dealers.
-    fn reshare_of_unmasked(
+    pub fn reshare_of_unmasked(
         setup: &ProtocolSetup,
         unmasked: &ProtocolRound,
         dealers: usize,
@@ -186,7 +189,7 @@ impl ProtocolRound {
 
     /// Runs a `ProtocolRound` for a `UnmaskedTimesMasked` transcript with
     /// `dealers` many distinct dealers.
-    fn multiply(
+    pub fn multiply(
         setup: &ProtocolSetup,
         masked: &ProtocolRound,
         unmasked: &ProtocolRound,
@@ -234,7 +237,7 @@ impl ProtocolRound {
 
                 for (idx, opening) in openings.iter().enumerate() {
                     if let CommitmentOpening::Simple(value) = opening {
-                        let index = EccScalar::from_u64(curve_type, idx as u64 + 1);
+                        let index = EccScalar::from_node_index(curve_type, idx as NodeIndex);
                         g_openings.push((index, *value));
                     } else {
                         panic!("Unexpected opening type");
@@ -252,7 +255,7 @@ impl ProtocolRound {
 
                 for (idx, opening) in openings.iter().enumerate() {
                     if let CommitmentOpening::Pedersen(value, mask) = opening {
-                        let index = EccScalar::from_u64(curve_type, idx as u64 + 1);
+                        let index = EccScalar::from_node_index(curve_type, idx as NodeIndex);
                         g_openings.push((index, *value));
                         h_openings.push((index, *mask));
                     } else {
@@ -386,120 +389,161 @@ impl ProtocolRound {
         dealings
     }
 
-    fn constant_term(&self) -> EccPoint {
+    pub fn constant_term(&self) -> EccPoint {
         self.commitment.constant_term()
     }
 }
 
-fn insufficient_dealings(r: Result<ProtocolRound, ThresholdEcdsaError>) {
-    match r {
-        Err(ThresholdEcdsaError::InsufficientDealings) => {}
-        Err(e) => panic!("Unexpected error {:?}", e),
-        Ok(r) => panic!("Unexpected success {:?}", r),
+#[derive(Clone, Debug)]
+pub struct SignatureProtocolSetup {
+    setup: ProtocolSetup,
+    key: ProtocolRound,
+    kappa: ProtocolRound,
+    lambda: ProtocolRound,
+    key_times_lambda: ProtocolRound,
+    kappa_times_lambda: ProtocolRound,
+}
+
+impl SignatureProtocolSetup {
+    pub fn new(
+        curve: EccCurveType,
+        dealers: usize,
+        threshold: usize,
+    ) -> ThresholdEcdsaResult<Self> {
+        let setup = ProtocolSetup::new(curve, dealers, threshold)?;
+
+        let key = ProtocolRound::random(&setup, dealers)?;
+        let kappa = ProtocolRound::random(&setup, dealers)?;
+        let lambda = ProtocolRound::random(&setup, dealers)?;
+
+        let key = ProtocolRound::reshare_of_masked(&setup, &key, dealers)?;
+        let kappa = ProtocolRound::reshare_of_masked(&setup, &kappa, dealers)?;
+
+        let key_times_lambda = ProtocolRound::multiply(&setup, &lambda, &key, dealers)?;
+        let kappa_times_lambda = ProtocolRound::multiply(&setup, &lambda, &kappa, dealers)?;
+
+        Ok(Self {
+            setup,
+            key,
+            kappa,
+            lambda,
+            key_times_lambda,
+            kappa_times_lambda,
+        })
     }
 }
 
-#[test]
-fn should_reshare_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
-    let setup = ProtocolSetup::new(EccCurveType::K256, 4, 2)?;
-
-    // First create a transcript of random dealings
-    let random = ProtocolRound::random(&setup, 4)?;
-
-    // Now reshare the random value twice
-
-    // 1 dealing is not sufficient
-    insufficient_dealings(ProtocolRound::reshare_of_masked(&setup, &random, 1));
-
-    // 2, 3, or 4 works:
-    let reshared2 = ProtocolRound::reshare_of_masked(&setup, &random, 2)?;
-    let reshared3 = ProtocolRound::reshare_of_masked(&setup, &random, 3)?;
-    let reshared4 = ProtocolRound::reshare_of_masked(&setup, &random, 4)?;
-
-    // The same value is committed in the resharings despite different dealing cnt
-    assert_eq!(reshared2.constant_term(), reshared3.constant_term());
-    assert_eq!(reshared2.constant_term(), reshared4.constant_term());
-
-    // Now reshare the now-unmasked value
-    insufficient_dealings(ProtocolRound::reshare_of_unmasked(&setup, &reshared2, 1));
-    let unmasked = ProtocolRound::reshare_of_unmasked(&setup, &reshared2, 2)?;
-    assert_eq!(reshared2.constant_term(), unmasked.constant_term());
-
-    // Now multiply the masked and umasked values
-    // We need 3 dealings to multiply
-    insufficient_dealings(ProtocolRound::multiply(&setup, &random, &unmasked, 1));
-    insufficient_dealings(ProtocolRound::multiply(&setup, &random, &unmasked, 2));
-    let _product = ProtocolRound::multiply(&setup, &random, &unmasked, 3)?;
-
-    Ok(())
+#[derive(Clone, Debug)]
+pub struct SignatureProtocolExecution {
+    setup: SignatureProtocolSetup,
+    signed_message: Vec<u8>,
+    hashed_message: Vec<u8>,
+    random_beacon: Randomness,
+    derivation_path: DerivationPath,
 }
 
-#[test]
-fn should_multiply_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
-    let setup = ProtocolSetup::new(EccCurveType::K256, 4, 2)?;
+impl SignatureProtocolExecution {
+    pub fn new(
+        setup: SignatureProtocolSetup,
+        signed_message: Vec<u8>,
+        random_beacon: Randomness,
+        derivation_path: DerivationPath,
+    ) -> Self {
+        let hashed_message = ic_crypto_sha::Sha256::hash(&signed_message).to_vec();
 
-    let dealers = 4;
+        Self {
+            setup,
+            signed_message,
+            hashed_message,
+            random_beacon,
+            derivation_path,
+        }
+    }
 
-    // First create two random transcripts
-    let random_a = ProtocolRound::random(&setup, dealers)?;
-    let random_b = ProtocolRound::random(&setup, dealers)?;
+    pub fn generate_shares(
+        &self,
+    ) -> ThresholdEcdsaResult<BTreeMap<u32, ThresholdEcdsaSigShareInternal>> {
+        let mut shares = BTreeMap::new();
 
-    // Now reshare them both
-    let random_c = ProtocolRound::reshare_of_masked(&setup, &random_a, dealers)?;
-    let random_d = ProtocolRound::reshare_of_masked(&setup, &random_b, dealers)?;
+        for node_index in 0..self.setup.setup.receivers {
+            let share = sign_share(
+                &self.derivation_path,
+                &self.hashed_message,
+                self.random_beacon,
+                &self.setup.kappa.transcript,
+                &self.setup.lambda.openings[node_index],
+                &self.setup.kappa_times_lambda.openings[node_index],
+                &self.setup.key_times_lambda.openings[node_index],
+                self.setup.setup.alg,
+            )
+            .expect("Failed to create sig share");
 
-    // Now multiply A*D and B*C (which will be the same numbers)
-    let product_ad = ProtocolRound::multiply(&setup, &random_a, &random_d, dealers)?;
-    let product_bc = ProtocolRound::multiply(&setup, &random_b, &random_c, dealers)?;
+            verify_signature_share(
+                &share,
+                &self.derivation_path,
+                &self.hashed_message,
+                self.random_beacon,
+                node_index as u32,
+                &self.setup.kappa.transcript,
+                &self.setup.lambda.transcript,
+                &self.setup.kappa_times_lambda.transcript,
+                &self.setup.key_times_lambda.transcript,
+                self.setup.setup.alg,
+            )
+            .expect("Signature share verification failed");
 
-    // Now reshare AD and BC
-    let reshare_ad = ProtocolRound::reshare_of_masked(&setup, &product_ad, dealers)?;
-    let reshare_bc = ProtocolRound::reshare_of_masked(&setup, &product_bc, dealers)?;
+            shares.insert(node_index as NodeIndex, share);
+        }
 
-    // The committed values of AD and BC should be the same:
-    assert_eq!(reshare_ad.constant_term(), reshare_bc.constant_term());
+        Ok(shares)
+    }
 
-    Ok(())
-}
+    pub fn generate_signature(
+        &self,
+        shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
+    ) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesInternalError>
+    {
+        combine_sig_shares(
+            &self.derivation_path,
+            self.random_beacon,
+            &self.setup.kappa.transcript,
+            self.setup.setup.threshold,
+            shares,
+            self.setup.setup.alg,
+        )
+    }
 
-#[test]
-fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
-    let mut setup = ProtocolSetup::new(EccCurveType::K256, 5, 2)?;
+    pub fn verify_signature(
+        &self,
+        sig: &ThresholdEcdsaCombinedSigInternal,
+    ) -> Result<(), ThresholdEcdsaVerifySignatureInternalError> {
+        verify_threshold_signature(
+            sig,
+            &self.derivation_path,
+            &self.hashed_message,
+            self.random_beacon,
+            &self.setup.kappa.transcript,
+            &self.setup.key.transcript,
+            self.setup.setup.alg,
+        )?;
 
-    let random_a = ProtocolRound::random(&setup, 5)?;
+        // If verification succeeded, check with RustCrypto's ECDSA also
+        let pk = derive_public_key(
+            &self.setup.key.transcript,
+            &self.derivation_path,
+            self.setup.setup.alg,
+        )?;
 
-    insufficient_dealings(ProtocolRound::reshare_of_masked(&setup, &random_a, 1));
-    let reshared_b = ProtocolRound::reshare_of_masked(&setup, &random_a, 2)?;
+        use k256::ecdsa::signature::{Signature, Verifier};
 
-    setup.modify_threshold(1);
-    setup.remove_nodes(2);
-    insufficient_dealings(ProtocolRound::reshare_of_unmasked(&setup, &reshared_b, 1));
+        let vk = k256::ecdsa::VerifyingKey::from_sec1_bytes(&pk.public_key)
+            .expect("Failed to parse public key");
 
-    let reshared_c = ProtocolRound::reshare_of_unmasked(&setup, &reshared_b, 2)?;
-    let reshared_d = ProtocolRound::reshare_of_unmasked(&setup, &reshared_b, 3)?;
+        let sig = k256::ecdsa::Signature::from_bytes(&sig.serialize())
+            .expect("Failed to parse signature");
 
-    // b, c, and d all have the same value
-    assert_eq!(reshared_b.constant_term(), reshared_c.constant_term());
-    assert_eq!(reshared_b.constant_term(), reshared_d.constant_term());
+        assert!(vk.verify(&self.signed_message, &sig).is_ok());
 
-    Ok(())
-}
-
-#[test]
-fn should_multiply_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
-    let mut setup = ProtocolSetup::new(EccCurveType::K256, 5, 2)?;
-
-    let random_a = ProtocolRound::random(&setup, 5)?;
-    let random_b = ProtocolRound::random(&setup, 5)?;
-
-    let reshared_c = ProtocolRound::reshare_of_masked(&setup, &random_a, 3)?;
-
-    setup.modify_threshold(1);
-    setup.remove_nodes(2);
-    insufficient_dealings(ProtocolRound::multiply(&setup, &random_b, &reshared_c, 1));
-    insufficient_dealings(ProtocolRound::multiply(&setup, &random_b, &reshared_c, 2));
-
-    let _product = ProtocolRound::multiply(&setup, &random_b, &reshared_c, 3)?;
-
-    Ok(())
+        Ok(())
+    }
 }

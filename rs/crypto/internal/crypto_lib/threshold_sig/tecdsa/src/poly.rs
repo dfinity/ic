@@ -532,6 +532,10 @@ impl PolynomialCommitment {
         self.points().len()
     }
 
+    pub(crate) fn evaluate_at(&self, eval_point: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+        evaluate_at(self.points(), eval_point)
+    }
+
     pub fn constant_term(&self) -> EccPoint {
         self.points()[0]
     }
