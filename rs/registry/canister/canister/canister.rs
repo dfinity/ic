@@ -160,6 +160,8 @@ fn canister_post_upgrade() {
         .expect("Error decoding from stable.");
     let registry = registry_mut();
     registry.from_serializable_form(ss.registry.expect("Error decoding from stable"));
+
+    registry.check_global_invariants(&[]);
     recertify_registry();
 }
 
