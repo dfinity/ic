@@ -228,7 +228,7 @@ async fn main() {
         .arg(
             Arg::with_name("http2-only")
                 .long("http2-only")
-                .default_value("false")
+                .default_value("true")
                 .takes_value(true)
                 .help("If specified, sets this option when building the hyper http client."),
         )
