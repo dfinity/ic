@@ -157,51 +157,6 @@ impl Registry {
             .count()
     }
 
-    /// Garbage-collects the Registry. This method deletes a record (along with
-    /// its associated mutations in the changelog), bypassing the need for
-    /// deleting via mutations. It also carries out the Registry's standard
-    /// invariant checks.
-    ///
-    /// Should only be called from `canister_post_upgrade`! Records are pruned
-    /// on a "best effort" basis; if the key does not exist then it is
-    /// skipped without a panic.
-    pub fn prune_stale_records(&mut self, record_keys: Vec<String>) {
-        let record_keys = record_keys
-            .into_iter()
-            .map(|key| key.as_bytes().to_vec())
-            .collect::<Vec<_>>();
-
-        let mut removed_records = vec![];
-        record_keys.iter().for_each(|record_key| {
-            if self.store.remove(record_key).is_some() {
-                removed_records.push(record_key);
-            }
-        });
-
-        let cl_clone = self.changelog.clone();
-        cl_clone.iter().for_each(|(key, encoded_atomic_mutation)| {
-            let mut atomic_mutation =
-                RegistryAtomicMutateRequest::decode(&encoded_atomic_mutation[..]).unwrap();
-            atomic_mutation
-                .mutations
-                .retain(|registry_mutation| !removed_records.contains(&&registry_mutation.key));
-
-            let mut buf = vec![];
-            atomic_mutation.encode(&mut buf).unwrap();
-
-            if !atomic_mutation.mutations.is_empty() {
-                self.changelog
-                    .modify(key.as_ref(), |encoded_atomic_mutation| {
-                        *encoded_atomic_mutation = buf;
-                    });
-            } else {
-                self.changelog.delete(key.as_ref());
-            }
-        });
-
-        self.check_global_invariants(&[]);
-    }
-
     /// Returns the last RegistryValue, if any, for the given key.
     ///
     /// As we keep track of deletions in the registry, this value
@@ -402,13 +357,33 @@ impl Registry {
 
         match repr_version {
             ReprVersion::Version1 => {
+                let mut current_version = 0;
                 for entry in stable_repr.changelog {
+                    // Code to fix ICSUP-2589.
+                    // This fills in missing versions with empty entries so that clients see an
+                    // unbroken sequence.
+                    // If the current version is different from the previous version + 1, we
+                    // need to add empty records to fill out the missing versions, to keep
+                    // the invariants that are present in the
+                    // client side.
+                    for i in current_version + 1..entry.version {
+                        let mutations = vec![RegistryMutation {
+                            mutation_type: Type::Upsert as i32,
+                            key: "_".into(),
+                            value: "".into(),
+                        }];
+                        self.apply_mutations_as_version(mutations, i);
+                        self.version = i;
+                    }
+                    // End code to fix ICSUP-2589
+
                     let req = RegistryAtomicMutateRequest::decode(&entry.encoded_mutation[..])
                         .unwrap_or_else(|err| {
                             panic!("Failed to decode mutation@{}: {}", entry.version, err)
                         });
                     self.apply_mutations_as_version(req.mutations, entry.version);
                     self.version = entry.version;
+                    current_version = self.version;
                 }
             }
             ReprVersion::Unspecified => {
@@ -920,6 +895,38 @@ mod tests {
     fn test_serialize_deserialize_with_random_content_1000_keys() {
         let registry = initialize_random_registry(3, 1000, 13.0, 1500);
         serialize_then_deserialize(registry)
+    }
+
+    #[test]
+    fn test_icsup_2589() {
+        use rand_core::RngCore;
+
+        let mut rng = rand::rngs::SmallRng::from_entropy();
+        let registry = initialize_random_registry(3, 1000, 13.0, 150);
+
+        let mut serializable_form = registry.serializable_form_at(ReprVersion::Version1);
+        // Remove half of the entries, but retain the first and the last entry.
+        let initial_len = registry.changelog().iter().count();
+        serializable_form.changelog.retain(|entry| {
+            entry.version == 1 || rng.next_u32() % 2 == 0 || entry.version == initial_len as u64
+        });
+        let len_after_random_trim = serializable_form.changelog.len();
+        assert!(len_after_random_trim < initial_len);
+
+        let mut serialized_v1 = Vec::new();
+        serializable_form
+            .encode(&mut serialized_v1)
+            .expect("Error encoding registry");
+
+        let restore_from_v1 = RegistryStableStorage::decode(serialized_v1.as_slice())
+            .expect("Error decoding registry");
+
+        assert_eq!(restore_from_v1.changelog.len(), len_after_random_trim);
+        let mut restored = Registry::new();
+
+        // The restore should add the missing versions.
+        restored.from_serializable_form(restore_from_v1);
+        assert_eq!(restored.changelog().iter().count(), initial_len);
     }
 
     #[allow(unused_must_use)] // Required because insertion errors are ignored.
