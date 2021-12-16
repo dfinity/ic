@@ -198,10 +198,10 @@ impl CatchUpPackageProvider {
             .join(format!("cup_{}.types.v1.CatchUpPackage.pb", subnet_id))
     }
 
-    // The path that should be used to save the CUP for the assigned subnet.
-    // Includes the specific type encoded in the file for future-proofing and
-    // ease of debugging.
-    fn get_cup_path(&self) -> PathBuf {
+    /// The path that should be used to save the CUP for the assigned subnet.
+    /// Includes the specific type encoded in the file for future-proofing and
+    /// ease of debugging.
+    pub fn get_cup_path(&self) -> PathBuf {
         self.cup_dir.join("cup.types.v1.CatchUpPackage.pb")
     }
 
