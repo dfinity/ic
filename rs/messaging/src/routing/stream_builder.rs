@@ -50,12 +50,13 @@ const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
 const LABEL_REMOTE: &str = "remote";
-const LABEL_INFINITE_LOOP: &str = "mr_stream_builder_infinite_loop";
 
 const LABEL_VALUE_TYPE_REQUEST: &str = "request";
 const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
 const LABEL_VALUE_STATUS_SUCCESS: &str = "success";
 const LABEL_VALUE_STATUS_CANISTER_NOT_FOUND: &str = "canister_not_found";
+
+const CRITICAL_ERROR_INFINITE_LOOP: &str = "mr_stream_builder_infinite_loop";
 
 impl StreamBuilderMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -85,7 +86,7 @@ impl StreamBuilderMetrics {
             // 10 B - 5 MB
             decimal_buckets(1, 6),
         );
-        let error_infinite_loops = metrics_registry.error_counter(LABEL_INFINITE_LOOP);
+        let error_infinite_loops = metrics_registry.error_counter(CRITICAL_ERROR_INFINITE_LOOP);
         // Initialize all `routed_messages` counters with zero, so they are all exported
         // from process start (`IntCounterVec` is really a map).
         for (msg_type, status) in &[
@@ -248,7 +249,9 @@ impl StreamBuilderImpl {
                 if output_size == last_output_size {
                     error!(
                         self.log,
-                        "Infinite loop detected in StreamBuilder::build_streams @{}.", output_size
+                        "{}: Infinite loop detected in StreamBuilder::build_streams @{}.",
+                        CRITICAL_ERROR_INFINITE_LOOP,
+                        output_size
                     );
                     self.metrics.error_infinite_loops.inc();
                     break;

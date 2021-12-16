@@ -99,8 +99,12 @@ impl MetricsRegistry {
     }
 
     /// Creates a `critical_errors{error="<error>"}` counter for the given error
-    /// type. Any increase in the counter is intended to trigger an alert and
-    /// should always be paired with a log message to aid in debugging.
+    /// type. Any increase in the counter will trigger an alert and must always
+    /// be paired with a error message (prefixed by the error name) to aid in
+    /// debugging.
+    ///
+    /// Additionally, the playbook for `IC_Replica_CriticalError` must describe
+    /// each error, possible root causes and mitigations.
     ///
     /// Panics if `error_counter()` has already been called with the same
     /// `error` value.
@@ -111,6 +115,9 @@ impl MetricsRegistry {
     /// use ic_metrics::MetricsRegistry;
     /// use prometheus::IntCounter;
     ///
+    /// /// Critical error tracking if `foo_bar` ever goes over the limit.
+    /// const CRITICAL_ERROR_FOO_BAR_ABOVE_LIMIT: &str = "foo_bar_above_limit";
+    ///
     /// pub struct FooMetrics {
     ///     bar_above_limit: IntCounter,
     /// }
@@ -118,14 +125,14 @@ impl MetricsRegistry {
     /// impl FooMetrics {
     ///     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
     ///         FooMetrics {
-    ///             bar_above_limit: metrics_registry.error_counter("foo_bar_above_limit"),
+    ///             bar_above_limit: metrics_registry.error_counter(CRITICAL_ERROR_FOO_BAR_ABOVE_LIMIT),
     ///         }
     ///     }
     /// }
     ///
     /// fn set_bar(new_bar: u64, metrics: &FooMetrics, log: &ReplicaLogger) {
     ///     if new_bar > 13 {
-    ///         error!(log, "foo_bar_above_limit: bar {} > 13", new_bar);
+    ///         error!(log, "{}: bar {} > 13", CRITICAL_ERROR_FOO_BAR_ABOVE_LIMIT, new_bar);
     ///         metrics.bar_above_limit.inc();
     ///     }
     ///
