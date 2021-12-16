@@ -1,6 +1,6 @@
 use crate::crypto::ErrorReplication;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
@@ -148,5 +148,12 @@ impl ErrorReplication for IDkgVerifyDealingPrivateError {
                 true
             }
         }
+    }
+}
+
+impl ErrorReplication for ThresholdEcdsaVerifySigShareError {
+    fn is_replicated(&self) -> bool {
+        // TODO correctly implement this function
+        false
     }
 }

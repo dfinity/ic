@@ -145,6 +145,9 @@ pub struct EcdsaSigShare {
     /// Height of the finalized block that requested the signature
     pub requested_height: Height,
 
+    /// The node that signed the share
+    pub signer_id: NodeId,
+
     /// The request this signature share belongs to
     pub request_id: RequestId,
 
@@ -363,6 +366,11 @@ pub trait EcdsaBlockReader {
     /// Returns the transcripts requested by the block.
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParams> + '_>;
 
+    /// Returns the signatures requested by the block.
+    fn requested_signatures(
+        &self,
+    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputs)> + '_>;
+
     // TODO: APIs for completed transcripts, etc.
 }
 
@@ -396,6 +404,16 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             .as_ref()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
                 ecdsa_payload.iter_transcript_configs_in_creation()
+            })
+    }
+
+    fn requested_signatures(
+        &self,
+    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputs)> + '_> {
+        self.ecdsa_payload
+            .as_ref()
+            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
+                Box::new(ecdsa_payload.ongoing_signatures.iter())
             })
     }
 }
