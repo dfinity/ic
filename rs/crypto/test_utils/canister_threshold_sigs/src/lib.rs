@@ -51,14 +51,11 @@ pub fn create_dealings(
 pub fn multisign_dealing(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
-    dealer_id: NodeId,
     dealing: &IDkgDealing,
 ) -> IDkgMultiSignedDealing {
     let ecdsa_dealing = EcdsaDealing {
         requested_height: Height::from(1),
-        dealer_id,
-        transcript_id: params.transcript_id(),
-        dealing: dealing.clone(),
+        idkg_dealing: dealing.clone(),
     };
 
     let signature = {
@@ -102,8 +99,7 @@ pub fn multisign_dealings(
     dealings
         .iter()
         .map(|(dealer_id, dealing)| {
-            let multisigned_dealing =
-                multisign_dealing(params, crypto_components, *dealer_id, dealing);
+            let multisigned_dealing = multisign_dealing(params, crypto_components, dealing);
 
             (*dealer_id, multisigned_dealing)
         })

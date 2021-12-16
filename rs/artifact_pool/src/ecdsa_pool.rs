@@ -288,12 +288,12 @@ mod tests {
     use std::collections::BTreeSet;
 
     fn create_ecdsa_dealing(transcript_id: IDkgTranscriptId) -> EcdsaDealing {
-        let dealing = dummy_idkg_dealing_for_tests();
+        let mut idkg_dealing = dummy_idkg_dealing_for_tests();
+        idkg_dealing.dealer_id = NODE_1;
+        idkg_dealing.transcript_id = transcript_id;
         EcdsaDealing {
             requested_height: Height::from(10),
-            dealer_id: NODE_1,
-            transcript_id,
-            dealing,
+            idkg_dealing,
         }
     }
 

@@ -178,11 +178,12 @@ pub(crate) mod test_utils {
         transcript_id: IDkgTranscriptId,
         dealer_id: NodeId,
     ) -> EcdsaDealing {
+        let mut idkg_dealing = dummy_idkg_dealing_for_tests();
+        idkg_dealing.dealer_id = dealer_id;
+        idkg_dealing.transcript_id = transcript_id;
         EcdsaDealing {
             requested_height: Height::from(10),
-            dealer_id,
-            transcript_id,
-            dealing: dummy_idkg_dealing_for_tests(),
+            idkg_dealing,
         }
     }
 
@@ -228,8 +229,8 @@ pub(crate) mod test_utils {
         for action in change_set {
             if let EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealing(dealing)) = action {
                 if dealing.requested_height == requested_height
-                    && dealing.transcript_id == *transcript_id
-                    && dealing.dealer_id == NODE_1
+                    && dealing.idkg_dealing.transcript_id == *transcript_id
+                    && dealing.idkg_dealing.dealer_id == NODE_1
                 {
                     return true;
                 }
@@ -250,8 +251,8 @@ pub(crate) mod test_utils {
                 action
             {
                 let dealing = &support.content;
-                if dealing.transcript_id == *transcript_id
-                    && dealing.dealer_id == *dealer_id
+                if dealing.idkg_dealing.transcript_id == *transcript_id
+                    && dealing.idkg_dealing.dealer_id == *dealer_id
                     && support.signature.signer == NODE_1
                 {
                     return true;
