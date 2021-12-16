@@ -16,7 +16,6 @@ use ic_protobuf::registry::{
     dc::v1::AddOrRemoveDataCentersProposalPayload,
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
-use ic_registry_keys::make_icp_xdr_conversion_rate_record_key;
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
@@ -161,12 +160,6 @@ fn canister_post_upgrade() {
         .expect("Error decoding from stable.");
     let registry = registry_mut();
     registry.from_serializable_form(ss.registry.expect("Error decoding from stable"));
-
-    // Hard-coded keys that should be pruned
-    let keys_to_prune = vec![make_icp_xdr_conversion_rate_record_key()];
-
-    // Prune specified records and check global invariants are not violated
-    registry.prune_stale_records(keys_to_prune);
     recertify_registry();
 }
 
