@@ -64,11 +64,13 @@ fi
 #  this is for the case when the machine that is running the test cannot connect to the host using IPv6)
 install_endpoints=$(jq_hostvars 'map(select(.subnet_index==1) | .api_listen_url) | join(",")')
 
+http2_only=false
 if [[ "$load_dest" == "dns" ]]; then
     loadhosts="https://$testnet.dfinity.network/"
 elif [[ "$load_dest" == "replica_nodes" ]]; then
     loadhosts=$install_endpoints
 elif [[ "$load_dest" == "boundary_nodes" ]]; then
+    http2_only=true
     loadhosts=$(jq_hostvars 'map(select(.subnet_index=="boundary") | .api_listen_url) | join(",")')
 else
     exit_usage
@@ -144,6 +146,7 @@ wg_status_file="$experiment_dir/wg_exit_status"
             -r "$rate" \
             --payload-size="$payload_size" \
             -n "$exec_time" \
+            --http2-only "$http2_only" \
             --periodic-output \
             --install-endpoint="$install_endpoints" \
             --summary-file "$experiment_dir/workload-summary.json" 2>"$wg_err_log" \

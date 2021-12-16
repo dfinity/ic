@@ -90,12 +90,14 @@ fi
 install_endpoints=$(jq_hostvars 'map(select(.subnet_index=='"${subnet_index}"') | .api_listen_url) | join(",")')
 
 STATUS_CHECK=""
+http2_only=false
 if [[ "$load_dest" == "dns" ]]; then
     loadhosts="https://$testnet.dfinity.network/"
 elif [[ "$load_dest" == "replica_nodes" ]]; then
     loadhosts=$install_endpoints
 elif [[ "$load_dest" == "boundary_nodes" ]]; then
     loadhosts=$(jq_hostvars 'map(select(.subnet_index=="boundary") | .api_listen_url) | join(",")')
+    http2_only=true
     STATUS_CHECK="--no-status-check"
 else
     exit_usage
@@ -170,6 +172,7 @@ wg_status_file="$experiment_dir/wg_exit_status"
             --payload-size="$payload_size" \
             -n "$exec_time" \
             --periodic-output $STATUS_CHECK \
+            --http2-only "$http2_only" \
             --install-endpoint="$install_endpoints" \
             --summary-file "$experiment_dir/workload-summary.json" 2>"$wg_err_log" \
             || local_wg_status=$?
