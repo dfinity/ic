@@ -168,8 +168,5 @@
 /experimental/nix/        @dfinity-lab/teams/idx
 /nix/overlays/haskell.nix @dfinity-lab/teams/ic-testing-verification
 
-# This is an automatic generated file so does not need an owner.
-/rs/Cargo.nix @ghost
-
 [Capsule]
 Capsule.toml             @dfinity-lab/teams/idx
