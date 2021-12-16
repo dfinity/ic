@@ -3235,7 +3235,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-canister-sandbox-replica-controller2"
+name = "ic-canister-sandbox-replica-controller"
 version = "0.8.0"
 dependencies = [
  "ic-canister-sandbox-backend-lib",
@@ -4257,7 +4257,7 @@ dependencies = [
  "escargot",
  "iai",
  "ic-base-types",
- "ic-canister-sandbox-replica-controller2",
+ "ic-canister-sandbox-replica-controller",
  "ic-config",
  "ic-cow-state",
  "ic-crypto",

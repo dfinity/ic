@@ -11,7 +11,7 @@ members = [
   "canister_sandbox",
   "canister_sandbox/backend_lib",
   "canister_sandbox/common",
-  "canister_sandbox/replica_controller2",
+  "canister_sandbox/replica_controller",
   "canonical_state",
   "certified_vars",
   "config",
