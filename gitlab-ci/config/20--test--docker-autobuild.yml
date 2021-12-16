@@ -113,3 +113,11 @@ docker-autobuild-tests:
       echo "------------------------------------------------------------------"
       echo "FINISHED RUNNING CHECK_IT.SH"
       echo "------------------------------------------------------------------"
+
+      DISK_UTIL=$(df / | tail -1 | awk '{print 0+$5}')
+      if [ "$DISK_UTIL" -gt 80 ]; then 
+        df -h /
+        docker container prune -f
+        docker image prune -f
+      fi
+      df -h /
