@@ -21,6 +21,16 @@ impl IDkgTranscriptInternal {
         serde_cbor::from_slice::<Self>(bytes)
             .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
     }
+
+    pub(crate) fn constant_term(&self) -> EccPoint {
+        self.combined_commitment.commitment().constant_term()
+    }
+
+    pub(crate) fn evaluate_at(&self, eval_point: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+        self.combined_commitment
+            .commitment()
+            .evaluate_at(eval_point)
+    }
 }
 
 impl TryFrom<&IDkgTranscript> for IDkgTranscriptInternal {
@@ -115,7 +125,7 @@ fn combine_commitments_via_interpolation(
     let mut combined = Vec::new();
 
     for (index, dealing) in verified_dealings {
-        indexes.push(EccScalar::from_u64(curve, (index + 1) as u64));
+        indexes.push(EccScalar::from_node_index(curve, *index));
         commitments.push(dealing.commitment.clone());
     }
 
@@ -283,11 +293,11 @@ impl CommitmentOpening {
                 public_key,
             )?;
 
-            let dealer_index = EccScalar::from_u64(curve, *dealer_index as u64 + 1);
+            let dealer_index = EccScalar::from_node_index(curve, *dealer_index);
             openings.push((dealer_index, opening));
         }
 
-        let receiver_index = EccScalar::from_u64(curve, receiver_index as u64 + 1);
+        let receiver_index = EccScalar::from_node_index(curve, receiver_index);
 
         // Recombine the openings according to the type of combined polynomial
         match &transcript.combined_commitment {

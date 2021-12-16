@@ -120,7 +120,7 @@ fn encrypt_and_commit_single_polynomial(
     let mut plaintexts = Vec::with_capacity(recipients.len());
 
     for (idx, _recipient) in recipients.iter().enumerate() {
-        let scalar = EccScalar::from_u64(curve, (idx as u64) + 1);
+        let scalar = EccScalar::from_node_index(curve, idx as NodeIndex);
         let v_s = poly.evaluate_at(&scalar)?;
         plaintexts.push(v_s)
     }
@@ -147,7 +147,7 @@ fn encrypt_and_commit_pair_of_polynomials(
     let mut plaintexts = Vec::with_capacity(recipients.len());
 
     for (idx, _recipient) in recipients.iter().enumerate() {
-        let scalar = EccScalar::from_u64(curve, (idx as u64) + 1);
+        let scalar = EccScalar::from_node_index(curve, idx as NodeIndex);
         let v_s = values.evaluate_at(&scalar)?;
         let m_s = mask.evaluate_at(&scalar)?;
         plaintexts.push((v_s, m_s))
@@ -354,8 +354,7 @@ impl IDkgDealingInternal {
                     }
                     PolynomialCommitment::Simple(c) => {
                         let constant_term = self.commitment.constant_term();
-                        let dealer_index =
-                            EccScalar::from_u64(curve_type, (dealer_index + 1) as u64);
+                        let dealer_index = EccScalar::from_node_index(curve_type, dealer_index);
 
                         if c.evaluate_at(&dealer_index)? != constant_term {
                             return Err(ThresholdEcdsaError::InconsistentCommitments);
