@@ -190,6 +190,99 @@ pub fn dummy_idkg_opening_for_tests() -> IDkgOpening {
     }
 }
 
+pub fn dummy_sig_inputs_for_tests(caller: PrincipalId) -> ThresholdEcdsaSigInputs {
+    let (fake_key, fake_presig_quadruple) = {
+        let mut nodes = BTreeSet::new();
+        nodes.insert(node_test_id(1));
+
+        let original_kappa_id = dummy_idkg_transcript_id_for_tests(1);
+        let kappa_id = dummy_idkg_transcript_id_for_tests(2);
+        let lambda_id = dummy_idkg_transcript_id_for_tests(3);
+        let key_id = dummy_idkg_transcript_id_for_tests(4);
+
+        let fake_kappa = IDkgTranscript {
+            transcript_id: kappa_id,
+            receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Unmasked(
+                IDkgUnmaskedTranscriptOrigin::ReshareMasked(original_kappa_id),
+            ),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+
+        let fake_lambda = IDkgTranscript {
+            transcript_id: lambda_id,
+            receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+
+        let fake_kappa_times_lambda = IDkgTranscript {
+            transcript_id: dummy_idkg_transcript_id_for_tests(40),
+            receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Masked(
+                IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(kappa_id, lambda_id),
+            ),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+
+        let fake_key = IDkgTranscript {
+            transcript_id: key_id,
+            receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Unmasked(
+                IDkgUnmaskedTranscriptOrigin::ReshareMasked(dummy_idkg_transcript_id_for_tests(50)),
+            ),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+
+        let fake_key_times_lambda = IDkgTranscript {
+            transcript_id: dummy_idkg_transcript_id_for_tests(50),
+            receivers: IDkgReceivers::new(nodes).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Masked(
+                IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(key_id, lambda_id),
+            ),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+
+        let presig_quadruple = PreSignatureQuadruple::new(
+            fake_kappa,
+            fake_lambda,
+            fake_kappa_times_lambda,
+            fake_key_times_lambda,
+        )
+        .unwrap();
+
+        (fake_key, presig_quadruple)
+    };
+
+    let derivation_path = ExtendedDerivationPath {
+        caller,
+        bip32_derivation_path: vec![],
+    };
+    ThresholdEcdsaSigInputs::new(
+        &derivation_path,
+        &[],
+        Randomness::from([0_u8; 32]),
+        fake_presig_quadruple,
+        fake_key,
+    )
+    .expect("failed to create signature inputs")
+}
+
 #[derive(Default)]
 pub struct CryptoReturningOk {
     // Here we store the ids of all transcripts, which were loaded by the crypto components.

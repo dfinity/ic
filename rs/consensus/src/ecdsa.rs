@@ -168,11 +168,13 @@
 
 use crate::consensus::{
     metrics::{timed_call, EcdsaClientMetrics},
+    utils::RoundRobin,
     ConsensusCrypto,
 };
 use crate::ecdsa::pre_signer::{
     EcdsaPreSigner, EcdsaPreSignerImpl, EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl,
 };
+use crate::ecdsa::signer::{EcdsaSigner, EcdsaSignerImpl};
 
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces::ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaGossip, EcdsaPool};
@@ -189,6 +191,8 @@ use std::sync::Arc;
 
 mod payload_builder;
 mod pre_signer;
+mod signer;
+mod utils;
 
 /// Similar to consensus, we don't fetch artifacts too far ahead in future.
 const LOOK_AHEAD: u64 = 10;
@@ -197,6 +201,8 @@ const LOOK_AHEAD: u64 = 10;
 /// ECDSA payloads.
 pub struct EcdsaImpl {
     pre_signer: Box<dyn EcdsaPreSigner>,
+    signer: Box<dyn EcdsaSigner>,
+    schedule: RoundRobin,
     metrics: EcdsaClientMetrics,
     logger: ReplicaLogger,
 }
@@ -212,6 +218,13 @@ impl EcdsaImpl {
     ) -> Self {
         let pre_signer = Box::new(EcdsaPreSignerImpl::new(
             node_id,
+            consensus_cache.clone(),
+            crypto.clone(),
+            metrics_registry.clone(),
+            logger.clone(),
+        ));
+        let signer = Box::new(EcdsaSignerImpl::new(
+            node_id,
             consensus_cache,
             crypto,
             metrics_registry.clone(),
@@ -219,40 +232,34 @@ impl EcdsaImpl {
         ));
         Self {
             pre_signer,
+            signer,
+            schedule: RoundRobin::default(),
             metrics: EcdsaClientMetrics::new(metrics_registry),
             logger,
         }
-    }
-
-    fn call_with_metrics<F>(&self, sub_component: &str, on_state_change_fn: F) -> EcdsaChangeSet
-    where
-        F: FnOnce() -> EcdsaChangeSet,
-    {
-        let _timer = self
-            .metrics
-            .on_state_change_duration
-            .with_label_values(&[sub_component])
-            .start_timer();
-        (on_state_change_fn)()
     }
 }
 
 impl Ecdsa for EcdsaImpl {
     fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet {
-        let mut changes: Vec<EcdsaChangeSet> = Vec::new();
         let metrics = self.metrics.clone();
+        let pre_signer = || {
+            timed_call(
+                "pre_signer",
+                || self.pre_signer.on_state_change(ecdsa_pool),
+                &metrics.on_state_change_duration,
+            )
+        };
+        let signer = || {
+            timed_call(
+                "signer",
+                || self.signer.on_state_change(ecdsa_pool),
+                &metrics.on_state_change_duration,
+            )
+        };
 
-        changes.push(timed_call(
-            "pre_signer",
-            || self.pre_signer.on_state_change(ecdsa_pool),
-            &metrics.on_state_change_duration,
-        ));
-
-        let mut ret = Vec::new();
-        changes.iter_mut().for_each(|mut change_set| {
-            ret.append(&mut change_set);
-        });
-        ret
+        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 2] = [&pre_signer, &signer];
+        self.schedule.call_next(&calls)
     }
 }
 
