@@ -37,6 +37,11 @@ impl ReplicaProcess {
         }
     }
 
+    /// Returns true only if the replica process is running.
+    pub fn is_running(&self) -> bool {
+        self.get_pid().is_some()
+    }
+
     /// Returns the `Pid` if the currently running replica; or `None` if no
     /// replica is running.
     fn get_pid(&self) -> Option<Pid> {
@@ -112,7 +117,7 @@ impl ReplicaProcess {
     pub(crate) fn start(
         &mut self,
         replica_binary: String,
-        replica_version: ReplicaVersion,
+        replica_version: &ReplicaVersion,
         args: Vec<String>,
     ) -> Result<()> {
         // Do nothing if we're already running a Replica with the requested version
@@ -191,7 +196,7 @@ impl ReplicaProcess {
             if let Some(command) = replica_process_guard.command.clone() {
                 let e = replica_process_guard.start(
                     command.replica_binary.clone(),
-                    command.replica_version.clone(),
+                    &command.replica_version,
                     command.args,
                 );
                 warn!(replica_process_guard.log, "Replica exited, {:?}", e);

@@ -6,15 +6,15 @@ use crate::release_package_provider::ReleasePackageProvider;
 use crate::replica_process::ReplicaProcess;
 use crate::utils;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_interfaces::registry::RegistryClient;
+use ic_logger::{debug, error, info, warn, ReplicaLogger};
+use ic_registry_client::helper::node::NodeRegistry;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_registry_client::helper::unassigned_nodes::UnassignedNodeRegistry;
 use ic_registry_common::local_store::LocalStoreImpl;
 use ic_types::consensus::catchup::CUPWithOriginalProtobuf;
-use ic_types::{
-    crypto::threshold_sig::{ni_dkg::NiDkgTag, ThresholdSigPublicKey},
-    RegistryVersion, ReplicaVersion, SubnetId,
-};
+use ic_types::consensus::CatchUpPackage;
+use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::process::{exit, Command};
@@ -28,13 +28,12 @@ pub(crate) struct ReleasePackage {
     replica_process: Arc<Mutex<ReplicaProcess>>,
     release_package_provider: Arc<ReleasePackageProvider>,
     cup_provider: Arc<CatchUpPackageProvider>,
-    subnet_id: Option<SubnetId>,
     replica_version: ReplicaVersion,
-    high_threshold_pub_key: Option<ThresholdSigPublicKey>,
     replica_config_file: PathBuf,
     ic_binary_dir: PathBuf,
     nns_registry_replicator: Arc<NnsRegistryReplicator>,
     logger: ReplicaLogger,
+    node_id: NodeId,
     enabled: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -45,23 +44,20 @@ impl ReleasePackage {
         replica_process: Arc<Mutex<ReplicaProcess>>,
         release_package_provider: Arc<ReleasePackageProvider>,
         cup_provider: Arc<CatchUpPackageProvider>,
-        subnet_id: Option<SubnetId>,
         replica_version: ReplicaVersion,
         replica_config_file: PathBuf,
+        node_id: NodeId,
         ic_binary_dir: PathBuf,
         nns_registry_replicator: Arc<NnsRegistryReplicator>,
         logger: ReplicaLogger,
     ) -> Arc<std::sync::atomic::AtomicBool> {
-        let high_threshold_pub_key = get_public_key(&registry, registry.get_latest_version()).await;
-
         let enabled = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        let mut release_package = Self {
+        let release_package = Self {
             registry,
             replica_process,
             release_package_provider,
             cup_provider,
-            subnet_id,
-            high_threshold_pub_key,
+            node_id,
             replica_version,
             replica_config_file,
             ic_binary_dir,
@@ -69,6 +65,7 @@ impl ReleasePackage {
             logger,
             enabled: enabled.clone(),
         };
+        release_package.confirm_boot();
         release_package.check_for_upgrade_once().await;
         tokio::spawn(background_task(release_package));
         enabled
@@ -76,23 +73,44 @@ impl ReleasePackage {
 
     /// Checks for a new release package, and if found, upgrades to this release
     /// package
-    ///
-    /// Returns which version is running or error in case of error.
-    pub(crate) async fn check_for_upgrade(
-        &self,
-    ) -> NodeManagerResult<(ReplicaVersion, Option<(SubnetId, ThresholdSigPublicKey)>)> {
+    pub(crate) async fn check_for_upgrade(&self) -> NodeManagerResult<()> {
         let latest_registry_version = self.registry.get_latest_version();
-        let (latest_subnet_id, subnet_record) =
-            match self.registry.get_own_subnet_record(latest_registry_version) {
-                Ok(val) => val,
-                Err(NodeManagerError::NodeUnassignedError(_, _)) => {
-                    return self
-                        .upgrade_as_unassigned()
-                        .await
-                        .map(|version| (version, None))
-                }
-                Err(err) => return Err(err),
-            };
+        // Determine the subnet_id using the local CUP.
+        let latest_subnet_id = if let Some(cup_with_proto) = self.cup_provider.get_local_cup() {
+            let cup = &cup_with_proto.cup;
+            let subnet_id = get_subnet_id(&*self.registry.registry_client, cup).map_err(|err| {
+                NodeManagerError::UpgradeError(format!(
+                    "Couldn't extract the subnet id from the local CUP: {:?}",
+                    err
+                ))
+            })?;
+            if should_node_become_unassigned(
+                &*self.registry.registry_client,
+                self.node_id,
+                subnet_id,
+                cup,
+            ) {
+                return Err(NodeManagerError::UpgradeError(
+                    "Unassignment is not implemented".to_string(),
+                ));
+            }
+            subnet_id
+        } else {
+            // If the local CUP was not found we first try to create one from the registry.
+            if let Ok(cup) = self.registry.get_registry_cup(latest_registry_version) {
+                self.cup_provider
+                    .persist_cup(&CUPWithOriginalProtobuf::from_cup(cup))?;
+                return Ok(());
+            }
+            // If we couldn't create a registry CUP, this node is not assigned;
+            // check if it needs to be upgraded.
+            return self.check_for_upgrade_as_unassigned().await;
+        };
+
+        // Now we know the subnet_id and we're assigned; start the replica if necessary.
+        if !self.replica_process.lock().unwrap().is_running() {
+            return self.start_replica(&self.replica_version, latest_subnet_id);
+        }
 
         // 0. Special case for when we are doing boostrap disaster recovery for
         // nns and replacing the local registry store. Because we replace the
@@ -157,31 +175,18 @@ impl ReleasePackage {
             utils::reexec_current_process(&self.logger);
         }
 
-        // 1. Check if the subnet has changed based on the latest registry
-        if let Some(current_subnet_id) = self.subnet_id {
-            if latest_subnet_id != current_subnet_id {
-                info!(
-                    self.logger,
-                    "Detected subnet migration from {:?} to {}",
-                    current_subnet_id,
-                    latest_subnet_id
-                );
-                // Subnet changes are currently not supported. At least two features are
-                // missing:
-                //
-                // 1. A safe way for a replica to leave the old subnetwork (incl. leaving DKG
-                // committee)
-                //
-                // 2. Delete state from old subnetwork
-                panic!("Subnet changes currently not supported");
-            }
-        }
+        // Get latest CUP from peers & local CUPs on disk (fallback to registry)
+        let cup = self.cup_provider.get_latest_cup(latest_subnet_id).await?;
+
+        let cup_registry_version = cup.cup.content.registry_version();
+
+        let subnet_record = self
+            .registry
+            .get_subnet_record(latest_subnet_id, cup_registry_version)?;
 
         // Determine version of release in the latest registry version.
         let latest_replica_version =
             RegistryHelper::get_replica_version_from_subnet_record(subnet_record)?;
-
-        let latest_public_key = get_public_key(&self.registry, latest_registry_version).await;
 
         // If we are already running what is the latest version in the registry,
         // there cannot be an upgrade. No need to check for CUPs, simply return.
@@ -191,79 +196,20 @@ impl ReleasePackage {
         // Note that we do not allow version transitions v1 -> v2 -> v1.
         // Even without this optimization, the node manager would not trigger restarting
         // the replica (e.g. in cases we directly upgrade v1 -> v1).
-        if latest_replica_version == self.replica_version
-            && (latest_public_key == self.high_threshold_pub_key ||
-                // There are cases where during start() get_public_key() was
-                // not yet available and it has been set to None. If that's
-                // the case and it is now available, set it and return.
-                    self.high_threshold_pub_key.is_none())
-        {
-            if self.subnet_id.is_none() {
-                // Confirm base OS has booted (so it does not get reverted on next boot).
-                let mut script = self.ic_binary_dir.clone();
-                script.push("manageboot.sh");
-                let mut c = Command::new("sudo");
-                c.arg(script.into_os_string())
-                    .arg("confirm")
-                    .output()
-                    .map_err(|e| NodeManagerError::file_command_error(e, &c))?;
-
-                // Get latest CUP
-                let cup = self.cup_provider.get_latest_cup(latest_subnet_id).await?;
-
-                let cup_public_key = cup
-                    .cup
-                    .content
-                    .block
-                    .get_value()
-                    .payload
-                    .as_ref()
-                    .as_summary()
-                    .dkg
-                    .current_transcript(&NiDkgTag::HighThreshold)
-                    .public_key();
-
-                // Now that we know we are upgrading, persist the CUP
-                // again.  This is just to determine the path. It's a
-                // bit ugly, but the API of the CUP package provider
-                // currently doesn't easily allow to get the actual
-                // path out. And persisting it again shouldn't break anything ..
-                let cup_path = self
-                    .cup_provider
-                    .persist_cup_deprecated(&cup, latest_subnet_id)?;
-
-                let replica_version = self.replica_version.clone();
-                // Start new replica binary
-                let mut replica_path = self.ic_binary_dir.clone();
-                replica_path.push("replica");
-                let replica_path = replica_path.into_os_string().into_string().unwrap();
-
-                self.start_replica(replica_path, replica_version, cup_path, latest_subnet_id)?;
-
-                return Ok((
-                    latest_replica_version,
-                    Some((latest_subnet_id, cup_public_key)),
-                ));
-            } else {
-                debug!(
-                    self.logger,
-                    "Latest version from registry {} - already running, no CUP fetching",
-                    latest_replica_version
-                );
-                return Ok((latest_replica_version, None));
-            }
+        if latest_replica_version == self.replica_version {
+            debug!(
+                self.logger,
+                "Latest version from registry {} - already running, no CUP fetching",
+                latest_replica_version
+            );
+            return Ok(());
         }
 
         info!(
             self.logger,
-            "Runnig upgrade loop. Latest IC version in registry: {} \
-             - running IC version {:?} \
-             - latest public key: {:?} \
-             - running with public key: {:?}",
+            "Runnig upgrade loop. Latest IC version in registry: {}, running IC version {:?}",
             latest_replica_version,
             self.replica_version.as_ref(),
-            latest_public_key,
-            self.high_threshold_pub_key,
         );
 
         // Attempt to pro-actively download the replica version for
@@ -288,11 +234,6 @@ impl ReleasePackage {
 
         // 2. Check for upgrade based on the registry verison used in current subnet
 
-        // Get latest CUP from peers & local CUPs on disk (fallback to registry)
-        let cup = self.cup_provider.get_latest_cup(latest_subnet_id).await?;
-
-        let cup_registry_version = cup.cup.content.registry_version();
-
         // For the CUP's registry version, get replica version of current subnet.
         let subnet_record = self
             .registry
@@ -309,7 +250,7 @@ impl ReleasePackage {
                 new_replica_version,
                 self.replica_version
             );
-            return Ok((self.replica_version.clone(), None));
+            return Ok(());
         }
 
         // Now that we know we are upgrading, persist the CUP.
@@ -326,7 +267,7 @@ impl ReleasePackage {
         self.download_and_upgrade(new_replica_version).await
     }
 
-    async fn upgrade_as_unassigned(&self) -> NodeManagerResult<ReplicaVersion> {
+    async fn check_for_upgrade_as_unassigned(&self) -> NodeManagerResult<()> {
         let registry = &self.registry.registry_client;
         match registry.get_unassigned_nodes_config(registry.get_latest_version()) {
             Ok(Some(record)) => {
@@ -338,7 +279,7 @@ impl ReleasePackage {
                         ))
                     })?;
                 if self.replica_version == replica_version {
-                    return Ok(replica_version);
+                    return Ok(());
                 }
                 info!(
                     self.logger,
@@ -404,15 +345,20 @@ impl ReleasePackage {
         })
     }
 
-    /// Stop the current Replica and start a new Replica command
+    // Stop the current Replica and start a new Replica command
     fn start_replica(
         &self,
-        replica_binary: String,
-        replica_version: ReplicaVersion,
-        cup_path: PathBuf,
+        replica_version: &ReplicaVersion,
         subnet_id: SubnetId,
     ) -> NodeManagerResult<()> {
-        info!(self.logger, "Starting new Replica process due to upgrade");
+        info!(self.logger, "Starting new replica process due to upgrade");
+        let cup_path = self.cup_provider.get_cup_path();
+        let replica_binary = self
+            .ic_binary_dir
+            .join("replica")
+            .as_path()
+            .display()
+            .to_string();
         let cmd = vec![
             format!("--replica-version={}", replica_version.as_ref()),
             format!(
@@ -435,26 +381,31 @@ impl ReleasePackage {
             })
     }
 
-    async fn check_for_upgrade_once(&mut self) {
+    async fn check_for_upgrade_once(&self) {
         info!(self.logger, "Checking for release package");
-        match self.check_for_upgrade().await {
-            Ok((new_version, new_subnet)) => {
-                self.replica_version = new_version;
-                // For subnet ID other than None, set that.
-                if let Some((subnet_id, latest_public_key)) = new_subnet {
-                    self.subnet_id = Some(subnet_id);
-                    self.high_threshold_pub_key = Some(latest_public_key)
-                }
-            }
-            Err(e) => info!(
+        if let Err(e) = self.check_for_upgrade().await {
+            warn!(
                 self.logger,
                 "Failed to check for or upgrade to release package: {}", e
-            ),
+            );
         };
+    }
+
+    // Calls a corresponding script to "confirm" that the base OS could boot
+    // successfully. With a confirmation the image will be reverted on the next
+    // restart.
+    fn confirm_boot(&self) {
+        if let Err(err) = Command::new("sudo")
+            .arg(self.ic_binary_dir.join("manageboot.sh").into_os_string())
+            .arg("confirm")
+            .output()
+        {
+            error!(self.logger, "Could not confirm the boot: {:?}", err);
+        }
     }
 }
 
-async fn background_task(mut release_package: ReleasePackage) {
+async fn background_task(release_package: ReleasePackage) {
     loop {
         if !release_package
             .enabled
@@ -467,19 +418,80 @@ async fn background_task(mut release_package: ReleasePackage) {
     }
 }
 
-async fn get_public_key(
-    registry: &Arc<RegistryHelper>,
-    registry_version: RegistryVersion,
-) -> Option<ThresholdSigPublicKey> {
-    registry.get_registry_cup(registry_version).ok().map(|cup| {
-        cup.content
-            .block
-            .get_value()
-            .payload
-            .as_ref()
-            .as_summary()
-            .dkg
-            .current_transcript(&NiDkgTag::HighThreshold)
-            .public_key()
-    })
+// Returns the subnet id for the given CUP.
+fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<SubnetId, String> {
+    let dkg_summary = &cup
+        .content
+        .block
+        .get_value()
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg;
+    // Note that although sometimes CUPs have no signatures (e.g. genesis and
+    // recovery CUPs) they always have the signer id (the DKG id), which is taken
+    // from the high-threshold transcript when we build a genesis/recovery CUP.
+    let dkg_id = cup.signature.signer;
+    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet;
+    // If the DKG key material was signed by the subnet itself — use it, if not, get
+    // the subnet id from the registry.
+    match dkg_id.target_subnet {
+        NiDkgTargetSubnet::Local => Ok(dkg_id.dealer_subnet),
+        // If we hit this case, than the local CUP is a genesis or recovery CUP of an application
+        // subnet. We cannot derive the subnet id from it, so we use the registry version of
+        // that CUP and the node id of one of the high-threshold committee members, to find
+        // out to which subnet this node belongs to.
+        NiDkgTargetSubnet::Remote(_) => {
+            let node_id = dkg_summary
+                .current_transcripts()
+                .values()
+                .next()
+                .ok_or("No current transcript found")?
+                .committee
+                .get()
+                .iter()
+                .next()
+                .ok_or("No nodes in current transcript committee found")?;
+            match registry.get_subnet_id_from_node_id(*node_id, dkg_summary.registry_version) {
+                Ok(Some(subnet_id)) => Ok(subnet_id),
+                other => Err(format!(
+                    "Couldn't get the subnet id from the registry for node {:?}: {:?}",
+                    node_id, other
+                )),
+            }
+        }
+    }
+}
+
+// Checks if the node still belongs to the subnet it was assigned the last
+// time. We decide this by checking the subnet membership starting from the
+// oldest relevant and ending with the newest relevant registry version of the
+// local CUP.
+fn should_node_become_unassigned(
+    registry: &dyn RegistryClient,
+    node_id: NodeId,
+    subnet_id: SubnetId,
+    cup: &CatchUpPackage,
+) -> bool {
+    let dkg_summary = &cup
+        .content
+        .block
+        .get_value()
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg;
+    let oldest_relevant_version = dkg_summary.get_subnet_membership_version().get();
+    // Get the highest registry version relevant for the local CUP.
+    let last_relevant_version = dkg_summary.registry_version.get();
+    for version in oldest_relevant_version..=last_relevant_version {
+        if let Ok(Some(members)) =
+            registry.get_node_ids_on_subnet(subnet_id, RegistryVersion::from(version))
+        {
+            if members.iter().any(|id| id == &node_id) {
+                return false;
+            }
+        }
+    }
+    true
 }

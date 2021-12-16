@@ -23,10 +23,8 @@ use ic_interfaces::{crypto::KeyManager, registry::RegistryClient};
 use ic_logger::{error, info, new_replica_logger, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
-use ic_registry_client::helper::node::NodeRegistry;
-use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_registry_common::local_store::{LocalStore, LocalStoreImpl};
-use ic_types::{consensus::CatchUpPackage, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
+use ic_types::ReplicaVersion;
 use slog_async::AsyncGuard;
 use std::convert::TryFrom;
 use std::env;
@@ -116,23 +114,6 @@ impl NodeManager {
         ));
 
         let replica_version = load_version_from_file(&logger, &args.version_file)?;
-        let local_cup = cup_provider.get_local_cup();
-        if let Some(cup_with_proto) = local_cup {
-            let cup = &cup_with_proto.cup;
-            match get_subnet_id(&*registry.registry_client, cup) {
-                Ok(subnet_id) => {
-                    if !should_node_become_unassigned(
-                        &*registry.registry_client,
-                        node_id,
-                        subnet_id,
-                        cup,
-                    ) {
-                        // unassign node
-                    }
-                }
-                Err(err) => error!(&logger, "Couldn't get the subnet_id: {:?}", err),
-            }
-        }
 
         // we only support the local store data provider
         let local_store_path = if let DataProviderConfig::LocalStore(path) = config
@@ -204,9 +185,9 @@ impl NodeManager {
             replica_process.clone(),
             release_package_provider,
             cup_provider,
-            None, // subnet_id,
             replica_version,
             args.replica_config_file.clone(),
+            node_id,
             ic_binary_directory.clone(),
             nns_registry_replicator,
             logger.clone(),
@@ -290,82 +271,4 @@ impl NodeManager {
 
         (metrics, metrics_runtime)
     }
-}
-
-// Returns the subnet id for the given CUP.
-fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<SubnetId, String> {
-    let dkg_summary = &cup
-        .content
-        .block
-        .get_value()
-        .payload
-        .as_ref()
-        .as_summary()
-        .dkg;
-    // Note that although sometimes CUPs have no signatures (e.g. genesis and
-    // recovery CUPs) they always have the signer id (the DKG id), which is taken
-    // from the high-threshold transcript when we build a genesis/recovery CUP.
-    let dkg_id = cup.signature.signer;
-    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet;
-    // If the DKG key material was signed by the subnet itself — use it, if not, get
-    // the subnet id from the registry.
-    match dkg_id.target_subnet {
-        NiDkgTargetSubnet::Local => Ok(dkg_id.dealer_subnet),
-        // If we hit this case, than the local CUP is a genesis or recovery CUP of an application
-        // subnet. We cannot derive the subnet id from it, so we use the registry version of
-        // that CUP and the node id of one of the high-threshold committee members, to find
-        // out to which subnet this node belongs to.
-        NiDkgTargetSubnet::Remote(_) => {
-            let node_id = dkg_summary
-                .current_transcripts()
-                .values()
-                .next()
-                .ok_or("No current transcript found")?
-                .committee
-                .get()
-                .iter()
-                .next()
-                .ok_or("No nodes in current transcript committee found")?;
-            match registry.get_subnet_id_from_node_id(*node_id, dkg_summary.registry_version) {
-                Ok(Some(subnet_id)) => Ok(subnet_id),
-                other => Err(format!(
-                    "Couldn't get the subnet id from the registry for node {:?}: {:?}",
-                    node_id, other
-                )),
-            }
-        }
-    }
-}
-
-// Checks if the node still belongs to the subnet it was assigned the last
-// time. We decide this by checking the subnet membership starting from the
-// oldest relevant and ending with the newest relevant registry version of the
-// local CUP.
-fn should_node_become_unassigned(
-    registry: &dyn RegistryClient,
-    node_id: NodeId,
-    subnet_id: SubnetId,
-    cup: &CatchUpPackage,
-) -> bool {
-    let dkg_summary = &cup
-        .content
-        .block
-        .get_value()
-        .payload
-        .as_ref()
-        .as_summary()
-        .dkg;
-    let oldest_relevant_version = dkg_summary.get_subnet_membership_version().get();
-    // Get the highest registry version relevant for the local CUP.
-    let last_relevant_version = dkg_summary.registry_version.get();
-    for version in oldest_relevant_version..=last_relevant_version {
-        if let Ok(Some(members)) =
-            registry.get_node_ids_on_subnet(subnet_id, RegistryVersion::from(version))
-        {
-            if members.iter().any(|id| id == &node_id) {
-                return true;
-            }
-        }
-    }
-    false
 }
