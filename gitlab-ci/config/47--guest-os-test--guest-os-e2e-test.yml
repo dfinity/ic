@@ -61,7 +61,7 @@ e2e-workload-test:
 
       mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e"
       # Actual test script, sets up VMs and drives the test.
-      placebo -v -i "${CI_PROJECT_DIR}/ic-os/guestos/tests/*.py" -i "${CI_PROJECT_DIR}/gitlab-runner-tmp/**/*" -- \
+      capsule -v -i "../ic-os/guestos/tests/*.py" -i "**/*" -- \
       "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-workload.py" \
           --vmtoolscfg=internal \
           --disk_image "$(pwd)/disk.img" \
@@ -134,7 +134,7 @@ e2e-scalability-suite-test:
       cd "${CI_PROJECT_DIR}/scalability"
       # Actual test script, sets up VMs and drives the test.
       pip3 install --user -r requirements.txt
-      placebo -v -i "${CI_PROJECT_DIR}/ic-os/guestos/tests/*.py" -i "${CI_PROJECT_DIR}/gitlab-runner-tmp/**/*" -- \
+      capsule -v -i "../ic-os/guestos/tests/*.py" -i "../gitlab-runner-tmp/**/*" -- \
       "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-benchmarking-suite.py" \
           --vmtoolscfg=internal \
           --timeout "$E2E_TEST_TIMEOUT" \
@@ -216,7 +216,7 @@ guest-os-upgrade-to-self:
 
       mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-upgrade-to-self"
       # Actual test script, sets up VMs and drives the test.
-      placebo -v -i "${CI_PROJECT_DIR}/ic-os/guestos/tests/*.py" -i "${CI_PROJECT_DIR}/gitlab-runner-tmp/**/*" -- \
+      capsule -v -i "../ic-os/guestos/tests/*.py" -i "**/*" -- \
       "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-upgrade.py" \
           --vmtoolscfg=internal \
           --disk_image "${GUESTOS_IMG}" \
@@ -312,7 +312,7 @@ guest-os-upgrade-to-master:
 
       mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-upgrade-to-master"
       # Actual test script, sets up VMs and drives the test.
-      placebo -v -i "${CI_PROJECT_DIR}/ic-os/guestos/tests/*.py" -i "${CI_PROJECT_DIR}/gitlab-runner-tmp/**/*" -- \
+      capsule -v -i "../ic-os/guestos/tests/*.py" -i "**/*" -- \
       "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-upgrade.py" \
           --vmtoolscfg=internal \
           --disk_image "${GUESTOS_IMG}" \
@@ -414,7 +414,7 @@ guest-os-upgrade-from-master:
 
       mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-upgrade-from-master"
       # Actual test script, sets up VMs and drives the test.
-      placebo -v -i "${CI_PROJECT_DIR}/ic-os/guestos/tests/*.py" -i "${CI_PROJECT_DIR}/gitlab-runner-tmp/**/*" -- \
+      capsule -v -i "../ic-os/guestos/tests/*.py" -i "**/*" -- \
       "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-upgrade.py" \
           --vmtoolscfg=internal \
           --disk_image "${GUESTOS_IMG}" \
@@ -496,7 +496,7 @@ guest-os-upgrade-app-subnet-to-self:
 
       mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-upgrade-app-subnet-to-self"
       # Actual test script, sets up VMs and drives the test.
-      placebo -v -i "${CI_PROJECT_DIR}/ic-os/guestos/tests/*.py" -i "${CI_PROJECT_DIR}/gitlab-runner-tmp/**/*" -- \
+      capsule -v -i "../ic-os/guestos/tests/*.py" -i "**/*" -- \
       "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-upgrade-appnet.py" \
           --vmtoolscfg=internal \
           --disk_image "${GUESTOS_IMG}" \

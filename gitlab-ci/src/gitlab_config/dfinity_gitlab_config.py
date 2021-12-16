@@ -38,6 +38,15 @@ GITLAB_URL = "https://gitlab.com"
 GITLAB_PROJECT_ID = urllib.parse.quote_plus("25333072")
 
 
+# TODO: this is likely a very poor escape. We should do here exactly the same as GitLab.
+def escape_yaml(content):
+    """Replace double dollar signs with single to unquote YAML strings."""
+    if isinstance(content, str):
+        return content.replace("$$", "$").replace(r'"', r"\"")
+    else:
+        return content
+
+
 class DfinityGitLabConfig:
     """Interface with the GitLab clone of the DFINITY monorepo."""
 
@@ -353,7 +362,7 @@ class DfinityGitLabConfig:
         after_script = job.get("after_script", [])
         if isinstance(after_script, list):
             after_script = "\n".join(after_script)
-        vars = "\n".join([f'export {k}="{v}"' for k, v in job.get("variables", {}).items()])
+        vars = "\n".join([f'export {k}="{escape_yaml(v)}"' for k, v in job.get("variables", {}).items()])
         return """\
 ######################################################
 # CI variables

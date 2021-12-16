@@ -1,0 +1,4 @@
+s3_bucket = "dfinity-capsule-cache"
+s3_bucket_objects = "dfinity-capsule-objects"
+s3_endpoint = "s3.eu-central-1.amazonaws.com"
+s3_region = "eu-central-1"

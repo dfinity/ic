@@ -38,5 +38,5 @@ prod-generic-test:
       # * run it for 120 seconds
       # * require at least 100 RPS
       # * use requests of size 1KB
-      placebo -i "testnet/**/*" -t "${GIT_REVISION}" -i "ic-os/guestos/build-out/disk-img-dev/*" -i "ic-os/generic-guestos/build-out/disk-img/*" -i "artifacts/canisters/*" -i "artifacts/release/*"  -i "artifacts/nix-release/*" -- \
+      capsule -i "testnet/**/*" -t "${GIT_REVISION}" -i "ic-os/guestos/build-out/disk-img-dev/*" -i "ic-os/generic-guestos/build-out/disk-img/*" -i "artifacts/canisters/*" -i "artifacts/release/*"  -i "artifacts/nix-release/*" -- \
       testnet/tests/scripts/generic.sh "$CDPRNET" 120 100 1k artifacts/results

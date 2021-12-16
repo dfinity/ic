@@ -38,7 +38,7 @@ RUN curl -fsSL https://download.dfinity.systems/idl2json/bcb27ac567eba7a7c14c9d7
 RUN curl --fail -sL https://download.dfinity.systems/cdk-rs/${cdk_opt_sha}/ic-cdk-optimizer-linux-amd64.gz | gunzip > /opt/bin/ic-cdk-optimizer && \
     chmod 0755 /opt/bin/ic-cdk-optimizer
 
-RUN curl -fsSL https://gitlab.com/api/v4/projects/29782482/packages/generic/capsule/0.1.10/capsule -o /opt/bin/capsule && \
+RUN curl -fsSL https://gitlab.com/api/v4/projects/29782482/packages/generic/capsule/0.2.4/capsule -o /opt/bin/capsule && \
     chmod +x /opt/bin/capsule && ln -s /usr/bin/capsule /opt/bin/placebo
 
 RUN mkdir /tmp/rocksdb && curl -fsSL https://github.com/facebook/rocksdb/archive/${rocksdb_sha}.tar.gz | tar -xz -C /tmp/rocksdb --strip-components 1

@@ -11,7 +11,7 @@ cargo-clippy-darwin:
 cargo-build-debug-linux:
   extends: .cargo-build-docker
   variables:
-    BUILD_COMMAND: "placebo -i Cargo.lock -i './**/Cargo.toml' -i './**/*.rs' -- cargo build"
+    BUILD_COMMAND: "placebo -i Cargo.lock -i './**/Cargo.toml' -i './**/*.rs'  -o \"$${CARGO_TARGET_DIR}/x86_64-unknown-linux-gnu/debug/*\" -- cargo build"
 
 cargo-build-debug-darwin:
   extends: .cargo-build-macos
@@ -27,7 +27,7 @@ cargo-build-release-linux:
     paths:
       - artifacts/nix-release/*
   variables:
-    BUILD_COMMAND: "placebo -i Cargo.lock -i './**/Cargo.toml' -i './**/*.rs' -- cargo build --release"
+    BUILD_COMMAND: "placebo -i Cargo.lock -i './**/Cargo.toml' -i './**/*.rs' -o \"$${CARGO_TARGET_DIR}/x86_64-unknown-linux-gnu/release/*\" -- cargo build --release"
 
 cargo-build-release-darwin:
   extends: .cargo-build-macos
@@ -44,7 +44,7 @@ cargo-build-release-linux-native:
     - .rules-parent-pipeline-autorun-on-trigger
   image:
     # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2021-11-29-4ef9591-c6b3878cb1aae7cccf27043117da415e8d7e9fd6"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2021-12-15-5da2bdba-a7afb063055bf34fc2f60b4548ebed2578f6bb5a"
   variables:
     BUILD_COMMAND: ""
     ARTIFACT_EXT: ""
@@ -59,7 +59,7 @@ cargo-build-release-linux-native:
 
       if [[ -z "${BUILD_COMMAND}" ]]; then
         buildevents cmd "${PARENT_PIPELINE_ID}" "${CI_JOB_ID}" cargo-build -- \
-        placebo -i Cargo.lock -i "./**/Cargo.toml" -i "./**/*.rs" -- \
+        placebo -i Cargo.lock -i "./**/Cargo.toml" -i "./**/*.rs" -o "${CARGO_TARGET_DIR}/x86_64-unknown-linux-gnu/release/*" -- \
         "$CI_PROJECT_DIR"/gitlab-ci/src/job_scripts/cargo-build-release-linux-native.sh
       else
         buildevents cmd "${PARENT_PIPELINE_ID}" "${CI_JOB_ID}" cargo-build -- bash -c "${BUILD_COMMAND}"
@@ -87,7 +87,7 @@ cargo-build-canisters:
     ARTIFACT_EXT: ""
   image:
     # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2021-11-29-4ef9591-c6b3878cb1aae7cccf27043117da415e8d7e9fd6"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2021-12-15-5da2bdba-a7afb063055bf34fc2f60b4548ebed2578f6bb5a"
   artifacts:
     paths:
       - "artifacts/canisters${ARTIFACT_EXT}/*"
