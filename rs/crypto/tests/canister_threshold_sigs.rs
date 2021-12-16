@@ -215,9 +215,7 @@ fn should_fail_create_transcript_without_enough_signatures() {
             let multisigned_dealing = {
                 let ecdsa_dealing = EcdsaDealing {
                     requested_height: Height::from(1),
-                    dealer_id: *dealer_id,
-                    transcript_id: params.transcript_id(),
-                    dealing: dealing.clone(),
+                    idkg_dealing: dealing.clone(),
                 };
 
                 let signers: BTreeSet<_> = params

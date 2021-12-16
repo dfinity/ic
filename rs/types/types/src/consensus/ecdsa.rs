@@ -19,8 +19,7 @@ use crate::crypto::{
     },
     CombinedMultiSigOf, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
 };
-use crate::Height;
-use ic_base_types::NodeId;
+use crate::{Height, NodeId};
 use phantom_newtype::Id;
 
 pub type EcdsaSignature = CombinedMultiSigOf<IDkgDealing>;
@@ -114,15 +113,9 @@ pub struct EcdsaDealing {
     /// Height of the finalized block that requested the transcript
     pub requested_height: Height,
 
-    /// The node that created the dealing
-    pub dealer_id: NodeId,
-
-    /// The transcript this dealing belongs to
-    pub transcript_id: IDkgTranscriptId,
-
-    /// The dealing
+    /// The crypto dealing
     /// TODO: dealers should send the BasicSigned<> dealing
-    pub dealing: IDkgDealing,
+    pub idkg_dealing: IDkgDealing,
 }
 
 impl SignedBytesWithoutDomainSeparator for EcdsaDealing {

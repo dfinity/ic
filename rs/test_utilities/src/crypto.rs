@@ -38,6 +38,7 @@ use ic_types::crypto::{
 };
 use ic_types::*;
 use ic_types::{NodeId, RegistryVersion};
+use ic_types_test_utils::ids::NODE_1;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
@@ -490,9 +491,14 @@ impl KeyManager for CryptoReturningOk {
 impl IDkgProtocol for CryptoReturningOk {
     fn create_dealing(
         &self,
-        _params: &IDkgTranscriptParams,
+        params: &IDkgTranscriptParams,
     ) -> Result<IDkgDealing, IDkgCreateDealingError> {
-        Ok(dummy_idkg_dealing_for_tests())
+        let dealing = IDkgDealing {
+            transcript_id: params.transcript_id(),
+            dealer_id: NODE_1,
+            internal_dealing_raw: vec![],
+        };
+        Ok(dealing)
     }
 
     fn verify_dealing_public(

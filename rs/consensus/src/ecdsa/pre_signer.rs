@@ -94,7 +94,10 @@ impl EcdsaPreSignerImpl {
         let mut dealing_keys = BTreeSet::new();
         let mut duplicate_keys = BTreeSet::new();
         for (_, dealing) in ecdsa_pool.unvalidated().dealings() {
-            let key = (dealing.transcript_id, dealing.dealer_id);
+            let key = (
+                dealing.idkg_dealing.transcript_id,
+                dealing.idkg_dealing.dealer_id,
+            );
             if !dealing_keys.insert(key) {
                 duplicate_keys.insert(key);
             }
@@ -103,7 +106,10 @@ impl EcdsaPreSignerImpl {
         let mut ret = Vec::new();
         for (id, dealing) in ecdsa_pool.unvalidated().dealings() {
             // Remove the duplicate entries
-            let key = (dealing.transcript_id, dealing.dealer_id);
+            let key = (
+                dealing.idkg_dealing.transcript_id,
+                dealing.idkg_dealing.dealer_id,
+            );
             if duplicate_keys.contains(&key) {
                 self.metrics
                     .pre_sign_errors_inc("duplicate_dealing_in_batch");
@@ -112,7 +118,9 @@ impl EcdsaPreSignerImpl {
                     format!(
                         "Duplicate dealing in unvalidated batch: dealer = {:?}, height = {:?},
                           transcript_id = {:?}",
-                        dealing.dealer_id, dealing.requested_height, dealing.transcript_id
+                        dealing.idkg_dealing.dealer_id,
+                        dealing.requested_height,
+                        dealing.idkg_dealing.transcript_id
                     ),
                 ));
                 continue;
@@ -121,12 +129,12 @@ impl EcdsaPreSignerImpl {
             match Action::action(
                 block_reader,
                 dealing.requested_height,
-                &dealing.transcript_id,
+                &dealing.idkg_dealing.transcript_id,
             ) {
                 Action::Process(transcript_params) => {
                     if transcript_params
                         .dealers()
-                        .position(dealing.dealer_id)
+                        .position(dealing.idkg_dealing.dealer_id)
                         .is_none()
                     {
                         // The node is not in the dealer list for this transcript
@@ -136,13 +144,15 @@ impl EcdsaPreSignerImpl {
                             format!(
                                 "Dealing from unexpected node: dealer = {:?}, height = {:?},
                                   transcript_id = {:?}",
-                                dealing.dealer_id, dealing.requested_height, dealing.transcript_id
+                                dealing.idkg_dealing.dealer_id,
+                                dealing.requested_height,
+                                dealing.idkg_dealing.transcript_id
                             ),
                         ))
                     } else if self.has_dealer_issued_dealing(
                         ecdsa_pool,
-                        &dealing.transcript_id,
-                        &dealing.dealer_id,
+                        &dealing.idkg_dealing.transcript_id,
+                        &dealing.idkg_dealing.dealer_id,
                     ) {
                         // The node already sent a valid dealing for this transcript
                         self.metrics.pre_sign_errors_inc("duplicate_dealing");
@@ -151,7 +161,9 @@ impl EcdsaPreSignerImpl {
                             format!(
                                 "Duplicate dealing: dealer = {:?}, height = {:?},
                                   transcript_id = {:?}",
-                                dealing.dealer_id, dealing.requested_height, dealing.transcript_id
+                                dealing.idkg_dealing.dealer_id,
+                                dealing.requested_height,
+                                dealing.idkg_dealing.transcript_id
                             ),
                         ))
                     } else {
@@ -186,15 +198,17 @@ impl EcdsaPreSignerImpl {
             .filter(|(_, dealing)| {
                 !self.has_node_issued_dealing_support(
                     ecdsa_pool,
-                    &dealing.transcript_id,
-                    &dealing.dealer_id,
+                    &dealing.idkg_dealing.transcript_id,
+                    &dealing.idkg_dealing.dealer_id,
                     &self.node_id,
                 )
             })
             .filter_map(|(id, dealing)| {
                 // Look up the transcript params for the dealing, and check if we
                 // are a receiver for this dealing
-                if let Some(transcript_params) = trancript_param_map.get(&dealing.transcript_id) {
+                if let Some(transcript_params) =
+                    trancript_param_map.get(&dealing.idkg_dealing.transcript_id)
+                {
                     transcript_params
                         .receivers()
                         .position(self.node_id)
@@ -206,9 +220,9 @@ impl EcdsaPreSignerImpl {
                         self.log,
                         "Dealing support creation: transcript_param not found: dealer = {:?},
                           height = {:?}, transcript_id = {:?}",
-                        dealing.dealer_id,
+                        dealing.idkg_dealing.dealer_id,
                         dealing.requested_height,
-                        dealing.transcript_id,
+                        dealing.idkg_dealing.transcript_id,
                     );
                     None
                 }
@@ -229,7 +243,10 @@ impl EcdsaPreSignerImpl {
         // Get the set of valid dealings <TranscriptId, DealerId>
         let mut valid_dealings = BTreeSet::new();
         for (_, dealing) in ecdsa_pool.validated().dealings() {
-            let dealing_key = (dealing.transcript_id, dealing.dealer_id);
+            let dealing_key = (
+                dealing.idkg_dealing.transcript_id,
+                dealing.idkg_dealing.dealer_id,
+            );
             valid_dealings.insert(dealing_key);
         }
 
@@ -239,8 +256,8 @@ impl EcdsaPreSignerImpl {
         for (_, support) in ecdsa_pool.unvalidated().dealing_support() {
             let dealing = &support.content;
             let support_key = (
-                dealing.transcript_id,
-                dealing.dealer_id,
+                dealing.idkg_dealing.transcript_id,
+                dealing.idkg_dealing.dealer_id,
                 support.signature.signer,
             );
             if !supports.insert(support_key) {
@@ -251,10 +268,13 @@ impl EcdsaPreSignerImpl {
         let mut ret = Vec::new();
         for (id, support) in ecdsa_pool.unvalidated().dealing_support() {
             let dealing = &support.content;
-            let dealing_key = (dealing.transcript_id, dealing.dealer_id);
+            let dealing_key = (
+                dealing.idkg_dealing.transcript_id,
+                dealing.idkg_dealing.dealer_id,
+            );
             let support_key = (
-                dealing.transcript_id,
-                dealing.dealer_id,
+                dealing.idkg_dealing.transcript_id,
+                dealing.idkg_dealing.dealer_id,
                 support.signature.signer,
             );
 
@@ -267,9 +287,9 @@ impl EcdsaPreSignerImpl {
                     format!(
                         "Duplicate support in unvalidated batch: dealer = {:?}, height = {:?},
                           transcript_id = {:?}, signer = {:?}",
-                        dealing.dealer_id,
+                        dealing.idkg_dealing.dealer_id,
                         dealing.requested_height,
-                        dealing.transcript_id,
+                        dealing.idkg_dealing.transcript_id,
                         support.signature.signer,
                     ),
                 ));
@@ -279,7 +299,7 @@ impl EcdsaPreSignerImpl {
             match Action::action(
                 block_reader,
                 dealing.requested_height,
-                &dealing.transcript_id,
+                &dealing.idkg_dealing.transcript_id,
             ) {
                 Action::Process(transcript_params) => {
                     if transcript_params
@@ -295,7 +315,9 @@ impl EcdsaPreSignerImpl {
                             format!(
                                 "Support from unexpected node: dealer = {:?}, height = {:?},
                                   transcript_id = {:?}, signer = support.signature.signer",
-                                dealing.dealer_id, dealing.requested_height, dealing.transcript_id
+                                dealing.idkg_dealing.dealer_id,
+                                dealing.requested_height,
+                                dealing.idkg_dealing.transcript_id
                             ),
                         ))
                     } else if !valid_dealings.contains(&dealing_key) {
@@ -303,8 +325,8 @@ impl EcdsaPreSignerImpl {
                         continue;
                     } else if self.has_node_issued_dealing_support(
                         ecdsa_pool,
-                        &dealing.transcript_id,
-                        &dealing.dealer_id,
+                        &dealing.idkg_dealing.transcript_id,
+                        &dealing.idkg_dealing.dealer_id,
                         &support.signature.signer,
                     ) {
                         // The node already sent a valid support for this dealing
@@ -314,9 +336,9 @@ impl EcdsaPreSignerImpl {
                             format!(
                                 "Duplicate support: dealer = {:?}, height = {:?},
                                   transcript_id = {:?}, signer = {:?}",
-                                dealing.dealer_id,
+                                dealing.idkg_dealing.dealer_id,
                                 dealing.requested_height,
-                                dealing.transcript_id,
+                                dealing.idkg_dealing.transcript_id,
                                 support.signature.signer
                             ),
                         ))
@@ -416,12 +438,10 @@ impl EcdsaPreSignerImpl {
                 self.metrics.pre_sign_errors_inc("create_dealing");
                 Default::default()
             },
-            |dealing| {
+            |idkg_dealing| {
                 let dealing = EcdsaDealing {
                     requested_height: block_reader.height(),
-                    transcript_id: transcript_params.transcript_id(),
-                    dealer_id: self.node_id,
-                    dealing,
+                    idkg_dealing,
                 };
                 self.metrics.pre_sign_metrics_inc("dealing_sent");
                 vec![EcdsaChangeAction::AddToValidated(
@@ -438,7 +458,7 @@ impl EcdsaPreSignerImpl {
         transcript_params: &IDkgTranscriptParams,
         dealing: &EcdsaDealing,
     ) -> EcdsaChangeSet {
-        IDkgProtocol::verify_dealing_public(&*self.crypto, transcript_params, &dealing.dealing)
+        IDkgProtocol::verify_dealing_public(&*self.crypto, transcript_params, &dealing.idkg_dealing)
             .map_or_else(
                 |error| {
                     if error.is_replicated() {
@@ -448,9 +468,9 @@ impl EcdsaPreSignerImpl {
                             format!(
                                 "Dealing validation(permanent error): dealer = {:?},
                               height = {:?}, transcript_id = {:?}, error = {:?}",
-                                dealing.dealer_id,
+                                dealing.idkg_dealing.dealer_id,
                                 dealing.requested_height,
-                                dealing.transcript_id,
+                                dealing.idkg_dealing.transcript_id,
                                 error
                             ),
                         )]
@@ -460,9 +480,9 @@ impl EcdsaPreSignerImpl {
                             self.log,
                             "Dealing validation(transient error): dealer = {:?},
                           height = {:?}, transcript_id = {:?}, error = {:?}",
-                            dealing.dealer_id,
+                            dealing.idkg_dealing.dealer_id,
                             dealing.requested_height,
-                            dealing.transcript_id,
+                            dealing.idkg_dealing.transcript_id,
                             error
                         );
                         self.metrics.pre_sign_errors_inc("verify_dealing_transient");
@@ -484,9 +504,11 @@ impl EcdsaPreSignerImpl {
         transcript_params: &IDkgTranscriptParams,
         dealing: &EcdsaDealing,
     ) -> EcdsaChangeSet {
-        if let Err(error) =
-            IDkgProtocol::verify_dealing_private(&*self.crypto, transcript_params, &dealing.dealing)
-        {
+        if let Err(error) = IDkgProtocol::verify_dealing_private(
+            &*self.crypto,
+            transcript_params,
+            &dealing.idkg_dealing,
+        ) {
             if error.is_replicated() {
                 self.metrics
                     .pre_sign_errors_inc("verify_dealing_private_permanent");
@@ -495,7 +517,10 @@ impl EcdsaPreSignerImpl {
                     format!(
                         "Dealing private verification(permanent error): dealer = {:?},
                           height = {:?}, transcript_id = {:?}, error = {:?}",
-                        dealing.dealer_id, dealing.requested_height, dealing.transcript_id, error
+                        dealing.idkg_dealing.dealer_id,
+                        dealing.requested_height,
+                        dealing.idkg_dealing.transcript_id,
+                        error
                     ),
                 )];
             } else {
@@ -505,9 +530,9 @@ impl EcdsaPreSignerImpl {
                     self.log,
                     "Dealing private verification(transient error): dealer = {:?},
                           height = {:?}, transcript_id = {:?}, error = {:?}",
-                    dealing.dealer_id,
+                    dealing.idkg_dealing.dealer_id,
                     dealing.requested_height,
-                    dealing.transcript_id,
+                    dealing.idkg_dealing.transcript_id,
                     error
                 );
                 return Default::default();
@@ -523,9 +548,9 @@ impl EcdsaPreSignerImpl {
                         self.log,
                         "Dealing multi sign failed: dealer = {:?},
                           height = {:?}, transcript_id = {:?}, error = {:?}",
-                        dealing.dealer_id,
+                        dealing.idkg_dealing.dealer_id,
                         dealing.requested_height,
-                        dealing.transcript_id,
+                        dealing.idkg_dealing.transcript_id,
                         error
                     );
                     self.metrics
@@ -563,9 +588,9 @@ impl EcdsaPreSignerImpl {
                         format!(
                             "Support validation failed: dealer = {:?},
                           height = {:?}, transcript_id = {:?}, signer = {:?}, error = {:?}",
-                            dealing.dealer_id,
+                            dealing.idkg_dealing.dealer_id,
                             dealing.requested_height,
-                            dealing.transcript_id,
+                            dealing.idkg_dealing.transcript_id,
                             support.signature.signer,
                             error
                         ),
@@ -619,7 +644,8 @@ impl EcdsaPreSignerImpl {
         dealer_id: &NodeId,
     ) -> bool {
         ecdsa_pool.validated().dealings().any(|(_, dealing)| {
-            dealing.dealer_id == *dealer_id && dealing.transcript_id == *transcript_id
+            dealing.idkg_dealing.dealer_id == *dealer_id
+                && dealing.idkg_dealing.transcript_id == *transcript_id
         })
     }
 
@@ -636,8 +662,8 @@ impl EcdsaPreSignerImpl {
             .validated()
             .dealing_support()
             .any(|(_, support)| {
-                support.content.dealer_id == *dealer_id
-                    && support.content.transcript_id == *transcript_id
+                support.content.idkg_dealing.dealer_id == *dealer_id
+                    && support.content.idkg_dealing.transcript_id == *transcript_id
                     && support.signature.signer == *node_id
             })
     }
@@ -649,7 +675,8 @@ impl EcdsaPreSignerImpl {
         current_height: Height,
         in_progress: &BTreeSet<IDkgTranscriptId>,
     ) -> bool {
-        dealing.requested_height <= current_height && !in_progress.contains(&dealing.transcript_id)
+        dealing.requested_height <= current_height
+            && !in_progress.contains(&dealing.idkg_dealing.transcript_id)
     }
 }
 
@@ -816,10 +843,11 @@ impl<'a> EcdsaTranscriptBuilder for EcdsaTranscriptBuilderImpl<'a> {
 
         // Step 1: Build the verified dealings from the support shares
         for (_, dealing) in ecdsa_pool.validated().dealings() {
-            let transcript_state = match trancript_state_map.get_mut(&dealing.transcript_id) {
-                Some(state) => state,
-                None => continue,
-            };
+            let transcript_state =
+                match trancript_state_map.get_mut(&dealing.idkg_dealing.transcript_id) {
+                    Some(state) => state,
+                    None => continue,
+                };
 
             // Collect the shares for this dealing and aggregate the shares
             // TODO: do preprocessing to avoid repeated walking of the
@@ -828,8 +856,9 @@ impl<'a> EcdsaTranscriptBuilder for EcdsaTranscriptBuilderImpl<'a> {
                 .validated()
                 .dealing_support()
                 .filter_map(|(_, support)| {
-                    if support.content.transcript_id == dealing.transcript_id
-                        && support.content.dealer_id == dealing.dealer_id
+                    if support.content.idkg_dealing.transcript_id
+                        == dealing.idkg_dealing.transcript_id
+                        && support.content.idkg_dealing.dealer_id == dealing.idkg_dealing.dealer_id
                     {
                         Some(support)
                     } else {
@@ -946,7 +975,7 @@ impl<'a> TranscriptState<'a> {
             signature: multi_sig,
         };
         self.completed_dealings
-            .insert(dealing.dealer_id, verified_dealing.into());
+            .insert(dealing.idkg_dealing.dealer_id, verified_dealing.into());
     }
 }
 

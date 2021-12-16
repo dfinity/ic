@@ -220,7 +220,7 @@ fn internal_dealings_by_index_from_dealings(
         .iter()
         .map(|(id, d)| {
             let internal_dealing =
-                deserialize_internal_dealing(&d.dealing.dealing.internal_dealing_raw)?;
+                deserialize_internal_dealing(&d.dealing.idkg_dealing.internal_dealing_raw)?;
             let index = id_to_index(*id, dealers, op_type)?;
             Ok((index, internal_dealing))
         })
@@ -324,7 +324,7 @@ fn complaints_from_internal_complaints(
         let verified_dealing = verified_dealings
             .get(&index)
             .expect("We already know this is proper dealer");
-        Ok(verified_dealing.dealing.dealer_id)
+        Ok(verified_dealing.dealing.idkg_dealing.dealer_id)
     }
 
     internal_complaints
