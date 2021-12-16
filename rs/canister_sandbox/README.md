@@ -18,7 +18,7 @@ per canister.
   organized as a library crate, with the main crate just calling its
   entry point.
 
-- `replica_controller2` implements the replica side control of the sandbox
+- `replica_controller` implements the replica side control of the sandbox
   mechanism. It provides on the one hand the API "glue" towards the execution
   layer, and on the other hand all logic to manage and talk to the backend
   processes. This also includes starting the backend processes.

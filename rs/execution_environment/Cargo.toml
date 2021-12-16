@@ -5,7 +5,7 @@ edition = "2018"
 
 [dependencies]
 candid = "0.7.4"
-ic-canister-sandbox-replica-controller2 = { path = "../canister_sandbox/replica_controller2" }
+ic-canister-sandbox-replica-controller = { path = "../canister_sandbox/replica_controller" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-cow-state = { path = "../cow_state" }

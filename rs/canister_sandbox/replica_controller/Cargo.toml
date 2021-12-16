@@ -1,5 +1,5 @@
 [package]
-name = "ic-canister-sandbox-replica-controller2"
+name = "ic-canister-sandbox-replica-controller"
 version = "0.8.0"
 edition = "2018"
 

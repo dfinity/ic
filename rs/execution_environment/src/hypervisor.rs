@@ -1,5 +1,5 @@
 use crate::QueryExecutionType;
-use ic_canister_sandbox_replica_controller2::sandboxed_execution_controller::SandboxedExecutionController;
+use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
 use ic_config::feature_status::FeatureStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cow_state::{error::CowError, CowMemoryManager};
