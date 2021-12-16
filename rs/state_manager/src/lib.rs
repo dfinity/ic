@@ -71,12 +71,16 @@ use std::{
 /// It is exported as public for use in tests and benchmarks.
 pub const NUMBER_OF_CHECKPOINT_THREADS: u32 = 16;
 
-/// Name of the error metric counting unexpectedly corrupted chunks
-const STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_chunks";
+/// Critical error tracking mismatches between reused and recomputed chunk
+/// hashes during manifest computation.
+const CRITICAL_ERROR_REUSED_CHUNK_HASH: &str =
+    "state_manager_manifest_reused_chunk_hash_error_count";
 
-/// Name of the error metrics counting checkpoints expected on disk but not
-/// found
-const MISSING_CHECKPOINTS: &str = "state_manager_missing_checkpoints";
+/// Critical error tracking unexpectedly corrupted chunks.
+const CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_chunks";
+
+/// Critical error tracking checkpoints expected to be on disk but not found.
+const CRITICAL_ERROR_MISSING_CHECKPOINTS: &str = "state_manager_missing_checkpoints";
 
 #[derive(Clone)]
 pub struct StateManagerMetrics {
@@ -203,7 +207,8 @@ impl StateManagerMetrics {
             "Total size of the state on disk in bytes.",
         );
 
-        let missing_checkpoints = metrics_registry.error_counter(MISSING_CHECKPOINTS);
+        let missing_checkpoints =
+            metrics_registry.error_counter(CRITICAL_ERROR_MISSING_CHECKPOINTS);
 
         Self {
             state_manager_error_count,
@@ -230,7 +235,7 @@ impl ManifestMetrics {
             hashed_chunk_bytes: metrics_registry.int_counter(
                 "state_manager_manifest_hashed_chunk_bytes",
                 "Size of chunks hashed during the manifest computation because no previously \
-		 computed hash was available.",
+                		 computed hash was available.",
             ),
             reused_chunk_bytes: metrics_registry.int_counter(
                 "state_manager_manifest_reused_chunk_bytes",
@@ -239,12 +244,12 @@ impl ManifestMetrics {
             hashed_and_compared_chunk_bytes: metrics_registry.int_counter(
                 "state_manager_manifest_hashed_and_compared_chunk_bytes",
                 "Size of chunks that we hashed during the manifest computation in order to compare \
-		 it to a previously computed hash.",
+		                it to a previously computed hash.",
             ),
             // Count of the chunks which have a mismatch between the recomputed hash and the reused
             // one.
             reused_chunk_hash_error_count: metrics_registry
-                .error_counter("state_manager_manifest_reused_chunk_hash_error_count"),
+                .error_counter(CRITICAL_ERROR_REUSED_CHUNK_HASH),
         }
     }
 }
@@ -281,7 +286,7 @@ impl StateSyncMetrics {
         }
 
         let state_sync_corrupted_chunks =
-            metrics_registry.error_counter(STATE_SYNC_CORRUPTED_CHUNKS);
+            metrics_registry.error_counter(CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS);
 
         Self {
             state_sync_size,
@@ -1387,9 +1392,9 @@ impl StateManagerImpl {
         for h in metadata_to_remove {
             error!(
                 log,
-                "Missing checkpoint at height {} during startup. Incrementing {}.",
-                h,
-                MISSING_CHECKPOINTS
+                "{}: Missing checkpoint at height {} during startup.",
+                CRITICAL_ERROR_MISSING_CHECKPOINTS,
+                h
             );
             metrics.missing_checkpoints.inc();
             metadata.remove(&h);

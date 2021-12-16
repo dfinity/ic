@@ -4,14 +4,14 @@ pub mod hash;
 mod tests;
 
 use super::CheckpointError;
-use crate::{DirtyPages, ManifestMetrics};
+use crate::{DirtyPages, ManifestMetrics, CRITICAL_ERROR_REUSED_CHUNK_HASH};
 use bit_vec::BitVec;
 use hash::{
     chunk_hasher, cow_chunk_hasher, cow_file_hasher, file_hasher, manifest_hasher, ManifestHash,
 };
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
 use ic_crypto_sha::Sha256;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{error, ReplicaLogger};
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_types::{
@@ -323,22 +323,23 @@ fn build_chunk_table_parallel(
                 chunk_info.hash = match chunk_action {
                     ChunkAction::Recompute => recompute_chunk_hash(),
                     ChunkAction::RecomputeAndCompare(precomputed_hash) => {
-			let recomputed_hash = recompute_chunk_hash();
-			debug_assert_eq!(recomputed_hash, precomputed_hash);
+                        let recomputed_hash = recompute_chunk_hash();
+                        debug_assert_eq!(recomputed_hash, precomputed_hash);
                         if recomputed_hash != precomputed_hash {
                             metrics.reused_chunk_hash_error_count.inc();
-                            warn!(
+                            error!(
                                 log,
-                                "Hash mismatch in chunk with index {} in file {}, recomputed hash {:?}, reused hash {:?}",
+                                "{}: Hash mismatch in chunk with index {} in file {}, recomputed hash {:?}, reused hash {:?}",
+                                CRITICAL_ERROR_REUSED_CHUNK_HASH,
                                 chunk_idx,
                                 file_path.display(),
                                 chunk_info.hash,
                                 precomputed_hash
                             );
                         }
-			recomputed_hash
+                        recomputed_hash
                     }
-		    ChunkAction::UseHash(precomputed_hash) => precomputed_hash,
+                    ChunkAction::UseHash(precomputed_hash) => precomputed_hash,
                 };
             });
         }
@@ -413,9 +414,10 @@ fn build_chunk_table_sequential(
                         debug_assert_eq!(recomputed_chunk_hash, reused_chunk_hash);
                         if recomputed_chunk_hash != reused_chunk_hash {
                             metrics.reused_chunk_hash_error_count.inc();
-                            warn!(
+                            error!(
                                 log,
-                                "Hash mismatch in chunk with index {} in file {}, recomputed hash {:?}, reused hash {:?}",
+                                "{}: Hash mismatch in chunk with index {} in file {}, recomputed hash {:?}, reused hash {:?}",
+                                CRITICAL_ERROR_REUSED_CHUNK_HASH,
                                 chunk_index,
                                 relative_path.display(),
                                 recomputed_chunk_hash,

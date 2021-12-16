@@ -1,6 +1,6 @@
 use crate::{
     manifest::{filter_out_zero_chunks, DiffScript},
-    CheckpointRef, StateSyncMetrics, StateSyncRefs, STATE_SYNC_CORRUPTED_CHUNKS,
+    CheckpointRef, StateSyncMetrics, StateSyncRefs, CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS,
 };
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
 use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
@@ -307,25 +307,25 @@ impl IncompleteState {
 
                                 if src_data.len() < byte_range.end {
                                     warn!(
-					log,
-					"Local chunk {} ({}@{}—{}) is out of range (file len = {}), \
-					 will request chunk {} instead",
-					idx,
-					src_path.display(),
-					byte_range.start,
-					byte_range.end,
-					src_data.len(),
-					new_chunk_idx + 1
+                                        log,
+                                        "Local chunk {} ({}@{}—{}) is out of range (file len = {}), \
+                                        will request chunk {} instead",
+                                        idx,
+                                        src_path.display(),
+                                        byte_range.start,
+                                        byte_range.end,
+                                        src_data.len(),
+                                        new_chunk_idx + 1
                                     );
                                     bad_chunks.push(idx);
                                     corrupted_chunks.lock().unwrap().push(new_chunk_idx + 1);
                                     if !validate_data && ALWAYS_VALIDATE {
                                         error!(
                                             log,
-					    "Unexpected chunk validation error for local chunk {}. Incrementing error metric {}",
-					    idx,
-					    STATE_SYNC_CORRUPTED_CHUNKS,
-					);
+                                            "{}: Unexpected chunk validation error for local chunk {}",
+                                            CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS,
+                                            idx,
+                                        );
                                         metrics.state_sync_corrupted_chunks.inc();
                                     }
                                     continue;
@@ -339,7 +339,7 @@ impl IncompleteState {
                                     warn!(
                                         log,
                                         "Local chunk {} ({}@{}–{}) doesn't pass validation: {}, \
-					 will request chunk {} instead",
+                    					 will request chunk {} instead",
                                         idx,
                                         src_path.display(),
                                         byte_range.start,
@@ -353,10 +353,10 @@ impl IncompleteState {
                                     if !validate_data && ALWAYS_VALIDATE {
                                         error!(
                                             log,
-					    "Unexpected chunk validation error for local chunk {}. Incrementing error metric {}",
-					    idx,
-					    STATE_SYNC_CORRUPTED_CHUNKS,
-					);
+                                            "{}: Unexpected chunk validation error for local chunk {}",
+                                            CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS,
+                                            idx,
+                                        );
                                         metrics.state_sync_corrupted_chunks.inc();
                                     }
                                 }
@@ -408,13 +408,13 @@ impl IncompleteState {
 
                                     dst.write_at(data, chunk.offset).unwrap_or_else(|err| {
                                         fatal!(
-					    log,
-					    "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
-					    chunk.offset,
-					    chunk.size_bytes,
-					    dst_path.display(),
-					    err
-					)
+                                            log,
+                                            "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
+                                            chunk.offset,
+                                            chunk.size_bytes,
+                                            dst_path.display(),
+                                            err
+                                        )
                                     });
                                     metrics.state_sync_remaining.sub(1);
                                 }
@@ -559,7 +559,7 @@ impl IncompleteState {
                             warn!(
                                 log,
                                 "Local chunk {} ({}@{}—{}) is out of range (file len = {}), \
-                         will request chunk {} instead",
+                                     will request chunk {} instead",
                                 *src_chunk_index,
                                 src_path.display(),
                                 byte_range.start,
@@ -582,7 +582,7 @@ impl IncompleteState {
                                 warn!(
                                     log,
                                     "Local chunk {} ({}@{}–{}) doesn't pass validation: {}, \
-				     will request chunk {} instead",
+			                    	     will request chunk {} instead",
                                     *src_chunk_index,
                                     src_path.display(),
                                     byte_range.start,
@@ -594,11 +594,11 @@ impl IncompleteState {
                                 corrupted_chunks.lock().unwrap().push(*dst_chunk_index + 1);
                                 if !validate_data && ALWAYS_VALIDATE {
                                     error!(
-                                            log,
-					    "Unexpected chunk validation error for local chunk {}. Incrementing error metric {}",
-					    *src_chunk_index,
-					    STATE_SYNC_CORRUPTED_CHUNKS,
-					);
+                                        log,
+                                        "{}: Unexpected chunk validation error for local chunk {}.",
+                                        CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS,
+                                        *src_chunk_index,
+                                    );
                                     metrics.state_sync_corrupted_chunks.inc();
                                 }
                                 continue;
