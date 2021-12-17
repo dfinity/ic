@@ -213,33 +213,34 @@ NOTE: This operation is idempotent.
 
 ## Accessing neuron attributes
 
-Use `/neuron/info` endpoint to access the staked amount and publicly available neuron metadata.
+Use `/account/balance` endpoint to access the staked amount and publicly available neuron metadata.
 
 Preconditions
   * `public_key` contains the public key of a neuron's controller.
 
-NOTE: This operation is only available in online mode.
+NOTE: This operation is available only in online mode.
 
 ### Request
 
 NOTE: The request should not specify any block identifier because the endpoint always returns the latest state of the neuron.
 
 ```json
-{
+ {
   "network_identifier": {
     "blockchain": "Internet Computer",
-    "network": "00000000000000010101",
+    "network": "00000000000000020101"
   },
-  "public_key": {
-    "hex_bytes": "1b400d60aaf34eaf6dcbab9bba46001a23497886cf11066f7846933d30e5ad3f",
-    "curve_type": "edwards25519"
+  "account_identifier": {
+    "address": "a4ac33c6a25a102756e3aac64fe9d3267dbef25392d031cfb3d2185dba93b4c4"
   },
-  "currencies": [
-    {
-      "symbol": "ICP",
-      "decimals": 8
+  "metadata": {
+    "account_type": "neuron",
+    "neuron_index": 1,
+    "public_key": {
+      "hex_bytes": "ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d",
+      "curve_type": "edwards25519"
     }
-  ]
+  }
 }
 ```
 
@@ -248,12 +249,12 @@ NOTE: The request should not specify any block identifier because the endpoint a
 ```json
 {
   "block_identifier": {
-    "index": 1123941,
-    "hash": "1f2cc6c5027d2f201a5453ad1119574d2aed23a392654742ac3c78783c071f85"
+    "index": 1150,
+    "hash": "ca02e34bafa2f58b18a66073deb5f389271ee74bd59a024f9f7b176a890039b2"
   },
   "balances": [
     {
-      "value": "1238089899992",
+      "value": "100000000",
       "currency": {
         "symbol": "ICP",
         "decimals": 8
@@ -261,11 +262,13 @@ NOTE: The request should not specify any block identifier because the endpoint a
     }
   ],
   "metadata": {
-    "state": "NON_DISSOLVING",
-    "dissolve_delay_seconds": "126230400",
-    "age_seconds": "15778800",
-    "voting_power": "1238089899992",
-    "retrieved_at_utc_seconds": "1627506488"
+    "verified_query": false,
+    "retrieved_at_timestamp_seconds": 1639670156,
+    "state": "DISSOLVING",
+    "age_seconds": 0,
+    "dissolve_delay_seconds": 240269355,
+    "voting_power": 195170955,
+    "created_timestamp_seconds": 1638802541
   }
 }
 ```

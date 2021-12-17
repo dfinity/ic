@@ -28,8 +28,9 @@ use convert::to_arg;
 use dfn_candid::CandidOne;
 use errors::ApiError;
 use ic_interfaces::crypto::DOMAIN_IC_REQUEST;
+use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::{
-    manage_neuron::{self, configure, Command},
+    manage_neuron::{self, configure, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
 use ic_types::messages::{
@@ -168,25 +169,69 @@ impl RosettaRequestHandler {
     ) -> Result<AccountBalanceResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
 
-        let neuron_info =
-            if let Some::<NeuronInfoRequest>(neuron_info_request) = msg.metadata.clone() {
-                if let Some((pk, nidx)) = &neuron_info_request.public_key_and_neuron_index {
+        let neuron_info_request_params = match msg.metadata.clone().unwrap_or_default().account_type
+        {
+            BalanceAccountType::Ledger => None,
+            BalanceAccountType::Neuron {
+                neuron_id,
+                subaccount_components,
+                verified_query,
+            } => {
+                let verified = verified_query.unwrap_or(false);
+
+                if let Some(NeuronSubaccountComponents {
+                    public_key,
+                    neuron_index,
+                }) = subaccount_components
+                {
                     let addr_from_pk = neuron_account_from_public_key(
                         self.ledger.governance_canister_id(),
-                        pk,
-                        *nidx,
+                        &public_key,
+                        neuron_index,
                     )?;
+
                     if addr_from_pk != msg.account_identifier {
                         return Err(ApiError::invalid_account_id(
                             "Account identifier does not match the public key + neuron index"
                                 .to_string(),
                         ));
                     }
+                    if neuron_id.is_some() {
+                        return Err(ApiError::invalid_request(
+                                "Only one of neuron_id or the combination of public_key and neuron_index must be present",
+                        ));
+                    }
+
+                    let neuron_subaccount =
+                        crate::convert::neuron_subaccount_bytes_from_public_key(
+                            &public_key,
+                            neuron_index,
+                        )?;
+
+                    Some((
+                        NeuronIdOrSubaccount::Subaccount(neuron_subaccount.to_vec()),
+                        verified,
+                    ))
+                } else {
+                    match neuron_id {
+                        Some(id) => {
+                            Some((NeuronIdOrSubaccount::NeuronId(NeuronId { id }), verified))
+                        }
+                        None => {
+                            return Err(ApiError::invalid_request(
+                                "Invalid neuron account balance request: either neuron_id or public_key must be present",
+                            ));
+                        }
+                    }
                 }
-                Some(self.neuron_info(neuron_info_request).await?)
-            } else {
-                None
-            };
+            }
+        };
+
+        let neuron_info = if let Some((neuron_id, verified)) = neuron_info_request_params {
+            Some(self.neuron_info(neuron_id, verified).await?)
+        } else {
+            None
+        };
 
         let account_id = ledger_canister::AccountIdentifier::from_hex(
             &msg.account_identifier.address,
@@ -1472,23 +1517,33 @@ impl RosettaRequestHandler {
 
     pub async fn neuron_info(
         &self,
-        msg: models::NeuronInfoRequest,
+        neuron_id: NeuronIdOrSubaccount,
+        verified: bool,
     ) -> Result<NeuronInfoResponse, ApiError> {
-        let nacc_id = msg.get_neuron_id_or_subaccount()?;
-        let verified = msg.verified_query.unwrap_or(false);
+        let res = self.ledger.neuron_info(neuron_id, verified).await?;
 
-        let res = self.ledger.neuron_info(nacc_id, verified).await?;
+        use ic_nns_governance::pb::v1::NeuronState as PbNeuronState;
+        let state = match PbNeuronState::from_i32(res.state) {
+            Some(PbNeuronState::NotDissolving) => NeuronState::NotDissolving,
+            Some(PbNeuronState::Dissolving) => NeuronState::Dissolving,
+            Some(PbNeuronState::Dissolved) => NeuronState::Dissolved,
+            Some(PbNeuronState::Unspecified) | None => {
+                return Err(ApiError::internal_error(format!(
+                    "unsupported neuron state code: {}",
+                    res.state
+                )))
+            }
+        };
 
-        let resp = NeuronInfoResponse {
+        Ok(NeuronInfoResponse {
             verified_query: verified,
             retrieved_at_timestamp_seconds: res.retrieved_at_timestamp_seconds,
-            state: res.state,
+            state,
             age_seconds: res.age_seconds,
             dissolve_delay_seconds: res.dissolve_delay_seconds,
             voting_power: res.voting_power,
             created_timestamp_seconds: res.created_timestamp_seconds,
-        };
-        Ok(resp)
+        })
     }
 }
 
