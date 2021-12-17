@@ -46,7 +46,7 @@ pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
     ));
 
     let app_endpoint = util::get_random_application_node_endpoint(&handle, &mut rng);
-    rt.block_on(nns_endpoint.assert_ready(ctx));
+    rt.block_on(app_endpoint.assert_ready(ctx));
     let agent = rt.block_on(util::assert_create_agent(app_endpoint.url.as_str()));
     let can1 = util::block_on(util::UniversalCanister::new(&agent));
     let can2 = util::block_on(util::UniversalCanister::new(&agent));
