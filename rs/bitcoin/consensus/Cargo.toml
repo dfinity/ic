@@ -1,0 +1,14 @@
+[package]
+name = "ic-btc-consensus"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+ic-interfaces = { path = "../../interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-types = { path = "../../types/types" }
+prometheus = { version = "0.12.0", features = [ "process" ] }
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+thiserror = "1.0"
