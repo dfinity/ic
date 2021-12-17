@@ -3,19 +3,17 @@ package registry.replica_version.v1;
 
 // Information about a Replica version
 message ReplicaVersionRecord {
-    // The URL against which a HTTP GET request will return a replica binary
-    // that corresponds to this version
-    string binary_url = 1;
+    reserved "binary_url";
+    reserved 1;
 
-    // The hex-formatted SHA-256 hash of the binary served by 'binary_url'
-    string sha256_hex = 2;
+    reserved "sha256_hex";
+    reserved 2;
 
-    // The URL against which a HTTP GET request will return a node manager binary
-    // that corresponds to this version
-    string node_manager_binary_url = 3;
+    reserved "node_manager_binary_url";
+    reserved 3;
 
-    // The hex-formatted SHA-256 hash of the binary served by 'node_manager_binary_url'
-    string node_manager_sha256_hex = 4;
+    reserved "node_manager_sha256_hex";
+    reserved 4;
 
     // The URL against which a HTTP GET request will return a release package
     // that corresponds to this version

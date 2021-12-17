@@ -39,11 +39,6 @@ fn test_the_anonymous_user_cannot_bless_a_version() {
 
         let payload = BlessReplicaVersionPayload {
             replica_version_id: "version_43".to_string(),
-            binary_url: "http://megaupload.com/replica_version_43_definitely_not_a_scam"
-                .to_string(),
-            sha256_hex: "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1".into(),
-            node_manager_binary_url: "".into(),
-            node_manager_sha256_hex: "".into(),
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
         };
@@ -109,10 +104,6 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_bless_a_version() {
         .await;
         let payload = BlessReplicaVersionPayload {
             replica_version_id: "version_43".to_string(),
-            binary_url: "http://invalid/replica_version_43_definitely_not_a_scam".to_string(),
-            sha256_hex: "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1".into(),
-            node_manager_binary_url: "".into(),
-            node_manager_sha256_hex: "".into(),
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
         };
@@ -165,11 +156,6 @@ fn test_accepted_proposal_mutates_the_registry() {
         // We can bless a new version, the version already in the registry is 42
         let payload_v43 = BlessReplicaVersionPayload {
             replica_version_id: "version_43".to_string(),
-            binary_url: "http://megaupload.com/replica_version_43_definitely_not_a_scam"
-                .to_string(),
-            sha256_hex: MOCK_HASH.into(),
-            node_manager_binary_url: "http://nodemanager.tar.gz".into(),
-            node_manager_sha256_hex: MOCK_HASH.into(),
             release_package_url: "http://release_package.tar.gz".into(),
             release_package_sha256_hex: MOCK_HASH.into(),
         };
@@ -196,10 +182,6 @@ fn test_accepted_proposal_mutates_the_registry() {
         // Trying to mutate an existing record should have no effect.
         let payload_v42_mutate = BlessReplicaVersionPayload {
             replica_version_id: "version_42".to_string(),
-            binary_url: "http://megaupload.com/new_version_42_definitely_not_a_scam".to_string(),
-            sha256_hex: MOCK_HASH.into(),
-            node_manager_binary_url: "http://nodemanager.tar.gz".into(),
-            node_manager_sha256_hex: MOCK_HASH.into(),
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
         };
@@ -220,11 +202,6 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await,
             ReplicaVersionRecord {
-                sha256_hex: MOCK_HASH.into(),
-                binary_url: "http://megaupload.com/replica_version_42_definitely_not_a_scam"
-                    .to_string(),
-                node_manager_binary_url: "http://nodemanager.tar.gz".into(),
-                node_manager_sha256_hex: MOCK_HASH.into(),
                 release_package_url: "http://release_package.tar.gz".into(),
                 release_package_sha256_hex: MOCK_HASH.into(),
             }

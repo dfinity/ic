@@ -190,14 +190,6 @@ pub struct IcConfig {
     ///
     /// The version id of the initial replica.
     initial_replica_version_id: ReplicaVersion,
-    /// The URL of the initial replica version.
-    initial_replica_download_url: Url,
-    /// The hash of the initial replica version.
-    initial_replica_hash: Option<String>,
-    /// The URL of the initial nodemanager version.
-    initial_nodemanager_url: Option<Url>,
-    /// The hash of the initial nodemanager version.
-    initial_nodemanager_sha256_hex: Option<String>,
     /// The URL of the initial release package.
     initial_release_package_url: Option<Url>,
     /// The hash of the initial release package.
@@ -300,12 +292,8 @@ impl IcConfig {
         target_dir: P,
         topology_config: TopologyConfig,
         replica_version_id: Option<ReplicaVersion>,
-        replica_download_url: Option<Url>,
-        replica_hash: Option<String>,
         generate_subnet_records: bool,
         nns_subnet_index: Option<u64>,
-        nodemanager_url: Option<Url>,
-        nodemanager_sha256_hex: Option<String>,
         release_package_url: Option<Url>,
         release_package_sha256_hex: Option<String>,
         provisional_whitelist: Option<ProvisionalWhitelist>,
@@ -317,13 +305,8 @@ impl IcConfig {
             target_dir: PathBuf::from(target_dir.as_ref()),
             topology_config,
             initial_replica_version_id: replica_version_id.unwrap_or_else(ReplicaVersion::default),
-            initial_replica_download_url: replica_download_url
-                .unwrap_or_else(|| Url::parse("http://example.internetcomputer.org").unwrap()),
-            initial_replica_hash: replica_hash,
             generate_subnet_records,
             nns_subnet_index,
-            initial_nodemanager_url: nodemanager_url,
-            initial_nodemanager_sha256_hex: nodemanager_sha256_hex,
             initial_release_package_url: release_package_url,
             initial_release_package_sha256_hex: release_package_sha256_hex,
             initial_registry_node_operator_entries: Vec::new(),
@@ -452,13 +435,6 @@ impl IcConfig {
         );
 
         let replica_version_record = ReplicaVersionRecord {
-            binary_url: self.initial_replica_download_url.to_string(),
-            sha256_hex: self.initial_replica_hash.unwrap_or_default(),
-            node_manager_binary_url: self
-                .initial_nodemanager_url
-                .map(|url| url.to_string())
-                .unwrap_or_default(),
-            node_manager_sha256_hex: self.initial_nodemanager_sha256_hex.unwrap_or_default(),
             release_package_url: self
                 .initial_release_package_url
                 .map(|url| url.to_string())

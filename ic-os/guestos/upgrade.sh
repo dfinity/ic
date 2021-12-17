@@ -110,7 +110,7 @@ export TMP=$(mktemp -d)
 download_binaries
 
 $TMP/ic-admin --nns-url $NNS_URL propose-to-bless-replica-version-flexible \
-    --test-neuron-proposer $VERSION foo foo foo foo \
+    --test-neuron-proposer $VERSION \
     $UPGRADE_URL $SHA256 2>&1 | tee $TMP/blessing.log
 
 export PROPOSAL_ID=$(grep '^proposal' $TMP/blessing.log | awk '{print $2}')

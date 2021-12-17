@@ -41,29 +41,21 @@ pub(crate) fn check_replica_version_invariants(
     versions.extend(blessed_version_ids);
     versions.dedup();
 
-    for version in versions {
-        let r = get_replica_version_record(snapshot, version);
+    // Check whether release package URL (iso image) and corresponding
+    // hash is well-formed. As file-based URLs are only used in
+    // test-deployments, we disallow file:/// URLs.
+    if strict {
+        for version in versions {
+            let r = get_replica_version_record(snapshot, version);
 
-        // An entry where all URLs are unspecified is invalid.
-        if r.binary_url.is_empty()
-            && r.node_manager_binary_url.is_empty()
-            && r.release_package_url.is_empty()
-        {
-            return Err(InvariantCheckError {
-                msg: "at least one URL must be set".to_string(),
-                source: None,
-            });
-        }
+            // An entry where all URLs are unspecified is invalid.
+            if r.release_package_url.is_empty() {
+                return Err(InvariantCheckError {
+                    msg: "release package URL must be set".to_string(),
+                    source: None,
+                });
+            }
 
-        if strict {
-            // Assert that URL and hash of the replica binary is well-formed.
-            // Allow file:/// URLs.
-            assert_valid_url_and_hash(&r.binary_url, &r.sha256_hex, true);
-            // dito for nodemanager. Allow file:/// URLs.
-            assert_valid_url_and_hash(&r.node_manager_binary_url, &r.node_manager_sha256_hex, true);
-            // Check whether release package URL (iso image) and corresponding
-            // hash is well-formed. As file-based URLs are only used in
-            // test-deployments, we disallow file:/// URLs.
             assert_valid_url_and_hash(&r.release_package_url, &r.release_package_sha256_hex, false);
         }
     }

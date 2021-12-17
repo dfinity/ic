@@ -622,14 +622,8 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload> for ProposeToBlessRepli
             .await
             .unwrap();
 
-        let sha256_hex = compute_sha256_hex(&dir.join("replica")).unwrap();
-        let node_manager_sha256_hex = compute_sha256_hex(&dir.join("nodemanager")).unwrap();
         BlessReplicaVersionPayload {
             replica_version_id: self.commit_hash.clone(),
-            binary_url,
-            sha256_hex,
-            node_manager_binary_url,
-            node_manager_sha256_hex,
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
         }
@@ -645,23 +639,6 @@ struct ProposeToBlessReplicaVersionFlexibleCmd {
     /// part of the payload is that it will be needed in the subsequent step
     /// of upgrading individual subnets.
     pub replica_version_id: String,
-
-    /// The URL against which a HTTP GET request will return a replica binary
-    /// that corresponds to this version.
-    pub replica_url: Option<String>,
-
-    /// The hex-formatted SHA-256 hash of the binary served by 'replica_url'
-    replica_sha256_hex: Option<String>,
-
-    /// The URL against which a HTTP GET request will return a node manager
-    /// binary that corresponds to this version. If unset, then only the
-    /// replica will be updated when a subnet is updated to that version.
-    pub node_manager_url: Option<String>,
-
-    /// The hex-formatted SHA-256 hash of the binary served by
-    /// 'node_manager_url'. Must be present if and only if the node manager
-    /// url is present.
-    node_manager_sha256_hex: Option<String>,
 
     /// The URL against which a HTTP GET request will return a release
     /// package that corresponds to this version. If set,
@@ -681,50 +658,21 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload>
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
-            None => format!(
-                "Bless replica version: {} with hash: {}",
-                self.replica_version_id,
-                self.replica_sha256_hex.clone().unwrap_or_default()
-            ),
+            None => format!("Bless replica version: {}", self.replica_version_id,),
         }
     }
 
     async fn payload(&self, _: Url) -> BlessReplicaVersionPayload {
-        if let Some(release_package_url) = self.release_package_url.clone() {
-            BlessReplicaVersionPayload {
-                replica_version_id: self.replica_version_id.clone(),
-                binary_url: String::default(),
-                sha256_hex: String::default(),
-                node_manager_binary_url: String::default(),
-                node_manager_sha256_hex: String::default(),
-                release_package_url,
-                release_package_sha256_hex: self
-                    .release_package_sha256_hex
-                    .clone()
-                    .expect("Release package sha256 is rquired if release package is used"),
-            }
-        } else {
-            BlessReplicaVersionPayload {
-                replica_version_id: self.replica_version_id.clone(),
-                binary_url: self.replica_url.clone().unwrap_or_else(String::default),
-                sha256_hex: self
-                    .replica_sha256_hex
-                    .clone()
-                    .unwrap_or_else(String::default),
-                node_manager_binary_url: self
-                    .node_manager_url
-                    .clone()
-                    .unwrap_or_else(String::default),
-                node_manager_sha256_hex: self
-                    .node_manager_sha256_hex
-                    .clone()
-                    .unwrap_or_else(String::default),
-                release_package_url: self.replica_url.clone().unwrap_or_else(String::default),
-                release_package_sha256_hex: self
-                    .replica_sha256_hex
-                    .clone()
-                    .unwrap_or_else(String::default),
-            }
+        BlessReplicaVersionPayload {
+            replica_version_id: self.replica_version_id.clone(),
+            release_package_url: self
+                .release_package_url
+                .clone()
+                .expect("Release package url is rquired"),
+            release_package_sha256_hex: self
+                .release_package_sha256_hex
+                .clone()
+                .expect("Release package sha256 is rquired"),
         }
     }
 }

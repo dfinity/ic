@@ -134,12 +134,8 @@ fn main() -> Result<()> {
             /* target_dir= */ config.state_dir.as_path(),
             topology_config,
             /* replica_version_id= */ None,
-            /* replica_donwload_url= */ None,
-            /* replica_hash */ None,
             /* generate_subnet_records= */ true, // see note above
             /* nns_subnet_index= */ Some(0),
-            /* nodemanager_download_url= */ None,
-            /* nodemanager_sha256_hex */ None,
             /* release_package_url= */ None,
             /* release_package_sha256_hex */ None,
             config.provisional_whitelist,

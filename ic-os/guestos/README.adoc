@@ -212,7 +212,7 @@ This should return a replica version record. Note that the record does not speci
 Then, trigger the upgrade (currently, with a very recent ic-admin, which is not yet on master)
 
     export IP=192.168.178.139
-    ic-admin --nns-url http://[::1]:8080 propose-to-bless-replica-version-flexible 42 foo foo foo foo \
+    ic-admin --nns-url http://[::1]:8080 propose-to-bless-replica-version-flexible 42 \
       http://$IP:8000/upgrade-image.tar e592d1a0aa055da6e9436f95c2a7e7e96ed0417eebb55d6a5af0fa15a4cd0ce4
     ic-admin --nns-url=http://[::1]:8080 forward-test-neuron-vote ${PROPOSAL_ID} && ic-admin --nns-url=http://[::1]:8080 execute-eligible-proposals
     ic-admin --nns-url=http://[::1]:8080 get-replica-version 42

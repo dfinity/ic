@@ -52,10 +52,6 @@ impl Registry {
                     .as_bytes()
                     .to_vec(),
                 value: encode_or_panic(&ReplicaVersionRecord {
-                    binary_url: payload.binary_url.clone(),
-                    sha256_hex: payload.sha256_hex.clone(),
-                    node_manager_binary_url: payload.node_manager_binary_url.clone(),
-                    node_manager_sha256_hex: payload.node_manager_sha256_hex.clone(),
                     release_package_url: payload.release_package_url.clone(),
                     release_package_sha256_hex: payload.release_package_sha256_hex,
                 }),
@@ -89,21 +85,6 @@ pub struct BlessReplicaVersionPayload {
     /// part of the payload is that it will be needed in the subsequent step
     /// of upgrading individual subnets.
     pub replica_version_id: String,
-
-    /// The URL against which a HTTP GET request will return a replica binary
-    /// that corresponds to this version
-    pub binary_url: String,
-
-    /// The hex-formatted SHA-256 hash of the binary served by 'binary_url'
-    pub sha256_hex: String,
-
-    /// The URL against which a HTTP GET request will return a node manager
-    /// binary that corresponds to this version
-    pub node_manager_binary_url: String,
-
-    /// The hex-formatted SHA-256 hash of the binary served by
-    /// 'node_manager_binary_url'
-    pub node_manager_sha256_hex: String,
 
     /// The URL against which a HTTP GET request will return a release package
     /// that corresponds to this version

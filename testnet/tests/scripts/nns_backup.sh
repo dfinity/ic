@@ -128,7 +128,7 @@ echo "➡️  Triggering upgrade"
     echo "Checksum is: ${SHA256}"
 
     ic-admin --nns-url "$nns_url" propose-to-bless-replica-version-flexible \
-        --test-neuron-proposer "$VERSION" foo foo foo foo \
+        --test-neuron-proposer "$VERSION" \
         "$UPGRADE_URL" "$SHA256" 2>&1 | tee "$LOG_BLESSING"
 
     until ic-admin --nns-url "$nns_url" get-blessed-replica-versions | grep -q "$VERSION"; do
