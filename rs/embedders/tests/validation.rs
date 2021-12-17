@@ -1,7 +1,8 @@
 use assert_matches::assert_matches;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_utils::validation::{
-    validate_wasm_binary, WasmImportsDetails, WasmValidationDetails, RESERVED_SYMBOLS,
+    extract_custom_section_name, validate_custom_section, validate_wasm_binary, WasmImportsDetails,
+    WasmValidationDetails, RESERVED_SYMBOLS,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 
@@ -10,6 +11,12 @@ fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wabt::Error> {
     features.enable_multi_value();
     wabt::wat2wasm_with_features(wat, features).map(BinaryEncodedWasm::new)
 }
+use ic_replicated_state::canister_state::execution_state::{
+    CustomSection, CustomSectionType, WasmMetadata,
+};
+use ic_types::NumBytes;
+use maplit::btreemap;
+use parity_wasm::elements::{CustomSection as WasmCustomSection, Module, Section};
 
 #[test]
 fn can_validate_valid_import_section() {
@@ -22,10 +29,7 @@ fn can_validate_valid_import_section() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Ok(WasmValidationDetails {
-            reserved_exports: 0,
-            imports_details: WasmImportsDetails::default(),
-        })
+        Ok(WasmValidationDetails::default())
     );
 }
 
@@ -72,10 +76,7 @@ fn can_validate_valid_export_section() {
 
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Ok(WasmValidationDetails {
-            reserved_exports: 0,
-            imports_details: WasmImportsDetails::default(),
-        })
+        Ok(WasmValidationDetails::default())
     );
 }
 
@@ -98,7 +99,7 @@ fn can_validate_valid_export_section_with_reserved_functions() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 2,
-            imports_details: WasmImportsDetails::default(),
+            ..Default::default()
         })
     );
 }
@@ -255,10 +256,7 @@ fn can_validate_canister_query_update_method_name_with_whitespace() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Ok(WasmValidationDetails {
-            reserved_exports: 0,
-            imports_details: WasmImportsDetails::default(),
-        })
+        Ok(WasmValidationDetails::default())
     );
 }
 
@@ -275,10 +273,7 @@ fn can_validate_valid_data_section() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Ok(WasmValidationDetails {
-            reserved_exports: 0,
-            imports_details: WasmImportsDetails::default(),
-        })
+        Ok(WasmValidationDetails::default())
     );
 }
 
@@ -309,10 +304,7 @@ fn can_validate_module_with_import_func() {
     let wasm = wat2wasm(r#"(module (import "ic0" "msg_reply" (func $msg_reply)))"#).unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Ok(WasmValidationDetails {
-            reserved_exports: 0,
-            imports_details: WasmImportsDetails::default(),
-        })
+        Ok(WasmValidationDetails::default())
     );
 }
 
@@ -339,7 +331,7 @@ fn can_validate_module_with_wrong_import_module_for_func() {
 }
 
 #[test]
-fn can_validate_module_with_too_many_globals() {
+fn can_reject_module_with_too_many_globals() {
     let wasm = wat2wasm(
         r#"
                 (module
@@ -367,7 +359,7 @@ fn can_validate_module_with_too_many_globals() {
 }
 
 #[test]
-fn can_validate_module_with_too_many_functions() {
+fn can_reject_module_with_too_many_functions() {
     let wasm = wat2wasm(
         r#"
                 (module
@@ -395,6 +387,162 @@ fn can_validate_module_with_too_many_functions() {
             allowed: 5
         })
     );
+}
+
+#[test]
+fn can_validate_module_with_custom_sections() {
+    let custom_section =
+        |name: String, content: Vec<u8>| Section::Custom(WasmCustomSection::new(name, content));
+    let custom_sections: Vec<Section> = vec![
+        custom_section("icp:private name1".to_string(), vec![0, 1]),
+        custom_section("icp:public name2".to_string(), vec![0, 2]),
+        custom_section("name3".to_string(), vec![0, 2]),
+    ];
+    let module = Module::new(custom_sections);
+
+    // Extracts the custom sections that provide the visibility `public/private`.
+    assert_eq!(
+        validate_custom_section(
+            &module,
+            &EmbeddersConfig {
+                max_custom_sections: 4,
+                ..Default::default()
+            }
+        ),
+        Ok(WasmMetadata::new(btreemap! {
+            "name1".to_string() => CustomSection {content: vec![0, 1] , visibility: CustomSectionType::Private},
+            "name2".to_string() => CustomSection {content: vec![0, 2] , visibility: CustomSectionType::Public}
+        }))
+    );
+}
+
+#[test]
+fn can_reject_module_with_too_many_custom_sections() {
+    let custom_section =
+        |name: String, content: Vec<u8>| Section::Custom(WasmCustomSection::new(name, content));
+    let custom_sections: Vec<Section> = vec![
+        custom_section("icp:private name1".to_string(), vec![0, 1]),
+        custom_section("icp:public name2".to_string(), vec![0, 2]),
+        custom_section("name3".to_string(), vec![0, 2]),
+    ];
+    let module = Module::new(custom_sections);
+
+    assert_matches!(
+        validate_custom_section(
+            &module,
+            &EmbeddersConfig {
+                max_custom_sections: 1,
+                ..Default::default()
+            }
+        ),
+        Err(WasmValidationError::TooManyCustomSections {
+            defined: 2,
+            allowed: 1
+        })
+    );
+}
+
+#[test]
+fn can_reject_module_with_custom_section_too_big() {
+    let content = vec![0, 1, 6, 5, 6, 7, 4, 6];
+    let size = content.len() + "custom_section".len();
+    let module = Module::new(vec![Section::Custom(WasmCustomSection::new(
+        "icp:private custom_section".to_string(),
+        content,
+    ))]);
+
+    let max_custom_section_size = NumBytes::new(4);
+    assert_eq!(
+        validate_custom_section(
+            &module, &EmbeddersConfig {
+                max_custom_sections: 2,
+                max_custom_section_size,
+                ..Default::default()
+            }
+        ),
+       Err(WasmValidationError::InvalidCustomSection(format!(
+                        "Invalid custom section: size of custom section named custom_section exceeds the maximum allowed: size {} bytes, allowed {} bytes",
+                         size, max_custom_section_size
+                    )
+       ))
+    );
+}
+
+#[test]
+fn can_reject_module_with_duplicate_custom_sections() {
+    let custom_section =
+        |name: String, content: Vec<u8>| Section::Custom(WasmCustomSection::new(name, content));
+    let custom_sections: Vec<Section> = vec![
+        custom_section("icp:private custom1".to_string(), vec![0, 1]),
+        custom_section("icp:public custom2".to_string(), vec![0, 2]),
+        custom_section("icp:public custom1".to_string(), vec![0, 3]),
+    ];
+    let module = Module::new(custom_sections);
+
+    // Rejects the module because of duplicate custom section names.
+    assert_eq!(
+        validate_custom_section(
+            &module,
+            &EmbeddersConfig {
+                max_custom_sections: 5,
+                ..Default::default()
+            }
+        ),
+        Err(WasmValidationError::InvalidCustomSection(
+            "Invalid custom section: name custom1 already exists".to_string()
+        ))
+    );
+}
+
+#[test]
+fn can_reject_module_with_invalid_custom_sections() {
+    let custom_section =
+        |name: String, content: Vec<u8>| Section::Custom(WasmCustomSection::new(name, content));
+    let custom_sections: Vec<Section> = vec![
+        custom_section("icp:private custom1".to_string(), vec![0, 1]),
+        custom_section("icp:public custom2".to_string(), vec![0, 2]),
+        custom_section("icp:dummy custom3".to_string(), vec![0, 3]),
+    ];
+    let module = Module::new(custom_sections);
+
+    // Only `private` or `public` is allowed if `icp:` prefix is defined.
+    assert_eq!(
+        validate_custom_section(
+            &module,
+            &EmbeddersConfig {
+                max_custom_sections: 5,
+                ..Default::default()
+            }
+        ),
+        Err(WasmValidationError::InvalidCustomSection(
+            "Invalid custom section: Custom section named custom3 has no public/private scope defined.".to_string()
+        ))
+    );
+}
+
+#[test]
+fn can_extract_custom_section_name() {
+    // Valid public section.
+    let name = "icp:public public_name";
+    let (name, visibility) = extract_custom_section_name(name).unwrap().unwrap();
+    assert_eq!(name, "public_name");
+    assert_eq!(visibility, CustomSectionType::Public);
+
+    // Valid private section.
+    let name = "icp:private    private_name";
+    let (name, visibility) = extract_custom_section_name(name).unwrap().unwrap();
+    assert_eq!(name, "private_name");
+    assert_eq!(visibility, CustomSectionType::Private);
+
+    // No public/private visibility defined.
+    let name = "icp:x invalid_custom";
+    assert_eq!(extract_custom_section_name(name),  Err(WasmValidationError::InvalidCustomSection(
+            "Invalid custom section: Custom section named invalid_custom has no public/private scope defined.".to_string()
+        )));
+
+    // Ignore custom section. The name does not start with `icp:`.
+    let name = "ignore_custom";
+    assert_eq!(extract_custom_section_name(name), Ok(None));
 }
 
 #[test]
@@ -471,11 +619,11 @@ fn can_validate_module_with_call_simple_import() {
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
-            reserved_exports: 0,
             imports_details: WasmImportsDetails {
                 imports_call_simple: true,
                 ..Default::default()
             },
+            ..Default::default()
         })
     );
 }
@@ -495,13 +643,13 @@ fn can_validate_module_cycles_related_imports() {
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
-            reserved_exports: 0,
             imports_details: WasmImportsDetails {
                 imports_call_cycles_add: true,
                 imports_canister_cycle_balance: true,
                 imports_msg_cycles_accept: true,
                 ..Default::default()
             },
+            ..Default::default()
         })
     );
 }
@@ -537,9 +685,6 @@ fn can_validate_module_cycles_u128_related_imports() {
 
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Ok(WasmValidationDetails {
-            reserved_exports: 0,
-            imports_details: WasmImportsDetails::default(),
-        })
+        Ok(WasmValidationDetails::default())
     );
 }
