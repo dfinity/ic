@@ -24,6 +24,7 @@ mod temp_crypto;
 
 pub use crate::sign::utils::combined_threshold_signature_and_public_key;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
+use std::os::unix::fs::PermissionsExt;
 pub use temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 
 #[cfg(test)]
@@ -259,7 +260,9 @@ fn config_with_dir_and_permissions(crypto_root: &Path) -> CryptoConfig {
     std::fs::create_dir_all(&crypto_root)
         .unwrap_or_else(|err| panic!("Failed to create crypto root directory: {}", err));
     let config = CryptoConfig::new(crypto_root.to_path_buf());
-    CryptoConfig::set_dir_with_required_permission(&config.crypto_root)
+    std::fs::set_permissions(crypto_root, std::fs::Permissions::from_mode(0o750))
+        .expect("Could not set the permissions of the new test directory.");
+    CryptoConfig::check_dir_has_required_permissions(&config.crypto_root)
         .expect("Could not setup crypto_root directory");
     config
 }

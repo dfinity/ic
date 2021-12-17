@@ -5,6 +5,7 @@ boundary_node/control_plane/src/main.rs:    collections::{HashMap, HashSet},
 boundary_node/control_plane/src/main.rs:    fs::{read_dir, remove_file, File},
 boundary_node/control_plane/src/main.rs:use std::{
 config/src/config_parser.rs:use std::fs;
+config/src/crypto.rs:use std::fs::Permissions;
 config/src/crypto.rs:use std::fs;
 config/src/crypto.rs:use std::os::unix::fs::PermissionsExt;
 cow_state/src/lib.rs:    collections::HashMap,
@@ -14,10 +15,9 @@ cow_state/src/lib.rs:use std::{
 crypto/internal/crypto_lib/basic_sig/ecdsa_secp256_wycheproof_tests/src/tests.rs:use std::fs::File;
 crypto/internal/crypto_service_provider/src/public_key_store/mod.rs:use std::fs;
 crypto/internal/crypto_service_provider/src/secret_key_store/proto_store.rs:use std::fs;
-crypto/internal/crypto_service_provider/src/secret_key_store/proto_store.rs:use std::os::unix::fs::PermissionsExt;
 crypto/internal/csp_test_utils/src/files.rs:use std::fs;
 crypto/internal/csp_test_utils/src/files.rs:use std::os::unix::fs::PermissionsExt;
-crypto/src/common/utils/temp_crypto/tests.rs:use std::os::unix::fs::PermissionsExt;
+crypto/src/common/utils.rs:use std::os::unix::fs::PermissionsExt;
 drun/src/lib.rs:use std::fs::OpenOptions;
 drun/src/message.rs:    convert::TryFrom,
 drun/src/message.rs:    fmt,

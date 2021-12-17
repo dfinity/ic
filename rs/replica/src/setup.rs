@@ -328,6 +328,6 @@ pub fn setup_crypto_provider(
             err
         )
     });
-    CryptoConfig::set_dir_with_required_permission(&config.crypto_root).unwrap();
+    CryptoConfig::check_dir_has_required_permissions(&config.crypto_root).unwrap();
     CryptoComponent::new(config, registry, replica_logger, metrics_registry)
 }

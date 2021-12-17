@@ -15,6 +15,7 @@ use tempfile::TempDir;
 use proptest::prelude::{any, Strategy};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
+use std::fs::Permissions;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
@@ -46,8 +47,15 @@ impl CryptoConfig {
             .prefix("ic_crypto_")
             .tempdir()
             .unwrap();
+        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o750)).unwrap_or_else(|_| {
+            panic!(
+                "Could not set the permissions of the new test directory {}",
+                temp_dir.path().display()
+            )
+        });
         let temp_dir_path = temp_dir.path().to_path_buf();
-        CryptoConfig::set_dir_with_required_permission(&temp_dir_path).unwrap();
+        CryptoConfig::check_dir_has_required_permissions(&temp_dir_path)
+            .expect("Wrong dir permissions");
         let config = CryptoConfig::new(temp_dir_path);
         (config, temp_dir)
     }
@@ -59,33 +67,52 @@ impl CryptoConfig {
         run(config)
     }
 
-    /// Set a directory permission to u+rwx (0700), which is required for
-    /// storing crypto states. Returns an error if it fails.
-    pub fn set_dir_with_required_permission(dir: &Path) -> Result<(), String> {
+    /// Checks that directory `dir` has permissions required for storing crypto
+    /// states, i.e. the owner can read/write files in the directly, but the
+    /// directory should not be world-accessible.  (Group permissions are
+    /// not checked, as these are up to the system setup.) Returns an error
+    /// if it fails. NOTE: this is only a basic sanity check; the exact
+    /// permissions depend on the system setup and are out of scope of
+    /// Crypto Component.
+    pub fn check_dir_has_required_permissions(dir: &Path) -> Result<(), String> {
         if !dir.exists() {
-            Err(format!(
+            return Err(format!(
                 "Crypto state directory does not exist: {}",
                 dir.display()
-            ))
-        } else {
-            let metadata = fs::metadata(&dir).map_err(|err| {
-                format!(
-                    "Cannot get the permissions of the crypto state directory: {:?}",
-                    err
-                )
-            })?;
-            let mut permissions = metadata.permissions();
-            // we set the file permission to -rwx------ (owner read, write, execute)
-            let mode = 0o700;
-            permissions.set_mode(mode);
-            fs::set_permissions(&dir, permissions).map_err(|err| {
-                format!(
-                    "Cannot set the permissions of the crypto state directory: {:?}",
-                    err
-                )
-            })?;
-            Ok(())
+            ));
         }
+        let metadata = fs::metadata(&dir).map_err(|err| {
+            format!(
+                "Cannot get the metadata of the crypto state directory {}: {:?}",
+                dir.display(),
+                err
+            )
+        })?;
+        if !metadata.is_dir() {
+            return Err(format!(
+                "Crypto state directory should be a directory, not a file: {}",
+                dir.display()
+            ));
+        }
+        let permissions = metadata.permissions();
+        let unix_permission_bits = permissions.mode();
+        let permissions_owner = unix_permission_bits & 0o700;
+        if permissions_owner != 0o700 {
+            return Err(format!(
+                "Crypto state directory {} has permissions {:#o}, disallowing owner access",
+                &dir.display(),
+                unix_permission_bits
+            ));
+        }
+        let permissions_all = unix_permission_bits & 0o007;
+        if permissions_all != 0 {
+            return Err(format!(
+                "Crypto state directory {} has permissions {:#o}, allowing general access",
+                &dir.display(),
+                unix_permission_bits
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -93,6 +120,15 @@ impl CryptoConfig {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+    use tempfile::tempdir as tempdir_deleted_at_end_of_scope;
+
+    // TODO(CRP-1338): review the creation/usage of the temp dirs.
+    pub fn mk_temp_dir_with_permissions(mode: u32) -> TempDir {
+        let dir = tempdir_deleted_at_end_of_scope().unwrap();
+        fs::set_permissions(dir.path(), Permissions::from_mode(mode))
+            .expect("Could not set the permissions of the new test directory.");
+        dir
+    }
 
     fn serde_test(config: CryptoConfig) {
         let serialized = json5::to_string(&config).unwrap();
@@ -130,14 +166,42 @@ mod tests {
     #[test]
     fn should_set_correct_path_permissions() {
         CryptoConfig::run_with_temp_config(|config| {
-            // the 40 indicates that this is a directory, 700 is the file permission we set.
-            assert_eq!(permission_mode(config), 0o40700);
+            CryptoConfig::check_dir_has_required_permissions(&*config.crypto_root)
+                .expect("Wrong direcotry permissions");
         })
     }
 
-    fn permission_mode(config: CryptoConfig) -> u32 {
-        let metadata = fs::metadata(config.crypto_root).unwrap();
-        let permissions = metadata.permissions();
-        permissions.mode()
+    #[test]
+    fn config_dir_check_should_fail_for_paths_that_do_not_exist() {
+        let dir_path = {
+            let dir = tempdir_deleted_at_end_of_scope().unwrap();
+            dir.path().to_owned()
+        };
+        let result = CryptoConfig::check_dir_has_required_permissions(&dir_path);
+        assert!(result.is_err(), "{:?}", result);
+    }
+
+    #[test]
+    fn config_dir_check_should_fail_for_paths_that_are_widely_readable() {
+        let dir = mk_temp_dir_with_permissions(0o700);
+        let result = CryptoConfig::check_dir_has_required_permissions(dir.as_ref());
+        assert!(result.is_ok(), "{:?}", result);
+        for mode in 0o701..=0o707 {
+            let dir = mk_temp_dir_with_permissions(mode);
+            let result = CryptoConfig::check_dir_has_required_permissions(dir.as_ref());
+            assert!(result.is_err(), "{:?}", result);
+        }
+    }
+
+    #[test]
+    fn config_dir_check_should_fail_for_paths_that_are_not_accessible_for_owner() {
+        let dir = mk_temp_dir_with_permissions(0o700);
+        let result = CryptoConfig::check_dir_has_required_permissions(dir.as_ref());
+        assert!(result.is_ok(), "{:?}", result);
+        for mode in [0o000, 0o100, 0o200, 0o300, 0o400, 0o500, 0o600] {
+            let dir = mk_temp_dir_with_permissions(mode);
+            let result = CryptoConfig::check_dir_has_required_permissions(dir.as_ref());
+            assert!(result.is_err(), "{:?}", result);
+        }
     }
 }
