@@ -606,7 +606,7 @@ mod tests {
                 stable_memory,
                 exported_globals: vec![],
                 exports: ExportedFunctions::new(BTreeSet::new()),
-                metadata: WasmMetadata::new(),
+                metadata: WasmMetadata::default(),
                 last_executed_round: ExecutionRound::from(0),
                 cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(
                     can_layout.unwrap().raw_path(),

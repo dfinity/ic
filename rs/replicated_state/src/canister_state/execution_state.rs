@@ -387,7 +387,7 @@ impl ExecutionState {
             wasm_memory,
             stable_memory,
             exported_globals,
-            metadata: WasmMetadata::new(),
+            metadata: WasmMetadata::default(),
             last_executed_round: ExecutionRound::from(0),
             cow_mem_mgr,
             mapped_state,
@@ -460,7 +460,7 @@ impl TryFrom<pb::CustomSectionType> for CustomSectionType {
 }
 
 /// Represents the data a custom section holds.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CustomSection {
     pub visibility: CustomSectionType,
     pub content: Vec<u8>,
@@ -498,7 +498,7 @@ impl TryFrom<pb::WasmCustomSection> for CustomSection {
 }
 
 /// A struct that holds all the custom sections exported by the Wasm module.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct WasmMetadata {
     /// Arc is used to make cheap clones of this during snapshots.
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
@@ -507,9 +507,9 @@ pub struct WasmMetadata {
 }
 
 impl WasmMetadata {
-    pub fn new() -> Self {
+    pub fn new(custom_sections: BTreeMap<String, CustomSection>) -> Self {
         Self {
-            custom_sections: Arc::new(btreemap![]),
+            custom_sections: Arc::new(custom_sections),
         }
     }
 
@@ -520,7 +520,9 @@ impl WasmMetadata {
 
 impl Default for WasmMetadata {
     fn default() -> Self {
-        Self::new()
+        Self {
+            custom_sections: Arc::new(btreemap![]),
+        }
     }
 }
 
