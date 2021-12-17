@@ -1574,7 +1574,7 @@ fn can_recover_from_corruption_on_state_sync() {
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(1), &[100u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[100u8; PAGE_SIZE]),
+            (PageIndex::new(3000), &[100u8; PAGE_SIZE]),
         ]);
     }
 
@@ -1593,11 +1593,11 @@ fn can_recover_from_corruption_on_state_sync() {
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         // Add a new page much further in the file so that the first one could
-        // be re-used as a chunk.
+        // be re-used as a chunk, and so that there are all-zero chunks inbetween.
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(300), &[2u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(3000), &[2u8; PAGE_SIZE])]);
 
         let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
@@ -1701,6 +1701,10 @@ fn can_recover_from_corruption_on_state_sync() {
                 *expected_state.take().as_ref()
             );
 
+            assert_eq!(
+                0,
+                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
+            );
             assert_error_counters(dst_metrics);
         })
     });
