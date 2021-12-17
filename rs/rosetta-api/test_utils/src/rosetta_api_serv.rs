@@ -393,16 +393,23 @@ impl RosettaApiHandle {
         pk_and_idx: Option<(PublicKey, u64)>,
         verified: bool,
     ) -> Result<Result<AccountBalanceResponse, RosettaError>, String> {
-        let neuron_info_req = NeuronInfoRequest {
-            neuron_id: nid,
-            public_key_and_neuron_index: pk_and_idx,
-            verified_query: Some(verified),
+        let account_balance_metadata = AccountBalanceMetadata {
+            account_type: BalanceAccountType::Neuron {
+                neuron_id: nid,
+                subaccount_components: pk_and_idx.map(|(public_key, neuron_index)| {
+                    NeuronSubaccountComponents {
+                        public_key,
+                        neuron_index,
+                    }
+                }),
+                verified_query: Some(verified),
+            },
         };
         let req = AccountBalanceRequest {
             network_identifier: self.network_id(),
             account_identifier: ic_rosetta_api::convert::to_model_account_identifier(&acc),
             block_identifier: None,
-            metadata: Some(neuron_info_req),
+            metadata: Some(account_balance_metadata),
         };
 
         to_rosetta_response(

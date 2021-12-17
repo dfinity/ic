@@ -17,7 +17,7 @@ end::catalog[] */
 use assert_json_diff::{assert_json_eq, assert_json_include};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
-use ic_rosetta_api::models::{ConstructionPayloadsResponse, Object, PublicKey};
+use ic_rosetta_api::models::{ConstructionPayloadsResponse, NeuronState, Object, PublicKey};
 use ic_rosetta_api::request_types::Status;
 use ic_rosetta_api::time::Seconds;
 use ledger_canister::{
@@ -33,7 +33,7 @@ use fondue::log::info;
 use ic_canister_client::Sender;
 use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron, NeuronState};
+use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
 use ic_nns_test_utils::itest_helpers::{set_up_governance_canister, set_up_ledger_canister};
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::{
@@ -365,7 +365,7 @@ pub fn test_everything(handle: IcHandle, ctx: &fondue::pot::Context) {
         let key_pair = Arc::new(key_pair);
         test_start_dissolve(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await.unwrap();
         let neuron_info = rosetta_api_serv.account_balance_neuron(neuron_account, None, Some((public_key, neuron_subaccount_identifier)), false).await.unwrap().unwrap().metadata.unwrap();
-        assert_eq!(neuron_info.state, i32::from(NeuronState::Dissolving));
+        assert_eq!(neuron_info.state, NeuronState::Dissolving);
 
         info!(&ctx.logger, "Test start dissolving neuron again");
         test_start_dissolve(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await.unwrap();
@@ -931,7 +931,7 @@ async fn test_staking(
         .unwrap()
         .metadata
         .unwrap();
-    assert_eq!(neuron_info.state, i32::from(NeuronState::Dissolved));
+    assert_eq!(neuron_info.state, NeuronState::Dissolved);
 
     let neuron_info = ros
         .account_balance_neuron(
@@ -945,7 +945,7 @@ async fn test_staking(
         .unwrap()
         .metadata
         .unwrap();
-    assert_eq!(neuron_info.state, i32::from(NeuronState::Dissolved));
+    assert_eq!(neuron_info.state, NeuronState::Dissolved);
 
     let neuron_info = ros
         .account_balance_neuron(
@@ -959,7 +959,7 @@ async fn test_staking(
         .unwrap()
         .metadata
         .unwrap();
-    assert_eq!(neuron_info.state, i32::from(NeuronState::Dissolved));
+    assert_eq!(neuron_info.state, NeuronState::Dissolved);
 
     // Return staked account.
     (dst_acc, dst_acc_kp)
@@ -1281,7 +1281,7 @@ async fn test_staking_raw(
         .unwrap()
         .metadata
         .unwrap();
-    assert_eq!(neuron_info.state, i32::from(NeuronState::Dissolved));
+    assert_eq!(neuron_info.state, NeuronState::Dissolved);
 
     // Return staked account.
     (dst_acc, dst_acc_kp)
