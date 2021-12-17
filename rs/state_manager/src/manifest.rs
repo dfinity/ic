@@ -4,7 +4,10 @@ pub mod hash;
 mod tests;
 
 use super::CheckpointError;
-use crate::{DirtyPages, ManifestMetrics, CRITICAL_ERROR_REUSED_CHUNK_HASH};
+use crate::{
+    DirtyPages, ManifestMetrics, CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED,
+    LABEL_VALUE_HASHED_AND_COMPARED, LABEL_VALUE_REUSED,
+};
 use bit_vec::BitVec;
 use hash::{
     chunk_hasher, cow_chunk_hasher, cow_file_hasher, file_hasher, manifest_hasher, ManifestHash,
@@ -206,33 +209,6 @@ fn uses_chunk_size(manifest: &Manifest, max_chunk_size: u32) -> bool {
     })
 }
 
-/// Updates manifest computation statistics.
-fn update_metrics(metrics: &ManifestMetrics, chunk_actions: &[ChunkAction], chunks: &[ChunkInfo]) {
-    let mut hashed_bytes = 0;
-    let mut reused_bytes = 0;
-    let mut hashed_and_compared_bytes = 0;
-
-    for (i, chunk) in chunks.iter().enumerate() {
-        match chunk_actions[i] {
-            ChunkAction::Recompute => {
-                hashed_bytes += chunk.size_bytes as u64;
-            }
-            ChunkAction::UseHash(_) => {
-                reused_bytes += chunk.size_bytes as u64;
-            }
-            ChunkAction::RecomputeAndCompare(_) => {
-                hashed_and_compared_bytes += chunk.size_bytes as u64;
-            }
-        }
-    }
-
-    metrics.hashed_chunk_bytes.inc_by(hashed_bytes);
-    metrics.reused_chunk_bytes.inc_by(reused_bytes);
-    metrics
-        .hashed_and_compared_chunk_bytes
-        .inc_by(hashed_and_compared_bytes);
-}
-
 // Computes file_table and chunk_table of a manifest using a parallel algorithm.
 // All the parallel work is spawned in the specified thread pool.
 fn build_chunk_table_parallel(
@@ -321,10 +297,15 @@ fn build_chunk_table_parallel(
                 };
 
                 chunk_info.hash = match chunk_action {
-                    ChunkAction::Recompute => recompute_chunk_hash(),
+                    ChunkAction::Recompute => {
+			metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED]).inc_by(chunk_info.size_bytes as u64);
+			recompute_chunk_hash()
+		    },
                     ChunkAction::RecomputeAndCompare(precomputed_hash) => {
-                        let recomputed_hash = recompute_chunk_hash();
-                        debug_assert_eq!(recomputed_hash, precomputed_hash);
+			metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED]).inc_by(chunk_info.size_bytes as u64);
+
+			let recomputed_hash = recompute_chunk_hash();
+			debug_assert_eq!(recomputed_hash, precomputed_hash);
                         if recomputed_hash != precomputed_hash {
                             metrics.reused_chunk_hash_error_count.inc();
                             error!(
@@ -339,7 +320,10 @@ fn build_chunk_table_parallel(
                         }
                         recomputed_hash
                     }
-                    ChunkAction::UseHash(precomputed_hash) => precomputed_hash,
+		    ChunkAction::UseHash(precomputed_hash) => {
+			metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_REUSED]).inc_by(chunk_info.size_bytes as u64);
+			precomputed_hash
+		    },
                 };
             });
         }
@@ -355,8 +339,6 @@ fn build_chunk_table_parallel(
         }
         file_info.hash = hasher.finish();
     }
-
-    update_metrics(metrics, &chunk_actions, &chunk_table);
 
     (file_table, chunk_table)
 }
@@ -408,6 +390,11 @@ fn build_chunk_table_sequential(
 
                 let chunk_hash = match chunk_actions[chunk_index] {
                     ChunkAction::RecomputeAndCompare(reused_chunk_hash) => {
+                        metrics
+                            .chunk_bytes
+                            .with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED])
+                            .inc_by(chunk_size);
+
                         // We have both a reused and a recomputed hash, so we can compare them to
                         // monitor for issues
                         let recomputed_chunk_hash = recompute_chunk_hash();
@@ -426,8 +413,20 @@ fn build_chunk_table_sequential(
                         }
                         recomputed_chunk_hash
                     }
-                    ChunkAction::UseHash(reused_chunk_hash) => reused_chunk_hash,
-                    ChunkAction::Recompute => recompute_chunk_hash(),
+                    ChunkAction::UseHash(reused_chunk_hash) => {
+                        metrics
+                            .chunk_bytes
+                            .with_label_values(&[LABEL_VALUE_REUSED])
+                            .inc_by(chunk_size);
+                        reused_chunk_hash
+                    }
+                    ChunkAction::Recompute => {
+                        metrics
+                            .chunk_bytes
+                            .with_label_values(&[LABEL_VALUE_REUSED])
+                            .inc_by(chunk_size);
+                        recompute_chunk_hash()
+                    }
                 };
 
                 let chunk_info = ChunkInfo {
@@ -471,8 +470,6 @@ fn build_chunk_table_sequential(
     }
 
     assert_eq!(chunk_table.len(), chunk_actions.len());
-
-    update_metrics(metrics, &chunk_actions, &chunk_table);
 
     (file_table, chunk_table)
 }

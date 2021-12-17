@@ -82,6 +82,12 @@ const CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_c
 /// Critical error tracking checkpoints expected to be on disk but not found.
 const CRITICAL_ERROR_MISSING_CHECKPOINTS: &str = "state_manager_missing_checkpoints";
 
+/// Labels for manifest metrics
+const LABEL_TYPE: &str = "type";
+const LABEL_VALUE_HASHED: &str = "hashed";
+const LABEL_VALUE_HASHED_AND_COMPARED: &str = "hashed_and_compared";
+const LABEL_VALUE_REUSED: &str = "reused";
+
 #[derive(Clone)]
 pub struct StateManagerMetrics {
     state_manager_error_count: IntCounterVec,
@@ -102,9 +108,7 @@ pub struct StateManagerMetrics {
 
 #[derive(Clone)]
 pub struct ManifestMetrics {
-    hashed_chunk_bytes: IntCounter,
-    reused_chunk_bytes: IntCounter,
-    hashed_and_compared_chunk_bytes: IntCounter,
+    chunk_bytes: IntCounterVec,
     reused_chunk_hash_error_count: IntCounter,
 }
 
@@ -231,21 +235,24 @@ impl StateManagerMetrics {
 
 impl ManifestMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        let chunk_bytes = metrics_registry.int_counter_vec(
+            "state_manager_manifest_chunk_bytes",
+            "Size of chunks in manifest by hash type ('reused', 'hashed', 'hashed_and_compared') during all manifest computations in bytes.",
+            &[LABEL_TYPE],
+        );
+
+        for tp in &[
+            LABEL_VALUE_REUSED,
+            LABEL_VALUE_HASHED,
+            LABEL_VALUE_HASHED_AND_COMPARED,
+        ] {
+            chunk_bytes.with_label_values(&[*tp]);
+        }
+
         Self {
-            hashed_chunk_bytes: metrics_registry.int_counter(
-                "state_manager_manifest_hashed_chunk_bytes",
-                "Size of chunks hashed during the manifest computation because no previously \
-                		 computed hash was available.",
-            ),
-            reused_chunk_bytes: metrics_registry.int_counter(
-                "state_manager_manifest_reused_chunk_bytes",
-                "Size of chunks that we didn't hash during the manifest computation.",
-            ),
-            hashed_and_compared_chunk_bytes: metrics_registry.int_counter(
-                "state_manager_manifest_hashed_and_compared_chunk_bytes",
-                "Size of chunks that we hashed during the manifest computation in order to compare \
-		                it to a previously computed hash.",
-            ),
+            // Number of bytes that are either reused, hashed, or hashed and compared during the
+            // manifest computation
+            chunk_bytes,
             // Count of the chunks which have a mismatch between the recomputed hash and the reused
             // one.
             reused_chunk_hash_error_count: metrics_registry
