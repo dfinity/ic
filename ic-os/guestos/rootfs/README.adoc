@@ -157,6 +157,7 @@ the bootstrap tarball. It must contain lines of "key=value= statements,
 with the following keys supported:
 
 * journalbeat_hosts:    space-separated list of logging hosts
+* journalbeat_tags:     space-separated list of tags
 
 == SELinux
 

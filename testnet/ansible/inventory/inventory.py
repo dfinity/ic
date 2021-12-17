@@ -520,6 +520,8 @@ class IcDeploymentInventory:
         result["journalbeat_hosts"] = journalbeat_hosts
         journalbeat_index = nodes_vars.get("journalbeat_index", "")
         result["journalbeat_index"] = journalbeat_index
+        journalbeat_tags = nodes_vars.get("journalbeat_tags", [])
+        result["journalbeat_tags"] = journalbeat_tags
 
         deployment_dcs = set()
         ic_nodes_by_dc = {}

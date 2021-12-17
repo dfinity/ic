@@ -73,5 +73,5 @@ fi
 if [ "${JOURNALBEAT_TAGS}" != "" ]; then
     # Covert string into comma separated array
     journalbeat_tags_array=$(for tag in ${JOURNALBEAT_TAGS}; do echo -n "\"${tag}\", "; done | sed -E "s@, \$@@g")
-    sed -e "s@{{ journalbeat_tags }}@tags: [${journalbeat_tags_array}]@" -i "${OUT_FILE}"
+    sed -e "s@#{{ journalbeat_tags }}@tags: [${journalbeat_tags_array}]@" -i "${OUT_FILE}"
 fi

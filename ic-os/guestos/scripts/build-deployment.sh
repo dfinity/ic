@@ -108,9 +108,10 @@ VALUES=$(echo ${CONFIG} | jq -r -c '[
     .deployment,
     (.name_servers | join(" ")),
     (.name_servers_fallback | join(" ")),
-    (.journalbeat_hosts | join(" "))
+    (.journalbeat_hosts | join(" ")),
+    (.journalbeat_tags | join(" "))
 ] | join("\u0001")')
-IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS NAME_SERVERS_FALLBACK JOURNALBEAT_HOSTS < <(echo $VALUES)
+IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS NAME_SERVERS_FALLBACK JOURNALBEAT_HOSTS JOURNALBEAT_TAGS < <(echo $VALUES)
 
 # Read all the node info out in one swoop
 NODES=0
@@ -274,6 +275,9 @@ function generate_journalbeat_config() {
 
         if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
             echo "journalbeat_hosts=${JOURNALBEAT_HOSTS}" >"${CONFIG_DIR}/$NODE_PREFIX/journalbeat.conf"
+        fi
+        if [ "${JOURNALBEAT_TAGS}" != "" ]; then
+            echo "journalbeat_tags=${JOURNALBEAT_TAGS}" >>"${CONFIG_DIR}/$NODE_PREFIX/journalbeat.conf"
         fi
     done
 }
