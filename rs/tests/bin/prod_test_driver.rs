@@ -2,7 +2,6 @@ use ic_fondue::prod_tests::cli::CliArgs;
 use ic_fondue::prod_tests::driver_setup::create_driver_context_from_cli;
 use ic_fondue::prod_tests::evaluation::{evaluate, TestResult};
 use ic_fondue::prod_tests::pot_dsl::*;
-use ic_tests::nns_fault_tolerance_test;
 use ic_tests::nns_follow_test::{self, test as follow_test};
 use ic_tests::nns_voting_test::{self, test as voting_test};
 use ic_tests::node_restart_test::{self, test as node_restart_test};
@@ -17,6 +16,7 @@ use ic_tests::{
     cycles_minting_test, feature_flags, nns_canister_upgrade_test, registry_authentication_test,
     ssh_access_to_nodes, subnet_creation, transaction_ledger_correctness_test, wasm_generator_test,
 };
+use ic_tests::{nns_fault_tolerance_test, rosetta_test};
 use regex::Regex;
 use std::collections::HashMap;
 
@@ -311,5 +311,21 @@ fn get_test_suites() -> HashMap<String, Suite> {
             )],
         ),
     );
+
+    m.insert(
+        "rosetta".to_string(),
+        suite(
+            "rosetta",
+            vec![pot(
+                "rosetta_pot",
+                rosetta_test::config(),
+                par(vec![t(
+                    "rosetta_test_everything",
+                    rosetta_test::test_everything,
+                )]),
+            )],
+        ),
+    );
+
     m
 }
