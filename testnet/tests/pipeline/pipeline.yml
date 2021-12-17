@@ -905,10 +905,16 @@ system-tests-hourly:
     SUITE_NAME: "hourly"
     cd_target_env: "HOURLY"
 
+rosetta-hourly:
+  extends: .system-tests
+  variables:
+    SUITE_NAME: "rosetta"
+    cd_target_env: "HOURLY"
+
 .system-tests-wasm-generator:
   extends: .system-tests
   variables:
-    SUITE_NAME: "wasm_generator_suite"
+    SUITE_NAME: "wasm_generator"
   before_script:
     - |
       export RANDOM_CANISTERS_BASE_DIR="${CI_PROJECT_DIR}/test_canisters"
@@ -919,7 +925,7 @@ system-tests-hourly:
 wasm-generator-hourly:
   extends: .system-tests-wasm-generator
   variables:
-    SUITE_NAME: "wasm_generator_suite"
+    SUITE_NAME: "wasm_generator"
     cd_target_env: "HOURLY"
     NUMBER_OF_CANISTERS: 20
 
@@ -927,7 +933,7 @@ wasm-generator-nightly:
   extends: .system-tests-wasm-generator
   stage: prod-tests-04
   variables:
-    SUITE_NAME: "wasm_generator_suite"
+    SUITE_NAME: "wasm_generator"
     NUMBER_OF_CANISTERS: 100
     cd_target_env: "NIGHTLY"
   timeout: 3 hours

@@ -301,13 +301,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
     // The tests in this suite require canisters to be build prior to
     // running the tests which is why we separate it out.
     m.insert(
-        "wasm_generator_suite".to_string(),
+        "wasm_generator".to_string(),
         suite(
-            "wasm_generator_suite",
+            "wasm_generator",
             vec![pot(
                 "wasm_generator_pot",
                 wasm_generator_test::config(),
-                par(vec![t("wasm_generator_pot", wasm_generator_test::test)]),
+                par(vec![t("wasm_generator_test", wasm_generator_test::test)]),
             )],
         ),
     );
