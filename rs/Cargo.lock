@@ -3158,6 +3158,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-btc-consensus"
+version = "0.1.0"
+dependencies = [
+ "ic-interfaces",
+ "ic-logger",
+ "ic-metrics",
+ "ic-replicated-state",
+ "ic-types 0.8.0",
+ "prometheus",
+ "slog",
+ "thiserror",
+]
+
+[[package]]
 name = "ic-canister-client"
 version = "0.8.0"
 dependencies = [
@@ -5330,6 +5344,7 @@ dependencies = [
  "criterion",
  "hex",
  "ic-base-server",
+ "ic-btc-consensus",
  "ic-config",
  "ic-consensus",
  "ic-consensus-message",

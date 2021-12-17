@@ -5,6 +5,7 @@ members = [
   "artifact_pool",
   "base/server",
   "base/thread",
+  "bitcoin/consensus",
   "boundary_node/control_plane",
   "canister_client",
   "cycles_account_manager",
