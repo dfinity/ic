@@ -16,7 +16,7 @@ use ic_state_manager::StateManagerImpl;
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
-    metrics::{fetch_int_counter, fetch_int_counter_vec, fetch_int_gauge},
+    metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels},
     mock_time,
     state::{arb_stream, arb_stream_slice, canister_ids},
     types::{
@@ -1853,11 +1853,14 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         wait_for_checkpoint(&state_manager, height(1));
 
+        let mut reused_label = Labels::new();
+        reused_label.insert("type".to_string(), "reused".to_string());
+        let mut compared_label = Labels::new();
+        compared_label.insert("type".to_string(), "hashed_and_compared".to_string());
+
         // First checkpoint: no chunks to reuse yet.
-        assert_eq!(
-            0,
-            fetch_int_counter(metrics, "state_manager_manifest_reused_chunk_bytes").unwrap()
-        );
+        let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
+        assert_eq!(0, chunk_bytes[&reused_label]);
 
         let (_, state) = state_manager.take_tip();
 
@@ -1865,14 +1868,10 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         let state_2_hash = wait_for_checkpoint(&state_manager, height(2));
 
         // Second checkpoint can leverage heap chunks computed previously.
+        let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
         assert_eq!(
             PAGE_SIZE as u64 * 301,
-            fetch_int_counter(metrics, "state_manager_manifest_reused_chunk_bytes").unwrap()
-                + fetch_int_counter(
-                    metrics,
-                    "state_manager_manifest_hashed_and_compared_chunk_bytes"
-                )
-                .unwrap()
+            chunk_bytes[&reused_label] + chunk_bytes[&compared_label]
         );
 
         let checkpoint_root = state_manager
