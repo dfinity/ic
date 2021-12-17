@@ -926,7 +926,7 @@ impl IncompleteState {
         {
             info!(
                 self.log,
-                "Initializing state for height {} based on {} at height {}",
+                "Initializing state sync for height {} based on {} at height {}",
                 self.height,
                 if missing_chunks.is_empty() {
                     "checkpoint"
@@ -986,6 +986,10 @@ impl IncompleteState {
             state_sync_size_preallocate.inc_by(preallocate_bytes as u64);
             state_sync_size_copy.inc_by(total_bytes - diff_bytes - preallocate_bytes as u64);
 
+            self.metrics
+                .state_sync_remaining
+                .sub(diff_script.zeros_chunks as i64);
+
             fetch_chunks
         } else {
             info!(
@@ -1000,6 +1004,10 @@ impl IncompleteState {
                 .sum();
             state_sync_size_fetch.inc_by(diff_bytes);
             state_sync_size_preallocate.inc_by(total_bytes - diff_bytes);
+
+            let zeros_chunks = manifest_new.chunk_table.len() - non_zero_chunks.len();
+
+            self.metrics.state_sync_remaining.sub(zeros_chunks as i64);
 
             non_zero_chunks.iter().map(|i| *i + 1).collect()
         }
