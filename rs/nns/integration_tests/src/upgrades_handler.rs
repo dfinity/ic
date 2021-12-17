@@ -23,10 +23,6 @@ fn test_submit_and_accept_bless_replica_version_proposal() {
 
         let proposal_payload = BlessReplicaVersionPayload {
             replica_version_id: "test_replica_version".to_string(),
-            binary_url: "http://test.test".to_string(),
-            sha256_hex: "f0e4c2f76c58916ec258f246851bea091d14d4247a2fc3e18694461b1816e13b".into(),
-            node_manager_binary_url: "".into(),
-            node_manager_sha256_hex: "".into(),
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
         };

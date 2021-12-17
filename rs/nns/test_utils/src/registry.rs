@@ -132,10 +132,6 @@ pub fn invariant_compliant_mutation() -> Vec<RegistryMutation> {
     const VERSION_REPLICA_ID: &str = "version_42";
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
     let replica_version = ReplicaVersionRecord {
-        sha256_hex: MOCK_HASH.into(),
-        binary_url: "http://megaupload.com/replica_version_42_definitely_not_a_scam".to_string(),
-        node_manager_binary_url: "http://nodemanager.tar.gz".into(),
-        node_manager_sha256_hex: MOCK_HASH.into(),
         release_package_url: "http://release_package.tar.gz".into(),
         release_package_sha256_hex: MOCK_HASH.into(),
     };
@@ -240,10 +236,6 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     const VERSION_REPLICA_ID: &str = "version_42";
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
     let replica_version = ReplicaVersionRecord {
-        sha256_hex: MOCK_HASH.into(),
-        binary_url: "http://megaupload.com/replica_version_42_definitely_not_a_scam".to_string(),
-        node_manager_binary_url: "http://nodemanager.tar.gz".into(),
-        node_manager_sha256_hex: MOCK_HASH.into(),
         release_package_url: "http://release_package.tar.gz".into(),
         release_package_sha256_hex: MOCK_HASH.into(),
     };
@@ -428,11 +420,7 @@ pub fn prepare_registry_with_two_node_sets(
     let nodes_in_subnet2_ids = &node_ids[..num_nodes_in_subnet2];
 
     let replica_version = ReplicaVersion::default();
-    let replica_version_record = ReplicaVersionRecord {
-        binary_url: "http://testurl.com/version_1.0".to_string(),
-        sha256_hex: "f0e4c2f76c58916ec258f246851bea091d14d4247a2fc3e18694461b1816e13b".to_string(),
-        ..Default::default()
-    };
+    let replica_version_record = ReplicaVersionRecord::default();
     mutations.push(insert(
         &make_replica_version_key(&replica_version.to_string()),
         encode_or_panic(&replica_version_record),

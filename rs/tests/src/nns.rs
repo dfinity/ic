@@ -31,7 +31,6 @@ use ic_nns_test_utils::{
     itest_helpers::{NnsCanisters, NnsInitPayloadsBuilder},
 };
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
-use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_common::local_store::{
     ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader,
@@ -218,39 +217,13 @@ impl NnsExt for fondue::pot::Context {
         &self,
         handle: &IcHandle,
         impl_version: NodeSoftwareVersion,
-        package_content: UpgradeContent,
+        _package_content: UpgradeContent,
     ) {
-        let (nm_url, nm_hash) = if package_content == UpgradeContent::All
-            || package_content == UpgradeContent::Nodemanager
-        {
-            let (nm_url, nm_hash) = (impl_version.nodemanager_url, impl_version.nodemanager_hash);
-            (nm_url.to_string(), nm_hash)
-        } else {
-            ("".to_string(), "".to_string())
-        };
-
-        let (replica_url, replica_hash) = if package_content == UpgradeContent::All
-            || package_content == UpgradeContent::Replica
-        {
-            let (replica_url, replica_hash) = (impl_version.replica_url, impl_version.replica_hash);
-            (replica_url.to_string(), replica_hash)
-        } else {
-            ("".to_string(), "".to_string())
-        };
-
-        let replica_version_record = ReplicaVersionRecord {
-            binary_url: replica_url,
-            sha256_hex: replica_hash,
-            node_manager_binary_url: nm_url,
-            node_manager_sha256_hex: nm_hash,
-            ..Default::default()
-        };
-
         let replica_version = impl_version.replica_version;
         let root_url = first_root_url(handle);
         block_on(async move {
             let rt = runtime_from_url(root_url);
-            add_replica_version(&rt, replica_version, replica_version_record)
+            add_replica_version(&rt, replica_version)
                 .await
                 .expect("adding replica version failed.");
         });
@@ -560,18 +533,10 @@ pub async fn get_software_version(endpoint: &IcEndpoint) -> Option<ReplicaVersio
 
 /// Adds the given `ReplicaVersionRecord` to the registry and returns the
 /// registry version after the update.
-async fn add_replica_version(
-    nns_api: &'_ Runtime,
-    version: ReplicaVersion,
-    replica_version_record: ReplicaVersionRecord,
-) -> Result<(), String> {
+async fn add_replica_version(nns_api: &'_ Runtime, version: ReplicaVersion) -> Result<(), String> {
     let governance_canister = get_governance_canister(nns_api);
     let proposal_payload = BlessReplicaVersionPayload {
         replica_version_id: version.to_string(),
-        binary_url: replica_version_record.binary_url,
-        sha256_hex: replica_version_record.sha256_hex,
-        node_manager_binary_url: replica_version_record.node_manager_binary_url,
-        node_manager_sha256_hex: replica_version_record.node_manager_sha256_hex,
         release_package_url: "".to_string(),
         release_package_sha256_hex: "".to_string(),
     };
@@ -788,10 +753,6 @@ pub async fn submit_bless_replica_version_proposal(
         NnsFunction::BlessReplicaVersion,
         BlessReplicaVersionPayload {
             replica_version_id: String::from(version.clone()),
-            binary_url: String::default(),
-            sha256_hex: String::default(),
-            node_manager_binary_url: String::default(),
-            node_manager_sha256_hex: String::default(),
             release_package_url: upgrade_url,
             release_package_sha256_hex: sha256.clone(),
         },

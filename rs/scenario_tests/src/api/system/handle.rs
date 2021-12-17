@@ -455,23 +455,17 @@ impl IcHandle {
                 port_allocators.insert(subnet_index, port_allocator);
             }
 
-            let (replica_url, replica_sha256_hex) = get_replica_url_and_hash();
-
             let whitelist = ProvisionalWhitelist::All;
             let mut ic_config = IcConfig::new(
                 working_dir.path(),
                 ic_topology,
                 Some(initial_replica.version_id.clone()),
-                Some(replica_url),
-                Some(replica_sha256_hex),
                 // To maintain backwards compatibility, pass true here.
                 // False is used only when nodes need to be deployed without
                 // them joining any subnet initially
                 /* generate_subnet_records= */
                 true,
                 /* nns_subnet_index= */ port_allocators.iter().next().map(|a| *a.0),
-                None,
-                None,
                 None,
                 None,
                 Some(whitelist),
@@ -653,8 +647,6 @@ impl IcHandle {
     pub async fn add_replica_version(
         self: &Arc<Self>,
         version_id: String,
-        binary_url: String,
-        sha256_hex: String,
         release_package_url: String,
         release_package_sha256_hex: String,
     ) -> SystemTestResult<()> {
@@ -662,8 +654,6 @@ impl IcHandle {
         add_replica_version(
             &nns_api,
             version_id,
-            binary_url,
-            sha256_hex,
             release_package_url,
             release_package_sha256_hex,
         )
@@ -869,18 +859,12 @@ fn read_initial_registry_mutations<P: AsRef<Path>>(path: P) -> Vec<RegistryMutat
 async fn add_replica_version(
     nns_api: &'_ Runtime,
     replica_version_id: String,
-    binary_url: String,
-    sha256_hex: String,
     release_package_url: String,
     release_package_sha256_hex: String,
 ) -> SystemTestResult<()> {
     let governance_canister = get_canister(nns_api, GOVERNANCE_CANISTER_ID);
     let proposal_payload = BlessReplicaVersionPayload {
         replica_version_id,
-        binary_url,
-        sha256_hex,
-        node_manager_binary_url: "".into(),
-        node_manager_sha256_hex: "".into(),
         release_package_url,
         release_package_sha256_hex,
     };

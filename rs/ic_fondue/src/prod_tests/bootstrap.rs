@@ -144,8 +144,6 @@ pub fn init_ic<P: AsRef<Path>>(
         working_dir.as_path(),
         ic_topology,
         Some(initial_replica.replica_version),
-        Some(initial_replica.replica_url),
-        Some(initial_replica.replica_hash),
         // To maintain backwards compatibility, pass true here.
         // False is used only when nodes need to be deployed without
         // them joining any subnet initially
@@ -155,8 +153,6 @@ pub fn init_ic<P: AsRef<Path>>(
         // We assume by default that the subnet with index 0 is the NNS subnet.
         /* nns_subnet_index= */
         nns_subnet_idx,
-        Some(initial_replica.nodemanager_url),
-        Some(initial_replica.nodemanager_hash),
         None, // release_package_url
         None, // release_package_sha256_hex
         Some(whitelist),

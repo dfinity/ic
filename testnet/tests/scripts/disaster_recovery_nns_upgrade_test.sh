@@ -77,7 +77,7 @@ function bless_replica_version() {
     local proposal_id
     proposal_id=$(ic-admin --nns-url "$NNS_URL" \
         propose-to-bless-replica-version-flexible \
-        --test-neuron-proposer "$version" ignore ignore ignore ignore \
+        --test-neuron-proposer "$version" \
         "https://download.dfinity.systems/ic/$version/guest-os/update-img/update-img.tar.gz" \
         "$sha256" | grep -i proposal | grep -oE "[0-9]*")
 

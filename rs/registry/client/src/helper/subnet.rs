@@ -537,10 +537,7 @@ mod tests {
         let mut subnet_record = SubnetRecord::default();
 
         let replica_version = ReplicaVersion::try_from("some_version").unwrap();
-        let replica_version_record = ReplicaVersionRecord {
-            binary_url: "http://some.url".to_string(),
-            ..Default::default()
-        };
+        let replica_version_record = ReplicaVersionRecord::default();
         subnet_record.replica_version_id = String::from(&replica_version);
         data_provider
             .add(
