@@ -1,11 +1,9 @@
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::{ExportedFunctions, Memory, NumWasmPages, PageMap};
 use prometheus::{Histogram, IntCounter};
 
-use crate::cow_memory_creator::CowMemoryCreator;
 use crate::{
     wasm_utils::instrumentation::{instrument, InstructionCostTable},
     wasm_utils::validation::{validate_wasm_binary, WasmImportsDetails},
@@ -13,7 +11,6 @@ use crate::{
     WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
 };
 use ic_config::{embedders::Config as EmbeddersConfig, embedders::PersistenceType};
-use ic_cow_state::{CowMemoryManager, MappedState};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, SystemApi,
 };
@@ -28,10 +25,7 @@ use ic_system_api::{
     system_api_empty::SystemApiEmpty, ModificationTracking, StaticSystemState, SystemApiImpl,
     SystemStateAccessorDirect,
 };
-use ic_types::{
-    methods::{FuncRef, WasmMethod},
-    CanisterId, NumInstructions,
-};
+use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
 struct WasmExecutorMetrics {
@@ -217,26 +211,6 @@ impl WasmExecutor {
         let system_state_accessor =
             SystemStateAccessorDirect::new(system_state, cycles_account_manager);
 
-        // TODO(EXC-176): we should combine this with the hypervisor so that
-        // we make the decision of whether or not to commit modifications in
-        // a single place instead.
-        let memory_creator = if execution_state.cow_mem_mgr.is_valid() {
-            match &func_ref {
-                FuncRef::Method(WasmMethod::Update(_))
-                | FuncRef::Method(WasmMethod::System(_))
-                | FuncRef::UpdateClosure(_) => {
-                    let mapped_state = execution_state.cow_mem_mgr.get_map();
-                    execution_state.mapped_state = Some(Arc::new(mapped_state));
-                }
-                _ => (),
-            }
-            let mapped_state = Arc::as_ref(execution_state.mapped_state.as_ref().unwrap());
-            Some(Arc::new(CowMemoryCreator::new(mapped_state)))
-        } else {
-            None
-        };
-
-        let commit_dirty_pages = func_ref.to_commit();
         let modification_tracking = api_type.modification_tracking();
 
         let instruction_limit = execution_parameters.instruction_limit;
@@ -255,7 +229,7 @@ impl WasmExecutor {
             &embedder_cache,
             &execution_state.exported_globals,
             execution_state.wasm_memory.size,
-            memory_creator,
+            None,
             Some(execution_state.wasm_memory.page_map.clone()),
             modification_tracking,
             system_api,
@@ -283,16 +257,8 @@ impl WasmExecutor {
             match run_result {
                 Ok(run_result) => {
                     if modification_tracking == ModificationTracking::Track {
-                        if execution_state.cow_mem_mgr.is_valid() && commit_dirty_pages {
-                            let mapped_state = execution_state.mapped_state.take();
-                            let pages: Vec<u64> =
-                                run_result.dirty_pages.iter().map(|p| p.get()).collect();
-                            mapped_state.unwrap().soft_commit(&pages);
-                        } else {
-                            let page_delta =
-                                compute_page_delta(&mut instance, &run_result.dirty_pages);
-                            execution_state.wasm_memory.page_map.update(&page_delta);
-                        }
+                        let page_delta = compute_page_delta(&mut instance, &run_result.dirty_pages);
+                        execution_state.wasm_memory.page_map.update(&page_delta);
                         execution_state.wasm_memory.size = instance.heap_size();
                         execution_state.stable_memory.page_map.update(
                             &run_result

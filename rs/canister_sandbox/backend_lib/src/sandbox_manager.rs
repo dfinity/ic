@@ -161,7 +161,6 @@ impl Execution {
 
         // Prepare instance for running -- memory map, some ancillary
         // parameters and system API.
-        let memory_creator = None;
         let memory_init = Some(runtime_state.wasm_memory.page_map.clone());
         let stable_memory = runtime_state.stable_memory.clone();
 
@@ -189,7 +188,7 @@ impl Execution {
             &self.canister_wasm.compilate,
             &runtime_state.globals,
             runtime_state.wasm_memory.size,
-            memory_creator,
+            None,
             memory_init,
             modification_tracking,
             system_api,
