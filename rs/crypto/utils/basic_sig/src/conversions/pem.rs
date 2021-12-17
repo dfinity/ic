@@ -37,13 +37,17 @@ pub fn pem_to_der(pem: &str, label: &str) -> io::Result<Vec<u8>> {
 
     let expect = format!("-----BEGIN {}-----", label);
     if !lines[0].starts_with(&expect) {
-        return Err(invalid_data_err(
-            "PEM file doesn't start with BEGIN PK block",
-        ));
+        return Err(invalid_data_err(format!(
+            "PEM file doesn't start with 'BEGIN {}' block",
+            label
+        )));
     }
     let expect = format!("-----END {}-----", label);
     if !lines[n - 1].starts_with(&expect) {
-        return Err(invalid_data_err("PEM file doesn't end with END PK block"));
+        return Err(invalid_data_err(format!(
+            "PEM file doesn't end with 'END {}' block",
+            label
+        )));
     }
 
     base64::decode(&lines[1..n - 1].join(""))

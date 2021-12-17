@@ -29,11 +29,13 @@ pub fn parse_threshold_sig_key(pem_file: &Path) -> Result<ThresholdSigPublicKey>
 
     if !lines[0].starts_with("-----BEGIN PUBLIC KEY-----") {
         return Err(invalid_data_err(
-            "PEM file doesn't start with BEGIN PK block",
+            "PEM file doesn't start with 'BEGIN PUBLIC KEY' block",
         ));
     }
     if !lines[n - 1].starts_with("-----END PUBLIC KEY-----") {
-        return Err(invalid_data_err("PEM file doesn't end with END PK block"));
+        return Err(invalid_data_err(
+            "PEM file doesn't end with 'END PUBLIC KEY' block",
+        ));
     }
 
     let decoded = base64::decode(&lines[1..n - 1].join(""))
