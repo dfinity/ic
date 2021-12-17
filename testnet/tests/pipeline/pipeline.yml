@@ -905,11 +905,11 @@ system-tests-hourly:
     SUITE_NAME: "hourly"
     cd_target_env: "HOURLY"
 
-rosetta-hourly:
-  extends: .system-tests
-  variables:
-    SUITE_NAME: "rosetta"
-    cd_target_env: "HOURLY"
+#rosetta-hourly:
+#  extends: .system-tests
+#  variables:
+#    SUITE_NAME: "rosetta"
+#    cd_target_env: "HOURLY"
 
 .system-tests-wasm-generator:
   extends: .system-tests
