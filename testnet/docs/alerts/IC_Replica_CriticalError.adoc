@@ -1,0 +1,69 @@
+= IC_Replica_CriticalError
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+A `critical_error` counter was incremented by a replica. This `CounterVec`
+(indexed by an `error` label) is used to record "not supposed to happen"
+critical errors (within any component) that don't represent an immediate threat
+to the health of the replica (and thus don't require panicking; essentially a
+`panic!()` without the mess) but are definitely not expected to happen and the
+component owners want to be notified immediately if and when they do.
+
+Incrementing the counter is always supposed to be paired with logging an error
+message beginning with the exact same label (to make it easy to find) providing
+the context necessary for debugging.
+
+Every single `critical_error` variant MUST be documented here, including impact,
+possible causes and remediation, where necessary.
+
+== Critical Errors
+
+Critical error names are namespaced, similar to Prometheus metrics. The team
+responsible for a given error counter can be determined from the error name
+prefix:
+
+ * `mr` and `state_manager`: Message Routing team, reachable at
+https://dfinity.slack.com/archives/CKXPC1928[`#eng-messaging`] or via
+`+@team-messaging+`on Slack.
+
+=== `mr_stream_builder_infinite_loop`
+
+An infinite loop was detected while iterating over canister output queues as
+part of routing output messages into streams. An occurrence of this error
+would indicate a bug in the `PeekableOutputIterator` implementation.
+
+Unless a stream is found to have stalled (which should not be the case, as at
+least one message is routed every round) no immediate action is needed.
+
+=== `state_manager_manifest_reused_chunk_hash_error_count`
+
+State Manager uses page deltas to keep track of which Replicated State chunks
+have not changed between checkpoints and reuses the corresponding chunk hashes
+instead of computing them from scratch every CUP interval. But it also
+probabilistically validates these hashes. This error would indicate a mismatch
+between the reused and recomputed chunk hash.
+
+An occurrence would indicate either a random bit flip or, if this happens on
+multiple replicas, a bug that must be investigated immediately.
+
+=== `state_manager_missing_checkpoints`
+
+State Manager retains one or more checkpoints at all times (for the purpose of
+resuming after a crash/restart; and for slow/newly added replicas to use for
+catching up with the subnet) as directories on disk. It also keeps track of
+the list of checkpoints in a states metadata file. This error indicates that a
+checkpoint listed in the states metadata file is not actually present on disk.
+
+An occurrence would very likely point to a bug in either the State Manager or
+in the API between State Manager and Consensus.
+
+=== `state_sync_corrupted_chunks`
+
+This is very similar to `state_manager_manifest_reused_chunk_hash_error_count`
+above, except the hash mismatch is detected during state sync, for a chunk
+that the State Sync implementation had assumed was already present locally.
+
+An occurrence would indicate either a random bit flip or, if this happens on
+multiple replicas, a bug that must be investigated immediately.
