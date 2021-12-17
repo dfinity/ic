@@ -719,8 +719,11 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload>
                     .node_manager_sha256_hex
                     .clone()
                     .unwrap_or_else(String::default),
-                release_package_url: "".into(),
-                release_package_sha256_hex: "".into(),
+                release_package_url: self.replica_url.clone().unwrap_or_else(String::default),
+                release_package_sha256_hex: self
+                    .replica_sha256_hex
+                    .clone()
+                    .unwrap_or_else(String::default),
             }
         }
     }
