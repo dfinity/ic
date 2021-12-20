@@ -227,9 +227,9 @@ pub const SAMPLE_CONFIG: &str = r#"
         block_on_overflow: true,
     },
     // ===================================
-    // Configuration of the logging setup for the nodemanager.
+    // Configuration of the logging setup for the orchestrator.
     // ===================================
-    nodemanager_logger: {
+    orchestrator_logger: {
         // The node id to append to log lines. [deprecated]
         node_id: 100,
 

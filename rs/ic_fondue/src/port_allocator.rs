@@ -26,7 +26,7 @@ pub enum AddrType {
     Xnet,
     PublicApi,
     Prometheus,
-    NodemanagerPrometheus,
+    OrchestratorPrometheus,
 }
 
 impl From<AddrType> for u16 {
@@ -37,7 +37,7 @@ impl From<AddrType> for u16 {
             Xnet => 2497,
             PublicApi => 8080,
             Prometheus => 9090,
-            NodemanagerPrometheus => 9100,
+            OrchestratorPrometheus => 9100,
         }
     }
 }
@@ -143,7 +143,7 @@ mod tests {
     fn t(n: usize, addr_allocator: &mut dyn TcpAddrAllocator) {
         use AddrType::*;
 
-        let addr_types: &[AddrType] = &[P2P, Xnet, PublicApi, Prometheus, NodemanagerPrometheus];
+        let addr_types: &[AddrType] = &[P2P, Xnet, PublicApi, Prometheus, OrchestratorPrometheus];
         let combinations: Vec<_> = (0..n)
             .flat_map(|s| {
                 (0..n).flat_map(move |n| addr_types.iter().map(move |at| (n, s, at.clone())))

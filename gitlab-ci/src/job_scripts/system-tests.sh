@@ -17,8 +17,8 @@ for f in "${CI_PROJECT_DIR}"/artifacts/release-malicious/*.gz; do
     chmod +x "local-bin/$target"
 done
 
-gunzip -c -d "${CI_PROJECT_DIR}/artifacts/release/nodemanager.gz" >"local-bin/nodemanager"
-chmod +x "local-bin/nodemanager"
+gunzip -c -d "${CI_PROJECT_DIR}/artifacts/release/orchestrator.gz" >"local-bin/orchestrator"
+chmod +x "local-bin/orchestrator"
 export PATH=$PWD/local-bin:$PATH
 
 # shellcheck source=/dev/null

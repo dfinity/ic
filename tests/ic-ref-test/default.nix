@@ -7,7 +7,7 @@ let
   lib = pkgs.lib;
 
   # Here we wrap the ic-test-bin in the environment it needs,
-  # with replica and nodemanager on the path, and all NNS canisters set up
+  # with replica and orchestrator on the path, and all NNS canisters set up
   # This allows you to run the replica with
   #
   # nix run -f tests/ic-ref-test ic-test-bin -c ic-test-bin
@@ -19,7 +19,7 @@ let
       mkdir $out
       makeWrapper ${rs.ic-test-bin}/bin/ic-test-bin $out/bin/ic-test-bin \
         --prefix PATH : ${rs.ic-replica-unwrapped}/bin \
-        --prefix PATH : ${rs.nodemanager-unwrapped}/bin \
+        --prefix PATH : ${rs.orchestrator-unwrapped}/bin \
     '';
 
   drv = { ver, ic-ref, use-app-subnet }:

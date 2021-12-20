@@ -5,7 +5,7 @@
 # The tarballs will be published under the following URL scheme:
 #
 # * https://download.dfinity.systems/ic/<revision>/x86_64-linux/ic-replica.tar.gz
-# * https://download.dfinity.systems/ic/<revision>/x86_64-linux/nodemanager.tar.gz
+# * https://download.dfinity.systems/ic/<revision>/x86_64-linux/orchestrator.tar.gz
 # * https://download.dfinity.systems/ic/<revision>/x86_64-linux/ic-admin.tar.gz
 # * https://download.dfinity.systems/ic/<revision>/x86_64-darwin/ic-admin.tar.gz
 #
@@ -52,8 +52,8 @@ pkgs.lib.linuxOnly (
     s3cp "${jobset.dfinity.rs.ic-replica-release.x86_64-linux}/ic-replica-$ic_version.tar.gz" \
          "$dir/x86_64-linux/ic-replica.tar.gz" \
          "application/gzip" "$cache_long"
-    s3cp "${jobset.dfinity.rs.nodemanager-release.x86_64-linux}/nodemanager-$ic_version.tar.gz" \
-         "$dir/x86_64-linux/nodemanager.tar.gz" \
+    s3cp "${jobset.dfinity.rs.orchestrator-release.x86_64-linux}/orchestrator-$ic_version.tar.gz" \
+         "$dir/x86_64-linux/orchestrator.tar.gz" \
          "application/gzip" "$cache_long"
     s3cp "${jobset.dfinity.rs.ic-admin-release.x86_64-linux}/ic-admin-$ic_version.tar.gz" \
          "$dir/x86_64-linux/ic-admin.tar.gz" \

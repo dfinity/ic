@@ -154,7 +154,7 @@ Note that you should also use tools such as `ic-admin` from master.
 How to build your own guest OS image
 ----------
 
- 1. Put your replica and your node manager in `rootfs/opt/ic/bin`
+ 1. Put your replica and your orchestrator in `rootfs/opt/ic/bin`
  2. Copy `vsock_agent` from `artifacts` to `rootfs/opt/ic/bin`
  2. Build a new disk image: `scripts/build-disk-image.sh -o /tmp/disk.img`
 

@@ -30,7 +30,7 @@ DEFAULT_BINARIES = [
     "ic-starter",
     "ic-test-bin",
     "ic-workload-generator",
-    "nodemanager",
+    "orchestrator",
     "prod-test-driver",
     "replica",
     "state-tool",

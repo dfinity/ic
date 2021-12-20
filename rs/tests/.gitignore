@@ -1,3 +1,3 @@
-# The directory used to place the compiled nodemanager, replica, etc. for local
+# The directory used to place the compiled orchestrator, replica, etc. for local
 # system tests.
 local-bin/*

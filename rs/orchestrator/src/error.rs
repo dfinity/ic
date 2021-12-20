@@ -8,12 +8,12 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub type NodeManagerResult<T> = Result<T, NodeManagerError>;
+pub type OrchestratorResult<T> = Result<T, OrchestratorError>;
 
-/// Enumerates the possible errors that NodeManager may encounter
+/// Enumerates the possible errors that Orchestrator may encounter
 #[derive(Debug)]
 #[allow(clippy::enum_variant_names)]
-pub enum NodeManagerError {
+pub enum OrchestratorError {
     /// The given node is not assigned to any Subnet
     NodeUnassignedError(NodeId, RegistryVersion),
 
@@ -21,7 +21,7 @@ pub enum NodeManagerError {
     /// version
     SubnetMissingError(SubnetId, RegistryVersion),
 
-    /// An error occurred when querying the Registry that prevents Node Manager
+    /// An error occurred when querying the Registry that prevents Orchestrator
     /// from making progress
     RegistryClientError(RegistryClientError),
 
@@ -44,7 +44,7 @@ pub enum NodeManagerError {
     /// downloaded file
     FileDownloadError(FileDownloadError),
 
-    /// Failed to exec a new Node Manager binary
+    /// Failed to exec a new Orchestrator binary
     ExecError(PathBuf, exec::Error),
 
     /// The provided configuration file (`ic.json5`) has invalid content.
@@ -57,99 +57,99 @@ pub enum NodeManagerError {
     ReleasePackageError(ReleaseError),
 }
 
-impl NodeManagerError {
+impl OrchestratorError {
     pub(crate) fn file_write_error(file_path: &Path, e: io::Error) -> Self {
-        NodeManagerError::IoError(format!("Failed to write to file: {:?}", file_path), e)
+        OrchestratorError::IoError(format!("Failed to write to file: {:?}", file_path), e)
     }
 
     pub(crate) fn file_open_error(file_path: &Path, e: io::Error) -> Self {
-        NodeManagerError::IoError(format!("Failed to open file: {:?}", file_path), e)
+        OrchestratorError::IoError(format!("Failed to open file: {:?}", file_path), e)
     }
 
     pub(crate) fn dir_create_error(dir: &Path, e: io::Error) -> Self {
-        NodeManagerError::IoError(format!("Failed to create dir: {:?}", dir), e)
+        OrchestratorError::IoError(format!("Failed to create dir: {:?}", dir), e)
     }
 
     pub(crate) fn compute_hash_error(file_path: &Path, e: io::Error) -> Self {
-        NodeManagerError::IoError(format!("Failed to hash of: {:?}", file_path), e)
+        OrchestratorError::IoError(format!("Failed to hash of: {:?}", file_path), e)
     }
 
     pub(crate) fn invalid_configuration_error(msg: impl ToString) -> Self {
-        NodeManagerError::InvalidConfigurationError(msg.to_string())
+        OrchestratorError::InvalidConfigurationError(msg.to_string())
     }
 
     pub(crate) fn file_command_error(e: io::Error, cmd: &Command) -> Self {
-        NodeManagerError::IoError(format!("Failed to executing command: {:?}", cmd), e)
+        OrchestratorError::IoError(format!("Failed to executing command: {:?}", cmd), e)
     }
 }
 
-impl fmt::Display for NodeManagerError {
+impl fmt::Display for OrchestratorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NodeManagerError::NodeUnassignedError(node_id, registry_version) => write!(
+            OrchestratorError::NodeUnassignedError(node_id, registry_version) => write!(
                 f,
                 "Node {:?} is not found in any subnet at registry version {:?}",
                 node_id, registry_version
             ),
-            NodeManagerError::RegistryClientError(e) => write!(f, "{:?}", e),
-            NodeManagerError::ReplicaVersionMissingError(replica_version, registry_version) => {
+            OrchestratorError::RegistryClientError(e) => write!(f, "{:?}", e),
+            OrchestratorError::ReplicaVersionMissingError(replica_version, registry_version) => {
                 write!(
                     f,
                     "Replica version {} was not found in the Registry at registry version {:?}",
                     replica_version, registry_version
                 )
             }
-            NodeManagerError::IoError(msg, e) => {
+            OrchestratorError::IoError(msg, e) => {
                 write!(f, "IO error, message: {:?}, error: {:?}", msg, e)
             }
-            NodeManagerError::FileDownloadError(e) => write!(f, "File download error: {:?}", e),
-            NodeManagerError::BinaryHttpError(HttpError::HyperError(e)) => {
+            OrchestratorError::FileDownloadError(e) => write!(f, "File download error: {:?}", e),
+            OrchestratorError::BinaryHttpError(HttpError::HyperError(e)) => {
                 write!(f, "Encountered error when requesting binary: {:?}", e)
             }
-            NodeManagerError::ExecError(path, e) => write!(
+            OrchestratorError::ExecError(path, e) => write!(
                 f,
-                "Failed to exec new Node Manager process: {:?}, error: {:?}",
+                "Failed to exec new Orchestrator process: {:?}, error: {:?}",
                 path, e
             ),
-            NodeManagerError::InvalidConfigurationError(msg) => {
+            OrchestratorError::InvalidConfigurationError(msg) => {
                 write!(f, "Invalid configuration: {}", msg)
             }
-            NodeManagerError::SubnetMissingError(subnet_id, registry_version) => write!(
+            OrchestratorError::SubnetMissingError(subnet_id, registry_version) => write!(
                 f,
                 "Subnet ID {:?} does not exist in the Registry at registry version {:?}",
                 subnet_id, registry_version
             ),
-            NodeManagerError::ReplicaVersionParseError(e) => {
+            OrchestratorError::ReplicaVersionParseError(e) => {
                 write!(f, "Failed to parse replica version: {}", e)
             }
-            NodeManagerError::ReleasePackageError(e) => {
+            OrchestratorError::ReleasePackageError(e) => {
                 write!(f, "Error with a release package: {}", e)
             }
-            NodeManagerError::MakeRegistryCupError(subnet_id, registry_version) => write!(
+            OrchestratorError::MakeRegistryCupError(subnet_id, registry_version) => write!(
                 f,
                 "Failed to construct the genesis/recovery CUP, subnet_id: {}, registry_version: {}",
                 subnet_id, registry_version,
             ),
-            NodeManagerError::UpgradeError(msg) => write!(f, "Failed to upgrade: {}", msg),
+            OrchestratorError::UpgradeError(msg) => write!(f, "Failed to upgrade: {}", msg),
         }
     }
 }
 
-impl From<hyper::Error> for NodeManagerError {
+impl From<hyper::Error> for OrchestratorError {
     fn from(e: hyper::Error) -> Self {
-        NodeManagerError::BinaryHttpError(HttpError::HyperError(e))
+        OrchestratorError::BinaryHttpError(HttpError::HyperError(e))
     }
 }
 
-impl From<FileDownloadError> for NodeManagerError {
+impl From<FileDownloadError> for OrchestratorError {
     fn from(e: FileDownloadError) -> Self {
-        NodeManagerError::FileDownloadError(e)
+        OrchestratorError::FileDownloadError(e)
     }
 }
 
-impl Error for NodeManagerError {}
+impl Error for OrchestratorError {}
 
-/// An HTTP error that Node Manager may encounter
+/// An HTTP error that Orchestrator may encounter
 #[derive(Debug)]
 pub enum HttpError {
     /// A hyper HTTP client produced an error

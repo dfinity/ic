@@ -1,4 +1,4 @@
-use crate::{metrics::NodeManagerMetrics, registry_helper::RegistryHelper};
+use crate::{metrics::OrchestratorMetrics, registry_helper::RegistryHelper};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_types::RegistryVersion;
 use std::io::Write;
@@ -13,7 +13,7 @@ const REGISTRY_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 /// node accordingly.
 pub(crate) struct SshAccessManager {
     registry: Arc<RegistryHelper>,
-    metrics: Arc<NodeManagerMetrics>,
+    metrics: Arc<OrchestratorMetrics>,
     logger: ReplicaLogger,
     last_seen_registry_version: RegistryVersion,
     // If false, do not start or terminate the background task
@@ -23,7 +23,7 @@ pub(crate) struct SshAccessManager {
 impl SshAccessManager {
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
-        metrics: Arc<NodeManagerMetrics>,
+        metrics: Arc<OrchestratorMetrics>,
         logger: ReplicaLogger,
     ) -> Self {
         let enabled = Arc::new(std::sync::atomic::AtomicBool::new(true));

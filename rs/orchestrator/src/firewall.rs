@@ -1,7 +1,7 @@
 use crate::registry_helper::RegistryHelper;
 use crate::{
-    error::{NodeManagerError, NodeManagerResult},
-    metrics::NodeManagerMetrics,
+    error::{OrchestratorError, OrchestratorResult},
+    metrics::OrchestratorMetrics,
 };
 use ic_config::firewall::{Config as FirewallConfig, FIREWALL_FILE_DEFAULT_PATH};
 use ic_logger::{debug, info, warn, ReplicaLogger};
@@ -25,7 +25,7 @@ enum DataSource {
 /// accordingly.
 pub(crate) struct Firewall {
     registry: Arc<RegistryHelper>,
-    metrics: Arc<NodeManagerMetrics>,
+    metrics: Arc<OrchestratorMetrics>,
     configuration: FirewallConfig,
     source: DataSource,
     logger: ReplicaLogger,
@@ -41,7 +41,7 @@ pub(crate) struct Firewall {
 impl Firewall {
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
-        metrics: Arc<NodeManagerMetrics>,
+        metrics: Arc<OrchestratorMetrics>,
         firewall_config: FirewallConfig,
         logger: ReplicaLogger,
     ) -> Self {
@@ -55,7 +55,7 @@ impl Firewall {
         if !enabled {
             warn!(
                 logger,
-                "Firewall configuration not found. Node manager does not update firewall rules."
+                "Firewall configuration not found. Orchestrator does not update firewall rules."
             );
         }
 
@@ -89,7 +89,7 @@ impl Firewall {
     pub(crate) fn check_for_firewall_config(
         &mut self,
         registry_version: RegistryVersion,
-    ) -> NodeManagerResult<()> {
+    ) -> OrchestratorResult<()> {
         match self.registry.get_firewall_config(registry_version) {
             Ok(registry_fw_config) => {
                 // Data found in registry!
@@ -131,12 +131,12 @@ impl Firewall {
             if content.is_empty() {
                 warn!(
                     self.logger,
-                    "No firewall configuration found. Node manager will not write any config to a file."
+                    "No firewall configuration found. Orchestrator will not write any config to a file."
                 );
             } else {
                 let f = &self.configuration.config_file;
                 write_string_using_tmp_file(f, content.as_str())
-                    .map_err(|e| NodeManagerError::file_write_error(f, e))?;
+                    .map_err(|e| OrchestratorError::file_write_error(f, e))?;
                 self.compiled_config = content;
             }
             self.must_write = false;

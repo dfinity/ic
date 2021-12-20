@@ -119,7 +119,7 @@ $TMP/ic-admin \
     add-node ${DERIVED_NODE_ID} ${SUBNET_ID} \
     pb_file ${TMP}/node-0/node_record_*.pb
 
-# Fetch replica and node manager binaries
+# Fetch replica and orchestrator binaries
 (
     export NNS_REPLICA=$NNS_HOSTNAME
     source "${BASE_DIR}"/scripts/fetch-dfinity-binaries.sh

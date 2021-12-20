@@ -248,7 +248,7 @@ impl Backup {
         // Due to the fact that the backup is synced to the disk completely
         // independently of the consensus pool and always after the consensus pool was
         // mutated, we might run into an inconsistent state between the pool and the
-        // backup data if the replica gets killed by the node manager. To avoid this
+        // backup data if the replica gets killed by the orchestrator. To avoid this
         // situation, on the instantiation of the consensus pool and the backup
         // component, we need to synchronize the backup with the pool in a blocking
         // manner.

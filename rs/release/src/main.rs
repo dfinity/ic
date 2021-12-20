@@ -21,9 +21,9 @@ pub struct CliArgs {
     #[structopt(long, parse(from_os_str))]
     replica_binary: PathBuf,
 
-    /// The path to the nodemanager binary.
+    /// The path to the orchestrator binary.
     #[structopt(long, parse(from_os_str))]
-    nodemanager_binary: PathBuf,
+    orchestrator_binary: PathBuf,
 
     #[structopt(long, parse(from_os_str))]
     target_file: PathBuf,
@@ -33,7 +33,7 @@ impl CliArgs {
     fn validate_release_content(&self) -> ReleaseResult<ReleaseContent> {
         let release_content = ReleaseContent::from_paths(
             self.replica_binary.as_path(),
-            self.nodemanager_binary.as_path(),
+            self.orchestrator_binary.as_path(),
         );
 
         release_content.validate()?;

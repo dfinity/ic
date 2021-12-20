@@ -9,7 +9,7 @@ fi
 show_help() {
     echo "Usage: ./setup-and-cargo-test.sh [OPTIONS] [-- FONDUE_OPTIONS]"
     echo ""
-    echo "Compiles the replica and nodemanager, sets the binaries up then"
+    echo "Compiles the replica and orchestrator, sets the binaries up then"
     echo "runs system-tests"
     echo ""
     echo "This script must be ran from 'rs/tests'. "
@@ -17,7 +17,7 @@ show_help() {
     echo "For information on the fondue options run this script with '-- -h'."
     echo ""
     echo "Options:"
-    echo "   --no-build    Does not build the replica nor the nodemanager"
+    echo "   --no-build    Does not build the replica nor the orchestrator"
     echo ""
     echo "   --debug       Build the binaries in debug mode (ignored if --no-build is specified)"
     echo ""
@@ -88,14 +88,14 @@ remove_tmp_dirs() {
     fi
 }
 
-# The shell kills the process group. However, the node manager sets the pgid to
-# its own pid. As a result, the nodemanagers and the replicas started by this
+# The shell kills the process group. However, the orchestrator sets the pgid to
+# its own pid. As a result, the orchestrators and the replicas started by this
 # script will not get killed when the user presses Ctrl+C. As a mitigation, ...
-# we simply kill all nodemanager and system-tests.
+# we simply kill all orchestrator and system-tests.
 on_sigterm() {
     echo "Received SIGINT ..."
-    echo "Sending SIGTERM to 'nodemanager' processes started by this session!"
-    for pid in $(pgrep nodemanager); do kill -s SIGTERM "$pid"; done
+    echo "Sending SIGTERM to 'orchestrator' processes started by this session!"
+    for pid in $(pgrep orchestrator); do kill -s SIGTERM "$pid"; done
     echo "Sending SIGTERM to 'system-tests' processes started by this session!"
     for pid in $(pgrep system-tests); do kill -s SIGTERM "$pid"; done
     echo "Sending SIGTERM to 'ic-rosetta-api' processes started by this session!"
@@ -108,13 +108,13 @@ on_sigterm() {
 }
 
 if [[ "$no_build" != true ]]; then
-    ## Go build the replica and the nodemanager
+    ## Go build the replica and the orchestrator
     pushd ..
     st_build=$(date)
     pushd replica
     cargo build ${jobs_str} --bin replica ${release_string} --features malicious_code
     popd
-    cargo build ${jobs_str} --bin nodemanager --bin ic-rosetta-api ${release_string}
+    cargo build ${jobs_str} --bin orchestrator --bin ic-rosetta-api ${release_string}
     popd
     cargo build ${jobs_str}
     e_build=$(date)
@@ -134,18 +134,18 @@ esac
 ## If CARGO_TEST_DIR is not set, we use the default $(pwd)/../target instead.
 target=${CARGO_TARGET_DIR:-$(pwd)/../target}/${RUST_TRIPLE}/${BUILD_DIR}
 
-if [[ ! -f "${target}/replica" ]] || [[ ! -f "${target}/nodemanager" ]]; then
+if [[ ! -f "${target}/replica" ]] || [[ ! -f "${target}/orchestrator" ]]; then
     echo "Make sure that the following files exist:"
     echo "    - ${target}/replica"
-    echo "    - ${target}/nodemanager"
+    echo "    - ${target}/orchestrator"
     echo "    - ${target}/ic-rosetta-api"
     exit 1
 fi
 
-## Make a local-bin directory and link the replica and nodemanager here
+## Make a local-bin directory and link the replica and orchestrator here
 mkdir -p local-bin
 ln -fs "${target}/replica" local-bin/
-ln -fs "${target}/nodemanager" local-bin/
+ln -fs "${target}/orchestrator" local-bin/
 ln -fs "${target}/ic-rosetta-api" local-bin/
 
 ## Update path; because we must run this script from the tests directory,

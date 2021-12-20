@@ -83,7 +83,7 @@ pub fn get_catch_up_package(
 ///
 /// First attempts to look up the node's subnet ID in the registry.
 ///
-/// Panic if this fails after some retries. The node manager should
+/// Panic if this fails after some retries. The orchestrator should
 /// never have booted a replica if our node ID is not assigned to a subntwork
 /// yet.
 pub async fn get_subnet_id(

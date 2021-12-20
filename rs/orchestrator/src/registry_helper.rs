@@ -1,4 +1,4 @@
-use crate::error::{NodeManagerError, NodeManagerResult};
+use crate::error::{OrchestratorError, OrchestratorResult};
 use ic_config::Config;
 use ic_consensus::dkg::make_registry_cup;
 use ic_interfaces::registry::RegistryClient;
@@ -19,7 +19,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use url::Url;
 
-/// Calls the Registry and converts errors into `NodeManagerError`
+/// Calls the Registry and converts errors into `OrchestratorError`
 #[derive(Clone)]
 pub(crate) struct RegistryHelper {
     node_id: NodeId,
@@ -27,9 +27,9 @@ pub(crate) struct RegistryHelper {
     logger: ReplicaLogger,
 }
 
-/// Registry helper for the node manager
+/// Registry helper for the orchestrator
 ///
-/// The node manager fetches information from the registry to determine:
+/// The orchestrator fetches information from the registry to determine:
 /// - which subnetwork a node is in
 /// - which peers it should attempt to fetch CUPs from
 /// - which replica binary
@@ -81,18 +81,21 @@ impl RegistryHelper {
     /// Return the `SubnetId` this node belongs to (i.e. the Subnet that
     /// contains `self.node_id`) iff the node belongs to a subnet and that
     /// subnet does not have the `start_as_nns`-flag set.
-    pub(crate) fn get_subnet_id(&self, version: RegistryVersion) -> NodeManagerResult<SubnetId> {
+    pub(crate) fn get_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId> {
         if let Some((subnet_id, subnet_record)) = self
             .registry_client
             .get_listed_subnet_for_node_id(self.node_id, version)
-            .map_err(NodeManagerError::RegistryClientError)?
+            .map_err(OrchestratorError::RegistryClientError)?
         {
             if !subnet_record.start_as_nns {
                 return Ok(subnet_id);
             }
         }
 
-        Err(NodeManagerError::NodeUnassignedError(self.node_id, version))
+        Err(OrchestratorError::NodeUnassignedError(
+            self.node_id,
+            version,
+        ))
     }
 
     /// Return HTTP urls for all nodes in subnetwork
@@ -151,10 +154,10 @@ impl RegistryHelper {
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> NodeManagerResult<SubnetRecord> {
+    ) -> OrchestratorResult<SubnetRecord> {
         match self.registry_client.get_subnet_record(subnet_id, version) {
             Ok(Some(record)) => Ok(record),
-            _ => Err(NodeManagerError::SubnetMissingError(subnet_id, version)),
+            _ => Err(OrchestratorError::SubnetMissingError(subnet_id, version)),
         }
     }
 
@@ -163,7 +166,7 @@ impl RegistryHelper {
     pub(crate) fn get_own_subnet_record(
         &self,
         registry_version: RegistryVersion,
-    ) -> NodeManagerResult<(SubnetId, SubnetRecord)> {
+    ) -> OrchestratorResult<(SubnetId, SubnetRecord)> {
         let new_subnet_id = self.get_subnet_id(registry_version)?;
         let new_subnet_record = self.get_subnet_record(new_subnet_id, registry_version)?;
 
@@ -175,11 +178,11 @@ impl RegistryHelper {
         &self,
         replica_version_id: ReplicaVersion,
         version: RegistryVersion,
-    ) -> NodeManagerResult<ReplicaVersionRecord> {
+    ) -> OrchestratorResult<ReplicaVersionRecord> {
         self.registry_client
             .get_replica_version_record_from_version_id(&replica_version_id, version)
-            .map_err(NodeManagerError::RegistryClientError)?
-            .ok_or(NodeManagerError::ReplicaVersionMissingError(
+            .map_err(OrchestratorError::RegistryClientError)?
+            .ok_or(OrchestratorError::ReplicaVersionMissingError(
                 replica_version_id,
                 version,
             ))
@@ -189,19 +192,19 @@ impl RegistryHelper {
     pub(crate) fn get_registry_cup(
         &self,
         version: RegistryVersion,
-    ) -> NodeManagerResult<CatchUpPackage> {
+    ) -> OrchestratorResult<CatchUpPackage> {
         let subnet_id = self.get_subnet_id(version)?;
         make_registry_cup(&*self.registry_client, subnet_id, Some(&self.logger))
-            .ok_or(NodeManagerError::MakeRegistryCupError(subnet_id, version))
+            .ok_or(OrchestratorError::MakeRegistryCupError(subnet_id, version))
     }
 
     pub(crate) fn get_firewall_config(
         &self,
         version: RegistryVersion,
-    ) -> NodeManagerResult<FirewallConfig> {
+    ) -> OrchestratorResult<FirewallConfig> {
         match self.registry_client.get_firewall_config(version) {
             Ok(Some(firewall_config)) => Ok(firewall_config),
-            _ => Err(NodeManagerError::InvalidConfigurationError(
+            _ => Err(OrchestratorError::InvalidConfigurationError(
                 "Invalid firewall configuration".to_string(),
             )),
         }
@@ -213,15 +216,15 @@ impl RegistryHelper {
 
     pub(crate) fn get_replica_version_from_subnet_record(
         subnet: SubnetRecord,
-    ) -> NodeManagerResult<ReplicaVersion> {
+    ) -> OrchestratorResult<ReplicaVersion> {
         ReplicaVersion::try_from(subnet.replica_version_id.as_ref())
-            .map_err(NodeManagerError::ReplicaVersionParseError)
+            .map_err(OrchestratorError::ReplicaVersionParseError)
     }
 
     pub(crate) fn get_own_readonly_and_backup_keysets(
         &self,
         version: RegistryVersion,
-    ) -> NodeManagerResult<(Vec<String>, Vec<String>)> {
+    ) -> OrchestratorResult<(Vec<String>, Vec<String>)> {
         // CON-621: get the keysets from the subnet record
 
         match self.get_own_subnet_record(version) {
@@ -229,11 +232,11 @@ impl RegistryHelper {
                 subnet_record.ssh_readonly_access,
                 subnet_record.ssh_backup_access,
             )),
-            Err(NodeManagerError::NodeUnassignedError(_, _)) => {
+            Err(OrchestratorError::NodeUnassignedError(_, _)) => {
                 match self
                     .registry_client
                     .get_unassigned_nodes_config(version)
-                    .map_err(NodeManagerError::RegistryClientError)?
+                    .map_err(OrchestratorError::RegistryClientError)?
                 {
                     // Unassigned nodes do not need backup keys
                     Some(record) => Ok((record.ssh_readonly_access, vec![])),

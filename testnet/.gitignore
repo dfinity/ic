@@ -1,5 +1,5 @@
 **/.vagrant/**
-nodemanager
+orchestrator
 ./replica
 ic-prep
 ic-admin

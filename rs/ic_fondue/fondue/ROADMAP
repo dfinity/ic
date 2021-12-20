@@ -15,7 +15,7 @@
 
 * Run a real replica using the process Manager
 
-* Run replica via node manager using the process Manager
+* Run replica via orchestrator using the process Manager
 
 * Port N of the old scenario tests to the new framework
 

@@ -127,7 +127,7 @@ if [ -z "$(echo "$ipv4_prefixes" | sed "s/\W//g")" ]; then
     ipv4_prefixes='-'
 fi
 
-# Put a placeholder for the prefixes instead of the actual prefixes (we want this part to be dynamically created by node manager)
+# Put a placeholder for the prefixes instead of the actual prefixes (we want this part to be dynamically created by orchestrator)
 # shellcheck disable=SC2001
 config_content=$(echo "$config_content" | tr '\n' '\a' | sed 's/define IPV6_PREFIXES={[^}]*}/define IPV6_PREFIXES={\n  << ipv6_prefixes >>\n}/g' | sed 's/define IPV4_PREFIXES={[^}]*}/define IPV4_PREFIXES={\n  << ipv4_prefixes >>\n}/g' | tr '\a' '\n')
 original_config_content=$(tr '\n' '\a' <"$original_fw_config_content_file" | sed 's/define IPV6_PREFIXES={[^}]*}/define IPV6_PREFIXES={\n  << ipv6_prefixes >>\n}/g' | sed 's/define IPV4_PREFIXES={[^}]*}/define IPV4_PREFIXES={\n  << ipv4_prefixes >>\n}/g' | tr '\a' '\n')

@@ -9,16 +9,16 @@ use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "node-manager",
-    about = "Arguments for the Internet Computer Node Manager."
+    name = "orchestrator",
+    about = "Arguments for the Internet Computer Orchestrator."
 )]
-/// Arguments for the node manager binary.
-pub struct NodeManagerArgs {
-    /// The directory where Node Manager will store Replica binaries
+/// Arguments for the orchestrator binary.
+pub struct OrchestratorArgs {
+    /// The directory where Orchestrator will store Replica binaries
     #[structopt(long, parse(from_os_str))]
     pub(crate) replica_binary_dir: PathBuf,
 
-    /// The directory where Node Manager will store catch-up packages (CUPs)
+    /// The directory where Orchestrator will store catch-up packages (CUPs)
     #[structopt(long, parse(from_os_str))]
     pub(crate) cup_dir: PathBuf,
 
@@ -37,7 +37,7 @@ pub struct NodeManagerArgs {
     #[structopt(long)]
     pub(crate) metrics_listen_addr: Option<SocketAddr>,
 
-    /// For debugging purposes, for the node manager to use the given
+    /// For debugging purposes, for the orchestrator to use the given
     /// replica.
     #[structopt(long)]
     pub(crate) force_replica_binary: Option<String>,
@@ -52,7 +52,7 @@ pub struct NodeManagerArgs {
     pub(crate) version_file: PathBuf,
 }
 
-impl NodeManagerArgs {
+impl OrchestratorArgs {
     /// Create the directories associated with this object if they don't already
     /// exist
     pub(crate) fn create_dirs(&self) {

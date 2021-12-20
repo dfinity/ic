@@ -1,8 +1,8 @@
 policy_module(ic-node, 1.0.0)
 
-# Nodemanager process & executable domain type
-type ic_nodemanager_t;
-type ic_nodemanager_exec_t;
+# Orchestrator process & executable domain type
+type ic_orchestrator_t;
+type ic_orchestrator_exec_t;
 
 # Replica process & executable domain type
 type ic_replica_t;
@@ -40,78 +40,78 @@ allow mount_t net_conf_t : file { mounton };
 allow mount_t etc_t : dir { mounton };
 
 ###############################################################################
-# Node manager, basic process stuff
+# Orchestrator, basic process stuff
 
-application_domain(ic_nodemanager_t, ic_nodemanager_exec_t)
+application_domain(ic_orchestrator_t, ic_orchestrator_exec_t)
 
 # Allow it to be spawned from init scripts.
-init_daemon_domain(ic_nodemanager_t, ic_nodemanager_exec_t)
+init_daemon_domain(ic_orchestrator_t, ic_orchestrator_exec_t)
 
 # Allow launching replica
-domain_auto_transition_pattern(ic_nodemanager_t, ic_replica_exec_t, ic_replica_t)
+domain_auto_transition_pattern(ic_orchestrator_t, ic_replica_exec_t, ic_replica_t)
 
 # Allow launching unrestricted sudo (in order to be able to apply upgrades).
 # This is obviously a wide breach in the security policy and will be restricted later.
-sudo_role_template(ic_nodemanager, system_r, ic_nodemanager_t)
+sudo_role_template(ic_orchestrator, system_r, ic_orchestrator_t)
 
 # Manage relevant files
-ic_rw_data(ic_nodemanager_t)
-ic_rw_crypto_store(ic_nodemanager_t)
+ic_rw_data(ic_orchestrator_t)
+ic_rw_crypto_store(ic_orchestrator_t)
 
 # For some reason, it wants to read this
-kernel_read_vm_overcommit_sysctl(ic_nodemanager_t)
+kernel_read_vm_overcommit_sysctl(ic_orchestrator_t)
 
 # Needs to read replica config.
-ic_read_replica_config(ic_nodemanager_t)
+ic_read_replica_config(ic_orchestrator_t)
 
-corenet_tcp_bind_generic_node(ic_nodemanager_t)
-corenet_tcp_bind_all_unreserved_ports(ic_nodemanager_t)
-corenet_tcp_connect_http_cache_port(ic_nodemanager_t)
-allow ic_nodemanager_t self:tcp_socket create_stream_socket_perms;
-allow ic_nodemanager_t self:tcp_socket rw_stream_socket_perms;
+corenet_tcp_bind_generic_node(ic_orchestrator_t)
+corenet_tcp_bind_all_unreserved_ports(ic_orchestrator_t)
+corenet_tcp_connect_http_cache_port(ic_orchestrator_t)
+allow ic_orchestrator_t self:tcp_socket create_stream_socket_perms;
+allow ic_orchestrator_t self:tcp_socket rw_stream_socket_perms;
 
 # wants to read openssl config and public certs
-miscfiles_read_generic_certs(ic_nodemanager_t)
+miscfiles_read_generic_certs(ic_orchestrator_t)
 
 # Allow using locales
-miscfiles_read_localization(ic_nodemanager_t)
+miscfiles_read_localization(ic_orchestrator_t)
 
 # wants to read /opt/ic/share/version.txt
-read_files_pattern(ic_nodemanager_t, usr_t, usr_t)
+read_files_pattern(ic_orchestrator_t, usr_t, usr_t)
 
 # we want to execute other processes (e.g. manageboot.sh to apply an update)
-corecmd_search_bin(ic_nodemanager_t)
-corecmd_exec_bin(ic_nodemanager_t)
-corecmd_exec_shell(ic_nodemanager_t)
-# we want to execute other commands while staying in the domain ic_nodemanager_t
+corecmd_search_bin(ic_orchestrator_t)
+corecmd_exec_bin(ic_orchestrator_t)
+corecmd_exec_shell(ic_orchestrator_t)
+# we want to execute other commands while staying in the domain ic_orchestrator_t
 # this is actually absolutely not ideal: executing something else should trigger
 # a domain transition. However, we are executing shell files and no domain transition
 # is available in this case.
-allow ic_nodemanager_t bin_t : file { entrypoint };
+allow ic_orchestrator_t bin_t : file { entrypoint };
 
 # Wants to read /sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us
-fs_read_cgroup_files(ic_nodemanager_t)
+fs_read_cgroup_files(ic_orchestrator_t)
 
 # For writing updates, it needs capability to write to EFI system
 # partition (maybe we should have a specific label for that). The
 # EFI system partition in turn is mounted below /boot.
 require { type boot_t; }
-search_dirs_pattern(ic_nodemanager_t, boot_t, boot_t)
-fs_manage_dos_files(ic_nodemanager_t)
+search_dirs_pattern(ic_orchestrator_t, boot_t, boot_t)
+fs_manage_dos_files(ic_orchestrator_t)
 
 # Wants to set process group
-allow ic_nodemanager_t self : process { getsched setpgid };
+allow ic_orchestrator_t self : process { getsched setpgid };
 
 # Create a fifo to communicate with updater process.
-allow ic_nodemanager_t self : fifo_file { getattr ioctl read write };
+allow ic_orchestrator_t self : fifo_file { getattr ioctl read write };
 
 # Allow creating arbitrary temporary files: For some reason the use of /tmp is hard-coded
 # in some places in the binary, so cannot divert this to a safer place.
 require { type tmp_t; }
-rw_dirs_pattern(ic_nodemanager_t, tmp_t, tmp_t)
-create_dirs_pattern(ic_nodemanager_t, tmp_t, tmp_t)
-delete_dirs_pattern(ic_nodemanager_t, tmp_t, tmp_t)
-list_dirs_pattern(ic_nodemanager_t, tmp_t, tmp_t)
+rw_dirs_pattern(ic_orchestrator_t, tmp_t, tmp_t)
+create_dirs_pattern(ic_orchestrator_t, tmp_t, tmp_t)
+delete_dirs_pattern(ic_orchestrator_t, tmp_t, tmp_t)
+list_dirs_pattern(ic_orchestrator_t, tmp_t, tmp_t)
 
 ###############################################################################
 # Replica, basic process stuff
@@ -120,8 +120,8 @@ application_domain(ic_replica_t, ic_replica_exec_t)
 
 # Describe replica_t as daemon domain: Quite similar to what init_daemon_domain does.
 # This would all look a lot simpler if init were to start replica directly
-# (instead of nodemanager being there as an intermediary -- in some sense,
-# nodemanager has the role of "init", so we need similar policy).
+# (instead of orchestrator being there as an intermediary -- in some sense,
+# orchestrator has the role of "init", so we need similar policy).
 typeattribute ic_replica_t daemon;
 domain_type(ic_replica_t)
 domain_entry_file(ic_replica_t, ic_replica_exec_t)
@@ -129,10 +129,10 @@ role system_r types ic_replica_t;
 init_dontaudit_use_fds(ic_replica_t)
 term_dontaudit_use_console(ic_replica_t)
 init_use_script_ptys(ic_replica_t)
-allow ic_nodemanager_t ic_replica_t : process rlimitinh;
+allow ic_orchestrator_t ic_replica_t : process rlimitinh;
 
 # Use inherited file descriptors.
-allow ic_replica_t ic_nodemanager_t : fd use;
+allow ic_replica_t ic_orchestrator_t : fd use;
 
 # Manage relevant files
 ic_rw_data(ic_replica_t)
@@ -226,7 +226,7 @@ search_dirs_pattern(iptables_t, var_run_t, ic_var_run_t)
 search_dirs_pattern(iptables_t, ic_var_run_t, ic_nftables_ruleset_t)
 read_files_pattern(iptables_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
 
-# Allow nodemanager to write nftables ruleset
-manage_files_pattern(ic_nodemanager_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
+# Allow orchestrator to write nftables ruleset
+manage_files_pattern(ic_orchestrator_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
 
 

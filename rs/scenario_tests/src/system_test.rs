@@ -44,7 +44,7 @@ use log_analyzer::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-pub const NODEMANAGER_EXECUTABLE: &str = "nodemanager";
+pub const ORCHESTRATOR_EXECUTABLE: &str = "orchestrator";
 pub const REPLICA_EXECUTABLE: &str = "replica";
 
 #[derive(Clone, Debug)]
@@ -134,7 +134,7 @@ impl InternetComputer {
     }
 
     pub fn is_system_test_environment() -> SystemTestResult<()> {
-        Self::is_file_on_path(NODEMANAGER_EXECUTABLE)
+        Self::is_file_on_path(ORCHESTRATOR_EXECUTABLE)
             .and_then(|_| Self::is_file_on_path(REPLICA_EXECUTABLE))
     }
 

@@ -61,9 +61,9 @@ nodes:
     node_exporter_metrics_listen_port: 9100
     node_exporter_metrics_listen_addr: "[{{ node_exporter_metrics_listen_ip }}]:{{ node_exporter_metrics_listen_port }}"
 
-    nodemanager_metrics_listen_ip: "{{ ipv6 }}"
-    nodemanager_metrics_listen_port: 9091
-    nodemanager_metrics_listen_addr: "[{{ nodemanager_metrics_listen_ip }}]:{{ nodemanager_metrics_listen_port }}"
+    orchestrator_metrics_listen_ip: "{{ ipv6 }}"
+    orchestrator_metrics_listen_port: 9091
+    orchestrator_metrics_listen_addr: "[{{ orchestrator_metrics_listen_ip }}]:{{ orchestrator_metrics_listen_port }}"
 
     journalbeat_hosts:
       - "elasticsearch-node-0.testnet.dfinity.systems:443"

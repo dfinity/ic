@@ -607,8 +607,8 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload> for ProposeToBlessRepli
             "https://download.dfinity.systems/ic/{}/x86_64-linux/ic-replica.tar.gz",
             &self.commit_hash
         );
-        let node_manager_binary_url = format!(
-            "https://download.dfinity.systems/ic/{}/x86_64-linux/nodemanager.tar.gz",
+        let orchestrator_binary_url = format!(
+            "https://download.dfinity.systems/ic/{}/x86_64-linux/orchestrator.tar.gz",
             &self.commit_hash
         );
 
@@ -619,7 +619,7 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload> for ProposeToBlessRepli
             .unwrap();
 
         file_downloader
-            .download_and_extract_tar_gz(&node_manager_binary_url, &dir, None)
+            .download_and_extract_tar_gz(&orchestrator_binary_url, &dir, None)
             .await
             .unwrap();
 
@@ -643,7 +643,7 @@ struct ProposeToBlessReplicaVersionFlexibleCmd {
 
     /// The URL against which a HTTP GET request will return a release
     /// package that corresponds to this version. If set,
-    /// {replica, node_manager}_{url, sha256_hex} will be ignored
+    /// {replica, orchestrator}_{url, sha256_hex} will be ignored
     pub release_package_url: Option<String>,
 
     /// The hex-formatted SHA-256 hash of the archive served by

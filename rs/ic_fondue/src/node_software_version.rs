@@ -12,8 +12,8 @@ pub struct NodeSoftwareVersion {
     pub replica_version: ReplicaVersion,
     pub replica_url: Url,
     pub replica_hash: String,
-    pub nodemanager_url: Url,
-    pub nodemanager_hash: String,
+    pub orchestrator_url: Url,
+    pub orchestrator_hash: String,
 }
 
 impl NodeSoftwareVersion {
@@ -22,7 +22,7 @@ impl NodeSoftwareVersion {
     /// the given replica version.
     ///
     /// The `current` version of replica is assumed to be the binaries named
-    /// `replica` and `nodemanager` found on `$PATH`.
+    /// `replica` and `orchestrator` found on `$PATH`.
     ///
     /// # Panics
     ///
@@ -31,14 +31,14 @@ impl NodeSoftwareVersion {
     pub fn system_test_current(replica_version: ReplicaVersion) -> Self {
         let (replica_url, replica_hash) =
             get_replica_url_and_hash().expect("Could not find replica on $PATH");
-        let (nodemanager_url, nodemanager_hash) =
-            get_nodemanager_url_and_hash().expect("Could not find nodemanager on $PATH");
+        let (orchestrator_url, orchestrator_hash) =
+            get_orchestrator_url_and_hash().expect("Could not find orchestrator on $PATH");
         Self {
             replica_version,
             replica_url,
             replica_hash,
-            nodemanager_url,
-            nodemanager_hash,
+            orchestrator_url,
+            orchestrator_hash,
         }
     }
 }
@@ -57,10 +57,10 @@ pub fn get_replica_url() -> Option<Url> {
     })
 }
 
-/// Returns a URL to nodemanager binary on path, and the sha256 value of the
+/// Returns a URL to orchestrator binary on path, and the sha256 value of the
 /// data contained in the file.
-pub fn get_nodemanager_url_and_hash() -> Option<(Url, String)> {
-    get_binary_url_and_hash("nodemanager")
+pub fn get_orchestrator_url_and_hash() -> Option<(Url, String)> {
+    get_binary_url_and_hash("orchestrator")
 }
 
 /// Returns a URL to replica binary on path, and the sha256 value of the data

@@ -312,7 +312,7 @@ pub trait StateManager: StateReader {
     /// # Panics
     ///
     /// This function always panics because there is no point in continuing the
-    /// normal operation.  We rely on node manager restarting the replica, which
+    /// normal operation.  We rely on orchestrator restarting the replica, which
     /// in turn will initiate the normal recovery procedure.
     fn report_diverged_state(&self, height: Height);
 }

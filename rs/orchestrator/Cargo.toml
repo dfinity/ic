@@ -1,5 +1,5 @@
 [package]
-name = "nodemanager"
+name = "orchestrator"
 version = "0.8.0"
 edition = "2018"
 

@@ -82,7 +82,7 @@ pub(crate) fn assert_authentication_fails(ip: &IpAddr, username: &str, mean: &Au
 }
 
 pub(crate) fn wait_until_authentication_is_granted(ip: &IpAddr, username: &str, mean: &AuthMean) {
-    // The node manager updates the access keys every 10 seconds. If we are lucky,
+    // The orchestrator updates the access keys every 10 seconds. If we are lucky,
     // this call succeeds at the first trial. If we are unlucky, it starts
     // succeeding after 10 secs.
     let deadline = current_time() + Duration::from_secs(30);
@@ -96,7 +96,7 @@ pub(crate) fn wait_until_authentication_is_granted(ip: &IpAddr, username: &str, 
 }
 
 pub(crate) fn wait_until_authentication_fails(ip: &IpAddr, username: &str, mean: &AuthMean) {
-    // The node manager updates the access keys every 10 seconds. If we are lucky,
+    // The orchestrator updates the access keys every 10 seconds. If we are lucky,
     // this call succeeds at the first trial. If we are unlucky, it starts
     // succeeding after 10 secs.
     let deadline = current_time() + Duration::from_secs(30);

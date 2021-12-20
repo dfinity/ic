@@ -82,7 +82,7 @@ ic-ref-test:
       ls -lah
 
       mkdir -p "${CI_PROJECT_DIR}/rs/local-bin"
-      for f in replica nodemanager ic-test-bin canister_sandbox; do
+      for f in replica orchestrator ic-test-bin canister_sandbox; do
         gunzip -k "$f.gz"
         chmod +x "$f"
         mv "$f" "${CI_PROJECT_DIR}/rs/local-bin/$f"

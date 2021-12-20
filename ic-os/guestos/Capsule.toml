@@ -1,7 +1,7 @@
 [guest-os-diskimg]
 input_files = [
     "../../artifacts/release/replica.gz",
-    "../../artifacts/release/nodemanager.gz",
+    "../../artifacts/release/orchestrator.gz",
     "../../artifacts/release/canister_sandbox.gz",
     "../../artifacts/release/vsock_agent.gz",
     "../../artifacts/release/state-tool.gz",
@@ -18,7 +18,7 @@ input_files = [
 [guest-os-diskimg-dev]
 input_files = [
     "../../artifacts/release/replica.gz",
-    "../../artifacts/release/nodemanager.gz",
+    "../../artifacts/release/orchestrator.gz",
     "../../artifacts/release/canister_sandbox.gz",
     "../../artifacts/release/vsock_agent.gz",
     "../../artifacts/release/state-tool.gz",
@@ -35,7 +35,7 @@ input_files = [
 [guest-os-diskimg-dev-malicious]
 input_files = [
     "../../artifacts/release/replica.gz",
-    "../../artifacts/release/nodemanager.gz",
+    "../../artifacts/release/orchestrator.gz",
     "../../artifacts/release/canister_sandbox.gz",
     "../../artifacts/release/vsock_agent.gz",
     "../../artifacts/release/state-tool.gz",
@@ -51,7 +51,7 @@ input_files = [
 [guest-os-updateimg-build]
 input_files = [
     "../../artifacts/release/replica.gz",
-    "../../artifacts/release/nodemanager.gz",
+    "../../artifacts/release/orchestrator.gz",
     "../../artifacts/release/canister_sandbox.gz",
     "../../artifacts/release/vsock_agent.gz",
     "../../artifacts/release/state-tool.gz",
@@ -68,7 +68,7 @@ input_files = [
 [guest-os-updateimg-build-dev]
 input_files = [
     "../../artifacts/release/replica.gz",
-    "../../artifacts/release/nodemanager.gz",
+    "../../artifacts/release/orchestrator.gz",
     "../../artifacts/release/canister_sandbox.gz",
     "../../artifacts/release/vsock_agent.gz",
     "../../artifacts/release/state-tool.gz",

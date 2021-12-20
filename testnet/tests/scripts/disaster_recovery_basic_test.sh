@@ -10,7 +10,7 @@ tag::catalog[]
 Title:: Recover From The Deployment of a No-Op application subnet
 
 Goal:: Demonstrate that recovery CUP can be written to registry and triggers
-upgrade in node manager
+upgrade in orchestrator
 
 Runbook::
 . Start ic with at least one application subnet with counter canister and

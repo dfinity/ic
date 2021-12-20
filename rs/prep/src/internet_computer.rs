@@ -179,7 +179,7 @@ pub type UnassignedNodes = BTreeMap<NodeIndex, InitializedNode>;
 pub struct IcConfig {
     target_dir: PathBuf,
     topology_config: TopologyConfig,
-    /// When a node starts up, the node manager fetches the replica binary found
+    /// When a node starts up, the orchestrator fetches the replica binary found
     /// at the URL in the blessed version record that carries the version
     /// id referred to in the subnet record that the node belongs to.
     ///

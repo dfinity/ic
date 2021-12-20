@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use tar::{Archive, Builder};
 
 pub const REPLICA_KEY: &str = "replica";
-pub const NODEMANAGER_KEY: &str = "nodemanager";
+pub const ORCHESTRATOR_KEY: &str = "orchestrator";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ReleaseIdentifier(pub [u8; 32]);
@@ -91,15 +91,15 @@ impl TryFrom<&Path> for ReleaseContent {
 }
 
 impl ReleaseContent {
-    pub fn from_paths<P: AsRef<Path>>(replica_binary: P, nodemanager_binary: P) -> Self {
+    pub fn from_paths<P: AsRef<Path>>(replica_binary: P, orchestrator_binary: P) -> Self {
         let mut entries = BTreeMap::default();
         entries.insert(
             REPLICA_KEY.to_string(),
             Value::File(PathBuf::from(replica_binary.as_ref())),
         );
         entries.insert(
-            NODEMANAGER_KEY.to_string(),
-            Value::File(PathBuf::from(nodemanager_binary.as_ref())),
+            ORCHESTRATOR_KEY.to_string(),
+            Value::File(PathBuf::from(orchestrator_binary.as_ref())),
         );
         Self { entries }
     }
@@ -216,17 +216,17 @@ impl ReleaseContent {
             .ok_or_else(|| ReleaseError::KeyMissing(key.into()))
     }
 
-    /// Return a path to the node manager binary, if this path exists
-    pub fn get_node_manager_binary(&self) -> ReleaseResult<PathBuf> {
-        self.get_file_by_key(NODEMANAGER_KEY)
+    /// Return a path to the orchestrator binary, if this path exists
+    pub fn get_orchestrator_binary(&self) -> ReleaseResult<PathBuf> {
+        self.get_file_by_key(ORCHESTRATOR_KEY)
     }
 
-    /// Return the hash of the node manager, if it exists in the release package
-    pub fn get_node_manager_hash(&self) -> ReleaseResult<[u8; 32]> {
+    /// Return the hash of the orchestrator, if it exists in the release package
+    pub fn get_orchestrator_hash(&self) -> ReleaseResult<[u8; 32]> {
         self.entries
-            .get(NODEMANAGER_KEY)
+            .get(ORCHESTRATOR_KEY)
             .map(|x| x.hash())
-            .ok_or_else(|| ReleaseError::KeyMissing(NODEMANAGER_KEY.to_string()))?
+            .ok_or_else(|| ReleaseError::KeyMissing(ORCHESTRATOR_KEY.to_string()))?
     }
 
     /// Return a path to the replica binary, if this path exists
@@ -295,9 +295,9 @@ mod tests {
     #[test]
     fn roundtrip_succeeds() {
         let replica_file = random_file();
-        let nodemanager_file = random_file();
+        let orchestrator_file = random_file();
 
-        let release = ReleaseContent::from_paths(replica_file.path(), nodemanager_file.path());
+        let release = ReleaseContent::from_paths(replica_file.path(), orchestrator_file.path());
 
         let release_ident = release.get_release_identifier().unwrap();
 
@@ -335,13 +335,13 @@ mod tests {
     #[test]
     fn nonexistent_file_failes() {
         let replica_file = random_file();
-        let nodemanager_file = {
+        let orchestrator_file = {
             // file is dropped and deleted in this context
             let f = random_file();
             PathBuf::from(f.path())
         };
 
-        let release = ReleaseContent::from_paths(replica_file.path(), &nodemanager_file);
+        let release = ReleaseContent::from_paths(replica_file.path(), &orchestrator_file);
 
         assert_matches!(release.validate(), Err(ReleaseError::FileNotFound(_)));
     }
@@ -349,9 +349,9 @@ mod tests {
     #[test]
     fn round_trip_from_release_directory() {
         let replica_file = random_file();
-        let nodemanager_file = random_file();
+        let orchestrator_file = random_file();
 
-        let release = ReleaseContent::from_paths(replica_file.path(), nodemanager_file.path());
+        let release = ReleaseContent::from_paths(replica_file.path(), orchestrator_file.path());
 
         let release_ident = release.get_release_identifier().unwrap();
 

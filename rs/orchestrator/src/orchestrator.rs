@@ -1,8 +1,8 @@
-use crate::args::NodeManagerArgs;
+use crate::args::OrchestratorArgs;
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::crypto_helper::setup_crypto;
 use crate::firewall::Firewall;
-use crate::metrics::NodeManagerMetrics;
+use crate::metrics::OrchestratorMetrics;
 use crate::nns_registry_replicator::NnsRegistryReplicator;
 use crate::registration::NodeRegistration;
 use crate::registry_helper::RegistryHelper;
@@ -32,7 +32,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-pub struct NodeManager {
+pub struct Orchestrator {
     pub logger: ReplicaLogger,
     _async_log_guard: AsyncGuard,
     _metrics_runtime: MetricsRuntimeImpl,
@@ -61,8 +61,8 @@ fn load_version_from_file(logger: &ReplicaLogger, path: &Path) -> Result<Replica
     })
 }
 
-impl NodeManager {
-    /// Start the Node Manager
+impl Orchestrator {
+    /// Start the Orchestrator
     ///
     /// This starts 2 tasks for upgrades: one which runs and monitors
     /// a Replica process, and another that constantly monitors for a
@@ -70,10 +70,10 @@ impl NodeManager {
     /// executes the upgrade to this new release.
     ///
     /// It spawns a third task that monitors the registry for new
-    /// data centers. If a new data center is added, node manager will
+    /// data centers. If a new data center is added, orchestrator will
     /// generate a new firewall configuration allowing access from the
     /// IP range specified in the DC record.
-    pub async fn start(args: NodeManagerArgs) -> Result<Self, ()> {
+    pub async fn start(args: OrchestratorArgs) -> Result<Self, ()> {
         args.create_dirs();
         let metrics_addr = args.get_metrics_addr();
         let config = args.get_ic_config();
@@ -82,14 +82,14 @@ impl NodeManager {
         let (logger, _async_log_guard) = Self::get_logger(&config);
         let slog_logger = logger.inner_logger.root.clone();
         let metrics_registry = MetricsRegistry::global();
-        let current_node_manager_hash = utils::get_node_manager_binary_hash()
-            .expect("Failed to determine sha256 of node manager binary");
+        let current_orchestrator_hash = utils::get_orchestrator_binary_hash()
+            .expect("Failed to determine sha256 of orchestrator binary");
 
         info!(
             logger,
-            "Running node manager ({:?} sha256 hash: {:?}) with upgrade support, config is: {:?}",
+            "Running orchestrator ({:?} sha256 hash: {:?}) with upgrade support, config is: {:?}",
             env::current_exe(),
-            current_node_manager_hash,
+            current_orchestrator_hash,
             config
         );
 
@@ -124,7 +124,7 @@ impl NodeManager {
         {
             path
         } else {
-            panic!("Only LocalStore is supported in the nodemanager.");
+            panic!("Only LocalStore is supported in the orchestrator.");
         };
 
         let (metrics, _metrics_runtime) = Self::get_metrics(
@@ -238,13 +238,13 @@ impl NodeManager {
     /// is dropped, all asynchronously logged messages will no longer be
     /// output.
     fn get_logger(config: &Config) -> (ReplicaLogger, AsyncGuard) {
-        let base_logger = LoggerImpl::new(&config.nodemanager_logger, "nodemanager".into());
+        let base_logger = LoggerImpl::new(&config.orchestrator_logger, "orchestrator".into());
         let logger = new_replica_logger(base_logger.root.clone(), &config.logger);
 
         (logger, base_logger.async_log_guard)
     }
 
-    /// Construct a `NodeManagerMetrics` and its `MetricsRuntimeImpl`. If this
+    /// Construct a `OrchestratorMetrics` and its `MetricsRuntimeImpl`. If this
     /// `MetricsRuntimeImpl` is dropped, metrics will no longer be
     /// collected.
     fn get_metrics(
@@ -253,7 +253,7 @@ impl NodeManager {
         metrics_registry: &MetricsRegistry,
         registry_client: Arc<dyn RegistryClient>,
         crypto: Arc<dyn TlsHandshake + Send + Sync>,
-    ) -> (NodeManagerMetrics, MetricsRuntimeImpl) {
+    ) -> (OrchestratorMetrics, MetricsRuntimeImpl) {
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
         };
@@ -267,7 +267,7 @@ impl NodeManager {
             logger,
         );
 
-        let metrics = NodeManagerMetrics::new(metrics_registry);
+        let metrics = OrchestratorMetrics::new(metrics_registry);
 
         (metrics, metrics_runtime)
     }

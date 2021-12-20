@@ -162,7 +162,7 @@ impl ProcessManager {
         self.send_group_signal(handle, Signal::SIGTERM)
     }
 
-    /// Apparently, as of Dec 09 2020 the nodemanager doesn't respond well to
+    /// Apparently, as of Dec 09 2020 the orchestrator doesn't respond well to
     /// SIGTERM, which is albeit minor, a significant issue. Hence, we need
     /// to really SIGKILL them. This function will send a specified signal
     /// to all processes. The caller should now whether the process_manager

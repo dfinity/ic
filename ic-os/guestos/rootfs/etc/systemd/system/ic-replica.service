@@ -27,7 +27,7 @@ Environment=RUST_MIN_STACK=8192000
 # one-shot service coupled with storage setup.
 ExecStartPre=+/opt/ic/bin/setup-permissions.sh
 ExecStartPre=+/opt/ic/bin/generate-replica-config.sh -n /boot/config/network.conf -c /boot/config/nns.conf -b /boot/config/backup.conf -l /boot/config/log.conf -m /boot/config/malicious_behavior.conf -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic.json5
-ExecStart=/opt/ic/bin/nodemanager --replica-binary-dir /var/lib/ic/data/images --cup-dir /var/lib/ic/data/cups --replica-config-file /run/ic-node/config/ic.json5 --enable-provisional-registration --ic-binary-directory /opt/ic/bin --version-file /opt/ic/share/version.txt
+ExecStart=/opt/ic/bin/orchestrator --replica-binary-dir /var/lib/ic/data/images --cup-dir /var/lib/ic/data/cups --replica-config-file /run/ic-node/config/ic.json5 --enable-provisional-registration --ic-binary-directory /opt/ic/bin --version-file /opt/ic/share/version.txt
 LimitNOFILE=131072
 Restart=always
 RestartSec=10

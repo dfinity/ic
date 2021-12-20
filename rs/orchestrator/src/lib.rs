@@ -1,4 +1,4 @@
-//! The node manager is a component of the Internet Computer that
+//! The orchestrator is a component of the Internet Computer that
 //! manages the replica.
 //!
 //! Among other things, it continuously determines the correct Replica
@@ -8,7 +8,7 @@
 //!
 //! # Upgrades
 //!
-//! The node manager also triggers upgrades of the replica
+//! The orchestrator also triggers upgrades of the replica
 //! process. For that, it periodically performs the following operations:
 //!
 //! 1. Ask the registry for the current peers in the subnetwork it is suposed to
@@ -28,7 +28,7 @@
 //!
 //! # Registry
 //!
-//! The node manager also fetches configuration updates from the
+//! The orchestrator also fetches configuration updates from the
 //! registry and writes them to disk for other components of the
 //! system to read.
 
@@ -39,7 +39,7 @@ mod error;
 mod firewall;
 mod metrics;
 mod nns_registry_replicator;
-pub mod node_manager;
+pub mod orchestrator;
 mod registration;
 mod registry_helper;
 mod release_package;

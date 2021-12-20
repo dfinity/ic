@@ -1,4 +1,4 @@
-use crate::error::{NodeManagerError, NodeManagerResult};
+use crate::error::{OrchestratorError, OrchestratorResult};
 
 use ic_crypto_sha::Sha256;
 use ic_logger::{info, ReplicaLogger};
@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
 /// Re-execute the current process, exactly as it was originally called.
-pub(crate) fn reexec_current_process(logger: &ReplicaLogger) -> NodeManagerError {
+pub(crate) fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
     let args: Vec<String> = env::args().collect();
     info!(
         logger,
@@ -18,7 +18,7 @@ pub(crate) fn reexec_current_process(logger: &ReplicaLogger) -> NodeManagerError
         &args[..]
     );
     let error = exec::Command::new(&args[0]).args(&args[1..]).exec();
-    NodeManagerError::ExecError(PathBuf::new(), error)
+    OrchestratorError::ExecError(PathBuf::new(), error)
 }
 
 /// Delete old files/directories in the given dir, keeping the
@@ -80,22 +80,22 @@ pub(crate) fn get_oldest_entry(dir: &Path) -> Option<PathBuf> {
     oldest.map(|pair| pair.1)
 }
 
-/// Determine sha256 hash of the currently running node manager binary
-pub(crate) fn get_node_manager_binary_hash() -> NodeManagerResult<String> {
+/// Determine sha256 hash of the currently running orchestrator binary
+pub(crate) fn get_orchestrator_binary_hash() -> OrchestratorResult<String> {
     let binary_path = env::current_exe()
-        .map_err(|e| NodeManagerError::IoError("env::current_exe() failed".into(), e))?;
+        .map_err(|e| OrchestratorError::IoError("env::current_exe() failed".into(), e))?;
 
     compute_sha256_hex(&binary_path)
 }
 
 /// Compute the SHA256 of a file and return a hex-encoded string of the hash
-pub(crate) fn compute_sha256_hex(path: &Path) -> NodeManagerResult<String> {
+pub(crate) fn compute_sha256_hex(path: &Path) -> OrchestratorResult<String> {
     let mut binary_file =
-        fs::File::open(path).map_err(|e| NodeManagerError::file_open_error(path, e))?;
+        fs::File::open(path).map_err(|e| OrchestratorError::file_open_error(path, e))?;
 
     let mut hasher = Sha256::new();
     std::io::copy(&mut binary_file, &mut hasher)
-        .map_err(|e| NodeManagerError::compute_hash_error(path, e))?;
+        .map_err(|e| OrchestratorError::compute_hash_error(path, e))?;
 
     Ok(hex::encode(hasher.finish()))
 }

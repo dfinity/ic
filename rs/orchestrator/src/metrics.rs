@@ -3,7 +3,7 @@ use prometheus::{IntCounter, IntGauge};
 pub const PROMETHEUS_HTTP_PORT: u16 = 9091;
 
 #[derive(Clone)]
-pub struct NodeManagerMetrics {
+pub struct OrchestratorMetrics {
     pub heart_beat_count: IntCounter,
     pub resident_mem_used: IntGauge,
     /// Registry version last used to succesfully fetch datacenter information
@@ -11,7 +11,7 @@ pub struct NodeManagerMetrics {
     pub ssh_access_registry_version: IntGauge,
 }
 
-impl NodeManagerMetrics {
+impl OrchestratorMetrics {
     pub fn new(metrics_registry: &ic_metrics::MetricsRegistry) -> Self {
         Self {
             heart_beat_count: metrics_registry.int_counter(

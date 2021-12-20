@@ -38,7 +38,7 @@ use ic_registry_common::registry::RegistryCanister;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
-use ic_release::release::{ReleaseContent, NODEMANAGER_KEY, REPLICA_KEY};
+use ic_release::release::{ReleaseContent, ORCHESTRATOR_KEY, REPLICA_KEY};
 use ic_test_utilities::types::ids::node_id_to_u64;
 use ic_types::{
     malicious_behaviour::MaliciousBehaviour,
@@ -1045,12 +1045,12 @@ pub fn get_replica_url_and_hash() -> (Url, String) {
 pub fn get_release_package(dir: &Path) -> (Url, String) {
     let replica = find_file_on_path("replica").expect("Could not find replica on $PATH");
 
-    let node_manager =
-        find_file_on_path("nodemanager").expect("Could not find nodemanager on $PATH");
+    let orchestrator =
+        find_file_on_path("orchestrator").expect("Could not find orchestrator on $PATH");
 
     let mut release_content = ReleaseContent::default();
     release_content.add_entry(REPLICA_KEY, replica);
-    release_content.add_entry(NODEMANAGER_KEY, node_manager);
+    release_content.add_entry(ORCHESTRATOR_KEY, orchestrator);
 
     let tar_path = dir.join("release_package.tar.gz");
     release_content
@@ -1113,7 +1113,7 @@ fn start_process_for_init_node(
         .to_string();
 
     let args = vec![
-        // in legacy mode, we need to make sure the nodemanager
+        // in legacy mode, we need to make sure the orchestrator
         // runs in test mode to not use a fixed port for metrics.
         "--metrics-listen-addr".to_string(),
         "0.0.0.0:0".to_string(),
@@ -1133,7 +1133,7 @@ fn start_process_for_init_node(
 
     process_manager.start_process_with_drop_handler(
         &node_id.to_string(),
-        ManagedCommand::new("nodemanager".to_string(), args).terminate_on_drop(),
+        ManagedCommand::new("orchestrator".to_string(), args).terminate_on_drop(),
         Box::new(temp_node_dirs),
     )
 }

@@ -1,4 +1,4 @@
-use crate::error::{NodeManagerError, NodeManagerResult};
+use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::registry_helper::RegistryHelper;
 use ic_canister_client::Sender;
 use ic_canister_client::{Agent, HttpClient};
@@ -141,14 +141,14 @@ impl CatchUpPackageProvider {
 
     /// Persist the given CUP to disk.
     ///
-    /// This is necessary, as it allows the node manager to find a CUP
+    /// This is necessary, as it allows the orchestrator to find a CUP
     /// it previously downloaded again after restart, so that the node
     /// manager never goes back in time.  It will always find a CUP
     /// that is at least as high as the one it has previously
     /// discovered.
     ///
     /// Follows guidelines for DFINITY thread-safe I/O.
-    pub(crate) fn persist_cup(&self, cup: &CUPWithOriginalProtobuf) -> NodeManagerResult<PathBuf> {
+    pub(crate) fn persist_cup(&self, cup: &CUPWithOriginalProtobuf) -> OrchestratorResult<PathBuf> {
         let cup_file_path = self.get_cup_path();
         info!(
             self.logger,
@@ -158,7 +158,7 @@ impl CatchUpPackageProvider {
             cup.cup.height()
         );
         write_protobuf_using_tmp_file(&cup_file_path, &cup.protobuf).map_err(|e| {
-            NodeManagerError::IoError(
+            OrchestratorError::IoError(
                 format!("Failed to serialize protobuf to disk: {:?}", &cup_file_path),
                 e,
             )
@@ -171,7 +171,7 @@ impl CatchUpPackageProvider {
         &self,
         cup: &CUPWithOriginalProtobuf,
         subnet_id: SubnetId,
-    ) -> NodeManagerResult<PathBuf> {
+    ) -> OrchestratorResult<PathBuf> {
         let cup_file_path = self.get_upgrade_cup_save_path(subnet_id);
         info!(
             self.logger,
@@ -181,7 +181,7 @@ impl CatchUpPackageProvider {
             cup.cup.height()
         );
         write_protobuf_using_tmp_file(&cup_file_path, &cup.protobuf).map_err(|e| {
-            NodeManagerError::IoError(
+            OrchestratorError::IoError(
                 format!("Failed to serialize protobuf to disk: {:?}", &cup_file_path),
                 e,
             )
@@ -213,7 +213,7 @@ impl CatchUpPackageProvider {
     pub(crate) async fn get_latest_cup(
         &self,
         subnet_id: SubnetId,
-    ) -> NodeManagerResult<CUPWithOriginalProtobuf> {
+    ) -> OrchestratorResult<CUPWithOriginalProtobuf> {
         let registry_version = self.registry.get_latest_version();
         let local_cup = match self.get_local_cup() {
             None => self.get_local_cup_deprecated(subnet_id),
@@ -236,7 +236,7 @@ impl CatchUpPackageProvider {
             .into_iter()
             .flatten()
             .max_by_key(|cup| cup.cup.content.height())
-            .ok_or(NodeManagerError::MakeRegistryCupError(
+            .ok_or(OrchestratorError::MakeRegistryCupError(
                 subnet_id,
                 registry_version,
             ))
