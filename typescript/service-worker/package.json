@@ -2,9 +2,9 @@
   "name": "ic-agent-sw-cert-app",
   "private": true,
   "dependencies": {
-    "@dfinity/agent": "^0.10.0",
-    "@dfinity/candid": "^0.10.0",
-    "@dfinity/principal": "^0.10.0",
+    "@dfinity/agent": "^0.10.2",
+    "@dfinity/candid": "^0.10.2",
+    "@dfinity/principal": "^0.10.2",
     "@types/pako": "^1.0.1",
     "assert": "^2.0.0",
     "base64-arraybuffer": "^0.2.0",
