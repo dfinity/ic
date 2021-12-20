@@ -24,7 +24,7 @@ phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 rand = "0.7.3"
 rand_chacha = "0.2.2"
-rayon = "1.5.0"
+rayon = "1.5.1"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 strum = "0.18.0"
 strum_macros = "0.18.0"
