@@ -19,7 +19,7 @@ use ic_tests::{
 use ic_tests::{nns_fault_tolerance_test, rosetta_test};
 use regex::Regex;
 use std::collections::HashMap;
-
+use std::time::Duration;
 use structopt::StructOpt;
 
 fn main() -> anyhow::Result<()> {
@@ -304,10 +304,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
         "wasm_generator".to_string(),
         suite(
             "wasm_generator",
-            vec![pot(
+            vec![pot_with_time_limit(
                 "wasm_generator_pot",
                 wasm_generator_test::config(),
                 par(vec![t("wasm_generator_test", wasm_generator_test::test)]),
+                Duration::from_secs(7200),
             )],
         ),
     );

@@ -3,20 +3,31 @@ use std::fmt::Display;
 use crate::{ic_manager::IcHandle, internet_computer::InternetComputer};
 use fondue::pot::FondueTestFn;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 pub fn suite(name: &str, pots: Vec<Pot>) -> Suite {
     let name = name.to_string();
     Suite { name, pots }
 }
 
-pub fn pot(name: &str, config: InternetComputer, testset: TestSet) -> Pot {
+pub fn pot_with_time_limit(
+    name: &str,
+    config: InternetComputer,
+    testset: TestSet,
+    time_limit: Duration,
+) -> Pot {
     let name = name.to_string();
     Pot {
         name,
         execution_mode: ExecutionMode::Run,
         config,
         testset,
+        time_limit,
     }
+}
+
+pub fn pot(name: &str, config: InternetComputer, testset: TestSet) -> Pot {
+    pot_with_time_limit(name, config, testset, Duration::from_secs(600))
 }
 
 pub fn seq(tests: Vec<Test>) -> TestSet {
@@ -43,6 +54,7 @@ pub struct Pot {
     pub execution_mode: ExecutionMode,
     pub config: InternetComputer,
     pub testset: TestSet,
+    pub time_limit: Duration,
 }
 
 pub enum TestSet {

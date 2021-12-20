@@ -33,12 +33,9 @@ for i in $(seq 1 $NB_CANISTERS); do
         rm -f "sample.*"
     fi
 
-    echo "generating random C program... sample.c"
     timeout 10s csmith $OPTIONS -o sample.c
 
-    if [ -f "sample.c" ]; then
-        echo "sample.c succesfully generated"
-    else
+    if ! [ -f "sample.c" ]; then
         echo "failed to generate sample.c "
         exit 0
     fi
@@ -46,21 +43,17 @@ for i in $(seq 1 $NB_CANISTERS); do
     CSMITH_INCLUDE=${CSMITH_INCLUDE:-/usr/include/csmith}
     LIBC_INCLUDE=${LIBC_INCLUDE:-/usr/include}
 
-    echo "compiling random C program with gcc"
     gcc -I "$CSMITH_INCLUDE" -I "$LIBC_INCLUDE" sample.c -o sample -w
 
-    echo "running compiled x86_64 sample"
     # Reject a random program if it does not terminate within 10s
     timeout 10s ./sample || continue
 
-    echo "preparing sample for IC"
     sed -i'.original' -e 's/platform_main_end(crc32_context ^ 0xFFFFFFFFUL, print_hash_value);/return crc32_context ^ 0xFFFFFFFFUL ;/g' sample.c
     sed -i'.original' -e 's/return 0;//g' sample.c
 
-    echo "compiling random canister C code"
     /usr/lib/llvm-10/bin/clang --target=wasm32 -fno-stack-protector -c -O3 -nostdlib -I "$CSMITH_INCLUDE" -I "$TEST_MODULES/wasm-generator" -I "$LIBC_INCLUDE" -w sample.c
     /usr/lib/llvm-10/bin/clang --target=wasm32 -fno-stack-protector -c -O3 -nostdlib -w "$TEST_MODULES/wasm-generator/"canister.c -I "$TEST_MODULES/wasm-generator" -I "$LIBC_INCLUDE"
     /usr/lib/llvm-10/bin/clang --target=wasm32 -fno-stack-protector -c -O3 -nostdlib -w "$TEST_MODULES/wasm-generator/"libs-src.c -I "$TEST_MODULES/wasm-generator" -I "$LIBC_INCLUDE"
-    echo "generating random canister wasm code"
+
     wasm-ld-10 --no-entry --export-dynamic --allow-undefined libs-src.o canister.o sample.o -o "${RANDOM_CANISTERS_BASE_DIR}/can-$i.wasm"
 done
