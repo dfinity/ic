@@ -71,7 +71,7 @@ ic-ref-test:
       cd artifacts/release
       BASE_BIN_DIR=$(pwd)
       ls -lah
-      for f in replica nodemanager canister_sandbox; do
+      for f in replica orchestrator canister_sandbox; do
         gunzip "$f.gz"
         chmod +x "$f"
       done
@@ -88,7 +88,7 @@ ic-ref-test:
         mv "$f" "${CI_PROJECT_DIR}/rs/local-bin/$f"
       done
 
-      for f in replica nodemanager; do
+      for f in replica orchestrator; do
         mv "${BASE_BIN_DIR}/$f" "${CI_PROJECT_DIR}/rs/local-bin/${f}_base"
       done
 
