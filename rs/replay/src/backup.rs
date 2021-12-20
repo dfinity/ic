@@ -65,6 +65,9 @@ pub(crate) enum ExitPoint {
     /// block with a validation context referencing a newer version than
     /// locally known.
     NewerRegistryVersion(RegistryVersion),
+    /// We restored all artifacts before a block with the certified height in
+    /// the validation context higher than the last state height.
+    StateBehind(Height),
 }
 
 /// Deserialize the CUP at the given height and inserts it into the pool.
@@ -186,6 +189,7 @@ pub(crate) fn deserialize_consensus_artifacts(
     height_to_batches: &mut BTreeMap<Height, HeightArtifacts>,
     subnet_id: SubnetId,
     current_replica_version: &ReplicaVersion,
+    latest_state_height: Height,
 ) -> ExitPoint {
     let time_source = SysTimeSource::new();
     let mut last_cup_height: Option<Height> = None;
@@ -270,6 +274,13 @@ pub(crate) fn deserialize_consensus_artifacts(
             .unwrap_or_else(|_| panic!("{}", deserialization_error(height)));
 
             let validation_context = &proposal.content.as_ref().context;
+            let certified_height = validation_context.certified_height;
+            // If the block references newer execution height than we have, we exit.
+            if certified_height > latest_state_height {
+                height_to_batches.insert(height, height_artifacts);
+                return ExitPoint::StateBehind(certified_height);
+            }
+
             let block_registry_version = validation_context.registry_version;
             // If the block references newer registry version, that we have, we exit.
             if block_registry_version > registry_client.get_latest_version() {
