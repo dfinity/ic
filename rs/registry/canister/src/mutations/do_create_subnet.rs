@@ -13,6 +13,7 @@ use candid::{CandidType, Deserialize, Encode};
 use dfn_core::api::{call, CanisterId};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use serde::Serialize;
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::{
@@ -190,7 +191,7 @@ impl Registry {
 /// See /rs/protobuf/def/registry/subnet/v1/subnet.proto
 /// for the explanation of the fields for the SubnetRecord. All the fields
 /// will be used by the subnet canister to create SubnetRecord.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CreateSubnetPayload {
     /// The list of node IDs that will be part of the new subnet.
     pub node_ids: Vec<NodeId>,

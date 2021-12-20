@@ -3,6 +3,7 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use serde::Serialize;
 
 use ic_base_types::NodeId;
 use ic_nns_common::registry::{encode_or_panic, get_subnet_ids_from_subnet_list};
@@ -44,7 +45,7 @@ impl Registry {
 }
 
 /// The payload of a proposal to remove a Node from a Subnet
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RemoveNodesFromSubnetPayload {
     /// The list of Node IDs that will be removed from their subnet
     pub node_ids: Vec<NodeId>,

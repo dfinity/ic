@@ -5,6 +5,7 @@ use std::convert::TryFrom;
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use serde::Serialize;
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 
@@ -38,7 +39,7 @@ impl Registry {
 }
 
 /// The payload of a proposal to add nodes to an existing subnet.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AddNodesToSubnetPayload {
     /// The subnet ID to add the nodes to.
     pub subnet_id: PrincipalId,

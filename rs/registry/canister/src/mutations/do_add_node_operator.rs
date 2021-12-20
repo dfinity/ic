@@ -3,6 +3,7 @@ use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Re
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use serde::Serialize;
 
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
@@ -35,7 +36,7 @@ impl Registry {
 /// The payload of a proposal to add a new Node Operator
 ///
 /// See /rs/protobuf/def/registry/node_operator/v1/node_operator.proto
-#[derive(CandidType, Deserialize, Clone, PartialEq, Eq, Message)]
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Message)]
 pub struct AddNodeOperatorPayload {
     /// The principal id of the node operator. This principal is the entity that
     /// is able to add and remove nodes.

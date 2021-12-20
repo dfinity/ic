@@ -7,6 +7,7 @@ use crate::{
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use serde::Serialize;
 
 use ic_protobuf::registry::replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord};
 use ic_registry_keys::{make_blessed_replica_version_key, make_replica_version_key};
@@ -79,7 +80,7 @@ impl Registry {
 /// from a BlessingProposalPayload.
 ///
 /// See /rs/protobuf/def/registry/replica_version/v1/replica_version.proto
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BlessReplicaVersionPayload {
     /// Version ID. This can be anything, it has not semantics. The reason it is
     /// part of the payload is that it will be needed in the subsequent step

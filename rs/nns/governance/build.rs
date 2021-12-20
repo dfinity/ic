@@ -48,7 +48,7 @@ fn main() {
     config.type_attribute(
         "ic_nns_governance.pb.v1.NodeProvider",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]",
             "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
         ]
         .join(" "),
@@ -444,7 +444,7 @@ fn main() {
     config.type_attribute(
         "ic_nns_governance.pb.v1.AddOrRemoveNodeProvider",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]",
             "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
         ]
         .join("\n"),
@@ -452,7 +452,7 @@ fn main() {
     config.type_attribute(
         "ic_nns_governance.pb.v1.AddOrRemoveNodeProvider.change",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]",
             "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
         ]
         .join("\n"),

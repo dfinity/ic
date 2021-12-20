@@ -3,6 +3,7 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use serde::Serialize;
 
 use crate::mutations::common::encode_or_panic;
 use ic_protobuf::registry::firewall::v1::FirewallConfig;
@@ -34,7 +35,7 @@ impl Registry {
 /// The payload of a proposal to set the firewall configuration
 ///
 /// See /rs/protobuf/def/registry/firewall/v1/firewall.proto
-#[derive(CandidType, Deserialize, Clone, PartialEq, Eq, Message)]
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Message)]
 pub struct SetFirewallConfigPayload {
     /// The firewall configuration content
     #[prost(string, tag = "1")]

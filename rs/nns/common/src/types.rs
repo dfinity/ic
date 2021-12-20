@@ -1,5 +1,6 @@
 use candid::{CandidType, Deserialize};
 use dfn_core::api::CanisterId;
+use serde::Serialize;
 
 use std::cmp::Eq;
 use std::cmp::PartialEq;
@@ -32,7 +33,7 @@ impl From<CanisterIdProto> for CanisterId {
 
 // A unique Id for a Neuron.
 #[cfg_attr(test, derive(comparable::Comparable))]
-#[derive(CandidType, Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
+#[derive(CandidType, Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub struct NeuronId(pub u64);
 
 impl From<NeuronIdProto> for NeuronId {
@@ -89,7 +90,7 @@ impl Display for ProposalId {
 /// Description of a change to the authz of a specific method on a specific
 /// canister that must happen for a given canister change/add/remove
 /// to be viable
-#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
 pub struct MethodAuthzChange {
     pub canister: CanisterId,
     pub method_name: String,
@@ -99,7 +100,7 @@ pub struct MethodAuthzChange {
 
 /// The operation to execute. Varible names in comments refer to the fields
 /// of AuthzChange.
-#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
 pub enum AuthzChangeOp {
     /// 'canister' must add a principal to the authorized list of 'method_name'.
     /// If 'add_self' is true, the canister_id to be authorized is the canister

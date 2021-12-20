@@ -4,6 +4,7 @@ use ic_base_types::{CanisterInstallMode, PrincipalId};
 use ic_crypto_sha::Sha256;
 use ic_nns_common::types::MethodAuthzChange;
 use ic_nns_constants::memory_allocation_of;
+use serde::Serialize;
 
 pub const LOG_PREFIX: &str = "[Root Handler] ";
 
@@ -69,7 +70,7 @@ impl CanisterStatusResult {
 }
 
 /// The payload to a proposal to upgrade a canister.
-#[derive(candid::CandidType, candid::Deserialize, Clone)]
+#[derive(CandidType, Serialize, Deserialize, Clone)]
 pub struct ChangeNnsCanisterProposalPayload {
     /// Whether the canister should first be stopped before the install_code
     /// method is called.
@@ -105,8 +106,11 @@ pub struct ChangeNnsCanisterProposalPayload {
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
 
+    #[serde(serialize_with = "serialize_optional_nat")]
     pub compute_allocation: Option<candid::Nat>,
+    #[serde(serialize_with = "serialize_optional_nat")]
     pub memory_allocation: Option<candid::Nat>,
+    #[serde(serialize_with = "serialize_optional_nat")]
     pub query_allocation: Option<candid::Nat>,
 
     /// A list of authz changes to enact, in addition to changing new canister.
@@ -179,7 +183,7 @@ impl ChangeNnsCanisterProposalPayload {
     }
 }
 
-#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
 pub struct AddNnsCanisterProposalPayload {
     /// A unique name for this NNS canister.
     pub name: String,
@@ -191,8 +195,11 @@ pub struct AddNnsCanisterProposalPayload {
 
     pub arg: Vec<u8>,
 
+    #[serde(serialize_with = "serialize_optional_nat")]
     pub compute_allocation: Option<candid::Nat>,
+    #[serde(serialize_with = "serialize_optional_nat")]
     pub memory_allocation: Option<candid::Nat>,
+    #[serde(serialize_with = "serialize_optional_nat")]
     pub query_allocation: Option<candid::Nat>,
 
     pub initial_cycles: u64,
@@ -217,4 +224,15 @@ pub enum CanisterAction {
 pub struct StopOrStartNnsCanisterProposalPayload {
     pub canister_id: CanisterId,
     pub action: CanisterAction,
+}
+
+// Use a serde field attribute to custom serialize the Nat candid type.
+fn serialize_optional_nat<S>(nat: &Option<candid::Nat>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match nat.as_ref() {
+        Some(num) => serializer.serialize_str(&num.to_string()),
+        None => serializer.serialize_none(),
+    }
 }

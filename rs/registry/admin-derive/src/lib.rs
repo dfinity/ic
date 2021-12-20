@@ -29,6 +29,10 @@ fn impl_proposal_metadata(ast: &syn::DeriveInput) -> TokenStream {
             fn proposer_and_sender(&self, sender: Sender) -> (NeuronId, Sender) {
                 get_proposer_and_sender(self.proposer.clone(), sender, self.test_neuron_proposer)
             }
+
+            fn is_dry_run(&self) -> bool {
+                self.dry_run
+            }
         }
     };
     gen.into()
@@ -76,6 +80,11 @@ pub fn derive_common_proposal_fields(_: TokenStream, item: TokenStream) -> Token
                             /// If this is provided "summary" will be ignored.
                             #[clap(long)]
                             summary_file: Option<PathBuf>,
+
+                            /// If set, the fully formed proposal payload will be printed but not
+                            /// submitted.
+                            #[clap(long)]
+                            pub dry_run: bool,
                     });
                     stream.extend(gen);
                     stream.extend(group.stream());

@@ -7,6 +7,7 @@ use crate::{
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use serde::Serialize;
 
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
@@ -53,7 +54,7 @@ impl Registry {
 /// to a specific version.
 ///
 /// The replica will be mutated only if the given version is, indeed, blessed.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateSubnetReplicaVersionPayload {
     /// The subnet to update.
     pub subnet_id: PrincipalId, // SubnetId See NNS-73
