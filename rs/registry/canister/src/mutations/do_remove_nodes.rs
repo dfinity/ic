@@ -5,6 +5,7 @@ use std::{collections::HashMap, convert::TryFrom};
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use serde::Serialize;
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_common::registry::encode_or_panic;
@@ -163,7 +164,7 @@ impl Registry {
 }
 
 /// The payload of an update request to add a new node.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RemoveNodesPayload {
     /// The list of Node IDs that will be removed
     pub node_ids: Vec<NodeId>,

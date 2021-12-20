@@ -2,6 +2,7 @@ use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Re
 
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
+use serde::Serialize;
 
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::{EcdsaConfig, GossipAdvertConfig, SubnetRecord};
@@ -47,7 +48,7 @@ impl Registry {
 /// are intentionally left out as they are updated via other proposals and/or
 /// handlers because they are subject to invariants, e.g. the replica version
 /// must be "blessed".
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateSubnetPayload {
     pub subnet_id: SubnetId,
 

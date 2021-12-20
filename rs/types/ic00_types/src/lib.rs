@@ -8,6 +8,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use num_traits::cast::ToPrimitive;
+use serde::Serialize;
 use std::{collections::BTreeSet, convert::TryFrom};
 use strum_macros::{EnumIter, EnumString, ToString};
 
@@ -57,7 +58,7 @@ pub trait Payload<'a>: Sized + CandidType + Deserialize<'a> {
 }
 
 /// Struct used for encoding/decoding `(record {canister_id})`.
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Serialize, Deserialize, Debug)]
 pub struct CanisterIdRecord {
     canister_id: PrincipalId,
 }

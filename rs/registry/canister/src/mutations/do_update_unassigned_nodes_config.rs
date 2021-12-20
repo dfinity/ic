@@ -9,6 +9,7 @@ use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use serde::Serialize;
 
 /// Updates the parameter that apply to all unassigned nodes in the Registry.
 ///
@@ -57,7 +58,7 @@ impl Registry {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateUnassignedNodesConfigPayload {
     pub ssh_readonly_access: Option<Vec<String>>,
     pub replica_version: Option<String>,

@@ -26,6 +26,7 @@ use ic_registry_keys::{
     make_subnet_record_key,
 };
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use serde::Serialize;
 use std::convert::TryFrom;
 
 use on_wire::bytes;
@@ -224,7 +225,7 @@ impl Registry {
 }
 
 /// A payload used to recover a subnet that has stalled
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RecoverSubnetPayload {
     /// The subnet ID to add the recovery CUP to
     pub subnet_id: PrincipalId,

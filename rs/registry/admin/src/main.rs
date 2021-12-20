@@ -400,6 +400,7 @@ pub trait ProposalMetadata {
     fn summary(&self) -> String;
     fn url(&self) -> String;
     fn proposer_and_sender(&self, sender: Sender) -> (NeuronId, Sender);
+    fn is_dry_run(&self) -> bool;
 }
 
 /// Trait to extract the title and the payload for each proposal type.
@@ -2654,7 +2655,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
 /// Extracts a proposal payload from the provided command and uses it to submit
 /// a proposal to the governance canister.
 async fn propose_external_proposal_from_command<
-    C: CandidType,
+    C: CandidType + Serialize,
     Command: ProposalMetadata + ProposalTitleAndPayload<C>,
 >(
     cmd: Command,
@@ -2670,9 +2671,16 @@ async fn propose_external_proposal_from_command<
         Some(proposer),
     ));
 
+    let payload = cmd.payload(nns_url).await;
+    print_payload(&payload);
+
+    if cmd.is_dry_run() {
+        return;
+    }
+
     let response = canister_client
         .submit_external_proposal_candid(
-            cmd.payload(nns_url).await,
+            payload,
             nns_function,
             cmd.url(),
             &cmd.title(),
@@ -2924,7 +2932,7 @@ async fn get_recovery_cup(registry_canister: RegistryCanister, cmd: GetRecoveryC
 ///
 /// The "authoritative" data structure is the one defined in `lifeline.mo` and
 /// this should stay in sync with it
-#[derive(CandidType)]
+#[derive(CandidType, Serialize)]
 pub struct UpgradeRootProposalPayload {
     pub wasm_module: Vec<u8>,
     pub module_arg: Vec<u8>,
@@ -2981,8 +2989,13 @@ async fn propose_to_add_or_remove_node_provider(
         ),
     };
     let payload = AddOrRemoveNodeProvider { change };
-    let summary = cmd.summary.unwrap_or(default_summary);
+    print_payload(&payload);
 
+    if cmd.is_dry_run() {
+        return;
+    }
+
+    let summary = cmd.summary.unwrap_or(default_summary);
     let response = canister_client
         .submit_add_or_remove_node_provider_proposal(
             payload,
@@ -3475,4 +3488,9 @@ impl RootCanisterClient {
             )
         })?
     }
+}
+
+fn print_payload<T: Serialize>(payload: &T) {
+    let serialized = serde_json::to_string(&payload).unwrap();
+    println!("submit_proposal payload: \n{}", serialized);
 }
