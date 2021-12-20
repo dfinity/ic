@@ -422,7 +422,6 @@ impl Player {
 
     // Blocks until the state at the given height is committed.
     fn wait_for_state(&self, height: Height) {
-        print!("Waiting for state at height {}...", height);
         loop {
             let latest_state_height = self.state_manager.latest_state_height();
             if latest_state_height >= height {
@@ -746,6 +745,7 @@ impl Player {
                 &mut height_to_batches,
                 self.subnet_id,
                 &self.replica_version,
+                self.state_manager.latest_state_height(),
             );
 
             let last_batch_height = self.deliver_batches(
@@ -754,11 +754,6 @@ impl Player {
                 self.replay_target_height.map(Height::from),
             );
             self.wait_for_state(last_batch_height);
-            backup::assert_consistency_and_clean_up(
-                &*self.state_manager,
-                self.consensus_pool.as_mut().unwrap(),
-            );
-
             if let Some(height) = target_height {
                 if last_batch_height >= height {
                     println!("Target height {} reached.", height);
@@ -777,6 +772,10 @@ impl Player {
                         backup_dir,
                         cup_height,
                     );
+                    backup::assert_consistency_and_clean_up(
+                        &*self.state_manager,
+                        self.consensus_pool.as_mut().unwrap(),
+                    );
                 }
                 // When we run into a proposal referencing a newer registry version, we need to dump
                 // all changes from the registry canister into the local store and apply them.
@@ -791,6 +790,13 @@ impl Player {
                         new_version, self.registry.get_latest_version()
                     );
                     println!("Updated the registry.");
+                }
+                backup::ExitPoint::StateBehind(certified_height) => {
+                    assert!(
+                        certified_height <= self.state_manager.latest_state_height(),
+                        "The state manager didn't catch up with the expected certified height"
+                    );
+                    self.state_manager.remove_states_below(certified_height);
                 }
                 backup::ExitPoint::Done => {
                     println!(
