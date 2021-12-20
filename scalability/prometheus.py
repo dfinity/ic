@@ -130,7 +130,7 @@ def get_http_request_duration(testnet, hosts: List[str], t_start, t_end, request
     assert t_end - t_start > 60
 
     metric = "replica_http_request_duration_seconds"
-    selector = '{}_bucket{{{},type="read",request_type="{}"}}'.format(metric, get_common(hosts, testnet), request_type)
+    selector = '{}_bucket{{{},request_type="{}"}}'.format(metric, get_common(hosts, testnet), request_type)
 
     payload = {
         "start": t_start,

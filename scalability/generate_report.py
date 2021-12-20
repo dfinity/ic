@@ -106,7 +106,9 @@ def generate_report(githash, timestamp):
                         try:
                             http_request_duration.append(metrics["http_request_duration"][0])
                         except Exception as err:
-                            print(f"Failed to determine HTTP request duration for iteration {i} - {err}")
+                            print(
+                                f"Failed to determine HTTP request duration for iteration {i} in file {path}/prometheus.json - {err}"
+                            )
 
                         t_start = int(metrics["http_request_rate"][0][0][0])
                         xdata = [int(x) - t_start for x, _ in metrics["http_request_rate"][0]]
