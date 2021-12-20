@@ -167,7 +167,7 @@
 #![allow(dead_code)]
 
 use crate::consensus::{
-    metrics::{timed_call, EcdsaClientMetrics},
+    metrics::{timed_call, EcdsaClientMetrics, EcdsaPayloadMetrics},
     utils::RoundRobin,
     ConsensusCrypto,
 };
@@ -189,10 +189,12 @@ use ic_types::{
 
 use std::sync::Arc;
 
-mod payload_builder;
-mod pre_signer;
-mod signer;
-mod utils;
+pub(crate) mod payload_builder;
+pub(crate) mod pre_signer;
+pub(crate) mod signer;
+pub(crate) mod utils;
+
+pub(crate) use payload_builder::{create_data_payload, create_summary_payload};
 
 /// Similar to consensus, we don't fetch artifacts too far ahead in future.
 const LOOK_AHEAD: u64 = 10;
@@ -333,8 +335,8 @@ pub(crate) fn get_completed_transcripts(
     metrics_registry: MetricsRegistry,
     logger: ReplicaLogger,
 ) -> Vec<IDkgTranscript> {
-    let builder =
-        EcdsaTranscriptBuilderImpl::new(consensus_cache, crypto, metrics_registry, logger);
+    let metrics = EcdsaPayloadMetrics::new(metrics_registry);
+    let builder = EcdsaTranscriptBuilderImpl::new(consensus_cache, crypto, &metrics, logger);
     builder.get_completed_transcripts(ecdsa_pool)
 }
 

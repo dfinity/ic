@@ -1,7 +1,7 @@
 mod framework;
 
 use crate::framework::ConsensusDriver;
-use ic_artifact_pool::{consensus_pool, dkg_pool};
+use ic_artifact_pool::{consensus_pool, dkg_pool, ecdsa_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::{certification::CertifierImpl, consensus::ConsensusImpl, dkg};
 use ic_interfaces::{state_manager::Labeled, time_source::TimeSource};
@@ -83,6 +83,10 @@ fn consensus_produces_expected_batches() {
         let dkg_pool = Arc::new(RwLock::new(dkg_pool::DkgPoolImpl::new(
             metrics_registry.clone(),
         )));
+        let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool::EcdsaPoolImpl::new(
+            no_op_logger(),
+            metrics_registry.clone(),
+        )));
 
         let registry_client = setup_registry(
             replica_config.subnet_id,
@@ -125,6 +129,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&xnet_payload_builder) as Arc<_>,
             Arc::clone(&self_validating_payload_builder) as Arc<_>,
             Arc::clone(&dkg_pool) as Arc<_>,
+            Arc::clone(&ecdsa_pool) as Arc<_>,
             dkg_key_manager.clone(),
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,

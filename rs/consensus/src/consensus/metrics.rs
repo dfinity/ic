@@ -27,7 +27,7 @@ impl BlockMakerMetrics {
                 &["status"],
             ),
             block_size_bytes_estimate: metrics_registry.int_gauge_vec(
-                "consensus_block_size_bytes_estimate", 
+                "consensus_block_size_bytes_estimate",
                 "An estimate about the block size produced by the block maker.",
                 &["payload_type"])
         }
@@ -383,6 +383,7 @@ impl EcdsaPreSignerMetrics {
 }
 
 #[derive(Clone)]
+
 pub struct EcdsaSignerMetrics {
     pub on_state_change_duration: HistogramVec,
     pub sign_metrics: IntCounterVec,
@@ -412,13 +413,46 @@ impl EcdsaSignerMetrics {
             ),
         }
     }
-
     pub fn sign_metrics_inc(&self, label: &str) {
         self.sign_metrics.with_label_values(&[label]).inc();
     }
 
     pub fn sign_errors_inc(&self, label: &str) {
         self.sign_errors.with_label_values(&[label]).inc();
+    }
+}
+
+pub struct EcdsaPayloadMetrics {
+    pub payload_metrics: IntGaugeVec,
+    pub payload_errors: IntCounterVec,
+}
+
+impl EcdsaPayloadMetrics {
+    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+        Self {
+            payload_metrics: metrics_registry.int_gauge_vec(
+                "ecdsa_payload_metrics",
+                "ECDSA payload related metrics",
+                &["type"],
+            ),
+            payload_errors: metrics_registry.int_counter_vec(
+                "ecdsa_payload_errors",
+                "ECDSA payload related errors",
+                &["type"],
+            ),
+        }
+    }
+
+    pub fn payload_metrics_set(&self, label: &str, value: i64) {
+        self.payload_metrics.with_label_values(&[label]).set(value);
+    }
+
+    pub fn payload_metrics_inc(&self, label: &str) {
+        self.payload_metrics.with_label_values(&[label]).inc();
+    }
+
+    pub fn payload_errors_inc(&self, label: &str) {
+        self.payload_errors.with_label_values(&[label]).inc();
     }
 }
 

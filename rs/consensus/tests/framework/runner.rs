@@ -142,6 +142,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.xnet_payload_builder.clone(),
             deps.self_validating_payload_builder.clone(),
             deps.dkg_pool.clone(),
+            deps.ecdsa_pool.clone(),
             dkg_key_manager.clone(),
             deps.message_routing.clone(),
             deps.state_manager.clone(),

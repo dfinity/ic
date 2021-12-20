@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl, dkg_pool,
+    ecdsa_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::{consensus::ConsensusImpl, dkg};
@@ -140,6 +141,7 @@ pub struct ConsensusDependencies {
     pub(crate) self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
+    pub ecdsa_pool: Arc<RwLock<ecdsa_pool::EcdsaPoolImpl>>,
     pub message_routing: Arc<dyn MessageRouting>,
     pub state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     pub replica_config: ReplicaConfig,
@@ -167,11 +169,13 @@ impl ConsensusDependencies {
             no_op_logger(),
         )));
         let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone());
+        let ecdsa_pool = ecdsa_pool::EcdsaPoolImpl::new(no_op_logger(), metrics_registry.clone());
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
         ConsensusDependencies {
             registry_client: Arc::clone(&registry_client),
             consensus_pool,
             dkg_pool: Arc::new(RwLock::new(dkg_pool)),
+            ecdsa_pool: Arc::new(RwLock::new(ecdsa_pool)),
             message_routing: Arc::new(FakeMessageRouting::with_state_manager(
                 state_manager.clone(),
             )),

@@ -52,6 +52,7 @@ use ic_interfaces::{
     consensus::{Consensus, ConsensusGossip},
     consensus_pool::ConsensusPool,
     dkg::DkgPool,
+    ecdsa::EcdsaPool,
     ingress_manager::IngressSelector,
     ingress_pool::IngressPoolSelect,
     messaging::{MessageRouting, XNetPayloadBuilder},
@@ -134,6 +135,7 @@ impl ConsensusImpl {
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
+        ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -217,6 +219,7 @@ impl ConsensusImpl {
                 crypto.clone(),
                 payload_builder.clone(),
                 dkg_pool.clone(),
+                ecdsa_pool.clone(),
                 state_manager.clone(),
                 stable_registry_version_age,
                 metrics_registry.clone(),
@@ -582,6 +585,7 @@ pub fn setup(
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     message_routing: Arc<dyn MessageRouting>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -614,6 +618,7 @@ pub fn setup(
             xnet_payload_builder,
             self_validating_payload_builder,
             dkg_pool,
+            ecdsa_pool,
             dkg_key_manager,
             message_routing.clone(),
             state_manager,
@@ -680,6 +685,7 @@ mod tests {
             replica_config,
             state_manager,
             dkg_pool,
+            ecdsa_pool,
             ..
         } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record)]);
         state_manager
@@ -703,6 +709,7 @@ mod tests {
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             dkg_pool,
+            ecdsa_pool,
             Arc::new(Mutex::new(DkgKeyManager::new(
                 metrics_registry.clone(),
                 crypto,

@@ -1,7 +1,7 @@
 //! The pre signature process manager
 
 use crate::consensus::{
-    metrics::{timed_call, EcdsaPreSignerMetrics},
+    metrics::{timed_call, EcdsaPayloadMetrics, EcdsaPreSignerMetrics},
     utils::RoundRobin,
     ConsensusCrypto,
 };
@@ -741,7 +741,7 @@ pub(crate) trait EcdsaTranscriptBuilder: Send {
 pub(crate) struct EcdsaTranscriptBuilderImpl<'a> {
     consensus_cache: &'a dyn ConsensusPoolCache,
     crypto: &'a dyn ConsensusCrypto,
-    metrics: EcdsaPreSignerMetrics,
+    metrics: &'a EcdsaPayloadMetrics,
     log: ReplicaLogger,
 }
 
@@ -749,13 +749,13 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
     pub(crate) fn new(
         consensus_cache: &'a dyn ConsensusPoolCache,
         crypto: &'a dyn ConsensusCrypto,
-        metrics_registry: MetricsRegistry,
+        metrics: &'a EcdsaPayloadMetrics,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             consensus_cache,
             crypto,
-            metrics: EcdsaPreSignerMetrics::new(metrics_registry),
+            metrics,
             log,
         }
     }
@@ -786,13 +786,12 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
                         transcript_params.transcript_id(),
                         error
                     );
-                    self.metrics
-                        .pre_sign_errors_inc("aggregate_dealing_support");
+                    self.metrics.payload_errors_inc("aggregate_dealing_support");
                     None
                 },
                 |multi_sig| {
                     self.metrics
-                        .pre_sign_metrics_inc("dealing_support_aggregated");
+                        .payload_metrics_inc("dealing_support_aggregated");
                     Some(multi_sig)
                 },
             )
@@ -818,11 +817,11 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
                         transcript_params.transcript_id(),
                         error
                     );
-                    self.metrics.pre_sign_errors_inc("create_transcript");
+                    self.metrics.payload_errors_inc("create_transcript");
                     None
                 },
                 |transcript| {
-                    self.metrics.pre_sign_metrics_inc("transcript_created");
+                    self.metrics.payload_metrics_inc("transcript_created");
                     Some(transcript)
                 },
             )
