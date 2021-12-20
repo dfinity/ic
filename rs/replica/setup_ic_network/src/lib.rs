@@ -6,15 +6,15 @@
 use ic_artifact_manager::{manager, processors};
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl,
-    dkg_pool::DkgPoolImpl, ensure_persistent_pool_replica_version_compatibility,
-    ingress_pool::IngressPoolImpl,
+    dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl,
+    ensure_persistent_pool_replica_version_compatibility, ingress_pool::IngressPoolImpl,
 };
 use ic_base_thread::async_safe_block_on_await;
 use ic_config::{artifact_pool::ArtifactPoolConfig, consensus::ConsensusConfig};
 use ic_consensus::{
     certification,
     consensus::{ConsensusCrypto, Membership},
-    dkg,
+    dkg, ecdsa,
 };
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -33,7 +33,7 @@ use ic_interfaces::{
     time_source::SysTimeSource,
     transport::Transport,
 };
-use ic_logger::{debug, replica_logger::ReplicaLogger};
+use ic_logger::{debug, info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p::{
     event_handler::{
@@ -42,6 +42,7 @@ use ic_p2p::{
     },
     gossip_protocol::GossipImpl,
 };
+use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
 use ic_transport::transport::create_transport;
@@ -335,7 +336,7 @@ fn setup_artifact_manager(
         artifact_pool_config.persistent_pool_db_path(),
     );
 
-    let (ingress_pool, consensus_pool, cert_pool, dkg_pool) = init_artifact_pools(
+    let (ingress_pool, consensus_pool, cert_pool, dkg_pool, ecdsa_pool) = init_artifact_pools(
         subnet_id,
         artifact_pool_config,
         metrics_registry.clone(),
@@ -418,6 +419,7 @@ fn setup_artifact_manager(
                     Arc::clone(&xnet_payload_builder) as Arc<_>,
                     Arc::clone(&self_validating_payload_builder) as Arc<_>,
                     Arc::clone(&dkg_pool) as Arc<_>,
+                    Arc::clone(&ecdsa_pool) as Arc<_>,
                     Arc::clone(&dkg_key_manager) as Arc<_>,
                     Arc::clone(&message_router) as Arc<_>,
                     Arc::clone(&state_manager) as Arc<_>,
@@ -479,7 +481,8 @@ fn setup_artifact_manager(
     }
 
     {
-        let event_handler = event_handler;
+        // Create the DKG client.
+        let event_handler = event_handler.clone();
         let (dkg_client, actor) = processors::DkgProcessor::build(
             move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
             || {
@@ -503,6 +506,41 @@ fn setup_artifact_manager(
         artifact_manager_maker.add_client(dkg_client, actor);
     }
 
+    {
+        // Create the ECDSA client if enabled by the config
+        if registry_client
+            .get_features(subnet_id, registry_client.get_latest_version())
+            .ok()
+            .flatten()
+            .map(|features| features.ecdsa_signatures)
+            == Some(true)
+        {
+            info!(replica_logger, "ECDSA feature enabled");
+            let (ecdsa_client, actor) = processors::EcdsaProcessor::build(
+                move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
+                || {
+                    (
+                        ecdsa::EcdsaImpl::new(
+                            consensus_replica_config.node_id,
+                            Arc::clone(&consensus_cache),
+                            Arc::clone(&consensus_crypto),
+                            metrics_registry.clone(),
+                            replica_logger.clone(),
+                        ),
+                        ecdsa::EcdsaGossipImpl::new(Arc::clone(&consensus_cache)),
+                    )
+                },
+                Arc::clone(&time_source) as Arc<_>,
+                Arc::clone(&ecdsa_pool),
+                metrics_registry.clone(),
+                replica_logger.clone(),
+            );
+            artifact_manager_maker.add_client(ecdsa_client, actor);
+        } else {
+            info!(replica_logger, "ECDSA feature disabled");
+        }
+    }
+
     Ok((
         artifact_manager_maker.finish(),
         consensus_cache,
@@ -523,6 +561,7 @@ pub(crate) fn init_artifact_pools(
     Arc<RwLock<ConsensusPoolImpl>>,
     Arc<RwLock<CertificationPoolImpl>>,
     Arc<RwLock<DkgPoolImpl>>,
+    Arc<RwLock<EcdsaPoolImpl>>,
 ) {
     (
         Arc::new(RwLock::new(IngressPoolImpl::new(
@@ -539,10 +578,11 @@ pub(crate) fn init_artifact_pools(
         ))),
         Arc::new(RwLock::new(CertificationPoolImpl::new(
             config,
-            log,
+            log.clone(),
             registry.clone(),
         ))),
-        Arc::new(RwLock::new(DkgPoolImpl::new(registry))),
+        Arc::new(RwLock::new(DkgPoolImpl::new(registry.clone()))),
+        Arc::new(RwLock::new(EcdsaPoolImpl::new(log, registry))),
     )
 }
 
