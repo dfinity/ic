@@ -1785,7 +1785,7 @@ impl StateManager for StateManagerImpl {
             }
             Err(StateHashError::Transient(StateNotCommittedYet(_))) => {
                 // Let's see if we already have this state locally.  This might
-                // be the case if we are in disaster recovery mode and
+                // be the case if we are in subnet recovery mode and
                 // re-introducing some old state with a new height.
                 if let Some((checkpoint_height, manifest)) = self.find_checkpoint_by_root_hash(&root_hash) {
                     info!(self.log,

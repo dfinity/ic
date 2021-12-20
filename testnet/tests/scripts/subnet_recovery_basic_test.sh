@@ -46,7 +46,7 @@ results_dir="$(
     realpath "$2"
 )"
 subnet_index=1
-experiment_dir="$results_dir/disaster_recovery_basic_test-${testnet}-$(date +%s)"
+experiment_dir="$results_dir/subnet_recovery_basic_test-${testnet}-$(date +%s)"
 mkdir -p "$experiment_dir"
 
 # shellcheck disable=SC1090

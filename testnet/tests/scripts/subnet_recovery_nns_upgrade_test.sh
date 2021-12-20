@@ -46,7 +46,7 @@ results_dir="$(
     realpath "$2"
 )"
 nns_subnet_index=0
-experiment_dir="${EXPERIMENT_DIR:-$results_dir/disaster_recovery_basic_test-${testnet}-$(date +%s)}"
+experiment_dir="${EXPERIMENT_DIR:-$results_dir/subnet_recovery_basic_test-${testnet}-$(date +%s)}"
 mkdir -p "$experiment_dir"
 
 ORIGINAL_NNS_DATA="${ORIGINAL_NNS_DATA:-$experiment_dir/original_nns_data}"
@@ -265,7 +265,7 @@ step 3.E "Create CUP" || time (
 )
 
 step 4 "Copy CUP, state and registry local store to NNS nodes and restart" || time (
-    TMP_DIR=/tmp/disaster_recovery_test
+    TMP_DIR=/tmp/subnet_recovery_test
     for node_ip in $MEMBER_IPS; do
         echo Copying data and restarting dfinity service on "$node_ip"
         #shellcheck disable=SC2086,SC2029

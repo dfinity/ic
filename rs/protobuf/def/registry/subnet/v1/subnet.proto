@@ -82,7 +82,7 @@ message SubnetRecord {
   uint64 max_number_of_canisters = 24;
 
   // The list of public keys whose owners have "readonly" SSH access to all replicas on this subnet,
-  // in case it is necessary to perform disaster recovery.
+  // in case it is necessary to perform subnet recovery.
   repeated string ssh_readonly_access = 25;
 
   // The list of public keys whose owners have "backup" SSH access to nodes on the NNS subnet

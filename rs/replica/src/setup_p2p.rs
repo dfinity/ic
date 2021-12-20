@@ -179,7 +179,7 @@ pub fn construct_ic_stack(
                     // incompatibility issues, because on other replicas of the same subnet the node
                     // manager version may differ, so the CUP contents might differ as well.
                     let registry_cup = make_registry_cup();
-                    // However in a special case of the NNS disaster recovery, we still have to use
+                    // However in a special case of the NNS subnet recovery, we still have to use
                     // a newer unsigned CUP. The incompatibility issue is not a problem in this
                     // case, because this CUP will not be created by the orchestrator.
                     if registry_cup.cup.height() < cup_from_nm.cup.height() {

@@ -5,7 +5,7 @@ import "types/v1/types.proto";
 // Config applied to the set of all unassigned nodes.
 message UnassignedNodesConfigRecord {
   // The list of public keys whose owners have "readonly" SSH access to all unassigned replicas,
-  // in case it is necessary to perform disaster recovery.
+  // in case it is necessary to perform subnet recovery.
   repeated string ssh_readonly_access = 1;
 
   // The replica version that the unassigned nodes are supposed to run.

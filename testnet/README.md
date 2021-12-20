@@ -106,7 +106,7 @@ testnet/
                              backup
                                  Adding your public SSH key to this
                                  authorized_keys file will grant you permissions
-                                 for the backup/disaster recovery tasks.
+                                 for the backup/subnet recovery tasks.
 
                                  ssh backup@<hostname>
 

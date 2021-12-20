@@ -112,7 +112,7 @@ pub(crate) fn check_subnet_invariants(
             source: None,
         });
     }
-    // TODO (OR1-22): uncomment the following when NNS disaster recovery
+    // TODO (OR1-22): uncomment the following when NNS subnet recovery
     // has fully been implemented which guarantees that no unnecessary
     // subnet records are in the registry.
     // All subnet records have been listed

@@ -4,7 +4,7 @@ The replay tool is to help recover a broken subnet by replaying past blocks
 and create a checkpoint of the latest state, which can then be used to
 create recovery `CatchUpPackage`.
 
-This is a vital step in the disaster recovery process.
+This is a vital step in the subnet recovery process.
 
 It is very important, that the version of `ic-replay` you run corresponds to the version of the replica, i.e. is build from the same commit.
 

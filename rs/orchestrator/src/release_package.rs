@@ -112,7 +112,7 @@ impl ReleasePackage {
             return self.start_replica(&self.replica_version, latest_subnet_id);
         }
 
-        // 0. Special case for when we are doing boostrap disaster recovery for
+        // 0. Special case for when we are doing boostrap subnet recovery for
         // nns and replacing the local registry store. Because we replace the
         // contents of the local registry store in the process of doing this, we
         // will not perpetually hit this case, and thus it is not important to
@@ -136,7 +136,7 @@ impl ReleasePackage {
 
             warn!(
                 self.logger,
-                "Downloading registry data from {} with hash {} for disaster recovery",
+                "Downloading registry data from {} with hash {} for subnet recovery",
                 registry_store_uri.uri,
                 registry_store_uri.hash,
             );
@@ -157,7 +157,7 @@ impl ReleasePackage {
             {
                 warn!(
                     self.logger,
-                    "Download of registry store for nns disaster recovery failed {}", e,
+                    "Download of registry store for nns subnet recovery failed {}", e,
                 );
                 return Err(OrchestratorError::FileDownloadError(e));
             }

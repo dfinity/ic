@@ -4,7 +4,7 @@
 
 == Goal(s)
 
-The *primary goal* is to provide a CLI-tool for operators (in testing, disaster
+The *primary goal* is to provide a CLI-tool for operators (in testing, subnet
 recovery, etc.) of IC nodes to quickly inspect a given version of the registry
 local store using a human readable format.
 

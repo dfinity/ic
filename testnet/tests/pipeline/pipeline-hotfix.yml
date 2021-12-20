@@ -38,7 +38,7 @@
     TESTNET: $TESTNET3
   resource_group: $TESTNET3
 
-disaster-recovery-nns-test-hotfix:
+subnet-recovery-nns-test-hotfix:
   extends: .prod-hotfix-test-group-1
   script:
     - |
@@ -46,7 +46,7 @@ disaster-recovery-nns-test-hotfix:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
       export GIT_REVISION
-      $SHELL_WRAPPER ./testnet/tests/scripts/disaster_recovery_nns_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
+      $SHELL_WRAPPER ./testnet/tests/scripts/subnet_recovery_nns_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
 
 nns-workload-hotfix:
   extends: .prod-hotfix-test-group-2
