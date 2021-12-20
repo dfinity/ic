@@ -100,7 +100,7 @@ fn ic_replay_main() {
         rt.block_on(async move {
             let player = match (subcmd.as_ref(), target_height) {
                 (Some(_), Some(_)) => {
-                    eprintln!("Target height cannot be used with any sub-command in disaster-recovery mode.");
+                    eprintln!("Target height cannot be used with any sub-command in subnet-recovery mode.");
                     return;
                 },
                 (_, target_height) => {

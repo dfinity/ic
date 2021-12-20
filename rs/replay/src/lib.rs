@@ -199,7 +199,7 @@ impl Player {
     }
 
     /// Create and return a `Player` from a replica configuration object for
-    /// disaster recovery.
+    /// subnet recovery.
     pub async fn new(cfg: Config, subnet_id: SubnetId) -> Self {
         let logger = LoggerImpl::new(&cfg.logger, "ic-replay".to_string());
         let log = new_replica_logger(logger.root.clone(), &cfg.logger);
@@ -209,7 +209,7 @@ impl Player {
         let mut replica_version = Default::default();
         let consensus_pool = if cfg.artifact_pool.consensus_pool_path.exists() {
             let mut artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
-            // We don't want to modify the original consensus pool during the disaster
+            // We don't want to modify the original consensus pool during the subnet
             // recovery.
             artifact_pool_config.persistent_pool_read_only = true;
             let consensus_pool = ConsensusPoolImpl::from_uncached(

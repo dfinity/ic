@@ -1339,7 +1339,7 @@ pub fn make_registry_cup(
         versioned_record.version
     };
     // We do not use `registry_version` here because doing so would cause issues
-    // for full NNS (4b) disaster recovery. When we are calling
+    // for full NNS (4b) subnet recovery. When we are calling
     // make_registry_cup, our notion of the the NNS registry is still that of
     // the temporary NNS that is used to spawn the recovered NNS. However the
     // registry version store in `registry_store_uri` is a registry version from

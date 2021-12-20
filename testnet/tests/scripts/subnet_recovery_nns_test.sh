@@ -51,7 +51,7 @@ results_dir="$(
     mkdir -p "$2"
     realpath "$2"
 )"
-experiment_subdir="${experiment_subdir-${testnet}_nns_disaster-recovery_$(date +%s)}"
+experiment_subdir="${experiment_subdir-${testnet}_nns_subnet-recovery_$(date +%s)}"
 experiment_dir="$results_dir/$experiment_subdir"
 
 ORIGINAL_NNS_DATA="${ORIGINAL_NNS_DATA:-$experiment_dir/original_nns_data}"
@@ -136,7 +136,7 @@ step 2.A "Break (Stop) NNS-subnet and save its state and registry data somewhere
     # shellcheck disable=SC2016
     echo "Saving DATA to $ORIGINAL_NNS_DATA"
     # The code below directly manipulates the ic replica service -- this is
-    # brittle, we need a way to transition a node from/to "disaster recovery
+    # brittle, we need a way to transition a node from/to "subnet recovery
     # mode" without referring to implementation details.
     ssh ${SSH_ARGS[@]} admin@"$NNS_HOST" <<EOF
 sudo systemctl stop ic-replica
@@ -223,8 +223,8 @@ step 5.A "Make the tarball" || time (
 )
 
 step 5.B "Copy registry tarball to auxiliary http server host" || time (
-    ssh ${SSH_ARGS[@]} admin@"$AUX_HOST" "mkdir -p /tmp/disaster_recovery_test/"
-    rsync --delete -a "$SCRATCH/registry_store.tar.gz" admin@"[$AUX_HOST]":'/tmp/disaster_recovery_test/registry_store.tar.gz' "$RSYNC_ARGS"
+    ssh ${SSH_ARGS[@]} admin@"$AUX_HOST" "mkdir -p /tmp/subnet_recovery_test/"
+    rsync --delete -a "$SCRATCH/registry_store.tar.gz" admin@"[$AUX_HOST]":'/tmp/subnet_recovery_test/registry_store.tar.gz' "$RSYNC_ARGS"
 )
 
 step 5.C "Install daemonize and python on auxiliary http server host" || time (
@@ -237,7 +237,7 @@ step 5.D "Host the tarball using python" || time (
 
 step 6 "Propose and execute recovery CUP" || true
 
-REGISTRY_STORE_URI="http://[$AUX_HOST]:8081/tmp/disaster_recovery_test/registry_store.tar.gz"
+REGISTRY_STORE_URI="http://[$AUX_HOST]:8081/tmp/subnet_recovery_test/registry_store.tar.gz"
 
 function get_state_hash() {
     local state_hash
@@ -281,7 +281,7 @@ step 6.A "Propose recovery CUP" || time (
 step 6.B "Restart node with new state" || time (
     echo "child host: $CHILD_NNS_HOST"
     # The code below directly manipulates the ic replica service -- this is
-    # brittle, we need a way to transition a node from/to "disaster recovery
+    # brittle, we need a way to transition a node from/to "subnet recovery
     # mode" without referring to implementation details.
     ssh ${SSH_ARGS[@]} admin@"$CHILD_NNS_HOST" <<EOF
 	sudo mkdir /var/lib/ic/data/new_ic_state
