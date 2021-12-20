@@ -45,9 +45,7 @@ use ic_registry_keys::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_transport::pb::v1::RegistryMutation;
-use ic_types::{
-    NodeId, PrincipalId, PrincipalIdParseError, RegistryVersion, ReplicaVersion, SubnetId,
-};
+use ic_types::{PrincipalId, PrincipalIdParseError, RegistryVersion, ReplicaVersion, SubnetId};
 
 use crate::subnet_configuration::{SubnetConfig, SubnetIndex};
 use crate::util::write_registry_entry;
@@ -174,8 +172,8 @@ impl From<NodeOperatorEntry> for NodeOperatorRecord {
     }
 }
 
-pub type InitializedTopology = BTreeMap<NodeIndex, InitializedSubnet>;
-pub type UnassignedNodes = BTreeMap<NodeId, InitializedNode>;
+pub type InitializedTopology = BTreeMap<SubnetIndex, InitializedSubnet>;
+pub type UnassignedNodes = BTreeMap<NodeIndex, InitializedNode>;
 
 #[derive(Clone, Debug)]
 pub struct IcConfig {
@@ -373,7 +371,7 @@ impl IcConfig {
             let node_path = InitializedSubnet::build_node_path(self.target_dir.as_path(), *n_idx);
             let init_node = nc.clone().initialize(node_path)?;
             init_node.write_registry_entries(&data_provider, version)?;
-            unassigned_nodes.insert(init_node.node_id, init_node);
+            unassigned_nodes.insert(*n_idx, init_node);
         }
 
         // Set the routing table after initializing the subnet ids

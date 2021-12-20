@@ -18,17 +18,7 @@ pub fn create_ic_handle(
     let mut malicious_public_api_endpoints = vec![];
 
     vm_nodes.iter().for_each(|(node_id, vm)| {
-        let (subnet, node) = if let Some((subnet, node)) = node_id_to_subnet(init_ic, *node_id) {
-            (Some(subnet), node)
-        } else {
-            (
-                None,
-                init_ic
-                    .unassigned_nodes
-                    .get(node_id)
-                    .expect("node not initialized"),
-            )
-        };
+        let (subnet, node) = node_id_to_subnet(init_ic, *node_id);
         let url = node
             .node_config
             .public_api
@@ -79,8 +69,8 @@ pub fn create_ic_handle(
 fn node_id_to_subnet(
     init_ic: &InitializedIc,
     node_id: NodeId,
-) -> Option<(&InitializedSubnet, &InitializedNode)> {
-    init_ic
+) -> (Option<&InitializedSubnet>, &InitializedNode) {
+    if let Some((s, n)) = init_ic
         .initialized_topology
         .values()
         .filter_map(|subnet| {
@@ -91,4 +81,16 @@ fn node_id_to_subnet(
                 .map(|n| (subnet, n))
         })
         .next()
+    {
+        (Some(s), n)
+    } else {
+        (
+            None,
+            init_ic
+                .unassigned_nodes
+                .values()
+                .find(|n| n.node_id == node_id)
+                .expect("node with given ID not included in topology"),
+        )
+    }
 }
