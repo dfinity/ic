@@ -28,6 +28,7 @@ use ic_types::{
 };
 
 const CRYPTO_DIR: &str = "crypto";
+pub type SubnetIndex = u64;
 pub type NodeIndex = u64;
 
 #[derive(Clone, Debug)]
