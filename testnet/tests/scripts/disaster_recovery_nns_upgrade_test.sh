@@ -232,11 +232,7 @@ step 3.C "Run ic-replay" || time (
     cd "$ORIGINAL_NNS_DATA"
     replica_version_record=$(
         cat <<END
-{ "binary_url": "",
-  "sha256_hex": "",
-  "node_manager_binary_url": "",
-  "node_manager_sha256_hex": "",
-  "release_package_url": "https://download.dfinity.systems/ic/$ic_version_working/guest-os/update-img/update-img.tar.gz",
+{ "release_package_url": "https://download.dfinity.systems/ic/$ic_version_working/guest-os/update-img/update-img.tar.gz",
   "release_package_sha256_hex": "$ic_version_working_sha256"
 }
 END

@@ -74,7 +74,7 @@ impl ReplicaProcess {
     /// by SELinux type enforcement.
     ///
     /// We still depend on init to handle reaping of adopted children,
-    /// as the nodemanager has no way of adopting or even knowing the
+    /// as the orchestrator has no way of adopting or even knowing the
     /// processes in question, cf. https://linux.die.net/man/2/waitpid.
     ///
     /// WARNING: We treat the sandbox processes as ACTIVELY

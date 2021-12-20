@@ -79,7 +79,7 @@ ic-os.img
 **/bin/ic-consensus-pool-util
 **/bin/ic-crypto-csp
 **/bin/ic-regedit
-**/bin/nodemanager
+**/bin/orchestrator
 **/bin/replica
 **/bin/state-tool
 **/bin/vsock_agent

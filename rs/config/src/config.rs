@@ -40,7 +40,7 @@ pub struct Config {
     pub logger: LoggerConfig,
     // If `manager_logger` is not specified in the configuration file, it
     // defaults to the value specified for `logger`.
-    pub nodemanager_logger: LoggerConfig,
+    pub orchestrator_logger: LoggerConfig,
     pub message_routing: MessageRoutingConfig,
     pub malicious_behaviour: MaliciousBehaviour,
     pub firewall: FirewallConfig,
@@ -62,7 +62,7 @@ pub struct ConfigOptional {
     pub consensus: Option<ConsensusConfig>,
     pub crypto: Option<CryptoConfig>,
     pub logger: Option<LoggerConfig>,
-    pub nodemanager_logger: Option<LoggerConfig>,
+    pub orchestrator_logger: Option<LoggerConfig>,
     pub message_routing: Option<MessageRoutingConfig>,
     pub malicious_behaviour: Option<MaliciousBehaviour>,
     pub firewall: Option<FirewallConfig>,
@@ -89,7 +89,7 @@ impl Config {
             consensus: ConsensusConfig::default(),
             crypto: CryptoConfig::new(parent_dir.join("crypto")),
             logger: logger.clone(),
-            nodemanager_logger: logger,
+            orchestrator_logger: logger,
             message_routing: MessageRoutingConfig::default(),
             malicious_behaviour: MaliciousBehaviour::default(),
             firewall: FirewallConfig::default(),
@@ -123,7 +123,7 @@ impl Config {
         let cfg = source.load::<ConfigOptional>()?;
 
         let logger = cfg.logger.unwrap_or(default.logger);
-        let nodemanager_logger = cfg.nodemanager_logger.unwrap_or_else(|| logger.clone());
+        let orchestrator_logger = cfg.orchestrator_logger.unwrap_or_else(|| logger.clone());
 
         Ok(Self {
             registry_client: cfg.registry_client.unwrap_or(default.registry_client),
@@ -141,7 +141,7 @@ impl Config {
             consensus: cfg.consensus.unwrap_or(default.consensus),
             crypto: cfg.crypto.unwrap_or(default.crypto),
             logger,
-            nodemanager_logger,
+            orchestrator_logger,
             message_routing: cfg.message_routing.unwrap_or(default.message_routing),
             malicious_behaviour: cfg
                 .malicious_behaviour

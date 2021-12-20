@@ -1,4 +1,4 @@
-use crate::error::{NodeManagerError, NodeManagerResult};
+use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::registry_helper::RegistryHelper;
 use crate::utils;
 use ic_http_utils::file_downloader::FileDownloader;
@@ -56,14 +56,14 @@ impl ReleasePackageProvider {
     ///
     /// If no release package URL or hash is defined for the given replica
     /// version's ReplicaVersionRecord, we attempt to construct a release
-    /// package from the record's replica and node manager URLs.
+    /// package from the record's replica and orchestrator URLs.
     ///
     /// Previously downloaded releases will be delete if redownload is set to
     /// true.
     pub(crate) async fn download_release_package(
         &self,
         replica_version: ReplicaVersion,
-    ) -> NodeManagerResult<ReleaseContent> {
+    ) -> OrchestratorResult<ReleaseContent> {
         self.gc_release_packages();
 
         let version_dir = self.make_version_dir(&replica_version)?;
@@ -90,7 +90,7 @@ impl ReleasePackageProvider {
                 Some(replica_version_record.release_package_sha256_hex),
             )
             .await
-            .map_err(NodeManagerError::from)?;
+            .map_err(OrchestratorError::from)?;
 
         let content = ReleaseContent::try_from(version_dir.as_path());
         if let Err(e) = &content {
@@ -101,7 +101,7 @@ impl ReleasePackageProvider {
                 e
             );
         }
-        content.map_err(NodeManagerError::ReleasePackageError)
+        content.map_err(OrchestratorError::ReleasePackageError)
     }
 
     /// Make a dir to store a release package for the given replica version
@@ -111,10 +111,10 @@ impl ReleasePackageProvider {
     pub(crate) fn make_version_dir(
         &self,
         replica_version: &ReplicaVersion,
-    ) -> NodeManagerResult<PathBuf> {
+    ) -> OrchestratorResult<PathBuf> {
         let version_dir = self.release_content_dir.join(replica_version.as_ref());
         fs::create_dir_all(&version_dir)
-            .map_err(|e| NodeManagerError::dir_create_error(&version_dir, e))?;
+            .map_err(|e| OrchestratorError::dir_create_error(&version_dir, e))?;
         Ok(version_dir)
     }
 

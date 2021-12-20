@@ -596,7 +596,7 @@ pub fn setup(
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
     registry_poll_delay_duration_ms: u64,
 ) -> (ConsensusImpl, ConsensusGossipImpl) {
-    // Currently, the nodemanager polls the registry every
+    // Currently, the orchestrator polls the registry every
     // `registry_poll_delay_duration_ms` and writes new updates into the
     // registry local store. The registry client polls the local store
     // for updates every `registry::POLLING_PERIOD`. These two polls are completelly

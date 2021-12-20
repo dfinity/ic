@@ -155,7 +155,7 @@ pub fn construct_ic_stack(
             )
         };
         match catch_up_package {
-            // The node manager has persisted a CUP for the replica.
+            // The orchestrator has persisted a CUP for the replica.
             Some(cup_from_nm) => {
                 let signed = !cup_from_nm
                     .cup
@@ -166,7 +166,7 @@ pub fn construct_ic_stack(
                     .0
                     .is_empty();
                 if signed {
-                    // The CUP persisted by the node manager is safe to use because it's signed.
+                    // The CUP persisted by the orchestrator is safe to use because it's signed.
                     info!(
                         &replica_logger,
                         "Using the signed CUP with height {}",
@@ -174,25 +174,25 @@ pub fn construct_ic_stack(
                     );
                     cup_from_nm
                 } else {
-                    // The CUP persisted by the node manager is unsigned and hence it was created
+                    // The CUP persisted by the orchestrator is unsigned and hence it was created
                     // from the registry CUP contents. In this case, we re-create this CUP to avoid
                     // incompatibility issues, because on other replicas of the same subnet the node
                     // manager version may differ, so the CUP contents might differ as well.
                     let registry_cup = make_registry_cup();
                     // However in a special case of the NNS disaster recovery, we still have to use
                     // a newer unsigned CUP. The incompatibility issue is not a problem in this
-                    // case, because this CUP will not be created by the node manager.
+                    // case, because this CUP will not be created by the orchestrator.
                     if registry_cup.cup.height() < cup_from_nm.cup.height() {
                         info!(
                             &replica_logger,
-                            "Using the newer CUP with height {} passed from the node manager",
+                            "Using the newer CUP with height {} passed from the orchestrator",
                             cup_from_nm.cup.height()
                         );
                         cup_from_nm
                     } else {
                         info!(
                             &replica_logger,
-                            "Using the CUP with height {} generated from the registry (CUP height from the node manager is {})",
+                            "Using the CUP with height {} generated from the registry (CUP height from the orchestrator is {})",
                             registry_cup.cup.height(),
                             cup_from_nm.cup.height()
                         );
@@ -200,7 +200,7 @@ pub fn construct_ic_stack(
                     }
                 }
             }
-            // No CUP was persisted by the node manager, which is usually the case for fresh nodes.
+            // No CUP was persisted by the orchestrator, which is usually the case for fresh nodes.
             None => {
                 let registry_cup = make_registry_cup();
                 info!(

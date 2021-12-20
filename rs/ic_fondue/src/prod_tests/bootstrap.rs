@@ -50,7 +50,7 @@ pub fn init_ic<P: AsRef<Path>>(
     let mut node_idx_to_vm: BTreeMap<NodeIndex, AllocatedVm> = Default::default();
 
     // In production, this dummy hash is not actually checked and exists
-    // only as a placeholder: Updating individual binaries (replica/nodemanager)
+    // only as a placeholder: Updating individual binaries (replica/orchestrator)
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
     info!(
@@ -65,8 +65,8 @@ pub fn init_ic<P: AsRef<Path>>(
             // the following are dummy values, these are not used in production
             replica_url: Url::parse("file:///opt/replica").unwrap(),
             replica_hash: dummy_hash.clone(),
-            nodemanager_url: Url::parse("file:///opt/replica").unwrap(),
-            nodemanager_hash: dummy_hash,
+            orchestrator_url: Url::parse("file:///opt/replica").unwrap(),
+            orchestrator_hash: dummy_hash,
         });
     info!(ctx.logger, "initial_replica: {:?}", initial_replica);
 

@@ -22,7 +22,7 @@ use ic_registry_keys::{
 /// the BlessedReplicaVersions-List, the following is checked:
 ///
 /// * The corresponding ReplicaVersionRecord exists.
-/// * At least one of either the replica, nodemanager or release package is
+/// * At least one of either the replica, orchestrator or release package is
 ///   specified.
 /// * Each set URL is well-formed.
 /// * Each set hash is a well-formed hex-encoded SHA256 value.

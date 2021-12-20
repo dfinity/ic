@@ -37,7 +37,7 @@ download_binaries
     source scripts/fetch-dfinity-binaries.sh
     get_dfinity_binaries
     REPLICA_HASH=$(sha256sum rootfs/opt/ic/bin/replica | cut -d " " -f 1)
-    NM_HASH=$(sha256sum rootfs/opt/ic/bin/nodemanager | cut -d " " -f 1)
+    NM_HASH=$(sha256sum rootfs/opt/ic/bin/orchestrator | cut -d " " -f 1)
     # Generate key material
     # See subnet_crypto_install, line 5
 
@@ -47,8 +47,8 @@ download_binaries
             "--working-dir" "$TMP" \
             "--replica-download-url" "file:///opt/ic/bin/replica" \
             "--replica-hash" "$REPLICA_HASH" \
-            "--nodemanager-download-url" "file:///opt/ic/bin/nodemanager" \
-            "--nodemanager-hash" "$NM_HASH" \
+            "--orchestrator-download-url" "file:///opt/ic/bin/orchestrator" \
+            "--orchestrator-hash" "$NM_HASH" \
             "--nns-subnet-index" "0" \
             "--dkg-interval-length" "5" \
             "--p2p-flows" "1234-1" \

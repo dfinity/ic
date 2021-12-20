@@ -110,7 +110,7 @@
 /rs/memory_tracker/                  @dfinity-lab/teams/execution-owners
 /rs/messaging/                       @dfinity-lab/teams/message-routing-owners
 /rs/nns/                             @dfinity-lab/teams/nns-team @granstrom1
-/rs/nodemanager/                     @dfinity-lab/teams/orchestrator-owners
+/rs/orchestrator/                    @dfinity-lab/teams/orchestrator-owners
 /rs/p2p/                             @dfinity-lab/teams/networking-team
 /rs/protobuf/def/crypto              @dfinity-lab/teams/crypto-owners
 /rs/protobuf/def/messaging           @dfinity-lab/teams/message-routing-owners

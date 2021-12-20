@@ -27,25 +27,25 @@ function get_dfinity_binaries() {
         chmod a+x "$REPLICA_TARGET"
         sha256sum "$REPLICA_TARGET"
 
-        NODEMANAGER_PATH="/var/lib/dfinity-node/replica_binaries/$ic_version/nodemanager"
-        NODEMANAGER_TARGET="rootfs/opt/ic/bin/nodemanager"
-        NODEMANAGER_DIR=$(dirname "$NODEMANAGER_TARGET")
-        mkdir -p "$NODEMANAGER_DIR"
+        ORCHESTRATOR_PATH="/var/lib/dfinity-node/replica_binaries/$ic_version/orchestrator"
+        ORCHESTRATOR_TARGET="rootfs/opt/ic/bin/orchestrator"
+        ORCHESTRATOR_DIR=$(dirname "$ORCHESTRATOR_TARGET")
+        mkdir -p "$ORCHESTRATOR_DIR"
 
-        rsync --rsync-path="sudo rsync" "${NNS_REPLICA}:${NODEMANAGER_PATH}" "$NODEMANAGER_TARGET"
-        chmod a+x "$NODEMANAGER_TARGET"
-        sha256sum "$NODEMANAGER_TARGET"
+        rsync --rsync-path="sudo rsync" "${NNS_REPLICA}:${ORCHESTRATOR_PATH}" "$ORCHESTRATOR_TARGET"
+        chmod a+x "$ORCHESTRATOR_TARGET"
+        sha256sum "$ORCHESTRATOR_TARGET"
 
     else
-        echo "Downloading replica and nodemanager binaries"
+        echo "Downloading replica and orchestrator binaries"
 
         TARGET_DIR="$REPO_ROOT/ic-os/guestos/rootfs/opt/ic/bin"
 
         "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
             --git-rev "$GIT_REVISION" --remote-path=release --out="$TARGET_DIR" \
-            --include "{replica,nodemanager}.gz"
+            --include "{replica,orchestrator}.gz"
 
-        for f in replica nodemanager; do
+        for f in replica orchestrator; do
             gunzip -f "$TARGET_DIR/$f"
             chmod +x "$TARGET_DIR/$f"
         done

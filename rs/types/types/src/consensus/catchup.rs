@@ -194,7 +194,7 @@ impl From<&CatchUpContent> for CatchUpShareContent {
 /// committee.
 pub type CatchUpPackageShare = Signed<CatchUpShareContent, ThresholdSignatureShare<CatchUpContent>>;
 
-/// The parameters used to request `CatchUpPackage` (by nodemanager).
+/// The parameters used to request `CatchUpPackage` (by orchestrator).
 ///
 /// We make use of the `Ord` trait to determine if one `CatchUpPackage` is newer
 /// than the other:

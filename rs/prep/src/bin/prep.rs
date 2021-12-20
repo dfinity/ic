@@ -47,13 +47,13 @@ struct CliArgs {
     #[structopt(long)]
     pub replica_hash: Option<String>,
 
-    /// URL from which to download the nodemanager binary
+    /// URL from which to download the orchestrator binary
     #[structopt(long, parse(try_from_str = url::Url::parse))]
-    pub nodemanager_download_url: Option<Url>,
+    pub orchestrator_download_url: Option<Url>,
 
-    /// sha256-hash of the nodemanager binary in hex.
+    /// sha256-hash of the orchestrator binary in hex.
     #[structopt(long)]
-    pub nodemanager_hash: Option<String>,
+    pub orchestrator_hash: Option<String>,
 
     /// The URL against which a HTTP GET request will return a release
     /// package that corresponds to this version.
@@ -206,8 +206,8 @@ struct ValidatedArgs {
     pub replica_version_id: Option<ReplicaVersion>,
     pub replica_download_url: Option<Url>,
     pub replica_hash: Option<String>,
-    pub nodemanager_download_url: Option<Url>,
-    pub nodemanager_hash: Option<String>,
+    pub orchestrator_download_url: Option<Url>,
+    pub orchestrator_hash: Option<String>,
     pub release_package_download_url: Option<Url>,
     pub release_package_sha256_hex: Option<String>,
     pub subnets: BTreeMap<SubnetIndex, BTreeMap<NodeIndex, NodeConfiguration>>,
@@ -590,12 +590,12 @@ impl CliArgs {
             _ => (),
         }
 
-        match (&self.nodemanager_download_url, &self.nodemanager_hash) {
+        match (&self.orchestrator_download_url, &self.orchestrator_hash) {
             (Some(_), None) => eprintln!(
-                "WARNING: missing nodemanager hash when nodemanager download url is given"
+                "WARNING: missing orchestrator hash when orchestrator download url is given"
             ),
             (None, Some(_)) => {
-                bail!("Missing nodemanager download url when nodemanager hash is given")
+                bail!("Missing orchestrator download url when orchestrator hash is given")
             }
             _ => (),
         }
@@ -618,8 +618,8 @@ impl CliArgs {
             replica_hash: self.replica_hash,
             replica_version_id: self.replica_version,
             replica_download_url: self.replica_download_url,
-            nodemanager_download_url: self.nodemanager_download_url,
-            nodemanager_hash: self.nodemanager_hash,
+            orchestrator_download_url: self.orchestrator_download_url,
+            orchestrator_hash: self.orchestrator_hash,
             release_package_download_url: self.release_package_download_url,
             release_package_sha256_hex: self.release_package_sha256_hex,
             subnets,

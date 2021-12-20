@@ -73,7 +73,7 @@ pub type CryptoComponent =
 ///
 /// This should be used whenever crypto is required on a node, but a
 /// full-fledged `CryptoComponent` is not available. Example use cases are in
-/// separate process such as ic-fe or the node manager.
+/// separate process such as ic-fe or the orchestrator.
 ///
 /// Do not instantiate a CryptoComponent outside of the replica process, since
 /// that may lead to problems with concurrent access to the secret key store.
@@ -312,7 +312,7 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
         registry_client: Arc<dyn RegistryClient>,
         logger: ReplicaLogger,
     ) -> impl CryptoComponentForNonReplicaProcess {
-        // disable metrics for crypto in node manager:
+        // disable metrics for crypto in orchestrator:
         CryptoComponentFatClient::new(config, registry_client, logger, None)
     }
 

@@ -13,7 +13,7 @@ ls -lah /var/run/docker.sock
 groups
 
 cd "$ROOT_DIR" || exit 1
-for f in replica nodemanager canister_sandbox vsock_agent state-tool ic-consensus-pool-util ic-crypto-csp ic-regedit; do
+for f in replica orchestrator canister_sandbox vsock_agent state-tool ic-consensus-pool-util ic-crypto-csp ic-regedit; do
     gunzip -c -d artifacts/release/$f.gz >artifacts/release/$f
 done
 

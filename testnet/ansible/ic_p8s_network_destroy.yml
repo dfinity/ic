@@ -22,5 +22,5 @@
         path: /var/lib/p8s-scrape/ic_networks/{{ item }}/{{ ic }}_{{ item }}_scrape_config.json
         state: absent
       loop:
-        - nodemanager
+        - orchestrator
         - node_exporter

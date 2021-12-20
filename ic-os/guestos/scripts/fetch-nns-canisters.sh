@@ -14,7 +14,7 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 function download_registry_canisters() {
     "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
         --git-rev "$GIT_REVISION" --remote-path=release --out="$TMPDIR" \
-        --include="{replica,nodemanager}.gz"
+        --include="{replica,orchestrator}.gz"
 
     for f in "${IC_PREP_DIR}"/*.gz; do
         gunzip -f "$f"

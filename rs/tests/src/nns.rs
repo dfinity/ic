@@ -118,7 +118,7 @@ pub trait NnsExt {
     /// available on the $PATH.
     ///
     /// Generates a new `ReplicaVersionRecord` with replica version `version`.
-    /// Depending on `package_content`, only `nodemanager`, only `replica`, or
+    /// Depending on `package_content`, only `orchestrator`, only `replica`, or
     /// both, will be updated with the given version. The binaries that are
     /// referenced in the update are the same that are used as the initial
     /// replica version.
@@ -286,7 +286,7 @@ impl NnsExt for fondue::pot::Context {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum UpgradeContent {
     All,
-    Nodemanager,
+    Orchestrator,
     Replica,
 }
 

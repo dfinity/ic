@@ -20,7 +20,7 @@ Please, adjust the table at the bottom of this file accordingly if you want to c
 failing to passing for your test.
 
 === Dependencies
-The tests start a `replica` process for each node. Thus, when running the tests (`cargo test testcase_`), a `replica` and a `nodemanager` binary needs to be on the `$PATH`.
+The tests start a `replica` process for each node. Thus, when running the tests (`cargo test testcase_`), a `replica` and a `orchestrator` binary needs to be on the `$PATH`.
 
 It is recommended to use a *release*-build of the `replica`. You can build a release-build using the following command in the `rs/` directory:
 

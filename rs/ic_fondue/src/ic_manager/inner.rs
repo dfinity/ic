@@ -89,8 +89,8 @@ pub struct NodeCommand {
     pub is_root_subnet: bool,
     // indicates whether this node was configured to exert malicious behavior.
     pub is_malicious: bool,
-    // The listening address on which the nodemanager should export its metrics.
-    pub nodemanager_metrics_listen_addr: SocketAddr,
+    // The listening address on which the orchestrator should export its metrics.
+    pub orchestrator_metrics_listen_addr: SocketAddr,
 
     pub initial_subnet_type: SubnetType,
 
@@ -420,7 +420,7 @@ impl IcManager {
                     port_allocator.get_addr(
                         init_subnet.subnet_index as usize,
                         *node_index as usize,
-                        AddrType::NodemanagerPrometheus,
+                        AddrType::OrchestratorPrometheus,
                     ),
                 )
             })
@@ -454,7 +454,7 @@ impl IcManager {
             http_addr: SocketAddr::from(&init_node.node_config.public_api[0]),
             is_root_subnet,
             is_malicious: matches!(malicious_behaviour, Some(m) if m.allow_malicious_behaviour),
-            nodemanager_metrics_listen_addr: metrics_socket_addr,
+            orchestrator_metrics_listen_addr: metrics_socket_addr,
             initial_subnet_type,
             subnet_id,
         }
@@ -502,7 +502,7 @@ impl IcManager {
         });
 
         // Here we use a placeholder for the log file for the replica and the
-        // nodemanager.  As these files need to be recreated every time the
+        // orchestrator.  As these files need to be recreated every time the
         // process starts, the corresponding paths will be set in situ with temp
         // files when spawning the command.
         let place_holder_path = PathBuf::from("/placeholder");
@@ -520,13 +520,13 @@ impl IcManager {
             ..LoggerConfig::default()
         });
 
-        let nodemanager_logger_config = logger_config.clone().map(|c| LoggerConfig {
+        let orchestrator_logger_config = logger_config.clone().map(|c| LoggerConfig {
             target: ic_config::logger::LogTarget::File(place_holder_path),
             ..c
         });
 
         replica_config.logger = logger_config;
-        replica_config.nodemanager_logger = nodemanager_logger_config;
+        replica_config.orchestrator_logger = orchestrator_logger_config;
         replica_config.malicious_behaviour = malicious_behaviour;
         replica_config
     }
@@ -560,23 +560,23 @@ impl ManagedProcessCfg for NodeCommand {
         std::fs::write(&version_file_path, default_version.to_string().as_bytes())
             .expect("Could not write version.txt");
         // Search for the directory containing the replica binary and pass it to
-        // the nodemanager explicitly.
+        // the orchestrator explicitly.
         let ic_binary_dir = find_file_on_path("replica").expect("Could not find replica on path.");
         let ic_binary_dir = ic_binary_dir.parent().expect("Could not deduce parent.");
 
         set_log_path(self.config.logger.as_mut());
-        set_log_path(self.config.nodemanager_logger.as_mut());
+        set_log_path(self.config.orchestrator_logger.as_mut());
         let config_json = serde_json::to_string(&self.config).unwrap();
         std::fs::write(&self.config_path, config_json.into_bytes()).unwrap();
 
-        let mut cmd = process::Command::new("nodemanager");
+        let mut cmd = process::Command::new("orchestrator");
 
         // Currently, the framework has no support for reading metrics from either the
-        // nodemanager or the replica and thus let the nodemanager assign a
+        // orchestrator or the replica and thus let the orchestrator assign a
         // OS-chosen port.
 
         cmd.arg("--metrics-listen-addr")
-            .arg(self.nodemanager_metrics_listen_addr.to_string())
+            .arg(self.orchestrator_metrics_listen_addr.to_string())
             .arg("--cup-dir")
             .arg(cup_dir)
             .arg("--replica-binary-dir")
@@ -597,7 +597,7 @@ impl ManagedProcessCfg for NodeCommand {
     fn auxiliary_info_source(&self) -> Vec<PathBuf> {
         vec![
             logger_config_to_file(self.config.logger.as_ref()),
-            logger_config_to_file(self.config.nodemanager_logger.as_ref()),
+            logger_config_to_file(self.config.orchestrator_logger.as_ref()),
         ]
         .into_iter()
         .flatten()

@@ -1,0 +1,14 @@
+[
+    {
+	"targets": [
+	    {% for host in groups['all'] -%}
+	    {%- if hostvars[host]['orchestrator_metrics_listen_addr'] is defined -%}
+	    "{{ hostvars[host]['orchestrator_metrics_listen_addr'] }}"{{ "," if not loop.last else ""}}
+            {% endif -%}
+	    {% endfor %}
+	],
+	"labels": {
+	    "ic": "{{ ic }}"
+	}
+    }
+]

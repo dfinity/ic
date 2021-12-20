@@ -331,7 +331,7 @@ def test_log_rdeps():
         "ledger-canister": "candid",
         "lifeline": "candid",
         "memory_tracker": "ic-logger",
-        "nodemanager": "candid",
+        "orchestrator": "candid",
         "phantom_newtype": "candid",
         "pmap": "canister-test",
         "registry-canister": "candid",

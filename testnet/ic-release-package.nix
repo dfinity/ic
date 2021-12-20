@@ -1,6 +1,6 @@
 { pkgs
 , ic-release
-, nodemanager
+, orchestrator
 , replica
 }:
 let
@@ -14,7 +14,7 @@ pkgs.runCommandNoCC "ic-release-package-${version}" {
     ic-release
     pkgs.jo
   ];
-  inherit version nodemanager replica;
+  inherit version orchestrator replica;
 } ''
   mkdir -p "$out"
 
@@ -22,7 +22,7 @@ pkgs.runCommandNoCC "ic-release-package-${version}" {
   the_release_id="ic-release-package-$version-id"
 
   ic-release \
-    --nodemanager-binary "$nodemanager" \
+    --orchestrator-binary "$orchestrator" \
     --replica-binary "$replica" \
     --target-file "$out/$the_release" > "$out/$the_release_id"
 

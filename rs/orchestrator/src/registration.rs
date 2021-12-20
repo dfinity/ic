@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::error::{NodeManagerError, NodeManagerResult};
+use crate::error::{OrchestratorError, OrchestratorResult};
 use candid::Encode;
 use ic_canister_client::{Agent, Sender};
 use ic_config::{
@@ -324,7 +324,7 @@ impl NodeRegistration {
 pub(crate) fn http_config_to_endpoint(
     log: &ReplicaLogger,
     http_config: &HttpConfig,
-) -> NodeManagerResult<String> {
+) -> OrchestratorResult<String> {
     info!(log, "Reading http config for registration");
     get_endpoint(
         log,
@@ -336,7 +336,7 @@ pub(crate) fn http_config_to_endpoint(
 pub(crate) fn msg_routing_config_to_endpoint(
     log: &ReplicaLogger,
     msg_routing_config: &MsgRoutingConfig,
-) -> NodeManagerResult<String> {
+) -> OrchestratorResult<String> {
     info!(log, "Reading msg routing config for registration");
     get_endpoint(
         log,
@@ -348,12 +348,12 @@ pub(crate) fn msg_routing_config_to_endpoint(
 pub(crate) fn transport_config_to_endpoints(
     log: &ReplicaLogger,
     transport_config: &TransportConfig,
-) -> NodeManagerResult<Vec<String>> {
+) -> OrchestratorResult<Vec<String>> {
     info!(log, "Reading transport config for registration");
     let mut flow_endpoints: Vec<String> = vec![];
 
     if transport_config.p2p_flows.is_empty() {
-        return Err(NodeManagerError::invalid_configuration_error(
+        return Err(OrchestratorError::invalid_configuration_error(
             "Empty list of transport flows",
         ));
     }
@@ -371,19 +371,19 @@ pub(crate) fn transport_config_to_endpoints(
 fn metrics_config_to_endpoint(
     log: &ReplicaLogger,
     metrics_config: &MetricsConfig,
-) -> NodeManagerResult<String> {
+) -> OrchestratorResult<String> {
     if let Exporter::Http(saddr) = metrics_config.exporter {
         return get_endpoint(log, saddr.ip().to_string(), saddr.port());
     }
 
-    Err(NodeManagerError::invalid_configuration_error(
+    Err(OrchestratorError::invalid_configuration_error(
         "Metrics endpoint is not configured.",
     ))
 }
 
-fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> NodeManagerResult<String> {
+fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> OrchestratorResult<String> {
     let parsed_ip_addr: IpAddr = ip_addr.parse().map_err(|_e| {
-        NodeManagerError::invalid_configuration_error(format!(
+        OrchestratorError::invalid_configuration_error(format!(
             "Could not parse IP-address: {}",
             ip_addr
         ))

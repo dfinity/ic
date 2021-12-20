@@ -28,7 +28,7 @@ Underneath `system-tests` we have two auxiliary libraries: `ic_fondue` and `fond
 	 confidence in `fondue`'s reliability.
 1. `ic_fondue` is an instantiation of `fondue` for the IC: the initial
 	 configuration corresponds with a topology, each `fondue` process is a
-	 `nodemanager` and we look at the logs produced by each replica as the source
+	 `orchestrator` and we look at the logs produced by each replica as the source
 	 of passive information. This minimizes the chance of a test writer wiring
 	 everything in the wrong way.
 

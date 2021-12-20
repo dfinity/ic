@@ -11,7 +11,7 @@ cargo run -p ic-prep --bin ic-prep -- \
   --working-dir /tmp/prep/node \
   --replica_version 0.1.0 \
   --replica-download-url ... \
-  --nodemanager-download-url ... \
+  --orchestrator-download-url ... \
   --p2p-flows 1234-3 \
   --node 'idx:1,subnet_idx:1,xnet_api:["http://1.2.3.4:81"],public_api:["http://1.2.3.4:82"],prometheus_metrics:["http://1.2.3.4:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"'
   --node ...

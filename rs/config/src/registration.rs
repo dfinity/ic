@@ -24,7 +24,7 @@ pub struct Config {
     #[serde(default = "eject_keycard_signal_file")]
     pub eject_keycard_signal_file: PathBuf,
 
-    /// When the node manager runs the first time, it will attempt to contact
+    /// When the orchestrator runs the first time, it will attempt to contact
     /// the NNS via those URLs to initialize the registry's local store.
     /// URLs should be provided coma-separated.
     pub nns_url: Option<String>,

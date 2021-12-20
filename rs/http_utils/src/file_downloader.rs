@@ -206,7 +206,7 @@ pub fn extract_tar_gz_into_dir(tar_gz_path: &Path, target_dir: &Path) -> FileDow
 
 pub type FileDownloadResult<T> = Result<T, FileDownloadError>;
 
-/// Enumerates the possible errors that NodeManager may encounter
+/// Enumerates the possible errors that Orchestrator may encounter
 #[derive(Debug)]
 pub enum FileDownloadError {
     /// An IO error occurred

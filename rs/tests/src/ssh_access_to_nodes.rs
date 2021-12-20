@@ -127,7 +127,7 @@ pub fn keys_in_the_subnet_record_can_be_updated(handle: IcHandle, ctx: &fondue::
 
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
-    // Node manager updates checks if there is a new version of the registry every
+    // Orchestrator updates checks if there is a new version of the registry every
     // 10 seconds. If so, it updates first the readonly and then the backup
     // keys. If backup key can authenticate we know that the readonly keys are
     // already updated too.
@@ -214,7 +214,7 @@ pub fn multiple_keys_can_access_one_account(handle: IcHandle, ctx: &fondue::pot:
     let backup_mean1 = AuthMean::PrivateKey(backup_private_key1);
     let backup_mean2 = AuthMean::PrivateKey(backup_private_key2);
     let backup_mean3 = AuthMean::PrivateKey(backup_private_key3);
-    // Node manager updates checks if there is a new version of the registry every
+    // Orchestrator updates checks if there is a new version of the registry every
     // 10 seconds. If so, it updates first the readonly and then the backup
     // keys. If backup key can authenticate we know that the readonly keys are
     // already updated too.
@@ -256,7 +256,7 @@ pub fn multiple_keys_can_access_one_account_on_unassigned_nodes(
     let readonly_mean1 = AuthMean::PrivateKey(readonly_private_key1);
     let readonly_mean2 = AuthMean::PrivateKey(readonly_private_key2);
     let readonly_mean3 = AuthMean::PrivateKey(readonly_private_key3);
-    // Node manager updates checks if there is a new version of the registry every
+    // Orchestrator updates checks if there is a new version of the registry every
     // 10 seconds. If so, it updates first the readonly and then the backup
     // keys. If backup key can authenticate we know that the readonly keys are
     // already updated too.

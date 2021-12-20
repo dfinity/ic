@@ -95,7 +95,7 @@ members = [
   "nns/gtc",
   "nns/gtc_accounts",
   "determinism_test",
-  "nodemanager",
+  "orchestrator",
   "p2p",
   "replica/setup_ic_network",
   "phantom_newtype",

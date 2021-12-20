@@ -17,7 +17,7 @@
   loop:
     - boundary_node_nginx
     - boundary_node_control_plane
-    - nodemanager
+    - orchestrator
     - node_exporter
 
 - name: "Generate the scrape configuration"
@@ -31,7 +31,7 @@
     # Ensure the targets list in the generated file is non-zero length
     validate: jq -e '.[0].targets | length != 0' %s
   loop:
-    - nodemanager
+    - orchestrator
     - node_exporter
 
 # Same as the previous step, but conditional on the inventory having

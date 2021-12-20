@@ -54,7 +54,7 @@ Instead do a docker based build as described here: https://github.com/dfinity/ic
 
   cd rs
   ../gitlab-ci/tools/docker-run cargo build --bin ic-workload-generator --bin vsock_agent --bin state-tool --bin ic-consensus-pool-util --bin ic-crypto-csp --bin ic-regedit --release
-  ../gitlab-ci/tools/docker-run cargo build -p nodemanager -p ic-replica --release
+  ../gitlab-ci/tools/docker-run cargo build -p orchestrator -p ic-replica --release
   # To build the NNS canisters needed for installing the NNS
   cd ../ic-os/guestos
   ../../gitlab-ci/tools/docker-run gitlab-ci/tools/cargo-build-canisters

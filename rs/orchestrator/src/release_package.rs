@@ -1,5 +1,5 @@
 use crate::catch_up_package_provider::CatchUpPackageProvider;
-use crate::error::{NodeManagerError, NodeManagerResult};
+use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::nns_registry_replicator::NnsRegistryReplicator;
 use crate::registry_helper::RegistryHelper;
 use crate::release_package_provider::ReleasePackageProvider;
@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 
 /// Continuously checks the Registry to determine if this node should upgrade
 /// to a new release package, and if so, downloads and extracts this release
-/// package and exec's the node manager binary contained within
+/// package and exec's the orchestrator binary contained within
 pub(crate) struct ReleasePackage {
     registry: Arc<RegistryHelper>,
     replica_process: Arc<Mutex<ReplicaProcess>>,
@@ -73,13 +73,13 @@ impl ReleasePackage {
 
     /// Checks for a new release package, and if found, upgrades to this release
     /// package
-    pub(crate) async fn check_for_upgrade(&self) -> NodeManagerResult<()> {
+    pub(crate) async fn check_for_upgrade(&self) -> OrchestratorResult<()> {
         let latest_registry_version = self.registry.get_latest_version();
         // Determine the subnet_id using the local CUP.
         let latest_subnet_id = if let Some(cup_with_proto) = self.cup_provider.get_local_cup() {
             let cup = &cup_with_proto.cup;
             let subnet_id = get_subnet_id(&*self.registry.registry_client, cup).map_err(|err| {
-                NodeManagerError::UpgradeError(format!(
+                OrchestratorError::UpgradeError(format!(
                     "Couldn't extract the subnet id from the local CUP: {:?}",
                     err
                 ))
@@ -90,7 +90,7 @@ impl ReleasePackage {
                 subnet_id,
                 cup,
             ) {
-                return Err(NodeManagerError::UpgradeError(
+                return Err(OrchestratorError::UpgradeError(
                     "Unassignment is not implemented".to_string(),
                 ));
             }
@@ -159,7 +159,7 @@ impl ReleasePackage {
                     self.logger,
                     "Download of registry store for nns disaster recovery failed {}", e,
                 );
-                return Err(NodeManagerError::FileDownloadError(e));
+                return Err(OrchestratorError::FileDownloadError(e));
             }
 
             if let Err(e) = self.stop_replica() {
@@ -194,7 +194,7 @@ impl ReleasePackage {
         // detect by seeing that the public key of the subnet has changed).
 
         // Note that we do not allow version transitions v1 -> v2 -> v1.
-        // Even without this optimization, the node manager would not trigger restarting
+        // Even without this optimization, the orchestrator would not trigger restarting
         // the replica (e.g. in cases we directly upgrade v1 -> v1).
         if latest_replica_version == self.replica_version {
             debug!(
@@ -267,13 +267,13 @@ impl ReleasePackage {
         self.download_and_upgrade(new_replica_version).await
     }
 
-    async fn check_for_upgrade_as_unassigned(&self) -> NodeManagerResult<()> {
+    async fn check_for_upgrade_as_unassigned(&self) -> OrchestratorResult<()> {
         let registry = &self.registry.registry_client;
         match registry.get_unassigned_nodes_config(registry.get_latest_version()) {
             Ok(Some(record)) => {
                 let replica_version = ReplicaVersion::try_from(record.replica_version.as_ref())
                     .map_err(|err| {
-                        NodeManagerError::UpgradeError(format!(
+                        OrchestratorError::UpgradeError(format!(
                             "Couldn't parse the replica version: {}",
                             err
                         ))
@@ -289,7 +289,7 @@ impl ReleasePackage {
                 );
                 self.download_and_upgrade(&replica_version).await
             }
-            _ => Err(NodeManagerError::UpgradeError(
+            _ => Err(OrchestratorError::UpgradeError(
                 "No replica version for unassigned nodes found".to_string(),
             )),
         }
@@ -298,7 +298,7 @@ impl ReleasePackage {
     async fn download_and_upgrade<T>(
         &self,
         replica_version: &ReplicaVersion,
-    ) -> NodeManagerResult<T> {
+    ) -> OrchestratorResult<T> {
         let download_path = self
             .release_package_provider
             .make_version_dir(replica_version)?
@@ -316,7 +316,7 @@ impl ReleasePackage {
             .arg(script.into_os_string())
             .arg(download_path)
             .output()
-            .map_err(|e| NodeManagerError::file_command_error(e, &c))?;
+            .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
 
         info!(self.logger, "Installing upgrade {:?}", out);
         if out.status.success() {
@@ -324,7 +324,7 @@ impl ReleasePackage {
             let out = c
                 .arg("reboot")
                 .output()
-                .map_err(|e| NodeManagerError::file_command_error(e, &c))?;
+                .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
 
             info!(self.logger, "Rebooting {:?}", out);
 
@@ -332,13 +332,15 @@ impl ReleasePackage {
         } else {
             warn!(self.logger, "Upgrade has failed");
 
-            Err(NodeManagerError::UpgradeError("Upgrade failed".to_string()))
+            Err(OrchestratorError::UpgradeError(
+                "Upgrade failed".to_string(),
+            ))
         }
     }
 
-    fn stop_replica(&self) -> NodeManagerResult<()> {
+    fn stop_replica(&self) -> OrchestratorResult<()> {
         self.replica_process.lock().unwrap().stop().map_err(|e| {
-            NodeManagerError::IoError(
+            OrchestratorError::IoError(
                 "Error when attempting to stop replica during upgrade".into(),
                 e,
             )
@@ -350,7 +352,7 @@ impl ReleasePackage {
         &self,
         replica_version: &ReplicaVersion,
         subnet_id: SubnetId,
-    ) -> NodeManagerResult<()> {
+    ) -> OrchestratorResult<()> {
         info!(self.logger, "Starting new replica process due to upgrade");
         let cup_path = self.cup_provider.get_cup_path();
         let replica_binary = self
@@ -377,7 +379,7 @@ impl ReleasePackage {
             .unwrap()
             .start(replica_binary, replica_version, cmd)
             .map_err(|e| {
-                NodeManagerError::IoError("Error when attempting to start new replica".into(), e)
+                OrchestratorError::IoError("Error when attempting to start new replica".into(), e)
             })
     }
 

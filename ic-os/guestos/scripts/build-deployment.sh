@@ -162,7 +162,7 @@ function prepare_build_directories() {
 }
 
 function cleanup_rootfs() {
-    rm -rf ${BASE_DIR}/rootfs/opt/ic/bin/nodemanager*
+    rm -rf ${BASE_DIR}/rootfs/opt/ic/bin/orchestrator*
     rm -rf ${BASE_DIR}/rootfs/opt/ic/bin/replica*
 }
 
@@ -190,10 +190,10 @@ function generate_subnet_config() {
     mkfifo "$TEMPDIR/REPLICA_HASH"
     mkfifo "$TEMPDIR/NM_HASH"
     sha256sum "${IC_PREP_DIR}/bin/replica" | cut -d " " -f 1 >"$TEMPDIR/REPLICA_HASH" &
-    sha256sum "${IC_PREP_DIR}/bin/nodemanager" | cut -d " " -f 1 >"$TEMPDIR/NM_HASH" &
+    sha256sum "${IC_PREP_DIR}/bin/orchestrator" | cut -d " " -f 1 >"$TEMPDIR/NM_HASH" &
 
     cp -a ${IC_PREP_DIR}/bin/replica "$REPO_ROOT/ic-os/guestos/rootfs/opt/ic/bin/replica"
-    cp -a ${IC_PREP_DIR}/bin/nodemanager "$REPO_ROOT/ic-os/guestos/rootfs/opt/ic/bin/nodemanager"
+    cp -a ${IC_PREP_DIR}/bin/orchestrator "$REPO_ROOT/ic-os/guestos/rootfs/opt/ic/bin/orchestrator"
     cp -a ${IC_PREP_DIR}/bin/boundary-node-control-plane "$REPO_ROOT/ic-os/generic-guestos/rootfs/opt/dfinity/boundary-node-control-plane"
 
     NODES_NNS=()
@@ -240,8 +240,8 @@ function generate_subnet_config() {
         "--replica-download-url" "file:///opt/ic/bin/replica" \
         "--replica-hash" "${REPLICA_HASH}" \
         "--replica-version" "${GIT_REVISION}" \
-        "--nodemanager-download-url" "file:///opt/ic/bin/nodemanager" \
-        "--nodemanager-hash" "${NM_HASH}" \
+        "--orchestrator-download-url" "file:///opt/ic/bin/orchestrator" \
+        "--orchestrator-hash" "${NM_HASH}" \
         "--nns-subnet-index" "0" \
         "--dkg-interval-length" "${DKG_INTERVAL_LENGTH}" \
         "--p2p-flows" "1234-1" \
