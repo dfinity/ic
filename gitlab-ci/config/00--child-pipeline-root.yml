@@ -115,6 +115,11 @@ include:
       set -eExuo pipefail
 
       TARGET_CRATE="${TARGET_CRATE:-$CI_JOB_NAME}"
+      TARGS=""
+      mkdir logs
+      if [ "$TARGET_CRATE" == "ic-nns-integration-tests" ]; then
+        TARGS="--nocapture"
+      fi
 
       # Setup the cargo canister sandbox
       cd "${CI_PROJECT_DIR}/rs"
@@ -138,7 +143,7 @@ include:
 
         # Run each test in a separate process
         cargo test -p \"${TARGET_CRATE}\" --release -- --list | grep ': test' | sed 's/: test$//' > /tmp/test-list.txt
-        parallel -a /tmp/test-list.txt --halt now,fail=1 --eta --results ci_output -t --joblog ci_joblog buildevents cmd \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" '{}' -- cargo test -p \"${TARGET_CRATE}\" --release '{}' -- --report-time -Z unstable-options --format=json
+        parallel -a /tmp/test-list.txt --halt now,fail=1 --eta --results ../logs/ci_output -t --joblog ../logs/ci_joblog buildevents cmd \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" '{}' -- cargo test -p \"${TARGET_CRATE}\" --release '{}' -- $TARGS --report-time -Z unstable-options --format=json | tee ../logs/job.log
       "
 
       set +x
