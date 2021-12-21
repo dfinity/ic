@@ -6,7 +6,7 @@ use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
 use ic_rosetta_api::{
     ledger_client::{self},
     store::SQLiteStore,
-    RosettaRequestHandler,
+    RosettaRequestHandler, DEFAULT_TOKEN_NAME,
 };
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId};
@@ -21,6 +21,8 @@ struct Opt {
     listen_port: u16,
     #[structopt(short = "c", long = "canister-id")]
     ic_canister_id: Option<String>,
+    #[structopt(short = "t", long = "token-name")]
+    token_name: Option<String>,
     /// Id of the governance canister to use for neuron management.
     #[structopt(short = "g", long = "governance-canister-id")]
     governance_canister_id: Option<String>,
@@ -148,6 +150,7 @@ async fn main() -> std::io::Result<()> {
     let client = ledger_client::LedgerClient::new(
         url,
         canister_id,
+        opt.token_name.unwrap_or_else(|| DEFAULT_TOKEN_NAME.to_string()),
         governance_canister_id,
         store,
         store_max_blocks,

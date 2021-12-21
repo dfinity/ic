@@ -349,16 +349,19 @@ impl Request {
     /// This is a thin wrapper over the `TransactionBuilder`.
     ///
     /// TODO We should capture the concept of a Transaction in a type.
-    pub fn requests_to_operations(requests: &[Request]) -> Result<Vec<Operation>, ApiError> {
+    pub fn requests_to_operations(
+        requests: &[Request],
+        token_name: &str,
+    ) -> Result<Vec<Operation>, ApiError> {
         let mut builder = TransactionBuilder::default();
         for request in requests {
             match request {
-                Request::Transfer(o) => builder.transfer(o)?,
+                Request::Transfer(o) => builder.transfer(o, token_name)?,
                 Request::Stake(o) => builder.stake(o),
                 Request::SetDissolveTimestamp(o) => builder.set_dissolve_timestamp(o),
                 Request::StartDissolve(o) => builder.start_dissolve(o),
                 Request::StopDissolve(o) => builder.stop_dissolve(o),
-                Request::Disburse(o) => builder.disburse(o),
+                Request::Disburse(o) => builder.disburse(o, token_name),
                 Request::AddHotKey(o) => builder.add_hot_key(o),
             };
         }
@@ -818,7 +821,11 @@ impl TransactionBuilder {
 
     /// Add a `Request::Transfer` to the Transaction.
     /// This handles `Send`, `Mint`, and `Burn`.
-    pub fn transfer(&mut self, operation: &LedgerOperation) -> Result<(), ApiError> {
+    pub fn transfer(
+        &mut self,
+        operation: &LedgerOperation,
+        token_name: &str,
+    ) -> Result<(), ApiError> {
         match operation {
             LedgerOperation::Burn { from, amount } => {
                 let operation_identifier = self.allocate_op_id();
@@ -827,7 +834,7 @@ impl TransactionBuilder {
                     _type: BURN.to_string(),
                     status: None,
                     account: Some(to_model_account_identifier(from)),
-                    amount: Some(signed_amount(-i128::from(amount.get_e8s()))),
+                    amount: Some(signed_amount(-i128::from(amount.get_e8s()), token_name)),
                     related_operations: None,
                     coin_change: None,
                     metadata: None,
@@ -840,7 +847,7 @@ impl TransactionBuilder {
                     _type: MINT.to_string(),
                     status: None,
                     account: Some(to_model_account_identifier(to)),
-                    amount: Some(amount_(*amount)?),
+                    amount: Some(amount_(*amount, token_name)?),
                     related_operations: None,
                     coin_change: None,
                     metadata: None,
@@ -861,7 +868,7 @@ impl TransactionBuilder {
                     _type: TRANSACTION.to_string(),
                     status: None,
                     account: from_account.clone(),
-                    amount: Some(signed_amount(-amount)),
+                    amount: Some(signed_amount(-amount, token_name)),
                     related_operations: None,
                     coin_change: None,
                     metadata: None,
@@ -872,7 +879,7 @@ impl TransactionBuilder {
                     _type: TRANSACTION.to_string(),
                     status: None,
                     account: Some(to_model_account_identifier(to)),
-                    amount: Some(signed_amount(amount)),
+                    amount: Some(signed_amount(amount, token_name)),
                     related_operations: None,
                     coin_change: None,
                     metadata: None,
@@ -883,7 +890,7 @@ impl TransactionBuilder {
                     _type: FEE.to_string(),
                     status: None,
                     account: from_account,
-                    amount: Some(signed_amount(-(fee.get_e8s() as i128))),
+                    amount: Some(signed_amount(-(fee.get_e8s() as i128), token_name)),
                     related_operations: None,
                     coin_change: None,
                     metadata: None,
@@ -987,7 +994,7 @@ impl TransactionBuilder {
         });
     }
 
-    pub fn disburse(&mut self, disburse: &Disburse) {
+    pub fn disburse(&mut self, disburse: &Disburse, token_name: &str) {
         let Disburse {
             account,
             amount,
@@ -1000,7 +1007,7 @@ impl TransactionBuilder {
             _type: DISBURSE.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
-            amount: amount.map(|a| amount_(a).expect("failed to convert amount")),
+            amount: amount.map(|a| amount_(a, token_name).expect("failed to convert amount")),
             related_operations: None,
             coin_change: None,
             metadata: Some(

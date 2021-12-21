@@ -2,7 +2,7 @@ use ic_rosetta_api::convert::{
     amount_, from_hex, from_model_account_identifier, from_operations, from_public_key,
     principal_id_from_public_key, signed_amount, to_hex, to_model_account_identifier,
 };
-use ic_rosetta_api::errors::ApiError;
+
 use ic_rosetta_api::models::Error as RosettaError;
 use ic_rosetta_api::models::{
     ConstructionCombineResponse, ConstructionPayloadsRequestMetadata, ConstructionPayloadsResponse,
@@ -13,6 +13,7 @@ use ic_rosetta_api::request_types::{
     StopDissolve, TransactionResults,
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
+use ic_rosetta_api::{errors::ApiError, DEFAULT_TOKEN_NAME};
 use ic_types::{messages::Blob, time, PrincipalId};
 
 use ledger_canister::{AccountIdentifier, BlockHeight, Operation, Tokens};
@@ -85,11 +86,12 @@ pub async fn prepare_multiple_txn(
     let mut all_sender_account_ids = Vec::new();
     let mut all_sender_pks = Vec::new();
     let mut trans_fee_amount = None;
+    let token_name = DEFAULT_TOKEN_NAME;
 
     for request in requests {
         // first ask for the fee
         let mut fee_found = false;
-        for o in Request::requests_to_operations(&[request.request.clone()]).unwrap() {
+        for o in Request::requests_to_operations(&[request.request.clone()], token_name).unwrap() {
             if o._type == "FEE" {
                 fee_found = true;
             } else {
@@ -100,7 +102,7 @@ pub async fn prepare_multiple_txn(
 
         match request.request.clone() {
             Request::Transfer(Operation::Transfer { from, fee, .. }) => {
-                trans_fee_amount = Some(amount_(fee).unwrap());
+                trans_fee_amount = Some(amount_(fee, token_name).unwrap());
                 all_sender_account_ids.push(to_model_account_identifier(&from));
 
                 // just a sanity check
@@ -150,7 +152,7 @@ pub async fn prepare_multiple_txn(
     let fee_icpts = Tokens::from_e8s(
         dry_run_suggested_fee
             .clone()
-            .unwrap_or_else(|| amount_(Tokens::default()).unwrap())
+            .unwrap_or_else(|| amount_(Tokens::default(), token_name).unwrap())
             .value
             .parse()
             .unwrap(),
@@ -159,7 +161,7 @@ pub async fn prepare_multiple_txn(
     if accept_suggested_fee {
         for o in &mut all_ops {
             if o._type == "FEE" {
-                o.amount = Some(signed_amount(-(fee_icpts.get_e8s() as i128)));
+                o.amount = Some(signed_amount(-(fee_icpts.get_e8s() as i128), token_name));
             }
         }
     } else {
@@ -337,7 +339,10 @@ pub async fn do_multiple_txn(
 
     if !accept_suggested_fee {
         let rs: Vec<_> = requests.iter().map(|r| r.request.clone()).collect();
-        assert_eq!(rs, from_operations(&parse_res.operations, false).unwrap());
+        assert_eq!(
+            rs,
+            from_operations(&parse_res.operations, false, DEFAULT_TOKEN_NAME).unwrap()
+        );
     }
 
     // check that we got enough unsigned messages
@@ -361,7 +366,10 @@ pub async fn do_multiple_txn(
 
     if !accept_suggested_fee {
         let rs: Vec<_> = requests.iter().map(|r| r.request.clone()).collect();
-        assert_eq!(rs, from_operations(&parse_res.operations, false).unwrap());
+        assert_eq!(
+            rs,
+            from_operations(&parse_res.operations, false, DEFAULT_TOKEN_NAME).unwrap()
+        );
     }
 
     let hash_res = ros

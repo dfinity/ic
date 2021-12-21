@@ -47,7 +47,7 @@ pub fn timestamp(timestamp: SystemTime) -> Result<Timestamp, ApiError> {
         })
 }
 
-pub fn transaction(hb: &HashedBlock) -> Result<models::Transaction, ApiError> {
+pub fn transaction(hb: &HashedBlock, token_name: &str) -> Result<models::Transaction, ApiError> {
     let block = hb
         .block
         .decode()
@@ -56,7 +56,7 @@ pub fn transaction(hb: &HashedBlock) -> Result<models::Transaction, ApiError> {
     let transaction_identifier = TransactionIdentifier::from(&transaction);
     let operation = transaction.operation;
     let operations = {
-        let mut ops = Request::requests_to_operations(&[Request::Transfer(operation)])?;
+        let mut ops = Request::requests_to_operations(&[Request::Transfer(operation)], token_name)?;
         for op in ops.iter_mut() {
             op.status = Some(STATUS_COMPLETED.to_string());
         }
@@ -82,7 +82,10 @@ pub fn transaction(hb: &HashedBlock) -> Result<models::Transaction, ApiError> {
 
 /// Translates a sequence of internal requests into an array of Rosetta API
 /// operations.
-pub fn requests_to_operations(requests: &[Request]) -> Result<Vec<Operation>, ApiError> {
+pub fn requests_to_operations(
+    requests: &[Request],
+    token_name: &str,
+) -> Result<Vec<Operation>, ApiError> {
     let mut ops = vec![];
     let mut idx = 0;
     let mut allocate_op_id = || {
@@ -107,7 +110,7 @@ pub fn requests_to_operations(requests: &[Request]) -> Result<Vec<Operation>, Ap
                     _type: TRANSACTION.to_string(),
                     status: None,
                     account: from_account.clone(),
-                    amount: Some(signed_amount(-amount)),
+                    amount: Some(signed_amount(-amount, token_name)),
                     related_operations: None,
                     coin_change: None,
                     metadata: None,
@@ -117,7 +120,7 @@ pub fn requests_to_operations(requests: &[Request]) -> Result<Vec<Operation>, Ap
                     _type: TRANSACTION.to_string(),
                     status: None,
                     account: Some(to_model_account_identifier(to)),
-                    amount: Some(signed_amount(amount)),
+                    amount: Some(signed_amount(amount, token_name)),
                     related_operations: None,
                     coin_change: None,
                     metadata: None,
@@ -127,7 +130,7 @@ pub fn requests_to_operations(requests: &[Request]) -> Result<Vec<Operation>, Ap
                     _type: FEE.to_string(),
                     status: None,
                     account: from_account,
-                    amount: Some(signed_amount(-(fee.get_e8s() as i128))),
+                    amount: Some(signed_amount(-(fee.get_e8s() as i128), token_name)),
                     related_operations: None,
                     coin_change: None,
                     metadata: None,
@@ -139,7 +142,7 @@ pub fn requests_to_operations(requests: &[Request]) -> Result<Vec<Operation>, Ap
                     _type: MINT.to_string(),
                     status: None,
                     account: Some(to_model_account_identifier(to)),
-                    amount: Some(amount_(*amount)?),
+                    amount: Some(amount_(*amount, token_name)?),
                     related_operations: None,
                     coin_change: None,
                     metadata: None,
@@ -151,7 +154,7 @@ pub fn requests_to_operations(requests: &[Request]) -> Result<Vec<Operation>, Ap
                     _type: BURN.to_string(),
                     status: None,
                     account: Some(to_model_account_identifier(from)),
-                    amount: Some(signed_amount(-i128::from(amount.get_e8s()))),
+                    amount: Some(signed_amount(-i128::from(amount.get_e8s()), token_name)),
                     related_operations: None,
                     coin_change: None,
                     metadata: None,
@@ -250,7 +253,7 @@ pub fn requests_to_operations(requests: &[Request]) -> Result<Vec<Operation>, Ap
                     _type: DISBURSE.to_string(),
                     status: None,
                     account: Some(to_model_account_identifier(account)),
-                    amount: amount.map(|a| amount_(a).expect("amount_ never fails")),
+                    amount: amount.map(|a| amount_(a, token_name).expect("amount_ never fails")),
                     related_operations: None,
                     coin_change: None,
                     metadata: Some(
@@ -476,7 +479,11 @@ impl State {
     }
 }
 
-pub fn from_operations(ops: &[Operation], preprocessing: bool) -> Result<Vec<Request>, ApiError> {
+pub fn from_operations(
+    ops: &[Operation],
+    preprocessing: bool,
+    token_name: &str,
+) -> Result<Vec<Request>, ApiError> {
     let op_error = |op: &Operation, e| {
         let msg = format!("In operation '{:?}': {}", op, e);
         ApiError::InvalidTransaction(false, msg.into())
@@ -528,7 +535,7 @@ pub fn from_operations(ops: &[Operation], preprocessing: bool) -> Result<Vec<Req
                     .amount
                     .as_ref()
                     .ok_or_else(|| op_error(o, "Amount must be populated".into()))?;
-                let amount = from_amount(amount).map_err(|e| op_error(o, e))?;
+                let amount = from_amount(amount, token_name).map_err(|e| op_error(o, e))?;
                 state.transaction(account, amount)?;
             }
             FEE => {
@@ -536,7 +543,7 @@ pub fn from_operations(ops: &[Operation], preprocessing: bool) -> Result<Vec<Req
                     .amount
                     .as_ref()
                     .ok_or_else(|| op_error(o, "Amount must be populated".into()))?;
-                let amount = from_amount(amount).map_err(|e| op_error(o, e))?;
+                let amount = from_amount(amount, token_name).map_err(|e| op_error(o, e))?;
                 if -amount != TRANSACTION_FEE.get_e8s() as i128 {
                     let msg = format!("Fee should be equal: {}", TRANSACTION_FEE.get_e8s());
                     return Err(op_error(o, msg));
@@ -585,9 +592,11 @@ pub fn from_operations(ops: &[Operation], preprocessing: bool) -> Result<Vec<Req
                 } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
                 let amount = if let Some(ref amount) = o.amount {
-                    Some(convert::ledgeramount_from_amount(amount).map_err(|e| {
-                        ApiError::internal_error(format!("Could not convert Amount {:?}", e))
-                    })?)
+                    Some(
+                        convert::ledgeramount_from_amount(amount, token_name).map_err(|e| {
+                            ApiError::internal_error(format!("Could not convert Amount {:?}", e))
+                        })?,
+                    )
                 } else {
                     None
                 };
@@ -612,30 +621,31 @@ pub fn from_operations(ops: &[Operation], preprocessing: bool) -> Result<Vec<Req
     Ok(state.actions)
 }
 
-pub fn amount_(amount: Tokens) -> Result<Amount, ApiError> {
+pub fn amount_(amount: Tokens, token_name: &str) -> Result<Amount, ApiError> {
     let amount = amount.get_e8s();
     Ok(Amount {
         value: format!("{}", amount),
-        currency: icp(),
+        currency: Currency::new(token_name.into(), DECIMAL_PLACES),
         metadata: None,
     })
 }
 
-pub fn signed_amount(amount: i128) -> Amount {
+pub fn signed_amount(amount: i128, token_name: &str) -> Amount {
     Amount {
         value: format!("{}", amount),
-        currency: icp(),
+        currency: Currency::new(token_name.into(), DECIMAL_PLACES),
         metadata: None,
     }
 }
 
-pub fn from_amount(amount: &Amount) -> Result<i128, String> {
+pub fn from_amount(amount: &Amount, token_name: &str) -> Result<i128, String> {
+    let cur = Currency::new(token_name.into(), DECIMAL_PLACES);
     match amount {
         Amount {
             value,
             currency,
             metadata: None,
-        } if currency == &icp() => {
+        } if currency == &cur => {
             let val: i128 = value
                 .parse()
                 .map_err(|e| format!("Parsing amount failed: {}", e))?;
@@ -643,16 +653,13 @@ pub fn from_amount(amount: &Amount) -> Result<i128, String> {
                 u64::try_from(val.abs()).map_err(|_| "Amount does not fit in u64".to_string())?;
             Ok(val)
         }
-        wrong => Err(format!("This value is not icp {:?}", wrong)),
+        wrong => Err(format!("This value is not {} {:?}", token_name, wrong)),
     }
 }
-pub fn ledgeramount_from_amount(amount: &Amount) -> Result<Tokens, String> {
-    let inner = from_amount(amount)?;
-    Ok(Tokens::from_e8s(inner as u64))
-}
 
-pub fn icp() -> Currency {
-    Currency::new("ICP".to_string(), DECIMAL_PLACES)
+pub fn ledgeramount_from_amount(amount: &Amount, token_name: &str) -> Result<Tokens, String> {
+    let inner = from_amount(amount, token_name)?;
+    Ok(Tokens::from_e8s(inner as u64))
 }
 
 pub fn block_id(block: &HashedBlock) -> Result<BlockIdentifier, ApiError> {

@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - /account/balance endpoint can now return information about neurons.
+- Token name can be specified with -t command line argument
 
 ## [1.2.0] - 2021-09-28
 ### Changed
