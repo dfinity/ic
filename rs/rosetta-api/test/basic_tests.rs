@@ -170,7 +170,11 @@ async fn smoke_test() {
         res,
         Ok(AccountBalanceResponse::new(
             block_id(scribe.blockchain.back().unwrap()).unwrap(),
-            vec![amount_(*scribe.balance_book.get(&acc_id(0)).unwrap()).unwrap()]
+            vec![amount_(
+                *scribe.balance_book.get(&acc_id(0)).unwrap(),
+                DEFAULT_TOKEN_NAME
+            )
+            .unwrap()]
         ))
     );
 

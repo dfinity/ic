@@ -21,7 +21,7 @@ use ic_rosetta_api::convert::{from_arg, to_model_account_identifier};
 use ic_rosetta_api::ledger_client::{Blocks, LedgerAccess};
 use ic_rosetta_api::rosetta_server::RosettaApiServer;
 use ic_rosetta_api::store::BlockStore;
-use ic_rosetta_api::{store::HashedBlock, RosettaRequestHandler};
+use ic_rosetta_api::{store::HashedBlock, RosettaRequestHandler, DEFAULT_TOKEN_NAME};
 use ic_types::{
     messages::{HttpCanisterUpdate, HttpSubmitContent},
     PrincipalId,
@@ -134,6 +134,10 @@ impl LedgerAccess for TestLedger {
     }
 
     async fn cleanup(&self) {}
+
+    fn token_name(&self) -> &str {
+        DEFAULT_TOKEN_NAME
+    }
 
     async fn sync_blocks(&self, _stopped: Arc<AtomicBool>) -> Result<(), ApiError> {
         let mut queue = self.submit_queue.write().await;

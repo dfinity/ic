@@ -52,6 +52,7 @@ pub trait LedgerAccess {
     async fn sync_blocks(&self, stopped: Arc<AtomicBool>) -> Result<(), ApiError>;
     fn ledger_canister_id(&self) -> &CanisterId;
     fn governance_canister_id(&self) -> &CanisterId;
+    fn token_name(&self) -> &str;
     async fn submit(&self, _envelopes: SignedTransaction) -> Result<TransactionResults, ApiError>;
     async fn cleanup(&self);
     async fn neuron_info(
@@ -72,15 +73,18 @@ pub struct LedgerClient {
     governance_canister_id: CanisterId,
     canister_access: Option<Arc<CanisterAccess>>,
     ic_url: Url,
+    token_name: String,
     store_max_blocks: Option<u64>,
     offline: bool,
     root_key: Option<ThresholdSigPublicKey>,
 }
 
 impl LedgerClient {
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         ic_url: Url,
         canister_id: CanisterId,
+        token_name: String,
         governance_canister_id: CanisterId,
         block_store: SQLiteStore,
         store_max_blocks: Option<u64>,
@@ -146,6 +150,7 @@ impl LedgerClient {
         Ok(Self {
             blockchain: RwLock::new(blocks),
             canister_id,
+            token_name,
             governance_canister_id,
             canister_access,
             ic_url,
@@ -252,6 +257,10 @@ async fn send_post_request(
 impl LedgerAccess for LedgerClient {
     async fn read_blocks(&self) -> Box<dyn Deref<Target = Blocks> + '_> {
         Box::new(self.blockchain.read().await)
+    }
+
+    fn token_name(&self) -> &str {
+        &self.token_name
     }
 
     async fn cleanup(&self) {
