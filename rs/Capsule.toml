@@ -1,0 +1,26 @@
+[cargo-build-release-linux-native]
+input_files = [
+  "./Cargo.lock",
+  "./**/Cargo.toml",
+  "./**/*.rs",
+]
+output_files = [
+  "/cargo_target/x86_64-unknown-linux-gnu/release/boundary-node-control-plane",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/canister_sandbox",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-admin",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-consensus-pool-util",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-crypto-csp",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-cup-explorer",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-get-neuron-ids",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-p8s-service-discovery",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-prep",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-regedit",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-replay",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-rosetta-api",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-starter",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-workload-generator",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/orchestrator",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/replica",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/state-tool",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/vsock_agent",
+]
