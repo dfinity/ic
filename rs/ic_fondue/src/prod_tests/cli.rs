@@ -1,10 +1,12 @@
 use anyhow::{bail, Result};
+use humantime::parse_duration;
 use ic_types::ReplicaVersion;
 use regex::Regex;
 use std::{
     convert::TryFrom,
     path::{Path, PathBuf},
     str::FromStr,
+    time::Duration,
 };
 use structopt::StructOpt;
 use url::Url;
@@ -111,6 +113,13 @@ The sha256 hash sum of the base image."#
         should use as target hosts. (e.g. "host1.target.com:443,host2.target.com:443")"#
     )]
     pub journalbeat_hosts: Option<String>,
+    #[structopt(
+    long = "pot-timeout",
+    default_value = "600s",
+    parse(try_from_str = parse_duration),
+    help = r#"Amount of time to wait before releasing resources allocated for a pot."#
+    )]
+    pub pot_timeout: Duration,
 }
 
 impl CliArgs {
@@ -170,6 +179,7 @@ impl CliArgs {
             skip_pattern,
             authorized_ssh_accounts,
             journalbeat_hosts,
+            pot_timeout: self.pot_timeout,
         })
     }
 }
@@ -200,6 +210,7 @@ pub struct ValidatedCliArgs {
     pub skip_pattern: Option<Regex>,
     pub authorized_ssh_accounts: Vec<AuthorizedSshAccount>,
     pub journalbeat_hosts: Vec<String>,
+    pub pot_timeout: Duration,
 }
 
 pub type PrivateKeyFileContent = Vec<u8>;

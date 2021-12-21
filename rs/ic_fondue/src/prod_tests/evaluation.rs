@@ -143,7 +143,11 @@ fn evaluate_pot(ctx: &DriverContext, pot: Pot, path: TestPath) -> FarmResult<Tes
     let spec = GroupSpec {
         vm_allocation: pot.config.vm_allocation.clone(),
     };
-    ctx.farm.create_group(&group_name, pot.time_limit, spec)?;
+    ctx.farm.create_group(
+        &group_name,
+        pot.pot_timeout.unwrap_or(ctx.pot_timeout),
+        spec,
+    )?;
     let res = evaluate_pot_with_group(ctx, pot, pot_path, &group_name);
     if let Err(e) = ctx.farm.delete_group(&group_name) {
         warn!(ctx.logger, "Could not delete group {}: {:?}", group_name, e);
