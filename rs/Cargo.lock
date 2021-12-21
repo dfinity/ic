@@ -4335,6 +4335,7 @@ dependencies = [
  "fs_extra",
  "futures",
  "hex",
+ "humantime 2.0.1",
  "ic-base-types",
  "ic-config",
  "ic-crypto-sha",

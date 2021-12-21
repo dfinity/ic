@@ -15,6 +15,7 @@ fondue = { path = "./fondue" }
 fs_extra = "1.2.0"
 futures = "0.3.6"
 hex = "0.4.2"
+humantime = "2.0"
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-crypto-sha = { path = "../crypto/sha" }

@@ -16,18 +16,11 @@ pub fn pot_with_time_limit(
     testset: TestSet,
     time_limit: Duration,
 ) -> Pot {
-    let name = name.to_string();
-    Pot {
-        name,
-        execution_mode: ExecutionMode::Run,
-        config,
-        testset,
-        time_limit,
-    }
+    Pot::new(name, ExecutionMode::Run, config, testset, Some(time_limit))
 }
 
 pub fn pot(name: &str, config: InternetComputer, testset: TestSet) -> Pot {
-    pot_with_time_limit(name, config, testset, Duration::from_secs(600))
+    Pot::new(name, ExecutionMode::Run, config, testset, None)
 }
 
 pub fn seq(tests: Vec<Test>) -> TestSet {
@@ -54,7 +47,25 @@ pub struct Pot {
     pub execution_mode: ExecutionMode,
     pub config: InternetComputer,
     pub testset: TestSet,
-    pub time_limit: Duration,
+    pub pot_timeout: Option<Duration>,
+}
+
+impl Pot {
+    pub fn new(
+        name: &str,
+        execution_mode: ExecutionMode,
+        config: InternetComputer,
+        testset: TestSet,
+        pot_timeout: Option<Duration>,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            execution_mode,
+            config,
+            testset,
+            pot_timeout,
+        }
+    }
 }
 
 pub enum TestSet {
