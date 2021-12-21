@@ -45,6 +45,9 @@ crates_config_override:
     variables:
       TARGET_CRATE: ic-nns-integration-tests
     retry: 1
+    artifacts:
+      paths:
+        - "logs/*"
   ic-nns-handler-root:
     extends: .cargo-crate-tests-process-per-test
   ic-nns-handler-subnet:
