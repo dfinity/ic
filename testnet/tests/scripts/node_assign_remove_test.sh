@@ -69,6 +69,7 @@ HOSTS_INI_ARGUMENTS=(--hosts-ini "$HOSTS_INI_FILENAME")
 
 # deploy the testnet with --dkg-interval-length 19 for faster subnet changes
 deploy_with_timeout "$testnet" \
+    --no-boundary-nodes \
     --git-revision "$GIT_REVISION" "${HOSTS_INI_ARGUMENTS[@]}" --dkg-interval-length 19
 
 # Store the test start time in epoch, so we can query Prometheus later.
