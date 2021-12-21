@@ -25,10 +25,13 @@ impl sandbox_service::SandboxService for DummySandboxService {
     fn close_wasm(&self, _req: sbxsvc::CloseWasmRequest) -> rpc::Call<sbxsvc::CloseWasmReply> {
         unimplemented!();
     }
-    fn open_state(&self, _req: sbxsvc::OpenStateRequest) -> rpc::Call<sbxsvc::OpenStateReply> {
+    fn open_memory(&self, _req: sbxsvc::OpenMemoryRequest) -> rpc::Call<sbxsvc::OpenMemoryReply> {
         unimplemented!();
     }
-    fn close_state(&self, _req: sbxsvc::CloseStateRequest) -> rpc::Call<sbxsvc::CloseStateReply> {
+    fn close_memory(
+        &self,
+        _req: sbxsvc::CloseMemoryRequest,
+    ) -> rpc::Call<sbxsvc::CloseMemoryReply> {
         unimplemented!();
     }
     fn open_execution(

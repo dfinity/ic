@@ -42,25 +42,33 @@ impl SandboxService for SandboxServer {
         rpc::Call::new_resolved(Ok(CloseWasmReply { success: true }))
     }
 
-    fn open_state(&self, req: OpenStateRequest) -> rpc::Call<OpenStateReply> {
-        self.manager.open_state(req);
-        rpc::Call::new_resolved(Ok(OpenStateReply { success: true }))
+    fn open_memory(&self, req: OpenMemoryRequest) -> rpc::Call<OpenMemoryReply> {
+        self.manager.open_memory(req);
+        rpc::Call::new_resolved(Ok(OpenMemoryReply { success: true }))
     }
 
-    fn close_state(&self, req: CloseStateRequest) -> rpc::Call<CloseStateReply> {
-        self.manager.close_state(req.state_id);
-        rpc::Call::new_resolved(Ok(CloseStateReply { success: true }))
+    fn close_memory(&self, req: CloseMemoryRequest) -> rpc::Call<CloseMemoryReply> {
+        self.manager.close_memory(req.memory_id);
+        rpc::Call::new_resolved(Ok(CloseMemoryReply { success: true }))
     }
 
     fn open_execution(&self, req: OpenExecutionRequest) -> rpc::Call<OpenExecutionReply> {
         let OpenExecutionRequest {
             exec_id,
             wasm_id,
-            state_id,
+            wasm_memory_id,
+            stable_memory_id,
             exec_input,
         } = req;
         rpc::Call::new_resolved({
-            SandboxManager::open_execution(&self.manager, exec_id, wasm_id, state_id, exec_input);
+            SandboxManager::open_execution(
+                &self.manager,
+                exec_id,
+                wasm_id,
+                wasm_memory_id,
+                stable_memory_id,
+                exec_input,
+            );
             Ok(OpenExecutionReply { success: true })
         })
     }
@@ -93,7 +101,7 @@ mod tests {
         fdenum::EnumerateInnerFileDescriptors,
         protocol::{
             self,
-            id::{ExecId, StateId, WasmId},
+            id::{ExecId, MemoryId, WasmId},
             structs::ExecInput,
         },
     };
@@ -153,7 +161,8 @@ mod tests {
         method_name: &str,
         incoming_payload: &[u8],
         globals: Vec<Global>,
-        next_state_id: StateId,
+        next_wasm_memory_id: MemoryId,
+        next_stable_memory_id: MemoryId,
     ) -> ExecInput {
         protocol::structs::ExecInput {
             func_ref: FuncRef::Method(WasmMethod::Update(method_name.to_string())),
@@ -172,7 +181,8 @@ mod tests {
             globals,
             canister_current_memory_usage: NumBytes::from(0),
             execution_parameters: execution_parameters(),
-            next_state_id,
+            next_wasm_memory_id,
+            next_stable_memory_id,
             static_system_state: static_system_state(),
         }
     }
@@ -193,7 +203,8 @@ mod tests {
             globals,
             canister_current_memory_usage: NumBytes::from(0),
             execution_parameters: execution_parameters(),
-            next_state_id: StateId::new(),
+            next_wasm_memory_id: MemoryId::new(),
+            next_stable_memory_id: MemoryId::new(),
             static_system_state: static_system_state(),
         }
     }
@@ -396,6 +407,27 @@ mod tests {
         Arc::new(controller)
     }
 
+    fn open_memory(srv: &SandboxServer, page_map: &PageMap, num_pages: usize) -> MemoryId {
+        let memory_id = MemoryId::new();
+        let rep = srv
+            .open_memory(OpenMemoryRequest {
+                memory_id,
+                memory: serialize_memory(page_map, NumWasmPages::new(num_pages)),
+            })
+            .sync()
+            .unwrap();
+        assert!(rep.success);
+        memory_id
+    }
+
+    fn close_memory(srv: &SandboxServer, memory_id: MemoryId) {
+        let rep = srv
+            .close_memory(protocol::sbxsvc::CloseMemoryRequest { memory_id })
+            .sync()
+            .unwrap();
+        assert!(rep.success);
+    }
+
     /// Verifies that we can create a simple canister and run something on
     /// it.
     #[test]
@@ -417,21 +449,9 @@ mod tests {
         assert!(rep.0.is_ok());
 
         let wasm_memory = PageMap::default();
+        let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
         let stable_memory = PageMap::default();
-
-        let state_id = StateId::new();
-        let rep = srv
-            .open_state(OpenStateRequest {
-                state_id,
-                state: StateSerialization {
-                    globals: vec![],
-                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
-                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(0)),
-                },
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
+        let stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
         // First time around, issue an update to increase the counter.
         let exec_id_1 = ExecId::new();
@@ -439,8 +459,15 @@ mod tests {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id: exec_id_1,
                 wasm_id,
-                state_id,
-                exec_input: exec_input_for_update("write", &[], vec![], StateId::new()),
+                wasm_memory_id,
+                stable_memory_id,
+                exec_input: exec_input_for_update(
+                    "write",
+                    &[],
+                    vec![],
+                    MemoryId::new(),
+                    MemoryId::new(),
+                ),
             })
             .sync()
             .unwrap();
@@ -465,7 +492,8 @@ mod tests {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id: exec_id_2,
                 wasm_id,
-                state_id,
+                wasm_memory_id,
+                stable_memory_id,
                 exec_input: exec_input_for_query("read", &[], globals),
             })
             .sync()
@@ -475,7 +503,7 @@ mod tests {
         let result = exec_finished_sync.get();
         assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        assert_eq!(WasmResult::Reply([0, 0, 0, 0].to_vec()), wasm_result);
+        assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
 
         let rep = srv
             .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id: exec_id_2 })
@@ -505,21 +533,9 @@ mod tests {
         assert!(rep.0.is_ok());
 
         let mut wasm_memory = PageMap::default();
+        let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
         let stable_memory = PageMap::default();
-
-        let state_id = StateId::new();
-        let rep = srv
-            .open_state(OpenStateRequest {
-                state_id,
-                state: StateSerialization {
-                    globals: vec![],
-                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
-                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(0)),
-                },
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
+        let stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
         // Issue a write of bytes [1, 2, 3, 4] at address 16.
         let exec_id = ExecId::new();
@@ -527,12 +543,14 @@ mod tests {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id,
                 wasm_id,
-                state_id,
+                wasm_memory_id,
+                stable_memory_id,
                 exec_input: exec_input_for_update(
                     "write",
                     &[16, 0, 0, 0, 1, 2, 3, 4],
                     vec![],
-                    StateId::new(),
+                    MemoryId::new(),
+                    MemoryId::new(),
                 ),
             })
             .sync()
@@ -578,28 +596,15 @@ mod tests {
         assert!(rep.0.is_ok());
 
         let mut wasm_memory = PageMap::default();
-        let stable_memory = PageMap::default();
-
         // Create state setting up initial memory to have a couple
         // bytes set to particular values.
         let mut page_data = [0; 4096];
         page_data[42] = 1;
         page_data[43] = 2;
         wasm_memory.update(&[(PageIndex::from(0), &page_data)]);
-
-        let state_id = StateId::new();
-        let rep = srv
-            .open_state(OpenStateRequest {
-                state_id,
-                state: StateSerialization {
-                    globals: vec![],
-                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(1)),
-                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(0)),
-                },
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
+        let wasm_memory_id = open_memory(&srv, &wasm_memory, 1);
+        let stable_memory = PageMap::default();
+        let stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
         // Issue a read of size 4 against address 40.
         let exec_id = ExecId::new();
@@ -607,7 +612,8 @@ mod tests {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id,
                 wasm_id,
-                state_id,
+                wasm_memory_id,
+                stable_memory_id,
                 exec_input: exec_input_for_query("read", &[40, 0, 0, 0, 4, 0, 0, 0], vec![]),
             })
             .sync()
@@ -658,21 +664,9 @@ mod tests {
         assert!(rep.0.is_ok());
 
         let wasm_memory = PageMap::default();
+        let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
         let stable_memory = PageMap::default();
-
-        let state_id = StateId::new();
-        let rep = srv
-            .open_state(OpenStateRequest {
-                state_id,
-                state: StateSerialization {
-                    globals: vec![],
-                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
-                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(0)),
-                },
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
+        let stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
         // First time around, issue an update to increase the counter.
         let exec_id = ExecId::new();
@@ -680,8 +674,15 @@ mod tests {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id,
                 wasm_id,
-                state_id,
-                exec_input: exec_input_for_update("write", &[], vec![], StateId::new()),
+                wasm_memory_id,
+                stable_memory_id,
+                exec_input: exec_input_for_update(
+                    "write",
+                    &[],
+                    vec![],
+                    MemoryId::new(),
+                    MemoryId::new(),
+                ),
             })
             .sync()
             .unwrap();
@@ -700,35 +701,31 @@ mod tests {
             .unwrap();
         assert!(rep.success);
 
-        // Ensure we close state.
-        let rep = srv
-            .close_state(protocol::sbxsvc::CloseStateRequest { state_id })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
+        // Ensure we close Wasm and stable memory.
+        close_memory(&srv, wasm_memory_id);
+        close_memory(&srv, stable_memory_id);
 
         // Now re-issue the same call but with the previous cache on.
 
-        let rep = srv
-            .open_state(OpenStateRequest {
-                state_id,
-                state: StateSerialization {
-                    globals: vec![],
-                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
-                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(0)),
-                },
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
+        let wasm_memory = PageMap::default();
+        let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
+        let stable_memory = PageMap::default();
+        let stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
         // First time around, issue an update to increase the counter.
         let rep = srv
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id,
                 wasm_id,
-                state_id,
-                exec_input: exec_input_for_update("write", &[], globals, StateId::new()),
+                wasm_memory_id,
+                stable_memory_id,
+                exec_input: exec_input_for_update(
+                    "write",
+                    &[],
+                    globals,
+                    MemoryId::new(),
+                    MemoryId::new(),
+                ),
             })
             .sync()
             .unwrap();
@@ -753,7 +750,8 @@ mod tests {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id,
                 wasm_id,
-                state_id,
+                wasm_memory_id,
+                stable_memory_id,
                 exec_input: exec_input_for_query("read", &[], globals),
             })
             .sync()
@@ -793,21 +791,9 @@ mod tests {
         assert!(rep.0.is_ok());
 
         let wasm_memory = PageMap::default();
+        let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
         let mut stable_memory = PageMap::default();
-
-        let state_id = StateId::new();
-        let rep = srv
-            .open_state(OpenStateRequest {
-                state_id,
-                state: StateSerialization {
-                    globals: vec![],
-                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
-                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(1)),
-                },
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
+        let stable_memory_id = open_memory(&srv, &stable_memory, 1);
 
         // Issue a write of bytes [1, 2, 3, 4] at address 16 in stable memory.
         let exec_id = ExecId::new();
@@ -815,12 +801,14 @@ mod tests {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id,
                 wasm_id,
-                state_id,
+                wasm_memory_id,
+                stable_memory_id,
                 exec_input: exec_input_for_update(
                     "write_stable",
                     &[16, 0, 0, 0, 1, 2, 3, 4],
                     vec![],
-                    StateId::new(),
+                    MemoryId::new(),
+                    MemoryId::new(),
                 ),
             })
             .sync()
@@ -866,6 +854,7 @@ mod tests {
         assert!(rep.0.is_ok());
 
         let wasm_memory = PageMap::default();
+        let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
         let mut stable_memory = PageMap::default();
         // Create state setting up initial memory to have a couple
         // bytes set to particular values.
@@ -873,19 +862,7 @@ mod tests {
         page_data[42] = 1;
         page_data[43] = 2;
         stable_memory.update(&[(PageIndex::new(0), &page_data)]);
-        let state_id = StateId::new();
-        let rep = srv
-            .open_state(OpenStateRequest {
-                state_id,
-                state: StateSerialization {
-                    globals: vec![],
-                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
-                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(1)),
-                },
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
+        let stable_memory_id = open_memory(&srv, &stable_memory, 1);
 
         // Issue a read of size 4 against address 40.
         let exec_id = ExecId::new();
@@ -893,7 +870,8 @@ mod tests {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id,
                 wasm_id,
-                state_id,
+                wasm_memory_id,
+                stable_memory_id,
                 exec_input: exec_input_for_query("read_stable", &[40, 0, 0, 0, 4, 0, 0, 0], vec![]),
             })
             .sync()
@@ -930,23 +908,12 @@ mod tests {
         assert!(rep.0.is_ok());
 
         let mut wasm_memory = PageMap::default();
+        let parent_wasm_memory_id = open_memory(&srv, &wasm_memory, 1);
         let stable_memory = PageMap::default();
+        let parent_stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
-        let parent_state_id = StateId::new();
-        let rep = srv
-            .open_state(OpenStateRequest {
-                state_id: parent_state_id,
-                state: StateSerialization {
-                    globals: vec![],
-                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(1)),
-                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(0)),
-                },
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
-
-        let child_state_id = StateId::new();
+        let child_wasm_memory_id = MemoryId::new();
+        let child_stable_memory_id = MemoryId::new();
 
         // Issue a write of bytes [1, 2, 3, 4] at address 16 in Wasm memory.
         let exec_id_1 = ExecId::new();
@@ -954,12 +921,14 @@ mod tests {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id: exec_id_1,
                 wasm_id,
-                state_id: parent_state_id,
+                wasm_memory_id: parent_wasm_memory_id,
+                stable_memory_id: parent_stable_memory_id,
                 exec_input: exec_input_for_update(
                     "write",
                     &[16, 0, 0, 0, 1, 2, 3, 4],
                     vec![],
-                    child_state_id,
+                    child_wasm_memory_id,
+                    child_stable_memory_id,
                 ),
             })
             .sync()
@@ -989,12 +958,14 @@ mod tests {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id: exec_id_2,
                 wasm_id,
-                state_id: child_state_id,
+                wasm_memory_id: child_wasm_memory_id,
+                stable_memory_id: child_stable_memory_id,
                 exec_input: exec_input_for_update(
                     "write",
                     &[32, 0, 0, 0, 5, 6, 7, 8],
                     vec![],
-                    StateId::new(),
+                    MemoryId::new(),
+                    MemoryId::new(),
                 ),
             })
             .sync()
@@ -1021,22 +992,10 @@ mod tests {
             .sync()
             .unwrap();
         assert!(rep.success);
-
-        let rep = srv
-            .close_state(protocol::sbxsvc::CloseStateRequest {
-                state_id: parent_state_id,
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
-
-        let rep = srv
-            .close_state(protocol::sbxsvc::CloseStateRequest {
-                state_id: child_state_id,
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
+        close_memory(&srv, parent_wasm_memory_id);
+        close_memory(&srv, parent_stable_memory_id);
+        close_memory(&srv, child_wasm_memory_id);
+        close_memory(&srv, child_stable_memory_id);
     }
 
     #[test]
@@ -1058,23 +1017,12 @@ mod tests {
         assert!(rep.0.is_ok());
 
         let wasm_memory = PageMap::default();
+        let parent_wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
         let mut stable_memory = PageMap::default();
+        let parent_stable_memory_id = open_memory(&srv, &stable_memory, 1);
 
-        let parent_state_id = StateId::new();
-        let rep = srv
-            .open_state(OpenStateRequest {
-                state_id: parent_state_id,
-                state: StateSerialization {
-                    globals: vec![],
-                    wasm_memory: serialize_memory(&wasm_memory, NumWasmPages::new(0)),
-                    stable_memory: serialize_memory(&stable_memory, NumWasmPages::new(1)),
-                },
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
-
-        let child_state_id = StateId::new();
+        let child_wasm_memory_id = MemoryId::new();
+        let child_stable_memory_id = MemoryId::new();
 
         // Issue a write of bytes [1, 2, 3, 4] at address 16 in stable memory.
         let exec_id_1 = ExecId::new();
@@ -1082,12 +1030,14 @@ mod tests {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id: exec_id_1,
                 wasm_id,
-                state_id: parent_state_id,
+                wasm_memory_id: parent_wasm_memory_id,
+                stable_memory_id: parent_stable_memory_id,
                 exec_input: exec_input_for_update(
                     "write_stable",
                     &[16, 0, 0, 0, 1, 2, 3, 4],
                     vec![],
-                    child_state_id,
+                    child_wasm_memory_id,
+                    child_stable_memory_id,
                 ),
             })
             .sync()
@@ -1117,12 +1067,14 @@ mod tests {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id: exec_id_2,
                 wasm_id,
-                state_id: child_state_id,
+                wasm_memory_id: child_wasm_memory_id,
+                stable_memory_id: child_stable_memory_id,
                 exec_input: exec_input_for_update(
                     "write_stable",
                     &[32, 0, 0, 0, 5, 6, 7, 8],
                     vec![],
-                    StateId::new(),
+                    MemoryId::new(),
+                    MemoryId::new(),
                 ),
             })
             .sync()
@@ -1150,20 +1102,9 @@ mod tests {
             .unwrap();
         assert!(rep.success);
 
-        let rep = srv
-            .close_state(protocol::sbxsvc::CloseStateRequest {
-                state_id: parent_state_id,
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
-
-        let rep = srv
-            .close_state(protocol::sbxsvc::CloseStateRequest {
-                state_id: child_state_id,
-            })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
+        close_memory(&srv, parent_wasm_memory_id);
+        close_memory(&srv, parent_stable_memory_id);
+        close_memory(&srv, child_wasm_memory_id);
+        close_memory(&srv, child_stable_memory_id);
     }
 }

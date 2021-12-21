@@ -12,8 +12,9 @@ use assert_matches::assert_matches;
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::execution_environment::Config;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, SubnetAvailableMemory,
+use ic_interfaces::{
+    execution_environment::{ExecutionParameters, HypervisorError, SubnetAvailableMemory},
+    messages::RequestOrIngress,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -21,8 +22,8 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    page_map, testing::CanisterQueuesTesting, CallContextManager, CallOrigin, CanisterStatus,
-    NumWasmPages, PageMap, ReplicatedState,
+    page_map, testing::CanisterQueuesTesting, CallContextAction, CallContextManager, CallOrigin,
+    CanisterStatus, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -35,8 +36,11 @@ use ic_test_utilities::{
     },
     types::{
         ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-        messages::{InstallCodeContextBuilder, RequestBuilder, SignedIngressBuilder},
+        messages::{
+            IngressBuilder, InstallCodeContextBuilder, RequestBuilder, SignedIngressBuilder,
+        },
     },
+    universal_canister::wasm,
     with_test_replica_logger,
 };
 use ic_types::messages::StopCanisterContext;
@@ -169,6 +173,45 @@ where
         initial_state(tmpdir.path(), subnet_id),
         subnet_id,
     )
+}
+
+fn with_hypervisor<F>(f: F)
+where
+    F: FnOnce(&Hypervisor, CanisterManager, ReplicatedState, SubnetId),
+{
+    with_test_replica_logger(|log| {
+        // Set up the initial canister.
+        let subnet_id = subnet_test_id(1);
+        let subnet_type = SubnetType::Application;
+        let metrics_registry = MetricsRegistry::new();
+        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+        let hypervisor = Hypervisor::new(
+            Config::default(),
+            1,
+            &metrics_registry,
+            subnet_id,
+            subnet_type,
+            log.clone(),
+            Arc::clone(&cycles_account_manager),
+        );
+
+        let hypervisor = Arc::new(hypervisor);
+        let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
+            log.clone(),
+            &metrics_registry,
+        ));
+        let canister_manager = CanisterManager::new(
+            Arc::clone(&hypervisor) as Arc<_>,
+            log,
+            canister_manager_config(subnet_id, subnet_type),
+            cycles_account_manager,
+            ingress_history_writer,
+        );
+
+        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+        let state = initial_state(tmpdir.path(), subnet_id);
+        f(&*hypervisor, canister_manager, state, subnet_id)
+    });
 }
 
 #[test]
@@ -3350,37 +3393,7 @@ const CONTROLLER_LENGTH: &str = r#"
 /// that the canister sees the proper change when the controller is updated.
 #[test]
 fn hypervisor_sends_new_controller_to_canister() {
-    with_test_replica_logger(|log| {
-        // Set up the initial canister.
-        let subnet_id = subnet_test_id(1);
-        let subnet_type = SubnetType::Application;
-        let metrics_registry = MetricsRegistry::new();
-        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let hypervisor = Hypervisor::new(
-            Config::default(),
-            1,
-            &metrics_registry,
-            subnet_id,
-            subnet_type,
-            log.clone(),
-            Arc::clone(&cycles_account_manager),
-        );
-
-        let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
-            log.clone(),
-            &metrics_registry,
-        ));
-        let canister_manager = CanisterManager::new(
-            Arc::clone(&hypervisor) as Arc<_>,
-            log,
-            canister_manager_config(subnet_id, subnet_type),
-            cycles_account_manager,
-            ingress_history_writer,
-        );
-
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let mut state = initial_state(tmpdir.path(), subnet_id);
+    with_hypervisor(|hypervisor, canister_manager, mut state, _| {
         let controller = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
         let canister_id = canister_manager
@@ -3486,4 +3499,113 @@ proptest! {
             assert_eq!(state.num_canisters() as u64, num_canisters);
         });
     }
+}
+
+#[test]
+fn test_upgrade_preserves_stable_memory() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        // Step 1. Create a universal canister.
+        let wasm_binary = ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec();
+        let user_id = user_test_id(0);
+        let sender = canister_test_id(100).get();
+        let canister_id = canister_manager
+            .create_canister(
+                sender,
+                subnet_id,
+                *INITIAL_CYCLES,
+                CanisterSettings::default(),
+                MAX_NUMBER_OF_CANISTERS,
+                &mut state,
+            )
+            .0
+            .unwrap();
+
+        canister_manager
+            .install_code(
+                InstallCodeContext {
+                    sender,
+                    canister_id,
+                    wasm_module: wasm_binary.clone(),
+                    arg: vec![],
+                    compute_allocation: None,
+                    memory_allocation: None,
+                    mode: CanisterInstallMode::Install,
+                    query_allocation: QueryAllocation::default(),
+                },
+                &mut state,
+                EXECUTION_PARAMETERS.clone(),
+            )
+            .1
+            .unwrap();
+
+        // Step 2. Grow the stable memory and write data there.
+        let data = vec![1, 2, 5, 8, 13];
+        let canister = state.take_canister_state(&canister_id).unwrap();
+        let req = IngressBuilder::new()
+            .method_name("update".to_string())
+            .method_payload(
+                wasm()
+                    .stable_grow(1)
+                    .stable_write(42, &data)
+                    .reply()
+                    .build(),
+            )
+            .source(user_id)
+            .build();
+        let subnet_records = Arc::new(btreemap! {
+            subnet_id => SubnetType::Application,
+        });
+
+        let (canister, _, action, _) = hypervisor.execute_update(
+            canister,
+            RequestOrIngress::Ingress(req),
+            mock_time(),
+            state.routing_table(),
+            subnet_records,
+            EXECUTION_PARAMETERS.clone(),
+            subnet_id,
+        );
+        match action {
+            CallContextAction::Reply { .. } => {}
+            _ => unreachable!("update call failed: {:?}", action),
+        }
+        state.put_canister_state(canister);
+
+        // Step 3. Upgrade the canister to self.
+        canister_manager
+            .install_code(
+                InstallCodeContext {
+                    sender,
+                    canister_id,
+                    wasm_module: wasm_binary,
+                    arg: vec![],
+                    compute_allocation: None,
+                    memory_allocation: None,
+                    mode: CanisterInstallMode::Upgrade,
+                    query_allocation: QueryAllocation::default(),
+                },
+                &mut state,
+                EXECUTION_PARAMETERS.clone(),
+            )
+            .1
+            .unwrap();
+
+        // Step 4. Read the stable memory and compare it with the expected value.
+        let canister = state.take_canister_state(&canister_id).unwrap();
+        let (canister, _, result) = hypervisor.execute_query(
+            QueryExecutionType::Replicated,
+            "query",
+            &wasm()
+                .stable_read(42, data.len() as u32)
+                .append_and_reply()
+                .build(),
+            user_id.get(),
+            canister,
+            None,
+            mock_time(),
+            EXECUTION_PARAMETERS.clone(),
+        );
+        state.put_canister_state(canister);
+        assert_eq!(result.unwrap(), Some(WasmResult::Reply(data)));
+    })
 }

@@ -40,19 +40,21 @@ impl SandboxService for SandboxClientStub {
         Call::new(cell)
     }
 
-    fn open_state(&self, req: OpenStateRequest) -> Call<OpenStateReply> {
-        let cell = self.channel.call(Request::OpenState(req), |rep| match rep {
-            Reply::OpenState(rep) => Ok(rep),
-            _ => Err(Error::ServerError),
-        });
+    fn open_memory(&self, req: OpenMemoryRequest) -> Call<OpenMemoryReply> {
+        let cell = self
+            .channel
+            .call(Request::OpenMemory(req), |rep| match rep {
+                Reply::OpenMemory(rep) => Ok(rep),
+                _ => Err(Error::ServerError),
+            });
         Call::new(cell)
     }
 
-    fn close_state(&self, req: CloseStateRequest) -> Call<CloseStateReply> {
+    fn close_memory(&self, req: CloseMemoryRequest) -> Call<CloseMemoryReply> {
         let cell = self
             .channel
-            .call(Request::CloseState(req), |rep| match rep {
-                Reply::CloseState(rep) => Ok(rep),
+            .call(Request::CloseMemory(req), |rep| match rep {
+                Reply::CloseMemory(rep) => Ok(rep),
                 _ => Err(Error::ServerError),
             });
         Call::new(cell)

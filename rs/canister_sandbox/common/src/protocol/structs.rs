@@ -4,7 +4,7 @@ use ic_system_api::{ApiType, StaticSystemState};
 use ic_types::{ingress::WasmResult, methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
 
-use super::id::StateId;
+use super::id::MemoryId;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Round(pub u64);
 
@@ -15,7 +15,8 @@ pub struct ExecInput {
     pub globals: Vec<Global>,
     pub canister_current_memory_usage: NumBytes,
     pub execution_parameters: ExecutionParameters,
-    pub next_state_id: StateId,
+    pub next_wasm_memory_id: MemoryId,
+    pub next_stable_memory_id: MemoryId,
     /// System state that won't change over the course of executing a single
     /// message.
     pub static_system_state: StaticSystemState,

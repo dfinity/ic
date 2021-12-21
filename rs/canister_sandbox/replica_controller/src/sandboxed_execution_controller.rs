@@ -1,12 +1,12 @@
 use ic_canister_sandbox_common::protocol;
-use ic_canister_sandbox_common::protocol::id::{StateId, WasmId};
-use ic_canister_sandbox_common::protocol::sbxsvc::{MemorySerialization, StateSerialization};
+use ic_canister_sandbox_common::protocol::id::{MemoryId, WasmId};
+use ic_canister_sandbox_common::protocol::sbxsvc::MemorySerialization;
 use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_embedders::{WasmExecutionInput, WasmExecutionOutput};
 use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats};
 use ic_logger::ReplicaLogger;
 use ic_replicated_state::canister_state::execution_state::{
-    SandboxExecutionState, SandboxExecutionStateHandle, SandboxExecutionStateOwner, WasmBinary,
+    SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
 };
 use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
 use ic_system_api::{StaticSystemState, SystemStateAccessorDirect};
@@ -69,41 +69,41 @@ impl std::fmt::Debug for OpenedWasm {
     }
 }
 
-/// Manages the lifetime of a remote execution state and provides its id.
-pub struct OpenedState {
+/// Manages the lifetime of a remote sandbox memory and provides its id.
+pub struct OpenedMemory {
     sandbox_service: Arc<dyn SandboxService>,
-    state_id: StateId,
+    memory_id: MemoryId,
 }
 
-impl OpenedState {
-    fn new(sandbox_service: Arc<dyn SandboxService>, state_id: StateId) -> Self {
+impl OpenedMemory {
+    fn new(sandbox_service: Arc<dyn SandboxService>, memory_id: MemoryId) -> Self {
         Self {
             sandbox_service,
-            state_id,
+            memory_id,
         }
     }
 }
 
-impl SandboxExecutionStateOwner for OpenedState {
+impl SandboxMemoryOwner for OpenedMemory {
     fn get_id(&self) -> usize {
-        self.state_id.as_usize()
+        self.memory_id.as_usize()
     }
 }
 
-impl Drop for OpenedState {
+impl Drop for OpenedMemory {
     fn drop(&mut self) {
         self.sandbox_service
-            .close_state(protocol::sbxsvc::CloseStateRequest {
-                state_id: self.state_id,
+            .close_memory(protocol::sbxsvc::CloseMemoryRequest {
+                memory_id: self.memory_id,
             })
             .on_completion(|_| {});
     }
 }
 
-impl std::fmt::Debug for OpenedState {
+impl std::fmt::Debug for OpenedMemory {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OpenedState")
-            .field("state_id", &self.state_id)
+        f.debug_struct("OpenedMemory")
+            .field("memory_id", &self.memory_id)
             .finish()
     }
 }
@@ -236,9 +236,20 @@ impl SandboxedExecutionController {
         );
 
         // Now set up resources on the sandbox to drive the execution.
-        let state_handle = open_remote_state(&sandbox_process.sandbox_service, &execution_state);
-        let state_id = StateId::from(state_handle.get_id());
-        let next_state_id = StateId::new();
+        let wasm_memory_handle = open_remote_memory(
+            &sandbox_process.sandbox_service,
+            &execution_state.wasm_memory,
+        );
+        let wasm_memory_id = MemoryId::from(wasm_memory_handle.get_id());
+        let next_wasm_memory_id = MemoryId::new();
+
+        let stable_memory_handle = open_remote_memory(
+            &sandbox_process.sandbox_service,
+            &execution_state.stable_memory,
+        );
+        let stable_memory_id = MemoryId::from(stable_memory_handle.get_id());
+        let next_stable_memory_id = MemoryId::new();
+
         let subnet_available_memory = execution_parameters.subnet_available_memory.clone();
 
         sandbox_process
@@ -246,14 +257,16 @@ impl SandboxedExecutionController {
             .open_execution(protocol::sbxsvc::OpenExecutionRequest {
                 exec_id,
                 wasm_id,
-                state_id,
+                wasm_memory_id,
+                stable_memory_id,
                 exec_input: protocol::structs::ExecInput {
                     func_ref,
                     api_type,
                     globals: execution_state.exported_globals.clone(),
                     canister_current_memory_usage,
                     execution_parameters,
-                    next_state_id,
+                    next_wasm_memory_id,
+                    next_stable_memory_id,
                     static_system_state,
                 },
             })
@@ -287,18 +300,20 @@ impl SandboxedExecutionController {
                     .page_map
                     .deserialize_delta(state_modifications.wasm_memory.page_delta);
                 execution_state.wasm_memory.size = state_modifications.wasm_memory.size;
+                execution_state.wasm_memory.sandbox_memory = SandboxMemory::synced(
+                    wrap_remote_memory(&sandbox_process.sandbox_service, next_wasm_memory_id),
+                );
 
                 execution_state
                     .stable_memory
                     .page_map
                     .deserialize_delta(state_modifications.stable_memory.page_delta);
                 execution_state.stable_memory.size = state_modifications.stable_memory.size;
+                execution_state.stable_memory.sandbox_memory = SandboxMemory::synced(
+                    wrap_remote_memory(&sandbox_process.sandbox_service, next_stable_memory_id),
+                );
 
                 execution_state.exported_globals = state_modifications.globals;
-
-                let state_handle =
-                    wrap_remote_state(&sandbox_process.sandbox_service, next_state_id);
-                execution_state.sandbox_state = SandboxExecutionState::synced(state_handle);
 
                 // Unconditionally update the subnet available memory.
                 // This value is actually a shared value under a RwLock, and the non-sandbox
@@ -395,49 +410,41 @@ fn open_wasm(
     Ok((wasm_id, 1))
 }
 
-// Returns the id of the remote state after making sure that
-// the remote state is in sync with the local state.
-fn open_remote_state(
+// Returns the id of the remote memory after making sure that the remote memory
+// is in sync with the local memory.
+fn open_remote_memory(
     sandbox_service: &Arc<dyn SandboxService>,
-    execution_state: &ExecutionState,
-) -> SandboxExecutionStateHandle {
-    let mut guard = execution_state.sandbox_state.lock().unwrap();
+    memory: &Memory,
+) -> SandboxMemoryHandle {
+    let mut guard = memory.sandbox_memory.lock().unwrap();
     match &*guard {
-        SandboxExecutionState::Synced(id) => id.clone(),
-        SandboxExecutionState::Unsynced => {
-            let globals = execution_state.exported_globals.clone();
-            let wasm_memory_page_map = execution_state.wasm_memory.page_map.serialize();
-            let wasm_memory = MemorySerialization {
-                page_map: wasm_memory_page_map,
-                num_wasm_pages: execution_state.wasm_memory.size,
+        SandboxMemory::Synced(id) => id.clone(),
+        SandboxMemory::Unsynced => {
+            let serialized_page_map = memory.page_map.serialize();
+            let serialized_memory = MemorySerialization {
+                page_map: serialized_page_map,
+                num_wasm_pages: memory.size,
             };
-            let stable_memory_page_map = execution_state.stable_memory.page_map.serialize();
-            let stable_memory = MemorySerialization {
-                page_map: stable_memory_page_map,
-                num_wasm_pages: execution_state.stable_memory.size,
-            };
-            let state = StateSerialization {
-                globals,
-                wasm_memory,
-                stable_memory,
-            };
-            let state_id = StateId::new();
+            let memory_id = MemoryId::new();
             sandbox_service
-                .open_state(protocol::sbxsvc::OpenStateRequest { state_id, state })
+                .open_memory(protocol::sbxsvc::OpenMemoryRequest {
+                    memory_id,
+                    memory: serialized_memory,
+                })
                 .on_completion(|_| {});
-            let handle = wrap_remote_state(sandbox_service, state_id);
-            *guard = SandboxExecutionState::Synced(handle.clone());
+            let handle = wrap_remote_memory(sandbox_service, memory_id);
+            *guard = SandboxMemory::Synced(handle.clone());
             handle
         }
     }
 }
 
-fn wrap_remote_state(
+fn wrap_remote_memory(
     sandbox_service: &Arc<dyn SandboxService>,
-    state_id: StateId,
-) -> SandboxExecutionStateHandle {
-    let opened_state = OpenedState::new(Arc::clone(sandbox_service), state_id);
-    SandboxExecutionStateHandle::new(Arc::new(opened_state))
+    memory_id: MemoryId,
+) -> SandboxMemoryHandle {
+    let opened_memory = OpenedMemory::new(Arc::clone(sandbox_service), memory_id);
+    SandboxMemoryHandle::new(Arc::new(opened_memory))
 }
 
 fn panic_due_to_sandbox_exit(output: ExitStatus, canister_id: CanisterId, pid: u32) {

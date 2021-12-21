@@ -14,7 +14,7 @@ use ic_types::{methods::WasmMethod, CanisterId};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    id::{ExecId, StateId, WasmId},
+    id::{ExecId, MemoryId, WasmId},
     structs::MemoryModifications,
 };
 
@@ -128,52 +128,35 @@ impl EnumerateInnerFileDescriptors for PageAllocatorSerialization {
     }
 }
 
-/// Contains information that is necessary to create an execution state in
-/// the sandbox process: the globals, the Wasm memory, and the stable memory.
+/// Describe a request to open a particular memory.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct StateSerialization {
-    pub globals: Vec<Global>,
-    pub wasm_memory: MemorySerialization,
-    pub stable_memory: MemorySerialization,
+pub struct OpenMemoryRequest {
+    pub memory_id: MemoryId,
+    pub memory: MemorySerialization,
 }
 
-impl EnumerateInnerFileDescriptors for StateSerialization {
+impl EnumerateInnerFileDescriptors for OpenMemoryRequest {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        self.wasm_memory.enumerate_fds(fds);
-        self.stable_memory.enumerate_fds(fds);
+        self.memory.enumerate_fds(fds);
     }
 }
 
-/// Describe a request to open a particular state containing either
-/// the state path or utilize a particular state branch.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OpenStateRequest {
-    pub state_id: StateId,
-    pub state: StateSerialization,
-}
-
-impl EnumerateInnerFileDescriptors for OpenStateRequest {
-    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        self.state.enumerate_fds(fds);
-    }
-}
-
-/// Ack to the controller that state was opened or failed to open. A
+/// Ack to the controller that memory was opened or failed to open. A
 /// failure to open will lead to a panic in the controller.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OpenStateReply {
+pub struct OpenMemoryReply {
     pub success: bool,
 }
 
-/// Request the indicated state session to be purged and dropped.
+/// Request the indicated memory to be purged and dropped.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct CloseStateRequest {
-    pub state_id: StateId,
+pub struct CloseMemoryRequest {
+    pub memory_id: MemoryId,
 }
 
-/// Ack state session was successfully closed or not.
+/// Ack memory was successfully closed or not.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct CloseStateReply {
+pub struct CloseMemoryReply {
     pub success: bool,
 }
 
@@ -189,8 +172,11 @@ pub struct OpenExecutionRequest {
     /// Id of canister to run (see OpenWasm).
     pub wasm_id: WasmId,
 
-    /// State to use (see OpenState).
-    pub state_id: StateId,
+    /// Wasm memory to use (see OpenMemory).
+    pub wasm_memory_id: MemoryId,
+
+    /// Stable memory to use (see OpenMemory).
+    pub stable_memory_id: MemoryId,
 
     /// Arguments to execution (api type, caller, payload, ...).
     pub exec_input: structs::ExecInput,
@@ -258,8 +244,8 @@ pub enum Request {
     Terminate(TerminateRequest),
     OpenWasm(OpenWasmRequest),
     CloseWasm(CloseWasmRequest),
-    OpenState(OpenStateRequest),
-    CloseState(CloseStateRequest),
+    OpenMemory(OpenMemoryRequest),
+    CloseMemory(CloseMemoryRequest),
     OpenExecution(OpenExecutionRequest),
     CloseExecution(CloseExecutionRequest),
     CreateExecutionState(CreateExecutionStateRequest),
@@ -268,12 +254,12 @@ pub enum Request {
 impl EnumerateInnerFileDescriptors for Request {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         match self {
-            Request::OpenState(request) => request.enumerate_fds(fds),
+            Request::OpenMemory(request) => request.enumerate_fds(fds),
             Request::CreateExecutionState(request) => request.enumerate_fds(fds),
             Request::Terminate(_)
             | Request::OpenWasm(_)
             | Request::CloseWasm(_)
-            | Request::CloseState(_)
+            | Request::CloseMemory(_)
             | Request::OpenExecution(_)
             | Request::CloseExecution(_) => {}
         }
@@ -287,8 +273,8 @@ pub enum Reply {
     Terminate(TerminateReply),
     OpenWasm(OpenWasmReply),
     CloseWasm(CloseWasmReply),
-    OpenState(OpenStateReply),
-    CloseState(CloseStateReply),
+    OpenMemory(OpenMemoryReply),
+    CloseMemory(CloseMemoryReply),
     OpenExecution(OpenExecutionReply),
     CloseExecution(CloseExecutionReply),
     CreateExecutionState(CreateExecutionStateReply),
