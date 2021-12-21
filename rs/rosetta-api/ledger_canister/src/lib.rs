@@ -743,6 +743,13 @@ impl Default for Ledger {
 }
 
 impl Ledger {
+    /// The maximum number of transactions that we attempt to purge in one go.
+    /// If there are many transactions in the buffer, purging them all in one go
+    /// might require more instructions than one message execution allows.
+    /// Hence, we purge old transactions incrementally, up to
+    /// MAX_TRANSACTIONS_TO_PURGE at a time.
+    const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
+
     /// This creates a block and adds it to the ledger
     pub fn add_payment(
         &mut self,
@@ -844,7 +851,9 @@ impl Ledger {
     }
 
     /// Remove transactions older than `transaction_window`.
+    /// Removes at most MAX_TRANSACTIONS_TO_PURGE entries
     fn purge_old_transactions(&mut self, now: TimeStamp) {
+        let mut cnt = 0usize;
         while let Some(TransactionInfo {
             block_timestamp,
             transaction_hash,
@@ -865,6 +874,10 @@ impl Ledger {
                 None => None,
             };
             self.transactions_by_height.pop_front();
+            cnt += 1;
+            if cnt >= Self::MAX_TRANSACTIONS_TO_PURGE {
+                break;
+            }
         }
     }
 
