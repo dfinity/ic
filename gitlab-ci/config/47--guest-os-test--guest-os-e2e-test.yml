@@ -76,6 +76,7 @@ e2e-scalability-suite-test:
   needs:
     - guest-os-diskimg
     - cargo-build-release-linux-native
+    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
@@ -158,6 +159,7 @@ guest-os-upgrade-to-self:
     - guest-os-diskimg
     - guest-os-updateimg-build
     - cargo-build-release-linux-native
+    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
@@ -238,6 +240,7 @@ guest-os-upgrade-to-master:
     - guest-os-diskimg
     - guest-os-updateimg-build
     - cargo-build-release-linux-native
+    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
@@ -334,6 +337,7 @@ guest-os-upgrade-from-master:
     - guest-os-diskimg
     - guest-os-updateimg-build
     - cargo-build-release-linux-native
+    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
@@ -437,6 +441,7 @@ guest-os-upgrade-app-subnet-to-self:
     - guest-os-diskimg
     - guest-os-updateimg-build
     - cargo-build-release-linux-native
+    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:

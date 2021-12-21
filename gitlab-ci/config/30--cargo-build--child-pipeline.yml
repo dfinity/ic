@@ -44,7 +44,7 @@ cargo-build-release-linux-native:
     - .rules-parent-pipeline-autorun-on-trigger
   image:
     # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2021-12-15-5da2bdba-a7afb063055bf34fc2f60b4548ebed2578f6bb5a"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2021-12-21-869b656e-6237e4b43afde442b14efcc523a7ff8db142d158"
   variables:
     BUILD_COMMAND: ""
     ARTIFACT_EXT: ""
@@ -59,8 +59,7 @@ cargo-build-release-linux-native:
 
       if [[ -z "${BUILD_COMMAND}" ]]; then
         buildevents cmd "${PARENT_PIPELINE_ID}" "${CI_JOB_ID}" cargo-build -- \
-        placebo -i Cargo.lock -i "./**/Cargo.toml" -i "./**/*.rs" -o "${CARGO_TARGET_DIR}/x86_64-unknown-linux-gnu/release/*" -- \
-        "$CI_PROJECT_DIR"/gitlab-ci/src/job_scripts/cargo-build-release-linux-native.sh
+        capsule -v -- "$CI_PROJECT_DIR/gitlab-ci/src/job_scripts/cargo-build-release-linux-native.sh"
       else
         buildevents cmd "${PARENT_PIPELINE_ID}" "${CI_JOB_ID}" cargo-build -- bash -c "${BUILD_COMMAND}"
       fi
@@ -70,8 +69,13 @@ cargo-build-release-linux-native:
       CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu buildevents cmd "${PARENT_PIPELINE_ID}" "${CI_JOB_ID}" collect-artifacts -- "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/collect_build_binaries.py "artifacts/release${ARTIFACT_EXT}" ''
 
       echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
-      "$RUSTC_WRAPPER" --show-stats
+      "$RUSTC_WRAPPER" --show-stats || true
       echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
+
+cargo-build-release-linux-native-nd:
+  extends: cargo-build-release-linux-native
+  variables:
+    BUILD_COMMAND: "cargo build --target x86_64-unknown-linux-gnu --release -p tests -p ic-nns-init"
 
 cargo-build-release-linux-native-malicious:
   extends: cargo-build-release-linux-native
@@ -87,7 +91,7 @@ cargo-build-canisters:
     ARTIFACT_EXT: ""
   image:
     # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2021-12-15-5da2bdba-a7afb063055bf34fc2f60b4548ebed2578f6bb5a"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2021-12-21-869b656e-6237e4b43afde442b14efcc523a7ff8db142d158"
   artifacts:
     paths:
       - "artifacts/canisters${ARTIFACT_EXT}/*"
