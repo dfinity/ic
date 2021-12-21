@@ -941,6 +941,7 @@ wasm-generator-slo:
   variables:
     NUMBER_OF_CANISTERS: 2000
     cd_target_env: "SLO"
+  timeout: 3 hours
 
 # Stress tests: Run given job sequence every N minutes so we can easily collect failure data
 icos-deploy-stress:
