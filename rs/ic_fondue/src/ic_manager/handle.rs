@@ -292,6 +292,13 @@ impl<'a> IcEndpoint {
     /// either active polling of the public API or--in the case of unassiged
     /// nodes--via establishing a connection to port 22.
     pub async fn assert_ready(&self, ctx: &fondue::pot::Context) {
+        self.assert_ready_with_start(self.started_at, ctx).await;
+    }
+
+    /// Same as `assert_ready`, except that the time offset from which the
+    /// timeout is measured is defined by `start` and not the IcEndpoint's
+    /// `started_at`.
+    pub async fn assert_ready_with_start(&self, start: Instant, ctx: &fondue::pot::Context) {
         let mut interval = time::interval(Duration::from_secs(1));
         loop {
             info!(
@@ -328,7 +335,7 @@ impl<'a> IcEndpoint {
                     );
                 }
             }
-            if Instant::now().duration_since(self.started_at) > READY_WAIT_TIMEOUT {
+            if Instant::now().duration_since(start) > READY_WAIT_TIMEOUT {
                 panic!("the IcEndpoint didn't come up within a time limit");
             }
             interval.tick().await;
@@ -338,6 +345,16 @@ impl<'a> IcEndpoint {
     /// Returns the `SubnetId` of this [IcEndpoint] if it exists.
     pub fn subnet_id(&self) -> Option<SubnetId> {
         self.subnet.as_ref().map(|s| s.id)
+    }
+
+    /// Creates a new instance of this IcEndpoint structure with the subnet
+    /// `subnet` and the `started_at` instant set to `Instant::now()`.
+    pub fn recreate_with_subnet(&self, subnet: IcSubnet) -> IcEndpoint {
+        Self {
+            subnet: Some(subnet),
+            started_at: Instant::now(),
+            ..self.clone()
+        }
     }
 }
 
