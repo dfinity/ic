@@ -33,7 +33,7 @@ use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::SandboxExecutionState, page_map::PersistenceError, PageIndex,
+    canister_state::execution_state::SandboxMemory, page_map::PersistenceError, PageIndex,
     ReplicatedState,
 };
 use ic_state_layout::{error::LayoutError, StateLayout};
@@ -733,7 +733,8 @@ fn strip_page_map_deltas(state: &mut ReplicatedState) {
             execution_state.stable_memory.page_map.strip_all_deltas();
             // Reset the sandbox state to force full synchronization on the next execution
             // since the page deltas are out of sync now.
-            execution_state.sandbox_state = SandboxExecutionState::new();
+            execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
+            execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
         }
     }
 }
@@ -771,7 +772,8 @@ fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
             assert_eq!(tip_state.wasm_memory.size, src_state.wasm_memory.size);
             // Reset the sandbox state to force full synchronization on the next message
             // execution because the checkpoint file of `tip` has changed.
-            tip_state.sandbox_state = SandboxExecutionState::new();
+            tip_state.wasm_memory.sandbox_memory = SandboxMemory::new();
+            tip_state.stable_memory.sandbox_memory = SandboxMemory::new();
         }
     }
 }

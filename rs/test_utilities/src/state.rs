@@ -11,7 +11,7 @@ use ic_cow_state::CowMemoryManagerImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::{SandboxExecutionState, WasmBinary, WasmMetadata},
+        execution_state::{WasmBinary, WasmMetadata},
         testing::new_canister_queues_for_test,
         QUEUE_INDEX_NONE,
     },
@@ -402,7 +402,6 @@ pub fn initial_execution_state(p: Option<std::path::PathBuf>) -> ExecutionState 
         last_executed_round: ExecutionRound::from(0),
         cow_mem_mgr: Arc::new(cow_mem_mgr),
         mapped_state: None,
-        sandbox_state: SandboxExecutionState::new(),
     }
 }
 

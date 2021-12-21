@@ -17,9 +17,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::ReplicaLogger;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::{
-    canister_state::execution_state::SandboxExecutionState, EmbedderCache, ExecutionState,
-};
+use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
 use ic_system_api::{
     system_api_empty::SystemApiEmpty, ModificationTracking, StaticSystemState, SystemApiImpl,
@@ -269,9 +267,6 @@ impl WasmExecutor {
                         );
                         execution_state.stable_memory.size = run_result.stable_memory_size;
                         execution_state.exported_globals = run_result.exported_globals;
-
-                        // TODO(EXC-624): Create delta-based remote state here.
-                        execution_state.sandbox_state = SandboxExecutionState::new();
                     }
                 }
                 Err(err) => {

@@ -2,7 +2,6 @@ use crate::{CheckpointError, CheckpointMetrics};
 use ic_base_types::CanisterId;
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::execution_state::SandboxExecutionState;
 use ic_replicated_state::Memory;
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
@@ -276,7 +275,6 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
                     canister_layout.raw_path(),
                 )),
                 mapped_state: None,
-                sandbox_state: SandboxExecutionState::new(),
             })
         }
         None => None,
@@ -445,10 +443,7 @@ mod tests {
         let delta = &[(PageIndex::from(0), &contents)];
         let mut page_map = PageMap::new();
         page_map.update(delta);
-        Memory {
-            page_map,
-            size: NumWasmPages::from(1),
-        }
+        Memory::new(page_map, NumWasmPages::from(1))
     }
 
     fn mark_readonly(path: &std::path::Path) -> std::io::Result<()> {
@@ -612,7 +607,6 @@ mod tests {
                     can_layout.unwrap().raw_path(),
                 )),
                 mapped_state: None,
-                sandbox_state: SandboxExecutionState::new(),
             };
             canister_state.execution_state = Some(execution_state);
 

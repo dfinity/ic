@@ -184,7 +184,7 @@ impl WasmBinary {
 }
 
 /// Represents a canister's wasm or stable memory.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Memory {
     /// The contents of this memory.
     pub page_map: PageMap,
@@ -194,11 +194,19 @@ pub struct Memory {
     /// that will be reflected in this field, but the `page_map` will remain
     /// empty until data is written to the memory.
     pub size: NumWasmPages,
+
+    /// Contains either a handle to the execution state in the sandbox process
+    /// or information that is necessary to constructs the state remotely.
+    pub sandbox_memory: Arc<Mutex<SandboxMemory>>,
 }
 
 impl Memory {
     pub fn new(page_map: PageMap, size: NumWasmPages) -> Self {
-        Memory { page_map, size }
+        Memory {
+            page_map,
+            size,
+            sandbox_memory: SandboxMemory::new(),
+        }
     }
 }
 
@@ -207,7 +215,15 @@ impl Default for Memory {
         Self {
             page_map: PageMap::default(),
             size: NumWasmPages::from(0),
+            sandbox_memory: SandboxMemory::new(),
         }
+    }
+}
+
+impl PartialEq for Memory {
+    fn eq(&self, other: &Self) -> bool {
+        // Skip the sandbox memory since it is not relevant for equality.
+        self.page_map == other.page_map && self.size == other.size
     }
 }
 
@@ -217,46 +233,46 @@ impl Default for Memory {
 /// state in the sandbox process. Otherwise, it indicates that the snapshot
 /// of the state needs to be sent to the sandbox process.
 #[derive(Debug)]
-pub enum SandboxExecutionState {
-    Synced(SandboxExecutionStateHandle),
+pub enum SandboxMemory {
+    Synced(SandboxMemoryHandle),
     Unsynced,
 }
 
-impl SandboxExecutionState {
+impl SandboxMemory {
     pub fn new() -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(SandboxExecutionState::Unsynced))
+        Arc::new(Mutex::new(SandboxMemory::Unsynced))
     }
 
-    pub fn synced(state_handle: SandboxExecutionStateHandle) -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(SandboxExecutionState::Synced(state_handle)))
+    pub fn synced(handle: SandboxMemoryHandle) -> Arc<Mutex<Self>> {
+        Arc::new(Mutex::new(SandboxMemory::Synced(handle)))
     }
 }
 
-/// The owner of the sandbox execution state. It's destructor must close
-/// the corresponding execution state in the sandbox process.
-pub trait SandboxExecutionStateOwner: std::fmt::Debug + Send + Sync {
+/// The owner of the sandbox memory. It's destructor must close the
+/// corresponding memory in the sandbox process.
+pub trait SandboxMemoryOwner: std::fmt::Debug + Send + Sync {
     fn get_id(&self) -> usize;
 }
 
-/// A handle to the sandbox execution state that keeps the corresponding
-/// execution state in the sandbox process open. It is cloneable and may be
-/// shared between multiple execution states.
+/// A handle to the sandbox memory that keeps the corresponding memory in the
+/// sandbox process open. It is cloneable and may be shared between multiple
+/// copies of memory.
 #[derive(Debug)]
-pub struct SandboxExecutionStateHandle(Arc<dyn SandboxExecutionStateOwner>);
+pub struct SandboxMemoryHandle(Arc<dyn SandboxMemoryOwner>);
 
-impl Clone for SandboxExecutionStateHandle {
+impl Clone for SandboxMemoryHandle {
     fn clone(&self) -> Self {
         Self(Arc::clone(&self.0))
     }
 }
 
-impl SandboxExecutionStateHandle {
-    pub fn new(id: Arc<dyn SandboxExecutionStateOwner>) -> Self {
+impl SandboxMemoryHandle {
+    pub fn new(id: Arc<dyn SandboxMemoryOwner>) -> Self {
         Self(id)
     }
 
-    /// Returns a raw id of the execution state in the sandbox process,
-    /// which can be converted to sandbox `StateId` using `StateId::from()`.
+    /// Returns a raw id of the memory in the sandbox process, which can be
+    /// converted to sandbox `MemoryId` using `MemoryId::from()`.
     pub fn get_id(&self) -> usize {
         self.0.get_id()
     }
@@ -324,10 +340,6 @@ pub struct ExecutionState {
 
     /// Mapped state of the current execution
     pub mapped_state: Option<Arc<MappedStateImpl>>,
-
-    /// Contains either a handle to the execution state in the sandbox process
-    /// or information that is necessary to constructs the state remotely.
-    pub sandbox_state: Arc<Mutex<SandboxExecutionState>>,
 }
 
 // We have to implement it by hand as embedder_cache can not be compared for
@@ -391,7 +403,6 @@ impl ExecutionState {
             last_executed_round: ExecutionRound::from(0),
             cow_mem_mgr,
             mapped_state,
-            sandbox_state: SandboxExecutionState::new(),
         }
     }
 

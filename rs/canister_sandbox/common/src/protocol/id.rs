@@ -31,13 +31,13 @@ impl Display for ExecId {
     }
 }
 
-/// The identifier of an execution state. It must be unique per sandbox process.
+/// The identifier of a memory. It must be unique per sandbox process.
 /// The current implementation provides stronger guarantee: it is unique across
 /// all canisters.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StateId(usize);
+pub struct MemoryId(usize);
 
-impl StateId {
+impl MemoryId {
     /// Only the replica process is supposed to create new `StateId`.
     pub fn new() -> Self {
         static MONOTONICALLY_INCREASING_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -45,29 +45,29 @@ impl StateId {
         Self(id)
     }
 
-    /// The conversion from and to `usize` is necessary because `ExecutionState`
-    /// needs to refer to the sandbox state without actually depending on the
-    /// sandbox crate and on `StateId`.
+    /// The conversion from and to `usize` is necessary because `Memory` needs
+    /// to refer to the sandbox state without actually depending on the sandbox
+    /// crate and on `MemoryId`.
     pub fn as_usize(&self) -> usize {
         self.0
     }
 }
 
-impl From<usize> for StateId {
+impl From<usize> for MemoryId {
     fn from(id: usize) -> Self {
         Self(id)
     }
 }
 
-impl Default for StateId {
+impl Default for MemoryId {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Display for StateId {
+impl Display for MemoryId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "state-id-{}", self.0)
+        write!(f, "memory-id-{}", self.0)
     }
 }
 
