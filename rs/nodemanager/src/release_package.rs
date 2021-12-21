@@ -384,10 +384,7 @@ impl ReleasePackage {
     async fn check_for_upgrade_once(&self) {
         info!(self.logger, "Checking for release package");
         if let Err(e) = self.check_for_upgrade().await {
-            warn!(
-                self.logger,
-                "Failed to check for or upgrade to release package: {}", e
-            );
+            warn!(self.logger, "Check for upgrade failed: {}", e);
         };
     }
 
@@ -463,10 +460,10 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
     }
 }
 
-// Checks if the node still belongs to the subnet it was assigned the last
-// time. We decide this by checking the subnet membership starting from the
-// oldest relevant and ending with the newest relevant registry version of the
-// local CUP.
+// Checks if the node still belongs to the subnet it was assigned the last time.
+// We decide this by checking the subnet membership starting from the oldest
+// relevant version of the local CUP and ending with the latest registry
+// version.
 fn should_node_become_unassigned(
     registry: &dyn RegistryClient,
     node_id: NodeId,
@@ -482,9 +479,7 @@ fn should_node_become_unassigned(
         .as_summary()
         .dkg;
     let oldest_relevant_version = dkg_summary.get_subnet_membership_version().get();
-    // Get the highest registry version relevant for the local CUP.
-    let last_relevant_version = dkg_summary.registry_version.get();
-    for version in oldest_relevant_version..=last_relevant_version {
+    for version in oldest_relevant_version..=registry.get_latest_version().get() {
         if let Ok(Some(members)) =
             registry.get_node_ids_on_subnet(subnet_id, RegistryVersion::from(version))
         {
