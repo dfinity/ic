@@ -192,6 +192,25 @@ impl<'a> UniversalCanister<'a> {
             .build()
     }
 
+    /// Try to store `msg` in stable memory starting at `offset` bytes.
+    pub async fn try_store_to_stable(
+        &self,
+        offset: u32,
+        msg: &[u8],
+        delay: garcon::Delay,
+    ) -> Result<(), AgentError> {
+        let res = self
+            .agent
+            .update(&self.canister_id, "update")
+            .with_arg(Self::stable_writer(offset, msg))
+            .call_and_wait(delay)
+            .await;
+        match res {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Stores `msg` in stable memory starting at `offset` bytes.
     pub async fn store_to_stable(&self, offset: u32, msg: &[u8]) {
         self.agent
@@ -340,6 +359,13 @@ pub fn delay() -> garcon::Delay {
         .build()
 }
 
+pub fn create_delay(throttle_duration: u64, timeout: u64) -> garcon::Delay {
+    garcon::Delay::builder()
+        .throttle(std::time::Duration::from_millis(throttle_duration))
+        .timeout(std::time::Duration::from_secs(timeout))
+        .build()
+}
+
 pub fn get_random_node_endpoint<'a>(handle: &'a IcHandle, rng: &mut ChaCha8Rng) -> &'a IcEndpoint {
     handle.as_permutation(rng).next().unwrap()
 }
@@ -432,6 +458,14 @@ pub fn get_random_unassigned_node_endpoint<'a>(
         .as_permutation(rng)
         .find(|ep| ep.subnet.is_none())
         .unwrap()
+}
+
+pub fn get_unassinged_nodes_endpoints(handle: &IcHandle) -> Vec<&IcEndpoint> {
+    handle
+        .public_api_endpoints
+        .iter()
+        .filter(|ep| ep.subnet.is_none())
+        .collect()
 }
 
 pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code: RejectCode) {

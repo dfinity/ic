@@ -79,7 +79,6 @@ ci_jobs_required:
   - generic-hourly
   - subnet-update-workload-nightly
   - global-reboot-nightly
-  - node-assign-test-nightly
   - subnet-threshold-test-nightly
   - nns-workload-nightly
   - xnet-slo-nightly

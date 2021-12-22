@@ -300,6 +300,7 @@ impl HasHandle for IcManager {
                 }),
                 started_at: Instant::now(),
                 ssh_key_pairs: vec![],
+                node_id: nc.node_id,
             }
         };
 

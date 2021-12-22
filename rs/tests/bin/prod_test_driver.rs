@@ -4,6 +4,7 @@ use ic_fondue::prod_tests::evaluation::{evaluate, TestResult};
 use ic_fondue::prod_tests::pot_dsl::*;
 use ic_tests::nns_follow_test::{self, test as follow_test};
 use ic_tests::nns_voting_test::{self, test as voting_test};
+use ic_tests::node_assign_test::{self, test as node_assign_test};
 use ic_tests::node_restart_test::{self, test as node_restart_test};
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::token_balance_test::{self, test as token_balance_test};
@@ -135,6 +136,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 execution::upgraded_pots::cycles_restrictions_pot(),
                 execution::upgraded_pots::inter_canister_queries(),
                 execution::upgraded_pots::compute_allocation_pot(),
+                pot(
+                    "node_assign_pot",
+                    node_assign_test::config(),
+                    par(vec![t("node_assign_test", node_assign_test)]),
+                ),
                 pot(
                     "nns_follow_pot",
                     nns_follow_test::config(),

@@ -1,5 +1,6 @@
 use fondue::pot::execution::Config as ExecConfig;
 use fondue::pot::Config as PotConfig;
+use ic_base_types::NodeId;
 use ic_fondue::ic_manager::{IcEndpoint, IcManagerSettings, IcSubnet, RuntimeDescriptor};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{PrincipalId, SubnetId};
@@ -76,6 +77,8 @@ impl Options {
                         metrics_url: None,
                         started_at: Instant::now(),
                         ssh_key_pairs: vec![],
+                        // this interface is deprecated and that's why we use a fake id here
+                        node_id: NodeId::from(PrincipalId::new_node_test_id(0)),
                     })
                 }
                 Some(endpoints)

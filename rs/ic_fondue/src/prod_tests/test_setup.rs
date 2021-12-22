@@ -49,6 +49,7 @@ pub fn create_ic_handle(
             is_root_subnet: subnet.map(|s| s.subnet_index) == Some(0),
             started_at: Instant::now(),
             ssh_key_pairs: ctx.authorized_ssh_accounts.clone(),
+            node_id: *node_id,
         };
 
         if mal_beh.contains_key(node_id) {

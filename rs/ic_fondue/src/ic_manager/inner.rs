@@ -1,3 +1,4 @@
+use ic_base_types::NodeId;
 use ic_config::{artifact_pool::ArtifactPoolTomlConfig, http_handler};
 use ic_config::{
     crypto::CryptoConfig,
@@ -95,6 +96,7 @@ pub struct NodeCommand {
     pub initial_subnet_type: SubnetType,
 
     pub subnet_id: SubnetId,
+    pub node_id: NodeId,
 }
 
 type MaliciousNodes = BTreeMap<NodeIndex, MaliciousBehaviour>;
@@ -457,6 +459,7 @@ impl IcManager {
             orchestrator_metrics_listen_addr: metrics_socket_addr,
             initial_subnet_type,
             subnet_id,
+            node_id: init_node.node_id,
         }
     }
 
