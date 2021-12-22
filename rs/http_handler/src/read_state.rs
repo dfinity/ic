@@ -11,7 +11,7 @@ use ic_interfaces::{
     crypto::IngressSigVerifier, registry::RegistryClient, state_manager::StateReader,
 };
 use ic_logger::{trace, ReplicaLogger};
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
     canonical_error::{
         invalid_argument_error, not_found_error, permission_denied_error, resource_exhausted_error,
@@ -24,7 +24,7 @@ use ic_types::{
         EXPECTED_MESSAGE_ID_LENGTH,
     },
     time::current_time,
-    UserId,
+    CanisterId, UserId,
 };
 use ic_validator::{get_authorized_canisters, CanisterIdSet};
 use std::convert::TryFrom;
@@ -200,6 +200,26 @@ fn verify_paths(
             [b"canister", _canister_id, b"controller"] => {}
             [b"canister", _canister_id, b"controllers"] => {}
             [b"canister", _canister_id, b"module_hash"] => {}
+            [b"canister", canister_id, b"metadata", name] => {
+                let name = String::from_utf8(Vec::from(*name)).map_err(|err| {
+                    invalid_argument_error(&format!(
+                        "Could not parse the custom section name: {}.",
+                        err
+                    ))
+                })?;
+
+                match CanisterId::try_from(*canister_id) {
+                    Ok(canister_id) => {
+                        can_read_canister_metadata(user, &canister_id, &name, &state)?
+                    }
+                    Err(err) => {
+                        return Err(invalid_argument_error(&format!(
+                            "Could not parse Canister ID: {}.",
+                            err
+                        )))
+                    }
+                }
+            }
             [b"subnet", _subnet_id, b"public_key"] => {}
             [b"subnet", _subnet_id, b"canister_ranges"] => {}
             [b"request_status", request_id] | [b"request_status", request_id, ..] => {
@@ -242,10 +262,49 @@ fn verify_paths(
     Ok(())
 }
 
+fn can_read_canister_metadata(
+    user: &UserId,
+    canister_id: &CanisterId,
+    custom_section_name: &str,
+    state: &ReplicatedState,
+) -> Result<(), CanonicalError> {
+    let canister = state
+        .canister_states
+        .get(canister_id)
+        .ok_or_else(|| not_found_error("Invalid path requested."))?;
+
+    match &canister.execution_state {
+        Some(execution_state) => {
+            let custom_section = execution_state
+                .metadata
+                .get_custom_section(custom_section_name)
+                .ok_or_else(|| not_found_error("Invalid path requested."))?;
+
+            // Only the controller can request this custom section.
+            if custom_section.visibility == CustomSectionType::Private
+                && !canister.system_state.controllers.contains(&user.get())
+            {
+                return Err(permission_denied_error(&format!(
+                    "Custom section {} can only be requested by the controllers of the canister.",
+                    custom_section_name
+                )));
+            }
+        }
+        None => return Err(not_found_error("Invalid path requested.")),
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use crate::common::test::{array, assert_cbor_ser_equal, bytes, int};
+    use crate::read_state::can_read_canister_metadata;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree};
+    use ic_registry_subnet_type::SubnetType;
+    use ic_replicated_state::ReplicatedState;
+    use ic_test_utilities::state::insert_dummy_canister;
+    use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id, user_test_id};
+    use ic_types::canonical_error::{not_found_error, permission_denied_error};
 
     #[test]
     fn encoding_read_state_tree_empty() {
@@ -301,6 +360,63 @@ mod test {
                 ]),
                 array(vec![int(3), bytes(&[4, 5, 6])]),
             ]),
+        );
+    }
+
+    #[test]
+    fn user_can_read_canister_metadata() {
+        let canister_id = canister_test_id(100);
+        let controller = user_test_id(24);
+        let non_controller = user_test_id(20);
+
+        let mut state = ReplicatedState::new_rooted_at(
+            subnet_test_id(1),
+            SubnetType::Application,
+            "Initial".into(),
+        );
+        insert_dummy_canister(&mut state, canister_id, controller.get());
+
+        let public_name = "dummy";
+        // Controller can read the public custom section
+        assert!(can_read_canister_metadata(&controller, &canister_id, public_name, &state).is_ok());
+
+        // Non-controller can read public custom section
+        assert!(
+            can_read_canister_metadata(&non_controller, &canister_id, public_name, &state).is_ok()
+        );
+
+        let private_name = "candid";
+        // Controller can read private custom section
+        assert!(
+            can_read_canister_metadata(&controller, &canister_id, private_name, &state).is_ok()
+        );
+    }
+
+    #[test]
+    fn user_cannot_read_canister_metadata() {
+        let canister_id = canister_test_id(100);
+        let controller = user_test_id(24);
+        let non_controller = user_test_id(20);
+
+        let mut state = ReplicatedState::new_rooted_at(
+            subnet_test_id(1),
+            SubnetType::Application,
+            "Initial".into(),
+        );
+        insert_dummy_canister(&mut state, canister_id, controller.get());
+
+        // Non-controller cannot read private custom section named `candid`.
+        assert_eq!(
+            can_read_canister_metadata(&non_controller, &canister_id, "candid", &state),
+            Err(permission_denied_error(
+                "Custom section candid can only be requested by the controllers of the canister."
+            ))
+        );
+
+        // Non existent public custom section.
+        assert_eq!(
+            can_read_canister_metadata(&non_controller, &canister_id, "unknown-name", &state),
+            Err(not_found_error("Invalid path requested."))
         );
     }
 }

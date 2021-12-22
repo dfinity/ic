@@ -53,7 +53,7 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::{
-            execution_state::{WasmBinary, WasmMetadata},
+            execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
             ExecutionState, ExportedFunctions, Global, NumWasmPages,
         },
         metadata_state::SubnetTopology,
@@ -237,6 +237,22 @@ mod tests {
         let wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(vec![]));
         let wasm_binary_hash = wasm_binary.binary.hash_sha256();
         let wasm_memory = Memory::new(PageMap::default(), NumWasmPages::from(2));
+
+        let metadata = btreemap! {
+            String::from("dummy1") => CustomSection {
+                visibility: CustomSectionType::Private,
+                content: vec![0, 2],
+            },
+            String::from("dummy2") => CustomSection {
+                visibility: CustomSectionType::Public,
+                content: vec![2, 1],
+            },
+            String::from("dummy3") => CustomSection {
+                visibility: CustomSectionType::Public,
+                content: vec![8, 9],
+            },
+        };
+
         let execution_state = ExecutionState {
             canister_root: "NOT_USED".into(),
             session_nonce: None,
@@ -245,7 +261,7 @@ mod tests {
             stable_memory: Memory::default(),
             exported_globals: vec![Global::I32(1)],
             exports: ExportedFunctions::new(BTreeSet::new()),
-            metadata: WasmMetadata::default(),
+            metadata: WasmMetadata::new(metadata),
             last_executed_round: ExecutionRound::from(0),
             cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(tmpdir.path().into())),
             mapped_state: None,
@@ -307,7 +323,57 @@ mod tests {
                 edge("controller"),
                 E::VisitBlob(controller.get().to_vec()),
                 edge("controllers"),
+                E::VisitBlob(controllers_cbor.clone()),
+                edge("module_hash"),
+                E::VisitBlob(wasm_binary_hash.to_vec()),
+                E::EndSubtree, // canister
+                E::EndSubtree, // canisters
+                edge("metadata"),
+                E::VisitBlob(encode_metadata(SystemMetadata {
+                    id_counter: 0,
+                    prev_state_hash: None
+                })),
+                edge("request_status"),
+                E::StartSubtree,
+                E::EndSubtree, // request_status
+                edge("streams"),
+                E::StartSubtree,
+                E::EndSubtree, // streams
+                edge("subnet"),
+                E::StartSubtree,
+                E::EndSubtree, // subnets
+                edge("time"),
+                leb_num(0),
+                E::EndSubtree, //global
+            ],
+            traverse(&state, visitor).0
+        );
+
+        // Test new certification version.
+        state.metadata.certification_version = 6;
+        let visitor = TracingVisitor::new(NoopVisitor);
+        assert_eq!(
+            vec![
+                E::StartSubtree,
+                edge("canister"),
+                E::StartSubtree,
+                E::EnterEdge(canister_id.get().into_vec()),
+                E::StartSubtree,
+                edge("certified_data"),
+                E::VisitBlob(vec![]),
+                edge("controller"),
+                E::VisitBlob(controller.get().to_vec()),
+                edge("controllers"),
                 E::VisitBlob(controllers_cbor),
+                edge("metadata"),
+                E::StartSubtree,
+                edge("dummy1"),
+                E::VisitBlob(vec![0, 2]),
+                edge("dummy2"),
+                E::VisitBlob(vec![2, 1]),
+                edge("dummy3"),
+                E::VisitBlob(vec![8, 9]),
+                E::EndSubtree, // metadata
                 edge("module_hash"),
                 E::VisitBlob(wasm_binary_hash.to_vec()),
                 E::EndSubtree, // canister
