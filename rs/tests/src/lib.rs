@@ -12,6 +12,7 @@ pub mod nns_fault_tolerance_test;
 pub mod nns_follow_test;
 pub mod nns_uninstall_code_proposal_test;
 pub mod nns_voting_test;
+pub mod node_assign_test;
 pub mod node_removal_test;
 pub mod node_restart_test;
 pub mod registry_authentication_test;
