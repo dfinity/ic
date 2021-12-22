@@ -24,7 +24,7 @@ Suggested success criteria (Queries):
 Maximum number of queries not be below yyy queries per second with less than 20% failure and a maximum latency of 5000ms
 
 Suggested success criteria (Updates):
-Maximum number of queries not be below xxx queries per second with less than 20% failure and a maximum latency of 10000ms
+Maximum number of updates not be below xxx updates per second with less than 20% failure and a maximum latency of 10000ms
 """
 import codecs
 import json
@@ -38,7 +38,7 @@ FLAGS = gflags.FLAGS
 gflags.DEFINE_bool("use_updates", False, "Issue update calls instead of query calls")
 
 PAYLOAD_SIZE = 5000000
-INITIAL_RPS = 150
+INITIAL_RPS = 20
 CANISTER = "memory-test-canister.wasm"
 
 
@@ -64,7 +64,7 @@ class Experiment2(experiment.Experiment):
     def run_experiment_internal(self, config):
         """Run workload generator with the load specified in config."""
         duration = config["duration"] if "duration" in config else 300
-        load = config["rps_total"]
+        load = config["load_total"]
         t_start = int(time.time())
         r = self.run_workload_generator(
             self.machines,
@@ -72,8 +72,8 @@ class Experiment2(experiment.Experiment):
             load,
             outdir=self.iter_outdir,
             payload=codecs.encode(json.dumps({"size": config["payload_size"]}).encode("utf-8"), "hex"),
-            method="Query",
-            call_method="query_copy",
+            method="Update" if self.use_updates else "Query",
+            call_method="update_copy" if self.use_updates else "query_copy",
             duration=duration,
         )
         self.last_duration = int(time.time()) - t_start
@@ -90,7 +90,7 @@ if __name__ == "__main__":
     exp.start_experiment()
     exp.run_experiment(
         {
-            "rps_total": INITIAL_RPS,
+            "load_total": INITIAL_RPS,
             "payload_size": PAYLOAD_SIZE,
             "duration": 60,
         }

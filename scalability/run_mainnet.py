@@ -102,7 +102,7 @@ class Mainnet:
             subnet_prefix,
             "--num_workload_generators",
             str(4),
-            "--initial_rps",
+            "--query_initial_rps",
             str(500),
             "--max_query_load",
             str(500),

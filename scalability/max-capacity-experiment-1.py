@@ -7,7 +7,7 @@ import run_experiment_1
 FLAGS = gflags.FLAGS
 
 # Flags for query mode
-gflags.DEFINE_integer("initial_rps", 100, "Start rps and increment in query mode.")
+gflags.DEFINE_integer("query_initial_rps", 100, "Start rps and increment in query mode.")
 gflags.DEFINE_integer("max_query_load", 40000, "Maximum query load in queries per second to issue.")
 gflags.DEFINE_integer("target_query_load", 2700, "Target query load in queries per second to issue.")
 gflags.DEFINE_integer("query_rps_increment", 50, "Increment of requests per second per round for queries.")
@@ -49,7 +49,7 @@ if __name__ == "__main__":
         )
         if FLAGS.use_updates
         else misc.get_datapoints(
-            FLAGS.target_query_load, FLAGS.initial_rps, FLAGS.max_query_load, FLAGS.query_rps_increment, 1.5
+            FLAGS.target_query_load, FLAGS.query_initial_rps, FLAGS.max_query_load, FLAGS.query_rps_increment, 1.5
         )
     )
     exp = run_experiment_1.Experiment1()
