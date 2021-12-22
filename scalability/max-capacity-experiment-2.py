@@ -7,15 +7,15 @@ import run_experiment_2
 FLAGS = gflags.FLAGS
 
 # Flags for query mode
-gflags.DEFINE_integer("initial_rps", 100, "Start rps and increment in query mode.")
-gflags.DEFINE_integer("target_query_load", 450, "Target query load in queries per second to issue.")
-gflags.DEFINE_integer("max_query_load", 40000, "Maximum query load in queries per second to issue.")
-gflags.DEFINE_integer("query_rps_increment", 50, "Increment of requests per second per round for queries.")
+gflags.DEFINE_integer("query_initial_rps", 20, "Start rps and increment in query mode.")
+gflags.DEFINE_integer("target_query_load", 120, "Target query load in queries per second to issue.")
+gflags.DEFINE_integer("max_query_load", 1000, "Maximum query load in queries per second to issue.")
+gflags.DEFINE_integer("query_rps_increment", 5, "Increment of requests per second per round for queries.")
 
 # Flags for update mode
-gflags.DEFINE_integer("target_update_load", 130, "Target update load in queries per second to issue.")
-gflags.DEFINE_integer("update_initial_rps", 20, "Start rps and increment in update mode.")
-gflags.DEFINE_integer("max_update_load", 1000, "Maximum update load in queries per second to issue.")
+gflags.DEFINE_integer("update_initial_rps", 10, "Start rps and increment in update mode.")
+gflags.DEFINE_integer("target_update_load", 60, "Target update load in queries per second to issue.")
+gflags.DEFINE_integer("max_update_load", 500, "Maximum update load in queries per second to issue.")
 gflags.DEFINE_integer("update_rps_increment", 5, "Increment of requests per second per round for update calls.")
 
 # Duration in seconds for which to execute workload in each round.
@@ -60,9 +60,10 @@ if __name__ == "__main__":
         )
         if exp.use_updates
         else misc.get_datapoints(
-            FLAGS.target_query_load, FLAGS.initial_rps, FLAGS.max_query_load, FLAGS.query_rps_increment, 1.5
+            FLAGS.target_query_load, FLAGS.query_initial_rps, FLAGS.max_query_load, FLAGS.query_rps_increment, 1.5
         )
     )
+    print(datapoints)
 
     while run:
 
@@ -74,7 +75,7 @@ if __name__ == "__main__":
 
         failure_rate, t_median, _, _, _, _, num_succ, _ = exp.run_experiment(
             {
-                "rps_total": load_total,
+                "load_total": load_total,
                 "payload_size": FLAGS.payload_size,
                 "duration": FLAGS.iter_duration,
             }
