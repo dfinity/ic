@@ -6,6 +6,7 @@ members = [
   "base/server",
   "base/thread",
   "bitcoin/consensus",
+  "bitcoin/validation",
   "boundary_node/control_plane",
   "canister_client",
   "cycles_account_manager",
@@ -162,9 +163,7 @@ members = [
   "workload_generator",
 ]
 
-exclude = [
-  "universal_canister/impl",
-]
+exclude = ["universal_canister/impl"]
 
 [profile.release]
 # Add debug information to the release build (does NOT reduce the level of optimization!)
