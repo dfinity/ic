@@ -11,7 +11,7 @@ use ic_cow_state::CowMemoryManagerImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::{WasmBinary, WasmMetadata},
+        execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         testing::new_canister_queues_for_test,
         QUEUE_INDEX_NONE,
     },
@@ -390,6 +390,23 @@ pub fn initial_execution_state(p: Option<std::path::PathBuf>) -> ExecutionState 
         None => CowMemoryManagerImpl::open_readwrite_fake(),
     };
 
+    let mut metadata: BTreeMap<String, CustomSection> = BTreeMap::new();
+    metadata.insert(
+        String::from("candid"),
+        CustomSection {
+            visibility: CustomSectionType::Private,
+            content: vec![0, 2],
+        },
+    );
+    metadata.insert(
+        String::from("dummy"),
+        CustomSection {
+            visibility: CustomSectionType::Public,
+            content: vec![2, 1],
+        },
+    );
+    let wasm_metadata = WasmMetadata::new(metadata);
+
     ExecutionState {
         canister_root: "NOT_USED".into(),
         session_nonce: None,
@@ -398,7 +415,7 @@ pub fn initial_execution_state(p: Option<std::path::PathBuf>) -> ExecutionState 
         stable_memory: Memory::default(),
         exported_globals: vec![],
         exports: ExportedFunctions::new(BTreeSet::new()),
-        metadata: WasmMetadata::default(),
+        metadata: wasm_metadata,
         last_executed_round: ExecutionRound::from(0),
         cow_mem_mgr: Arc::new(cow_mem_mgr),
         mapped_state: None,
@@ -561,6 +578,25 @@ pub fn new_canister_state(
     let system_state =
         SystemState::new_running(canister_id, controller, initial_cycles, freeze_threshold);
     CanisterState::new(system_state, None, scheduler_state)
+}
+
+/// Helper function to insert a canister in the provided `ReplicatedState`.
+pub fn insert_dummy_canister(
+    state: &mut ReplicatedState,
+    canister_id: CanisterId,
+    controller: PrincipalId,
+) {
+    let wasm = BinaryEncodedWasm::new(vec![]);
+    let mut canister_state = new_canister_state(
+        canister_id,
+        controller,
+        INITIAL_CYCLES,
+        NumSeconds::from(100_000),
+    );
+    let mut execution_state = initial_execution_state(None);
+    execution_state.wasm_binary = WasmBinary::new(wasm);
+    canister_state.execution_state = Some(execution_state);
+    state.put_canister_state(canister_state);
 }
 
 prop_compose! {

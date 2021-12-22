@@ -14,7 +14,7 @@ use ic_replicated_state::{
     canister_state::CanisterState,
     metadata_state::{IngressHistoryState, StreamMap, SubnetTopology, SystemMetadata},
     replicated_state::ReplicatedStateMessageRouting,
-    ReplicatedState,
+    ExecutionState, ReplicatedState,
 };
 use ic_types::{
     ingress::{IngressStatus, WasmResult},
@@ -91,6 +91,16 @@ impl LabelLike for u64 {
         }
         let be_bytes: [u8; 8] = label.try_into().ok()?;
         Some(u64::from_be_bytes(be_bytes))
+    }
+}
+
+impl LabelLike for String {
+    fn to_label(&self) -> Label {
+        Label::from(self.as_bytes())
+    }
+
+    fn from_label(label: &[u8]) -> Option<Self> {
+        String::from_utf8(Vec::from(label)).ok()
     }
 }
 
@@ -214,7 +224,7 @@ fn state_as_tree(state: &ReplicatedState) -> LazyTree<'_> {
 
     fork(
         FiniteMap::default()
-            .with("metadata", move || metadata_as_tree(&state.metadata))
+            .with("metadata", move || system_metadata_as_tree(&state.metadata))
             .with("streams", move || {
                 streams_as_tree(state.streams(), certification_version)
             })
@@ -271,7 +281,7 @@ fn streams_as_tree(streams: &StreamMap, certification_version: u32) -> LazyTree<
     })
 }
 
-fn metadata_as_tree(m: &SystemMetadata) -> LazyTree<'_> {
+fn system_metadata_as_tree(m: &SystemMetadata) -> LazyTree<'_> {
     blob(move || encode_metadata(m))
 }
 
@@ -342,6 +352,11 @@ fn canisters_as_tree(
                         certification_version > 1,
                         "controllers",
                         blob(move || encode_controllers(&canister.system_state.controllers)),
+                    )
+                    .with_tree_if(
+                        certification_version > 5,
+                        "metadata",
+                        canister_metadata_as_tree(execution_state, certification_version),
                     ),
             ),
             None => fork(
@@ -387,5 +402,16 @@ fn subnets_as_tree(
                     ),
             )
         },
+    })
+}
+
+fn canister_metadata_as_tree(
+    execution_state: &ExecutionState,
+    certification_version: u32,
+) -> LazyTree<'_> {
+    fork(MapTransformFork {
+        map: execution_state.metadata.custom_sections(),
+        certification_version,
+        mk_tree: |_name, section, _version| Blob(section.content.as_slice()),
     })
 }

@@ -524,8 +524,14 @@ impl WasmMetadata {
         }
     }
 
+    /// Get the custom sections exported by the Wasm module.
     pub fn custom_sections(&self) -> &BTreeMap<String, CustomSection> {
         &self.custom_sections
+    }
+
+    /// Returns the custom section associated with the provided name.
+    pub fn get_custom_section(&self, custom_section_name: &str) -> Option<&CustomSection> {
+        self.custom_sections.get(custom_section_name)
     }
 }
 
