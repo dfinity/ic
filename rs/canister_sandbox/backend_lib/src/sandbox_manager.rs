@@ -168,7 +168,10 @@ impl Execution {
                 instance_stats,
             },
             deltas,
-            _system_state_accessor,
+            // This field isn't used, but we want to ensure that it is not
+            // dropped until the execution result is send back to the replica
+            // because the drop can be expensive.
+            _instance_or_system_api,
         ) = ic_embedders::wasm_executor::process(
             exec_input.func_ref,
             exec_input.api_type,
