@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
-use ic_replicated_state::{ExportedFunctions, Memory, NumWasmPages, PageMap};
+use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
+use ic_system_api::{ApiType, StaticSystemState, SystemStateAccessor, SystemStateAccessorDirect};
+use ic_types::methods::FuncRef;
 use prometheus::{Histogram, IntCounter};
 
 use crate::{
@@ -12,18 +14,15 @@ use crate::{
 };
 use ic_config::{embedders::Config as EmbeddersConfig, embedders::PersistenceType};
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, InstanceStats, SystemApi,
+    ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats, SystemApi,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
-use ic_system_api::{
-    system_api_empty::SystemApiEmpty, ModificationTracking, StaticSystemState, SystemApiImpl,
-    SystemStateAccessorDirect,
-};
-use ic_types::{CanisterId, NumInstructions};
+use ic_system_api::{system_api_empty::SystemApiEmpty, ModificationTracking, SystemApiImpl};
+use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
 struct WasmExecutorMetrics {
@@ -178,120 +177,60 @@ impl WasmExecutor {
         &self,
         WasmExecutionInput {
             api_type,
-            system_state,
+            static_system_state,
             canister_current_memory_usage,
             execution_parameters,
             func_ref,
             mut execution_state,
-            cycles_account_manager,
+            system_state_accessor,
         }: WasmExecutionInput,
-    ) -> WasmExecutionOutput {
+    ) -> (
+        WasmExecutionOutput,
+        ExecutionState,
+        SystemStateAccessorDirect,
+    ) {
         // Ensure that Wasm is compiled.
         let embedder_cache = match self.get_embedder_cache(&execution_state.wasm_binary) {
             Ok(embedder_cache) => embedder_cache,
             Err(err) => {
-                return WasmExecutionOutput {
-                    wasm_result: Err(err),
-                    num_instructions_left: NumInstructions::from(0),
-                    system_state,
-                    execution_state,
-                    instance_stats: InstanceStats {
-                        accessed_pages: 0,
-                        dirty_pages: 0,
+                return (
+                    WasmExecutionOutput {
+                        wasm_result: Err(err),
+                        num_instructions_left: NumInstructions::from(0),
+                        instance_stats: InstanceStats {
+                            accessed_pages: 0,
+                            dirty_pages: 0,
+                        },
                     },
-                };
+                    execution_state,
+                    system_state_accessor,
+                )
             }
         };
-
-        let static_system_state =
-            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
-        let canister_id = system_state.canister_id;
-        let system_state_accessor =
-            SystemStateAccessorDirect::new(system_state, cycles_account_manager);
-
-        let modification_tracking = api_type.modification_tracking();
-
-        let instruction_limit = execution_parameters.instruction_limit;
-        let system_api = SystemApiImpl::new(
+        let (wasm_execution_output, deltas, system_state_accessor) = process(
+            func_ref,
             api_type,
-            system_state_accessor,
-            static_system_state,
             canister_current_memory_usage,
             execution_parameters,
-            execution_state.stable_memory.clone(),
+            static_system_state,
+            system_state_accessor,
+            &embedder_cache,
+            &self.wasm_embedder,
+            &mut execution_state.wasm_memory,
+            &mut execution_state.stable_memory,
+            &execution_state.exported_globals,
             self.log.clone(),
         );
 
-        let mut instance = match self.wasm_embedder.new_instance(
-            canister_id,
-            &embedder_cache,
-            &execution_state.exported_globals,
-            execution_state.wasm_memory.size,
-            None,
-            Some(execution_state.wasm_memory.page_map.clone()),
-            modification_tracking,
-            system_api,
-        ) {
-            Ok(instance) => instance,
-            Err((err, system_api)) => {
-                return WasmExecutionOutput {
-                    wasm_result: Err(err),
-                    num_instructions_left: NumInstructions::from(0),
-                    system_state: system_api
-                        .release_system_state_accessor()
-                        .release_system_state(),
-                    execution_state,
-                    instance_stats: InstanceStats {
-                        accessed_pages: 0,
-                        dirty_pages: 0,
-                    },
-                };
-            }
-        };
-
-        let (execution_result, available_num_instructions, system_state, instance_stats) = {
-            instance.set_num_instructions(instruction_limit);
-            let run_result = instance.run(func_ref);
-            match run_result {
-                Ok(run_result) => {
-                    if modification_tracking == ModificationTracking::Track {
-                        let page_delta = compute_page_delta(&mut instance, &run_result.dirty_pages);
-                        execution_state.wasm_memory.page_map.update(&page_delta);
-                        execution_state.wasm_memory.size = instance.heap_size();
-                        execution_state.stable_memory.page_map.update(
-                            &run_result
-                                .stable_memory_dirty_pages
-                                .iter()
-                                .map(|(i, p)| (*i, p))
-                                .collect::<Vec<_>>(),
-                        );
-                        execution_state.stable_memory.size = run_result.stable_memory_size;
-                        execution_state.exported_globals = run_result.exported_globals;
-                    }
-                }
-                Err(err) => {
-                    instance
-                        .store_data_mut()
-                        .system_api
-                        .set_execution_error(err);
-                }
-            };
-            let num_instructions = instance.get_num_instructions();
-            let stats = instance.get_stats();
-            let mut system_api = instance.into_store_data().system_api;
-            let execution_result = system_api.take_execution_result();
-            let system_state_accessor = system_api.release_system_state_accessor();
-            let system_state = system_state_accessor.release_system_state();
-            (execution_result, num_instructions, system_state, stats)
-        };
-
-        WasmExecutionOutput {
-            wasm_result: execution_result,
-            num_instructions_left: available_num_instructions,
-            system_state,
-            execution_state,
-            instance_stats,
+        if let Some((_, new_globals)) = deltas {
+            execution_state.exported_globals = new_globals;
         }
+
+        (
+            wasm_execution_output,
+            execution_state,
+            system_state_accessor,
+        )
     }
 
     pub fn create_execution_state(
@@ -391,4 +330,131 @@ pub fn compute_page_delta<'a, S: SystemApi>(
         pages.push((*page_index, page_ref));
     }
     pages
+}
+
+pub struct DirtyPageIndices {
+    pub wasm_memory_delta: Vec<PageIndex>,
+    pub stable_memory_delta: Vec<PageIndex>,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn process<A: SystemStateAccessor>(
+    func_ref: FuncRef,
+    api_type: ApiType,
+    canister_current_memory_usage: NumBytes,
+    execution_parameters: ExecutionParameters,
+    static_system_state: StaticSystemState,
+    system_state_accessor: A,
+    embedder_cache: &EmbedderCache,
+    embedder: &WasmtimeEmbedder,
+    wasm_memory: &mut Memory,
+    stable_memory: &mut Memory,
+    globals: &[Global],
+    logger: ReplicaLogger,
+) -> (
+    WasmExecutionOutput,
+    Option<(DirtyPageIndices, Vec<Global>)>,
+    A,
+) {
+    let instruction_limit = execution_parameters.instruction_limit;
+    let canister_id = static_system_state.canister_id();
+    let modification_tracking = api_type.modification_tracking();
+    let system_api = SystemApiImpl::new(
+        api_type,
+        system_state_accessor,
+        static_system_state,
+        canister_current_memory_usage,
+        execution_parameters,
+        stable_memory.clone(),
+        logger,
+    );
+
+    let mut instance = match embedder.new_instance(
+        canister_id,
+        embedder_cache,
+        globals,
+        wasm_memory.size,
+        None,
+        Some(wasm_memory.page_map.clone()),
+        modification_tracking,
+        system_api,
+    ) {
+        Ok(instance) => instance,
+        Err((err, system_api)) => {
+            return (
+                WasmExecutionOutput {
+                    wasm_result: Err(err),
+                    num_instructions_left: NumInstructions::from(0),
+                    instance_stats: InstanceStats {
+                        accessed_pages: 0,
+                        dirty_pages: 0,
+                    },
+                },
+                None,
+                system_api.release_system_state_accessor(),
+            );
+        }
+    };
+    instance.set_num_instructions(instruction_limit);
+    let run_result = instance.run(func_ref);
+
+    let num_instructions_left = instance.get_num_instructions();
+    let instance_stats = instance.get_stats();
+
+    if let Err(err) = &run_result {
+        instance
+            .store_data_mut()
+            .system_api
+            .set_execution_error(err.clone());
+    }
+
+    // Has the side effect up deallocating memory if message failed.
+    let wasm_result = instance.store_data_mut().system_api.take_execution_result();
+
+    let memory_deltas = match run_result {
+        Ok(run_result) => {
+            match modification_tracking {
+                ModificationTracking::Track => {
+                    // Update the Wasm memory and serialize the delta.
+                    let wasm_memory_delta = wasm_memory
+                        .page_map
+                        .update(&compute_page_delta(&mut instance, &run_result.dirty_pages));
+                    wasm_memory.size = instance.heap_size();
+
+                    // Update the stable memory and serialize the delta.
+                    let stable_memory_delta = stable_memory.page_map.update(
+                        &instance
+                            .store_data_mut()
+                            .system_api
+                            .stable_memory_dirty_pages(),
+                    );
+                    stable_memory.size = run_result.stable_memory_size;
+
+                    Some((
+                        DirtyPageIndices {
+                            wasm_memory_delta,
+                            stable_memory_delta,
+                        },
+                        run_result.exported_globals,
+                    ))
+                }
+                ModificationTracking::Ignore => None,
+            }
+        }
+        Err(_) => None,
+    };
+
+    let system_state_accessor = instance
+        .into_store_data()
+        .system_api
+        .release_system_state_accessor();
+    (
+        WasmExecutionOutput {
+            wasm_result,
+            num_instructions_left,
+            instance_stats,
+        },
+        memory_deltas,
+        system_state_accessor,
+    )
 }

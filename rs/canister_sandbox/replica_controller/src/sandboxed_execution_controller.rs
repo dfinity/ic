@@ -1,6 +1,7 @@
 use ic_canister_sandbox_common::protocol;
 use ic_canister_sandbox_common::protocol::id::{MemoryId, WasmId};
 use ic_canister_sandbox_common::protocol::sbxsvc::MemorySerialization;
+use ic_canister_sandbox_common::protocol::structs::SandboxExecInput;
 use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_embedders::{WasmExecutionInput, WasmExecutionOutput};
 use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats};
@@ -9,7 +10,7 @@ use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
 };
 use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
-use ic_system_api::{StaticSystemState, SystemStateAccessorDirect};
+use ic_system_api::SystemStateAccessorDirect;
 use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 use std::collections::HashMap;
@@ -181,16 +182,20 @@ impl SandboxedExecutionController {
         &self,
         WasmExecutionInput {
             api_type,
-            system_state,
+            static_system_state,
             canister_current_memory_usage,
             execution_parameters,
             func_ref,
             mut execution_state,
-            cycles_account_manager,
+            system_state_accessor,
         }: WasmExecutionInput,
-    ) -> WasmExecutionOutput {
+    ) -> (
+        WasmExecutionOutput,
+        ExecutionState,
+        SystemStateAccessorDirect,
+    ) {
         // Determine which process we want to run this on.
-        let sandbox_process = self.get_sandbox_process(&system_state.canister_id());
+        let sandbox_process = self.get_sandbox_process(&static_system_state.canister_id());
 
         // Ensure that Wasm is compiled.
         let (wasm_id, compile_count) = match open_wasm(
@@ -199,16 +204,18 @@ impl SandboxedExecutionController {
         ) {
             Ok((wasm_id, compile_count)) => (wasm_id, compile_count),
             Err(err) => {
-                return WasmExecutionOutput {
-                    wasm_result: Err(err),
-                    num_instructions_left: NumInstructions::from(0),
-                    system_state,
-                    execution_state,
-                    instance_stats: InstanceStats {
-                        accessed_pages: 0,
-                        dirty_pages: 0,
+                return (
+                    WasmExecutionOutput {
+                        wasm_result: Err(err),
+                        num_instructions_left: NumInstructions::from(0),
+                        instance_stats: InstanceStats {
+                            accessed_pages: 0,
+                            dirty_pages: 0,
+                        },
                     },
-                };
+                    execution_state,
+                    system_state_accessor,
+                );
             }
         };
 
@@ -220,16 +227,13 @@ impl SandboxedExecutionController {
         // Create channel through which we will receive the execution
         // output from closure (running by IPC thread at end of
         // execution).
-        let (tx, rx) = std::sync::mpsc::sync_channel::<Option<protocol::structs::ExecOutput>>(1);
-
-        let static_system_state =
-            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
 
         // Generate an ID for this execution, register it. We need to
         // pass the system state accessor as well as the completion
         // function that gets our result back in the end.
         let exec_id = sandbox_process.execution_states.register_execution(
-            SystemStateAccessorDirect::new(system_state, cycles_account_manager),
+            system_state_accessor,
             move |_id, exec_output| {
                 tx.send(exec_output).unwrap();
             },
@@ -259,7 +263,7 @@ impl SandboxedExecutionController {
                 wasm_id,
                 wasm_memory_id,
                 stable_memory_id,
-                exec_input: protocol::structs::ExecInput {
+                exec_input: SandboxExecInput {
                     func_ref,
                     api_type,
                     globals: execution_state.exported_globals.clone(),
@@ -273,7 +277,7 @@ impl SandboxedExecutionController {
             .on_completion(|_| {});
 
         // Wait for completion.
-        let exec_output = rx.recv().unwrap().unwrap();
+        let (exec_output, state_modifications) = rx.recv().unwrap().unwrap();
 
         // Release all resources on the sandbox process (compiled wasm is
         // left cached).
@@ -282,16 +286,15 @@ impl SandboxedExecutionController {
             .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id })
             .on_completion(|_| {});
 
-        // Release the system state (we need to return it to the caller).
-        let system_state = sandbox_process
+        // Release the system state accessor (we need to return it to the caller).
+        let system_state_accessor = sandbox_process
             .execution_states
             .unregister_execution(exec_id)
-            .unwrap()
-            .release_system_state();
+            .unwrap();
 
         // Unless execution trapped, commit state.
         if exec_output.wasm_result.is_ok() {
-            if let Some(state_modifications) = exec_output.state_modifications {
+            if let Some(state_modifications) = state_modifications {
                 // TODO: If a canister has broken out of wasm then it might have allocated more
                 // wasm or stable memory then allowed. We should add an additional check here
                 // that thet canister is still within it's allowed memory usage.
@@ -324,13 +327,7 @@ impl SandboxedExecutionController {
             }
         }
 
-        WasmExecutionOutput {
-            wasm_result: exec_output.wasm_result,
-            num_instructions_left: exec_output.num_instructions_left,
-            system_state,
-            execution_state,
-            instance_stats: exec_output.instance_stats,
-        }
+        (exec_output, execution_state, system_state_accessor)
     }
 
     pub fn create_execution_state(

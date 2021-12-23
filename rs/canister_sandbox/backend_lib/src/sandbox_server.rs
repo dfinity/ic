@@ -102,7 +102,7 @@ mod tests {
         protocol::{
             self,
             id::{ExecId, MemoryId, WasmId},
-            structs::ExecInput,
+            structs::SandboxExecInput,
         },
     };
     use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
@@ -163,8 +163,8 @@ mod tests {
         globals: Vec<Global>,
         next_wasm_memory_id: MemoryId,
         next_stable_memory_id: MemoryId,
-    ) -> ExecInput {
-        protocol::structs::ExecInput {
+    ) -> SandboxExecInput {
+        SandboxExecInput {
             func_ref: FuncRef::Method(WasmMethod::Update(method_name.to_string())),
             api_type: ApiType::update(
                 Time::from_nanos_since_unix_epoch(0),
@@ -191,8 +191,8 @@ mod tests {
         method_name: &str,
         incoming_payload: &[u8],
         globals: Vec<Global>,
-    ) -> ExecInput {
-        protocol::structs::ExecInput {
+    ) -> SandboxExecInput {
+        SandboxExecInput {
             func_ref: FuncRef::Method(WasmMethod::Query(method_name.to_string())),
             api_type: ApiType::replicated_query(
                 Time::from_nanos_since_unix_epoch(0),
@@ -476,7 +476,7 @@ mod tests {
         let result = exec_finished_sync.get();
         assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let globals = result.exec_output.state_modifications.unwrap().globals;
+        let globals = result.state_modifications.unwrap().globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
 
         let rep = srv
@@ -559,7 +559,7 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let state_modifications = result.exec_output.state_modifications.unwrap();
+        let state_modifications = result.state_modifications.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
         wasm_memory.deserialize_delta(state_modifications.wasm_memory.page_delta);
@@ -691,7 +691,7 @@ mod tests {
         let result = exec_finished_sync.get();
         assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let globals = result.exec_output.state_modifications.unwrap().globals;
+        let globals = result.state_modifications.unwrap().globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
         assert_eq!([Global::I32(1), Global::I64(988)].to_vec(), globals);
 
@@ -734,7 +734,7 @@ mod tests {
         let result = exec_finished_sync.get();
         assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let globals = result.exec_output.state_modifications.unwrap().globals;
+        let globals = result.state_modifications.unwrap().globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
 
         let rep = srv
@@ -817,7 +817,7 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let state_modifications = result.exec_output.state_modifications.unwrap();
+        let state_modifications = result.state_modifications.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
         stable_memory.deserialize_delta(state_modifications.stable_memory.page_delta);
@@ -937,7 +937,7 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let state_modifications = result.exec_output.state_modifications.unwrap();
+        let state_modifications = result.state_modifications.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
         wasm_memory.deserialize_delta(state_modifications.wasm_memory.page_delta);
@@ -974,7 +974,7 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let state_modifications = result.exec_output.state_modifications.unwrap();
+        let state_modifications = result.state_modifications.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
         wasm_memory.deserialize_delta(state_modifications.wasm_memory.page_delta);
@@ -1046,7 +1046,7 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let state_modifications = result.exec_output.state_modifications.unwrap();
+        let state_modifications = result.state_modifications.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
         stable_memory.deserialize_delta(state_modifications.stable_memory.page_delta);
@@ -1083,7 +1083,7 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let state_modifications = result.exec_output.state_modifications.unwrap();
+        let state_modifications = result.state_modifications.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
         stable_memory.deserialize_delta(state_modifications.stable_memory.page_delta);
