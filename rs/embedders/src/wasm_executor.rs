@@ -207,7 +207,7 @@ impl WasmExecutor {
                 )
             }
         };
-        let (wasm_execution_output, deltas, system_state_accessor) = process(
+        let (wasm_execution_output, deltas, instance_or_system_api) = process(
             func_ref,
             api_type,
             canister_current_memory_usage,
@@ -225,6 +225,12 @@ impl WasmExecutor {
         if let Some((_, new_globals)) = deltas {
             execution_state.exported_globals = new_globals;
         }
+
+        let system_state_accessor = match instance_or_system_api {
+            Ok(instance) => instance.into_store_data().system_api,
+            Err(system_api) => system_api,
+        }
+        .release_system_state_accessor();
 
         (
             wasm_execution_output,
@@ -338,6 +344,7 @@ pub struct DirtyPageIndices {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::type_complexity)]
 pub fn process<A: SystemStateAccessor>(
     func_ref: FuncRef,
     api_type: ApiType,
@@ -354,7 +361,7 @@ pub fn process<A: SystemStateAccessor>(
 ) -> (
     WasmExecutionOutput,
     Option<(DirtyPageIndices, Vec<Global>)>,
-    A,
+    Result<WasmtimeInstance<SystemApiImpl<A>>, SystemApiImpl<A>>,
 ) {
     let instruction_limit = execution_parameters.instruction_limit;
     let canister_id = static_system_state.canister_id();
@@ -391,7 +398,7 @@ pub fn process<A: SystemStateAccessor>(
                     },
                 },
                 None,
-                system_api.release_system_state_accessor(),
+                Err(system_api),
             );
         }
     };
@@ -401,15 +408,12 @@ pub fn process<A: SystemStateAccessor>(
     let num_instructions_left = instance.get_num_instructions();
     let instance_stats = instance.get_stats();
 
-    if let Err(err) = &run_result {
-        instance
-            .store_data_mut()
-            .system_api
-            .set_execution_error(err.clone());
-    }
-
-    // Has the side effect up deallocating memory if message failed.
-    let wasm_result = instance.store_data_mut().system_api.take_execution_result();
+    // Has the side effect up deallocating memory if message failed and
+    // returning cycles from a request that wasn't sent.
+    let wasm_result = instance
+        .store_data_mut()
+        .system_api
+        .take_execution_result(run_result.as_ref().err());
 
     let memory_deltas = match run_result {
         Ok(run_result) => {
@@ -444,10 +448,6 @@ pub fn process<A: SystemStateAccessor>(
         Err(_) => None,
     };
 
-    let system_state_accessor = instance
-        .into_store_data()
-        .system_api
-        .release_system_state_accessor();
     (
         WasmExecutionOutput {
             wasm_result,
@@ -455,6 +455,6 @@ pub fn process<A: SystemStateAccessor>(
             instance_stats,
         },
         memory_deltas,
-        system_state_accessor,
+        Ok(instance),
     )
 }

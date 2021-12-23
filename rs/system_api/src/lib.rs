@@ -704,8 +704,42 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
         }
     }
 
-    pub fn take_execution_result(&mut self) -> HypervisorResult<Option<WasmResult>> {
-        if let Some(err) = self.execution_error.take() {
+    /// Gets the result of execution, assuming there is no error from
+    /// running the canister. Returns any cycles used for an outgoing request
+    /// that doesn't get sent and returns allocated memory to the subnet if the
+    /// there is an error from running the canister.
+    pub fn take_execution_result(
+        &mut self,
+        wasm_run_error: Option<&HypervisorError>,
+    ) -> HypervisorResult<Option<WasmResult>> {
+        match &mut self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::Heartbeat { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. }
+            | ApiType::NonReplicatedQuery { .. } => (),
+            ApiType::Update {
+                outgoing_request, ..
+            }
+            | ApiType::ReplyCallback {
+                outgoing_request, ..
+            }
+            | ApiType::RejectCallback {
+                outgoing_request, ..
+            } => {
+                if let Some(outgoing_request) = outgoing_request.take() {
+                    self.system_state_accessor
+                        .canister_cycles_refund(outgoing_request.take_cycles());
+                }
+            }
+        }
+        if let Some(err) = wasm_run_error
+            .cloned()
+            .or_else(|| self.execution_error.take())
+        {
             // Return allocated memory in case of failed message execution.
             self.memory_usage
                 .deallocate_memory(self.memory_usage.allocated_memory);
@@ -966,31 +1000,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
         }
     }
 
-    pub fn release_system_state_accessor(mut self) -> A {
-        match &mut self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. }
-            | ApiType::NonReplicatedQuery { .. } => (),
-            ApiType::Update {
-                outgoing_request, ..
-            }
-            | ApiType::ReplyCallback {
-                outgoing_request, ..
-            }
-            | ApiType::RejectCallback {
-                outgoing_request, ..
-            } => {
-                if let Some(outgoing_request) = outgoing_request.take() {
-                    self.system_state_accessor
-                        .canister_cycles_refund(outgoing_request.take_cycles());
-                }
-            }
-        }
+    pub fn release_system_state_accessor(self) -> A {
         self.system_state_accessor
     }
 
