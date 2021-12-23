@@ -55,17 +55,29 @@ lazy_static! {
         SubnetAvailableMemory::new(i64::MAX / 2);
 }
 
-fn execution_parameters(
+fn execution_parameters_with_unique_subnet_available_memory(
     canister: &CanisterState,
     instruction_limit: NumInstructions,
+    subnet_available_memory: SubnetAvailableMemory,
 ) -> ExecutionParameters {
     ExecutionParameters {
         instruction_limit,
         canister_memory_limit: canister.memory_limit(NumBytes::new(u64::MAX / 2)),
-        subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        subnet_available_memory,
         compute_allocation: canister.scheduler_state.compute_allocation,
         subnet_type: SubnetType::Application,
     }
+}
+
+fn execution_parameters(
+    canister: &CanisterState,
+    instruction_limit: NumInstructions,
+) -> ExecutionParameters {
+    execution_parameters_with_unique_subnet_available_memory(
+        canister,
+        instruction_limit,
+        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+    )
 }
 
 fn test_func_ref() -> FuncRef {
@@ -198,6 +210,55 @@ fn execute_update(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn execute_update_with_cycles_memory_time_subnet_memory(
+    hypervisor: &Hypervisor,
+    wast: &str,
+    method: &str,
+    payload: Vec<u8>,
+    caller: Option<PrincipalId>,
+    instructions_limit: NumInstructions,
+    bytes: NumBytes,
+    time: Time,
+    canister_root: std::path::PathBuf,
+    nns_subnet_id: SubnetId,
+    subnet_available_memory: SubnetAvailableMemory,
+) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
+    let caller = caller.unwrap_or_else(|| user_test_id(24).get());
+
+    let wasm_binary = wabt::wat2wasm(wast).unwrap();
+    let canister_id = canister_test_id(42);
+    let execution_state = hypervisor
+        .create_execution_state(wasm_binary, canister_root, canister_id)
+        .unwrap();
+    let mut canister = canister_from_exec_state(execution_state, canister_id);
+    canister.system_state.memory_allocation = MemoryAllocation::try_from(bytes).unwrap();
+
+    let req = IngressBuilder::new()
+        .method_name(method.to_string())
+        .method_payload(payload)
+        .source(UserId::from(caller))
+        .build();
+
+    let (_, _, _, routing_table, subnet_records) = setup();
+    let execution_parameters = execution_parameters_with_unique_subnet_available_memory(
+        &canister,
+        instructions_limit,
+        subnet_available_memory,
+    );
+    let (canister, num_instructions_left, action, heap_delta) = hypervisor.execute_update(
+        canister,
+        RequestOrIngress::Ingress(req),
+        time,
+        routing_table,
+        subnet_records,
+        execution_parameters,
+        nns_subnet_id,
+    );
+
+    (canister, num_instructions_left, action, heap_delta)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn execute_update_with_cycles_memory_time(
     hypervisor: &Hypervisor,
     wast: &str,
@@ -315,6 +376,7 @@ fn execute(
                 func_ref,
                 execution_state,
             )
+            .0
             .wasm_result;
     });
     result
@@ -3208,6 +3270,79 @@ fn sys_api_call_update_available_memory_2() {
             CallContextAction::NoResponse {
                 refund: Cycles::from(0),
             },
+        );
+    });
+}
+
+#[test]
+// Verifies that subnet available memory decreases when execution succeeds.
+fn available_memory_is_updated() {
+    let available_memory = ic_replicated_state::num_bytes_try_from(NumWasmPages::from(9)).unwrap();
+    with_hypervisor(|hypervisor, tmp_path| {
+        let subnet_available_memory = SubnetAvailableMemory::new(1_000_000_000);
+        let initial_subnet_available_memory = subnet_available_memory.get();
+        let _ = execute_update_with_cycles_memory_time_subnet_memory(
+            &hypervisor,
+            r#"
+                (module
+                  (func (;0;)
+                    i32.const 1
+                    memory.grow ;; Try to grow by 1 wasm page
+                    drop
+                  )
+                  (memory (;0;) 1 20)
+                  (export "memory" (memory 0))
+                  (export "canister_update test" (func 0)))"#,
+            "test",
+            EMPTY_PAYLOAD,
+            None,
+            MAX_NUM_INSTRUCTIONS,
+            available_memory,
+            mock_time(),
+            tmp_path,
+            subnet_test_id(0x101), // NNS subnet != canister subnet
+            subnet_available_memory.clone(),
+        );
+        assert_eq!(
+            initial_subnet_available_memory - WASM_PAGE_SIZE as i64,
+            subnet_available_memory.get()
+        );
+    });
+}
+
+#[test]
+// Verifies that subnet available memory doesn't decrease when execution fails.
+fn available_memory_isnt_updated_from_failed_message() {
+    let available_memory = ic_replicated_state::num_bytes_try_from(NumWasmPages::from(9)).unwrap();
+    with_hypervisor(|hypervisor, tmp_path| {
+        let subnet_available_memory = SubnetAvailableMemory::new(1_000_000_000);
+        let initial_subnet_available_memory = subnet_available_memory.get();
+        let _ = execute_update_with_cycles_memory_time_subnet_memory(
+            &hypervisor,
+            r#"
+                (module
+                  (func (;0;)
+                    i32.const 1
+                    memory.grow ;; Try to grow by 1 wasm page
+                    drop
+                    unreachable
+                  )
+                  (memory (;0;) 1 20)
+                  (export "memory" (memory 0))
+                  (export "canister_update test" (func 0)))"#,
+            "test",
+            EMPTY_PAYLOAD,
+            None,
+            MAX_NUM_INSTRUCTIONS,
+            available_memory,
+            mock_time(),
+            tmp_path,
+            subnet_test_id(0x101), // NNS subnet != canister subnet
+            subnet_available_memory.clone(),
+        );
+        assert_eq!(
+            initial_subnet_available_memory,
+            subnet_available_memory.get()
         );
     });
 }

@@ -39,6 +39,7 @@ impl ControllerService for ControllerServiceImpl {
     ) -> rpc::Call<protocol::ctlsvc::ExecFinishedReply> {
         let exec_id = req.exec_id;
         let exec_output = req.exec_output;
+        let state_modifications = req.state_modifications;
         // Sandbox is telling us that execution has finished for this
         // ID. We will validate this ID by looking up the execution
         // state for this ID and extracting its closure. If the closure
@@ -60,7 +61,7 @@ impl ControllerService for ControllerServiceImpl {
                 Err(rpc::Error::ServerError)
             },
             |completion| {
-                completion(exec_id, Some(exec_output));
+                completion(exec_id, Some((exec_output, state_modifications)));
                 Ok(protocol::ctlsvc::ExecFinishedReply {})
             },
         );

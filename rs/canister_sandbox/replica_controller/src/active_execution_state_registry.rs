@@ -1,5 +1,6 @@
 use ic_canister_sandbox_common::protocol::id::ExecId;
-use ic_canister_sandbox_common::protocol::structs;
+use ic_canister_sandbox_common::protocol::structs::StateModifications;
+use ic_embedders::WasmExecutionOutput;
 /// Execution state registry for sandbox processes.
 ///
 /// This tracks the "active" executions on a sandbox process and
@@ -26,8 +27,12 @@ use ic_system_api::SystemStateAccessorDirect;
 use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
 
-type CompletionFunction =
-    Box<dyn FnOnce(ExecId, Option<structs::ExecOutput>) + Sync + Send + 'static>;
+type CompletionFunction = Box<
+    dyn FnOnce(ExecId, Option<(WasmExecutionOutput, Option<StateModifications>)>)
+        + Sync
+        + Send
+        + 'static,
+>;
 
 /// Represents an execution in progress on the sandbox process.
 ///
@@ -88,7 +93,10 @@ impl ActiveExecutionStateRegistry {
         completion: F,
     ) -> ExecId
     where
-        F: FnOnce(ExecId, Option<structs::ExecOutput>) + Send + Sync + 'static,
+        F: FnOnce(ExecId, Option<(WasmExecutionOutput, Option<StateModifications>)>)
+            + Send
+            + Sync
+            + 'static,
     {
         let exec_id = ExecId::new();
         let completion = Box::new(completion);

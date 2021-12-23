@@ -19,26 +19,27 @@ use ic_canister_sandbox_common::protocol::id::{ExecId, MemoryId, WasmId};
 use ic_canister_sandbox_common::protocol::sbxsvc::{
     CreateExecutionStateSuccessReply, OpenMemoryRequest,
 };
-use ic_canister_sandbox_common::protocol::structs::MemoryModifications;
+use ic_canister_sandbox_common::protocol::structs::{
+    MemoryModifications, SandboxExecInput, StateModifications,
+};
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
 use ic_config::embedders::{Config, PersistenceType};
+use ic_embedders::wasm_executor::DirtyPageIndices;
+use ic_embedders::WasmExecutionOutput;
 use ic_embedders::{
-    wasm_executor::compute_page_delta,
     wasm_utils::{
         instrumentation::{instrument, InstructionCostTable},
         validation::validate_wasm_binary,
     },
     WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, InstanceStats, SystemApi,
-};
+use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, InstanceStats};
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Memory, NumWasmPages, PageIndex, PageMap};
 use ic_sys::PageBytes;
 use ic_system_api::system_api_empty::SystemApiEmpty;
-use ic_system_api::{ModificationTracking, SystemApiImpl};
+use ic_system_api::ModificationTracking;
 use ic_types::CanisterId;
 use ic_types::NumInstructions;
 use ic_wasm_types::BinaryEncodedWasm;
@@ -90,13 +91,14 @@ enum ExecutionInner {
 }
 
 impl Execution {
-    fn record_error(&self, exec_output: protocol::structs::ExecOutput) {
+    fn record_error(&self, exec_output: WasmExecutionOutput) {
         *self.internal.lock().unwrap() = ExecutionInner::FinishedError;
         self.sandbox_manager
             .controller
             .exec_finished(protocol::ctlsvc::ExecFinishedRequest {
                 exec_id: self.exec_id,
                 exec_output,
+                state_modifications: None,
             });
     }
 
@@ -114,7 +116,7 @@ impl Execution {
         stable_memory: Arc<Memory>,
         sandbox_manager: Arc<SandboxManager>,
         workers: &mut threadpool::ThreadPool,
-        exec_input: protocol::structs::ExecInput,
+        exec_input: SandboxExecInput,
     ) -> Arc<Self> {
         let wasm_memory = (*wasm_memory).clone();
         let stable_memory = (*stable_memory).clone();
@@ -136,7 +138,7 @@ impl Execution {
     // in the thread pool.
     fn entry(
         &self,
-        exec_input: protocol::structs::ExecInput,
+        exec_input: SandboxExecInput,
         mut wasm_memory: Memory,
         mut stable_memory: Memory,
     ) {
@@ -144,136 +146,85 @@ impl Execution {
             err: HypervisorError,
             num_instructions_left: NumInstructions,
             instance_stats: InstanceStats,
-        ) -> protocol::structs::ExecOutput {
-            protocol::structs::ExecOutput {
+        ) -> WasmExecutionOutput {
+            WasmExecutionOutput {
                 wasm_result: Err(err),
                 num_instructions_left,
                 instance_stats,
-                state_modifications: None,
             }
         }
 
-        // Prepare instance for running -- memory map, some ancillary
-        // parameters and system API.
         let system_state_accessor =
             SystemStateAccessorRPC::new(self.exec_id, self.sandbox_manager.controller.clone());
-        let num_instructions = exec_input.execution_parameters.instruction_limit;
-        let canister_id = exec_input.static_system_state.canister_id();
-        let modification_tracking = exec_input.api_type.modification_tracking();
+
         let subnet_available_memory = exec_input
             .execution_parameters
             .subnet_available_memory
             .clone();
-        let system_api = SystemApiImpl::new(
+        let (
+            WasmExecutionOutput {
+                wasm_result,
+                num_instructions_left,
+                instance_stats,
+            },
+            deltas,
+            _system_state_accessor,
+        ) = ic_embedders::wasm_executor::process(
+            exec_input.func_ref,
             exec_input.api_type,
-            system_state_accessor,
-            exec_input.static_system_state,
             exec_input.canister_current_memory_usage,
             exec_input.execution_parameters,
-            stable_memory.clone(),
+            exec_input.static_system_state,
+            system_state_accessor,
+            &self.canister_wasm.compilate,
+            &self.canister_wasm.embedder,
+            &mut wasm_memory,
+            &mut stable_memory,
+            &exec_input.globals,
             no_op_logger(),
         );
 
-        let mut instance = match self.canister_wasm.embedder.new_instance(
-            canister_id,
-            &self.canister_wasm.compilate,
-            &exec_input.globals,
-            wasm_memory.size,
-            None,
-            Some(wasm_memory.page_map.clone()),
-            modification_tracking,
-            system_api,
-        ) {
-            Ok(instance) => instance,
-            Err((err, _)) => {
-                self.record_error(error_exec_output(
-                    err,
-                    NumInstructions::from(0),
-                    InstanceStats {
-                        accessed_pages: 0,
-                        dirty_pages: 0,
+        match wasm_result {
+            Ok(_) => {
+                let state_modifications = deltas.map(
+                    |(
+                        DirtyPageIndices {
+                            wasm_memory_delta,
+                            stable_memory_delta,
+                        },
+                        globals,
+                    )| {
+                        StateModifications::new(
+                            globals,
+                            &wasm_memory,
+                            &stable_memory,
+                            &wasm_memory_delta,
+                            &stable_memory_delta,
+                            subnet_available_memory.get(),
+                        )
                     },
-                ));
-                return;
-            }
-        };
-        instance.set_num_instructions(num_instructions);
-
-        // Run actual code and take out results.
-        let run_result = instance.run(exec_input.func_ref);
-
-        let num_instructions_left = instance.get_num_instructions();
-        let instance_stats = instance.get_stats();
-
-        // Has the side effect up deallocating unused memory.
-        let wasm_result = instance.store_data_mut().system_api.take_execution_result();
-        match run_result {
-            Ok(run_result) => {
-                let state_modifications = match modification_tracking {
-                    ModificationTracking::Ignore => None,
-                    ModificationTracking::Track => {
-                        // Update the Wasm memory and serialize the delta.
-                        let wasm_memory_delta = wasm_memory
-                            .page_map
-                            .update(&compute_page_delta(&mut instance, &run_result.dirty_pages));
-                        wasm_memory.size = instance.heap_size();
-                        let wasm_memory_modifications = MemoryModifications {
-                            page_delta: wasm_memory.page_map.serialize_delta(&wasm_memory_delta),
-                            size: wasm_memory.size,
-                        };
-                        self.sandbox_manager
-                            .add_memory(exec_input.next_wasm_memory_id, wasm_memory);
-
-                        // Update the stable memory and serialize the delta.
-                        let stable_memory_delta = stable_memory.page_map.update(
-                            &instance
-                                .store_data_mut()
-                                .system_api
-                                .stable_memory_dirty_pages(),
-                        );
-                        stable_memory.size = run_result.stable_memory_size;
-                        let stable_memory_modifications = MemoryModifications {
-                            page_delta: stable_memory
-                                .page_map
-                                .serialize_delta(&stable_memory_delta),
-                            size: stable_memory.size,
-                        };
-                        self.sandbox_manager
-                            .add_memory(exec_input.next_stable_memory_id, stable_memory);
-
-                        Some(protocol::structs::StateModifications {
-                            globals: run_result.exported_globals,
-                            wasm_memory: wasm_memory_modifications,
-                            stable_memory: stable_memory_modifications,
-                            subnet_available_memory: subnet_available_memory.get(),
-                        })
-                    }
-                };
-
-                // This has a side effect of refunding unused cycles.
-                let _ = instance
-                    .into_store_data()
-                    .system_api
-                    .release_system_state_accessor();
-                let exec_output = protocol::structs::ExecOutput {
+                );
+                if state_modifications.is_some() {
+                    self.sandbox_manager
+                        .add_memory(exec_input.next_wasm_memory_id, wasm_memory);
+                    self.sandbox_manager
+                        .add_memory(exec_input.next_stable_memory_id, stable_memory);
+                }
+                let exec_output = WasmExecutionOutput {
                     wasm_result,
                     num_instructions_left,
                     instance_stats,
-                    state_modifications,
                 };
-
                 *self.internal.lock().unwrap() = ExecutionInner::FinishedOk;
                 self.sandbox_manager.controller.exec_finished(
                     protocol::ctlsvc::ExecFinishedRequest {
                         exec_id: self.exec_id,
                         exec_output,
+                        state_modifications,
                     },
                 );
             }
             Err(err) => {
-                let system_api = instance.into_store_data().system_api;
-                // This has a side effect of refunding unused cycles.
-                let _ = system_api.release_system_state_accessor();
                 self.record_error(error_exec_output(
                     err,
                     num_instructions_left,
@@ -431,7 +382,7 @@ impl SandboxManager {
         wasm_id: WasmId,
         wasm_memory_id: MemoryId,
         stable_memory_id: MemoryId,
-        exec_input: protocol::structs::ExecInput,
+        exec_input: SandboxExecInput,
     ) {
         let mut guard = sandbox_manager.repr.lock().unwrap();
         assert!(

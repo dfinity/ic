@@ -19,6 +19,7 @@ path = "src/test_sandbox.rs"
 bytes = "1.0.1"
 serde_bytes = "0.11.5"
 serde_cbor = "0.11.1"
+ic-embedders = { path = "../../embedders" }
 ic-interfaces = { path = "../../interfaces" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }

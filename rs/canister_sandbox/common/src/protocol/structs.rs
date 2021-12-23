@@ -1,15 +1,18 @@
-use ic_interfaces::execution_environment::{ExecutionParameters, HypervisorResult, InstanceStats};
-use ic_replicated_state::{page_map::PageDeltaSerialization, Global, NumWasmPages};
+use ic_interfaces::execution_environment::ExecutionParameters;
+use ic_replicated_state::{
+    page_map::PageDeltaSerialization, Global, Memory, NumWasmPages, PageIndex,
+};
 use ic_system_api::{ApiType, StaticSystemState};
-use ic_types::{ingress::WasmResult, methods::FuncRef, NumBytes, NumInstructions};
+use ic_types::{methods::FuncRef, NumBytes};
 use serde::{Deserialize, Serialize};
 
 use super::id::MemoryId;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Round(pub u64);
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct ExecInput {
+pub struct SandboxExecInput {
     pub func_ref: FuncRef,
     pub api_type: ApiType,
     pub globals: Vec<Global>,
@@ -45,10 +48,30 @@ pub struct StateModifications {
     pub subnet_available_memory: i64,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct ExecOutput {
-    pub wasm_result: HypervisorResult<Option<WasmResult>>,
-    pub num_instructions_left: NumInstructions,
-    pub instance_stats: InstanceStats,
-    pub state_modifications: Option<StateModifications>,
+impl StateModifications {
+    pub fn new(
+        globals: Vec<Global>,
+        wasm_memory: &Memory,
+        stable_memory: &Memory,
+        wasm_memory_delta: &[PageIndex],
+        stable_memory_delta: &[PageIndex],
+        subnet_available_memory: i64,
+    ) -> Self {
+        let wasm_memory = MemoryModifications {
+            page_delta: wasm_memory.page_map.serialize_delta(wasm_memory_delta),
+            size: wasm_memory.size,
+        };
+
+        let stable_memory = MemoryModifications {
+            page_delta: stable_memory.page_map.serialize_delta(stable_memory_delta),
+            size: stable_memory.size,
+        };
+
+        StateModifications {
+            globals,
+            wasm_memory,
+            stable_memory,
+            subnet_available_memory,
+        }
+    }
 }

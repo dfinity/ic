@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     id::{ExecId, MemoryId, WasmId},
-    structs::MemoryModifications,
+    structs::{MemoryModifications, SandboxExecInput},
 };
 
 /// This defines the RPC service methods offered by the sandbox process
@@ -179,7 +179,7 @@ pub struct OpenExecutionRequest {
     pub stable_memory_id: MemoryId,
 
     /// Arguments to execution (api type, caller, payload, ...).
-    pub exec_input: structs::ExecInput,
+    pub exec_input: SandboxExecInput,
 }
 
 /// Reply to an `OpenExecutionRequest`.

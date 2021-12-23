@@ -3268,6 +3268,7 @@ name = "ic-canister-sandbox-common"
 version = "0.8.0"
 dependencies = [
  "bytes",
+ "ic-embedders",
  "ic-interfaces",
  "ic-registry-subnet-type",
  "ic-replicated-state",
