@@ -185,11 +185,11 @@ fn create_sandbox_argv_for_testing() -> Option<Vec<String>> {
     static SANDBOX_COMPILED: OnceCell<()> = OnceCell::new();
 
     // When running in a dev environment we expect `cargo` to be in our path and
-    // we should be able to find the workspace cargo manifest so this should
-    // succeed.
+    // we should be able to find the `canister_sandbox` cargo manifest so this
+    // should succeed.
     match (
         which::which("cargo"),
-        top_level_cargo_manifest_for_testing(),
+        canister_sandbox_cargo_manifest_for_testing(),
     ) {
         (Ok(path), Some(manifest_path)) => {
             println!(
@@ -212,9 +212,9 @@ fn create_sandbox_argv_for_testing() -> Option<Vec<String>> {
 }
 
 /// Only for testing purposes.
-/// Finds the topmost cargo manifest in the directory path of the current
-/// manifest.
-fn top_level_cargo_manifest_for_testing() -> Option<PathBuf> {
+/// Finds the cargo manifest of the `canister_sandbox` crate in the directory
+/// path of the current manifest.
+fn canister_sandbox_cargo_manifest_for_testing() -> Option<PathBuf> {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").ok();
     let mut next_parent = manifest_dir.as_ref().map(Path::new);
     let mut current_manifest = None;
@@ -225,7 +225,26 @@ fn top_level_cargo_manifest_for_testing() -> Option<PathBuf> {
         }
         next_parent = parent.parent();
     }
-    current_manifest
+    // At this point `current_manifest` points to the top-level workspace
+    // manifest. Try to get the manifest of the `canister_sandbox` crate
+    // relative to it.
+    //
+    // Using the top-level cargo manifest would also be correct, but that would
+    // ignore the `dev-dependencies` resulting in a different metadata hash,
+    // which causes rebuilding of all dependencies that have already been
+    // built by `cargo test`.
+    let canister_sandbox: PathBuf = [
+        current_manifest.as_ref()?.parent()?,
+        Path::new("canister_sandbox"),
+        Path::new("Cargo.toml"),
+    ]
+    .iter()
+    .collect();
+    if canister_sandbox.exists() {
+        Some(canister_sandbox)
+    } else {
+        None
+    }
 }
 
 /// Only for testing purposes.
