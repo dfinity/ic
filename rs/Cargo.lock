@@ -917,6 +917,7 @@ name = "canister_sandbox"
 version = "0.8.0"
 dependencies = [
  "ic-canister-sandbox-backend-lib",
+ "ic-test-utilities",
 ]
 
 [[package]]

@@ -5,3 +5,10 @@ edition = "2018"
 
 [dependencies]
 ic-canister-sandbox-backend-lib = { path = "backend_lib" }
+
+[dev-dependencies]
+# This makes the dependecies of the binary more consistent
+# with the dependencies of execution environment tests and
+# allows the binary to reuse most of the build artifacts
+# produced by `cargo test`.
+ic-test-utilities = { path = "../test_utilities" }
