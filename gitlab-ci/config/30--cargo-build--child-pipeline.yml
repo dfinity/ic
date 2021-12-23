@@ -75,7 +75,7 @@ cargo-build-release-linux-native:
 cargo-build-release-linux-native-nd:
   extends: cargo-build-release-linux-native
   variables:
-    BUILD_COMMAND: "cargo build --target x86_64-unknown-linux-gnu --release -p tests -p ic-nns-init"
+    BUILD_COMMAND: "cargo build --target x86_64-unknown-linux-gnu --release -p tests -p ic-nns-init -p ic-scenario-tests"
 
 cargo-build-release-linux-native-malicious:
   extends: cargo-build-release-linux-native
