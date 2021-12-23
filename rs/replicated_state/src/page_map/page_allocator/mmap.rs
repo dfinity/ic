@@ -37,12 +37,17 @@ unsafe impl Send for PagePtr {}
 pub struct MmapBasedPage {
     ptr: PagePtr,
     offset: FileOffset,
-    page_allocator: Arc<MmapBasedPageAllocator>,
+    // The page allocator is needed only in the destructor of the page in order
+    // to enqueue the page for freeing. This field is empty if the page allocator
+    // does not own the backing file.
+    page_allocator: Option<Arc<MmapBasedPageAllocator>>,
 }
 
 impl Drop for MmapBasedPage {
     fn drop(&mut self) {
-        self.page_allocator.add_dropped_page(self.ptr);
+        if let Some(page_allocator) = self.page_allocator.as_ref() {
+            page_allocator.add_dropped_page(self.ptr);
+        }
     }
 }
 
@@ -125,7 +130,9 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
     // See the comments of the corresponding method in `PageAllocator`.
     fn deserialize(serialized_page_allocator: PageAllocatorSerialization) -> Self {
         match serialized_page_allocator {
-            PageAllocatorSerialization::Mmap(file_descriptor) => Self::open(file_descriptor),
+            PageAllocatorSerialization::Mmap(file_descriptor) => {
+                Self::open(file_descriptor, BackingFileOwner::AnotherAllocator)
+            }
             PageAllocatorSerialization::Heap => {
                 // This is really unreachable. See `serialize()`.
                 unreachable!("Unexpected serialization of MmapBasedPageAllocator");
@@ -184,18 +191,21 @@ impl MmapBasedPageAllocator {
         Self(Mutex::new(None))
     }
 
-    fn open(file_descriptor: FileDescriptor) -> Self {
+    fn open(file_descriptor: FileDescriptor, backing_file_owner: BackingFileOwner) -> Self {
         Self(Mutex::new(Some(MmapBasedPageAllocatorCore::open(
             file_descriptor,
+            backing_file_owner,
         ))))
     }
 
     // Adds the given page to the list of dropped pages that will be freed on the
     // next allocation.
+    // Precondition: the page allocator must be the owner of the backing file.
     fn add_dropped_page(&self, page_ptr: PagePtr) {
         let dropped_pages = {
             let mut guard = self.0.lock().unwrap();
             let core = guard.as_mut().unwrap();
+            assert_eq!(core.backing_file_owner, BackingFileOwner::CurrentAllocator);
             core.dropped_pages.push(page_ptr);
             if core.dropped_pages.len() > MIN_PAGES_TO_FREE {
                 Some(std::mem::take(&mut core.dropped_pages))
@@ -253,7 +263,7 @@ impl AllocationArea {
     // are backed a valid mutable memory.
     unsafe fn allocate_page(
         &mut self,
-        page_allocator: &Arc<MmapBasedPageAllocator>,
+        page_allocator: Option<&Arc<MmapBasedPageAllocator>>,
     ) -> MmapBasedPage {
         assert!(!self.is_empty());
         let ptr = PagePtr(self.start);
@@ -263,9 +273,18 @@ impl AllocationArea {
         MmapBasedPage {
             ptr,
             offset,
-            page_allocator: Arc::clone(page_allocator),
+            page_allocator: page_allocator.map(Arc::clone),
         }
     }
+}
+
+// Indicates whether the backing file is owned by the current allocator or
+// another allocator. The owner is responsible for freeing the physical memory
+// of dropped pages by punching holes in the backing file.
+#[derive(Debug, PartialEq)]
+enum BackingFileOwner {
+    CurrentAllocator,
+    AnotherAllocator,
 }
 
 /// The actual allocator implementation. It starts with an empty file, an
@@ -295,6 +314,8 @@ struct MmapBasedPageAllocatorCore {
     chunks: Vec<Chunk>,
     // Pages that are not longer used.
     dropped_pages: Vec<PagePtr>,
+    // The owner of the backing file.
+    backing_file_owner: BackingFileOwner,
 }
 
 impl Drop for MmapBasedPageAllocatorCore {
@@ -324,10 +345,10 @@ impl MmapBasedPageAllocatorCore {
     fn new() -> Self {
         let fd = memfd_create(&CString::default(), MemFdCreateFlag::empty())
             .expect("MmapPageAllocatorCore failed to create a memory file");
-        Self::open(FileDescriptor { fd })
+        Self::open(FileDescriptor { fd }, BackingFileOwner::CurrentAllocator)
     }
 
-    fn open(file_descriptor: FileDescriptor) -> Self {
+    fn open(file_descriptor: FileDescriptor, backing_file_owner: BackingFileOwner) -> Self {
         Self {
             allocation_area: Default::default(),
             allocated_pages: 0,
@@ -335,6 +356,7 @@ impl MmapBasedPageAllocatorCore {
             file_len: 0,
             chunks: vec![],
             dropped_pages: vec![],
+            backing_file_owner,
         }
     }
 
@@ -344,6 +366,10 @@ impl MmapBasedPageAllocatorCore {
             self.allocation_area = self.new_allocation_area();
             assert!(!self.allocation_area.is_empty());
         }
+        let page_allocator = match self.backing_file_owner {
+            BackingFileOwner::CurrentAllocator => Some(page_allocator),
+            BackingFileOwner::AnotherAllocator => None,
+        };
         // Fast path of allocation.
         // SAFETY: the allocation area is backed by the most recently
         // allocated `Chunk`. We also know that it is not empty.
@@ -458,6 +484,10 @@ impl MmapBasedPageAllocatorCore {
         file_offset: FileOffset,
         page_allocator: &Arc<MmapBasedPageAllocator>,
     ) -> MmapBasedPage {
+        let page_allocator = match self.backing_file_owner {
+            BackingFileOwner::CurrentAllocator => Some(page_allocator),
+            BackingFileOwner::AnotherAllocator => None,
+        };
         // Find the memory-mapped chunk that contains the given file offset.
         // For a file of length N bytes, there will be O(lg(N)) chunks because
         // allocation ensures that the chunk size increases exponentially.
@@ -479,7 +509,7 @@ impl MmapBasedPageAllocatorCore {
                 return MmapBasedPage {
                     ptr: PagePtr(page_start),
                     offset: file_offset,
-                    page_allocator: Arc::clone(page_allocator),
+                    page_allocator: page_allocator.map(Arc::clone),
                 };
             }
         }
