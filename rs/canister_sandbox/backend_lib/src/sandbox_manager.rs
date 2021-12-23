@@ -368,6 +368,9 @@ impl SandboxManager {
             "Failed to close state {}: id not found",
             memory_id
         );
+        // Dropping memory may be expensive. Do it on a worker thread to avoid
+        // blocking the main thread of the sandbox process.
+        guard.workers.execute(move || drop(removed));
     }
 
     /// Opens new execution using specific code and state, passing
