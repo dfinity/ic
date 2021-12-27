@@ -13,7 +13,7 @@ ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 openssl = "0.10.29"
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"
-zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
+zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 simple_asn1 = "0.5.4"
 
 [dev-dependencies]

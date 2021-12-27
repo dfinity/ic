@@ -5,7 +5,7 @@ edition = "2018"
 
 [dependencies]
 serde = { version = "1.0.99", features = ["derive"] }
-zeroize = { version = "1.1.1", features = ["zeroize_derive"] }
+zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 serde_cbor = "0.11.1"

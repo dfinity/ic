@@ -17,7 +17,7 @@ rand = "0.7.3"
 rand_chacha = "0.2.2"
 serde = { version = "1.0.99", features = [ "derive" ] }
 simple_asn1 = "0.5.4"
-zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
+zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
