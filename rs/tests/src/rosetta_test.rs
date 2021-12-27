@@ -31,9 +31,9 @@ use dfn_protobuf::protobuf;
 use ed25519_dalek::Signer;
 use fondue::log::info;
 use ic_canister_client::Sender;
-use ic_crypto_sha::Sha256;
 use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
+use ic_nns_governance::governance::compute_neuron_staking_subaccount;
 use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
 use ic_nns_test_utils::itest_helpers::{set_up_governance_canister, set_up_ledger_canister};
 use ic_registry_subnet_type::SubnetType;
@@ -2000,7 +2000,7 @@ async fn test_spawn(ros: &RosettaApiHandle, ledger: &Canister<'_>, neuron_info: 
     );
 
     // Verify that maturity got transferred to the spawned neuron.
-    let subaccount = compute_neuron_spawn_subaccount(neuron_info.principal_id, neuron_index);
+    let subaccount = compute_neuron_staking_subaccount(neuron_info.principal_id, neuron_index);
     let spawned_neuron = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
     let balance_sub = get_balance(ledger, spawned_neuron).await;
     assert_eq!(
@@ -2011,18 +2011,6 @@ async fn test_spawn(ros: &RosettaApiHandle, ledger: &Canister<'_>, neuron_info: 
 
     // We should get the same results with Rosetta call (step not required though).
     check_balance(ros, ledger, &spawned_neuron, Tokens::from_e8s(500_000_000)).await;
-
-    /// compute spawned neuron sub-account like it is done in the governance.
-    fn compute_neuron_spawn_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
-        Subaccount({
-            let mut state = Sha256::new();
-            state.write(&[0x0c]);
-            state.write(b"neuron-spawn");
-            state.write(controller.as_slice());
-            state.write(&nonce.to_be_bytes());
-            state.finish()
-        })
-    }
 }
 
 async fn test_spawn_invalid(ros: &RosettaApiHandle, neuron_info: NeuronInfo) {

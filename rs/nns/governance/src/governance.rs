@@ -2763,7 +2763,7 @@ impl Governance {
         // use provided sub-account if any, otherwise generate a random one.
         let to_subaccount = match spawn.nonce {
             None => Subaccount(self.env.random_byte_array()),
-            Some(nonce_val) => compute_neuron_spawn_subaccount(*child_controller, nonce_val),
+            Some(nonce_val) => compute_neuron_staking_subaccount(*child_controller, nonce_val),
         };
 
         // Make sure there isn't already a neuron with the same sub-account.
@@ -5684,20 +5684,9 @@ impl Governance {
     }
 }
 
-fn compute_neuron_spawn_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
-    Subaccount({
-        let mut state = Sha256::new();
-        state.write(&[0x0c]);
-        state.write(b"neuron-spawn");
-        state.write(controller.as_slice());
-        state.write(&nonce.to_be_bytes());
-        state.finish()
-    })
-}
-
 /// Computes the subaccount to which neuron staking transfers are made. This
 /// function must be kept in sync with the NNS UI equivalent.
-fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
+pub fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
     // The equivalent function in the UI is
     // https://github.com/dfinity/dfinity_wallet/blob/351e07d3e6d007b090117161a94ce8ec9d5a6b49/js-agent/src/canisters/createNeuron.ts#L63
     Subaccount({

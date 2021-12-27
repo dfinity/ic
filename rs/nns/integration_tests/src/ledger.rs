@@ -8,12 +8,12 @@ use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client::Sender;
-use ic_crypto_sha::Sha256;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::ids::TEST_USER1_KEYPAIR;
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID,
 };
+use ic_nns_governance::governance::compute_neuron_staking_subaccount;
 use ic_nns_governance::pb::v1::governance_error::ErrorType;
 use ic_nns_governance::pb::v1::manage_neuron::claim_or_refresh::{By, MemoAndController};
 use ic_nns_governance::pb::v1::manage_neuron::Disburse;
@@ -31,8 +31,8 @@ use ic_nns_test_utils::itest_helpers::{
 };
 use ledger_canister::{
     protobuf::TipOfChainRequest, AccountBalanceArgs, AccountIdentifier, ArchiveOptions, Block,
-    BlockHeight, LedgerCanisterInitPayload, Memo, SendArgs, Subaccount, TimeStamp, TipOfChainRes,
-    Tokens, Transaction, TRANSACTION_FEE,
+    BlockHeight, LedgerCanisterInitPayload, Memo, SendArgs, TimeStamp, TipOfChainRes, Tokens,
+    Transaction, TRANSACTION_FEE,
 };
 use tokio::time::{timeout_at, Instant};
 
@@ -259,14 +259,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             // Stake a neuron by transferring to a subaccount of the neurons
             // canister and claiming the neuron on the governance canister..
             let nonce = 12345u64;
-            let to_subaccount = Subaccount({
-                let mut state = Sha256::new();
-                state.write(&[0x0c]);
-                state.write(b"neuron-stake");
-                state.write(user.get_principal_id().as_slice());
-                state.write(&nonce.to_be_bytes());
-                state.finish()
-            });
+            let to_subaccount = compute_neuron_staking_subaccount(user.get_principal_id(), nonce);
 
             // Stake the neuron.
             let stake = Tokens::from_tokens(100).unwrap();
@@ -431,14 +424,7 @@ fn test_stake_and_disburse_neuron_with_account() {
             // Stake a neuron by transferring to a subaccount of the neurons
             // canister and notifying the canister of the transfer.
             let nonce = 12345u64;
-            let to_subaccount = Subaccount({
-                let mut state = Sha256::new();
-                state.write(&[0x0c]);
-                state.write(b"neuron-stake");
-                state.write(user.get_principal_id().as_slice());
-                state.write(&nonce.to_be_bytes());
-                state.finish()
-            });
+            let to_subaccount = compute_neuron_staking_subaccount(user.get_principal_id(), nonce);
 
             let stake = Tokens::from_tokens(100).unwrap();
             let _block_height: BlockHeight = nns_canisters

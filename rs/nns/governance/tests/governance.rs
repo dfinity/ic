@@ -4360,7 +4360,7 @@ fn test_neuron_spawn_with_subaccount() {
     let expected_subaccount = {
         let mut state = Sha256::new();
         state.write(&[0x0c]);
-        state.write(b"neuron-spawn");
+        state.write(b"neuron-stake");
         state.write(child_controller.as_slice());
         state.write(&nonce_spawn.to_be_bytes());
         state.finish()
