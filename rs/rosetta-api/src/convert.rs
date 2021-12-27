@@ -4,12 +4,12 @@ use crate::models;
 use crate::models::{
     AccountIdentifier, Amount, BlockIdentifier, Currency, Operation, OperationIdentifier, Timestamp,
 };
-use crate::request_types::DISBURSE;
 use crate::request_types::{
     AddHotKey, Disburse, DisburseMetadata, KeyMetadata, NeuronIdentifierMetadata,
-    PublicKeyOrPrincipal, Request, SetDissolveTimestamp, SetDissolveTimestampMetadata, Stake,
-    StartDissolve, StopDissolve, ADD_HOT_KEY, BURN, FEE, MINT, SET_DISSOLVE_TIMESTAMP, STAKE,
-    START_DISSOLVE, STATUS_COMPLETED, STOP_DISSOLVE, TRANSACTION,
+    PublicKeyOrPrincipal, Request, SetDissolveTimestamp, SetDissolveTimestampMetadata, Spawn,
+    SpawnMetadata, Stake, StartDissolve, StopDissolve, ADD_HOT_KEY, BURN, DISBURSE, FEE, MINT,
+    SET_DISSOLVE_TIMESTAMP, SPAWN, STAKE, START_DISSOLVE, STATUS_COMPLETED, STOP_DISSOLVE,
+    TRANSACTION,
 };
 use crate::store::HashedBlock;
 use crate::time::Seconds;
@@ -287,6 +287,30 @@ pub fn requests_to_operations(
                     ),
                 });
             }
+            Request::Spawn(Spawn {
+                account,
+                spawned_neuron_index: neuron_index,
+                controller,
+                neuron_identifier,
+            }) => {
+                ops.push(Operation {
+                    operation_identifier: allocate_op_id(),
+                    _type: SPAWN.to_string(),
+                    status: None,
+                    account: Some(to_model_account_identifier(account)),
+                    amount: None,
+                    related_operations: None,
+                    coin_change: None,
+                    metadata: Some(
+                        SpawnMetadata {
+                            neuron_index: *neuron_index,
+                            controller: *controller,
+                            neuron_identifier: *neuron_identifier,
+                        }
+                        .into(),
+                    ),
+                });
+            }
         }
     }
     Ok(ops)
@@ -477,6 +501,25 @@ impl State {
 
         Ok(())
     }
+
+    fn spawn(
+        &mut self,
+        account: ledger_canister::AccountIdentifier,
+        neuron_identifier: u64,
+        neuron_index: u64,
+        controller: Option<PrincipalId>,
+    ) -> Result<(), ApiError> {
+        self.flush()?;
+
+        self.actions.push(Request::Spawn(Spawn {
+            account,
+            spawned_neuron_index: neuron_index,
+            controller,
+            neuron_identifier,
+        }));
+
+        Ok(())
+    }
 }
 
 pub fn from_operations(
@@ -602,6 +645,15 @@ pub fn from_operations(
                 };
                 state.disburse(account, neuron_identifier, amount, recipient)?;
             }
+            SPAWN => {
+                let SpawnMetadata {
+                    neuron_index,
+                    controller,
+                    neuron_identifier,
+                } = o.metadata.clone().try_into()?;
+                validate_neuron_management_op()?;
+                state.spawn(account, neuron_identifier, neuron_index, controller)?;
+            }
             _ => {
                 let msg = format!("Unsupported operation type: {}", o._type);
                 return Err(op_error(o, msg));
@@ -708,6 +760,8 @@ pub fn account_from_public_key(pk: &models::PublicKey) -> Result<AccountIdentifi
 }
 
 /// `neuron_identifier` must also be the `nonce` of neuron management commands.
+/// FIXME this method doesn't work for Spawned neurons (with or without nonce)
+/// and should be deleted.
 pub fn neuron_subaccount_bytes_from_public_key(
     pk: &models::PublicKey,
     neuron_identifier: u64,

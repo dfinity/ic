@@ -67,7 +67,8 @@ impl TransactionIdentifier {
             | RequestType::StopDissolve { .. }
             | RequestType::SetDissolveTimestamp { .. }
             | RequestType::Disburse { .. }
-            | RequestType::AddHotKey { .. } => {
+            | RequestType::AddHotKey { .. }
+            | RequestType::Spawn { .. } => {
                 // Unfortunately, staking operations don't really have a transaction ID
                 Ok(TransactionIdentifier {
                     hash: NEURON_MANAGEMEN_PSEUDO_HASH.to_string(),

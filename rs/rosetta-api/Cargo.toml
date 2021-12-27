@@ -54,8 +54,14 @@ name = "utils"
 path = "src/utils.rs"
 
 [dev-dependencies]
-tempfile = "3.1.0"
+ed25519-dalek = "1.0.1"
+ic-nns-governance = { path = "../nns/governance"}
 ic-rosetta-test-utils = { path = "test_utils" }
+ic-base-types = { path = "../types/base_types" }
+ic-types = { path = "../types/types" }
+rand_chacha = "0.2.2"
+rand_core = "0.5.1"
+futures = "0.3.13"
 
 [[test]]
 name = "rosetta-api-tests"
