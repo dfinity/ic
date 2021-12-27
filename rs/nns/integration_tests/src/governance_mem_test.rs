@@ -22,6 +22,7 @@ fn governance_mem_test() {
         let state_initializer_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
             "nns/integration_tests",
             "governance-mem-test-canister",
+            &[],
         );
 
         // It's on purpose that we don't want retries here! This test is only about
@@ -36,6 +37,7 @@ fn governance_mem_test() {
         let real_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
             "nns/governance",
             "governance-canister",
+            &[],
         );
         governance.set_wasm(real_wasm.bytes());
 

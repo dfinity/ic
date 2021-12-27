@@ -81,6 +81,7 @@ fn test_upgrade_governance_through_root_proposal() {
         let governance_canister_wasm_bytes = Project::cargo_bin_maybe_use_path_relative_to_rs(
             "nns/governance",
             "governance-canister",
+            &[],
         )
         .bytes();
         let governance_canister_sha = &ic_crypto_sha::Sha256::hash(&governance_canister_wasm_bytes);
@@ -192,6 +193,7 @@ fn test_unauthorized_user_cant_submit_on_root_proposals() {
         let governance_canister_wasm_bytes = Project::cargo_bin_maybe_use_path_relative_to_rs(
             "nns/governance",
             "governance-canister",
+            &[],
         )
         .bytes();
         let governance_canister_sha = &ic_crypto_sha::Sha256::hash(&governance_canister_wasm_bytes);
@@ -285,6 +287,7 @@ fn test_enough_no_votes_rejects_the_proposal() {
         let governance_canister_wasm_bytes = Project::cargo_bin_maybe_use_path_relative_to_rs(
             "nns/governance",
             "governance-canister",
+            &[],
         )
         .bytes();
         let governance_canister_sha = &ic_crypto_sha::Sha256::hash(&governance_canister_wasm_bytes);
@@ -372,6 +375,7 @@ fn test_changing_the_sha_invalidates_the_proposal() {
         let governance_canister_wasm_bytes = Project::cargo_bin_maybe_use_path_relative_to_rs(
             "nns/governance",
             "governance-canister",
+            &[],
         )
         .bytes();
         let governance_canister_sha = &ic_crypto_sha::Sha256::hash(&governance_canister_wasm_bytes);

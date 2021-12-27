@@ -60,4 +60,5 @@ path = "test/notified.rs"
 prost-build = "0.9.0"
 
 [features]
+notify-method = []
 test = ["ic-base-types/test"]

@@ -59,6 +59,7 @@ async fn install_mem_utils_test_canister(canister: &mut Canister<'_>) {
         canister,
         "nns/integration_tests",
         "mem-utils-test-canister",
+        &[],
         None,
     )
     .await;

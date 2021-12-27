@@ -197,6 +197,7 @@ async fn send(
 /// * `to_subaccount` - The subaccount that received the payment.
 /// * `notify_using_protobuf` - Whether the notification should be encoded using
 ///   protobuf or candid.
+#[cfg(feature = "notify-method")]
 pub async fn notify(
     block_height: BlockHeight,
     max_fee: Tokens,
@@ -535,6 +536,7 @@ fn send_dfx_() {
     over_async(candid_one, send_dfx);
 }
 
+#[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_pb"]
 fn notify_() {
     // we use over_init because it doesn't reply automatically so we can do explicit
@@ -583,6 +585,7 @@ fn transfer() {
 }
 
 /// See caveats of use on send_dfx
+#[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_dfx"]
 fn notify_dfx_() {
     // we use over_init because it doesn't reply automatically so we can do explicit

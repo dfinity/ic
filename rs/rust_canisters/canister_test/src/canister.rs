@@ -53,8 +53,13 @@ pub struct Wasm(Vec<u8>);
 impl Wasm {
     /// Constructs the name of the env variable that will be checked to see if a
     /// pre-compiled binary exists on the filesystem.
-    pub fn env_var_name(bin_name: &str) -> String {
-        format!("{}_WASM_PATH", bin_name)
+    pub fn env_var_name(bin_name: &str, features: &[&str]) -> String {
+        let features_part = if features.is_empty() {
+            "".into()
+        } else {
+            format!("_{}", features.join("_"))
+        };
+        format!("{}{}_WASM_PATH", bin_name, features_part)
             .replace("-", "_")
             .to_uppercase()
     }
@@ -62,8 +67,8 @@ impl Wasm {
     /// If an environment variable with a specific name derived from the binary
     /// name exists, then assumes it is the location of a wasm file and
     /// reads it.
-    pub fn from_location_specified_by_env_var(bin_name: &str) -> Option<Wasm> {
-        let var_name = Wasm::env_var_name(bin_name);
+    pub fn from_location_specified_by_env_var(bin_name: &str, features: &[&str]) -> Option<Wasm> {
+        let var_name = Wasm::env_var_name(bin_name, features);
         match env::var(&var_name) {
             Ok(path) => {
                 eprintln!("Using pre-built binary for {}", bin_name);

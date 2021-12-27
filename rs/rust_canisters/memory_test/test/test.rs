@@ -7,7 +7,7 @@ fn test_memory_test_canisters() {
 
         println!("Start installing memory test canister");
         let canister = proj
-            .cargo_bin("memory-test-canister")
+            .cargo_bin("memory-test-canister", &[])
             .install(&r)
             .with_memory_allocation(8 * 1024 * 1024 * 1024) // 8GiB
             .bytes(Vec::new())

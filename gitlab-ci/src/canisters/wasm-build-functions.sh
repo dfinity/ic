@@ -14,6 +14,7 @@ wasm_canister_list=(
     json
     ledger-archive-node-canister
     ledger-canister
+    ledger-canister_notify-method
     lifeline
     mem-utils-test-canister
     memory-test-canister

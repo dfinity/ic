@@ -47,12 +47,36 @@ declare -A wasm_canister_copy_list=(
     ["counter.wat"]="rs/workload_generator/src"
 )
 
+function optimize_wasm() {
+    bin_name="$1"
+
+    src_filename="$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/$bin_name.wasm"
+    if [[ -r "$src_filename" ]]; then
+        ic-cdk-optimizer -o "${ARTIFACTS}/$bin_name.wasm" "$src_filename"
+    else
+        echo "ERROR: target canister Wasm binary does not exist: ${src_filename}"
+        exit 1
+    fi
+}
+
+function build_with_features() {
+    bin_name="$1"
+    features="$2"
+    target_bin_name="$3"
+
+    cargo build --target wasm32-unknown-unknown --release --bin "$bin_name" --features "$features"
+    mv "$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/$bin_name.wasm" \
+        "$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/$target_bin_name.wasm"
+}
+
 function wasm_canisters_cargo_args() {
     # returns a list of wasm_canisters prefixed with "--bin"
     for c in "${wasm_canister_build_list[@]}"; do
         echo -n " --bin $c"
     done
 }
+
+build_with_features ledger-canister notify-method ledger-canister_notify-method
 
 # shellcheck disable=SC2046  # Intended splitting of $(wasm_canisters_cargo_args)
 cargo build --target wasm32-unknown-unknown --release $(wasm_canisters_cargo_args)
@@ -66,14 +90,10 @@ echo "Building of Wasm canisters finished"
 
 cd "$ROOT_DIR" || exit 1
 
+optimize_wasm ledger-canister_notify-method
+
 for wasm in "${wasm_canister_build_list[@]}"; do
-    src_filename="$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/$wasm.wasm"
-    if [[ -r "$src_filename" ]]; then
-        ic-cdk-optimizer -o "${ARTIFACTS}/$wasm.wasm" "$src_filename"
-    else
-        echo "ERROR: target canister Wasm binary does not exist: ${src_filename}"
-        exit 1
-    fi
+    optimize_wasm "$wasm"
 done
 
 # Copy/optimize prebuilt canisters

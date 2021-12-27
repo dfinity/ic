@@ -7,7 +7,7 @@ fn reverse_test() {
     local_test_e(|r| async move {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
 
-        let canister = proj.cargo_bin("wasm").install_(&r, Vec::new()).await?;
+        let canister = proj.cargo_bin("wasm", &[]).install_(&r, Vec::new()).await?;
 
         let res = canister.query_("reverse", bytes, vec![0, 1, 2, 3]).await?;
 
@@ -21,7 +21,7 @@ fn balance128_test() {
     local_test_e(|r| async move {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
 
-        let canister = proj.cargo_bin("wasm").install_(&r, Vec::new()).await?;
+        let canister = proj.cargo_bin("wasm", &[]).install_(&r, Vec::new()).await?;
 
         let res = canister.query_("balance128", bytes, vec![]).await?;
 
@@ -39,7 +39,7 @@ fn certification_api_test() {
     local_test_e(|r| async move {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
 
-        let canister = proj.cargo_bin("wasm").install_(&r, Vec::new()).await?;
+        let canister = proj.cargo_bin("wasm", &[]).install_(&r, Vec::new()).await?;
 
         let _ = canister
             .update_("set_certified_data", bytes, vec![0u8; 32])
@@ -56,7 +56,7 @@ fn stable_memory_read_write() {
     local_test_e(|r| async move {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
 
-        let canister = proj.cargo_bin("wasm").install_(&r, Vec::new()).await?;
+        let canister = proj.cargo_bin("wasm", &[]).install_(&r, Vec::new()).await?;
 
         let contents_1 = vec![0xdeu8; 100];
 

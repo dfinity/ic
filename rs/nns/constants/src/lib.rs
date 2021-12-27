@@ -36,7 +36,7 @@ pub const NNS_CANISTER_WASMS: [&str; 9] = [
     // include_bytes, it is not provided on the path. We want to change that, though.
     "registry-canister",
     "governance-canister",
-    "ledger-canister",
+    "ledger-canister_notify-method",
     "root-canister",
     "cycles-minting-canister",
     // The lifeline is built differently, which explains why its wasm has a different name pattern.

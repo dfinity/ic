@@ -121,7 +121,7 @@ fn upgrade_test() {
         let accounts = make_accounts(5, 4);
 
         let mut ledger = proj
-            .cargo_bin("ledger-canister")
+            .cargo_bin("ledger-canister", &[])
             .install_(
                 &r,
                 CandidOne(LedgerCanisterInitPayload::new(
@@ -195,7 +195,7 @@ fn archive_blocks_small_test() {
                 archive_options,
                 send_whitelist: HashSet::new(),
             };
-            let mut install = proj.cargo_bin("ledger-canister").install(&r);
+            let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
             install.memory_allocation = Some(128 * 1024 * 1024);
             install.bytes(CandidOne(payload).into_bytes()?).await?
         };
@@ -297,7 +297,7 @@ fn archive_blocks_large_test() {
                 archive_options,
                 send_whitelist: HashSet::new(),
             };
-            let mut install = proj.cargo_bin("ledger-canister").install(&r);
+            let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
             install.memory_allocation = Some(128 * 1024 * 1024);
             install.bytes(CandidOne(payload).into_bytes()?).await?
         };
@@ -401,7 +401,7 @@ fn notify_timeout_test() {
         );
 
         let test_canister = proj
-            .cargo_bin("test-notified")
+            .cargo_bin("test-notified", &[])
             .install_(&r, Vec::new())
             .await?;
 
@@ -411,7 +411,7 @@ fn notify_timeout_test() {
         send_whitelist.insert(test_canister.canister_id());
 
         let ledger_canister = proj
-            .cargo_bin("ledger-canister")
+            .cargo_bin("ledger-canister", &["notify-method"])
             .install_(
                 &r,
                 CandidOne(LedgerCanisterInitPayload {
@@ -457,8 +457,9 @@ fn notify_timeout_test() {
             .await;
 
         assert!(
-            r1.unwrap_err().contains("that is more than"),
-            "Cannot notify after duration"
+            r1.as_ref().unwrap_err().contains("that is more than"),
+            "Notifying after duration should return an error containing \"that is more than\". Instead got {:?}",
+            r1
         );
 
         Ok(())
@@ -477,12 +478,12 @@ fn notify_test() {
         );
 
         let test_canister = proj
-            .cargo_bin("test-notified")
+            .cargo_bin("test-notified", &[])
             .install_(&r, Vec::new())
             .await?;
 
         let test_canister_2 = proj
-            .cargo_bin("test-notified")
+            .cargo_bin("test-notified", &[])
             .install_(&r, Vec::new())
             .await?;
 
@@ -513,7 +514,7 @@ fn notify_test() {
         });
 
         let ledger_canister = proj
-            .cargo_bin("ledger-canister")
+            .cargo_bin("ledger-canister", &["notify-method"])
             .install_(
                 &r,
                 CandidOne(LedgerCanisterInitPayload {
@@ -641,6 +642,128 @@ fn notify_test() {
 }
 
 #[test]
+fn notify_disabled_test() {
+    local_test_e(|r| async move {
+        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let mut accounts = HashMap::new();
+        let sender = create_sender(100);
+        accounts.insert(
+            sender.get_principal_id().into(),
+            Tokens::from_tokens(100).unwrap(),
+        );
+
+        let test_canister = proj
+            .cargo_bin("test-notified", &[])
+            .install_(&r, Vec::new())
+            .await?;
+
+        let minting_account = create_sender(0);
+
+        let mut send_whitelist = HashSet::new();
+        send_whitelist.insert(test_canister.canister_id());
+
+        let (node_max_memory_size_bytes, max_message_size_bytes): (usize, usize) = {
+            let blocks_per_archive_node = 8;
+
+            let blocks_per_archive_call = 3;
+
+            let e = example_block().encode().unwrap();
+            println!("[test] encoded block size: {}", e.size_bytes());
+            (
+                e.size_bytes() * blocks_per_archive_node,
+                e.size_bytes() * blocks_per_archive_call,
+            )
+        };
+
+        let archive_options = Some(ArchiveOptions {
+            node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
+            max_message_size_bytes: Some(max_message_size_bytes),
+            controller_id: CanisterId::from_u64(876),
+            trigger_threshold: 8,
+            num_blocks_to_archive: 3,
+        });
+
+        let ledger_canister = proj
+            .cargo_bin("ledger-canister", &[])
+            .install_(
+                &r,
+                CandidOne(LedgerCanisterInitPayload {
+                    minting_account: CanisterId::try_from(minting_account.get_principal_id())
+                        .unwrap()
+                        .into(),
+                    initial_values: accounts,
+                    max_message_size_bytes: Some(max_message_size_bytes),
+                    transaction_window: None,
+                    archive_options,
+                    send_whitelist,
+                }),
+            )
+            .await?;
+
+        let block_height: BlockHeight = ledger_canister
+            .update_from_sender(
+                "send_pb",
+                protobuf,
+                SendArgs {
+                    from_subaccount: None,
+                    to: test_canister.canister_id().into(),
+                    amount: Tokens::from_tokens(1).unwrap(),
+                    fee: TRANSACTION_FEE,
+                    memo: Memo(0),
+                    created_at_time: None,
+                },
+                &sender,
+            )
+            .await?;
+
+        for i in 1..10 {
+            let _: BlockHeight = ledger_canister
+                .update_from_sender(
+                    "send_pb",
+                    protobuf,
+                    SendArgs {
+                        from_subaccount: None,
+                        to: test_canister.canister_id().into(),
+                        amount: Tokens::from_e8s(1),
+                        fee: TRANSACTION_FEE,
+                        memo: Memo(i),
+                        created_at_time: None,
+                    },
+                    &sender,
+                )
+                .await?;
+        }
+
+        let notify = NotifyCanisterArgs {
+            block_height,
+            max_fee: TRANSACTION_FEE,
+            from_subaccount: None,
+            to_canister: test_canister.canister_id(),
+            to_subaccount: None,
+        };
+
+        let r1: Result<(), String> = ledger_canister
+            .update_from_sender("notify_pb", protobuf, notify.clone(), &sender)
+            .await;
+
+        let r2: Result<(), String> = ledger_canister
+            .update_from_sender("notify_dfx", candid_one, notify.clone(), &sender)
+            .await;
+
+        for r in &[r1, r2] {
+            assert!(
+                r.as_ref().map_err(|e| e.contains("has no update method 'notify"))
+                    .err().unwrap_or(false),
+                "Calling notify_* when notify-method feature is not set should result in an error containing the string has no update method 'notify. Result was: {:?}",
+                r
+            );
+        }
+
+        Ok(())
+    });
+}
+
+#[test]
 fn sub_account_test() {
     local_test_e(|r| async move {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
@@ -659,7 +782,7 @@ fn sub_account_test() {
         let mut send_whitelist = HashSet::new();
         send_whitelist.insert(CanisterId::new(sender.get_principal_id()).unwrap());
         let ledger_canister = proj
-            .cargo_bin("ledger-canister")
+            .cargo_bin("ledger-canister", &[])
             .install_(
                 &r,
                 CandidOne(LedgerCanisterInitPayload::new(
@@ -742,7 +865,7 @@ fn check_anonymous_cannot_send() {
         );
 
         let ledger_canister = proj
-            .cargo_bin("ledger-canister")
+            .cargo_bin("ledger-canister", &[])
             .install_(
                 &r,
                 CandidOne(LedgerCanisterInitPayload::new(
@@ -799,7 +922,7 @@ fn transaction_test() {
         );
 
         let ledger = proj
-            .cargo_bin("ledger-canister")
+            .cargo_bin("ledger-canister", &[])
             .install_(
                 &r,
                 CandidOne(LedgerCanisterInitPayload::new(
@@ -1003,7 +1126,7 @@ fn get_block_test() {
                 None,
                 HashSet::new(),
             );
-            let mut install = proj.cargo_bin("ledger-canister").install(&r);
+            let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
             install.memory_allocation = Some(128 * 1024 * 1024);
             install.bytes(CandidOne(payload).into_bytes()?).await?
         };
@@ -1164,7 +1287,7 @@ fn get_multiple_blocks_test() {
                 None,
                 HashSet::new(),
             );
-            let mut install = proj.cargo_bin("ledger-canister").install(&r);
+            let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
             install.memory_allocation = Some(128 * 1024 * 1024);
             install.bytes(CandidOne(payload).into_bytes()?).await?
         };
@@ -1344,7 +1467,7 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
                 None,
                 HashSet::new(),
             );
-            let mut install = proj.cargo_bin("ledger-canister").install(&r);
+            let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
             install.memory_allocation = Some(128 * 1024 * 1024);
             install.bytes(CandidOne(payload).into_bytes()?).await?
         };
@@ -1411,7 +1534,7 @@ fn test_transfer_candid() {
         accounts.insert(acc2_address, Tokens::from_e8s(1_000_000_000));
 
         let ledger = proj
-            .cargo_bin("ledger-canister")
+            .cargo_bin("ledger-canister", &[])
             .install_(
                 &r,
                 CandidOne(LedgerCanisterInitPayload::new(
@@ -1604,7 +1727,7 @@ fn call_with_cleanup() {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
 
         let test_canister = proj
-            .cargo_bin("test-notified")
+            .cargo_bin("test-notified", &[])
             .install_(&r, Vec::new())
             .await?;
 
