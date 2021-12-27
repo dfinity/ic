@@ -30,10 +30,15 @@ For now one key can only control a single neuron, but this restriction might be 
     "curve_type": "edwards25519"
   },
   "metadata": {
-    "account_type": "neuron"
+    "account_type": "neuron",
+    "neuron_index": 0
   }
 }
 ```
+
+Note: it's possible to control many neurons using the same key.
+The client can differentiate between neurons it creates using different values of the `neuron_index` metadata field.
+`neuron_index` field is supported by all neuron management operations and is equal to zero if not specified.
 
 ### Response
 
@@ -91,7 +96,10 @@ NOTE: `STAKE` operation is idempotent.
     {
       "operation_identifier": { "index": 3 },
       "type": "STAKE",
-      "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" }
+      "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
+      "metadata": {
+        "neuron_index": 0
+      }
     }
   ]
 }
@@ -140,7 +148,10 @@ NOTE: `STAKE` operation is idempotent.
         "operation_identifier": { "index": 3 },
         "type": "STAKE",
         "status": "COMPLETED",
-        "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" }
+        "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
+        "metadata": {
+          "neuron_index": 0
+        }
       }
     ]
   }
@@ -162,7 +173,8 @@ NOTE: This operation is idempotent.
     "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d"
   },
   "metadata": {
-    "dissolve_time_utc_seconds": "1879939507"
+    "neuron_index": 0,
+    "dissolve_time_utc_seconds": 1879939507
   }
 }
 ```
@@ -185,6 +197,9 @@ NOTE: This operation is idempotent.
   "type": "START_DISSOLVING",
   "account": {
     "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" 
+  },
+  "metadata": {
+    "neuron_index": 0
   }
 }
 ```
@@ -207,6 +222,9 @@ NOTE: This operation is idempotent.
   "type": "STOP_DISSOLVING",
   "account": {
     "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" 
+  },
+  "metadata": {
+    "neuron_index": 0
   }
 }
 ```
@@ -235,7 +253,7 @@ NOTE: The request should not specify any block identifier because the endpoint a
   },
   "metadata": {
     "account_type": "neuron",
-    "neuron_index": 1,
+    "neuron_index": 0,
     "public_key": {
       "hex_bytes": "ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d",
       "curve_type": "edwards25519"
@@ -275,15 +293,16 @@ NOTE: The request should not specify any block identifier because the endpoint a
 
 ## Spawn neurons
 
-The `SPAWN` operation creates a new neuron from an existing neuron with enough maturity. It transfers all the maturity from the existing neuron to the balance of the newly spawned neuron.
+The `SPAWN` operation creates a new neuron from an existing neuron with enough maturity.
+This operation transfers all the maturity from the existing neuron to the staked amount of the newly spawned neuron.
 
 Preconditions:
-* `account.address` is a ledger address of a neuron controller.
-* The parent neuron has at least 1 ICP worth of maturity.
+  * `account.address` is a ledger address of a neuron controller.
+  * The parent neuron has at least 1 ICP worth of maturity.
 
 Postconditions:
-* Parent neuron maturity is set to `0`.
-* A new neuron is spawned with a balance equals to transferred maturity.
+  * Parent neuron maturity is set to `0`.
+  * A new neuron is spawned with a balance equals to transferred maturity.
 
 ```json
  {
@@ -297,6 +316,7 @@ Postconditions:
       "type": "SPAWN",
       "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
       "metadata": {
+        "neuron_index": 0,
         "controller": "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae",
         "spawned_neuron_index": 1
       }
@@ -306,5 +326,7 @@ Postconditions:
 ```
 
 Notes:
-- `controller` is optional and equal to the existing neuron controller by default.
-- `spawned_neuron_index` is required and used to compute the sub-account for the spawned neuron. All spawned neurons should have a different `spawned_neuron_index`.
+  * `controller` metadata field is optional and equal to the existing neuron controller by default.
+  * `spawned_neuron_index` metadata field is required.
+    The rosetta node uses this index to compute the sub-account for the spawned neuron.
+    All spawned neurons must have different values of `spawned_neuron_index`.

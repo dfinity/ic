@@ -162,7 +162,7 @@ pub fn requests_to_operations(
             }
             Request::Stake(Stake {
                 account,
-                neuron_identifier,
+                neuron_index,
             }) => {
                 ops.push(Operation {
                     operation_identifier: allocate_op_id(),
@@ -174,7 +174,7 @@ pub fn requests_to_operations(
                     coin_change: None,
                     metadata: Some(
                         NeuronIdentifierMetadata {
-                            neuron_identifier: *neuron_identifier,
+                            neuron_index: *neuron_index,
                         }
                         .into(),
                     ),
@@ -182,7 +182,7 @@ pub fn requests_to_operations(
             }
             Request::SetDissolveTimestamp(SetDissolveTimestamp {
                 account,
-                neuron_identifier,
+                neuron_index,
                 timestamp,
             }) => {
                 ops.push(Operation {
@@ -195,7 +195,7 @@ pub fn requests_to_operations(
                     coin_change: None,
                     metadata: Some(
                         SetDissolveTimestampMetadata {
-                            neuron_identifier: *neuron_identifier,
+                            neuron_index: *neuron_index,
                             timestamp: *timestamp,
                         }
                         .into(),
@@ -204,7 +204,7 @@ pub fn requests_to_operations(
             }
             Request::StartDissolve(StartDissolve {
                 account,
-                neuron_identifier,
+                neuron_index,
             }) => {
                 ops.push(Operation {
                     operation_identifier: allocate_op_id(),
@@ -216,7 +216,7 @@ pub fn requests_to_operations(
                     coin_change: None,
                     metadata: Some(
                         NeuronIdentifierMetadata {
-                            neuron_identifier: *neuron_identifier,
+                            neuron_index: *neuron_index,
                         }
                         .into(),
                     ),
@@ -224,7 +224,7 @@ pub fn requests_to_operations(
             }
             Request::StopDissolve(StopDissolve {
                 account,
-                neuron_identifier,
+                neuron_index,
             }) => {
                 ops.push(Operation {
                     operation_identifier: allocate_op_id(),
@@ -236,7 +236,7 @@ pub fn requests_to_operations(
                     coin_change: None,
                     metadata: Some(
                         NeuronIdentifierMetadata {
-                            neuron_identifier: *neuron_identifier,
+                            neuron_index: *neuron_index,
                         }
                         .into(),
                     ),
@@ -246,7 +246,7 @@ pub fn requests_to_operations(
                 account,
                 amount,
                 recipient,
-                neuron_identifier,
+                neuron_index,
             }) => {
                 ops.push(Operation {
                     operation_identifier: allocate_op_id(),
@@ -259,7 +259,7 @@ pub fn requests_to_operations(
                     metadata: Some(
                         DisburseMetadata {
                             recipient: *recipient,
-                            neuron_identifier: *neuron_identifier,
+                            neuron_index: *neuron_index,
                         }
                         .into(),
                     ),
@@ -267,7 +267,7 @@ pub fn requests_to_operations(
             }
             Request::AddHotKey(AddHotKey {
                 account,
-                neuron_identifier,
+                neuron_index,
                 key,
             }) => {
                 ops.push(Operation {
@@ -281,7 +281,7 @@ pub fn requests_to_operations(
                     metadata: Some(
                         KeyMetadata {
                             key: key.clone(),
-                            neuron_identifier: *neuron_identifier,
+                            neuron_index: *neuron_index,
                         }
                         .into(),
                     ),
@@ -289,9 +289,9 @@ pub fn requests_to_operations(
             }
             Request::Spawn(Spawn {
                 account,
-                spawned_neuron_index: neuron_index,
+                spawned_neuron_index,
                 controller,
-                neuron_identifier,
+                neuron_index,
             }) => {
                 ops.push(Operation {
                     operation_identifier: allocate_op_id(),
@@ -305,7 +305,7 @@ pub fn requests_to_operations(
                         SpawnMetadata {
                             neuron_index: *neuron_index,
                             controller: *controller,
-                            neuron_identifier: *neuron_identifier,
+                            spawned_neuron_index: *spawned_neuron_index,
                         }
                         .into(),
                     ),
@@ -411,12 +411,12 @@ impl State {
     fn stake(
         &mut self,
         account: ledger_canister::AccountIdentifier,
-        neuron_identifier: u64,
+        neuron_index: u64,
     ) -> Result<(), ApiError> {
         self.flush()?;
         self.actions.push(Request::Stake(Stake {
             account,
-            neuron_identifier,
+            neuron_index,
         }));
         Ok(())
     }
@@ -424,14 +424,14 @@ impl State {
     fn set_dissolve_timestamp(
         &mut self,
         account: ledger_canister::AccountIdentifier,
-        neuron_identifier: u64,
+        neuron_index: u64,
         timestamp: Seconds,
     ) -> Result<(), ApiError> {
         self.flush()?;
         self.actions
             .push(Request::SetDissolveTimestamp(SetDissolveTimestamp {
                 account,
-                neuron_identifier,
+                neuron_index,
                 timestamp,
             }));
         Ok(())
@@ -440,13 +440,13 @@ impl State {
     fn start_dissolve(
         &mut self,
         account: ledger_canister::AccountIdentifier,
-        neuron_identifier: u64,
+        neuron_index: u64,
     ) -> Result<(), ApiError> {
         self.flush()?;
 
         self.actions.push(Request::StartDissolve(StartDissolve {
             account,
-            neuron_identifier,
+            neuron_index,
         }));
 
         Ok(())
@@ -455,13 +455,13 @@ impl State {
     fn stop_dissolve(
         &mut self,
         account: ledger_canister::AccountIdentifier,
-        neuron_identifier: u64,
+        neuron_index: u64,
     ) -> Result<(), ApiError> {
         self.flush()?;
 
         self.actions.push(Request::StopDissolve(StopDissolve {
             account,
-            neuron_identifier,
+            neuron_index,
         }));
 
         Ok(())
@@ -469,14 +469,14 @@ impl State {
     fn add_hot_key(
         &mut self,
         account: ledger_canister::AccountIdentifier,
-        neuron_identifier: u64,
+        neuron_index: u64,
         key: PublicKeyOrPrincipal,
     ) -> Result<(), ApiError> {
         self.flush()?;
 
         self.actions.push(Request::AddHotKey(AddHotKey {
             account,
-            neuron_identifier,
+            neuron_index,
             key,
         }));
 
@@ -486,7 +486,7 @@ impl State {
     fn disburse(
         &mut self,
         account: ledger_canister::AccountIdentifier,
-        neuron_identifier: u64,
+        neuron_index: u64,
         amount: Option<Tokens>,
         recipient: Option<ledger_canister::AccountIdentifier>,
     ) -> Result<(), ApiError> {
@@ -496,7 +496,7 @@ impl State {
             account,
             amount,
             recipient,
-            neuron_identifier,
+            neuron_index,
         }));
 
         Ok(())
@@ -505,17 +505,17 @@ impl State {
     fn spawn(
         &mut self,
         account: ledger_canister::AccountIdentifier,
-        neuron_identifier: u64,
         neuron_index: u64,
+        spawned_neuron_index: u64,
         controller: Option<PrincipalId>,
     ) -> Result<(), ApiError> {
         self.flush()?;
 
         self.actions.push(Request::Spawn(Spawn {
             account,
-            spawned_neuron_index: neuron_index,
+            spawned_neuron_index,
             controller,
-            neuron_identifier,
+            neuron_index,
         }));
 
         Ok(())
@@ -595,42 +595,36 @@ pub fn from_operations(
             }
             STAKE => {
                 validate_neuron_management_op()?;
-                let NeuronIdentifierMetadata { neuron_identifier } =
-                    o.metadata.clone().try_into()?;
-                state.stake(account, neuron_identifier)?;
+                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                state.stake(account, neuron_index)?;
             }
             SET_DISSOLVE_TIMESTAMP => {
                 validate_neuron_management_op()?;
                 let SetDissolveTimestampMetadata {
-                    neuron_identifier,
+                    neuron_index,
                     timestamp,
                 } = o.metadata.clone().try_into()?;
 
-                state.set_dissolve_timestamp(account, neuron_identifier, timestamp)?;
+                state.set_dissolve_timestamp(account, neuron_index, timestamp)?;
             }
             START_DISSOLVE => {
                 validate_neuron_management_op()?;
-                let NeuronIdentifierMetadata { neuron_identifier } =
-                    o.metadata.clone().try_into()?;
-                state.start_dissolve(account, neuron_identifier)?;
+                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                state.start_dissolve(account, neuron_index)?;
             }
             STOP_DISSOLVE => {
                 validate_neuron_management_op()?;
-                let NeuronIdentifierMetadata { neuron_identifier } =
-                    o.metadata.clone().try_into()?;
-                state.stop_dissolve(account, neuron_identifier)?;
+                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                state.stop_dissolve(account, neuron_index)?;
             }
             ADD_HOT_KEY => {
-                let KeyMetadata {
-                    key,
-                    neuron_identifier,
-                } = o.metadata.clone().try_into()?;
+                let KeyMetadata { key, neuron_index } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
-                state.add_hot_key(account, neuron_identifier, key)?;
+                state.add_hot_key(account, neuron_index, key)?;
             }
             DISBURSE => {
                 let DisburseMetadata {
-                    neuron_identifier,
+                    neuron_index,
                     recipient,
                 } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
@@ -643,16 +637,16 @@ pub fn from_operations(
                 } else {
                     None
                 };
-                state.disburse(account, neuron_identifier, amount, recipient)?;
+                state.disburse(account, neuron_index, amount, recipient)?;
             }
             SPAWN => {
                 let SpawnMetadata {
                     neuron_index,
                     controller,
-                    neuron_identifier,
+                    spawned_neuron_index,
                 } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
-                state.spawn(account, neuron_identifier, neuron_index, controller)?;
+                state.spawn(account, neuron_index, spawned_neuron_index, controller)?;
             }
             _ => {
                 let msg = format!("Unsupported operation type: {}", o._type);
@@ -759,12 +753,11 @@ pub fn account_from_public_key(pk: &models::PublicKey) -> Result<AccountIdentifi
     Ok(to_model_account_identifier(&pid.into()))
 }
 
-/// `neuron_identifier` must also be the `nonce` of neuron management commands.
-/// FIXME this method doesn't work for Spawned neurons (with or without nonce)
-/// and should be deleted.
+/// `neuron_index` must also be the `nonce` of neuron management commands.
+// TODO(ROSETTA1-178) this method doesn't work for Spawned neurons.
 pub fn neuron_subaccount_bytes_from_public_key(
     pk: &models::PublicKey,
-    neuron_identifier: u64,
+    neuron_index: u64,
 ) -> Result<[u8; 32], ApiError> {
     let controller = principal_id_from_public_key(pk)?;
 
@@ -774,17 +767,17 @@ pub fn neuron_subaccount_bytes_from_public_key(
     state.write(&[0x0c]);
     state.write(b"neuron-stake");
     state.write(controller.as_slice());
-    state.write(&neuron_identifier.to_be_bytes());
+    state.write(&neuron_index.to_be_bytes());
     Ok(state.finish())
 }
 
-/// `neuron_identifier` must also be the `nonce` of neuron management commands.
+/// `neuron_index` must also be the `nonce` of neuron management commands.
 pub fn neuron_account_from_public_key(
     governance_canister_id: &CanisterId,
     pk: &models::PublicKey,
-    neuron_identifier: u64,
+    neuron_index: u64,
 ) -> Result<AccountIdentifier, ApiError> {
-    let subaccount_bytes = neuron_subaccount_bytes_from_public_key(pk, neuron_identifier)?;
+    let subaccount_bytes = neuron_subaccount_bytes_from_public_key(pk, neuron_index)?;
     Ok(to_model_account_identifier(
         &ledger_canister::AccountIdentifier::new(
             governance_canister_id.get(),

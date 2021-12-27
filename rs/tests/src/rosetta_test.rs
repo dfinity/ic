@@ -890,14 +890,13 @@ async fn test_staking(
 ) -> (AccountIdentifier, Arc<EdKeypair>) {
     let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1300);
     let dst_acc_kp = Arc::new(dst_acc_kp);
-    let neuron_identifier = 2;
+    let neuron_index = 2;
 
     let staked_amount = Tokens::new(10, 0).unwrap();
 
     // Could use /construction/derive for this.
     let neuron_account =
-        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_identifier)
-            .unwrap();
+        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_index).unwrap();
     let neuron_account = from_model_account_identifier(&neuron_account).unwrap();
 
     let (_tid, results, _fee) = do_multiple_txn(
@@ -924,7 +923,7 @@ async fn test_staking(
             RequestInfo {
                 request: Request::Stake(Stake {
                     account: dst_acc,
-                    neuron_identifier,
+                    neuron_index,
                 }),
                 sender_keypair: Arc::clone(&dst_acc_kp),
             },
@@ -959,7 +958,7 @@ async fn test_staking(
         .account_balance_neuron(
             neuron_account,
             None,
-            Some((dst_acc_pk.clone(), neuron_identifier)),
+            Some((dst_acc_pk.clone(), neuron_index)),
             false,
         )
         .await
@@ -970,12 +969,7 @@ async fn test_staking(
     assert_eq!(neuron_info.state, NeuronState::Dissolved);
 
     let neuron_info = ros
-        .account_balance_neuron(
-            neuron_account,
-            None,
-            Some((dst_acc_pk, neuron_identifier)),
-            true,
-        )
+        .account_balance_neuron(neuron_account, None, Some((dst_acc_pk, neuron_index)), true)
         .await
         .unwrap()
         .unwrap()
@@ -994,12 +988,11 @@ async fn test_staking_raw(
 ) -> (AccountIdentifier, Arc<EdKeypair>) {
     let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1300);
     let dst_acc_kp = Arc::new(dst_acc_kp);
-    let neuron_identifier = 2;
+    let neuron_index = 2;
 
     // Could use /construction/derive for this.
     let neuron_account =
-        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_identifier)
-            .unwrap();
+        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_index).unwrap();
     let neuron_account = from_model_account_identifier(&neuron_account).unwrap();
 
     // Key pairs as Json.
@@ -1133,7 +1126,7 @@ async fn test_staking_raw(
                 "address": &dst_acc
             },
             "metadata": {
-                "neuron_identifier": &neuron_identifier
+                "neuron_index": &neuron_index
             }
         }
     ]);
@@ -1149,7 +1142,7 @@ async fn test_staking_raw(
             "request_types": [
                 "TRANSACTION",
                 "TRANSACTION",
-                {"STAKE": {"neuron_identifier": 2}}
+                {"STAKE": {"neuron_index": 2}}
             ]
         }),
         options.unwrap()
@@ -1334,15 +1327,14 @@ async fn test_staking_failure(
 ) {
     let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1301);
     let dst_acc_kp = Arc::new(dst_acc_kp);
-    let neuron_identifier = 2;
+    let neuron_index = 2;
 
     // This is just below the minimum (NetworkEconomics.neuron_minimum_stake_e8s).
     let staked_amount = (Tokens::new(1, 0).unwrap() - Tokens::from_e8s(1)).unwrap();
 
     // Could use /construction/derive for this.
     let neuron_account =
-        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_identifier)
-            .unwrap();
+        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_index).unwrap();
     let neuron_account = from_model_account_identifier(&neuron_account).unwrap();
 
     let err = do_multiple_txn(
@@ -1369,7 +1361,7 @@ async fn test_staking_failure(
             RequestInfo {
                 request: Request::Stake(Stake {
                     account: dst_acc,
-                    neuron_identifier,
+                    neuron_index,
                 }),
                 sender_keypair: Arc::clone(&dst_acc_kp),
             },
@@ -1392,14 +1384,14 @@ async fn test_start_dissolve(
     ros: &RosettaApiHandle,
     account: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
-    neuron_identifier: u64,
+    neuron_index: u64,
 ) -> Result<(), ic_rosetta_api::models::Error> {
     do_multiple_txn(
         ros,
         &[RequestInfo {
             request: Request::StartDissolve(StartDissolve {
                 account,
-                neuron_identifier,
+                neuron_index,
             }),
             sender_keypair: Arc::clone(&key_pair),
         }],
@@ -1424,14 +1416,14 @@ async fn test_stop_dissolve(
     ros: &RosettaApiHandle,
     account: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
-    neuron_identifier: u64,
+    neuron_index: u64,
 ) -> Result<(), ic_rosetta_api::models::Error> {
     do_multiple_txn(
         ros,
         &[RequestInfo {
             request: Request::StopDissolve(StopDissolve {
                 account,
-                neuron_identifier,
+                neuron_index,
             }),
             sender_keypair: Arc::clone(&key_pair),
         }],
@@ -1456,14 +1448,14 @@ async fn test_set_dissolve_timestamp_in_the_past_fail(
     ros: &RosettaApiHandle,
     acc: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
-    neuron_identifier: u64,
+    neuron_index: u64,
 ) {
     let err = set_dissolve_timestamp(
         ros,
         acc,
         key_pair,
         Seconds::from(std::time::SystemTime::now() - Duration::from_secs(100000)),
-        neuron_identifier,
+        neuron_index,
     )
     .await;
 
@@ -1479,9 +1471,9 @@ async fn test_set_dissolve_timestamp(
     acc: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
     delay_secs: Seconds,
-    neuron_identifier: u64,
+    neuron_index: u64,
 ) {
-    set_dissolve_timestamp(ros, acc, key_pair, delay_secs, neuron_identifier)
+    set_dissolve_timestamp(ros, acc, key_pair, delay_secs, neuron_index)
         .await
         .unwrap();
 }
@@ -1491,14 +1483,14 @@ async fn set_dissolve_timestamp(
     acc: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
     timestamp: Seconds,
-    neuron_identifier: u64,
+    neuron_index: u64,
 ) -> Result<(), ic_rosetta_api::models::Error> {
     do_multiple_txn(
         ros,
         &[RequestInfo {
             request: Request::SetDissolveTimestamp(SetDissolveTimestamp {
                 account: acc,
-                neuron_identifier,
+                neuron_index,
                 timestamp,
             }),
             sender_keypair: Arc::clone(&key_pair),
@@ -1524,7 +1516,7 @@ async fn test_add_hot_key(
     ros: &RosettaApiHandle,
     acc: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
-    neuron_identifier: u64,
+    neuron_index: u64,
 ) -> Result<(), ic_rosetta_api::models::Error> {
     let (_, _, pk, pid) = make_user(1400);
 
@@ -1533,7 +1525,7 @@ async fn test_add_hot_key(
         &[RequestInfo {
             request: Request::AddHotKey(AddHotKey {
                 account: acc,
-                neuron_identifier,
+                neuron_index,
                 key: PublicKeyOrPrincipal::PublicKey(pk),
             }),
             sender_keypair: Arc::clone(&key_pair),
@@ -1562,7 +1554,7 @@ async fn test_add_hot_key(
         &[RequestInfo {
             request: Request::AddHotKey(AddHotKey {
                 account: acc,
-                neuron_identifier,
+                neuron_index,
                 key: PublicKeyOrPrincipal::Principal(pid),
             }),
             sender_keypair: Arc::clone(&key_pair),
@@ -1595,7 +1587,7 @@ async fn test_disburse(
     ledger: &Canister<'_>,
     acc: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
-    neuron_identifier: u64,
+    neuron_index: u64,
     amount: Option<Tokens>,
     recipient: Option<AccountIdentifier>,
     neuron: &Neuron,
@@ -1610,7 +1602,7 @@ async fn test_disburse(
                 account: acc,
                 amount,
                 recipient,
-                neuron_identifier,
+                neuron_index,
             }),
             sender_keypair: Arc::clone(&key_pair),
         }],
@@ -1657,7 +1649,7 @@ async fn test_disburse_raw(
     ledger: &Canister<'_>,
     acc: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
-    neuron_identifier: u64,
+    neuron_index: u64,
     amount: Option<Tokens>,
     recipient: Option<AccountIdentifier>,
     neuron: &Neuron,
@@ -1677,7 +1669,7 @@ async fn test_disburse_raw(
                     "address": &acc
                 },
                 "metadata": {
-                    "neuron_identifier": &neuron_identifier
+                    "neuron_index": &neuron_index
                 }
             }
         ]
@@ -1754,11 +1746,10 @@ async fn test_staking_flow(
 
     let staked_amount = Tokens::new(1, 0).unwrap();
 
-    let neuron_identifier = 1;
+    let neuron_index = 1;
     // Could use /neuron/derive for this.
     let neuron_account =
-        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_identifier)
-            .unwrap();
+        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_index).unwrap();
     let neuron_account = from_model_account_identifier(&neuron_account).unwrap();
 
     let (_tid, res, _fee) = do_multiple_txn(
@@ -1785,14 +1776,14 @@ async fn test_staking_flow(
             RequestInfo {
                 request: Request::Stake(Stake {
                     account: dst_acc,
-                    neuron_identifier,
+                    neuron_index,
                 }),
                 sender_keypair: Arc::clone(&dst_acc_kp),
             },
             RequestInfo {
                 request: Request::SetDissolveTimestamp(SetDissolveTimestamp {
                     account: dst_acc,
-                    neuron_identifier,
+                    neuron_index,
                     timestamp,
                 }),
                 sender_keypair: Arc::clone(&dst_acc_kp),
@@ -1800,14 +1791,14 @@ async fn test_staking_flow(
             RequestInfo {
                 request: Request::StartDissolve(StartDissolve {
                     account: dst_acc,
-                    neuron_identifier,
+                    neuron_index,
                 }),
                 sender_keypair: Arc::clone(&dst_acc_kp),
             },
             RequestInfo {
                 request: Request::StopDissolve(StopDissolve {
                     account: dst_acc,
-                    neuron_identifier,
+                    neuron_index,
                 }),
                 sender_keypair: Arc::clone(&dst_acc_kp),
             },
@@ -1850,12 +1841,11 @@ async fn test_staking_flow_two_txns(
     let dst_acc_kp = Arc::new(dst_acc_kp);
 
     let staked_amount = Tokens::new(1, 0).unwrap();
-    let neuron_identifier = 1;
+    let neuron_index = 1;
 
     // Could use /neuron/derive for this.
     let neuron_account =
-        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_identifier)
-            .unwrap();
+        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_index).unwrap();
     let neuron_account = from_model_account_identifier(&neuron_account).unwrap();
 
     let (_tid, _bh, _fee) = do_multiple_txn(
@@ -1893,14 +1883,14 @@ async fn test_staking_flow_two_txns(
             RequestInfo {
                 request: Request::Stake(Stake {
                     account: dst_acc,
-                    neuron_identifier,
+                    neuron_index,
                 }),
                 sender_keypair: Arc::clone(&dst_acc_kp),
             },
             RequestInfo {
                 request: Request::SetDissolveTimestamp(SetDissolveTimestamp {
                     account: dst_acc,
-                    neuron_identifier,
+                    neuron_index,
                     timestamp,
                 }),
                 sender_keypair: Arc::clone(&dst_acc_kp),
@@ -1908,14 +1898,14 @@ async fn test_staking_flow_two_txns(
             RequestInfo {
                 request: Request::StartDissolve(StartDissolve {
                     account: dst_acc,
-                    neuron_identifier,
+                    neuron_index,
                 }),
                 sender_keypair: Arc::clone(&dst_acc_kp),
             },
             RequestInfo {
                 request: Request::StopDissolve(StopDissolve {
                     account: dst_acc,
-                    neuron_identifier,
+                    neuron_index,
                 }),
                 sender_keypair: Arc::clone(&dst_acc_kp),
             },
@@ -1948,21 +1938,21 @@ async fn test_spawn(ros: &RosettaApiHandle, ledger: &Canister<'_>, neuron_info: 
     let (_, tip_idx) = get_tip(ledger).await;
 
     let acc = neuron_info.account_id;
-    let neuron_identifier = neuron_info.neuron_subaccount_identifier;
+    let neuron_index = neuron_info.neuron_subaccount_identifier;
     let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
 
     let balance_main_before = get_balance(ledger, acc).await;
 
     // the nonce used to generate spawned neuron.
-    let neuron_index: u64 = 4321;
+    let spawned_neuron_index: u64 = 4321;
     let res = do_multiple_txn(
         ros,
         &[RequestInfo {
             request: Request::Spawn(Spawn {
                 account: acc,
-                spawned_neuron_index: neuron_index,
+                spawned_neuron_index,
                 controller: Option::None, // use default (same) controller.
-                neuron_identifier,
+                neuron_index,
             }),
             sender_keypair: Arc::clone(&key_pair),
         }],
@@ -2000,7 +1990,8 @@ async fn test_spawn(ros: &RosettaApiHandle, ledger: &Canister<'_>, neuron_info: 
     );
 
     // Verify that maturity got transferred to the spawned neuron.
-    let subaccount = compute_neuron_staking_subaccount(neuron_info.principal_id, neuron_index);
+    let subaccount =
+        compute_neuron_staking_subaccount(neuron_info.principal_id, spawned_neuron_index);
     let spawned_neuron = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
     let balance_sub = get_balance(ledger, spawned_neuron).await;
     assert_eq!(
@@ -2015,19 +2006,19 @@ async fn test_spawn(ros: &RosettaApiHandle, ledger: &Canister<'_>, neuron_info: 
 
 async fn test_spawn_invalid(ros: &RosettaApiHandle, neuron_info: NeuronInfo) {
     let acc = neuron_info.account_id;
-    let neuron_identifier = neuron_info.neuron_subaccount_identifier;
+    let neuron_index = neuron_info.neuron_subaccount_identifier;
     let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
 
     // the nonce used to generate spawned neuron.
-    let neuron_index: u64 = 5678;
+    let spawned_neuron_index: u64 = 5678;
     let res = do_multiple_txn(
         ros,
         &[RequestInfo {
             request: Request::Spawn(Spawn {
                 account: acc,
-                spawned_neuron_index: neuron_index,
+                spawned_neuron_index,
                 controller: Option::None, // use default (same) controller.
-                neuron_identifier,
+                neuron_index,
             }),
             sender_keypair: Arc::clone(&key_pair),
         }],

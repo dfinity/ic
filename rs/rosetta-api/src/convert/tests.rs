@@ -34,11 +34,11 @@ impl OperationBuilder {
         })
     }
 
-    fn neuron_identifier(self, neuron_identifier: u64) -> Self {
+    fn neuron_index(self, neuron_index: u64) -> Self {
         let mut metadata = self.0.metadata.unwrap_or_default();
         metadata.insert(
-            "neuron_identifier".to_owned(),
-            serde_json::to_value(neuron_identifier).unwrap(),
+            "neuron_index".to_owned(),
+            serde_json::to_value(neuron_index).unwrap(),
         );
         Self(Operation {
             metadata: Some(metadata),
@@ -99,7 +99,7 @@ fn test_transfer_and_stake_requests_to_operations() {
                 }),
                 Request::Stake(Stake {
                     account: test_account(2),
-                    neuron_identifier: 1,
+                    neuron_index: 1,
                 })
             ],
             DEFAULT_TOKEN_NAME
@@ -119,7 +119,7 @@ fn test_transfer_and_stake_requests_to_operations() {
                 .build(),
             OperationBuilder::new(3, "STAKE")
                 .account(test_account(2))
-                .neuron_identifier(1)
+                .neuron_index(1)
                 .build(),
         ])
     );
