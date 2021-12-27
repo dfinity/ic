@@ -10,7 +10,7 @@ hex = "0.4.2"
 http = "0.2.5"
 flate2 = "1.0.20"
 futures = "0.3.13"
-hyper = { version = "0.14.5", features = ["full"] }
+hyper = { version = "0.14.16", features = ["full"] }
 ic-base-thread = { path = "../base/thread" }
 ic-config = { path = "../config" }
 ic-crypto = { path = "../crypto" }

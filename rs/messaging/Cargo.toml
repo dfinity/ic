@@ -7,7 +7,7 @@ edition = "2018"
 futures = "0.3.6"
 async-trait = "0.1.31"
 crossbeam-channel = "0.5.0"
-hyper = { version = "0.14.5" , features = ["full", "tcp", ] }
+hyper = { version = "0.14.16" , features = ["full", "tcp", ] }
 ic-base-types = { path = "../types/base_types" }
 ic-canonical-state = { path = "../canonical_state" }
 ic-config = { path = "../config" }
