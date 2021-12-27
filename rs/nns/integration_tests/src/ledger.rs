@@ -170,6 +170,7 @@ fn test_rosetta1_92() {
         let archive_canister_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
             "rosetta-api/ledger_canister",
             "ledger-archive-node-canister",
+            &[],
         );
 
         archive_canister.set_wasm(archive_canister_wasm.bytes());

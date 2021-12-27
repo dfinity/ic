@@ -9,7 +9,7 @@ fn nan_canonicalized() {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
 
         let canister = proj
-            .cargo_bin("nan_canonicalized")
+            .cargo_bin("nan_canonicalized", &[])
             .install_(&r, Vec::new())
             .await?;
 
@@ -26,7 +26,10 @@ fn stable() {
     local_test_e(|r| async move {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
 
-        let stable = proj.cargo_bin("stable").install_(&r, Vec::new()).await?;
+        let stable = proj
+            .cargo_bin("stable", &[])
+            .install_(&r, Vec::new())
+            .await?;
 
         stable.query_("stable", bytes, Vec::new()).await?;
         Ok(())
@@ -42,7 +45,7 @@ fn what_time_is_it() {
     local_test_e(|r| async move {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
 
-        let stable = proj.cargo_bin("time").install_(&r, Vec::new()).await?;
+        let stable = proj.cargo_bin("time", &[]).install_(&r, Vec::new()).await?;
 
         let native_time: SystemTime = SystemTime::now();
         let canister_time: SystemTime = stable.query_("what_time_is_it", json, ()).await?;
@@ -58,7 +61,7 @@ fn call_nonesistent_method_should_not_panic() {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
 
         let canister = proj
-            .cargo_bin("inter_canister_error_handling")
+            .cargo_bin("inter_canister_error_handling", &[])
             .install_(&r, Vec::new())
             .await?;
 

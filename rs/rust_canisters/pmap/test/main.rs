@@ -12,7 +12,7 @@ fn test() {
         ///////////////////////////////////////////////////////
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
 
-        let create_canister = |c| proj.cargo_bin(c).install(&runtime).bytes(Vec::new());
+        let create_canister = |c| proj.cargo_bin(c, &[]).install(&runtime).bytes(Vec::new());
 
         let canister = create_canister("pmap_canister").await?;
 

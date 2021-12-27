@@ -9,7 +9,7 @@ fn candid_test() {
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
 
         let canister = proj
-            .cargo_bin("wasm")
+            .cargo_bin("wasm", &[])
             .install_(&r, BytesS(Vec::new()))
             .await?;
 

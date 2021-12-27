@@ -283,6 +283,7 @@ fn get_nns_canister_wasm<'a>(
             wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
                 "rosetta-api/ledger_canister",
                 "ledger-canister",
+                &[],
             ),
             use_root: true,
             canister: &nns_canisters.ledger,
@@ -293,6 +294,7 @@ fn get_nns_canister_wasm<'a>(
             wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
                 "nns/gtc",
                 "genesis-token-canister",
+                &[],
             ),
             use_root: true,
             canister: &nns_canisters.genesis_token,
@@ -303,6 +305,7 @@ fn get_nns_canister_wasm<'a>(
             wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
                 "rosetta-api/cycles_minting_canister",
                 "cycles-minting-canister",
+                &[],
             ),
             use_root: true,
             canister: &nns_canisters.cycles_minting,
@@ -320,6 +323,7 @@ fn get_nns_canister_wasm<'a>(
             wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
                 "nns/governance",
                 "governance-canister",
+                &[],
             ),
             use_root: true,
             canister: &nns_canisters.governance,
@@ -330,6 +334,7 @@ fn get_nns_canister_wasm<'a>(
             wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
                 "nns/handlers/root",
                 "root-canister",
+                &[],
             ),
             use_root: false,
             canister: &nns_canisters.root,
@@ -340,6 +345,7 @@ fn get_nns_canister_wasm<'a>(
             wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
                 "registry/canister",
                 "registry-canister",
+                &[],
             ),
             use_root: true,
             canister: &nns_canisters.registry,

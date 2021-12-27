@@ -365,12 +365,14 @@ pub async fn install_rust_canister_with_memory_allocation(
     mut canister: &mut Canister<'_>,
     relative_path_from_rs: impl AsRef<Path>,
     binary_name: impl AsRef<str>,
+    cargo_features: &[&str],
     canister_init_payload: Option<Vec<u8>>,
     memory_allocation: u64, // in bytes
 ) {
     let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
         relative_path_from_rs,
         binary_name.as_ref(),
+        cargo_features,
     );
 
     wasm.install_with_retries_onto_canister(
@@ -392,12 +394,14 @@ pub async fn install_rust_canister(
     canister: &mut Canister<'_>,
     relative_path_from_rs: impl AsRef<Path>,
     binary_name: impl AsRef<str>,
+    cargo_features: &[&str],
     canister_init_payload: Option<Vec<u8>>,
 ) {
     install_rust_canister_with_memory_allocation(
         canister,
         relative_path_from_rs,
         binary_name,
+        cargo_features,
         canister_init_payload,
         memory_allocation_of(canister.canister_id()),
     )
@@ -415,6 +419,7 @@ pub async fn install_governance_canister(canister: &mut Canister<'_>, init_paylo
         canister,
         "nns/governance",
         "governance-canister",
+        &[],
         Some(serialized),
     )
     .await;
@@ -440,6 +445,7 @@ pub async fn install_registry_canister(
         canister,
         "registry/canister",
         "registry-canister",
+        &[],
         Some(encoded),
     )
     .await;
@@ -466,6 +472,7 @@ pub async fn install_genesis_token_canister(canister: &mut Canister<'_>, init_pa
         canister,
         "nns/gtc",
         "genesis-token-canister",
+        &[],
         Some(serialized),
     )
     .await
@@ -490,6 +497,7 @@ pub async fn install_ledger_canister<'runtime, 'a>(
         canister,
         "rosetta-api/ledger_canister",
         "ledger-canister",
+        &["notify-method"],
         Some(CandidOne(args).into_bytes().unwrap()),
     )
     .await
@@ -515,6 +523,7 @@ pub async fn install_root_canister(
         canister,
         "nns/handlers/root",
         "root-canister",
+        &[],
         Some(encoded),
     )
     .await;
@@ -540,6 +549,7 @@ pub async fn install_cycles_minting_canister(
         canister,
         "nns/cmc",
         "cycles-minting-canister",
+        &[],
         Some(CandidOne(init_payload).into_bytes().unwrap()),
     )
     .await;
@@ -561,7 +571,7 @@ pub async fn install_lifeline_canister(
     _init_payload: LifelineCanisterInitPayload,
 ) {
     // Use the env var if we have one, otherwise use the embedded binary.
-    Wasm::from_location_specified_by_env_var("lifeline")
+    Wasm::from_location_specified_by_env_var("lifeline", &[])
         .unwrap_or_else(|| Wasm::from_bytes(LIFELINE_CANISTER_WASM))
         .install_with_retries_onto_canister(
             canister,

@@ -14,13 +14,13 @@ use std::time::SystemTime;
 ///     let project = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 ///     let canister_1 =
 ///         project
-///         .cargo_bin("canister_1")
+///         .cargo_bin("canister_1", &[])
 ///         .install(&r)
 ///         .bytes(vec![]);
 ///
 ///     let canister_2 =
 ///         project
-///         .cargo_bin("canister_2")
+///         .cargo_bin("canister_2", &[])
 ///         .install(&r)
 ///         .bytes(vec![]);
 ///
@@ -85,10 +85,11 @@ impl Project {
     pub fn cargo_bin_maybe_use_path_relative_to_rs(
         relative_path_from_rs: impl AsRef<Path>,
         bin_name: &str,
+        features: &[&str],
     ) -> Wasm {
-        Wasm::from_location_specified_by_env_var(bin_name).unwrap_or_else(|| {
+        Wasm::from_location_specified_by_env_var(bin_name, features).unwrap_or_else(|| {
           if env::var("CARGO_MANIFEST_DIR").is_ok() {
-            Self::new_from_path_relative_to_rs(relative_path_from_rs).cargo_bin(bin_name)
+            Self::new_from_path_relative_to_rs(relative_path_from_rs).cargo_bin(bin_name, features)
           } else {
               panic!(
                   "No CARGO_MANIFEST_DIR set, but also no _CANISTER env var, while searching for {}",
@@ -114,8 +115,8 @@ impl Project {
     /// We also ignore linker arguments during this compilation
     /// because they generally don't play well with the WASM
     /// linker
-    pub fn cargo_bin(&self, bin_name: &str) -> Wasm {
-        if let Some(wasm) = Wasm::from_location_specified_by_env_var(bin_name) {
+    pub fn cargo_bin(&self, bin_name: &str, features: &[&str]) -> Wasm {
+        if let Some(wasm) = Wasm::from_location_specified_by_env_var(bin_name, features) {
             return wasm;
         }
         let since_start_secs = {
@@ -141,13 +142,19 @@ impl Project {
         // re-enter the replica and wasm
         let build_rust_flags = "-C link-args=";
 
-        let binary = CargoBuild::new()
+        let mut cargo_build = CargoBuild::new()
             .target("wasm32-unknown-unknown")
             .env("CARGO_BUILD_RUSTFLAGS", build_rust_flags)
             .bin(bin_name.to_string())
             .release()
             .manifest_path(cargo_toml_path)
-            .target_dir(wasm_target_dir)
+            .target_dir(wasm_target_dir);
+
+        if !features.is_empty() {
+            cargo_build = cargo_build.features(features.join(" "));
+        }
+
+        let binary = cargo_build
             .run()
             .expect("Cargo failed to compile the wasm binary");
 

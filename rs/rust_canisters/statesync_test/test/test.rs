@@ -7,7 +7,7 @@ fn test_statesync_test_canisters() {
 
         println!("Start installing statesync test canister");
         let canister = proj
-            .cargo_bin("statesync-test-canister")
+            .cargo_bin("statesync-test-canister", &[])
             .install(&r)
             .with_memory_allocation(8 * 1024 * 1024 * 1024) // 8GiB
             .bytes(Vec::new())

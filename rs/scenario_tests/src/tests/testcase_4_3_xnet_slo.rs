@@ -355,7 +355,7 @@ pub fn load_canister_bin(dir: &str, bin: &str) -> Wasm {
         .join("rust_canisters")
         .join(dir);
 
-    Project { cargo_manifest_dir }.cargo_bin(bin)
+    Project { cargo_manifest_dir }.cargo_bin(bin, &[])
 }
 
 pub async fn stop_chatters(canisters: &[Canister<'_>], on_error: fn(&str) -> ()) {

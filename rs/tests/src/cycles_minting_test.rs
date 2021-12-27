@@ -510,6 +510,7 @@ pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
         let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
             "rosetta-api/cycles_minting_canister",
             "cycles-minting-canister",
+            &[],
         );
 
         upgrade_nns_canister_by_proposal(

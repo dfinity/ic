@@ -14,7 +14,7 @@ fn main() {
 
             let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
 
-            let canister = proj.cargo_bin("json").install_(&r, Vec::new()).await?;
+            let canister = proj.cargo_bin("json", &[]).install_(&r, Vec::new()).await?;
 
             group.bench_function("query", |bench| {
                 bench.iter(|| async {

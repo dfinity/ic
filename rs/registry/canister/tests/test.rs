@@ -50,7 +50,7 @@ mod test {
     ) -> Result<Canister<'_>, String> {
         let encoded = Encode!(&init_payload).unwrap();
         let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
-        proj.cargo_bin("registry-canister")
+        proj.cargo_bin("registry-canister", &[])
             .install(runtime)
             .bytes(encoded)
             .await
@@ -403,7 +403,7 @@ mod test {
         local_test_on_nns_subnet(|runtime| async move {
             assert_matches!(
             Project::new(env!("CARGO_MANIFEST_DIR"))
-            .cargo_bin("registry-canister")
+            .cargo_bin("registry-canister", &[])
                 .install(&runtime)
                 .bytes(b"This is not legal candid".to_vec())
                 .await,
