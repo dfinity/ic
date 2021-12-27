@@ -217,9 +217,7 @@ impl RosettaApiHandle {
             network_identifier: self.network_id(),
             public_key: pk,
             metadata: Some(ConstructionDeriveRequestMetadata {
-                account_type: AccountType::Neuron {
-                    neuron_identifier: 0,
-                },
+                account_type: AccountType::Neuron { neuron_index: 0 },
             }),
         };
         to_rosetta_response(

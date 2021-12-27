@@ -566,7 +566,7 @@ pub enum AccountType {
     Ledger,
     Neuron {
         #[serde(default)]
-        neuron_identifier: u64,
+        neuron_index: u64,
     },
 }
 
@@ -585,15 +585,13 @@ pub struct ConstructionDeriveRequestMetadata {
 #[test]
 fn test_construction_derive_request_metadata() {
     let r0 = ConstructionDeriveRequestMetadata {
-        account_type: AccountType::Neuron {
-            neuron_identifier: 1,
-        },
+        account_type: AccountType::Neuron { neuron_index: 1 },
     };
 
     let s = serde_json::to_string(&r0).unwrap();
     let r1 = serde_json::from_str(s.as_str()).unwrap();
 
-    assert_eq!(s, r#"{"account_type":"neuron","neuron_identifier":1}"#);
+    assert_eq!(s, r#"{"account_type":"neuron","neuron_index":1}"#);
     assert_eq!(r0, r1);
 }
 
