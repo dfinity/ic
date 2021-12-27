@@ -8,7 +8,7 @@ A CloudFlare HealthCheck against the URL https://ic-api.internetcomputer.org/api
 
 == Impact
 
-The public dashboard at https://dashboard.internetcomputer.com uses the ic-api to pull down stats that are shown.
+The public dashboard at https://dashboard.internetcomputer.org uses the ic-api to pull down stats that are shown.
 
 If the ic-api is failing, it means that the public dashboard stats are not updating.
 
