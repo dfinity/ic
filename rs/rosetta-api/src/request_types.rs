@@ -32,6 +32,7 @@ pub const SET_DISSOLVE_TIMESTAMP: &str = "SET_DISSOLVE_TIMESTAMP";
 pub const DISBURSE: &str = "DISBURSE";
 pub const DISSOLVE_TIME_UTC_SECONDS: &str = "dissolve_time_utc_seconds";
 pub const ADD_HOT_KEY: &str = "ADD_HOT_KEY";
+pub const SPAWN: &str = "SPAWN";
 
 /// `RequestType` contains all supported values of `Operation.type`.
 /// Extra information, such as `neuron_identifier` should only be included
@@ -60,6 +61,9 @@ pub enum RequestType {
     #[serde(rename = "ADD_HOT_KEY")]
     #[serde(alias = "AddHotKey")]
     AddHotKey { neuron_identifier: u64 },
+    #[serde(rename = "SPAWN")]
+    #[serde(alias = "Spawn")]
+    Spawn { neuron_identifier: u64 },
 }
 
 impl RequestType {
@@ -72,6 +76,7 @@ impl RequestType {
             RequestType::StopDissolve { .. } => STOP_DISSOLVE,
             RequestType::Disburse { .. } => DISBURSE,
             RequestType::AddHotKey { .. } => ADD_HOT_KEY,
+            RequestType::Spawn { .. } => SPAWN,
         }
     }
 
@@ -88,6 +93,7 @@ impl RequestType {
                 | RequestType::StopDissolve { .. }
                 | RequestType::Disburse { .. }
                 | RequestType::AddHotKey { .. }
+                | RequestType::Spawn { .. }
         )
     }
 }
@@ -300,6 +306,8 @@ pub enum Request {
     Disburse(Disburse),
     #[serde(rename = "ADD_HOT_KEY")]
     AddHotKey(AddHotKey),
+    #[serde(rename = "SPAWN")]
+    Spawn(Spawn),
 }
 
 impl Request {
@@ -342,6 +350,11 @@ impl Request {
             Request::Transfer(LedgerOperation::Mint { .. }) => Err(ApiError::invalid_request(
                 "Mint operations are not supported through rosetta",
             )),
+            Request::Spawn(Spawn {
+                neuron_identifier, ..
+            }) => Ok(RequestType::Spawn {
+                neuron_identifier: *neuron_identifier,
+            }),
         }
     }
 
@@ -363,6 +376,7 @@ impl Request {
                 Request::StopDissolve(o) => builder.stop_dissolve(o),
                 Request::Disburse(o) => builder.disburse(o, token_name),
                 Request::AddHotKey(o) => builder.add_hot_key(o),
+                Request::Spawn(o) => builder.spawn(o),
             };
         }
         Ok(builder.build())
@@ -381,6 +395,7 @@ impl Request {
                 | Request::StopDissolve(_)
                 | Request::Disburse(_)
                 | Request::AddHotKey(_)
+                | Request::Spawn(_)
         )
     }
 }
@@ -513,6 +528,29 @@ impl TryFrom<&models::Request> for Request {
                     Err(ApiError::invalid_request("Request is missing set hotkey."))
                 }
             }
+
+            RequestType::Spawn { neuron_identifier } => {
+                if let Some(Command::Spawn(manage_neuron::Spawn {
+                    new_controller,
+                    nonce,
+                })) = manage_neuron()?
+                {
+                    if let Some(spawned_neuron_index) = nonce {
+                        Ok(Request::Spawn(Spawn {
+                            account,
+                            spawned_neuron_index,
+                            controller: new_controller,
+                            neuron_identifier: *neuron_identifier,
+                        }))
+                    } else {
+                        Err(ApiError::invalid_request(
+                            "Spawned neuron index is required.",
+                        ))
+                    }
+                } else {
+                    Err(ApiError::invalid_request("Invalid spawn request."))
+                }
+            }
         }
     }
 }
@@ -628,6 +666,15 @@ pub struct AddHotKey {
     #[serde(default)]
     pub neuron_identifier: u64,
     pub key: PublicKeyOrPrincipal,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Spawn {
+    pub account: ledger_canister::AccountIdentifier,
+    pub spawned_neuron_index: u64,
+    pub controller: Option<PrincipalId>,
+    #[serde(default)]
+    pub neuron_identifier: u64,
 }
 
 #[derive(Debug, Clone, Eq, PartialOrd, Ord, Deserialize, Serialize)]
@@ -779,6 +826,39 @@ impl TryFrom<Option<Object>> for KeyMetadata {
 
 impl From<KeyMetadata> for Object {
     fn from(m: KeyMetadata) -> Self {
+        match serde_json::to_value(m) {
+            Ok(Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub struct SpawnMetadata {
+    #[serde(default)]
+    pub neuron_index: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub controller: Option<PrincipalId>,
+    #[serde(default)]
+    pub neuron_identifier: u64,
+}
+
+impl TryFrom<Option<Object>> for SpawnMetadata {
+    type Error = ApiError;
+
+    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse a `neuron_identifier` from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+impl From<SpawnMetadata> for Object {
+    fn from(m: SpawnMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
             _ => unreachable!(),
@@ -1038,6 +1118,33 @@ impl TransactionBuilder {
             metadata: Some(
                 KeyMetadata {
                     key: key.clone(),
+                    neuron_identifier: *neuron_identifier,
+                }
+                .into(),
+            ),
+        });
+    }
+
+    pub fn spawn(&mut self, spawn: &Spawn) {
+        let Spawn {
+            account,
+            spawned_neuron_index: neuron_index,
+            controller,
+            neuron_identifier,
+        } = spawn;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            _type: SPAWN.to_string(),
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: Some(
+                SpawnMetadata {
+                    controller: *controller,
+                    neuron_index: *neuron_index,
                     neuron_identifier: *neuron_identifier,
                 }
                 .into(),

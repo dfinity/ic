@@ -18,8 +18,8 @@ use crate::convert::{
 };
 use crate::ledger_client::LedgerAccess;
 use crate::request_types::{
-    AddHotKey, Disburse, PublicKeyOrPrincipal, Request, RequestType, SetDissolveTimestamp, Stake,
-    StartDissolve, StopDissolve,
+    AddHotKey, Disburse, PublicKeyOrPrincipal, Request, RequestType, SetDissolveTimestamp, Spawn,
+    Stake, StartDissolve, StopDissolve,
 };
 use crate::store::{BlockStore, HashedBlock};
 use crate::time::Seconds;
@@ -660,6 +660,37 @@ impl RosettaRequestHandler {
                         ));
                     };
                 }
+
+                RequestType::Spawn { neuron_identifier } => {
+                    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+                        ApiError::internal_error(format!(
+                            "Could not decode ManageNeuron argument: {}",
+                            e
+                        ))
+                    })?;
+                    if let Some(Command::Spawn(manage_neuron::Spawn {
+                        new_controller,
+                        nonce,
+                    })) = manage.command
+                    {
+                        if let Some(spawned_neuron_index) = nonce {
+                            requests.push(Request::Spawn(Spawn {
+                                account: from,
+                                spawned_neuron_index,
+                                controller: new_controller,
+                                neuron_identifier,
+                            }));
+                        } else {
+                            return Err(ApiError::internal_error(
+                                "Incompatible manage_neuron command (spawned neuron index is required).",
+                            ));
+                        }
+                    } else {
+                        return Err(ApiError::internal_error(
+                            "Incompatible manage_neuron command".to_string(),
+                        ));
+                    }
+                }
             }
         }
 
@@ -1037,6 +1068,25 @@ impl RosettaRequestHandler {
                         "Mint operations are not supported through rosetta",
                     ))
                 }
+                Request::Spawn(Spawn {
+                    account,
+                    spawned_neuron_index: neuron_index,
+                    controller,
+                    neuron_identifier,
+                }) => {
+                    let command = Command::Spawn(manage_neuron::Spawn {
+                        new_controller: controller,
+                        nonce: Some(neuron_index),
+                    });
+                    add_neuron_management_payload(
+                        RequestType::Spawn { neuron_identifier },
+                        account,
+                        neuron_identifier,
+                        command,
+                        &mut payloads,
+                        &mut updates,
+                    )?;
+                }
             }
         }
 
@@ -1073,7 +1123,8 @@ impl RosettaRequestHandler {
                     | Request::StartDissolve(StartDissolve { account, .. })
                     | Request::StopDissolve(StopDissolve { account, .. })
                     | Request::Disburse(Disburse { account, .. })
-                    | Request::AddHotKey(AddHotKey { account, .. }) => Ok(account),
+                    | Request::AddHotKey(AddHotKey { account, .. })
+                    | Request::Spawn(Spawn { account, .. }) => Ok(account),
                     Request::Transfer(Operation::Burn { .. }) => Err(ApiError::invalid_request(
                         "Burn operations are not supported through rosetta",
                     )),

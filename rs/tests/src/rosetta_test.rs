@@ -18,7 +18,7 @@ use assert_json_diff::{assert_json_eq, assert_json_include};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_rosetta_api::models::{ConstructionPayloadsResponse, NeuronState, Object, PublicKey};
-use ic_rosetta_api::request_types::Status;
+use ic_rosetta_api::request_types::{Spawn, Status};
 use ic_rosetta_api::time::Seconds;
 use ledger_canister::{
     protobuf::TipOfChainRequest, AccountBalanceArgs, AccountIdentifier, ArchiveOptions,
@@ -31,6 +31,7 @@ use dfn_protobuf::protobuf;
 use ed25519_dalek::Signer;
 use fondue::log::info;
 use ic_canister_client::Sender;
+use ic_crypto_sha::Sha256;
 use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
@@ -54,7 +55,6 @@ use serde_json::{json, Value};
 use slog::Logger;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use url::Url;
@@ -66,11 +66,7 @@ pub fn config() -> InternetComputer {
 
 /// No changes to the IC environment
 pub fn test_everything(handle: IcHandle, ctx: &fondue::pot::Context) {
-    let minting_address = AccountIdentifier::new(
-        PrincipalId::from_str("hn6vo-x2xxx-axxxx-minti-ngxxa-ddres-sxxxx-xxxxx-xxxxx-xxxxx-xq")
-            .unwrap(),
-        None,
-    );
+    let minting_address = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), None);
 
     let (acc_a, kp_a, _pk_a, _pid_a) = make_user(100);
     let kp_a = Arc::new(kp_a);
@@ -205,6 +201,26 @@ pub fn test_everything(handle: IcHandle, ctx: &fondue::pot::Context) {
         rand::random(),
         |neuron| {
             neuron.dissolve_state = None;
+        },
+    );
+
+    neuron_tests.add(
+        &mut ledger_balances,
+        "Test spawn neuron with enough maturity",
+        rand::random(),
+        |neuron| {
+            neuron.dissolve_state = None;
+            neuron.maturity_e8s_equivalent = 500_000_000;
+        },
+    );
+
+    neuron_tests.add(
+        &mut ledger_balances,
+        "Test spawn neuron with not enough maturity",
+        rand::random(),
+        |neuron| {
+            neuron.dissolve_state = None;
+            neuron.maturity_e8s_equivalent = 4_000;
         },
     );
 
@@ -392,6 +408,12 @@ pub fn test_everything(handle: IcHandle, ctx: &fondue::pot::Context) {
         // Note that this is an incorrect usage, but no error is returned.
         // Start and Stop operations never fail, even when they have no affect.
         test_start_dissolve(&rosetta_api_serv, account_id, key_pair.into(), neuron_subaccount_identifier).await.unwrap();
+
+        let neuron_info= neuron_tests.get_neuron_for_test("Test spawn neuron with enough maturity");
+        test_spawn(&rosetta_api_serv, &ledger, neuron_info).await;
+
+        let neuron_info= neuron_tests.get_neuron_for_test("Test spawn neuron with not enough maturity");
+        test_spawn_invalid(&rosetta_api_serv, neuron_info).await;
 
         info!(&ctx.logger, "Test staking");
         let _ = test_staking(&rosetta_api_serv, acc_b, Arc::clone(&kp_b)).await;
@@ -1920,6 +1942,133 @@ async fn test_staking_flow_two_txns(
             .unwrap(),
     )
     .await;
+}
+
+async fn test_spawn(ros: &RosettaApiHandle, ledger: &Canister<'_>, neuron_info: NeuronInfo) {
+    let (_, tip_idx) = get_tip(ledger).await;
+
+    let acc = neuron_info.account_id;
+    let neuron_identifier = neuron_info.neuron_subaccount_identifier;
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+
+    let balance_main_before = get_balance(ledger, acc).await;
+
+    // the nonce used to generate spawned neuron.
+    let neuron_index: u64 = 4321;
+    let res = do_multiple_txn(
+        ros,
+        &[RequestInfo {
+            request: Request::Spawn(Spawn {
+                account: acc,
+                spawned_neuron_index: neuron_index,
+                controller: Option::None, // use default (same) controller.
+                neuron_identifier,
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert!(matches!(
+            results.operations.first().unwrap(),
+            RequestResult {
+                _type: Request::Spawn(_),
+                status: Status::Completed,
+                ..
+            }
+        ));
+        results
+    });
+
+    // Check spawn results.
+    // We expect one transaction to happen.
+    let expected_idx = tip_idx + 1;
+    if let Some(h) = res.unwrap().last_block_index() {
+        assert_eq!(h, expected_idx);
+    }
+    // Wait for Rosetta sync.
+    ros.wait_for_tip_sync(expected_idx).await.unwrap();
+    let balance_main_after = get_balance(ledger, acc).await;
+    assert_eq!(
+        balance_main_before.get_e8s(),
+        balance_main_after.get_e8s(),
+        "Neuron balance shouldn't change during spawn."
+    );
+
+    // Verify that maturity got transferred to the spawned neuron.
+    let subaccount = compute_neuron_spawn_subaccount(neuron_info.principal_id, neuron_index);
+    let spawned_neuron = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
+    let balance_sub = get_balance(ledger, spawned_neuron).await;
+    assert_eq!(
+        500_000_000,
+        balance_sub.get_e8s(),
+        "Expecting all maturity to be transferred to the spawned neuron."
+    );
+
+    // We should get the same results with Rosetta call (step not required though).
+    check_balance(ros, ledger, &spawned_neuron, Tokens::from_e8s(500_000_000)).await;
+
+    /// compute spawned neuron sub-account like it is done in the governance.
+    fn compute_neuron_spawn_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
+        Subaccount({
+            let mut state = Sha256::new();
+            state.write(&[0x0c]);
+            state.write(b"neuron-spawn");
+            state.write(controller.as_slice());
+            state.write(&nonce.to_be_bytes());
+            state.finish()
+        })
+    }
+}
+
+async fn test_spawn_invalid(ros: &RosettaApiHandle, neuron_info: NeuronInfo) {
+    let acc = neuron_info.account_id;
+    let neuron_identifier = neuron_info.neuron_subaccount_identifier;
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+
+    // the nonce used to generate spawned neuron.
+    let neuron_index: u64 = 5678;
+    let res = do_multiple_txn(
+        ros,
+        &[RequestInfo {
+            request: Request::Spawn(Spawn {
+                account: acc,
+                spawned_neuron_index: neuron_index,
+                controller: Option::None, // use default (same) controller.
+                neuron_identifier,
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert!(matches!(
+            results.operations.first().unwrap(),
+            RequestResult {
+                _type: Request::Spawn(_),
+                status: Status::Completed,
+                ..
+            }
+        ));
+        results
+    });
+
+    assert!(
+        res.is_err(),
+        "Error expected while trying to spawn a neuron with no enough maturity"
+    );
+
+    let err = res.unwrap_err();
+    assert_eq!(err.code, 770);
+    assert_eq!(err.message, "Operation failed".to_string());
 }
 
 fn rosetta_cli_construction_check(conf_file: &str) {

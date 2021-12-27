@@ -52,7 +52,7 @@ The only field that should be set for the `STAKE` operation is `account`, which 
 
 NOTE: `STAKE` operation is idempotent. 
 
-### Requst
+### Request
 
 ```json
 {
@@ -272,3 +272,39 @@ NOTE: The request should not specify any block identifier because the endpoint a
   }
 }
 ```
+
+## Spawn neurons
+
+The `SPAWN` operation creates a new neuron from an existing neuron with enough maturity. It transfers all the maturity from the existing neuron to the balance of the newly spawned neuron.
+
+Preconditions:
+* `account.address` is a ledger address of a neuron controller.
+* The parent neuron has at least 1 ICP worth of maturity.
+
+Postconditions:
+* Parent neuron maturity is set to `0`.
+* A new neuron is spawned with a balance equals to transferred maturity.
+
+```json
+ {
+  "network_identifier": {
+    "blockchain": "Internet Computer",
+    "network": "00000000000000020101"
+  },
+  "operations": [
+    {
+      "operation_identifier": { "index": 0 },
+      "type": "SPAWN",
+      "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
+      "metadata": {
+        "controller": "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae",
+        "spawned_neuron_index": 1
+      }
+    }
+  ]
+}
+```
+
+Notes:
+- `controller` is optional and equal to the existing neuron controller by default.
+- `spawned_neuron_index` is required and used to compute the sub-account for the spawned neuron. All spawned neurons should have a different `spawned_neuron_index`.
