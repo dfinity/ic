@@ -62,6 +62,7 @@ PACKAGES_TO_COPY=(
     monitoring/context_logger
     monitoring/logger
     monitoring/metrics
+    nns/cmc
     nns/constants
     nns/common
     nns/governance
