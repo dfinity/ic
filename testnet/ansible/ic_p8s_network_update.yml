@@ -16,10 +16,6 @@
       when: yes_i_confirm != "yes"
     - shell: git branch --show-current
       register: git_branch
-    - name: ask Git Confirmation
-      when: '(ic_deployment_name == "mercury") and ("master" not in git_branch.stdout)'
-      fail:
-        msg: "You're trying to push monitoring configs from a non-master git branch, this is not acceptable for the mercury deployment."
 
 - hosts: prometheus
   gather_facts: false
