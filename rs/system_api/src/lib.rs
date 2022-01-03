@@ -87,6 +87,7 @@ pub enum ApiType {
     /// For executing the `canister_init` method
     Init {
         time: Time,
+        #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
     },
@@ -94,11 +95,13 @@ pub enum ApiType {
     /// For executing canister methods marked as `update`
     Update {
         time: Time,
+        #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         incoming_cycles: Cycles,
         caller: PrincipalId,
         call_context_id: CallContextId,
         /// Begins as empty and used to accumulate data for sending replies.
+        #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
         own_subnet_id: SubnetId,
@@ -119,8 +122,10 @@ pub enum ApiType {
     // For executing canister methods marked as `query`
     ReplicatedQuery {
         time: Time,
+        #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
+        #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
         data_certificate: Option<Vec<u8>>,
@@ -129,6 +134,7 @@ pub enum ApiType {
 
     NonReplicatedQuery {
         time: Time,
+        #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
         call_context_id: CallContextId,
@@ -141,6 +147,7 @@ pub enum ApiType {
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
         // Begins as empty and used to accumulate data for sending replies.
+        #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
         max_reply_size: NumBytes,
@@ -150,10 +157,12 @@ pub enum ApiType {
     // For executing closures when a `Reply` is received
     ReplyCallback {
         time: Time,
+        #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
         // Begins as empty and used to accumulate data for sending replies.
+        #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
         own_subnet_id: SubnetId,
@@ -178,6 +187,7 @@ pub enum ApiType {
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
         // Begins as empty and used to accumulate data for sending replies.
+        #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
         own_subnet_id: SubnetId,
@@ -206,6 +216,7 @@ pub enum ApiType {
     InspectMessage {
         caller: PrincipalId,
         method_name: String,
+        #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         time: Time,
         message_accepted: bool,

@@ -18,6 +18,7 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-logger = { path = "../monitoring/logger" }
 serde = { version = "1.0.99", features = ["derive"] }
+serde_bytes = "0.11"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 
 [dev-dependencies]

@@ -5869,6 +5869,7 @@ dependencies = [
  "lazy_static",
  "maplit",
  "serde",
+ "serde_bytes",
  "slog",
 ]
 
