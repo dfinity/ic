@@ -3396,6 +3396,7 @@ dependencies = [
  "ic-config",
  "ic-consensus-message",
  "ic-crypto",
+ "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-cycles-account-manager",
  "ic-ecdsa-object",
  "ic-execution-environment",
