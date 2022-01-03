@@ -330,3 +330,37 @@ Notes:
   * `spawned_neuron_index` metadata field is required.
     The rosetta node uses this index to compute the sub-account for the spawned neuron.
     All spawned neurons must have different values of `spawned_neuron_index`.
+
+## Merge neuron maturity
+
+The `MERGE_MATURITY` operation merges the existing maturity of a neuron into its stake. The percentage of maturity to merge can be specified, otherwise the entire maturity is merged by default.
+
+Preconditions:
+ * `account.address` is a ledger address of a neuron controller.
+ * The neuron has some maturity to merge.
+
+Postconditions:
+ * Maturity decreased by the amount merged. 
+ * Neuron stake increased by the amount merged.
+
+```json
+ {
+  "network_identifier": {
+    "blockchain": "Internet Computer",
+    "network": "00000000000000020101"
+  },
+  "operations": [
+    {
+      "operation_identifier": { "index": 0 },
+      "type": "MERGE_MATURITY",
+      "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
+      "metadata": {
+        "percentage_to_merge": 14
+      }
+    }
+  ]
+}
+```
+
+Notes:
+ * `percentage_to_merge` is optional and equal to 100 by default. If specified it must be a natural number between 1 and 100 (included).

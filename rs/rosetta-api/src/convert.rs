@@ -5,11 +5,11 @@ use crate::models::{
     AccountIdentifier, Amount, BlockIdentifier, Currency, Operation, OperationIdentifier, Timestamp,
 };
 use crate::request_types::{
-    AddHotKey, Disburse, DisburseMetadata, KeyMetadata, NeuronIdentifierMetadata,
-    PublicKeyOrPrincipal, Request, SetDissolveTimestamp, SetDissolveTimestampMetadata, Spawn,
-    SpawnMetadata, Stake, StartDissolve, StopDissolve, ADD_HOT_KEY, BURN, DISBURSE, FEE, MINT,
-    SET_DISSOLVE_TIMESTAMP, SPAWN, STAKE, START_DISSOLVE, STATUS_COMPLETED, STOP_DISSOLVE,
-    TRANSACTION,
+    AddHotKey, Disburse, DisburseMetadata, KeyMetadata, MergeMaturity, MergeMaturityMetadata,
+    NeuronIdentifierMetadata, PublicKeyOrPrincipal, Request, SetDissolveTimestamp,
+    SetDissolveTimestampMetadata, Spawn, SpawnMetadata, Stake, StartDissolve, StopDissolve,
+    ADD_HOT_KEY, BURN, DISBURSE, FEE, MERGE_MATURITY, MINT, SET_DISSOLVE_TIMESTAMP, SPAWN, STAKE,
+    START_DISSOLVE, STATUS_COMPLETED, STOP_DISSOLVE, TRANSACTION,
 };
 use crate::store::HashedBlock;
 use crate::time::Seconds;
@@ -311,6 +311,28 @@ pub fn requests_to_operations(
                     ),
                 });
             }
+            Request::MergeMaturity(MergeMaturity {
+                account,
+                percentage_to_merge,
+                neuron_index,
+            }) => {
+                ops.push(Operation {
+                    operation_identifier: allocate_op_id(),
+                    _type: MERGE_MATURITY.to_string(),
+                    status: None,
+                    account: Some(to_model_account_identifier(account)),
+                    amount: None,
+                    related_operations: None,
+                    coin_change: None,
+                    metadata: Some(
+                        MergeMaturityMetadata {
+                            percentage_to_merge: Option::from(*percentage_to_merge),
+                            neuron_index: *neuron_index,
+                        }
+                        .into(),
+                    ),
+                });
+            }
         }
     }
     Ok(ops)
@@ -520,6 +542,28 @@ impl State {
 
         Ok(())
     }
+
+    fn merge_maturity(
+        &mut self,
+        account: ledger_canister::AccountIdentifier,
+        neuron_index: u64,
+        percentage_to_merge: Option<u32>,
+    ) -> Result<(), ApiError> {
+        if let Some(pct) = percentage_to_merge {
+            if !(1..=100).contains(&pct) {
+                let msg = format!("Invalid percentage to merge: {}", pct);
+                let err = ApiError::InvalidTransaction(false, msg.into());
+                return Err(err);
+            }
+        }
+        self.flush()?;
+        self.actions.push(Request::MergeMaturity(MergeMaturity {
+            account,
+            neuron_index,
+            percentage_to_merge: percentage_to_merge.unwrap_or(100),
+        }));
+        Ok(())
+    }
 }
 
 pub fn from_operations(
@@ -647,6 +691,14 @@ pub fn from_operations(
                 } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
                 state.spawn(account, neuron_index, spawned_neuron_index, controller)?;
+            }
+            MERGE_MATURITY => {
+                let MergeMaturityMetadata {
+                    neuron_index,
+                    percentage_to_merge,
+                } = o.metadata.clone().try_into()?;
+                validate_neuron_management_op()?;
+                state.merge_maturity(account, neuron_index, percentage_to_merge)?;
             }
             _ => {
                 let msg = format!("Unsupported operation type: {}", o._type);
