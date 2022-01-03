@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for `SPAWN` neuron management operation.
 
 ## [1.2.0] - 2021-09-28
+### Added
+- Support for `ADD_HOTKEY` neuron management operation.
+
 ### Changed
 - Neuron address derivation is now supported by /construction/derive endpoint.
   Custom /neuron/derive endpoint is removed.

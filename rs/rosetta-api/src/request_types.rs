@@ -860,6 +860,47 @@ impl From<KeyMetadata> for Object {
     }
 }
 
+#[test]
+fn test_parse_key_metadata() {
+    use std::str::FromStr;
+
+    let m1: KeyMetadata = serde_json::from_str(
+        r#"{ "principal" : "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae" }"#,
+    )
+    .unwrap();
+    assert_eq!(
+        m1,
+        KeyMetadata {
+            neuron_index: 0,
+            key: PublicKeyOrPrincipal::Principal(
+                PrincipalId::from_str(
+                    "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae"
+                )
+                .unwrap()
+            ),
+        }
+    );
+
+    let m2: KeyMetadata = serde_json::from_str(
+        r#"{ "public_key": {
+          "hex_bytes":  "1b400d60aaf34eaf6dcbab9bba46001a23497886cf11066f7846933d30e5ad3f",
+          "curve_type": "edwards25519"
+        } }"#,
+    )
+    .unwrap();
+    assert_eq!(
+        m2,
+        KeyMetadata {
+            neuron_index: 0,
+            key: PublicKeyOrPrincipal::PublicKey(models::PublicKey {
+                hex_bytes: "1b400d60aaf34eaf6dcbab9bba46001a23497886cf11066f7846933d30e5ad3f"
+                    .to_string(),
+                curve_type: models::CurveType::Edwards25519
+            }),
+        }
+    );
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct SpawnMetadata {
     #[serde(default)]

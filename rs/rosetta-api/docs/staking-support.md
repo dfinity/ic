@@ -52,6 +52,10 @@ The client can differentiate between neurons it creates using different values o
 
 ## Stake funds
 
+| Since version | Idempotent? |
+| ------------: | ----------- |
+|         1.0.5 |     yes     |
+
 Staking is represented as a normal transfer to the neuron address followed by a `STAKE` operation.
 The only field that should be set for the `STAKE` operation is `account`, which should be equal to the ledger account of the neuron controller.
 
@@ -158,7 +162,20 @@ NOTE: `STAKE` operation is idempotent.
 }
 ```
 
-### Setting Dissolve Timestamps
+## Managing neurons
+
+### Setting dissolve timestamp
+
+| Since version | Idempotent? |
+| ------------: | ----------- |
+|         1.1.0 |     yes     |
+
+This operation updates the time when the neuron can reach `DISSOLVED` state.
+
+Dissolve timestamp always increases monotonically.
+  * If the neuron is in `DISSOLVING`, this operation can move the dissolve timestamp further into the future.
+  * If the neuron is in `NOT_DISSOLVING` state, invoking `SET_DISSOLVE_TIMESTAMP` with time T will attemp to increase it's dissolve delay (the minimal time it will take to dissolve the neuron) to `T - current_time`.
+  * If the neuron is in `DISSOLVED` state, invoking `SET_DISSOLVE_TIMESTAMP` will move it to the `NOT_DISSOLVING` state and will set the dissolve delay accordingly.
 
 Preconditions
   * `account.address` is a ledger address of a neuron contoller.
@@ -179,7 +196,11 @@ NOTE: This operation is idempotent.
 }
 ```
 
-## Start dissolving
+### Start dissolving
+
+| Since version | Idempotent? |
+| ------------: | ----------- |
+|         1.1.0 |     yes     |
 
 This operation changes the state of the neuron to `DISSOLVING`.
 
@@ -204,9 +225,13 @@ NOTE: This operation is idempotent.
 }
 ```
 
-## Stop dissolving
+### Stop dissolving
 
-This operation changes the state of the neuron to `NOT_DISSOLVING`.
+| Since version | Idempotent? |
+| ------------: | ----------- |
+|         1.1.0 |     yes     |
+
+The `STOP_DISSOLVING` operation changes the state of the neuron to `NOT_DISSOLVING`.
 
 Preconditions:
   * `account.address` is a ledger address of a neuron contoller.
@@ -229,7 +254,128 @@ NOTE: This operation is idempotent.
 }
 ```
 
+### Adding hot keys
+
+| Since version | Idempotent? |
+| ------------: | ----------- |
+|         1.2.0 |     yes     |
+
+The `ADD_HOTKEY` operation adds a hot key to a neuron.
+The Governance canister smart contract allows some non-critical operations to be signed with a hot key instead of the controller's key (e.g., voting and querying maturity).
+
+Preconditions:
+  * `account.address` is a ledger address of a neuron contoller.
+  * The neuron being modified has less than 10 hot keys.
+
+NOTE: This operation is idempotent.
+
+The command has two forms: one form accepts an [IC principal](https://smartcontracts.org/docs/interface-spec/index.html#principal) as a hotkey, another form accepts a [public key](https://www.rosetta-api.org/docs/models/PublicKey.html).
+
+#### Add a principal as a hot key
+
+```json
+{
+  "operation_identifier": { "index": 0 },
+  "type": "ADD_HOTKEY",
+  "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
+  "metadata": {
+    "neuron_index": 0,
+    "principal": "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae"
+  }
+}
+```
+
+#### Add a public key as a hot key
+
+```json
+{
+  "operation_identifier": { "index": 0 },
+  "type": "ADD_HOTKEY",
+  "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
+  "metadata": {
+    "neuron_index": 0,
+    "public_key": {
+      "hex_bytes":  "1b400d60aaf34eaf6dcbab9bba46001a23497886cf11066f7846933d30e5ad3f",
+      "curve_type": "edwards25519"
+    }
+  }
+}
+```
+
+### Spawn neurons
+
+| Since version | Idempotent? |
+| ------------: | ----------- |
+|         1.3.0 |     yes     |
+
+The `SPAWN` operation creates a new neuron from an existing neuron with enough maturity.
+This operation transfers all the maturity from the existing neuron to the staked amount of the newly spawned neuron.
+
+Preconditions:
+  * `account.address` is a ledger address of a neuron controller.
+  * The parent neuron has at least 1 ICP worth of maturity.
+
+Postconditions:
+  * Parent neuron maturity is set to `0`.
+  * A new neuron is spawned with a balance equals to transferred maturity.
+
+```json
+{
+  "operation_identifier": { "index": 0 },
+  "type": "SPAWN",
+  "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
+  "metadata": {
+    "neuron_index": 0,
+    "controller": "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae",
+    "spawned_neuron_index": 1
+  }
+}
+```
+
+Notes:
+  * `controller` metadata field is optional and equal to the existing neuron controller by default.
+  * `spawned_neuron_index` metadata field is required.
+    The rosetta node uses this index to compute the sub-account for the spawned neuron.
+    All spawned neurons must have different values of `spawned_neuron_index`.
+
+### Merge neuron maturity
+
+| Since version | Idempotent? |
+| ------------: | ----------- |
+|         1.4.0 |     no      |
+
+The `MERGE_MATURITY` operation merges the existing maturity of a neuron into its stake.
+The percentage of maturity to merge can be specified, otherwise the entire maturity is merged by default.
+
+Preconditions:
+ * `account.address` is a ledger address of a neuron controller.
+ * The neuron has non-zero maturity to merge.
+
+Postconditions:
+ * Maturity decreased by the amount merged. 
+ * Neuron stake increased by the amount merged.
+
+```json
+{
+  "operation_identifier": { "index": 0 },
+  "type": "MERGE_MATURITY",
+  "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
+  "metadata": {
+    "neuron_index": 0,
+    "percentage_to_merge": 14
+  }
+}
+```
+
+Notes:
+ * `percentage_to_merge` metadata field is optional and equal to 100 by default.
+   If specified, the value must be an integer between 1 and 100 (bounds included).
+
 ## Accessing neuron attributes
+
+| Since version |
+| ------------: |
+|     1.3.0     |
 
 Use `/account/balance` endpoint to access the staked amount and publicly available neuron metadata.
 
@@ -290,77 +436,3 @@ NOTE: The request should not specify any block identifier because the endpoint a
   }
 }
 ```
-
-## Spawn neurons
-
-The `SPAWN` operation creates a new neuron from an existing neuron with enough maturity.
-This operation transfers all the maturity from the existing neuron to the staked amount of the newly spawned neuron.
-
-Preconditions:
-  * `account.address` is a ledger address of a neuron controller.
-  * The parent neuron has at least 1 ICP worth of maturity.
-
-Postconditions:
-  * Parent neuron maturity is set to `0`.
-  * A new neuron is spawned with a balance equals to transferred maturity.
-
-```json
- {
-  "network_identifier": {
-    "blockchain": "Internet Computer",
-    "network": "00000000000000020101"
-  },
-  "operations": [
-    {
-      "operation_identifier": { "index": 0 },
-      "type": "SPAWN",
-      "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
-      "metadata": {
-        "neuron_index": 0,
-        "controller": "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae",
-        "spawned_neuron_index": 1
-      }
-    }
-  ]
-}
-```
-
-Notes:
-  * `controller` metadata field is optional and equal to the existing neuron controller by default.
-  * `spawned_neuron_index` metadata field is required.
-    The rosetta node uses this index to compute the sub-account for the spawned neuron.
-    All spawned neurons must have different values of `spawned_neuron_index`.
-
-## Merge neuron maturity
-
-The `MERGE_MATURITY` operation merges the existing maturity of a neuron into its stake. The percentage of maturity to merge can be specified, otherwise the entire maturity is merged by default.
-
-Preconditions:
- * `account.address` is a ledger address of a neuron controller.
- * The neuron has some maturity to merge.
-
-Postconditions:
- * Maturity decreased by the amount merged. 
- * Neuron stake increased by the amount merged.
-
-```json
- {
-  "network_identifier": {
-    "blockchain": "Internet Computer",
-    "network": "00000000000000020101"
-  },
-  "operations": [
-    {
-      "operation_identifier": { "index": 0 },
-      "type": "MERGE_MATURITY",
-      "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
-      "metadata": {
-        "percentage_to_merge": 14
-      }
-    }
-  ]
-}
-```
-
-Notes:
- * `percentage_to_merge` is optional and equal to 100 by default. If specified it must be a natural number between 1 and 100 (included).
