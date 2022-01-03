@@ -3291,6 +3291,7 @@ dependencies = [
  "ic-embedders",
  "ic-interfaces",
  "ic-logger",
+ "ic-metrics",
  "ic-replicated-state",
  "ic-sys",
  "ic-system-api",
@@ -3300,6 +3301,7 @@ dependencies = [
  "libc",
  "nix 0.23.0",
  "once_cell 1.8.0",
+ "prometheus",
  "slog",
  "which 4.2.2",
 ]

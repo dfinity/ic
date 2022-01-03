@@ -1,6 +1,5 @@
 use ic_canister_sandbox_common::protocol::id::ExecId;
-use ic_canister_sandbox_common::protocol::structs::StateModifications;
-use ic_embedders::WasmExecutionOutput;
+use ic_canister_sandbox_common::protocol::structs::SandboxExecOutput;
 /// Execution state registry for sandbox processes.
 ///
 /// This tracks the "active" executions on a sandbox process and
@@ -27,12 +26,7 @@ use ic_system_api::SystemStateAccessorDirect;
 use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
 
-type CompletionFunction = Box<
-    dyn FnOnce(ExecId, Option<(WasmExecutionOutput, Option<StateModifications>)>)
-        + Sync
-        + Send
-        + 'static,
->;
+type CompletionFunction = Box<dyn FnOnce(ExecId, SandboxExecOutput) + Sync + Send + 'static>;
 
 /// Represents an execution in progress on the sandbox process.
 ///
@@ -93,10 +87,7 @@ impl ActiveExecutionStateRegistry {
         completion: F,
     ) -> ExecId
     where
-        F: FnOnce(ExecId, Option<(WasmExecutionOutput, Option<StateModifications>)>)
-            + Send
-            + Sync
-            + 'static,
+        F: FnOnce(ExecId, SandboxExecOutput) + Send + Sync + 'static,
     {
         let exec_id = ExecId::new();
         let completion = Box::new(completion);
@@ -238,9 +229,12 @@ impl BorrowedSystemStateAccessor {
 mod tests {
     use super::*;
 
+    use ic_embedders::WasmExecutionOutput;
+    use ic_interfaces::execution_environment::{HypervisorError, InstanceStats};
     use ic_test_utilities::{
         cycles_account_manager::CyclesAccountManagerBuilder, state::SystemStateBuilder,
     };
+    use ic_types::NumInstructions;
 
     struct SyncCell<T> {
         item: Mutex<Option<T>>,
@@ -308,7 +302,22 @@ mod tests {
         let t1 = std::thread::spawn(move || {
             let completion = reg.extract_completion(exec1_id_copy);
             reg.unregister_execution(exec1_id_copy);
-            completion.unwrap()(exec1_id_copy, None);
+            completion.unwrap()(
+                exec1_id_copy,
+                SandboxExecOutput {
+                    wasm: WasmExecutionOutput {
+                        wasm_result: Err(HypervisorError::WasmModuleNotFound),
+                        num_instructions_left: NumInstructions::from(0),
+                        instance_stats: InstanceStats {
+                            accessed_pages: 0,
+                            dirty_pages: 0,
+                        },
+                    },
+                    state: None,
+                    execute_total_duration: std::time::Duration::from_secs(0),
+                    execute_run_duration: std::time::Duration::from_secs(0),
+                },
+            );
         });
 
         // Execution cannot have been unregistered yet, so the

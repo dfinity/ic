@@ -20,7 +20,7 @@ use ic_canister_sandbox_common::protocol::sbxsvc::{
     CreateExecutionStateSuccessReply, OpenMemoryRequest,
 };
 use ic_canister_sandbox_common::protocol::structs::{
-    MemoryModifications, SandboxExecInput, StateModifications,
+    MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
 };
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
 use ic_config::embedders::{Config, PersistenceType};
@@ -33,12 +33,11 @@ use ic_embedders::{
     },
     WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, InstanceStats};
+use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Memory, PageMap};
 use ic_types::CanisterId;
-use ic_types::NumInstructions;
 use ic_wasm_types::BinaryEncodedWasm;
 
 use crate::system_state_accessor_rpc::SystemStateAccessorRPC;
@@ -68,16 +67,6 @@ struct Execution {
 }
 
 impl Execution {
-    fn record_error(&self, exec_output: WasmExecutionOutput) {
-        self.sandbox_manager.controller.execution_finished(
-            protocol::ctlsvc::ExecutionFinishedRequest {
-                exec_id: self.exec_id,
-                exec_output,
-                state_modifications: None,
-            },
-        );
-    }
-
     /// Creates new execution based on canister wasm and state. In order
     /// to start the execution, the given state object will be "locked" --
     /// if that cannot be done, then creation of execution will fail.
@@ -85,6 +74,7 @@ impl Execution {
     /// thread pool.
     ///
     /// This will *actually* schedule and initiate a new execution.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn start_on_worker_thread(
         exec_id: ExecId,
         canister_wasm: Arc<CanisterWasm>,
@@ -93,38 +83,30 @@ impl Execution {
         sandbox_manager: Arc<SandboxManager>,
         workers: &mut threadpool::ThreadPool,
         exec_input: SandboxExecInput,
+        total_timer: std::time::Instant,
     ) {
         let wasm_memory = (*wasm_memory).clone();
         let stable_memory = (*stable_memory).clone();
 
-        let instance = Arc::new(Self {
+        let execution = Arc::new(Self {
             exec_id,
             canister_wasm,
             sandbox_manager,
         });
 
-        workers.execute(move || instance.entry(exec_input, wasm_memory, stable_memory));
+        workers.execute(move || execution.run(exec_input, wasm_memory, stable_memory, total_timer));
     }
 
     // Actual wasm code execution -- this is run on the target thread
     // in the thread pool.
-    fn entry(
+    fn run(
         &self,
         exec_input: SandboxExecInput,
         mut wasm_memory: Memory,
         mut stable_memory: Memory,
+        total_timer: std::time::Instant,
     ) {
-        fn error_exec_output(
-            err: HypervisorError,
-            num_instructions_left: NumInstructions,
-            instance_stats: InstanceStats,
-        ) -> WasmExecutionOutput {
-            WasmExecutionOutput {
-                wasm_result: Err(err),
-                num_instructions_left,
-                instance_stats,
-            }
-        }
+        let run_timer = std::time::Instant::now();
 
         let system_state_accessor =
             SystemStateAccessorRPC::new(self.exec_id, self.sandbox_manager.controller.clone());
@@ -185,7 +167,7 @@ impl Execution {
                     self.sandbox_manager
                         .add_memory(exec_input.next_stable_memory_id, stable_memory);
                 }
-                let exec_output = WasmExecutionOutput {
+                let wasm_output = WasmExecutionOutput {
                     wasm_result,
                     num_instructions_left,
                     instance_stats,
@@ -193,17 +175,33 @@ impl Execution {
                 self.sandbox_manager.controller.execution_finished(
                     protocol::ctlsvc::ExecutionFinishedRequest {
                         exec_id: self.exec_id,
-                        exec_output,
-                        state_modifications,
+                        exec_output: SandboxExecOutput {
+                            wasm: wasm_output,
+                            state: state_modifications,
+                            execute_total_duration: total_timer.elapsed(),
+                            execute_run_duration: run_timer.elapsed(),
+                        },
                     },
                 );
             }
             Err(err) => {
-                self.record_error(error_exec_output(
-                    err,
+                let wasm_output = WasmExecutionOutput {
+                    wasm_result: Err(err),
                     num_instructions_left,
                     instance_stats,
-                ));
+                };
+
+                self.sandbox_manager.controller.execution_finished(
+                    protocol::ctlsvc::ExecutionFinishedRequest {
+                        exec_id: self.exec_id,
+                        exec_output: SandboxExecOutput {
+                            wasm: wasm_output,
+                            state: None,
+                            execute_total_duration: total_timer.elapsed(),
+                            execute_run_duration: run_timer.elapsed(),
+                        },
+                    },
+                );
             }
         }
     }
@@ -336,6 +334,7 @@ impl SandboxManager {
         stable_memory_id: MemoryId,
         exec_input: SandboxExecInput,
     ) {
+        let total_timer = std::time::Instant::now();
         let mut guard = sandbox_manager.repr.lock().unwrap();
         let wasm_runner = guard.canister_wasms.get(&wasm_id).unwrap_or_else(|| {
             unreachable!(
@@ -363,6 +362,7 @@ impl SandboxManager {
             Arc::clone(sandbox_manager),
             &mut guard.workers,
             exec_input,
+            total_timer,
         );
     }
 

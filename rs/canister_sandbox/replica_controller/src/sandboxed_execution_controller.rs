@@ -6,6 +6,8 @@ use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_embedders::{WasmExecutionInput, WasmExecutionOutput};
 use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats};
 use ic_logger::ReplicaLogger;
+use ic_metrics::buckets::decimal_buckets_with_zero;
+use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
 };
@@ -13,6 +15,7 @@ use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memo
 use ic_system_api::SystemStateAccessorDirect;
 use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
+use prometheus::{Histogram, HistogramVec};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{
@@ -26,6 +29,65 @@ use crate::launch_as_process::{create_sandbox_argv, create_sandbox_process};
 use std::process::Child;
 use std::process::ExitStatus;
 use std::thread;
+
+struct SandboxedExecutionMetrics {
+    sandboxed_execution_replica_execute_duration: HistogramVec,
+    sandboxed_execution_replica_execute_prepare_duration: HistogramVec,
+    sandboxed_execution_replica_execute_wait_duration: HistogramVec,
+    sandboxed_execution_replica_execute_finish_duration: HistogramVec,
+    sandboxed_execution_sandbox_execute_duration: HistogramVec,
+    sandboxed_execution_sandbox_execute_run_duration: HistogramVec,
+    sandboxed_execution_spawn_process: Histogram,
+}
+
+impl SandboxedExecutionMetrics {
+    fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            sandboxed_execution_replica_execute_duration: metrics_registry.histogram_vec(
+                "sandboxed_execution_replica_execute_duration_seconds",
+                "The total message execution duration in the replica controller",
+                decimal_buckets_with_zero(-4, 1),
+                &["api_type"],
+            ),
+            sandboxed_execution_replica_execute_prepare_duration: metrics_registry.histogram_vec(
+                "sandboxed_execution_replica_execute_prepare_duration_seconds",
+                "The time until sending an execution request to the sandbox process",
+                decimal_buckets_with_zero(-4, 1),
+                &["api_type"],
+            ),
+            sandboxed_execution_replica_execute_wait_duration: metrics_registry.histogram_vec(
+                "sandboxed_execution_replica_execute_wait_duration_seconds",
+                "The time from sending an execution request to receiving response",
+                decimal_buckets_with_zero(-4, 1),
+                &["api_type"],
+            ),
+            sandboxed_execution_replica_execute_finish_duration: metrics_registry.histogram_vec(
+                "sandboxed_execution_replica_execute_finish_duration_seconds",
+                "The time to finalize execution in the replica controller",
+                decimal_buckets_with_zero(-4, 1),
+                &["api_type"],
+            ),
+            sandboxed_execution_sandbox_execute_duration: metrics_registry.histogram_vec(
+                "sandboxed_execution_sandbox_execute_duration_seconds",
+                "The time from receiving an execution request to finishing execution",
+                decimal_buckets_with_zero(-4, 1),
+                &["api_type"],
+            ),
+
+            sandboxed_execution_sandbox_execute_run_duration: metrics_registry.histogram_vec(
+                "sandboxed_execution_sandbox_execute_run_duration_seconds",
+                "The time spent in the sandbox's worker thread responsible for actually performing the executions",
+                decimal_buckets_with_zero(-4, 1),
+                &["api_type"],
+            ),
+            sandboxed_execution_spawn_process: metrics_registry.histogram(
+                "sandboxed_execution_spawn_process_duration_seconds",
+                "The time to spawn a sandbox process",
+                decimal_buckets_with_zero(-4, 1),
+            ),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct SandboxProcess {
@@ -118,18 +180,20 @@ pub struct SandboxedExecutionController {
     /// the same for all canisters.
     sandbox_exec_argv: Vec<String>,
     compile_count_for_testing: AtomicU64,
+    metrics: Arc<SandboxedExecutionMetrics>,
 }
 
 impl SandboxedExecutionController {
     /// Create a new sandboxed execution controller. It provides the
     /// same interface as the `WasmExecutor`.
-    pub fn new(logger: ReplicaLogger) -> Self {
+    pub fn new(logger: ReplicaLogger, metrics_registry: &MetricsRegistry) -> Self {
         let sandbox_exec_argv = create_sandbox_argv().expect("No canister_sandbox binary found");
         Self {
             backends: Arc::new(Mutex::new(HashMap::new())),
             logger,
             compile_count_for_testing: AtomicU64::new(0),
             sandbox_exec_argv,
+            metrics: Arc::new(SandboxedExecutionMetrics::new(metrics_registry)),
         }
     }
 
@@ -140,6 +204,7 @@ impl SandboxedExecutionController {
             // Sandbox backend running for this canister already.
             sandbox_process.clone()
         } else {
+            let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
             // No sandbox backend found for this canister. Start a new
             // one and register it.
             let reg = Arc::new(ActiveExecutionStateRegistry::new());
@@ -194,6 +259,18 @@ impl SandboxedExecutionController {
         ExecutionState,
         SystemStateAccessorDirect,
     ) {
+        let api_type_label = api_type.as_str();
+        let _execute_timer = self
+            .metrics
+            .sandboxed_execution_replica_execute_duration
+            .with_label_values(&[api_type_label])
+            .start_timer();
+        let prepare_timer = self
+            .metrics
+            .sandboxed_execution_replica_execute_prepare_duration
+            .with_label_values(&[api_type_label])
+            .start_timer();
+
         // Determine which process we want to run this on.
         let sandbox_process = self.get_sandbox_process(&static_system_state.canister_id());
 
@@ -275,9 +352,21 @@ impl SandboxedExecutionController {
                 },
             })
             .on_completion(|_| {});
+        drop(prepare_timer);
 
+        let wait_timer = self
+            .metrics
+            .sandboxed_execution_replica_execute_wait_duration
+            .with_label_values(&[api_type_label])
+            .start_timer();
         // Wait for completion.
-        let (exec_output, state_modifications) = rx.recv().unwrap().unwrap();
+        let exec_output = rx.recv().unwrap();
+        drop(wait_timer);
+        let _finish_timer = self
+            .metrics
+            .sandboxed_execution_replica_execute_finish_duration
+            .with_label_values(&[api_type_label])
+            .start_timer();
 
         // Release the system state accessor (we need to return it to the caller).
         let system_state_accessor = sandbox_process
@@ -286,8 +375,8 @@ impl SandboxedExecutionController {
             .unwrap();
 
         // Unless execution trapped, commit state.
-        if exec_output.wasm_result.is_ok() {
-            if let Some(state_modifications) = state_modifications {
+        if exec_output.wasm.wasm_result.is_ok() {
+            if let Some(state_modifications) = exec_output.state {
                 // TODO: If a canister has broken out of wasm then it might have allocated more
                 // wasm or stable memory then allowed. We should add an additional check here
                 // that thet canister is still within it's allowed memory usage.
@@ -319,8 +408,16 @@ impl SandboxedExecutionController {
                 subnet_available_memory.set(state_modifications.subnet_available_memory);
             }
         }
+        self.metrics
+            .sandboxed_execution_sandbox_execute_duration
+            .with_label_values(&[api_type_label])
+            .observe(exec_output.execute_total_duration.as_secs_f64());
+        self.metrics
+            .sandboxed_execution_sandbox_execute_run_duration
+            .with_label_values(&[api_type_label])
+            .observe(exec_output.execute_run_duration.as_secs_f64());
 
-        (exec_output, execution_state, system_state_accessor)
+        (exec_output.wasm, execution_state, system_state_accessor)
     }
 
     pub fn create_execution_state(

@@ -472,9 +472,9 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let globals = result.state_modifications.unwrap().globals;
+        assert!(result.exec_output.wasm.num_instructions_left < NumInstructions::from(1000));
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
+        let globals = result.exec_output.state.unwrap().globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
 
         // Second time around, issue a query to read the counter. We
@@ -493,8 +493,8 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
+        assert!(result.exec_output.wasm.num_instructions_left < NumInstructions::from(1000));
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
     }
 
@@ -545,8 +545,8 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let state_modifications = result.state_modifications.unwrap();
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
+        let state_modifications = result.exec_output.state.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
         wasm_memory.deserialize_delta(state_modifications.wasm_memory.page_delta);
@@ -603,7 +603,7 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
         assert_eq!(WasmResult::Reply([0, 0, 1, 2].to_vec()), wasm_result);
     }
 
@@ -668,9 +668,9 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let globals = result.state_modifications.unwrap().globals;
+        assert!(result.exec_output.wasm.num_instructions_left < NumInstructions::from(1000));
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
+        let globals = result.exec_output.state.unwrap().globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
         assert_eq!([Global::I32(1), Global::I64(988)].to_vec(), globals);
 
@@ -705,9 +705,9 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let globals = result.state_modifications.unwrap().globals;
+        assert!(result.exec_output.wasm.num_instructions_left < NumInstructions::from(1000));
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
+        let globals = result.exec_output.state.unwrap().globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
 
         // Second time around, issue a query to read the counter. We
@@ -726,8 +726,8 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        assert!(result.exec_output.num_instructions_left < NumInstructions::from(500));
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
+        assert!(result.exec_output.wasm.num_instructions_left < NumInstructions::from(500));
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
     }
 
@@ -778,8 +778,8 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let state_modifications = result.state_modifications.unwrap();
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
+        let state_modifications = result.exec_output.state.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
         stable_memory.deserialize_delta(state_modifications.stable_memory.page_delta);
@@ -836,7 +836,7 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
         assert_eq!(WasmResult::Reply([0, 0, 1, 2].to_vec()), wasm_result);
     }
 
@@ -888,8 +888,8 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let state_modifications = result.state_modifications.unwrap();
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
+        let state_modifications = result.exec_output.state.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
         wasm_memory.deserialize_delta(state_modifications.wasm_memory.page_delta);
@@ -919,8 +919,8 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let state_modifications = result.state_modifications.unwrap();
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
+        let state_modifications = result.exec_output.state.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
         wasm_memory.deserialize_delta(state_modifications.wasm_memory.page_delta);
@@ -987,8 +987,8 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let state_modifications = result.state_modifications.unwrap();
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
+        let state_modifications = result.exec_output.state.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
         stable_memory.deserialize_delta(state_modifications.stable_memory.page_delta);
@@ -1018,8 +1018,8 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
-        let state_modifications = result.state_modifications.unwrap();
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
+        let state_modifications = result.exec_output.state.unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
         stable_memory.deserialize_delta(state_modifications.stable_memory.page_delta);
