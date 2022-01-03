@@ -33,10 +33,10 @@ impl ControllerServiceImpl {
 }
 
 impl ControllerService for ControllerServiceImpl {
-    fn exec_finished(
+    fn execution_finished(
         &self,
-        req: protocol::ctlsvc::ExecFinishedRequest,
-    ) -> rpc::Call<protocol::ctlsvc::ExecFinishedReply> {
+        req: protocol::ctlsvc::ExecutionFinishedRequest,
+    ) -> rpc::Call<protocol::ctlsvc::ExecutionFinishedReply> {
         let exec_id = req.exec_id;
         let exec_output = req.exec_output;
         let state_modifications = req.state_modifications;
@@ -62,7 +62,7 @@ impl ControllerService for ControllerServiceImpl {
             },
             |completion| {
                 completion(exec_id, Some((exec_output, state_modifications)));
-                Ok(protocol::ctlsvc::ExecFinishedReply {})
+                Ok(protocol::ctlsvc::ExecutionFinishedReply {})
             },
         );
         rpc::Call::new_resolved(reply)

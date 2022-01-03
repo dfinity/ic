@@ -52,8 +52,8 @@ impl SandboxService for SandboxServer {
         rpc::Call::new_resolved(Ok(CloseMemoryReply { success: true }))
     }
 
-    fn open_execution(&self, req: OpenExecutionRequest) -> rpc::Call<OpenExecutionReply> {
-        let OpenExecutionRequest {
+    fn start_execution(&self, req: StartExecutionRequest) -> rpc::Call<StartExecutionReply> {
+        let StartExecutionRequest {
             exec_id,
             wasm_id,
             wasm_memory_id,
@@ -61,7 +61,7 @@ impl SandboxService for SandboxServer {
             exec_input,
         } = req;
         rpc::Call::new_resolved({
-            SandboxManager::open_execution(
+            SandboxManager::start_execution(
                 &self.manager,
                 exec_id,
                 wasm_id,
@@ -69,13 +69,8 @@ impl SandboxService for SandboxServer {
                 stable_memory_id,
                 exec_input,
             );
-            Ok(OpenExecutionReply { success: true })
+            Ok(StartExecutionReply { success: true })
         })
-    }
-
-    fn close_execution(&self, req: CloseExecutionRequest) -> rpc::Call<CloseExecutionReply> {
-        self.manager.close_execution(req.exec_id);
-        rpc::Call::new_resolved(Ok(CloseExecutionReply { success: true }))
     }
 
     fn create_execution_state(
@@ -214,9 +209,9 @@ mod tests {
         }
 
         trait ControllerService {
-            fn exec_finished(
-                &self, req : protocol::ctlsvc::ExecFinishedRequest
-            ) -> rpc::Call<protocol::ctlsvc::ExecFinishedReply>;
+            fn execution_finished(
+                &self, req : protocol::ctlsvc::ExecutionFinishedRequest
+            ) -> rpc::Call<protocol::ctlsvc::ExecutionFinishedReply>;
 
             fn canister_system_call(
                 &self, req : protocol::ctlsvc::CanisterSystemCallRequest
@@ -393,13 +388,15 @@ mod tests {
     /// - when receiving a "special" syscall, it will pass the number of
     ///   instructions to set up for instrumentation
     fn setup_mock_controller(
-        exec_finished_sync: Arc<SyncCell<protocol::ctlsvc::ExecFinishedRequest>>,
+        exec_finished_sync: Arc<SyncCell<protocol::ctlsvc::ExecutionFinishedRequest>>,
     ) -> Arc<dyn ControllerService> {
         let mut controller = MockControllerService::new();
-        controller.expect_exec_finished().returning(move |req| {
-            (*exec_finished_sync).put(req);
-            rpc::Call::new_resolved(Ok(protocol::ctlsvc::ExecFinishedReply {}))
-        });
+        controller
+            .expect_execution_finished()
+            .returning(move |req| {
+                (*exec_finished_sync).put(req);
+                rpc::Call::new_resolved(Ok(protocol::ctlsvc::ExecutionFinishedReply {}))
+            });
         controller
             .expect_log_via_replica()
             .returning(move |_req| rpc::Call::new_resolved(Ok(())));
@@ -432,7 +429,8 @@ mod tests {
     /// it.
     #[test]
     fn test_simple_canister() {
-        let exec_finished_sync = Arc::new(SyncCell::<protocol::ctlsvc::ExecFinishedRequest>::new());
+        let exec_finished_sync =
+            Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
         let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
             exec_finished_sync.clone(),
@@ -456,7 +454,7 @@ mod tests {
         // First time around, issue an update to increase the counter.
         let exec_id_1 = ExecId::new();
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id: exec_id_1,
                 wasm_id,
                 wasm_memory_id,
@@ -479,17 +477,11 @@ mod tests {
         let globals = result.state_modifications.unwrap().globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
 
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id: exec_id_1 })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
-
         // Second time around, issue a query to read the counter. We
         // will still read the same value of the counter.
         let exec_id_2 = ExecId::new();
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id: exec_id_2,
                 wasm_id,
                 wasm_memory_id,
@@ -504,19 +496,14 @@ mod tests {
         assert!(result.exec_output.num_instructions_left < NumInstructions::from(1000));
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
-
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id: exec_id_2 })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
     }
 
     /// Verify that memory writes result in correct page being marked
     /// dirty and passed back.
     #[test]
     fn test_memory_write_dirty() {
-        let exec_finished_sync = Arc::new(SyncCell::<protocol::ctlsvc::ExecFinishedRequest>::new());
+        let exec_finished_sync =
+            Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
         let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
             exec_finished_sync.clone(),
@@ -540,7 +527,7 @@ mod tests {
         // Issue a write of bytes [1, 2, 3, 4] at address 16.
         let exec_id = ExecId::new();
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id,
                 wasm_id,
                 wasm_memory_id,
@@ -567,19 +554,14 @@ mod tests {
             vec![1, 2, 3, 4],
             wasm_memory.get_page(PageIndex::new(0))[16..20].to_vec()
         );
-
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
     }
 
     /// Verify that state is set up correctly with given page contents
     /// such that memory reads yield the correct data.
     #[test]
     fn test_memory_read_state() {
-        let exec_finished_sync = Arc::new(SyncCell::<protocol::ctlsvc::ExecFinishedRequest>::new());
+        let exec_finished_sync =
+            Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
         let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
             exec_finished_sync.clone(),
@@ -609,7 +591,7 @@ mod tests {
         // Issue a read of size 4 against address 40.
         let exec_id = ExecId::new();
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id,
                 wasm_id,
                 wasm_memory_id,
@@ -623,12 +605,6 @@ mod tests {
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
         assert_eq!(WasmResult::Reply([0, 0, 1, 2].to_vec()), wasm_result);
-
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
     }
 
     /// Verifies that we can create a simple canister and run multiple
@@ -637,14 +613,17 @@ mod tests {
     #[test]
     #[ignore]
     fn test_simple_canister_wasm_cache() {
-        let exec_finished_sync = Arc::new(SyncCell::<protocol::ctlsvc::ExecFinishedRequest>::new());
+        let exec_finished_sync =
+            Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
         let exec_finished_sync_clone = Arc::clone(&exec_finished_sync);
 
         let mut controller = MockControllerService::new();
-        controller.expect_exec_finished().returning(move |req| {
-            (*exec_finished_sync_clone).put(req);
-            rpc::Call::new_resolved(Ok(protocol::ctlsvc::ExecFinishedReply {}))
-        });
+        controller
+            .expect_execution_finished()
+            .returning(move |req| {
+                (*exec_finished_sync_clone).put(req);
+                rpc::Call::new_resolved(Ok(protocol::ctlsvc::ExecutionFinishedReply {}))
+            });
         controller
             .expect_log_via_replica()
             .returning(move |_req| rpc::Call::new_resolved(Ok(())));
@@ -671,7 +650,7 @@ mod tests {
         // First time around, issue an update to increase the counter.
         let exec_id = ExecId::new();
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id,
                 wasm_id,
                 wasm_memory_id,
@@ -695,12 +674,6 @@ mod tests {
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
         assert_eq!([Global::I32(1), Global::I64(988)].to_vec(), globals);
 
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
-
         // Ensure we close Wasm and stable memory.
         close_memory(&srv, wasm_memory_id);
         close_memory(&srv, stable_memory_id);
@@ -714,7 +687,7 @@ mod tests {
 
         // First time around, issue an update to increase the counter.
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id,
                 wasm_id,
                 wasm_memory_id,
@@ -737,17 +710,11 @@ mod tests {
         let globals = result.state_modifications.unwrap().globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
 
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
-
         // Second time around, issue a query to read the counter. We
         // expect to be able to read back the modified counter value
         // (since we committed the previous state).
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id,
                 wasm_id,
                 wasm_memory_id,
@@ -762,19 +729,14 @@ mod tests {
         assert!(result.exec_output.num_instructions_left < NumInstructions::from(500));
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
-
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
     }
 
     /// Verify that stable memory writes result in correct page being marked
     /// dirty and passed back.
     #[test]
     fn test_stable_memory_write_dirty() {
-        let exec_finished_sync = Arc::new(SyncCell::<protocol::ctlsvc::ExecFinishedRequest>::new());
+        let exec_finished_sync =
+            Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
         let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
             exec_finished_sync.clone(),
@@ -798,7 +760,7 @@ mod tests {
         // Issue a write of bytes [1, 2, 3, 4] at address 16 in stable memory.
         let exec_id = ExecId::new();
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id,
                 wasm_id,
                 wasm_memory_id,
@@ -825,19 +787,14 @@ mod tests {
             vec![1, 2, 3, 4],
             stable_memory.get_page(PageIndex::new(0))[16..20].to_vec()
         );
-
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
     }
 
     /// Verify that state is set up correctly with given page contents
     /// such that memory reads yield the correct data.
     #[test]
     fn test_stable_memory_read_state() {
-        let exec_finished_sync = Arc::new(SyncCell::<protocol::ctlsvc::ExecFinishedRequest>::new());
+        let exec_finished_sync =
+            Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
         let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
             exec_finished_sync.clone(),
@@ -867,7 +824,7 @@ mod tests {
         // Issue a read of size 4 against address 40.
         let exec_id = ExecId::new();
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id,
                 wasm_id,
                 wasm_memory_id,
@@ -881,17 +838,12 @@ mod tests {
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm_result.unwrap().unwrap();
         assert_eq!(WasmResult::Reply([0, 0, 1, 2].to_vec()), wasm_result);
-
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
     }
 
     #[test]
     fn test_wasm_memory_delta() {
-        let exec_finished_sync = Arc::new(SyncCell::<protocol::ctlsvc::ExecFinishedRequest>::new());
+        let exec_finished_sync =
+            Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
         let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
             exec_finished_sync.clone(),
@@ -918,7 +870,7 @@ mod tests {
         // Issue a write of bytes [1, 2, 3, 4] at address 16 in Wasm memory.
         let exec_id_1 = ExecId::new();
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id: exec_id_1,
                 wasm_id,
                 wasm_memory_id: parent_wasm_memory_id,
@@ -946,16 +898,10 @@ mod tests {
             wasm_memory.get_page(PageIndex::new(0))[16..20].to_vec()
         );
 
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id: exec_id_1 })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
-
         // Issue a write of bytes [5, 6, 7, 8] at address 32 in stable memory.
         let exec_id_2 = ExecId::new();
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id: exec_id_2,
                 wasm_id,
                 wasm_memory_id: child_wasm_memory_id,
@@ -987,11 +933,6 @@ mod tests {
             wasm_memory.get_page(PageIndex::new(0))[16..20].to_vec()
         );
 
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id: exec_id_2 })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
         close_memory(&srv, parent_wasm_memory_id);
         close_memory(&srv, parent_stable_memory_id);
         close_memory(&srv, child_wasm_memory_id);
@@ -1000,7 +941,8 @@ mod tests {
 
     #[test]
     fn test_stable_memory_delta() {
-        let exec_finished_sync = Arc::new(SyncCell::<protocol::ctlsvc::ExecFinishedRequest>::new());
+        let exec_finished_sync =
+            Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
         let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
             exec_finished_sync.clone(),
@@ -1027,7 +969,7 @@ mod tests {
         // Issue a write of bytes [1, 2, 3, 4] at address 16 in stable memory.
         let exec_id_1 = ExecId::new();
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id: exec_id_1,
                 wasm_id,
                 wasm_memory_id: parent_wasm_memory_id,
@@ -1055,16 +997,10 @@ mod tests {
             stable_memory.get_page(PageIndex::new(0))[16..20].to_vec()
         );
 
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id: exec_id_1 })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
-
         // Issue a write of bytes [5, 6, 7, 8] at address 32 in stable memory.
         let exec_id_2 = ExecId::new();
         let rep = srv
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id: exec_id_2,
                 wasm_id,
                 wasm_memory_id: child_wasm_memory_id,
@@ -1095,12 +1031,6 @@ mod tests {
             vec![1, 2, 3, 4],
             stable_memory.get_page(PageIndex::new(0))[16..20].to_vec()
         );
-
-        let rep = srv
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id: exec_id_2 })
-            .sync()
-            .unwrap();
-        assert!(rep.success);
 
         close_memory(&srv, parent_wasm_memory_id);
         close_memory(&srv, parent_stable_memory_id);

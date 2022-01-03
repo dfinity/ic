@@ -258,7 +258,7 @@ impl SandboxedExecutionController {
 
         sandbox_process
             .sandbox_service
-            .open_execution(protocol::sbxsvc::OpenExecutionRequest {
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
                 exec_id,
                 wasm_id,
                 wasm_memory_id,
@@ -278,13 +278,6 @@ impl SandboxedExecutionController {
 
         // Wait for completion.
         let (exec_output, state_modifications) = rx.recv().unwrap().unwrap();
-
-        // Release all resources on the sandbox process (compiled wasm is
-        // left cached).
-        sandbox_process
-            .sandbox_service
-            .close_execution(protocol::sbxsvc::CloseExecutionRequest { exec_id })
-            .on_completion(|_| {});
 
         // Release the system state accessor (we need to return it to the caller).
         let system_state_accessor = sandbox_process

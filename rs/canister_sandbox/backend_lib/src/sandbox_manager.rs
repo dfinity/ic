@@ -65,38 +65,17 @@ struct Execution {
     /// 1) Providing the controller to talk to the replica process.
     /// 2) Creating a new execution state.
     sandbox_manager: Arc<SandboxManager>,
-
-    /// Internal synchronized state -- the execution object itself
-    /// needs to be sychronized because it is accessed from different
-    /// threads (incoming RPC handling as well as actual execution
-    /// thread).
-    internal: Mutex<ExecutionInner>,
-}
-/// Inner synchronized data held in Execution. It evolves from Running
-/// to {FinishedOk | FinishedError} to Closed.
-enum ExecutionInner {
-    /// The execution thread is running.
-    Running,
-    FinishedOk,
-    FinishedError,
-    /// Execution is finished and has been closed. This is an
-    /// intermittent state before the object is destroyed -- it should
-    /// not really be externally visible, but if it were to (e.g.
-    /// due to a race condition) this also guards against illegal
-    /// operations.
-    Closed,
 }
 
 impl Execution {
     fn record_error(&self, exec_output: WasmExecutionOutput) {
-        *self.internal.lock().unwrap() = ExecutionInner::FinishedError;
-        self.sandbox_manager
-            .controller
-            .exec_finished(protocol::ctlsvc::ExecFinishedRequest {
+        self.sandbox_manager.controller.execution_finished(
+            protocol::ctlsvc::ExecutionFinishedRequest {
                 exec_id: self.exec_id,
                 exec_output,
                 state_modifications: None,
-            });
+            },
+        );
     }
 
     /// Creates new execution based on canister wasm and state. In order
@@ -106,7 +85,7 @@ impl Execution {
     /// thread pool.
     ///
     /// This will *actually* schedule and initiate a new execution.
-    pub(crate) fn create(
+    pub(crate) fn start_on_worker_thread(
         exec_id: ExecId,
         canister_wasm: Arc<CanisterWasm>,
         wasm_memory: Arc<Memory>,
@@ -114,7 +93,7 @@ impl Execution {
         sandbox_manager: Arc<SandboxManager>,
         workers: &mut threadpool::ThreadPool,
         exec_input: SandboxExecInput,
-    ) -> Arc<Self> {
+    ) {
         let wasm_memory = (*wasm_memory).clone();
         let stable_memory = (*stable_memory).clone();
 
@@ -122,13 +101,9 @@ impl Execution {
             exec_id,
             canister_wasm,
             sandbox_manager,
-            internal: Mutex::new(ExecutionInner::Running),
         });
 
-        let instance_copy = Arc::clone(&instance);
-        workers.execute(move || instance_copy.entry(exec_input, wasm_memory, stable_memory));
-
-        instance
+        workers.execute(move || instance.entry(exec_input, wasm_memory, stable_memory));
     }
 
     // Actual wasm code execution -- this is run on the target thread
@@ -215,9 +190,8 @@ impl Execution {
                     num_instructions_left,
                     instance_stats,
                 };
-                *self.internal.lock().unwrap() = ExecutionInner::FinishedOk;
-                self.sandbox_manager.controller.exec_finished(
-                    protocol::ctlsvc::ExecFinishedRequest {
+                self.sandbox_manager.controller.execution_finished(
+                    protocol::ctlsvc::ExecutionFinishedRequest {
                         exec_id: self.exec_id,
                         exec_output,
                         state_modifications,
@@ -230,29 +204,6 @@ impl Execution {
                     num_instructions_left,
                     instance_stats,
                 ));
-            }
-        }
-    }
-
-    /// Closes the current execution (assuming that it has finished).
-    /// Returns true if the close completed successfully.
-    pub(crate) fn close(&self) {
-        let mut guard = self.internal.lock().unwrap();
-        match *guard {
-            ExecutionInner::FinishedOk | ExecutionInner::FinishedError => {
-                *guard = ExecutionInner::Closed;
-            }
-            ExecutionInner::Closed => {
-                unreachable!(
-                    "Failed to close exec session {}: already closed",
-                    self.exec_id
-                );
-            }
-            ExecutionInner::Running => {
-                unreachable!(
-                    "Failed to close exec session {}: still running",
-                    self.exec_id
-                );
             }
         }
     }
@@ -302,7 +253,6 @@ pub struct SandboxManager {
 struct SandboxManagerInt {
     canister_wasms: std::collections::HashMap<WasmId, Arc<CanisterWasm>>,
     memories: std::collections::HashMap<MemoryId, Arc<Memory>>,
-    active_execs: std::collections::HashMap<ExecId, Arc<Execution>>,
     workers: threadpool::ThreadPool,
 }
 
@@ -315,7 +265,6 @@ impl SandboxManager {
             repr: Mutex::new(SandboxManagerInt {
                 canister_wasms: HashMap::new(),
                 memories: HashMap::new(),
-                active_execs: HashMap::new(),
                 workers: threadpool::ThreadPool::new(4),
             }),
             controller,
@@ -373,13 +322,13 @@ impl SandboxManager {
         guard.workers.execute(move || drop(removed));
     }
 
-    /// Opens new execution using specific code and state, passing
+    /// Starts Wasm execution using specific code and state, passing
     /// execution input.
     ///
     /// Note that inside here we start a transaction and the state of
     /// execution can not and does not change while we are processing
     /// this particular session.
-    pub fn open_execution(
+    pub fn start_execution(
         sandbox_manager: &Arc<SandboxManager>,
         exec_id: ExecId,
         wasm_id: WasmId,
@@ -388,11 +337,6 @@ impl SandboxManager {
         exec_input: SandboxExecInput,
     ) {
         let mut guard = sandbox_manager.repr.lock().unwrap();
-        assert!(
-            !guard.active_execs.contains_key(&exec_id),
-            "Failed to open exec session {}: id is already in use",
-            exec_id
-        );
         let wasm_runner = guard.canister_wasms.get(&wasm_id).unwrap_or_else(|| {
             unreachable!(
                 "Failed to open exec session {}: wasm {} not found",
@@ -411,7 +355,7 @@ impl SandboxManager {
                 exec_id, stable_memory_id,
             )
         });
-        let exec = Execution::create(
+        Execution::start_on_worker_thread(
             exec_id,
             Arc::clone(wasm_runner),
             Arc::clone(wasm_memory),
@@ -420,17 +364,6 @@ impl SandboxManager {
             &mut guard.workers,
             exec_input,
         );
-        guard.active_execs.insert(exec_id, exec);
-    }
-
-    /// Closes previously opened execution. Execution must have
-    /// finished previously.
-    pub fn close_execution(&self, exec_id: ExecId) {
-        let mut guard = self.repr.lock().unwrap();
-        let exec = guard.active_execs.remove(&exec_id).unwrap_or_else(|| {
-            unreachable!("Failed to close exec session {}: id not found", exec_id);
-        });
-        exec.close();
     }
 
     pub fn create_execution_state(
