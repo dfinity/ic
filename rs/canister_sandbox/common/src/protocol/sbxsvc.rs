@@ -162,7 +162,7 @@ pub struct CloseMemoryReply {
 
 /// Start execution of a canister.
 #[derive(Serialize, Deserialize, Clone)]
-pub struct OpenExecutionRequest {
+pub struct StartExecutionRequest {
     /// Id of the newly created invocation of this canister. This is
     /// used to identify the running instance in callbacks as well as
     /// other operations (status queries etc.).
@@ -184,31 +184,7 @@ pub struct OpenExecutionRequest {
 
 /// Reply to an `OpenExecutionRequest`.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OpenExecutionReply {
-    pub success: bool,
-}
-
-/// Request type
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct CloseExecutionRequest {
-    /// Id of execution previously created (see OpenExecution)
-    pub exec_id: ExecId,
-    /* There used to be a "commit" field in this message. The
-     * intent is that the "post-exec" state on the sandbox
-     * process is immediately formed after execution has finished,
-     * preferably using the data that is still held in the
-     * process.
-     * With the change to have _only_ the replica process perform
-     * writes, this does not work that way and there is no sense
-     * in replica telling sandbox whether to commit.
-     * This comment is only left to explain design intent, and
-     * where to possibly to put a "post-exec commit" command in
-     * case we later want to introduce such optimization again. */
-}
-
-/// Ack `CloseExecutionRequest`.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct CloseExecutionReply {
+pub struct StartExecutionReply {
     pub success: bool,
 }
 
@@ -246,8 +222,7 @@ pub enum Request {
     CloseWasm(CloseWasmRequest),
     OpenMemory(OpenMemoryRequest),
     CloseMemory(CloseMemoryRequest),
-    OpenExecution(OpenExecutionRequest),
-    CloseExecution(CloseExecutionRequest),
+    StartExecution(StartExecutionRequest),
     CreateExecutionState(CreateExecutionStateRequest),
 }
 
@@ -260,8 +235,7 @@ impl EnumerateInnerFileDescriptors for Request {
             | Request::OpenWasm(_)
             | Request::CloseWasm(_)
             | Request::CloseMemory(_)
-            | Request::OpenExecution(_)
-            | Request::CloseExecution(_) => {}
+            | Request::StartExecution(_) => {}
         }
     }
 }
@@ -275,7 +249,6 @@ pub enum Reply {
     CloseWasm(CloseWasmReply),
     OpenMemory(OpenMemoryReply),
     CloseMemory(CloseMemoryReply),
-    OpenExecution(OpenExecutionReply),
-    CloseExecution(CloseExecutionReply),
+    StartExecution(StartExecutionReply),
     CreateExecutionState(CreateExecutionStateReply),
 }

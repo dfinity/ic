@@ -19,11 +19,11 @@ impl ControllerClientStub {
 }
 
 impl ControllerService for ControllerClientStub {
-    fn exec_finished(&self, req: ExecFinishedRequest) -> Call<ExecFinishedReply> {
+    fn execution_finished(&self, req: ExecutionFinishedRequest) -> Call<ExecutionFinishedReply> {
         let cell = self
             .channel
-            .call(Request::ExecFinished(req), |rep| match rep {
-                Reply::ExecFinished(rep) => Ok(rep),
+            .call(Request::ExecutionFinished(req), |rep| match rep {
+                Reply::ExecutionFinished(rep) => Ok(rep),
                 _ => Err(Error::ServerError),
             });
         Call::new(cell)

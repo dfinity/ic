@@ -60,21 +60,11 @@ impl SandboxService for SandboxClientStub {
         Call::new(cell)
     }
 
-    fn open_execution(&self, req: OpenExecutionRequest) -> Call<OpenExecutionReply> {
+    fn start_execution(&self, req: StartExecutionRequest) -> Call<StartExecutionReply> {
         let cell = self
             .channel
-            .call(Request::OpenExecution(req), |rep| match rep {
-                Reply::OpenExecution(rep) => Ok(rep),
-                _ => Err(Error::ServerError),
-            });
-        Call::new(cell)
-    }
-
-    fn close_execution(&self, req: CloseExecutionRequest) -> Call<CloseExecutionReply> {
-        let cell = self
-            .channel
-            .call(Request::CloseExecution(req), |rep| match rep {
-                Reply::CloseExecution(rep) => Ok(rep),
+            .call(Request::StartExecution(req), |rep| match rep {
+                Reply::StartExecution(rep) => Ok(rep),
                 _ => Err(Error::ServerError),
             });
         Call::new(cell)

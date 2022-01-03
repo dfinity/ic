@@ -9,7 +9,7 @@ use super::{id::ExecId, structs::StateModifications};
 
 // Notify controller that a canister run has finished.
 #[derive(Serialize, Deserialize, Clone)]
-pub struct ExecFinishedRequest {
+pub struct ExecutionFinishedRequest {
     // Id for this run, as set up by controller.
     pub exec_id: ExecId,
 
@@ -19,7 +19,7 @@ pub struct ExecFinishedRequest {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct ExecFinishedReply {}
+pub struct ExecutionFinishedReply {}
 
 // Relay system call made by canister to controller.
 #[derive(Serialize, Deserialize, Clone)]
@@ -42,7 +42,7 @@ pub struct CanisterSystemCallReply {
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Request {
-    ExecFinished(ExecFinishedRequest),
+    ExecutionFinished(ExecutionFinishedRequest),
     CanisterSystemCall(CanisterSystemCallRequest),
     LogViaReplica(LogRequest),
 }
@@ -52,7 +52,7 @@ pub enum Request {
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Reply {
-    ExecFinished(ExecFinishedReply),
+    ExecutionFinished(ExecutionFinishedReply),
     CanisterSystemCall(CanisterSystemCallReply),
     LogViaReplica(()),
 }

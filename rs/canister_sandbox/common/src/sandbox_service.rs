@@ -19,15 +19,11 @@ pub trait SandboxService: Send + Sync {
     fn open_memory(&self, req: OpenMemoryRequest) -> Call<OpenMemoryReply>;
     /// Close the indicated state object.
     fn close_memory(&self, req: CloseMemoryRequest) -> Call<CloseMemoryReply>;
-    /// Start an execution, passing parameters for execution down to
-    /// sandbox process; requires both a code object (can be used in
-    /// multiple executions concurrently) and a state object (can only
-    /// be used in a single execution at a time). Takes a Wasm and
-    /// state identifier.
-    fn open_execution(&self, req: OpenExecutionRequest) -> Call<OpenExecutionReply>;
-    /// Close the indicated execution state. Indicate if the state is
-    /// to be committed.
-    fn close_execution(&self, req: CloseExecutionRequest) -> Call<CloseExecutionReply>;
+    /// Starts Wasm execution, passing parameters for execution down to sandbox
+    /// process. The result of the execution is sent in a separate
+    /// `ExecutionFinishedRequest` from the sandbox process to the replica
+    /// process.
+    fn start_execution(&self, req: StartExecutionRequest) -> Call<StartExecutionReply>;
     /// Perform initial parsing and evaluation needed to create the starting
     /// execution state.
     fn create_execution_state(
@@ -46,11 +42,8 @@ impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
             Request::CloseWasm(req) => Call::new_wrap(self.close_wasm(req), Reply::CloseWasm),
             Request::OpenMemory(req) => Call::new_wrap(self.open_memory(req), Reply::OpenMemory),
             Request::CloseMemory(req) => Call::new_wrap(self.close_memory(req), Reply::CloseMemory),
-            Request::OpenExecution(req) => {
-                Call::new_wrap(self.open_execution(req), Reply::OpenExecution)
-            }
-            Request::CloseExecution(req) => {
-                Call::new_wrap(self.close_execution(req), Reply::CloseExecution)
+            Request::StartExecution(req) => {
+                Call::new_wrap(self.start_execution(req), Reply::StartExecution)
             }
             Request::CreateExecutionState(req) => Call::new_wrap(
                 self.create_execution_state(req),

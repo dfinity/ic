@@ -10,10 +10,10 @@ struct DummyControllerService {}
 
 /// RPC interface exposed by sandbox process.
 impl ControllerService for DummyControllerService {
-    fn exec_finished(
+    fn execution_finished(
         &self,
-        _req: ctlsvc::ExecFinishedRequest,
-    ) -> rpc::Call<ctlsvc::ExecFinishedReply> {
+        _req: ctlsvc::ExecutionFinishedRequest,
+    ) -> rpc::Call<ctlsvc::ExecutionFinishedReply> {
         unimplemented!();
     }
 

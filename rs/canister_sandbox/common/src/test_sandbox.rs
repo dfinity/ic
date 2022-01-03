@@ -34,16 +34,10 @@ impl sandbox_service::SandboxService for DummySandboxService {
     ) -> rpc::Call<sbxsvc::CloseMemoryReply> {
         unimplemented!();
     }
-    fn open_execution(
+    fn start_execution(
         &self,
-        _req: sbxsvc::OpenExecutionRequest,
-    ) -> rpc::Call<sbxsvc::OpenExecutionReply> {
-        unimplemented!();
-    }
-    fn close_execution(
-        &self,
-        _req: sbxsvc::CloseExecutionRequest,
-    ) -> rpc::Call<sbxsvc::CloseExecutionReply> {
+        _req: sbxsvc::StartExecutionRequest,
+    ) -> rpc::Call<sbxsvc::StartExecutionReply> {
         unimplemented!();
     }
 
