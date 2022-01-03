@@ -9,8 +9,8 @@ use ic_rosetta_api::models::{
     CurveType, PublicKey, Signature, SignatureType,
 };
 use ic_rosetta_api::request_types::{
-    AddHotKey, Disburse, Request, RequestResult, SetDissolveTimestamp, Spawn, Stake, StartDissolve,
-    StopDissolve, TransactionResults,
+    AddHotKey, Disburse, MergeMaturity, Request, RequestResult, SetDissolveTimestamp, Spawn, Stake,
+    StartDissolve, StopDissolve, TransactionResults,
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{errors::ApiError, DEFAULT_TOKEN_NAME};
@@ -114,7 +114,8 @@ pub async fn prepare_multiple_txn(
             | Request::SetDissolveTimestamp(SetDissolveTimestamp { account, .. })
             | Request::AddHotKey(AddHotKey { account, .. })
             | Request::Disburse(Disburse { account, .. })
-            | Request::Spawn(Spawn { account, .. }) => {
+            | Request::Spawn(Spawn { account, .. })
+            | Request::MergeMaturity(MergeMaturity { account, .. }) => {
                 all_sender_account_ids.push(to_model_account_identifier(&account));
             }
             Request::Transfer(Operation::Burn { .. }) => {

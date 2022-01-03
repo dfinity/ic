@@ -2899,7 +2899,7 @@ impl Governance {
         if merge_maturity.percentage_to_merge > 100 || merge_maturity.percentage_to_merge == 0 {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "The percentage of maturity to merge must be a value between 0 (exclusive) and 1 (inclusive)."));
+                "The percentage of maturity to merge must be a value between 0 (exclusive) and 100 (inclusive)."));
         }
 
         let economics = self

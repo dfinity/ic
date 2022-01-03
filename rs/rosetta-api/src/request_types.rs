@@ -33,6 +33,7 @@ pub const DISBURSE: &str = "DISBURSE";
 pub const DISSOLVE_TIME_UTC_SECONDS: &str = "dissolve_time_utc_seconds";
 pub const ADD_HOT_KEY: &str = "ADD_HOT_KEY";
 pub const SPAWN: &str = "SPAWN";
+pub const MERGE_MATURITY: &str = "MERGE_MATURITY";
 
 /// `RequestType` contains all supported values of `Operation.type`.
 /// Extra information, such as `neuron_index` should only be included
@@ -64,6 +65,9 @@ pub enum RequestType {
     #[serde(rename = "SPAWN")]
     #[serde(alias = "Spawn")]
     Spawn { neuron_index: u64 },
+    #[serde(rename = "MERGE_MATURITY")]
+    #[serde(alias = "MergeMaturity")]
+    MergeMaturity { neuron_index: u64 },
 }
 
 impl RequestType {
@@ -77,6 +81,7 @@ impl RequestType {
             RequestType::Disburse { .. } => DISBURSE,
             RequestType::AddHotKey { .. } => ADD_HOT_KEY,
             RequestType::Spawn { .. } => SPAWN,
+            RequestType::MergeMaturity { .. } => MERGE_MATURITY,
         }
     }
 
@@ -94,6 +99,7 @@ impl RequestType {
                 | RequestType::Disburse { .. }
                 | RequestType::AddHotKey { .. }
                 | RequestType::Spawn { .. }
+                | RequestType::MergeMaturity { .. }
         )
     }
 }
@@ -308,6 +314,8 @@ pub enum Request {
     AddHotKey(AddHotKey),
     #[serde(rename = "SPAWN")]
     Spawn(Spawn),
+    #[serde(rename = "MERGE_MATURITY")]
+    MergeMaturity(MergeMaturity),
 }
 
 impl Request {
@@ -347,6 +355,11 @@ impl Request {
             Request::Spawn(Spawn { neuron_index, .. }) => Ok(RequestType::Spawn {
                 neuron_index: *neuron_index,
             }),
+            Request::MergeMaturity(MergeMaturity { neuron_index, .. }) => {
+                Ok(RequestType::MergeMaturity {
+                    neuron_index: *neuron_index,
+                })
+            }
         }
     }
 
@@ -369,6 +382,7 @@ impl Request {
                 Request::Disburse(o) => builder.disburse(o, token_name),
                 Request::AddHotKey(o) => builder.add_hot_key(o),
                 Request::Spawn(o) => builder.spawn(o),
+                Request::MergeMaturity(o) => builder.merge_maturity(o),
             };
         }
         Ok(builder.build())
@@ -388,6 +402,7 @@ impl Request {
                 | Request::Disburse(_)
                 | Request::AddHotKey(_)
                 | Request::Spawn(_)
+                | Request::MergeMaturity(_)
         )
     }
 }
@@ -541,6 +556,20 @@ impl TryFrom<&models::Request> for Request {
                     Err(ApiError::invalid_request("Invalid spawn request."))
                 }
             }
+            RequestType::MergeMaturity { neuron_index } => {
+                if let Some(Command::MergeMaturity(manage_neuron::MergeMaturity {
+                    percentage_to_merge,
+                })) = manage_neuron()?
+                {
+                    Ok(Request::MergeMaturity(MergeMaturity {
+                        account,
+                        percentage_to_merge,
+                        neuron_index: *neuron_index,
+                    }))
+                } else {
+                    Err(ApiError::invalid_request("Invalid merge maturity request."))
+                }
+            }
         }
     }
 }
@@ -663,6 +692,14 @@ pub struct Spawn {
     pub account: ledger_canister::AccountIdentifier,
     pub spawned_neuron_index: u64,
     pub controller: Option<PrincipalId>,
+    #[serde(default)]
+    pub neuron_index: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct MergeMaturity {
+    pub account: ledger_canister::AccountIdentifier,
+    pub percentage_to_merge: u32,
     #[serde(default)]
     pub neuron_index: u64,
 }
@@ -852,6 +889,37 @@ impl TryFrom<Option<Object>> for SpawnMetadata {
 
 impl From<SpawnMetadata> for Object {
     fn from(m: SpawnMetadata) -> Self {
+        match serde_json::to_value(m) {
+            Ok(Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub struct MergeMaturityMetadata {
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub percentage_to_merge: Option<u32>,
+    #[serde(default)]
+    pub neuron_index: u64,
+}
+
+impl TryFrom<Option<Object>> for MergeMaturityMetadata {
+    type Error = ApiError;
+
+    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse a `neuron_index` from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+impl From<MergeMaturityMetadata> for Object {
+    fn from(m: MergeMaturityMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
             _ => unreachable!(),
@@ -1086,7 +1154,6 @@ impl TransactionBuilder {
             metadata: Some(
                 DisburseMetadata {
                     recipient: *recipient,
-
                     neuron_index: *neuron_index,
                 }
                 .into(),
@@ -1139,6 +1206,31 @@ impl TransactionBuilder {
                     controller: *controller,
                     neuron_index: *neuron_index,
                     spawned_neuron_index: *spawned_neuron_index,
+                }
+                .into(),
+            ),
+        });
+    }
+
+    pub fn merge_maturity(&mut self, merge: &MergeMaturity) {
+        let MergeMaturity {
+            account,
+            percentage_to_merge,
+            neuron_index,
+        } = merge;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            _type: MERGE_MATURITY.to_string(),
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: Some(
+                MergeMaturityMetadata {
+                    percentage_to_merge: Option::from(*percentage_to_merge),
+                    neuron_index: *neuron_index,
                 }
                 .into(),
             ),

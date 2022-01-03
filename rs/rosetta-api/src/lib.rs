@@ -18,8 +18,8 @@ use crate::convert::{
 };
 use crate::ledger_client::LedgerAccess;
 use crate::request_types::{
-    AddHotKey, Disburse, PublicKeyOrPrincipal, Request, RequestType, SetDissolveTimestamp, Spawn,
-    Stake, StartDissolve, StopDissolve,
+    AddHotKey, Disburse, MergeMaturity, PublicKeyOrPrincipal, Request, RequestType,
+    SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
 };
 use crate::store::{BlockStore, HashedBlock};
 use crate::time::Seconds;
@@ -691,6 +691,29 @@ impl RosettaRequestHandler {
                         ));
                     }
                 }
+
+                RequestType::MergeMaturity { neuron_index } => {
+                    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+                        ApiError::internal_error(format!(
+                            "Could not decode ManageNeuron argument: {}",
+                            e
+                        ))
+                    })?;
+                    if let Some(Command::MergeMaturity(manage_neuron::MergeMaturity {
+                        percentage_to_merge,
+                    })) = manage.command
+                    {
+                        requests.push(Request::MergeMaturity(MergeMaturity {
+                            account: from,
+                            percentage_to_merge,
+                            neuron_index,
+                        }));
+                    } else {
+                        return Err(ApiError::internal_error(
+                            "Incompatible manage_neuron command".to_string(),
+                        ));
+                    }
+                }
             }
         }
 
@@ -1086,6 +1109,23 @@ impl RosettaRequestHandler {
                         &mut updates,
                     )?;
                 }
+                Request::MergeMaturity(MergeMaturity {
+                    account,
+                    percentage_to_merge,
+                    neuron_index,
+                }) => {
+                    let command = Command::MergeMaturity(manage_neuron::MergeMaturity {
+                        percentage_to_merge,
+                    });
+                    add_neuron_management_payload(
+                        RequestType::MergeMaturity { neuron_index },
+                        account,
+                        neuron_index,
+                        command,
+                        &mut payloads,
+                        &mut updates,
+                    )?;
+                }
             }
         }
 
@@ -1123,7 +1163,8 @@ impl RosettaRequestHandler {
                     | Request::StopDissolve(StopDissolve { account, .. })
                     | Request::Disburse(Disburse { account, .. })
                     | Request::AddHotKey(AddHotKey { account, .. })
-                    | Request::Spawn(Spawn { account, .. }) => Ok(account),
+                    | Request::Spawn(Spawn { account, .. })
+                    | Request::MergeMaturity(MergeMaturity { account, .. }) => Ok(account),
                     Request::Transfer(Operation::Burn { .. }) => Err(ApiError::invalid_request(
                         "Burn operations are not supported through rosetta",
                     )),
@@ -1287,6 +1328,8 @@ impl RosettaRequestHandler {
                     "SET_DISSOLVE_TIMESTAMP".to_string(),
                     "START_DISSOLVING".to_string(),
                     "STOP_DISSOLVING".to_string(),
+                    "SPAWN".to_string(),
+                    "MERGE_MATURITY".to_string(),
                 ],
                 {
                     let mut errs = vec![
