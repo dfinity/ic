@@ -2,10 +2,13 @@ use ic_fondue::prod_tests::cli::CliArgs;
 use ic_fondue::prod_tests::driver_setup::create_driver_context_from_cli;
 use ic_fondue::prod_tests::evaluation::{evaluate, TestResult};
 use ic_fondue::prod_tests::pot_dsl::*;
+use ic_tests::create_subnet::{self, create_subnet_test};
+use ic_tests::nns_fault_tolerance_test;
 use ic_tests::nns_follow_test::{self, test as follow_test};
 use ic_tests::nns_voting_test::{self, test as voting_test};
 use ic_tests::node_assign_test::{self, test as node_assign_test};
 use ic_tests::node_restart_test::{self, test as node_restart_test};
+use ic_tests::rosetta_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::token_balance_test::{self, test as token_balance_test};
 use ic_tests::upgrade_reject::{self, upgrade_reject};
@@ -17,7 +20,6 @@ use ic_tests::{
     cycles_minting_test, feature_flags, nns_canister_upgrade_test, registry_authentication_test,
     ssh_access_to_nodes, subnet_creation, transaction_ledger_correctness_test, wasm_generator_test,
 };
-use ic_tests::{nns_fault_tolerance_test, rosetta_test};
 use regex::Regex;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -132,6 +134,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
         suite(
             "pre_master",
             vec![
+                pot(
+                    "create_subnet", 
+                    create_subnet::config(),
+                    par(vec![
+                        t("create_subnet", create_subnet_test),
+                    ]),
+                ),
                 execution::upgraded_pots::general_execution_pot(),
                 execution::upgraded_pots::cycles_restrictions_pot(),
                 execution::upgraded_pots::inter_canister_queries(),
@@ -278,6 +287,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 ),
                 pot(
+                    "create_subnet",
+                    create_subnet::config(),
+                    par(vec![t("create_subnet", create_subnet_test)]),
+                ),
+                pot(
                     "upgrade_reject",
                     upgrade_reject::config(),
                     par(vec![t("upgrade_reject", upgrade_reject)]),
@@ -293,16 +307,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ],
         ),
     );
-
-    // TODO: uncomment when we have some nightly system tests:
-    // m.insert(
-    //     "nightly".to_string(),
-    //     suite(
-    //         "nightly",
-    //         vec![
-    //         ],
-    //     ),
-    // );
 
     // The tests in this suite require canisters to be build prior to
     // running the tests which is why we separate it out.

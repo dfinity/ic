@@ -51,7 +51,7 @@ impl InternetComputer {
     /// The subnet is able to execute calls faster because the block time
     /// on the node is reduced.
     pub fn add_fast_single_node_subnet(mut self, subnet_type: SubnetType) -> Self {
-        self.subnets.push(Subnet::fast(subnet_type));
+        self.subnets.push(Subnet::fast_single_node(subnet_type));
         self
     }
 
@@ -176,11 +176,18 @@ impl Subnet {
         }
     }
 
-    /// A one-node subnet that's optimized to be "fast".
+    /// An empty subnet that's optimized to be "fast".
     ///
     /// The subnet is able to execute calls faster because the block time
-    /// on the node is reduced.
-    pub fn fast(subnet_type: SubnetType) -> Self {
+    /// on its nodes is reduced.
+    ///
+    /// See also `fast_single_node`.
+    pub fn fast(subnet_type: SubnetType, no_of_nodes: usize) -> Self {
+        assert!(
+            0 < no_of_nodes,
+            "cannot create subner with {} nodes",
+            no_of_nodes
+        );
         Self::new(subnet_type)
             // Shorter block time.
             .with_unit_delay(Duration::from_millis(200))
@@ -189,7 +196,12 @@ impl Subnet {
             // when the block time is low and isn't needed for a
             // single node anyways.
             .with_detect_starvation(false)
-            .add_nodes(1)
+            .add_nodes(no_of_nodes)
+    }
+
+    /// A one-node subnet that's optimized to be "fast".
+    pub fn fast_single_node(subnet_type: SubnetType) -> Self {
+        Self::fast(subnet_type, 1)
     }
 
     /// A (many-node) that's optimized to be "slow" so that its nodes

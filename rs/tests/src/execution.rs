@@ -19,41 +19,41 @@ use crate::util::CYCLES_LIMIT_PER_CANISTER;
 
 pub fn config_system_verified_application_subnets() -> InternetComputer {
     InternetComputer::new()
-        .add_subnet(Subnet::fast(SubnetType::System))
-        .add_subnet(Subnet::fast(SubnetType::VerifiedApplication))
-        .add_subnet(Subnet::fast(SubnetType::Application))
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
+        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
 }
 
 pub fn config_system_verified_subnets() -> InternetComputer {
     InternetComputer::new()
-        .add_subnet(Subnet::fast(SubnetType::System))
-        .add_subnet(Subnet::fast(SubnetType::VerifiedApplication))
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
 }
 
 pub fn pot1_config() -> InternetComputer {
     InternetComputer::new()
         .add_subnet(
-            Subnet::fast(SubnetType::System)
+            Subnet::fast_single_node(SubnetType::System)
                 .with_max_cycles_per_canister(Some(CYCLES_LIMIT_PER_CANISTER)),
         )
         .add_subnet(
-            Subnet::fast(SubnetType::Application)
+            Subnet::fast_single_node(SubnetType::Application)
                 .with_max_cycles_per_canister(Some(CYCLES_LIMIT_PER_CANISTER)),
         )
 }
 
 pub fn config_many_system_subnets() -> InternetComputer {
     InternetComputer::new()
-        .add_subnet(Subnet::fast(SubnetType::System))
-        .add_subnet(Subnet::fast(SubnetType::VerifiedApplication))
-        .add_subnet(Subnet::fast(SubnetType::Application))
-        .add_subnet(Subnet::fast(SubnetType::System))
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
+        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
 }
 
 // A special configuration for testing memory capacity limits.
 pub fn config_memory_capacity() -> InternetComputer {
     InternetComputer::new().add_subnet(
-        Subnet::fast(SubnetType::System)
+        Subnet::fast_single_node(SubnetType::System)
             // A tiny memory capacity
             .with_memory_capacity(20 * 1024 * 1024 /* 20 MiB */),
     )

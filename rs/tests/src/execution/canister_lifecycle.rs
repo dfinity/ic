@@ -664,7 +664,7 @@ pub fn exceeding_memory_capacity_fails_when_memory_allocation_changes(
 // A special configuration for testing small canister memory size.
 pub fn config_canister_memory_size() -> InternetComputer {
     InternetComputer::new().add_subnet(
-        Subnet::fast(SubnetType::System)
+        Subnet::fast_single_node(SubnetType::System)
             // A small limit on canisters' memory.
             .with_max_canister_memory_size(10 * 1024 * 1024 /* 10 MiB */),
     )
@@ -923,8 +923,8 @@ pub fn canister_can_manage_other_canister_batched(handle: IcHandle, ctx: &fondue
 
 pub fn config_compute_allocation() -> InternetComputer {
     InternetComputer::new()
-        .add_subnet(Subnet::fast(SubnetType::System))
-        .add_subnet(Subnet::fast(SubnetType::Application))
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
 }
 
 /// This tests expects to be run on a clean slate, i.e. requires it's own Pot
@@ -1468,7 +1468,7 @@ pub fn refunds_after_uninstall_are_refunded(handle: IcHandle, ctx: &fondue::pot:
 // subnet. The value is set to 3 for the tests.
 pub fn config_max_number_of_canisters() -> InternetComputer {
     InternetComputer::new()
-        .add_subnet(Subnet::fast(SubnetType::System).with_max_number_of_canisters(3))
+        .add_subnet(Subnet::fast_single_node(SubnetType::System).with_max_number_of_canisters(3))
 }
 
 /// This test assumes it's being executed using

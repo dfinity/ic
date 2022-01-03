@@ -211,8 +211,10 @@ pub fn no_cycle_balance_limit_on_nns_subnet(handle: IcHandle, ctx: &fondue::pot:
 
 pub fn config() -> InternetComputer {
     InternetComputer::new()
-        .add_subnet(Subnet::fast(SubnetType::System).with_max_cycles_per_canister(None))
-        .add_subnet(Subnet::fast(SubnetType::Application).with_max_cycles_per_canister(None))
+        .add_subnet(Subnet::fast_single_node(SubnetType::System).with_max_cycles_per_canister(None))
+        .add_subnet(
+            Subnet::fast_single_node(SubnetType::Application).with_max_cycles_per_canister(None),
+        )
 }
 
 pub fn max_cycles_per_canister_system_subnet(handle: IcHandle, ctx: &fondue::pot::Context) {

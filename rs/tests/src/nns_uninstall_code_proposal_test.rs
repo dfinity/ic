@@ -21,8 +21,8 @@ use ic_utils::interfaces::ManagementCanister;
 
 pub fn config() -> InternetComputer {
     InternetComputer::new()
-        .add_subnet(Subnet::fast(SubnetType::System))
-        .add_subnet(Subnet::fast(SubnetType::Application))
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
 }
 
 /// Submits an `UninstallCode` proposal to the governance and verifies

@@ -2,6 +2,7 @@ pub mod basic_health_test;
 pub mod cli;
 pub mod consensus;
 pub mod cow_safety_test;
+pub mod create_subnet;
 pub mod cycles_minting_test;
 pub mod execution;
 pub mod feature_flags;
