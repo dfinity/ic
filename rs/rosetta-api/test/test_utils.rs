@@ -20,7 +20,6 @@ use ic_rosetta_api::balance_book::BalanceBook;
 use ic_rosetta_api::convert::{from_arg, to_model_account_identifier};
 use ic_rosetta_api::ledger_client::{Blocks, LedgerAccess};
 use ic_rosetta_api::rosetta_server::RosettaApiServer;
-use ic_rosetta_api::store::BlockStore;
 use ic_rosetta_api::{store::HashedBlock, RosettaRequestHandler, DEFAULT_TOKEN_NAME};
 use ic_types::{
     messages::{HttpCanisterUpdate, HttpSubmitContent},
@@ -64,7 +63,7 @@ pub struct TestLedger {
 impl TestLedger {
     pub fn new() -> Self {
         Self {
-            blockchain: RwLock::new(Blocks::default()),
+            blockchain: RwLock::new(Blocks::new_in_memory()),
             canister_id: CanisterId::new(
                 PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
             )

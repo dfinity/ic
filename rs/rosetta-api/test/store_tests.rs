@@ -1,5 +1,5 @@
 use super::*;
-use ic_rosetta_api::store::{BlockStore, BlockStoreError, SQLiteStore};
+use ic_rosetta_api::store::{BlockStoreError, SQLiteStore};
 use std::path::Path;
 
 pub(crate) fn sqlite_on_disk_store(path: &Path) -> SQLiteStore {
@@ -126,7 +126,7 @@ async fn store_prune_and_load_test() {
     verify_balance_snapshot(&scribe, &mut store, 30);
 }
 
-fn prune(scribe: &Scribe, store: &mut impl BlockStore, prune_at: u64) {
+fn prune(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {
     let oldest_idx = prune_at;
     let oldest_block = scribe.blockchain.get(oldest_idx as usize).unwrap();
     let oldest_balance = to_balances(
@@ -141,7 +141,7 @@ fn prune(scribe: &Scribe, store: &mut impl BlockStore, prune_at: u64) {
     store.prune(oldest_block, &oldest_balance).unwrap();
 }
 
-fn verify_pruned(scribe: &Scribe, store: &mut impl BlockStore, prune_at: u64) {
+fn verify_pruned(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {
     let after_last_idx = scribe.blockchain.len() as u64;
     let oldest_idx = prune_at.min(after_last_idx);
 
@@ -172,7 +172,7 @@ fn verify_pruned(scribe: &Scribe, store: &mut impl BlockStore, prune_at: u64) {
     }
 }
 
-fn verify_balance_snapshot(scribe: &Scribe, store: &mut impl BlockStore, prune_at: u64) {
+fn verify_balance_snapshot(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {
     let oldest_idx = prune_at as usize;
     let (oldest_block, balances) = store.first_snapshot().unwrap();
     assert_eq!(oldest_block, *scribe.blockchain.get(oldest_idx).unwrap());

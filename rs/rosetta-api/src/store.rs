@@ -47,28 +47,20 @@ impl From<BlockStoreError> for ApiError {
             BlockStoreError::NotFound(idx) => {
                 ApiError::invalid_block_id(format!("Block not found: {}", idx))
             }
-            // TODO Add a new error type (ApiError::BlockPruned or something like that)
             BlockStoreError::NotAvailable(idx) => {
-                ApiError::internal_error(format!("Block not available for query: {}", idx))
+                ApiError::invalid_block_id(format!("Block not available for query: {}", idx))
             }
             BlockStoreError::Other(msg) => ApiError::internal_error(msg),
         }
     }
 }
 
-pub trait BlockStore {
-    fn get_at(&self, index: BlockHeight) -> Result<HashedBlock, BlockStoreError>;
-    fn get_range(
-        &self,
-        range: std::ops::Range<BlockHeight>,
-    ) -> Result<Vec<HashedBlock>, BlockStoreError>;
-    fn push(&mut self, block: HashedBlock) -> Result<(), BlockStoreError>;
-    fn push_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), BlockStoreError>;
-    fn prune(&mut self, hb: &HashedBlock, balances: &BalanceBook) -> Result<(), String>;
-    fn first_snapshot(&self) -> Option<(HashedBlock, BalanceBook)>;
-    fn first(&self) -> Result<Option<HashedBlock>, BlockStoreError>;
-    fn last_verified(&self) -> Option<BlockHeight>;
-    fn mark_last_verified(&mut self, h: BlockHeight) -> Result<(), BlockStoreError>;
+fn vec_into_array(v: Vec<u8>) -> [u8; 32] {
+    let ba: Box<[u8; 32]> = match v.into_boxed_slice().try_into() {
+        Ok(ba) => ba,
+        Err(v) => panic!("Expected a Vec of length 32 but it was {}", v.len()),
+    };
+    *ba
 }
 
 pub struct SQLiteStore {
@@ -333,18 +325,8 @@ impl SQLiteStore {
         self.first_block = Option::Some(hb.clone());
         Ok(())
     }
-}
 
-fn vec_into_array(v: Vec<u8>) -> [u8; 32] {
-    let ba: Box<[u8; 32]> = match v.into_boxed_slice().try_into() {
-        Ok(ba) => ba,
-        Err(v) => panic!("Expected a Vec of length 32 but it was {}", v.len()),
-    };
-    *ba
-}
-
-impl BlockStore for SQLiteStore {
-    fn get_at(&self, index: BlockHeight) -> Result<HashedBlock, BlockStoreError> {
+    pub fn get_at(&self, index: BlockHeight) -> Result<HashedBlock, BlockStoreError> {
         if 0 < index && index < self.base_idx {
             return Err(BlockStoreError::NotAvailable(index));
         }
@@ -373,7 +355,7 @@ impl BlockStore for SQLiteStore {
             .map(|block| block.unwrap())
     }
 
-    fn get_range(
+    pub fn get_range(
         &self,
         range: std::ops::Range<BlockHeight>,
     ) -> Result<Vec<HashedBlock>, BlockStoreError> {
@@ -405,12 +387,12 @@ impl BlockStore for SQLiteStore {
         Ok(res)
     }
 
-    fn push(&mut self, hb: HashedBlock) -> Result<(), BlockStoreError> {
+    pub fn push(&mut self, hb: HashedBlock) -> Result<(), BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
         Self::execute_push(&mut *connection, hb)
     }
 
-    fn push_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), BlockStoreError> {
+    pub fn push_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
 
         connection
@@ -436,7 +418,7 @@ impl BlockStore for SQLiteStore {
     }
 
     // FIXME: Make `prune` return `BlockStoreError` on error
-    fn prune(&mut self, hb: &HashedBlock, balances: &BalanceBook) -> Result<(), String> {
+    pub fn prune(&mut self, hb: &HashedBlock, balances: &BalanceBook) -> Result<(), String> {
         self.write_oldest_block_snapshot(hb, balances)?;
         let mut connection = self.connection.lock().unwrap();
         let tx = connection.transaction().expect("Cannot open transaction");
@@ -461,12 +443,12 @@ impl BlockStore for SQLiteStore {
         Ok(())
     }
 
-    fn first_snapshot(&self) -> Option<(HashedBlock, BalanceBook)> {
+    pub fn first_snapshot(&self) -> Option<(HashedBlock, BalanceBook)> {
         self.read_oldest_block_snapshot()
             .expect("Error while retrieving first snapshot.")
     }
 
-    fn first(&self) -> Result<Option<HashedBlock>, BlockStoreError> {
+    pub fn first(&self) -> Result<Option<HashedBlock>, BlockStoreError> {
         if let Some(first_block) = self.first_block.as_ref() {
             Ok(Some(first_block.clone()))
         } else {
@@ -478,11 +460,11 @@ impl BlockStore for SQLiteStore {
         }
     }
 
-    fn last_verified(&self) -> Option<BlockHeight> {
+    pub fn last_verified(&self) -> Option<BlockHeight> {
         self.last_verified_idx
     }
 
-    fn mark_last_verified(&mut self, block_height: BlockHeight) -> Result<(), BlockStoreError> {
+    pub fn mark_last_verified(&mut self, block_height: BlockHeight) -> Result<(), BlockStoreError> {
         if let Some(hh) = self.last_verified_idx {
             if block_height < hh {
                 panic!(

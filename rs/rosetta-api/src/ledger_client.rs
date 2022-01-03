@@ -38,7 +38,7 @@ use crate::models::{EnvelopePair, SignedTransaction};
 use crate::request_types::START_DISSOLVE;
 use crate::request_types::STOP_DISSOLVE;
 use crate::request_types::{Request, RequestResult, RequestType, Status, TransactionResults};
-use crate::store::{BlockStore, BlockStoreError, HashedBlock, SQLiteStore};
+use crate::store::{BlockStoreError, HashedBlock, SQLiteStore};
 use crate::transaction_id::TransactionIdentifier;
 
 // If pruning is enabled, instead of pruning after each new block
@@ -86,12 +86,15 @@ impl LedgerClient {
         canister_id: CanisterId,
         token_name: String,
         governance_canister_id: CanisterId,
-        block_store: SQLiteStore,
+        store_location: Option<&std::path::Path>,
         store_max_blocks: Option<u64>,
         offline: bool,
         root_key: Option<ThresholdSigPublicKey>,
     ) -> Result<LedgerClient, ApiError> {
-        let mut blocks = Blocks::new(block_store);
+        let mut blocks = match store_location {
+            Some(loc) => Blocks::new_persistent(loc),
+            None => Blocks::new_in_memory(),
+        };
         let canister_access = if offline {
             None
         } else {
@@ -1167,16 +1170,12 @@ pub struct Blocks {
     last_hash: Option<HashOf<EncodedBlock>>,
 }
 
-impl Default for Blocks {
-    fn default() -> Self {
-        Blocks::new_in_memory()
-    }
-}
-
 impl Blocks {
     const LOAD_FROM_STORE_BLOCK_BATCH_LEN: u64 = 10000;
 
-    pub fn new(block_store: SQLiteStore) -> Self {
+    pub fn new_persistent(store_location: &std::path::Path) -> Self {
+        let block_store = SQLiteStore::new_on_disk(store_location)
+            .expect("Failed to initialize sql store for ledger");
         Self {
             balance_book: BalanceBook::default(),
             hash_location: HashMap::default(),
@@ -1187,9 +1186,15 @@ impl Blocks {
     }
 
     pub fn new_in_memory() -> Self {
-        let store =
+        let block_store =
             SQLiteStore::new_in_memory().expect("Failed to initialize sql store for ledger");
-        Self::new(store)
+        Self {
+            balance_book: BalanceBook::default(),
+            hash_location: HashMap::default(),
+            tx_hash_location: HashMap::default(),
+            block_store,
+            last_hash: None,
+        }
     }
 
     pub fn load_from_store(&mut self) -> Result<u64, ApiError> {

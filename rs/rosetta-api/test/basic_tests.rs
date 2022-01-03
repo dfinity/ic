@@ -7,7 +7,6 @@ use ic_rosetta_api::ledger_client::LedgerAccess;
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{RosettaRequestHandler, API_VERSION, NODE_VERSION};
 
-use std::path::Path;
 use std::sync::Arc;
 
 #[actix_rt::test]
@@ -558,27 +557,13 @@ async fn verify_account_search(
 }
 
 #[actix_rt::test]
-async fn load_from_store_test_sqlite_store() {
+async fn load_from_store_test() {
     init_test_logger();
     let tmpdir = create_tmp_dir();
-    load_from_store_test(tmpdir.path()).await;
-}
-
-#[actix_rt::test]
-async fn load_unverified_test_sqlite_store() {
-    init_test_logger();
-    let tmpdir = create_tmp_dir();
-    load_unverified_test(tmpdir.path()).await;
-}
-
-fn create_blocks(location: &Path) -> Blocks {
-    Blocks::new(super::store_tests::sqlite_on_disk_store(location))
-}
-
-async fn load_from_store_test(location: &Path) {
+    let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
 
-    let mut blocks = create_blocks(location);
+    let mut blocks = Blocks::new_persistent(location);
     let mut last_verified = 0;
     for hb in &scribe.blockchain {
         blocks.add_block(hb.clone()).unwrap();
@@ -601,7 +586,7 @@ async fn load_from_store_test(location: &Path) {
 
     drop(req_handler);
 
-    let mut blocks = create_blocks(location);
+    let mut blocks = Blocks::new_persistent(location);
     blocks.load_from_store().unwrap();
 
     assert!(blocks.get_verified_at(10).is_ok());
@@ -618,7 +603,7 @@ async fn load_from_store_test(location: &Path) {
 
     drop(blocks);
 
-    let mut blocks = create_blocks(location);
+    let mut blocks = Blocks::new_persistent(location);
     blocks.load_from_store().unwrap();
 
     verify_balances(&scribe, &blocks, 0);
@@ -639,7 +624,7 @@ async fn load_from_store_test(location: &Path) {
 
     drop(req_handler);
 
-    let mut blocks = create_blocks(location);
+    let mut blocks = Blocks::new_persistent(location);
     blocks.load_from_store().unwrap();
 
     verify_balances(&scribe, &blocks, 10);
@@ -668,10 +653,14 @@ async fn load_from_store_test(location: &Path) {
 }
 
 // remove this test if it's in the way of a new spec
-async fn load_unverified_test(location: &Path) {
+#[actix_rt::test]
+async fn load_unverified_test() {
+    init_test_logger();
+    let tmpdir = create_tmp_dir();
+    let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
 
-    let mut blocks = create_blocks(location);
+    let mut blocks = Blocks::new_persistent(location);
     for hb in &scribe.blockchain {
         blocks.add_block(hb.clone()).unwrap();
         if hb.index < 20 {
@@ -688,7 +677,7 @@ async fn load_unverified_test(location: &Path) {
 
     drop(blocks);
 
-    let mut blocks = create_blocks(location);
+    let mut blocks = Blocks::new_persistent(location);
     blocks.load_from_store().unwrap();
     let last_verified = (scribe.blockchain.len() - 1) as u64;
     blocks
@@ -707,16 +696,13 @@ async fn load_unverified_test(location: &Path) {
 }
 
 #[actix_rt::test]
-async fn store_batch_test_sqlite_store() {
+async fn store_batch_test() {
     init_test_logger();
     let tmpdir = create_tmp_dir();
-    store_batch_test(tmpdir.path()).await;
-}
-
-async fn store_batch_test(location: &Path) {
+    let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
 
-    let mut blocks = create_blocks(location);
+    let mut blocks = Blocks::new_persistent(location);
     for hb in &scribe.blockchain {
         if hb.index < 21 {
             blocks.add_block(hb.clone()).unwrap();
