@@ -1,0 +1,59 @@
+= IC_Subnet_SlowManifestComputation
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+:state-size-chart: https://grafana.dfinity.systems/d/Bk9yw3R7z/state-manager?viewPanel=8&var-ic=mercury&var-ic_subnet=jtdsg-3h6gi-hs7o5-z2soi-43w3z-soyl3-ajnp3-ekni5-sw553-5kw67-nqe
+:heap-delta-chart: https://grafana.dfinity.systems/d/GWlsOrn7z/execution-metrics-2-0?viewPanel=103&var-ic=mercury&var-ic_subnet=jtdsg-3h6gi-hs7o5-z2soi-43w3z-soyl3-ajnp3-ekni5-sw553-5kw67-nqe
+:jira-NODE-253:  https://dfinity.atlassian.net/browse/NODE-253
+:jira-ICSUP-2585: https://dfinity.atlassian.net/browse/ICSUP-2585
+
+== Triggered by
+
+State Manager manifest computation duration on a subnet (defined as the 75th
+percentile of replica manifest computation duration) is longer than 6 minutes.
+
+== Impact
+
+Manifest computations not completing within a CUP interval will prevent CUP
+creation. This alert is intended to trigger before that occurs.
+
+If no new CUPs are created, this can make it really hard for a replica to join
+or catch up to the subnet. And, based on experience, it soon leads to severely
+reduced finalization rate (below .1 BPS).
+
+== Possible causes (non-exhaustive)
+
+* {state-size-chart}[Huge states] (select the appropriate subnet) and/or large
+  numbers of {heap-delta-chart}[modified heap / stable memory pages] (ditto)
+  will require more file chunks to be hashed, increasing manifest computation
+  time.
+
+* We currently have an issue with deployed hosts (see {jira-NODE-253}[NODE-253]
+  and {jira-ICSUP-2585}[ICSUP-2585]) unintentionally having a tiny 8 GB
+  partition. Whenever host memory starts being swapped out, it manifests as huge
+  CPU utilization on the guest, significantly increasing (among other things)
+  manifest computation times. If enough replicas on a subnet get into this
+  state, it may artificially increase the subnet's manifest computation times.
+  (https://bit.ly/3e3Ccrm[Prometheus charts] of replicas with more than 1.2x more
+  CPU usage compared to the subnet median and counts of such replicas by subnet.)
+
+== Troubleshooting and remediation
+
+* Reduce subnet finalization rate (e.g. to .5 BPS) via NNS proposal. This is
+  only a temporary workaround, providing the subnet with (a bit more than)
+  double the time to produce a manifest and a CUP.
++
+[source,shell]
+....
+ic-admin --nns-url <nns-url> propose-to-update-subnet --subnet <subnet> --initial-notary-delay-millis 1500 --proposer <neuronid> --summary <summary>
+....
+
+* If the root cause is determined to be a more than 1/3 proportion of slow
+  replicas due to {jira-NODE-253}[NODE-253] / {jira-ICSUP-2585}[ICSUP-2585],
+  consider swapping out some replicas. Contact the Release Engineering team at
+  https://dfinity.slack.com/archives/C01DB8MQ5M1[`#eng-release`] or via
+  `@release-engs` on Slack.
+
+* Inform the Message Routing team (at
+  https://dfinity.slack.com/archives/CKXPC1928[`#eng-messaging`] or via
+  `@team-messaging`) to start investigating the root cause and find a
+  permanent solution.
