@@ -657,6 +657,10 @@ fn inject_metering(
 ) {
     let points = injections(code.elements(), instruction_cost_table);
     let points = points.iter().filter(|point| match point.cost_detail {
+        InjectionPointCostDetail::StaticCost {
+            scope: Scope::ReentrantBlockStart,
+            cost: _,
+        } => true,
         InjectionPointCostDetail::StaticCost { scope: _, cost } => cost > 0,
         InjectionPointCostDetail::DynamicCost => true,
     });
