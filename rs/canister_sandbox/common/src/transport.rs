@@ -343,16 +343,17 @@ pub fn socket_read_messages<
     handler: Handler,
     socket: Arc<UnixStream>,
 ) {
+    const MIN_READ_SIZE: usize = 16384;
+    const INITIAL_SIZE: usize = 65536;
     let fd = socket.as_raw_fd();
     let mut decoder = FrameDecoder::<Message>::new();
-    let mut buf = BytesMut::new();
+    let mut buf = BytesMut::with_capacity(INITIAL_SIZE);
     let mut fds = Vec::<RawFd>::new();
     loop {
         while let Some(mut frame) = decoder.decode(&mut buf) {
             install_file_descriptors(&mut frame, &mut fds);
             handler(frame);
         }
-        const MIN_READ_SIZE: usize = 16384;
         buf.reserve(MIN_READ_SIZE);
         let p = buf.as_mut_ptr();
         #[cfg(not(target_os = "linux"))]
@@ -367,7 +368,7 @@ pub fn socket_read_messages<
         let num_bytes_received = unsafe {
             let mut iov = libc::iovec {
                 iov_base: p.add(buf.len()) as *mut std::ffi::c_void,
-                iov_len: MIN_READ_SIZE,
+                iov_len: buf.capacity() - buf.len(),
             };
             let mut cmsgbuf: [u8; 4096] = [0; 4096];
             let mut hdr = libc::msghdr {
