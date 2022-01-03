@@ -36,10 +36,7 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, InstanceStats};
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::page_map::PageMapSerialization;
-use ic_replicated_state::{EmbedderCache, Memory, NumWasmPages, PageIndex, PageMap};
-use ic_sys::PageBytes;
-use ic_system_api::system_api_empty::SystemApiEmpty;
-use ic_system_api::ModificationTracking;
+use ic_replicated_state::{EmbedderCache, Memory, PageMap};
 use ic_types::CanisterId;
 use ic_types::NumInstructions;
 use ic_wasm_types::BinaryEncodedWasm;
@@ -443,7 +440,7 @@ impl SandboxManager {
         wasm_page_map: PageMapSerialization,
         canister_id: CanisterId,
     ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
-        // Step 1: Get the compiled binary from the cache.
+        // Get the compiled binary from the cache.
         let binary_encoded_wasm = BinaryEncodedWasm::new(wasm_source);
         let (embedder_cache, embedder) = {
             let guard = self.repr.lock().unwrap();
@@ -459,58 +456,28 @@ impl SandboxManager {
             )
         };
 
-        // Step 2. Get data from instrumentation output.
-        // TODO(EXC-755): Use the proper embedder config.
-        validate_wasm_binary(&binary_encoded_wasm, &Config::default())?;
-        let instrumentation_output =
-            instrument(&binary_encoded_wasm, &InstructionCostTable::new())?;
-        let exported_functions = instrumentation_output.exported_functions;
-        let wasm_memory_pages = instrumentation_output.data.as_pages();
-
-        // Step 3. Apply the initial memory pages to the page map.
         let mut wasm_page_map = PageMap::deserialize(wasm_page_map).unwrap();
-        let wasm_memory_delta = wasm_page_map.update(
-            &wasm_memory_pages
-                .iter()
-                .map(|(index, bytes)| (*index, bytes as &PageBytes))
-                .collect::<Vec<(PageIndex, &PageBytes)>>(),
-        );
 
-        // Step 4. Instantiate the Wasm module to get the globals and the memory size.
-        //
-        // We are using the wasm instance to initialize the execution state properly.
-        // SystemApi is needed when creating a Wasmtime instance because the Linker
-        // will try to assemble a list of all imports used by the wasm module.
-        //
-        // However, there is no need to initialize a `SystemApiImpl`
-        // as we don't execute any wasm instructions at this point,
-        // so we use an empty SystemApi instead.
-        let system_api = SystemApiEmpty;
-        let mut instance = match embedder.new_instance(
-            canister_id,
-            &embedder_cache,
-            &[],
-            NumWasmPages::from(0),
-            None,
-            Some(wasm_page_map.clone()),
-            ModificationTracking::Ignore,
-            system_api,
-        ) {
-            Ok(instance) => instance,
-            Err((err, _system_api)) => {
-                return Err(err);
-            }
-        };
+        let (exported_functions, exported_globals, wasm_memory_delta, wasm_memory_size) =
+            ic_embedders::wasm_executor::get_initial_globals_and_memory(
+                &binary_encoded_wasm,
+                &embedder_cache,
+                &embedder,
+                // TODO(EXC-755): Use the proper embedder config.
+                &Config::default(),
+                &mut wasm_page_map,
+                canister_id,
+            )?;
 
-        // Step 5. Send all necessary data for creating the execution state to replica.
+        // Send all necessary data for creating the execution state to replica.
         let wasm_memory = MemoryModifications {
             page_delta: wasm_page_map.serialize_delta(&wasm_memory_delta),
-            size: instance.heap_size(),
+            size: wasm_memory_size,
         };
 
         Ok(CreateExecutionStateSuccessReply {
             wasm_memory,
-            exported_globals: instance.get_exported_globals(),
+            exported_globals,
             exported_functions,
         })
     }

@@ -1,9 +1,10 @@
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
 use ic_system_api::{ApiType, StaticSystemState, SystemStateAccessor, SystemStateAccessorDirect};
-use ic_types::methods::FuncRef;
+use ic_types::methods::{FuncRef, WasmMethod};
 use prometheus::{Histogram, IntCounter};
 
 use crate::{
@@ -245,63 +246,31 @@ impl WasmExecutor {
         canister_root: PathBuf,
         canister_id: CanisterId,
     ) -> HypervisorResult<ExecutionState> {
-        // Step 1: Compile Wasm binary and cache it.
+        // Compile Wasm binary and cache it.
         let binary_encoded_wasm = BinaryEncodedWasm::new(wasm_source);
         let wasm_binary = WasmBinary::new(binary_encoded_wasm.clone());
         let embedder_cache = self.get_embedder_cache(&wasm_binary)?;
-
-        // Step 2. Get data from instrumentation output.
-        validate_wasm_binary(&binary_encoded_wasm, &self.config)?;
-        let instrumentation_output =
-            instrument(&binary_encoded_wasm, &InstructionCostTable::new())?;
-        let exported_functions = instrumentation_output.exported_functions;
-        let wasm_memory_pages = instrumentation_output.data.as_pages();
-
-        // Step 3. Apply the initial memory pages to the page map.
         let mut wasm_page_map = PageMap::default();
-        wasm_page_map.update(
-            &wasm_memory_pages
-                .iter()
-                .map(|(index, bytes)| (*index, bytes as &PageBytes))
-                .collect::<Vec<(PageIndex, &PageBytes)>>(),
-        );
 
-        // Step 4. Instantiate the Wasm module to get the globals and the memory size.
-        //
-        // We are using the wasm instance to initialize the execution state properly.
-        // SystemApi is needed when creating a Wasmtime instance because the Linker
-        // will try to assemble a list of all imports used by the wasm module.
-        //
-        // However, there is no need to initialize a `SystemApiImpl`
-        // as we don't execute any wasm instructions at this point,
-        // so we use an empty SystemApi instead.
-        let system_api = SystemApiEmpty;
-        let mut instance = match self.wasm_embedder.new_instance(
-            canister_id,
-            &embedder_cache,
-            &[],
-            NumWasmPages::from(0),
-            None,
-            Some(wasm_page_map.clone()),
-            ModificationTracking::Ignore,
-            system_api,
-        ) {
-            Ok(instance) => instance,
-            Err((err, _system_api)) => {
-                return Err(err);
-            }
-        };
+        let (exported_functions, globals, _wasm_page_delta, wasm_memory_size) =
+            get_initial_globals_and_memory(
+                &binary_encoded_wasm,
+                &embedder_cache,
+                &self.wasm_embedder,
+                &self.config,
+                &mut wasm_page_map,
+                canister_id,
+            )?;
 
-        // Step 5. Create the execution state.
-        let wasm_memory = Memory::new(wasm_page_map, instance.heap_size());
+        // Create the execution state.
         let stable_memory = Memory::default();
         let execution_state = ExecutionState::new(
             canister_root,
             wasm_binary,
             ExportedFunctions::new(exported_functions),
-            wasm_memory,
+            Memory::new(wasm_page_map, wasm_memory_size),
             stable_memory,
-            instance.get_exported_globals(),
+            globals,
         );
         Ok(execution_state)
     }
@@ -457,4 +426,73 @@ pub fn process<A: SystemStateAccessor>(
         memory_deltas,
         Ok(instance),
     )
+}
+
+/// Validates and instruments a compiled wasm module, updating the wasm memory
+/// `PageMap`. Returns the exported methods and globals, as well as wasm memory
+/// delta and final wasm memory size.
+///
+/// The only wasm code that will be run is const evaluation of the wasm globals.
+#[allow(clippy::type_complexity)]
+pub fn get_initial_globals_and_memory(
+    binary_encoded_wasm: &BinaryEncodedWasm,
+    embedder_cache: &EmbedderCache,
+    embedder: &WasmtimeEmbedder,
+    config: &EmbeddersConfig,
+    wasm_page_map: &mut PageMap,
+    canister_id: CanisterId,
+) -> HypervisorResult<(
+    BTreeSet<WasmMethod>,
+    Vec<Global>,
+    Vec<PageIndex>,
+    NumWasmPages,
+)> {
+    // Step 1. Get data from instrumentation output.
+    validate_wasm_binary(binary_encoded_wasm, config)?;
+    let instrumentation_output = instrument(binary_encoded_wasm, &InstructionCostTable::new())?;
+    let exported_functions = instrumentation_output.exported_functions;
+    let wasm_memory_pages = instrumentation_output.data.as_pages();
+
+    // Step 2. Apply the initial memory pages to the page map.
+    let wasm_memory_delta = wasm_page_map.update(
+        &wasm_memory_pages
+            .iter()
+            .map(|(index, bytes)| (*index, bytes as &PageBytes))
+            .collect::<Vec<(PageIndex, &PageBytes)>>(),
+    );
+
+    // Step 3. Instantiate the Wasm module to get the globals and the memory size.
+    //
+    // We are using the wasm instance to initialize the execution state properly.
+    // SystemApi is needed when creating a Wasmtime instance because the Linker
+    // will try to assemble a list of all imports used by the wasm module.
+    //
+    // However, there is no need to initialize a `SystemApiImpl`
+    // as we don't execute any wasm instructions at this point,
+    // so we use an empty SystemApi instead.
+    let system_api = SystemApiEmpty;
+    // This runs the module's `start` function, but instrumentation clears the
+    // start section and re-exports the start function as `canister_start`.
+    let mut instance = match embedder.new_instance(
+        canister_id,
+        embedder_cache,
+        &[],
+        NumWasmPages::from(0),
+        None,
+        Some(wasm_page_map.clone()),
+        ModificationTracking::Ignore,
+        system_api,
+    ) {
+        Ok(instance) => instance,
+        Err((err, _system_api)) => {
+            return Err(err);
+        }
+    };
+
+    Ok((
+        exported_functions,
+        instance.get_exported_globals(),
+        wasm_memory_delta,
+        instance.heap_size(),
+    ))
 }
