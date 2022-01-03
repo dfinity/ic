@@ -10,6 +10,7 @@ use fondue::{
 };
 use ic_base_types::NodeId;
 use ic_canister_client::{Agent, Sender};
+use ic_config::subnet_config::SchedulerConfig;
 use ic_fondue::{
     ic_manager::{IcEndpoint, IcHandle},
     node_software_version::NodeSoftwareVersion,
@@ -30,22 +31,32 @@ use ic_nns_test_utils::{
     governance::{submit_external_update_proposal, wait_for_final_state},
     itest_helpers::{NnsCanisters, NnsInitPayloadsBuilder},
 };
-use ic_prep_lib::prep_state_directory::IcPrepStateDir;
+use ic_prep_lib::{
+    prep_state_directory::IcPrepStateDir,
+    subnet_configuration::{self, duration_to_millis},
+};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
-use ic_registry_common::local_store::{
-    ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader,
+use ic_registry_common::{
+    local_store::{ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader},
+    registry::RegistryCanister,
+    values::deserialize_registry_value,
 };
 use ic_registry_keys::{get_node_record_node_id, make_subnet_list_record_key};
+use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::registry_mutation::Type;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
-use ic_types::{CanisterId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
+use ic_types::{p2p, CanisterId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
 use ledger_canister::LedgerCanisterInitPayload;
 use ledger_canister::Tokens;
 use prost::Message;
-use registry_canister::mutations::do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload;
 use registry_canister::mutations::{
     do_bless_replica_version::BlessReplicaVersionPayload,
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
+};
+use registry_canister::mutations::{
+    do_create_subnet::CreateSubnetPayload,
+    do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
 };
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
@@ -182,6 +193,15 @@ pub trait NnsExt {
             })
             .map(NodeId::from)
             .collect()
+    }
+
+    fn initial_unassigned_node_endpoints(&self, handle: &IcHandle) -> Vec<IcEndpoint> {
+        handle
+            .public_api_endpoints
+            .iter()
+            .filter(|ep| ep.subnet.is_none())
+            .cloned()
+            .collect::<Vec<IcEndpoint>>()
     }
 }
 
@@ -452,7 +472,7 @@ pub async fn await_proposal_execution(
 /// # Arguments
 ///
 /// * `ctx`                  - Fondue context
-/// * `endpoint`             - Endpoint of
+/// * `endpoint`             - Endpoint of a subnet
 /// * `retry_delay`          - Duration between polling attempts
 /// * `timeout`              - Duration after which we give up (returning false)
 /// * `acceptance_criterium` - Predicate determining whether the current status
@@ -808,4 +828,77 @@ pub async fn submit_update_subnet_replica_version_proposal(
     )
     .await
     .expect("submit_update_subnet_replica_version_proposal failed")
+}
+
+/// Submits a proposal for creating an application subnet.
+///
+/// # Arguments
+///
+/// * `governance`      - Governance canister
+/// * `node_ids`        - IDs of (currently, unassigned) nodes that should join
+///   the new subnet
+/// * `replica_version` - Replica software version to install to the new subnet
+///   nodes (see `get_software_version`)
+///
+/// Eventually returns the identifier of the newly submitted proposal.
+pub async fn submit_create_application_subnet_proposal(
+    governance: &Canister<'_>,
+    node_ids: Vec<NodeId>,
+    replica_version: ReplicaVersion,
+) -> ProposalId {
+    let config =
+        subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
+    let gossip = p2p::build_default_gossip_config();
+    let scheduler = SchedulerConfig::application_subnet();
+    let payload = CreateSubnetPayload {
+        node_ids,
+        subnet_id_override: None,
+        ingress_bytes_per_block_soft_cap: config.ingress_bytes_per_block_soft_cap,
+        max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
+        max_ingress_messages_per_block: config.max_ingress_messages_per_block,
+        max_block_payload_size: config.max_block_payload_size,
+        replica_version_id: replica_version.to_string(),
+        unit_delay_millis: duration_to_millis(config.unit_delay),
+        initial_notary_delay_millis: duration_to_millis(config.initial_notary_delay),
+        dkg_interval_length: config.dkg_interval_length.get(),
+        dkg_dealings_per_block: config.dkg_dealings_per_block as u64,
+        gossip_max_artifact_streams_per_peer: gossip.max_artifact_streams_per_peer,
+        gossip_max_chunk_wait_ms: gossip.max_chunk_wait_ms,
+        gossip_max_duplicity: gossip.max_duplicity,
+        gossip_max_chunk_size: gossip.max_chunk_size,
+        gossip_receive_check_cache_size: gossip.receive_check_cache_size,
+        gossip_pfn_evaluation_period_ms: gossip.pfn_evaluation_period_ms,
+        gossip_registry_poll_period_ms: gossip.registry_poll_period_ms,
+        gossip_retransmission_request_ms: gossip.retransmission_request_ms,
+        advert_best_effort_percentage: gossip.advert_config.map(|gac| gac.best_effort_percentage),
+        start_as_nns: false,
+        subnet_type: SubnetType::Application,
+        is_halted: false,
+        max_instructions_per_message: scheduler.max_instructions_per_message.get(),
+        max_instructions_per_round: scheduler.max_instructions_per_round.get(),
+        max_instructions_per_install_code: scheduler.max_instructions_per_install_code.get(),
+        features: SubnetFeatures::default(),
+        max_number_of_canisters: 3,
+        ssh_readonly_access: vec![],
+        ssh_backup_access: vec![],
+    };
+
+    submit_external_proposal_with_test_id(governance, NnsFunction::CreateSubnet, payload).await
+}
+
+// Queries the registry for the subnet_list record, awaits, decodes, and returns
+// the response.
+pub async fn get_subnet_list_from_registry(client: &RegistryCanister) -> Vec<SubnetId> {
+    let (original_subnets_enc, _) = client
+        .get_value(make_subnet_list_record_key().as_bytes().to_vec(), None)
+        .await
+        .expect("failed to get value for subnet list");
+
+    deserialize_registry_value::<SubnetListRecord>(Ok(Some(original_subnets_enc)))
+        .expect("could not decode subnet list record")
+        .unwrap()
+        .subnets
+        .iter()
+        .map(|s| SubnetId::from(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
+        .collect::<Vec<SubnetId>>()
 }

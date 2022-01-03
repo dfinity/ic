@@ -48,8 +48,9 @@ use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 
 pub fn config() -> InternetComputer {
     // 19 blocks till checkpoint
-    InternetComputer::new()
-        .add_subnet(Subnet::fast(SubnetType::System).with_dkg_interval_length(Height::from(19)))
+    InternetComputer::new().add_subnet(
+        Subnet::fast_single_node(SubnetType::System).with_dkg_interval_length(Height::from(19)),
+    )
 }
 
 pub fn upgrade_reject(handle: IcHandle, ctx: &fondue::pot::Context) {

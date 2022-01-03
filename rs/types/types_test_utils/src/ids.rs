@@ -170,6 +170,11 @@ pub fn subnet_test_id(i: u64) -> SubnetId {
     SubnetId::from(PrincipalId::new_subnet_test_id(i))
 }
 
+/// Returns a [`NodeId`] that can be used in tests.
+pub fn new_node_test_id(i: u64) -> NodeId {
+    NodeId::from(PrincipalId::new_node_test_id(i))
+}
+
 /// Returns a [`UserId`] that can be used in tests.
 pub fn user_test_id(i: u64) -> UserId {
     UserId::from(PrincipalId::new_user_test_id(i))

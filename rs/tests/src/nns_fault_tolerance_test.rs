@@ -17,8 +17,8 @@ use std::convert::TryFrom;
 
 pub fn config() -> InternetComputer {
     InternetComputer::new()
-        .add_subnet(Subnet::fast(SubnetType::System).add_nodes(3))
-        .add_subnet(Subnet::fast(SubnetType::Application))
+        .add_subnet(Subnet::fast_single_node(SubnetType::System).add_nodes(3))
+        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
 }
 
 pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {

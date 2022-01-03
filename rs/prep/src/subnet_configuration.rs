@@ -143,6 +143,13 @@ pub struct SubnetConfigParams {
     pub dkg_dealings_per_block: usize,
 }
 
+/// This helper function can be used to convert `Duration` to milliseconds.
+/// For example, this is useful for creating payloads (see
+/// `submit_create_application_subnet_proposal`).
+pub fn duration_to_millis(unit_delay: Duration) -> u64 {
+    u64::try_from(unit_delay.as_millis()).expect("cannot convert u128 to u64")
+}
+
 /// Returns config parameters, which depend on the type and size of the subnet.
 /// The configuration for app subnets is used for new app subnets with at most
 /// 13 nodes. App subnets with more than 13 nodes will be deployed with the NNS
