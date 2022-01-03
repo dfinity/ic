@@ -1,3 +1,4 @@
+use ic_embedders::WasmExecutionOutput;
 use ic_interfaces::execution_environment::ExecutionParameters;
 use ic_replicated_state::{
     page_map::PageDeltaSerialization, Global, Memory, NumWasmPages, PageIndex,
@@ -23,6 +24,14 @@ pub struct SandboxExecInput {
     /// System state that won't change over the course of executing a single
     /// message.
     pub static_system_state: StaticSystemState,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SandboxExecOutput {
+    pub wasm: WasmExecutionOutput,
+    pub state: Option<StateModifications>,
+    pub execute_total_duration: std::time::Duration,
+    pub execute_run_duration: std::time::Duration,
 }
 
 /// Describes the memory changes performed by execution.

@@ -1,8 +1,7 @@
 use crate::protocol::{logging::LogRequest, syscall};
-use ic_embedders::WasmExecutionOutput;
 use serde::{Deserialize, Serialize};
 
-use super::{id::ExecId, structs::StateModifications};
+use super::{id::ExecId, structs::SandboxExecOutput};
 
 // This defines the RPC service methods offered by the controller process
 // (used by the sandbox) as well as the expected replies.
@@ -13,9 +12,7 @@ pub struct ExecutionFinishedRequest {
     // Id for this run, as set up by controller.
     pub exec_id: ExecId,
 
-    pub exec_output: WasmExecutionOutput,
-
-    pub state_modifications: Option<StateModifications>,
+    pub exec_output: SandboxExecOutput,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

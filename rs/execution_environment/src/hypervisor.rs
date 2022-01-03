@@ -1063,9 +1063,10 @@ impl Hypervisor {
         );
 
         let sandbox_executor = match config.canister_sandboxing_flag {
-            FeatureStatus::Enabled => {
-                Some(Arc::new(SandboxedExecutionController::new(log.clone())))
-            }
+            FeatureStatus::Enabled => Some(Arc::new(SandboxedExecutionController::new(
+                log.clone(),
+                metrics_registry,
+            ))),
             FeatureStatus::Disabled => None,
         };
 
