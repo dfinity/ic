@@ -1,5 +1,5 @@
 ---
-source: wasm_utils/tests/instrumentation.rs
+source: embedders/tests/instrumentation.rs
 expression: out
 ---
 (module
@@ -13,7 +13,17 @@ expression: out
   (import "__" "update_available_memory" (func (;1;) (type 3)))
   (import "foo" "bar" (func (;2;) (type 1)))
   (import "foo" "bar" (func (;3;) (type 2)))
-  (func (;4;) (type 1))
+  (func (;4;) (type 1)
+    global.get 0
+    i64.const 0
+    i64.sub
+    global.set 0
+    global.get 0
+    i64.const 0
+    i64.lt_s
+    if  ;; label = @1
+      call 0
+    end)
   (func (;5;) (type 1)
     global.get 0
     i64.const 2
