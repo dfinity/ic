@@ -18,25 +18,25 @@
       essentially nothing for typical application subnetworks.
     </p>
 
-    <h2>Query calls</h2>
+    <h3>Query calls</h3>
 
     <div id="plot-exp1-query" class="plot"></div>
     <script>
       window.addEventListener("load", function(event) {
           plot = document.getElementById('plot-exp1-query');
-          Plotly.newPlot( plot, {{{plot_exp1_query.plot}}},  {{{plot_exp1_query.layout}}});
+          Plotly.newPlot(plot, {{{plot_exp1_query.plot}}},  {{{plot_exp1_query.layout}}});
       }, false);
     </script>
 
-    <h3>Reports</h3>
+    <h4>Reports</h4>
 
     <ul>
     {{#each plot_exp1_query.data}}
       <li><a href="{{this.githash}}/{{this.timestamp}}/report.html">{{this.date}}</a></li>
     {{/each}}
     </ul>
-    
-    <h2>Update calls</h2>
+
+    <h3>Update calls</h3>
 
     <div id="plot-exp1-update" class="plot"></div>
     <script>
@@ -45,8 +45,8 @@
           Plotly.newPlot( plot, {{{plot_exp1_update.plot}}},  {{{plot_exp1_update.layout}}});
       }, false);
     </script>
-    
-    <h3>Reports</h3>
+
+    <h4>Reports</h4>
     <ul>
     {{#each plot_exp1_update.data}}
       <li><a href="{{this.githash}}/{{this.timestamp}}/report.html">{{this.date}}</a></li>
@@ -59,6 +59,12 @@
       Purpose: Measure memory performance for a canister that has a high memory demand.
     </p>
 
+    <h3>Update</h3>
+
+    <p>In contrast to query calls, when executing the memory load benchmark with update calls,
+      orthogonal persistence and snapshots needs to be done for the memory pages touched.</p>
+
+
     <div id="plot-exp2-update" class="plot"></div>
     <script>
       window.addEventListener("load", function(event) {
@@ -68,12 +74,30 @@
       }, false);
     </script>
 
-    <h3>Reports</h3>
+    <h4>Reports</h4>
     <ul>
     {{#each plot_exp2_update.data}}
       <li><a href="{{this.githash}}/{{this.timestamp}}/report.html">{{this.date}}</a></li>
     {{/each}}
     </ul>
-    
+
+    <h3>Query</h3>
+
+    <div id="plot-exp2-query" class="plot"></div>
+    <script>
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot-exp2-query');
+          Plotly.newPlot( plot, {{{ plot_exp2_query.plot }}},  {{{plot_exp2_query.layout}}});
+
+      }, false);
+    </script>
+
+    <h4>Reports</h4>
+    <ul>
+    {{#each plot_exp2_query.data}}
+      <li><a href="{{this.githash}}/{{this.timestamp}}/report.html">{{this.date}}</a></li>
+    {{/each}}
+    </ul>
+
   </div>
 </body>

@@ -104,13 +104,48 @@ if __name__ == "__main__":
         data = {}
 
         print("Experiment 1")
-        data["plot_exp1_query"] = find_results(["experiment_1", "system-baseline-experiment"], "query", 1300)
+        data["plot_exp1_query"] = find_results(["experiment_1", "system-baseline-experiment"], "query", 2800)
+        data["plot_exp1_query"]["layout"].update(
+            {
+                "annotations": [
+                    {
+                        "x": convert_date(1639340737),
+                        "y": "1750.0",
+                        "xref": "x",
+                        "yref": "y",
+                        "text": "workload generator http1 only",
+                        "textangle": "-60",
+                        "showarrow": "true",
+                        "arrowhead": 7,
+                        "ax": 0,
+                        "ay": -40,
+                    }
+                ]
+            }
+        )
         data["plot_exp1_update"] = find_results(["experiment_1", "system-baseline-experiment"], "update", 500)
 
         print("Experiment 2")
-        data["plot_exp2_query"] = find_results(["experiment_2"], "query", 100)
-        data["plot_exp2_update"] = find_results(["experiment_2"], "update", 100)
-
+        data["plot_exp2_update"] = find_results(["experiment_2"], "update", 20)
+        data["plot_exp2_update"]["layout"].update(
+            {
+                "annotations": [
+                    {
+                        "x": convert_date(1639939504),
+                        "y": "175.0",
+                        "xref": "x",
+                        "yref": "y",
+                        "text": "Up until here, running as query",
+                        "textangle": "-60",
+                        "showarrow": "true",
+                        "arrowhead": 7,
+                        "ax": 0,
+                        "ay": -40,
+                    }
+                ]
+            }
+        )
+        data["plot_exp2_query"] = find_results(["experiment_2"], "query", 150)
         print(data)
 
         with open("cd-overview.html", "w") as outfile:
