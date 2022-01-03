@@ -21,7 +21,7 @@ use crate::request_types::{
     AddHotKey, Disburse, PublicKeyOrPrincipal, Request, RequestType, SetDissolveTimestamp, Spawn,
     Stake, StartDissolve, StopDissolve,
 };
-use crate::store::{BlockStore, HashedBlock};
+use crate::store::HashedBlock;
 use crate::time::Seconds;
 
 use convert::to_arg;

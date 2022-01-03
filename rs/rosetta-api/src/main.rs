@@ -3,11 +3,7 @@ use structopt::StructOpt;
 use ic_crypto_internal_threshold_sig_bls12381 as bls12_381;
 use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
 use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
-use ic_rosetta_api::{
-    ledger_client::{self},
-    store::SQLiteStore,
-    RosettaRequestHandler, DEFAULT_TOKEN_NAME,
-};
+use ic_rosetta_api::{ledger_client, RosettaRequestHandler, DEFAULT_TOKEN_NAME};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId};
 use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
@@ -136,7 +132,17 @@ async fn main() -> std::io::Result<()> {
         (root_key, canister_id, governance_canister_id, url)
     };
 
-    let store = store(opt.store_type, &opt.store_location);
+    let store_location: Option<&Path> = match opt.store_type.as_ref() {
+        "sqlite" => Some(&opt.store_location),
+        "sqlite-in-memory" | "in-memory" => {
+            log::info!("Using in-memory block store");
+            None
+        }
+        _ => {
+            log::error!("Invalid store type. Expected sqlite or sqlite-in-memory.");
+            panic!("Invalid store type");
+        }
+    };
 
     let Opt {
         store_max_blocks,
@@ -152,7 +158,7 @@ async fn main() -> std::io::Result<()> {
         canister_id,
         opt.token_name.unwrap_or_else(|| DEFAULT_TOKEN_NAME.to_string()),
         governance_canister_id,
-        store,
+        store_location,
         store_max_blocks,
         offline,
         root_key,
@@ -186,29 +192,4 @@ async fn main() -> std::io::Result<()> {
     serv.stop().await;
     log::info!("Th-th-th-that's all folks!");
     Ok(())
-}
-
-fn store(store_type: String, store_location: &Path) -> SQLiteStore {
-    match store_type.as_ref() {
-        "sqlite" => sqlite_store(store_location),
-        "sqlite-in-memory" | "in-memory" => sqlite_in_memory_store(),
-        "on-disk" => {
-            log::error!("On-disk storage is not supported anymore.");
-            panic!("On-disk storage is not supported anymore.");
-        }
-        _ => {
-            log::error!("Invalid store type: {}", store_type);
-            panic!("Invalid store type");
-        }
-    }
-}
-
-fn sqlite_store(store_location: &Path) -> SQLiteStore {
-    log::info!("Using SQLite block store");
-    SQLiteStore::new_on_disk(store_location).expect("Failed to initialize sqlite on-disk store")
-}
-
-fn sqlite_in_memory_store() -> SQLiteStore {
-    log::info!("Using in-memory SQLite block store");
-    SQLiteStore::new_in_memory().expect("Failed to initialize sqlite in-memory store")
 }
