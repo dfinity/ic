@@ -1696,6 +1696,60 @@ fn test_transfer_candid() {
     });
 }
 
+#[test]
+fn test_transfer_u64_overflow() {
+    local_test_e(|r| async move {
+        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+
+        let minting_account = create_sender(0);
+        let acc1 = create_sender(1);
+        let acc2 = create_sender(2);
+
+        let acc1_address: AccountIdentifier = acc1.get_principal_id().into();
+        let acc2_address: AccountIdentifier = acc2.get_principal_id().into();
+
+        let mut accounts = HashMap::new();
+        accounts.insert(acc1_address, Tokens::from_e8s(1_000_000_000));
+
+        let ledger = proj
+            .cargo_bin("ledger-canister", &[])
+            .install_(
+                &r,
+                CandidOne(LedgerCanisterInitPayload::new(
+                    CanisterId::try_from(minting_account.get_principal_id())
+                        .unwrap()
+                        .into(),
+                    accounts,
+                    None,
+                    None,
+                    None,
+                    HashSet::new(),
+                )),
+            )
+            .await?;
+
+        assert_eq!(
+            transfer_candid(
+                &ledger,
+                &acc1,
+                TransferArgs {
+                    memo: Memo(0),
+                    amount: Tokens::from_e8s(u64::MAX - 1),
+                    fee: Tokens::from_e8s(10_000),
+                    from_subaccount: None,
+                    to: acc2_address.to_address(),
+                    created_at_time: None,
+                },
+            )
+            .await,
+            Err(TransferError::InsufficientFunds {
+                balance: Tokens::from_e8s(1_000_000_000)
+            })
+        );
+
+        Ok(())
+    });
+}
 async fn ledger_assert_num_blocks(ledger: &Canister<'_>, num_expected: usize) {
     let IterBlocksRes(blocks) = ledger
         .query_(

@@ -205,10 +205,12 @@ pub type Certification = Option<Vec<u8>>;
 pub type LedgerBalances = Balances<HashMap<AccountIdentifier, Tokens>>;
 
 pub trait BalancesStore {
+    /// Returns the balance on the specified account.
     fn get_balance(&self, k: &AccountIdentifier) -> Option<&Tokens>;
-    // Update balance for an account using function f.
-    // Its arg is previous balance or None if not found and
-    // return value is the new balance.
+
+    /// Update balance for an account using function f.
+    /// Its arg is previous balance or None if not found and
+    /// return value is the new balance.
     fn update<F, E>(&mut self, acc: AccountIdentifier, action_on_acc: F) -> Result<Tokens, E>
     where
         F: FnMut(Option<&Tokens>) -> Result<Tokens, E>;
@@ -284,9 +286,16 @@ impl<S: Default + BalancesStore> Balances<S> {
                 amount,
                 fee,
             } => {
-                let debit_amount = (*amount + *fee).expect("amount + fee failed");
+                let debit_amount = (*amount + *fee).map_err(|_| {
+                    // No account can hold more than u64::MAX.
+                    let balance = self.account_balance(from);
+                    BalanceError::InsufficientFunds { balance }
+                })?;
                 self.debit(from, debit_amount)?;
                 self.credit(to, *amount);
+                // NB. integer overflow is not possible here unless there is a
+                // severe bug in the system: total amount of tokens in the
+                // circulation cannot exceed u64::MAX.
                 self.token_pool += *fee;
             }
             Operation::Burn { from, amount, .. } => {
@@ -294,8 +303,8 @@ impl<S: Default + BalancesStore> Balances<S> {
                 self.token_pool += *amount;
             }
             Operation::Mint { to, amount, .. } => {
+                self.token_pool = (self.token_pool - *amount).expect("total token supply exceeded");
                 self.credit(to, *amount);
-                self.token_pool -= *amount;
             }
         }
         Ok(())
@@ -331,7 +340,11 @@ impl<S: Default + BalancesStore> Balances<S> {
     pub fn credit(&mut self, to: &AccountIdentifier, amount: Tokens) {
         self.store
             .update(*to, |prev| -> Result<Tokens, std::convert::Infallible> {
-                Ok((amount + *prev.unwrap_or(&Tokens::ZERO)).expect("integer overflow"))
+                // NB. credit cannot overflow unless there is a bug in the
+                // system: the total amount of tokens in the circulation cannot
+                // exceed u64::MAX, so it's impossible to have more than
+                // u64::MAX tokens on a single account.
+                Ok((amount + *prev.unwrap_or(&Tokens::ZERO)).expect("bug: overflow in credit"))
             })
             .unwrap();
     }
