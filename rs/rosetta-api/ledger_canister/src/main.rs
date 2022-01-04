@@ -168,10 +168,15 @@ async fn send(
             fee,
         }
     };
-    let (height, hash) = LEDGER
+    let (height, hash) = match LEDGER
         .write()
         .unwrap()
-        .add_payment(memo, transfer, created_at_time)?;
+        .add_payment(memo, transfer, created_at_time)
+    {
+        Ok((height, hash)) => (height, hash),
+        Err(PaymentError::TransferError(transfer_error)) => return Err(transfer_error),
+        Err(PaymentError::Reject(msg)) => panic!("{}", msg),
+    };
     set_certified_data(&hash.into_bytes());
 
     // Don't put anything that could ever trap after this call or people using this
