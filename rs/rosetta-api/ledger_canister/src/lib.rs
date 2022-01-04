@@ -701,6 +701,10 @@ where
     deserializer.deserialize_map(IntMapVisitor::new())
 }
 
+fn default_max_transactions_in_window() -> usize {
+    Ledger::DEFAULT_MAX_TRANSACTIONS_IN_WINDOW
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Ledger {
     pub balances: LedgerBalances,
@@ -730,6 +734,10 @@ pub struct Ledger {
     transactions_by_height: VecDeque<TransactionInfo>,
     /// Used to prevent non-whitelisted canisters from sending tokens
     send_whitelist: HashSet<CanisterId>,
+    /// Maximum number of transactions which ledger will accept
+    /// within the transaction_window.
+    #[serde(default = "default_max_transactions_in_window")]
+    max_transactions_in_window: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -751,6 +759,7 @@ impl Default for Ledger {
             transactions_by_hash: BTreeMap::new(),
             transactions_by_height: VecDeque::new(),
             send_whitelist: HashSet::new(),
+            max_transactions_in_window: Self::DEFAULT_MAX_TRANSACTIONS_IN_WINDOW,
         }
     }
 }
@@ -762,6 +771,36 @@ impl Ledger {
     /// Hence, we purge old transactions incrementally, up to
     /// MAX_TRANSACTIONS_TO_PURGE at a time.
     const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
+    /// See Ledger::max_transactions_in_window
+    const DEFAULT_MAX_TRANSACTIONS_IN_WINDOW: usize = 3_000_000;
+
+    /// Returns true if the next transaction should be throttled due to high
+    /// load on the ledger.
+    fn throttle(&self, now: TimeStamp) -> bool {
+        let num_in_window = self.transactions_by_height.len();
+        // We admit the first half of max_transactions_in_window freely.
+        // After that we start throttling on per-second basis.
+        // This way we guarantee that at most max_transactions_in_window will
+        // get through within the transaction window.
+        if num_in_window >= self.max_transactions_in_window / 2 {
+            // max num of transactions allowed per second
+            let max_rate = (0.5 * self.max_transactions_in_window as f64
+                / self.transaction_window.as_secs_f64())
+            .ceil() as usize;
+
+            if self
+                .transactions_by_height
+                .get(num_in_window.saturating_sub(max_rate))
+                .map(|x| x.block_timestamp)
+                .unwrap_or_else(|| TimeStamp::from_nanos_since_unix_epoch(0))
+                + Duration::from_secs(1)
+                > now
+            {
+                return true;
+            }
+        }
+        false
+    }
 
     /// This creates a block and adds it to the ledger
     pub fn add_payment(
@@ -769,7 +808,7 @@ impl Ledger {
         memo: Memo,
         payment: Operation,
         created_at_time: Option<TimeStamp>,
-    ) -> Result<(BlockHeight, HashOf<EncodedBlock>), TransferError> {
+    ) -> Result<(BlockHeight, HashOf<EncodedBlock>), PaymentError> {
         self.add_payment_with_timestamp(memo, payment, created_at_time, dfn_core::api::now().into())
     }
 
@@ -781,19 +820,27 @@ impl Ledger {
         payment: Operation,
         created_at_time: Option<TimeStamp>,
         now: TimeStamp,
-    ) -> Result<(BlockHeight, HashOf<EncodedBlock>), TransferError> {
-        self.purge_old_transactions(now);
+    ) -> Result<(BlockHeight, HashOf<EncodedBlock>), PaymentError> {
+        let num_pruned = self.purge_old_transactions(now);
 
         let created_at_time = created_at_time.unwrap_or(now);
 
         if created_at_time + self.transaction_window < now {
-            return Err(TransferError::TxTooOld {
+            return Err(PaymentError::TransferError(TransferError::TxTooOld {
                 allowed_window_nanos: self.transaction_window.as_nanos() as u64,
-            });
+            }));
         }
 
         if created_at_time > now + ic_types::ingress::PERMITTED_DRIFT {
-            return Err(TransferError::TxCreatedInFuture);
+            return Err(PaymentError::TransferError(
+                TransferError::TxCreatedInFuture,
+            ));
+        }
+
+        // If we pruned some transactions, let this one through
+        // otherwise throttle if there are too many
+        if num_pruned == 0 && self.throttle(now) {
+            return Err(PaymentError::Reject("Too many transactions in replay prevention window, ledger is throttling, please retry later".to_string()));
         }
 
         let transaction = Transaction {
@@ -805,9 +852,9 @@ impl Ledger {
         let transaction_hash = transaction.hash();
 
         if let Some(block_height) = self.transactions_by_hash.get(&transaction_hash) {
-            return Err(TransferError::TxDuplicate {
+            return Err(PaymentError::TransferError(TransferError::TxDuplicate {
                 duplicate_of: *block_height,
-            });
+            }));
         }
 
         let block = Block::new_from_transaction(self.blockchain.last_hash, transaction, now);
@@ -815,7 +862,7 @@ impl Ledger {
 
         self.balances.add_payment(&payment).map_err(|e| match e {
             BalanceError::InsufficientFunds { balance } => {
-                TransferError::InsufficientFunds { balance }
+                PaymentError::TransferError(TransferError::InsufficientFunds { balance })
             }
         })?;
 
@@ -863,9 +910,10 @@ impl Ledger {
         Ok((height, self.blockchain.last_hash.unwrap()))
     }
 
-    /// Remove transactions older than `transaction_window`.
-    /// Removes at most MAX_TRANSACTIONS_TO_PURGE entries
-    fn purge_old_transactions(&mut self, now: TimeStamp) {
+    /// Removes at most [MAX_TRANSACTIONS_TO_PURGE] transactions older
+    /// than `now - transaction_window` and returns the number of pruned
+    /// transactions.
+    fn purge_old_transactions(&mut self, now: TimeStamp) -> usize {
         let mut cnt = 0usize;
         while let Some(TransactionInfo {
             block_timestamp,
@@ -892,6 +940,7 @@ impl Ledger {
                 break;
             }
         }
+        cnt
     }
 
     /// This adds a pre created block to the ledger. This should only be used
@@ -1350,9 +1399,9 @@ mod tests {
         let now = dfn_core::api::now().into();
 
         assert_eq!(
-            TransferError::TxTooOld {
+            PaymentError::TransferError(TransferError::TxTooOld {
                 allowed_window_nanos: Duration::from_secs(24 * 60 * 60).as_nanos() as u64,
-            },
+            }),
             state
                 .add_payment(
                     Memo(1),
@@ -1371,7 +1420,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            TransferError::TxCreatedInFuture,
+            PaymentError::TransferError(TransferError::TxCreatedInFuture),
             state
                 .add_payment(
                     Memo(3),
@@ -1477,7 +1526,7 @@ mod tests {
         );
 
         assert_eq!(
-            TransferError::TxDuplicate { duplicate_of: 0 },
+            PaymentError::TransferError(TransferError::TxDuplicate { duplicate_of: 0 }),
             state
                 .add_payment(Memo::default(), transfer.clone(), Some(now))
                 .unwrap_err()
@@ -1499,7 +1548,7 @@ mod tests {
         );
 
         assert_eq!(
-            TransferError::TxDuplicate { duplicate_of: 4 },
+            PaymentError::TransferError(TransferError::TxDuplicate { duplicate_of: 4 }),
             state
                 .add_payment_with_timestamp(
                     Memo::default(),
@@ -1623,6 +1672,118 @@ mod tests {
         assert_eq!(res6, None);
     }
 
+    fn apply_at(ledger: &mut Ledger, op: &Operation, ts: TimeStamp) -> BlockHeight {
+        let memo = Memo::default();
+        ledger
+            .add_payment_with_timestamp(memo, op.clone(), None, ts)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to execute operation {:?} with memo {:?} at {:?}: {:?}",
+                    op, memo, ts, e
+                )
+            })
+            .0
+    }
+
+    #[test]
+    #[should_panic(expected = "Too many transactions")]
+    fn test_throttle_tx_per_second_nok() {
+        let millis = Duration::from_millis;
+
+        let mut ledger = Ledger {
+            transaction_window: millis(2000),
+            max_transactions_in_window: 2,
+            ..Ledger::default()
+        };
+
+        let op = Operation::Mint {
+            to: PrincipalId::new_user_test_id(1).into(),
+            amount: Tokens::from_e8s(1000),
+        };
+
+        let now: TimeStamp = dfn_core::api::now().into();
+
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(1002)), 1);
+
+        // expecting panic here
+        apply_at(&mut ledger, &op, now + millis(1003));
+    }
+
+    #[test]
+    fn test_throttle_tx_per_second_ok() {
+        let millis = Duration::from_millis;
+
+        let mut ledger = Ledger {
+            transaction_window: millis(2000),
+            max_transactions_in_window: 2,
+            ..Ledger::default()
+        };
+
+        let op = Operation::Mint {
+            to: PrincipalId::new_user_test_id(1).into(),
+            amount: Tokens::from_e8s(1000),
+        };
+        let now: TimeStamp = dfn_core::api::now().into();
+
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(1002)), 1);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(2003)), 2);
+    }
+
+    #[test]
+    fn test_throttle_two_tx_per_second_after_soft_limit_ok() {
+        let millis = Duration::from_millis;
+
+        let mut ledger = Ledger {
+            transaction_window: millis(2000),
+            max_transactions_in_window: 8,
+            ..Ledger::default()
+        };
+
+        let op = Operation::Mint {
+            to: PrincipalId::new_user_test_id(1).into(),
+            amount: Tokens::from_e8s(1000),
+        };
+        let now: TimeStamp = dfn_core::api::now().into();
+
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(2)), 1);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(3)), 2);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(4)), 3);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(1005)), 4);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(1006)), 5);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(2007)), 6);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(3008)), 7);
+    }
+
+    #[test]
+    #[should_panic(expected = "Too many transactions")]
+    fn test_throttle_two_tx_per_second_after_soft_limit_nok() {
+        let millis = Duration::from_millis;
+
+        let mut ledger = Ledger {
+            transaction_window: millis(2000),
+            max_transactions_in_window: 8,
+            ..Ledger::default()
+        };
+
+        let op = Operation::Mint {
+            to: PrincipalId::new_user_test_id(1).into(),
+            amount: Tokens::from_e8s(1000),
+        };
+        let now: TimeStamp = dfn_core::api::now().into();
+
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(2)), 1);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(3)), 2);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(4)), 3);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(1005)), 4);
+        assert_eq!(apply_at(&mut ledger, &op, now + millis(1006)), 5);
+        // expecting panic here
+        apply_at(&mut ledger, &op, now + millis(1007));
+    }
+
     /// Verify consistency of transaction hash after renaming transfer to
     /// operation (see NNS1-765).
     #[test]
@@ -1728,6 +1889,12 @@ impl fmt::Display for TransferError {
             ),
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum PaymentError {
+    Reject(String),
+    TransferError(TransferError),
 }
 
 /// Struct sent by the ledger canister when it notifies a recipient of a payment
