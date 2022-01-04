@@ -106,7 +106,6 @@ pub enum ApiType {
         response_status: ResponseStatus,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        nns_subnet_id: SubnetId,
         #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
         #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         routing_table: Arc<RoutingTable>,
@@ -167,7 +166,6 @@ pub enum ApiType {
         response_status: ResponseStatus,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        nns_subnet_id: SubnetId,
         #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
         #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         routing_table: Arc<RoutingTable>,
@@ -192,7 +190,6 @@ pub enum ApiType {
         response_status: ResponseStatus,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        nns_subnet_id: SubnetId,
         #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
         #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         routing_table: Arc<RoutingTable>,
@@ -228,7 +225,6 @@ pub enum ApiType {
         call_context_id: CallContextId,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        nns_subnet_id: SubnetId,
         #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
         #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
         routing_table: Arc<RoutingTable>,
@@ -269,7 +265,6 @@ impl ApiType {
         call_context_id: CallContextId,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        nns_subnet_id: SubnetId,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
     ) -> Self {
@@ -278,7 +273,6 @@ impl ApiType {
             call_context_id,
             own_subnet_id,
             own_subnet_type,
-            nns_subnet_id,
             routing_table,
             subnet_records,
             outgoing_request: None,
@@ -294,7 +288,6 @@ impl ApiType {
         call_context_id: CallContextId,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        nns_subnet_id: SubnetId,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
     ) -> Self {
@@ -308,7 +301,6 @@ impl ApiType {
             response_status: ResponseStatus::NotRepliedYet,
             own_subnet_id,
             own_subnet_type,
-            nns_subnet_id,
             routing_table,
             subnet_records,
             outgoing_request: None,
@@ -369,7 +361,6 @@ impl ApiType {
         replied: bool,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        nns_subnet_id: SubnetId,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
     ) -> Self {
@@ -386,7 +377,6 @@ impl ApiType {
             },
             own_subnet_id,
             own_subnet_type,
-            nns_subnet_id,
             routing_table,
             subnet_records,
             outgoing_request: None,
@@ -403,7 +393,6 @@ impl ApiType {
         replied: bool,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        nns_subnet_id: SubnetId,
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
     ) -> Self {
@@ -420,7 +409,6 @@ impl ApiType {
             },
             own_subnet_id,
             own_subnet_type,
-            nns_subnet_id,
             routing_table,
             subnet_records,
             outgoing_request: None,
@@ -2364,12 +2352,12 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_mint_cycles")),
 
-            ApiType::Update { nns_subnet_id, .. }
-            | ApiType::Heartbeat { nns_subnet_id, .. }
-            | ApiType::ReplyCallback { nns_subnet_id, .. }
-            | ApiType::RejectCallback { nns_subnet_id, .. } => {
+            ApiType::Update { .. }
+            | ApiType::Heartbeat { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => {
                 self.system_state_accessor
-                    .mint_cycles(Cycles::from(amount), nns_subnet_id)?;
+                    .mint_cycles(Cycles::from(amount))?;
                 Ok(amount)
             }
         }

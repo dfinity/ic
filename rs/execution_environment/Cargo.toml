@@ -18,6 +18,7 @@ ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
+ic-nns-constants = { path = "../nns/constants" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-common = { path = "../registry/common" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }

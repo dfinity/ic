@@ -3,7 +3,7 @@ use ic_replicated_state::{canister_state::system_state::CanisterStatus, StateErr
 use ic_types::{
     messages::{CallContextId, CallbackId},
     methods::Callback,
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId,
+    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -26,8 +26,6 @@ pub struct ControllerReply {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MintCyclesRequest {
     pub amount: Cycles,
-    // TODO: EXC-678 NNS subnet id should be removed from the sandbox request
-    pub nns_subnet_id: SubnetId,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

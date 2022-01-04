@@ -1,24 +1,20 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use crate::types::*;
-use crate::util::*;
-use candid::Principal;
-use candid::{Decode, Encode};
+use crate::{types::*, util::CYCLES_LIMIT_PER_CANISTER, util::*};
+use candid::{Decode, Encode, Principal};
+use ic_agent::AgentError;
 use ic_base_types::RegistryVersion;
 use ic_fondue::{
     ic_manager::IcHandle,
     internet_computer::{InternetComputer, Subnet},
 };
 use ic_ic00_types::SetupInitialDKGArgs;
+use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Cycles;
 use ic_types_test_utils::ids::node_test_id;
-use ic_utils::call::AsyncCall;
-use ic_utils::interfaces::ManagementCanister;
 use lazy_static::lazy_static;
-use std::convert::TryFrom;
-use std::convert::TryInto;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
@@ -51,12 +47,11 @@ const MINT_CYCLES: &str = r#"(module
                   (export "memory" (memory $memory))
               )"#;
 
-pub fn mint_cycles_supported_on_system_subnet(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn mint_cycles_not_supported_on_system_subnet(handle: IcHandle, ctx: &fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
-        const CYCLES_TO_MINT: Cycles = Cycles::new(10_000_000_000);
         let wasm = wabt::wat2wasm(MINT_CYCLES).unwrap();
         let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
         nns_endpoint.assert_ready(ctx).await;
@@ -76,24 +71,19 @@ pub fn mint_cycles_supported_on_system_subnet(handle: IcHandle, ctx: &fondue::po
             .update(&nns_canister_id, "test")
             .call_and_wait(delay())
             .await
-            .expect("should succeed");
+            .expect_err("should not succeed");
 
         assert_eq!(
-            Cycles::from(u64::from_le_bytes(res.as_slice().try_into().unwrap())),
-            CYCLES_TO_MINT
+            res,
+            AgentError::ReplicaError { reject_code: 5, reject_message: format!("Canister {} violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}", nns_canister_id, nns_canister_id, CYCLES_MINTING_CANISTER_ID) }
         );
 
         let after_balance = get_balance(&nns_canister_id, &nns_agent).await;
         assert!(
-            after_balance > before_balance,
-            "expected {} > {}",
+            after_balance == before_balance,
+            "expected {} == {}",
             after_balance,
             before_balance
-        );
-        assert_balance_equals(
-            *INITIAL_CYCLES + CYCLES_TO_MINT,
-            Cycles::from(after_balance),
-            BALANCE_EPSILON,
         );
     });
 }
@@ -152,60 +142,56 @@ pub fn no_cycle_balance_limit_on_nns_subnet(handle: IcHandle, ctx: &fondue::pot:
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
-
-        // Wasm for a canister that calls mint_cycles
-        // Increases the balance above `CYCLES_LIMIT_PER_CANISTER`
-        let wasm = wabt::wat2wasm(r#"(module
-                  (import "ic0" "mint_cycles" (func $ic0_mint_cycles (param $amount i64) (result i64)))
-                  (func $test
-                    (call $ic0_mint_cycles
-                        (i64.const 100000000000)
-                    )
-                    drop
-                  )
-                  (export "canister_update test" (func $test))
-                  (memory $memory 1)
-                  (export "memory" (memory $memory))
-                  (data (i32.const 0) "some_remote_method XYZ")
-                  (data (i32.const 100) "\00\00\00\00\00\00\03\09\01\01")
-
-                  ;;(table funcref (elem $test))
-            )"#).unwrap();
-
         let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
         endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(endpoint.url.as_str()).await;
-        let mgr = ManagementCanister::create(&agent);
 
-        let canister_id = create_and_install(&agent, wasm.as_slice()).await;
-        let canister_status = mgr
-            .canister_status(&canister_id)
-            .call_and_wait(delay())
-            .await
-            .expect("Could not get canister status")
-            .0;
+        let canister_a =
+            UniversalCanister::new_with_cycles(&agent, CYCLES_LIMIT_PER_CANISTER * 3).await;
 
-        assert_balance_equals(
-            CYCLES_LIMIT_PER_CANISTER,
-            Cycles::from(u128::try_from(canister_status.cycles.0).unwrap()),
-            BALANCE_EPSILON,
+        let balance = get_balance(&canister_a.canister_id(), &agent).await;
+        assert!(
+            Cycles::from(balance) == CYCLES_LIMIT_PER_CANISTER * 3,
+            "expected {} == {}",
+            balance,
+            CYCLES_LIMIT_PER_CANISTER * 3
         );
 
-        // Canister's balance is not capped by `CYCLES_LIMIT_PER_CANISTER`
-        let _res = agent
-            .update(&canister_id, "test")
-            .call_and_wait(delay())
-            .await;
+        // Canister A creates canister B with `CYCLES_LIMIT_PER_CANISTER` cycles.
+        let canister_b_id =
+            create_canister_via_canister_with_cycles(&canister_a, CYCLES_LIMIT_PER_CANISTER)
+                .await
+                .unwrap();
 
-        let canister_status = mgr
-            .canister_status(&canister_id)
-            .call_and_wait(delay())
-            .await
-            .expect("Could not get canister status")
-            .0;
+        // Check canister_a's balance has decreased.
+        let balance = get_balance(&canister_a.canister_id(), &agent).await;
+        assert!(
+            Cycles::from(balance) == CYCLES_LIMIT_PER_CANISTER * 2,
+            "expected {} == {}",
+            balance,
+            CYCLES_LIMIT_PER_CANISTER * 2
+        );
 
-        let balance = u128::try_from(canister_status.cycles.0).unwrap();
-        assert!(Cycles::from(balance) > CYCLES_LIMIT_PER_CANISTER, "expected {} > {}", balance, CYCLES_LIMIT_PER_CANISTER);
+        // Deposit cycles from canister_a to canister_b to increase b's balance
+        let cycles_to_deposit = CYCLES_LIMIT_PER_CANISTER;
+        deposit_cycles(&canister_a, &canister_b_id, cycles_to_deposit).await;
+
+        // Check canister_a's balance has not decreased as it's an NNS node.
+        let balance = get_balance(&canister_a.canister_id(), &agent).await;
+        assert!(
+            Cycles::from(balance) == CYCLES_LIMIT_PER_CANISTER,
+            "expected {} == {}",
+            balance,
+            CYCLES_LIMIT_PER_CANISTER
+        );
+
+        let balance = get_balance_via_canister(&canister_b_id, &canister_a).await;
+        assert!(
+            balance == CYCLES_LIMIT_PER_CANISTER * 2,
+            "expected {} == {}",
+            balance,
+            CYCLES_LIMIT_PER_CANISTER * 2
+        );
     });
 }
 

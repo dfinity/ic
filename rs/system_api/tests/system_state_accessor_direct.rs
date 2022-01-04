@@ -1,5 +1,6 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, SystemApi};
+use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{StateError, SystemState};
 use ic_system_api::{SystemStateAccessor, SystemStateAccessorDirect};
@@ -227,12 +228,9 @@ fn mint_all_cycles() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::System)
         .build();
-    let system_state = SystemStateBuilder::new().build();
 
-    let api_type = ApiTypeBuilder::new()
-        .with_nns_subnet_id(cycles_account_manager.get_subnet_id())
-        .build_update_api();
-    let mut api = get_system_api(api_type, system_state, cycles_account_manager);
+    let api_type = ApiTypeBuilder::new().build_update_api();
+    let mut api = get_system_api(api_type, get_cmc_system_state(), cycles_account_manager);
     let balance_before = api.ic0_canister_cycle_balance().unwrap();
 
     let amount = 50;
@@ -248,7 +246,9 @@ fn mint_cycles_above_max() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::System)
         .build();
-    let mut system_state = SystemStateBuilder::new().build();
+    let mut system_state = SystemStateBuilder::new()
+        .canister_id(CYCLES_MINTING_CANISTER_ID)
+        .build();
 
     // Set cycles balance to max - 10.
     cycles_account_manager.add_cycles(&mut system_state, CYCLES_LIMIT_PER_CANISTER);
@@ -261,9 +261,7 @@ fn mint_cycles_above_max() {
         )
         .unwrap();
 
-    let api_type = ApiTypeBuilder::new()
-        .with_nns_subnet_id(cycles_account_manager.get_subnet_id())
-        .build_update_api();
+    let api_type = ApiTypeBuilder::new().build_update_api();
     let mut api = get_system_api(api_type, system_state, cycles_account_manager);
     let balance_before = api.ic0_canister_cycle_balance().unwrap();
 

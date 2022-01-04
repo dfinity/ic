@@ -112,8 +112,7 @@ impl ControllerService for ControllerServiceImpl {
                     use protocol::syscall::*;
                     let reply = match request {
                         Request::MintCycles(req) => {
-                            let result =
-                                system_state_accessor.mint_cycles(req.amount, req.nns_subnet_id);
+                            let result = system_state_accessor.mint_cycles(req.amount);
                             Reply::MintCycles(MintCyclesReply { result })
                         }
                         Request::MsgCyclesAccept(req) => {

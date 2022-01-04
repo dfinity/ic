@@ -3563,7 +3563,6 @@ fn test_upgrade_preserves_stable_memory() {
             state.routing_table(),
             subnet_records,
             EXECUTION_PARAMETERS.clone(),
-            subnet_id,
         );
         match action {
             CallContextAction::Reply { .. } => {}

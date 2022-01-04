@@ -13,22 +13,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::CanisterId;
 use ic_universal_canister::{call_args, wasm};
 
-/// converts canister id into an escaped byte string, to inject this string into
-/// a data section
-fn escape_for_wat(id: &Principal) -> String {
-    // Quoting from
-    // https://webassembly.github.io/spec/core/text/values.html#text-string:
-    //
-    // "Strings [...] can represent both textual and binary data" and
-    //
-    // "hexadecimal escape sequences ‘∖ℎℎ’, [...] represent raw bytes of the
-    // respective value".
-    id.as_slice().iter().fold(String::new(), |mut res, b| {
-        res.push_str(&format!("\\{:02x}", b));
-        res
-    })
-}
-
 pub fn config() -> InternetComputer {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
@@ -358,4 +342,19 @@ endpoint.assert_ready(ctx).await;
             assert_eq!(result, vec![5]);
         }
     });
+}
+
+/// Converts Canister id into an escaped byte string
+pub(crate) fn escape_for_wat(id: &Principal) -> String {
+    // Quoting from
+    // https://webassembly.github.io/spec/core/text/values.html#text-string:
+    //
+    // "Strings [...] can represent both textual and binary data" and
+    //
+    // "hexadecimal escape sequences ‘∖ℎℎ’, [...] represent raw bytes of the
+    // respective value".
+    id.as_slice().iter().fold(String::new(), |mut res, b| {
+        res.push_str(&format!("\\{:02x}", b));
+        res
+    })
 }

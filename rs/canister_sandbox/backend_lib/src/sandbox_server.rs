@@ -169,7 +169,6 @@ mod tests {
                 CallContextId::from(0),
                 SubnetId::from(PrincipalId::new_subnet_test_id(0)),
                 SubnetType::Application,
-                SubnetId::from(PrincipalId::new_subnet_test_id(0x100)),
                 Arc::new(RoutingTable::new(BTreeMap::new())),
                 Arc::new(BTreeMap::new()),
             ),

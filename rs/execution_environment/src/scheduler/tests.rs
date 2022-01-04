@@ -722,7 +722,7 @@ fn test_multiple_iterations_of_inner_loop() {
     exec_env
         .expect_execute_canister_message()
         .times(2)
-        .returning(move |mut canister, _, msg, _, _, _, _, _| {
+        .returning(move |mut canister, _, msg, _, _, _, _| {
             let canister0 = canister_test_id(0);
             let canister1 = canister_test_id(1);
             let canister_id = canister.canister_id();
@@ -854,7 +854,7 @@ fn canister_can_run_for_multiple_iterations() {
     exec_env
         .expect_execute_canister_message()
         .times(..)
-        .returning(move |mut canister, _, _, _, _, _, _, _| {
+        .returning(move |mut canister, _, _, _, _, _, _| {
             let canister_id = canister.canister_id();
             canister
                 .push_output_request(
@@ -1713,7 +1713,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
     exec_env
         .expect_execute_canister_heartbeat()
         .times(1)
-        .returning(move |canister, instruction_limit, _, _, _, _, _| {
+        .returning(move |canister, instruction_limit, _, _, _, _| {
             (
                 canister,
                 instruction_limit - NumInstructions::from(1),
@@ -1779,7 +1779,7 @@ fn execute_heartbeat_before_messages() {
     exec_env
         .expect_execute_canister_heartbeat()
         .times(1)
-        .returning(move |canister, instruction_limit, _, _, _, _, _| {
+        .returning(move |canister, instruction_limit, _, _, _, _| {
             (
                 canister,
                 instruction_limit - NumInstructions::from(1),
@@ -1847,7 +1847,7 @@ fn execute_multiple_heartbeats() {
     exec_env
         .expect_execute_canister_heartbeat()
         .times(number_of_canisters * number_of_rounds)
-        .returning(move |canister, instruction_limit, _, _, _, _, _| {
+        .returning(move |canister, instruction_limit, _, _, _, _| {
             (
                 canister,
                 instruction_limit - NumInstructions::from(1),
@@ -1912,7 +1912,7 @@ fn can_record_metrics_single_scheduler_thread() {
         exec_env
             .expect_execute_canister_message()
             .times(1)
-            .returning(move |canister, _, _, _, _, _, _, _| ExecuteMessageResult {
+            .returning(move |canister, _, _, _, _, _, _| ExecuteMessageResult {
                 canister,
                 num_instructions_left: NumInstructions::from(0),
                 ingress_status: Some((
@@ -1931,7 +1931,7 @@ fn can_record_metrics_single_scheduler_thread() {
             exec_env
                 .expect_execute_canister_message()
                 .times(1)
-                .returning(move |canister, _, _, _, _, _, _, _| ExecuteMessageResult {
+                .returning(move |canister, _, _, _, _, _, _| ExecuteMessageResult {
                     canister,
                     num_instructions_left: NumInstructions::from(1),
                     ingress_status: Some((
@@ -2015,7 +2015,6 @@ fn can_record_metrics_single_scheduler_thread() {
                 only_track_system_errors: true,
             },
             &measurement_scope,
-            subnet_test_id(0x101), // NNS subnet
         );
 
         let cycles_consumed_per_message_stats = fetch_histogram_stats(
@@ -2882,7 +2881,7 @@ fn heartbeat_metrics_are_recorded() {
     exec_env
         .expect_execute_canister_heartbeat()
         .times(2)
-        .returning(move |canister, _, _, _, _, _, _| {
+        .returning(move |canister, _, _, _, _, _| {
             let canister0 = canister_test_id(0);
             let canister1 = canister_test_id(1);
             if canister.canister_id() == canister0 {
@@ -3517,7 +3516,7 @@ fn default_exec_env_mock(
     exec_env
         .expect_execute_canister_message()
         .times(calls)
-        .returning(move |canister, _, msg, _, _, _, _, _| {
+        .returning(move |canister, _, msg, _, _, _, _| {
             if let CanisterInputMessage::Ingress(msg) = msg {
                 ExecuteMessageResult {
                     canister: canister.clone(),

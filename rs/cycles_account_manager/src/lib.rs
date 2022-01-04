@@ -16,6 +16,7 @@
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_logger::{info, ReplicaLogger};
+use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, SystemState};
 use ic_types::{
@@ -594,11 +595,12 @@ impl CyclesAccountManager {
         &self,
         system_state: &mut SystemState,
         amount_to_mint: Cycles,
-        nns_subnet_id: SubnetId,
     ) -> Result<(), CyclesAccountManagerError> {
-        if self.own_subnet_id != nns_subnet_id {
-            let error_str =
-                    format!("ic0.mint_cycles cannot be executed. Should only be called by a canister on the NNS subnet: {} != {}", self.own_subnet_id, nns_subnet_id);
+        if system_state.canister_id != CYCLES_MINTING_CANISTER_ID {
+            let error_str = format!(
+                "ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}",
+                system_state.canister_id, CYCLES_MINTING_CANISTER_ID
+            );
             Err(CyclesAccountManagerError::ContractViolation(error_str))
         } else {
             self.add_cycles(system_state, amount_to_mint);
