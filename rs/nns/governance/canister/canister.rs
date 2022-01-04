@@ -49,9 +49,9 @@ use ic_nns_governance::{
         },
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
         ClaimOrRefreshNeuronFromAccountResponse, ExecuteNnsFunction, Governance as GovernanceProto,
-        GovernanceError, ListNeurons, ListNeuronsResponse, ListProposalInfo,
-        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, Neuron, NeuronInfo,
-        NnsFunction, Proposal, ProposalInfo, Vote,
+        GovernanceError, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
+        ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, Neuron,
+        NeuronInfo, NnsFunction, Proposal, ProposalInfo, Vote,
     },
 };
 
@@ -645,6 +645,19 @@ fn get_monthly_node_provider_rewards() {
 #[candid_method(update, rename = "get_monthly_node_provider_rewards")]
 async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, GovernanceError> {
     governance().get_monthly_node_provider_rewards().await
+}
+
+#[export_name = "canister_query list_known_neurons"]
+fn list_known_neurons() {
+    println!("{}list_known_neurons", LOG_PREFIX);
+    over(candid_one, |()| -> ListKnownNeuronsResponse {
+        list_known_neurons_()
+    })
+}
+
+#[candid_method(query, rename = "list_known_neurons")]
+fn list_known_neurons_() -> ListKnownNeuronsResponse {
+    governance().list_known_neurons()
 }
 
 /// DEPRECATED: Always panics. Use manage_neuron instead.

@@ -86,3 +86,6 @@ mod update_unassigned_nodes_config;
 
 #[cfg(test)]
 mod wait_for_quiet;
+
+#[cfg(test)]
+mod known_neurons;

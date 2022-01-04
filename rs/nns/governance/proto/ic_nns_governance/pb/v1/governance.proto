@@ -174,6 +174,8 @@ message NeuronInfo {
   uint64 stake_e8s = 8;
   // Timestamp when this neuron joined the community fund.
   optional uint64 joined_community_fund_timestamp_seconds = 9;
+  // Name of this neuron if it has been given one.
+  optional KnownNeuronData known_neuron_data = 10;
 }
 
 // A transfer performed from some account to stake a new neuron.
@@ -326,6 +328,9 @@ message Neuron {
   // irreversible decision that can only be made by the neuron's
   // controller.
   optional uint64 joined_community_fund_timestamp_seconds = 17;
+
+  // If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
+  optional KnownNeuronData known_neuron_data = 18;
 }
 
 // The types of votes the Neuron can issue.
@@ -610,6 +615,8 @@ message Proposal {
     SetDefaultFollowees set_default_followees = 18;
     // Reward multiple NodeProvider
     RewardNodeProviders reward_node_providers = 19;
+    // Register Neuron
+    KnownNeuron register_known_neuron = 21;
   }
 }
 
@@ -1206,6 +1213,17 @@ message RewardEvent {
   uint64 distributed_e8s_equivalent = 4;
 }
 
+message KnownNeuron {
+  ic_nns_common.pb.v1.NeuronId id = 1;
+  KnownNeuronData known_neuron_data = 2;
+}
+
+// Known neurons have extra information (mainly a name) used to identify them.
+message KnownNeuronData {
+  string name = 1;
+  optional string description = 2;
+}
+
 // This represents the whole NNS governance system. It contains all
 // information about the NNS governance system that must be kept
 // across upgrades of the NNS governance system.
@@ -1388,6 +1406,12 @@ message ListNeuronsResponse {
   // hot key, or controller or hot key of some followee on the
   // `ManageNeuron` topic).
   repeated Neuron full_neurons = 2;
+}
+
+// A response to "ListKnownNeurons"
+message ListKnownNeuronsResponse {
+  // List of known neurons.
+  repeated KnownNeuron known_neurons = 1;
 }
 
 // The arguments to the method `claim_or_refresh_neuron_from_account`.

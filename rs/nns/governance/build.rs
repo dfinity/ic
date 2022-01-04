@@ -582,6 +582,14 @@ fn main() {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
+        "ic_nns_governance.pb.v1.ListKnownNeurons",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ListKnownNeuronsResponse",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.Governance",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",
@@ -652,6 +660,22 @@ fn main() {
     config.type_attribute(
         "ic_nns_governance.pb.v1.Subaccount",
         "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.KnownNeuronData",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize, Eq)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), compare_default)]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.KnownNeuron",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
     );
 
     println!("cargo:rerun-if-changed={}", proto_file);

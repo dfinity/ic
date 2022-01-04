@@ -19,8 +19,8 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 #[cfg(test)]
 use ic_nns_governance::pb::v1::{
     governance::GovernanceCachedMetricsChange, proposal::ActionDesc, BallotChange,
-    BallotInfoChange, GovernanceChange, NeuronChange, ProposalChange, ProposalDataChange,
-    TallyChange, WaitForQuietStateDesc,
+    BallotInfoChange, GovernanceChange, KnownNeuron, NeuronChange, ProposalChange,
+    ProposalDataChange, TallyChange, WaitForQuietStateDesc,
 };
 use ic_nns_governance::{
     governance::{
@@ -60,10 +60,10 @@ use ic_nns_governance::{
         proposal,
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         AddOrRemoveNodeProvider, Ballot, BallotInfo, Empty, ExecuteNnsFunction,
-        Governance as GovernanceProto, GovernanceError, ListNeurons, ListNeuronsResponse,
-        ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron, NeuronState, NnsFunction,
-        NodeProvider, Proposal, ProposalData, ProposalStatus, RewardEvent, RewardNodeProvider,
-        SetDefaultFollowees, Tally, Topic, Vote,
+        Governance as GovernanceProto, GovernanceError, KnownNeuronData, ListNeurons,
+        ListNeuronsResponse, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron,
+        NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData, ProposalStatus,
+        RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
     },
 };
 use ledger_canister::{AccountIdentifier, Memo, Tokens};
@@ -8930,5 +8930,163 @@ fn test_wfq_constant_flipping() {
     assert!(deadline_after_test <= DEFAULT_TEST_START_TIMESTAMP_SECONDS + 8 * ONE_DAY_SECONDS);
     assert!(
         deadline_after_test >= DEFAULT_TEST_START_TIMESTAMP_SECONDS + 8 * ONE_DAY_SECONDS - 600
+    );
+}
+
+/// Test for the known neuron functionality.
+///
+/// The test does the following:
+/// - Start with 3 neurons, none of them "known".
+/// - Register a name for two of them.
+/// - Assert than when querying the known neurons by id the result is the
+///   expected one.
+/// - Assert than when querying all known neurons the result is the expected
+///   one.
+/// - Update the name of one of the neurons
+/// - Assert than when querying the neuron the updated name is correct.
+#[test]
+fn test_known_neurons() {
+    let driver = fake::FakeDriver::default();
+    let neurons = [
+        (
+            1,
+            Neuron {
+                id: Some(NeuronId { id: 1 }),
+                controller: Some(principal(1)),
+                cached_neuron_stake_e8s: 100_000_000,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                    MAX_DISSOLVE_DELAY_SECONDS,
+                )),
+                ..Default::default()
+            },
+        ),
+        (
+            2,
+            Neuron {
+                id: Some(NeuronId { id: 2 }),
+                controller: Some(principal(2)),
+                cached_neuron_stake_e8s: 100_000_000,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                    MAX_DISSOLVE_DELAY_SECONDS,
+                )),
+                ..Default::default()
+            },
+        ),
+        (
+            3,
+            Neuron {
+                id: Some(NeuronId { id: 3 }),
+                controller: Some(principal(3)),
+                cached_neuron_stake_e8s: 100_000_000_000,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                    MAX_DISSOLVE_DELAY_SECONDS,
+                )),
+                ..Default::default()
+            },
+        ),
+    ]
+    .to_vec()
+    .into_iter()
+    .collect();
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons,
+        ..Default::default()
+    };
+    let mut gov = Governance::new(
+        governance_proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+    );
+
+    gov.make_proposal(
+        &NeuronId { id: 3 },
+        // Must match neuron 1's serialized_id.
+        &principal(3),
+        &Proposal {
+            summary: "proposal 1 summary".to_string(),
+            action: Some(proposal::Action::RegisterKnownNeuron(KnownNeuron {
+                id: Some(NeuronId { id: 1 }),
+                known_neuron_data: Some(KnownNeuronData {
+                    name: "The One".to_string(),
+                    description: None,
+                }),
+            })),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    gov.make_proposal(
+        &NeuronId { id: 3 },
+        // Must match neuron 1's serialized_id.
+        &principal(3),
+        &Proposal {
+            summary: "proposal 2 summary".to_string(),
+            action: Some(proposal::Action::RegisterKnownNeuron(KnownNeuron {
+                id: Some(NeuronId { id: 2 }),
+                known_neuron_data: Some(KnownNeuronData {
+                    name: "Dos".to_string(),
+                    description: None,
+                }),
+            })),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        gov.get_neuron_info(&NeuronId { id: 1 })
+            .unwrap()
+            .known_neuron_data
+            .unwrap()
+            .name,
+        "The One".to_string()
+    );
+    let expected_known_neurons = vec![
+        KnownNeuron {
+            id: Some(NeuronId { id: 1 }),
+            known_neuron_data: Some(KnownNeuronData {
+                name: "The One".to_string(),
+                description: None,
+            }),
+        },
+        KnownNeuron {
+            id: Some(NeuronId { id: 2 }),
+            known_neuron_data: Some(KnownNeuronData {
+                name: "Dos".to_string(),
+                description: None,
+            }),
+        },
+    ];
+    let mut sorted_response_known_neurons = gov.list_known_neurons().known_neurons;
+    sorted_response_known_neurons
+        .sort_by(|a, b| a.id.as_ref().unwrap().id.cmp(&b.id.as_ref().unwrap().id));
+    assert_eq!(sorted_response_known_neurons, expected_known_neurons);
+
+    // Update the name of neuron 2.
+    gov.make_proposal(
+        &NeuronId { id: 3 },
+        // Must match neuron 1's serialized_id.
+        &principal(3),
+        &Proposal {
+            summary: "proposal 3 summary".to_string(),
+            action: Some(proposal::Action::RegisterKnownNeuron(KnownNeuron {
+                id: Some(NeuronId { id: 2 }),
+                known_neuron_data: Some(KnownNeuronData {
+                    name: "Zwei".to_string(),
+                    description: None,
+                }),
+            })),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        gov.get_neuron_info(&NeuronId { id: 2 })
+            .unwrap()
+            .known_neuron_data
+            .unwrap()
+            .name,
+        "Zwei".to_string()
     );
 }
