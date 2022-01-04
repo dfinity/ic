@@ -149,7 +149,6 @@ where
                     routing_table,
                     subnet_records,
                     execution_parameters,
-                    subnet_test_id(0x101), // NNS subnet != canister subnet
                 );
             });
         }
@@ -176,7 +175,6 @@ where
                                 Arc::clone(&routing_table),
                                 subnet_records.clone(),
                                 execution_parameters.clone(),
-                                subnet_test_id(0x101), // NNS subnet != canister subnet
                             );
                             match action {
                                 CallContextAction::NoResponse { .. } => {}

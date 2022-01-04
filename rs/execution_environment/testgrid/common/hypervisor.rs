@@ -6,6 +6,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces::messages::RequestOrIngress;
 use ic_metrics::MetricsRegistry;
+use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::MemoryRegion;
@@ -91,31 +92,23 @@ fn test_caller() -> PrincipalId {
 fn setup() -> (
     SubnetId,
     SubnetType,
-    SubnetId,
     Arc<RoutingTable>,
     Arc<BTreeMap<SubnetId, SubnetType>>,
 ) {
     let subnet_id = subnet_test_id(1);
     let subnet_type = SubnetType::Application;
-    let nns_subnet_id = subnet_test_id(0x101);
     let routing_table = Arc::new(RoutingTable::new(btreemap! {
         CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
     }));
     let subnet_records = Arc::new(btreemap! {
         subnet_id => subnet_type,
     });
-    (
-        subnet_id,
-        subnet_type,
-        nns_subnet_id,
-        routing_table,
-        subnet_records,
-    )
+    (subnet_id, subnet_type, routing_table, subnet_records)
 }
 
 fn test_api_type_for_update(caller: Option<PrincipalId>, payload: Vec<u8>) -> ApiType {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
-    let (subnet_id, subnet_type, nns_subnet_id, routing_table, subnet_records) = setup();
+    let (subnet_id, subnet_type, routing_table, subnet_records) = setup();
     ApiType::update(
         mock_time(),
         payload,
@@ -124,14 +117,13 @@ fn test_api_type_for_update(caller: Option<PrincipalId>, payload: Vec<u8>) -> Ap
         call_context_test_id(13),
         subnet_id,
         subnet_type,
-        nns_subnet_id,
         routing_table,
         subnet_records,
     )
 }
 
 fn test_api_type_for_reject(reject_context: RejectContext) -> ApiType {
-    let (subnet_id, subnet_type, nns_subnet_id, routing_table, subnet_records) = setup();
+    let (subnet_id, subnet_type, routing_table, subnet_records) = setup();
     ApiType::reject_callback(
         mock_time(),
         reject_context,
@@ -140,7 +132,6 @@ fn test_api_type_for_reject(reject_context: RejectContext) -> ApiType {
         false,
         subnet_id,
         subnet_type,
-        nns_subnet_id,
         routing_table,
         subnet_records,
     )
@@ -167,45 +158,36 @@ where
     });
 }
 
-fn execute_update_on_nns(
+fn execute_update(
     hypervisor: &Hypervisor,
     wast: &str,
     method: &str,
     payload: Vec<u8>,
-    caller: Option<PrincipalId>,
     canister_root: std::path::PathBuf,
-    nns_subnet_id: SubnetId,
+) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
+    execute_update_on(hypervisor, wast, method, payload, None, None, canister_root)
+}
+
+fn execute_update_on(
+    hypervisor: &Hypervisor,
+    wast: &str,
+    method: &str,
+    payload: Vec<u8>,
+    source: Option<UserId>,
+    receiver: Option<CanisterId>,
+    canister_root: std::path::PathBuf,
 ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
     execute_update_with_cycles_memory_time(
         hypervisor,
         wast,
         method,
         payload,
-        caller,
+        source,
+        receiver,
         MAX_NUM_INSTRUCTIONS,
         NumBytes::from(0),
         mock_time(),
         canister_root,
-        nns_subnet_id,
-    )
-}
-
-fn execute_update(
-    hypervisor: &Hypervisor,
-    wast: &str,
-    method: &str,
-    payload: Vec<u8>,
-    caller: Option<PrincipalId>,
-    canister_root: std::path::PathBuf,
-) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
-    execute_update_on_nns(
-        hypervisor,
-        wast,
-        method,
-        payload,
-        caller,
-        canister_root,
-        subnet_test_id(0x101), // NNS subnet != canister subnet
     )
 }
 
@@ -215,31 +197,29 @@ fn execute_update_with_cycles_memory_time_subnet_memory(
     wast: &str,
     method: &str,
     payload: Vec<u8>,
-    caller: Option<PrincipalId>,
     instructions_limit: NumInstructions,
     bytes: NumBytes,
     time: Time,
     canister_root: std::path::PathBuf,
-    nns_subnet_id: SubnetId,
     subnet_available_memory: SubnetAvailableMemory,
 ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
-    let caller = caller.unwrap_or_else(|| user_test_id(24).get());
+    let source = user_test_id(24);
+    let receiver = canister_test_id(42);
 
     let wasm_binary = wabt::wat2wasm(wast).unwrap();
-    let canister_id = canister_test_id(42);
     let execution_state = hypervisor
-        .create_execution_state(wasm_binary, canister_root, canister_id)
+        .create_execution_state(wasm_binary, canister_root, receiver)
         .unwrap();
-    let mut canister = canister_from_exec_state(execution_state, canister_id);
+    let mut canister = canister_from_exec_state(execution_state, receiver);
     canister.system_state.memory_allocation = MemoryAllocation::try_from(bytes).unwrap();
 
     let req = IngressBuilder::new()
         .method_name(method.to_string())
         .method_payload(payload)
-        .source(UserId::from(caller))
+        .source(source)
         .build();
 
-    let (_, _, _, routing_table, subnet_records) = setup();
+    let (_, _, routing_table, subnet_records) = setup();
     let execution_parameters = execution_parameters_with_unique_subnet_available_memory(
         &canister,
         instructions_limit,
@@ -252,7 +232,6 @@ fn execute_update_with_cycles_memory_time_subnet_memory(
         routing_table,
         subnet_records,
         execution_parameters,
-        nns_subnet_id,
     );
 
     (canister, num_instructions_left, action, heap_delta)
@@ -264,30 +243,32 @@ fn execute_update_with_cycles_memory_time(
     wast: &str,
     method: &str,
     payload: Vec<u8>,
-    caller: Option<PrincipalId>,
+    source: Option<UserId>,
+    receiver: Option<CanisterId>,
     instructions_limit: NumInstructions,
     bytes: NumBytes,
     time: Time,
     canister_root: std::path::PathBuf,
-    nns_subnet_id: SubnetId,
 ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
-    let caller = caller.unwrap_or_else(|| user_test_id(24).get());
+    let source = source.unwrap_or_else(|| user_test_id(24));
+    let receiver = receiver.unwrap_or_else(|| canister_test_id(42));
 
     let wasm_binary = wabt::wat2wasm(wast).unwrap();
-    let canister_id = canister_test_id(42);
     let execution_state = hypervisor
-        .create_execution_state(wasm_binary, canister_root, canister_id)
+        .create_execution_state(wasm_binary, canister_root, receiver)
         .unwrap();
-    let mut canister = canister_from_exec_state(execution_state, canister_id);
+    let mut canister = canister_from_exec_state(execution_state, receiver);
     canister.system_state.memory_allocation = MemoryAllocation::try_from(bytes).unwrap();
+    canister.system_state.canister_id = receiver;
 
     let req = IngressBuilder::new()
         .method_name(method.to_string())
         .method_payload(payload)
-        .source(UserId::from(caller))
+        .source(source)
+        .receiver(receiver)
         .build();
 
-    let (_, _, _, routing_table, subnet_records) = setup();
+    let (_, _, routing_table, subnet_records) = setup();
     let execution_parameters = execution_parameters(&canister, instructions_limit);
     let (canister, num_instructions_left, action, heap_delta) = hypervisor.execute_update(
         canister,
@@ -296,7 +277,6 @@ fn execute_update_with_cycles_memory_time(
         routing_table,
         subnet_records,
         execution_parameters,
-        nns_subnet_id,
     );
 
     (canister, num_instructions_left, action, heap_delta)
@@ -332,7 +312,7 @@ fn execute_update_for_request(
         .payment(payment)
         .build();
 
-    let (_, _, _, routing_table, subnet_records) = setup();
+    let (_, _, routing_table, subnet_records) = setup();
     let execution_parameters = execution_parameters(&canister, instructions_limit);
     let (canister, num_instructions_left, action, _) = hypervisor.execute_update(
         canister,
@@ -341,7 +321,6 @@ fn execute_update_for_request(
         routing_table,
         subnet_records,
         execution_parameters,
-        subnet_test_id(0x101), // NNS subnet
     );
 
     (canister, num_instructions_left, action)
@@ -387,15 +366,7 @@ fn execute(
 fn test_method_not_found_error() {
     with_hypervisor(|hypervisor, tmp_path| {
         assert_eq!(
-            execute_update(
-                &hypervisor,
-                "(module)",
-                "test",
-                EMPTY_PAYLOAD,
-                None,
-                tmp_path,
-            )
-            .2,
+            execute_update(&hypervisor, "(module)", "test", EMPTY_PAYLOAD, tmp_path,).2,
             CallContextAction::Fail {
                 error: HypervisorError::MethodNotFound(WasmMethod::Update("test".to_string())),
                 refund: Cycles::from(0),
@@ -522,7 +493,6 @@ fn sys_api_call_canister_status() {
              )"#,
                 "hi",
                 vec![],
-                None,
                 tmp_path,
             )
             .2,
@@ -554,7 +524,6 @@ fn sys_api_call_arg_data_size() {
                   (export "canister_update test" (func 1)))"#,
                 "test",
                 vec![0, 1, 2, 3],
-                None,
                 tmp_path,
             )
             .2,
@@ -600,7 +569,6 @@ fn sys_api_call_stable_grow() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -654,7 +622,6 @@ fn exercise_stable_memory_delta() {
             wasm_module,
             "grow",
             EMPTY_PAYLOAD,
-            None,
             tmp_path.clone(),
         );
         assert_eq!(
@@ -666,14 +633,8 @@ fn exercise_stable_memory_delta() {
         );
         assert_eq!(delta, NumBytes::from(0));
 
-        let (_, _, action, delta) = execute_update(
-            &hypervisor,
-            wasm_module,
-            "write",
-            EMPTY_PAYLOAD,
-            None,
-            tmp_path,
-        );
+        let (_, _, action, delta) =
+            execute_update(&hypervisor, wasm_module, "write", EMPTY_PAYLOAD, tmp_path);
         assert_eq!(
             action,
             CallContextAction::Reply {
@@ -729,7 +690,6 @@ fn exercise_stable_memory_delta_2() {
             wasm_module,
             "grow",
             EMPTY_PAYLOAD,
-            None,
             tmp_path.clone(),
         );
         assert_eq!(
@@ -741,14 +701,8 @@ fn exercise_stable_memory_delta_2() {
         );
         assert_eq!(delta, NumBytes::from(0));
 
-        let (_, _, action, delta) = execute_update(
-            &hypervisor,
-            wasm_module,
-            "write",
-            EMPTY_PAYLOAD,
-            None,
-            tmp_path,
-        );
+        let (_, _, action, delta) =
+            execute_update(&hypervisor, wasm_module, "write", EMPTY_PAYLOAD, tmp_path);
         assert_eq!(
             action,
             CallContextAction::Reply {
@@ -803,7 +757,6 @@ fn exercise_stable_memory_delta64() {
             wasm_module,
             "grow",
             EMPTY_PAYLOAD,
-            None,
             tmp_path.clone(),
         );
         assert_eq!(
@@ -815,14 +768,8 @@ fn exercise_stable_memory_delta64() {
         );
         assert_eq!(delta, NumBytes::from(0));
 
-        let (_, _, action, delta) = execute_update(
-            &hypervisor,
-            wasm_module,
-            "write",
-            EMPTY_PAYLOAD,
-            None,
-            tmp_path,
-        );
+        let (_, _, action, delta) =
+            execute_update(&hypervisor, wasm_module, "write", EMPTY_PAYLOAD, tmp_path);
         assert_eq!(
             action,
             CallContextAction::Reply {
@@ -878,7 +825,6 @@ fn exercise_stable_memory_delta64_exact_page() {
             wasm_module,
             "grow",
             EMPTY_PAYLOAD,
-            None,
             tmp_path.clone(),
         );
         assert_eq!(
@@ -890,14 +836,8 @@ fn exercise_stable_memory_delta64_exact_page() {
         );
         assert_eq!(delta, NumBytes::from(0));
 
-        let (_, _, action, delta) = execute_update(
-            &hypervisor,
-            wasm_module,
-            "write",
-            EMPTY_PAYLOAD,
-            None,
-            tmp_path,
-        );
+        let (_, _, action, delta) =
+            execute_update(&hypervisor, wasm_module, "write", EMPTY_PAYLOAD, tmp_path);
         assert_eq!(
             action,
             CallContextAction::Reply {
@@ -937,7 +877,6 @@ fn sys_api_call_stable_grow_too_many_pages() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -990,11 +929,11 @@ fn sys_api_call_stable64_grow() {
                 "test",
                 EMPTY_PAYLOAD,
                 None,
+                None,
                 MAX_NUM_INSTRUCTIONS,
                 NumBytes::from(8 * 1024 * 1024 * 1024),
                 mock_time(),
                 tmp_path,
-                subnet_test_id(0x101), // NNS subnet != canister subnet
             )
             .2,
             CallContextAction::Reply {
@@ -1041,11 +980,11 @@ fn sys_api_call_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
                 "test",
                 EMPTY_PAYLOAD,
                 None,
+                None,
                 MAX_NUM_INSTRUCTIONS,
                 NumBytes::from(8 * 1024 * 1024 * 1024),
                 mock_time(),
                 tmp_path,
-                subnet_test_id(0x101), // NNS subnet != canister subnet
             )
             .2,
             CallContextAction::Fail {
@@ -1092,11 +1031,11 @@ fn sys_api_call_stable_grow_by_traps_if_memory_exceeds_4gb() {
                 "test",
                 EMPTY_PAYLOAD,
                 None,
+                None,
                 MAX_NUM_INSTRUCTIONS,
                 NumBytes::from(8 * 1024 * 1024 * 1024),
                 mock_time(),
                 tmp_path,
-                subnet_test_id(0x101), // NNS subnet != canister subnet
             )
             .2,
             CallContextAction::Fail {
@@ -1155,7 +1094,6 @@ fn sys_api_call_stable_read_write() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1191,7 +1129,6 @@ fn sys_api_call_stable_read_traps_when_out_of_bounds() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1226,11 +1163,11 @@ fn sys_api_call_stable_read_can_handle_overflows() {
                 "test",
                 EMPTY_PAYLOAD,
                 None,
+                None,
                 MAX_NUM_INSTRUCTIONS * 10,
                 NumBytes::from(0),
                 mock_time(),
                 tmp_path,
-                subnet_test_id(0x101), // NNS subnet != canister subnet
             )
             .2,
             CallContextAction::Fail {
@@ -1262,7 +1199,6 @@ fn sys_api_call_stable_write_traps_when_out_of_bounds() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1297,11 +1233,11 @@ fn sys_api_call_stable_write_can_handle_overflows() {
                 "test",
                 EMPTY_PAYLOAD,
                 None,
+                None,
                 MAX_NUM_INSTRUCTIONS * 10,
                 NumBytes::from(0),
                 mock_time(),
                 tmp_path,
-                subnet_test_id(0x101), // NNS subnet != canister subnet
             )
             .2,
             CallContextAction::Fail {
@@ -1340,7 +1276,6 @@ fn sys_api_call_stable_read_traps_when_heap_out_of_bounds() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1378,7 +1313,6 @@ fn sys_api_call_stable_write_traps_when_heap_out_of_bounds() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1417,7 +1351,6 @@ fn sys_api_call_stable_write_at_max_size_handled_gracefully() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1456,7 +1389,6 @@ fn sys_api_call_stable_read_does_not_trap_at_end_of_page() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1493,7 +1425,6 @@ fn sys_api_call_stable_read_traps_beyond_end_of_page() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1532,7 +1463,6 @@ fn sys_api_call_stable_read_at_max_size_handled_gracefully() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1570,7 +1500,6 @@ fn sys_api_call_stable64_read_traps_when_out_of_bounds() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1607,7 +1536,6 @@ fn sys_api_call_stable64_read_can_handle_overflows() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1640,7 +1568,6 @@ fn sys_api_call_stable64_write_traps_when_out_of_bounds() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1678,7 +1605,6 @@ fn sys_api_call_stable64_write_can_handle_overflows() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1718,7 +1644,6 @@ fn sys_api_call_stable64_read_traps_when_heap_out_of_bounds() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1756,7 +1681,6 @@ fn sys_api_call_stable64_write_traps_when_heap_out_of_bounds() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1795,7 +1719,6 @@ fn sys_api_call_stable64_read_does_not_trap_at_end_of_page() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1832,7 +1755,6 @@ fn sys_api_call_stable64_read_traps_beyond_end_of_page() {
                     (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -1870,12 +1792,12 @@ fn sys_api_call_time_with_5_nanoseconds() {
                 "test",
                 EMPTY_PAYLOAD,
                 None,
+                None,
                 MAX_NUM_INSTRUCTIONS,
                 MEMORY_ALLOCATION,
                 // Five nanoseconds
                 mock_time() + Duration::new(0, 5),
                 tmp_path,
-                subnet_test_id(0x101), // NNS subnet != canister subnet
             )
             .2,
             CallContextAction::Reply {
@@ -1909,12 +1831,12 @@ fn sys_api_call_time_with_5_seconds() {
                 "test",
                 EMPTY_PAYLOAD,
                 None,
+                None,
                 MAX_NUM_INSTRUCTIONS,
                 MEMORY_ALLOCATION,
                 // Five seconds
                 mock_time() + Duration::new(5, 0),
                 tmp_path,
-                subnet_test_id(0x101), // NNS subnet != canister subnet
             )
             .2,
             CallContextAction::Reply {
@@ -1972,7 +1894,6 @@ fn sys_api_call_reply() {
                   (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -2003,7 +1924,6 @@ fn sys_api_call_reply_without_finishing() {
                   (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -2053,12 +1973,13 @@ fn test_execute_update_msg_caller() {
     with_hypervisor(|hypervisor, tmp_path| {
         let id = user_test_id(12);
         assert_eq!(
-            execute_update(
+            execute_update_on(
                 &hypervisor,
                 MSG_CALLER_WAT,
                 "update_test",
                 EMPTY_PAYLOAD,
-                Some(id.get()),
+                Some(id),
+                None,
                 tmp_path.clone(),
             )
             .2,
@@ -2068,14 +1989,15 @@ fn test_execute_update_msg_caller() {
             },
         );
 
-        let id = canister_test_id(32);
+        let id = user_test_id(32);
         assert_eq!(
-            execute_update(
+            execute_update_on(
                 &hypervisor,
                 MSG_CALLER_WAT,
                 "update_test",
                 EMPTY_PAYLOAD,
-                Some(id.get()),
+                Some(id),
+                None,
                 tmp_path,
             )
             .2,
@@ -2184,7 +2106,6 @@ fn sys_api_call_arg_data_copy() {
                   (export "canister_update test" (func $test)))"#,
                 "test",
                 vec![121, 121, 121, 121],
-                None,
                 tmp_path,
             )
             .2,
@@ -2218,7 +2139,6 @@ fn sys_api_call_reject() {
                   (export "canister_update test" (func 1)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -2433,7 +2353,6 @@ fn sys_api_call_reject_msg_size_outside_reject_callback() {
               (export "canister_update test" (func 1)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -2495,7 +2414,6 @@ fn sys_api_call_reject_msg_copy_called_outside_reject_callback() {
                 REJECT_MSG_COPY_WAT,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -2552,7 +2470,6 @@ fn sys_api_call_canister_self_size() {
                   (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -2568,9 +2485,8 @@ fn sys_api_call_canister_self_size() {
 fn sys_api_call_canister_self_copy() {
     with_hypervisor(|hypervisor, tmp_path| {
         let canister_id = canister_test_id(42);
-        let source = user_test_id(24);
         assert_eq!(
-            execute_update(
+            execute_update_on(
                 &hypervisor,
                 r#"(module
                   (import "ic0" "canister_self_copy"
@@ -2591,7 +2507,8 @@ fn sys_api_call_canister_self_copy() {
                   (export "canister_update test" (func $test)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                Some(source.get()),
+                None,
+                Some(canister_id),
                 tmp_path,
             )
             .2,
@@ -2639,7 +2556,6 @@ fn test_call_simple_does_not_enqueue_request_if_err() {
                 )"#,
             "test",
             EMPTY_PAYLOAD,
-            None,
             tmp_path,
         );
 
@@ -2694,7 +2610,6 @@ fn test_call_with_builder_does_not_enqueue_request_if_err() {
                 )"#,
             "test",
             EMPTY_PAYLOAD,
-            None,
             tmp_path,
         );
 
@@ -2745,7 +2660,6 @@ fn test_call_add_cycles_deducts_cycles() {
                 )"#,
             "test",
             EMPTY_PAYLOAD,
-            None,
             tmp_path,
         );
 
@@ -2805,7 +2719,6 @@ fn test_call_add_cycles_no_effect_when_perform_not_called() {
                 )"#,
             "test",
             EMPTY_PAYLOAD,
-            None,
             tmp_path,
         );
 
@@ -2847,22 +2760,16 @@ const MINT_CYCLES: &str = r#"(module
 #[test]
 fn test_mint_cycles_non_nns_canister() {
     with_hypervisor(|hypervisor, tmp_path| {
-        let (canister, _, action, _) = execute_update(
-            &hypervisor,
-            MINT_CYCLES,
-            "test",
-            EMPTY_PAYLOAD,
-            None,
-            tmp_path,
-        );
+        let (canister, _, action, _) =
+            execute_update(&hypervisor, MINT_CYCLES, "test", EMPTY_PAYLOAD, tmp_path);
 
         assert_eq!(
             action,
             CallContextAction::Fail {
-                error: ContractViolation(
-                    format!("ic0.mint_cycles cannot be executed. Should only be called by a canister on the NNS subnet: {} != {}",
-                    subnet_test_id(0),
-                    subnet_test_id(0x101),
+                error: ContractViolation(format!(
+                    "ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}",
+                    canister.canister_id(),
+                    CYCLES_MINTING_CANISTER_ID,
                 )),
                 refund: Cycles::from(0)
             }
@@ -2880,14 +2787,13 @@ fn test_mint_cycles_non_nns_canister() {
 }
 
 #[test]
-fn test_mint_cycles_nns_canister() {
+fn test_mint_cycles_cmc_canister() {
     with_test_replica_logger(|log| {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         let metrics_registry = MetricsRegistry::new();
         let cycles_account_manager = Arc::new(
             CyclesAccountManagerBuilder::new()
                 .with_subnet_type(SubnetType::System)
-                .with_subnet_id(subnet_test_id(1))
                 .build(),
         );
         let hypervisor = Hypervisor::new(
@@ -2895,18 +2801,18 @@ fn test_mint_cycles_nns_canister() {
             1,
             &metrics_registry,
             cycles_account_manager.get_subnet_id(),
-            SubnetType::Application,
+            SubnetType::System,
             log,
             cycles_account_manager,
         );
-        let (canister, _, _, _) = execute_update_on_nns(
+        let (canister, _, _, _) = execute_update_on(
             &hypervisor,
             MINT_CYCLES,
             "test",
             EMPTY_PAYLOAD,
             None,
+            Some(CYCLES_MINTING_CANISTER_ID),
             tmpdir.path().into(),
-            subnet_test_id(1), // NNS subnet == canister subnet
         );
 
         assert_eq!(canister.system_state.queues().output_queues_len(), 0);
@@ -2938,14 +2844,12 @@ fn test_mint_cycles_fail_on_system_canister() {
             log,
             cycles_account_manager,
         );
-        let (canister, _, _, _) = execute_update_on_nns(
+        let (canister, _, _, _) = execute_update(
             &hypervisor,
             MINT_CYCLES,
             "test",
             EMPTY_PAYLOAD,
-            None,
             tmpdir.path().into(),
-            subnet_test_id(0x101), // NNS subnet != canister subnet
         );
 
         assert_eq!(canister.system_state.queues().output_queues_len(), 0);
@@ -2995,7 +2899,6 @@ fn test_call_simple_enqueues_request() {
                 )"#,
             "test",
             EMPTY_PAYLOAD,
-            None,
             tmp_path,
         );
 
@@ -3050,7 +2953,6 @@ fn test_call_with_builder_enqueues_request() {
                 )"#,
             "test",
             EMPTY_PAYLOAD,
-            None,
             tmp_path,
         );
 
@@ -3084,7 +2986,6 @@ fn sys_api_call_ic_trap() {
             )"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -3119,7 +3020,6 @@ fn globals_are_updated_in_execution_state_after_message_execution() {
             "#,
             "write",
             EMPTY_PAYLOAD,
-            None,
             tmp_path,
         );
         assert_eq!(
@@ -3155,7 +3055,6 @@ fn comparison_of_non_canonical_nans() {
             "#,
             "test",
             EMPTY_PAYLOAD,
-            None,
             tmp_path,
         );
         assert_eq!(
@@ -3191,12 +3090,12 @@ fn sys_api_call_out_of_cycles() {
                 "test",
                 EMPTY_PAYLOAD,
                 None,
+                None,
                 // this is not enough for 4 instructions
                 NumInstructions::from(3),
                 MEMORY_ALLOCATION,
                 mock_time(),
                 tmp_path,
-                subnet_test_id(0x101), // NNS subnet != canister subnet
             )
             .2,
             CallContextAction::Fail {
@@ -3228,12 +3127,12 @@ fn sys_api_call_update_available_memory_1() {
                 "test",
                 EMPTY_PAYLOAD,
                 None,
+                None,
                 MAX_NUM_INSTRUCTIONS,
                 // Only 9 pages available
                 ic_replicated_state::num_bytes_try_from(NumWasmPages::from(9)).unwrap(),
                 mock_time(),
                 tmp_path,
-                subnet_test_id(0x101), // NNS subnet != canister subnet
             )
             .2,
             CallContextAction::Fail {
@@ -3263,7 +3162,6 @@ fn sys_api_call_update_available_memory_2() {
                   (export "canister_update test" (func 0)))"#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -3295,12 +3193,10 @@ fn available_memory_is_updated() {
                   (export "canister_update test" (func 0)))"#,
             "test",
             EMPTY_PAYLOAD,
-            None,
             MAX_NUM_INSTRUCTIONS,
             available_memory,
             mock_time(),
             tmp_path,
-            subnet_test_id(0x101), // NNS subnet != canister subnet
             subnet_available_memory.clone(),
         );
         assert_eq!(
@@ -3332,12 +3228,10 @@ fn available_memory_isnt_updated_from_failed_message() {
                   (export "canister_update test" (func 0)))"#,
             "test",
             EMPTY_PAYLOAD,
-            None,
             MAX_NUM_INSTRUCTIONS,
             available_memory,
             mock_time(),
             tmp_path,
-            subnet_test_id(0x101), // NNS subnet != canister subnet
             subnet_available_memory.clone(),
         );
         assert_eq!(
@@ -3367,7 +3261,6 @@ fn sys_api_call_msg_cycles_available_for_ingress() {
                   (export "canister_update test" (func 1)))"#,
                 "test",
                 vec![0, 1, 2, 3],
-                None,
                 tmp_path,
             )
             .2,
@@ -3451,7 +3344,6 @@ fn canister_metrics_are_recorded() {
                 wast,
                 "write",
                 EMPTY_PAYLOAD,
-                None,
                 tmpdir.path().into(),
             )
             .2,
@@ -3522,7 +3414,6 @@ fn executing_non_existing_method_does_not_consume_cycles() {
             wast,
             "foo",
             EMPTY_PAYLOAD,
-            None,
             tmpdir.path().into(),
         );
         assert_eq!(
@@ -3635,7 +3526,6 @@ fn memory_access_between_min_and_max_ingress() {
             "#,
                 "test",
                 EMPTY_PAYLOAD,
-                None,
                 tmp_path,
             )
             .2,
@@ -3768,7 +3658,7 @@ fn test_non_existing_system_method(system_method: SystemMethod) {
 
         let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-        let (_, _, _, routing_table, subnet_records) = setup();
+        let (_, _, routing_table, subnet_records) = setup();
         // Run the non-existing system method.
         let (_, cycles, res) = match system_method {
             SystemMethod::CanisterPostUpgrade => hypervisor.execute_canister_post_upgrade(
@@ -3802,7 +3692,6 @@ fn test_non_existing_system_method(system_method: SystemMethod) {
                 subnet_records,
                 mock_time(),
                 execution_parameters,
-                subnet_test_id(0x101), // NNS subnet
             ),
         };
 
@@ -4111,7 +4000,7 @@ fn changes_to_stable_memory_in_canister_post_upgrade_are_rolled_back_on_failure(
 fn cannot_execute_update_on_stopping_canister() {
     with_hypervisor(|hypervisor, _| {
         let canister = get_stopping_canister(canister_test_id(0));
-        let (_, _, _, routing_table, subnet_records) = setup();
+        let (_, _, routing_table, subnet_records) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
@@ -4123,7 +4012,6 @@ fn cannot_execute_update_on_stopping_canister() {
                     routing_table,
                     subnet_records,
                     execution_parameters,
-                    subnet_test_id(0x101), // NNS subnet
                 )
                 .2,
             CallContextAction::Fail {
@@ -4138,7 +4026,7 @@ fn cannot_execute_update_on_stopping_canister() {
 fn cannot_execute_update_on_stopped_canister() {
     with_hypervisor(|hypervisor, _| {
         let canister = get_stopped_canister(canister_test_id(0));
-        let (_, _, _, routing_table, subnet_records) = setup();
+        let (_, _, routing_table, subnet_records) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
@@ -4150,7 +4038,6 @@ fn cannot_execute_update_on_stopped_canister() {
                     routing_table,
                     subnet_records,
                     execution_parameters,
-                    subnet_test_id(0x101), // NNS subnet
                 )
                 .2,
             CallContextAction::Fail {
@@ -4213,7 +4100,7 @@ fn cannot_execute_query_on_stopped_canister() {
 fn cannot_execute_callback_on_stopped_canister() {
     with_hypervisor(|hypervisor, _| {
         let canister = get_stopped_canister(canister_test_id(0));
-        let (_, _, _, routing_table, subnet_records) = setup();
+        let (_, _, routing_table, subnet_records) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
@@ -4234,7 +4121,6 @@ fn cannot_execute_callback_on_stopped_canister() {
                     routing_table,
                     subnet_records,
                     execution_parameters,
-                    subnet_test_id(0x101), // NNS subnet
                 )
                 .3,
             Err(HypervisorError::CanisterStopped)
@@ -4261,14 +4147,8 @@ fn sys_api_call_ic_trap_preserves_some_cycles() {
             )"#;
 
         // Check an update method.
-        let (canister, num_instructions_left, action, _) = execute_update(
-            &hypervisor,
-            wat,
-            "update_trap",
-            EMPTY_PAYLOAD,
-            None,
-            tmp_path,
-        );
+        let (canister, num_instructions_left, action, _) =
+            execute_update(&hypervisor, wat, "update_trap", EMPTY_PAYLOAD, tmp_path);
         assert_eq!(
             action,
             CallContextAction::Fail {
@@ -4325,7 +4205,7 @@ fn canister_heartbeat() {
             .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
         let canister = canister_from_exec_state(execution_state, canister_id);
-        let (_, _, _, routing_table, subnet_records) = setup();
+        let (_, _, routing_table, subnet_records) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
@@ -4336,7 +4216,6 @@ fn canister_heartbeat() {
                     subnet_records,
                     mock_time(),
                     execution_parameters,
-                    subnet_test_id(0x101), // NNS subnet
                 )
                 .2,
             Err(HypervisorError::Trapped(TrapCode::Unreachable))
@@ -4363,7 +4242,7 @@ fn execute_canister_heartbeat_produces_heap_delta() {
             .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
         let canister = canister_from_exec_state(execution_state, canister_id);
-        let (_, _, _, routing_table, subnet_records) = setup();
+        let (_, _, routing_table, subnet_records) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let (_, _, result) = hypervisor.execute_canister_heartbeat(
@@ -4372,7 +4251,6 @@ fn execute_canister_heartbeat_produces_heap_delta() {
             subnet_records,
             mock_time(),
             execution_parameters,
-            subnet_test_id(0x101), // NNS subnet
         );
         let heap_delta = result.unwrap();
         // the wasm module touched one memory location so that should produce one page
@@ -4400,7 +4278,7 @@ fn execute_update_produces_heap_delta() {
             .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
         let canister = canister_from_exec_state(execution_state, canister_id);
-        let (_, _, _, routing_table, subnet_records) = setup();
+        let (_, _, routing_table, subnet_records) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let message = RequestOrIngress::Ingress(
@@ -4416,7 +4294,6 @@ fn execute_update_produces_heap_delta() {
             routing_table,
             subnet_records,
             execution_parameters,
-            subnet_test_id(0x101), // NNS subnet
         );
         // the wasm module touched one memory location so that should produce one page
         // of delta.
@@ -4609,7 +4486,7 @@ impl MemoryAccessor {
 
         let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-        let (_, _, _, routing_table, subnet_records) = setup();
+        let (_, _, routing_table, subnet_records) = setup();
         Self {
             hypervisor,
             canister,
@@ -4637,7 +4514,6 @@ impl MemoryAccessor {
             Arc::clone(&self.routing_table),
             Arc::clone(&self.subnet_records),
             self.execution_parameters.clone(),
-            subnet_test_id(0x101), // NNS subnet
         );
         self.canister = result.0;
         result.2
@@ -4661,7 +4537,6 @@ impl MemoryAccessor {
             Arc::clone(&self.routing_table),
             Arc::clone(&self.subnet_records),
             self.execution_parameters.clone(),
-            subnet_test_id(0x101), // NNS subnet
         );
         self.canister = result.0;
         result.2
@@ -4683,7 +4558,6 @@ impl MemoryAccessor {
             Arc::clone(&self.routing_table),
             Arc::clone(&self.subnet_records),
             self.execution_parameters.clone(),
-            subnet_test_id(0x101), // NNS subnet
         );
         self.canister = result.0;
         result.2
@@ -4706,7 +4580,6 @@ impl MemoryAccessor {
             Arc::clone(&self.routing_table),
             Arc::clone(&self.subnet_records),
             self.execution_parameters.clone(),
-            subnet_test_id(0x101), // NNS subnet
         );
         self.canister = result.0;
         result.2

@@ -4,7 +4,7 @@ use ic_replicated_state::{StateError, SystemState};
 use ic_types::{
     messages::{CallContextId, CallbackId, Request},
     methods::Callback,
-    ComputeAllocation, Cycles, SubnetId,
+    ComputeAllocation, Cycles,
 };
 use std::ops::DerefMut;
 use std::{cell::RefCell, sync::Arc};
@@ -37,10 +37,10 @@ impl SystemStateAccessorDirect {
 }
 
 impl SystemStateAccessor for SystemStateAccessorDirect {
-    fn mint_cycles(&self, amount_to_mint: Cycles, nns_subnet_id: SubnetId) -> HypervisorResult<()> {
+    fn mint_cycles(&self, amount_to_mint: Cycles) -> HypervisorResult<()> {
         let mut system_state = self.system_state.borrow_mut();
         self.cycles_account_manager
-            .mint_cycles(&mut system_state, amount_to_mint, nns_subnet_id)
+            .mint_cycles(&mut system_state, amount_to_mint)
             .map_err(|CyclesAccountManagerError::ContractViolation(msg)| {
                 HypervisorError::ContractViolation(msg)
             })

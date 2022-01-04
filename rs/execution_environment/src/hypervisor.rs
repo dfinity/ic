@@ -123,7 +123,6 @@ impl Hypervisor {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         execution_parameters: ExecutionParameters,
-        nns_subnet_id: SubnetId,
     ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
         debug!(self.log, "execute_update: method {}", request.method_name());
 
@@ -188,7 +187,6 @@ impl Hypervisor {
             call_context_id,
             self.own_subnet_id,
             self.own_subnet_type,
-            nns_subnet_id,
             routing_table,
             subnet_records,
         );
@@ -391,7 +389,6 @@ impl Hypervisor {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         execution_parameters: ExecutionParameters,
-        nns_subnet_id: SubnetId,
     ) -> (
         CanisterState,
         NumInstructions,
@@ -441,7 +438,6 @@ impl Hypervisor {
                 call_responded,
                 self.own_subnet_id,
                 self.own_subnet_type,
-                nns_subnet_id,
                 routing_table,
                 subnet_records,
             ),
@@ -453,7 +449,6 @@ impl Hypervisor {
                 call_responded,
                 self.own_subnet_id,
                 self.own_subnet_type,
-                nns_subnet_id,
                 routing_table,
                 subnet_records,
             ),
@@ -898,7 +893,6 @@ impl Hypervisor {
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         time: Time,
         execution_parameters: ExecutionParameters,
-        nns_subnet_id: SubnetId,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterHeartbeat);
         let memory_usage = canister.memory_usage(self.own_subnet_type);
@@ -936,7 +930,6 @@ impl Hypervisor {
             call_context_id,
             self.own_subnet_id,
             self.own_subnet_type,
-            nns_subnet_id,
             routing_table,
             subnet_records,
         );

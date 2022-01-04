@@ -34,18 +34,6 @@ use common::*;
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 40);
 
-fn get_system_state() -> SystemState {
-    let mut system_state = SystemStateBuilder::new().build();
-    system_state
-        .call_context_manager_mut()
-        .unwrap()
-        .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
-            Cycles::from(50),
-        );
-    system_state
-}
-
 fn get_system_state_with_cycles(cycles_amount: Cycles) -> SystemState {
     SystemState::new_running(
         canister_test_id(42),
@@ -133,10 +121,8 @@ fn test_canister_update_support() {
         .with_subnet_type(SubnetType::System)
         .build();
 
-    let api_type = ApiTypeBuilder::new()
-        .with_nns_subnet_id(cycles_account_manager.get_subnet_id())
-        .build_update_api();
-    let mut api = get_system_api(api_type, get_system_state(), cycles_account_manager);
+    let api_type = ApiTypeBuilder::new().build_update_api();
+    let mut api = get_system_api(api_type, get_cmc_system_state(), cycles_account_manager);
 
     assert_api_supported(api.ic0_msg_caller_size());
     assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
@@ -373,10 +359,8 @@ fn test_reply_api_support_on_nns() {
         .with_subnet_type(SubnetType::System)
         .build();
 
-    let api_type = ApiTypeBuilder::new()
-        .with_nns_subnet_id(cycles_account_manager.get_subnet_id())
-        .build_reply_api(Cycles::from(0));
-    let mut api = get_system_api(api_type, get_system_state(), cycles_account_manager);
+    let api_type = ApiTypeBuilder::new().build_reply_api(Cycles::from(0));
+    let mut api = get_system_api(api_type, get_cmc_system_state(), cycles_account_manager);
 
     assert_api_not_supported(api.ic0_msg_caller_size());
     assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
@@ -489,13 +473,11 @@ fn test_reject_api_support_on_nns() {
         .with_subnet_type(SubnetType::System)
         .build();
 
-    let api_type = ApiTypeBuilder::new()
-        .with_nns_subnet_id(cycles_account_manager.get_subnet_id())
-        .build_reject_api(RejectContext {
-            code: RejectCode::CanisterReject,
-            message: "error".to_string(),
-        });
-    let mut api = get_system_api(api_type, get_system_state(), cycles_account_manager);
+    let api_type = ApiTypeBuilder::new().build_reject_api(RejectContext {
+        code: RejectCode::CanisterReject,
+        message: "error".to_string(),
+    });
+    let mut api = get_system_api(api_type, get_cmc_system_state(), cycles_account_manager);
 
     assert_api_not_supported(api.ic0_msg_caller_size());
     assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
@@ -898,10 +880,8 @@ fn test_canister_heartbeat_support_nns() {
         .with_subnet_type(SubnetType::System)
         .build();
 
-    let api_type = ApiTypeBuilder::new()
-        .with_nns_subnet_id(cycles_account_manager.get_subnet_id())
-        .build_heartbeat_api();
-    let mut api = get_system_api(api_type, get_system_state(), cycles_account_manager);
+    let api_type = ApiTypeBuilder::new().build_heartbeat_api();
+    let mut api = get_system_api(api_type, get_cmc_system_state(), cycles_account_manager);
 
     assert_api_not_supported(api.ic0_msg_caller_size());
     assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
@@ -948,7 +928,6 @@ fn test_canister_heartbeat_support_nns() {
     assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
-    // Only supported on NNS.
     assert_api_supported(api.ic0_mint_cycles(0));
 }
 

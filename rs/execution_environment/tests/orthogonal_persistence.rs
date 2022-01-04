@@ -100,7 +100,6 @@ impl HypervisorTest {
             Arc::clone(&self.routing_table),
             self.subnet_records.clone(),
             execution_parameters(),
-            subnet_test_id(0x101), // NNS subnet
         );
         self.canister = canister;
         action

@@ -500,7 +500,6 @@ impl<'a> QueryContext<'a> {
                 Arc::clone(&self.routing_table),
                 subnet_records,
                 execution_parameters,
-                self.state.metadata.network_topology.nns_subnet_id,
             );
         let instructions_executed = instruction_limit - instructions_left;
         measurement_scope.add(instructions_executed, NumMessages::from(1));

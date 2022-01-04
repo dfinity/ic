@@ -385,7 +385,6 @@ impl SchedulerImpl {
                 subnet_records.clone(),
                 heartbeat_handling,
                 &measurement_scope,
-                state.metadata.network_topology.nns_subnet_id,
             );
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
@@ -493,7 +492,6 @@ impl SchedulerImpl {
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         heartbeat_handling: HeartbeatHandling,
         measurement_scope: &MeasurementScope,
-        nns_subnet_id: SubnetId,
     ) -> (
         Vec<CanisterState>,
         Vec<(MessageId, IngressStatus)>,
@@ -552,7 +550,6 @@ impl SchedulerImpl {
                         subnet_records,
                         heartbeat_handling,
                         logger,
-                        nns_subnet_id,
                     );
                 });
             }
@@ -1064,7 +1061,6 @@ fn execute_canisters_on_thread(
     subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
     heartbeat_handling: HeartbeatHandling,
     logger: ReplicaLogger,
-    nns_subnet_id: SubnetId,
 ) -> ExecutionThreadResult {
     // Since this function runs on a helper thread, we cannot use a nested scope
     // here. Instead, we propagate metrics to the outer scope manually via
@@ -1110,7 +1106,6 @@ fn execute_canisters_on_thread(
                         Arc::clone(&subnet_records),
                         time,
                         subnet_available_memory.clone(),
-                        nns_subnet_id,
                     );
                 let heap_delta = match result {
                     Ok(heap_delta) => heap_delta,
@@ -1178,7 +1173,6 @@ fn execute_canisters_on_thread(
                 Arc::clone(&routing_table),
                 Arc::clone(&subnet_records),
                 subnet_available_memory.clone(),
-                nns_subnet_id,
             );
             let instructions_consumed = canister_execution_limits.instruction_limit_per_message
                 - result.num_instructions_left;

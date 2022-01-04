@@ -166,8 +166,8 @@ pub fn general_execution_pot() -> Pot {
                 execution::queries::query_reply_sizes
             ),
             t(
-                "mint_cycles_supported_on_system_subnet",
-                execution::nns_shielding::mint_cycles_supported_on_system_subnet
+                "mint_cycles_not_supported_on_system_subnet",
+                execution::nns_shielding::mint_cycles_not_supported_on_system_subnet
             ),
             t(
                 "mint_cycles_not_supported_on_application_subnet",

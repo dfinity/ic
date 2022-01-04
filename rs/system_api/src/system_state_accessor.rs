@@ -4,7 +4,7 @@ use ic_replicated_state::StateError;
 use ic_types::{
     messages::{CallContextId, CallbackId, Request},
     methods::Callback,
-    ComputeAllocation, Cycles, SubnetId,
+    ComputeAllocation, Cycles,
 };
 
 /// The abstract interface through which canister user code can
@@ -14,7 +14,7 @@ use ic_types::{
 /// arguments.
 pub trait SystemStateAccessor {
     /// Increases the balance of the canister by `amount`
-    fn mint_cycles(&self, amount: Cycles, nns_subnet_id: SubnetId) -> HypervisorResult<()>;
+    fn mint_cycles(&self, amount: Cycles) -> HypervisorResult<()>;
 
     /// Accepts cycles from given call context.
     fn msg_cycles_accept(&self, call_context_id: &CallContextId, max_amount: Cycles) -> Cycles;

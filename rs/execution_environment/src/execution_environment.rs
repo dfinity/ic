@@ -89,7 +89,6 @@ pub trait ExecutionEnvironment: Sync + Send {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
-        nns_subnet_id: SubnetId,
     ) -> ExecuteMessageResult<CanisterState>;
 
     /// Executes a heartbeat of a given canister.
@@ -102,7 +101,6 @@ pub trait ExecutionEnvironment: Sync + Send {
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         time: Time,
         subnet_available_memory: SubnetAvailableMemory,
-        nns_subnet_id: SubnetId,
     ) -> (
         CanisterState,
         NumInstructions,
@@ -655,7 +653,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
-        nns_subnet_id: SubnetId,
     ) -> ExecuteMessageResult<CanisterState> {
         let (should_refund_remaining_cycles, mut res) = match msg {
             CanisterInputMessage::Request(request) => {
@@ -689,7 +686,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         routing_table,
                         subnet_records,
                         subnet_available_memory,
-                        nns_subnet_id,
                     ),
                 )
             }
@@ -733,7 +729,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         routing_table,
                         subnet_records,
                         subnet_available_memory,
-                        nns_subnet_id,
                     ),
                 )
             }
@@ -746,7 +741,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 routing_table,
                 subnet_records,
                 subnet_available_memory,
-                nns_subnet_id,
             ),
         };
 
@@ -770,7 +764,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         time: Time,
         subnet_available_memory: SubnetAvailableMemory,
-        nns_subnet_id: SubnetId,
     ) -> (
         CanisterState,
         NumInstructions,
@@ -810,7 +803,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 subnet_records,
                 time,
                 execution_parameters,
-                nns_subnet_id,
             );
 
         // Clone the `cycles_account_manager` to avoid having to require 'static
@@ -1051,7 +1043,6 @@ impl ExecutionEnvironmentImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
-        nns_subnet_id: SubnetId,
     ) -> (bool, ExecuteMessageResult<CanisterState>) {
         let call_context_manager = match canister.status() {
             CanisterStatusType::Stopped => {
@@ -1201,7 +1192,6 @@ impl ExecutionEnvironmentImpl {
                 routing_table,
                 subnet_records,
                 execution_parameters,
-                nns_subnet_id,
             );
 
             let log = self.log.clone();
@@ -1260,7 +1250,6 @@ impl ExecutionEnvironmentImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
-        nns_subnet_id: SubnetId,
     ) -> ExecuteMessageResult<CanisterState> {
         if CanisterStatusType::Running != canister.status() {
             // Canister isn't running. Reject the request.
@@ -1288,7 +1277,6 @@ impl ExecutionEnvironmentImpl {
                 routing_table,
                 subnet_records,
                 subnet_available_memory,
-                nns_subnet_id,
             )
         }
     }
@@ -1329,7 +1317,6 @@ impl ExecutionEnvironmentImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
-        nns_subnet_id: SubnetId,
     ) -> ExecuteMessageResult<CanisterState> {
         let sender = req.sender;
         let reply_callback = req.sender_reply_callback;
@@ -1344,7 +1331,6 @@ impl ExecutionEnvironmentImpl {
             routing_table,
             subnet_records,
             execution_parameters,
-            nns_subnet_id,
         );
 
         produce_inter_canister_response(&mut canister, action, sender, reply_callback);
@@ -1486,7 +1472,6 @@ impl ExecutionEnvironmentImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
-        nns_subnet_id: SubnetId,
     ) -> ExecuteMessageResult<CanisterState> {
         let canister_id = canister.canister_id();
         if CanisterStatusType::Running != canister.status() {
@@ -1547,7 +1532,6 @@ impl ExecutionEnvironmentImpl {
                 routing_table,
                 subnet_records,
                 subnet_available_memory,
-                nns_subnet_id,
             )
         }
     }
@@ -1563,7 +1547,6 @@ impl ExecutionEnvironmentImpl {
         routing_table: Arc<RoutingTable>,
         subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
         subnet_available_memory: SubnetAvailableMemory,
-        nns_subnet_id: SubnetId,
     ) -> ExecuteMessageResult<CanisterState> {
         let message_id = ingress.message_id.clone();
         let source = ingress.source;
@@ -1577,7 +1560,6 @@ impl ExecutionEnvironmentImpl {
             routing_table,
             subnet_records,
             execution_parameters,
-            nns_subnet_id,
         );
 
         let ingress_status =

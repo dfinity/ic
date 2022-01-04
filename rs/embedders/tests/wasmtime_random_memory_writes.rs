@@ -69,11 +69,6 @@ fn test_api_for_update(
             call_context_test_id(13),
             subnet_id,
             subnet_type,
-            if subnet_type == SubnetType::System {
-                subnet_id
-            } else {
-                subnet_test_id(0x101)
-            },
             routing_table,
             subnet_records,
         ),

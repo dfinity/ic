@@ -219,7 +219,6 @@ fn test_outgoing_messages(
             routing_table,
             subnet_records,
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            subnet_test_id(0x101), // NNS subnet
         );
 
         test(res);
@@ -535,7 +534,6 @@ fn test_allocate_memory_for_output_requests() {
                 Arc::clone(&routing_table),
                 subnet_records.clone(),
                 subnet_available_memory.clone(),
-                subnet_test_id(0x101), // NNS subnet
             );
             canister = execute_message_result.canister;
             assert_eq!(1 << 30, subnet_available_memory.get());
@@ -558,7 +556,6 @@ fn test_allocate_memory_for_output_requests() {
                 Arc::clone(&routing_table),
                 subnet_records.clone(),
                 subnet_available_memory.clone(),
-                subnet_test_id(0x101), // NNS subnet
             );
             canister = execute_message_result.canister;
             assert_eq!(13, subnet_available_memory.get());
@@ -582,7 +579,6 @@ fn test_allocate_memory_for_output_requests() {
                 routing_table,
                 subnet_records,
                 subnet_available_memory.clone(),
-                subnet_test_id(0x101), // NNS subnet
             );
             canister = execute_message_result.canister;
             if ENFORCE_MESSAGE_MEMORY_USAGE {
@@ -949,7 +945,6 @@ fn stopping_canister_rejects_requests() {
                 routing_table,
                 subnet_records,
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                subnet_test_id(0x101), // NNS subnet
             );
             assert_eq!(
                 result
@@ -992,7 +987,6 @@ fn stopping_canister_rejects_ingress() {
                         routing_table,
                         subnet_records,
                         MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                        subnet_test_id(0x101), // NNS subnet
                     )
                     .ingress_status
                     .unwrap()
@@ -1055,7 +1049,6 @@ fn stopped_canister_rejects_requests() {
                 routing_table,
                 subnet_records,
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                subnet_test_id(0x101), // NNS subnet
             );
             assert_eq!(
                 result
@@ -1095,7 +1088,6 @@ fn stopped_canister_rejects_ingress() {
                 routing_table,
                 subnet_records,
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                subnet_test_id(0x101), // NNS subnet
             );
 
             assert_eq!(
@@ -2545,7 +2537,6 @@ fn can_update_canisters_cycles_account_when_an_ingress_is_executed() {
                 routing_table,
                 subnet_records,
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                subnet_test_id(0x101), // NNS subnet
             );
 
             assert_eq!(
@@ -2597,7 +2588,6 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
                 routing_table,
                 subnet_records,
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                subnet_test_id(0x101), // NNS subnet
             );
             assert_eq!(
             result
@@ -2655,7 +2645,6 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
                 routing_table,
                 subnet_records,
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                subnet_test_id(0x101), // NNS subnet
             );
             assert_eq!(
             result.ingress_status,
@@ -2699,7 +2688,6 @@ fn canister_heartbeat_doesnt_run_when_canister_is_stopped() {
                     subnet_records,
                     mock_time(),
                     MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                    subnet_test_id(0x101), // NNS subnet
                 )
                 .2;
 
@@ -2728,7 +2716,6 @@ fn canister_heartbeat_doesnt_run_when_canister_is_stopping() {
                     subnet_records,
                     mock_time(),
                     MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                    subnet_test_id(0x101), // NNS subnet
                 )
                 .2;
 
@@ -3053,7 +3040,6 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
                 routing_table,
                 subnet_records,
                 subnet_available_memory.clone(),
-                subnet_test_id(0x101), // NNS subnet
             );
             assert_eq!(
                 subnet_available_memory_bytes_num,
@@ -3109,7 +3095,6 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
                 routing_table,
                 subnet_records,
                 subnet_available_memory.clone(),
-                subnet_test_id(0x101), // NNS subnet
             );
             // The canister allocates 10 wasm pages in the heap and 10 wasm pages of stable
             // memory.

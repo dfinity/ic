@@ -12,7 +12,7 @@ use ic_system_api::SystemStateAccessor;
 use ic_types::{
     messages::{CallContextId, CallbackId},
     methods::Callback,
-    ComputeAllocation, Cycles, NumBytes, SubnetId,
+    ComputeAllocation, Cycles, NumBytes,
 };
 
 use std::sync::Arc;
@@ -44,13 +44,9 @@ impl SystemStateAccessorRPC {
 }
 
 impl SystemStateAccessor for SystemStateAccessorRPC {
-    // TODO: EXC-678 NNS subnet id should be removed from the state accessor
-    fn mint_cycles(&self, amount: Cycles, nns_subnet_id: SubnetId) -> HypervisorResult<()> {
+    fn mint_cycles(&self, amount: Cycles) -> HypervisorResult<()> {
         let reply = self.make_call(protocol::syscall::Request::MintCycles(
-            protocol::syscall::MintCyclesRequest {
-                amount,
-                nns_subnet_id,
-            },
+            protocol::syscall::MintCyclesRequest { amount },
         ));
         match reply {
             protocol::syscall::Reply::MintCycles(rep) => rep.result,
