@@ -286,6 +286,12 @@ if [[ $status_202_good == "0" ]]; then
     failure "There were no good requests, check '$experiment_dir/workload-summary.json'"
 elif [[ $bad_percentage -le "5" ]]; then
     success "No more than 5% of requests failed."
+elif [[ "$subnet_type" == "56_nns" ]]; then
+    if [[ $bad_percentage -le "20" ]]; then
+        success "At most 20% of the requests failed."
+    else
+        failure "More than 20% of the requests failed, check '$experiment_dir/workload-summary.json'"
+    fi
 else
     failure "More than 5% of requests failed, check '$experiment_dir/workload-summary.json'"
 fi

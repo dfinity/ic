@@ -631,8 +631,8 @@ nns-workload-test-slo:
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
       export GIT_REVISION
 
-      $SHELL_WRAPPER timeout 3h ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 7200 300 1k 56_nns replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
-      $SHELL_WRAPPER timeout 45m ./testnet/tests/scripts/network_reliability_test.sh "$TESTNET" 900 300 1k 56_nns "$CI_JOB_STAGE/$CI_JOB_NAME"
+      $SHELL_WRAPPER timeout 3h ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 7200 280 1k 56_nns replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
+      $SHELL_WRAPPER timeout 45m ./testnet/tests/scripts/network_reliability_test.sh "$TESTNET" 900 280 1k 56_nns "$CI_JOB_STAGE/$CI_JOB_NAME"
       $SHELL_WRAPPER timeout 45m ./testnet/tests/scripts/nns_registry_changes.sh "$TESTNET" 600 200 56_nns "$CI_JOB_STAGE/$CI_JOB_NAME"
 
 # SCENARIO TEST maximum_capacity_rejoin_script: have 30GiB state in old checkpoint and start from 20GiB of fetched state size and increase by 5GiB each time
