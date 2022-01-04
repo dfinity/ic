@@ -264,6 +264,7 @@ fn allocate_neuron(id: u64) -> Neuron {
         dissolve_state: Some(neuron::DissolveState::WhenDissolvedTimestampSeconds(0)),
         not_for_profit: true,
         joined_community_fund_timestamp_seconds: None,
+        known_neuron_data: None,
     }
 }
 

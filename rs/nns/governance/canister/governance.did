@@ -1,5 +1,6 @@
 type AccountIdentifier = record { hash : vec nat8 };
 type Action = variant {
+  RegisterKnownNeuron : KnownNeuron;
   ManageNeuron : ManageNeuron;
   ExecuteNnsFunction : ExecuteNnsFunction;
   RewardNodeProvider : RewardNodeProvider;
@@ -119,6 +120,12 @@ type GovernanceError = record { error_message : text; error_type : int32 };
 type IncreaseDissolveDelay = record {
   additional_dissolve_delay_seconds : nat32;
 };
+type KnownNeuron = record {
+  id : opt NeuronId;
+  known_neuron_data : opt KnownNeuronData;
+};
+type KnownNeuronData = record { name : text; description : opt text };
+type ListKnownNeuronsResponse = record { known_neurons : vec KnownNeuron };
 type ListNeurons = record {
   neuron_ids : vec nat64;
   include_neurons_readable_by_caller : bool;
@@ -175,6 +182,7 @@ type Neuron = record {
   followees : vec record { int32; Followees };
   neuron_fees_e8s : nat64;
   transfer : opt NeuronStakeTransfer;
+  known_neuron_data : opt KnownNeuronData;
 };
 type NeuronId = record { id : nat64 };
 type NeuronIdOrSubaccount = variant {
@@ -193,6 +201,7 @@ type NeuronInfo = record {
   stake_e8s : nat64;
   joined_community_fund_timestamp_seconds : opt nat64;
   retrieved_at_timestamp_seconds : nat64;
+  known_neuron_data : opt KnownNeuronData;
   voting_power : nat64;
   age_seconds : nat64;
 };
@@ -314,6 +323,7 @@ service : (Governance) -> {
     ) query;
   get_pending_proposals : () -> (vec ProposalInfo) query;
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;
+  list_known_neurons : () -> (ListKnownNeuronsResponse) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
