@@ -23,7 +23,6 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-crypto = { path = "../crypto" }
-ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-base-types = { path = "../types/base_types" }
