@@ -38,7 +38,7 @@ class Experiment3(experiment.Experiment):
 
     def __init__(self):
         """Construct experiment 3."""
-        super().__init__(num_workload_gen=1)
+        super().__init__()
         self.init()
         self.num_canisters = self.get_num_canisters()
 
@@ -46,14 +46,16 @@ class Experiment3(experiment.Experiment):
         """Return the currently installed number of canisters in the subnetwork."""
         return int(
             prometheus.extract_value(
-                prometheus.get_num_canisters_installed(self.testnet, [self.target_nodes[0]], int(time.time()))
+                prometheus.get_num_canisters_installed(
+                    self.testnet, [self.get_machine_to_instrument()], int(time.time())
+                )
             )[0][1]
         )
 
     def get_canister_install_rate(self):
         """Get current rate of canister install calls."""
         return prometheus.extract_value(
-            prometheus.get_canister_install_rate(self.testnet, [self.target_nodes[0]], int(time.time()))
+            prometheus.get_canister_install_rate(self.testnet, [self.get_machine_to_instrument()], int(time.time()))
         )[0][1]
 
     def run_experiment_internal(self, config):
@@ -75,7 +77,7 @@ class Experiment3(experiment.Experiment):
             p = []
             print(f"Installing {FLAGS.batchsize} canisters in parallel .. ")
             for _ in range(FLAGS.batchsize):
-                p.append(self.install_canister_nonblocking(self.target_nodes[0]))
+                p.append(self.install_canister_nonblocking(self.get_machine_to_instrument()))
             for process in p:
                 process.wait()
 

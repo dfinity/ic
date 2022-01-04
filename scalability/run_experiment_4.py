@@ -18,8 +18,8 @@ Measure and determine:
 """
 import sys
 
-import experiment
 import gflags
+import load_experiment
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_bool("use_updates", True, "Issue update calls instead of query calls")
@@ -29,7 +29,7 @@ gflags.DEFINE_integer("max_nodes", 50, "Add machines until given number of nodes
 gflags.DEFINE_integer("subnet_to_grow", 1, "Index of the subnet to grow.")
 
 
-class Experiment4(experiment.Experiment):
+class Experiment4(load_experiment.LoadExperiment):
     """Logic for experiment 4."""
 
     def __init__(self):

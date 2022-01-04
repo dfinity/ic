@@ -31,6 +31,8 @@ import time
 
 import experiment
 import gflags
+import load_experiment
+from termcolor import colored
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_bool("use_updates", False, "Issue update calls instead of query calls")
@@ -39,7 +41,7 @@ gflags.DEFINE_integer("load", 50, "Load in requests per second to issue")
 gflags.DEFINE_integer("num_workload_generators", 5, "Number of workload generators to run")
 
 
-class Experiment1(experiment.Experiment):
+class Experiment1(load_experiment.LoadExperiment):
     """Logic for experiment 1."""
 
     def __init__(self):
@@ -65,7 +67,9 @@ class Experiment1(experiment.Experiment):
         duration = config["duration"] if "duration" in config else 300
 
         if self.use_updates and len(self.target_nodes) < 2:
-            raise Exception("Update requests have to be targeted at all subnet nodes when stressing the system.")
+            print(
+                colored("⚠️  Update requests have to be targeted at all subnet nodes when stressing the system.", "red")
+            )
 
         return self.run_workload_generator(
             self.machines,

@@ -33,16 +33,18 @@ import time
 
 import experiment
 import gflags
+import load_experiment
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_bool("use_updates", False, "Issue update calls instead of query calls")
+gflags.DEFINE_integer("payload_size", 5000000, "Payload size to pass to memory test canister")
+gflags.DEFINE_integer("initial_rps", 20, "Requests per second to issue")
+gflags.DEFINE_integer("duration", 60, "Duration of the benchmark")
 
-PAYLOAD_SIZE = 5000000
-INITIAL_RPS = 20
 CANISTER = "memory-test-canister.wasm"
 
 
-class Experiment2(experiment.Experiment):
+class Experiment2(load_experiment.LoadExperiment):
     """Logic for experiment 2."""
 
     def __init__(self):
@@ -90,11 +92,11 @@ if __name__ == "__main__":
     exp.start_experiment()
     exp.run_experiment(
         {
-            "load_total": INITIAL_RPS,
-            "payload_size": PAYLOAD_SIZE,
-            "duration": 60,
+            "load_total": FLAGS.initial_rps,
+            "payload_size": FLAGS.payload_size,
+            "duration": FLAGS.duration,
         }
     )
-    exp.write_summary_file("experiment_2", {"rps": [INITIAL_RPS]}, [INITIAL_RPS], "requests / s")
+    exp.write_summary_file("experiment_2", {"rps": [FLAGS.initial_rps]}, [FLAGS.initial_rps], "requests / s")
 
     exp.end_experiment()
