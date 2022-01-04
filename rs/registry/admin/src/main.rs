@@ -14,9 +14,7 @@ use ic_canister_client::{Agent, Sender};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto::threshold_sig_public_key_to_der;
 use ic_crypto_utils_basic_sig::conversions::Ed25519SecretKeyConversions;
-use ic_http_utils::file_downloader::{
-    check_file_hash, compute_sha256_hex, extract_tar_gz_into_dir, FileDownloader,
-};
+use ic_http_utils::file_downloader::{check_file_hash, extract_tar_gz_into_dir, FileDownloader};
 use ic_prep_lib::subnet_configuration;
 use ic_types::p2p;
 #[macro_use]
@@ -1245,9 +1243,17 @@ struct ProposeToChangeNnsCanisterCmd {
     /// The ID of the canister to modify
     canister_id: CanisterId,
 
+    #[clap(long)]
+    /// The file system path to the new wasm module to ship.
+    pub wasm_module_path: Option<PathBuf>,
+
+    #[clap(long)]
+    /// The URL of the new wasm module to ship.
+    wasm_module_url: Option<Url>,
+
     #[clap(long, required = true)]
-    /// The path to the new wasm module to ship.
-    pub wasm_module_path: PathBuf,
+    /// The sha256 of the new wasm module to ship.
+    wasm_module_sha256: String,
 
     #[clap(long)]
     /// The path to a binary file containing the initialization args of the
@@ -1275,14 +1281,18 @@ impl ProposalTitleAndPayload<UpgradeRootProposalPayload> for ProposeToChangeNnsC
             Some(title) => title.clone(),
             None => format!(
                 "Upgrade Root Canister to wasm with hash: {}",
-                compute_sha256_hex(&self.wasm_module_path)
-                    .expect("Couldn't compute the hash of the wasm module")
+                &self.wasm_module_sha256
             ),
         }
     }
 
     async fn payload(&self, _: Url) -> UpgradeRootProposalPayload {
-        let wasm_module = read_file_fully(&self.wasm_module_path);
+        let wasm_module = read_wasm_module(
+            &self.wasm_module_path,
+            &self.wasm_module_url,
+            &self.wasm_module_sha256,
+        )
+        .await;
         let module_arg = self
             .arg
             .as_ref()
@@ -1303,15 +1313,18 @@ impl ProposalTitleAndPayload<ChangeNnsCanisterProposalPayload> for ProposeToChan
             Some(title) => title.clone(),
             None => format!(
                 "Upgrade Nns Canister: {} to wasm with hash: {}",
-                self.canister_id,
-                compute_sha256_hex(&self.wasm_module_path)
-                    .expect("Couldn't compute the hash of the wasm module")
+                self.canister_id, &self.wasm_module_sha256
             ),
         }
     }
 
     async fn payload(&self, _: Url) -> ChangeNnsCanisterProposalPayload {
-        let wasm_module = read_file_fully(&self.wasm_module_path);
+        let wasm_module = read_wasm_module(
+            &self.wasm_module_path,
+            &self.wasm_module_url,
+            &self.wasm_module_sha256,
+        )
+        .await;
         let arg = self
             .arg
             .as_ref()
@@ -1364,9 +1377,17 @@ struct ProposeToAddNnsCanisterCmd {
     /// A unique name for the canister.
     name: String,
 
+    #[clap(long)]
+    /// The file system path to the new wasm module to ship.
+    pub wasm_module_path: Option<PathBuf>,
+
+    #[clap(long)]
+    /// The URL of the new wasm module to ship.
+    wasm_module_url: Option<Url>,
+
     #[clap(long, required = true)]
-    /// The path to the new wasm module to ship.
-    pub wasm_module_path: PathBuf,
+    /// The sha256 of the new wasm module to ship.
+    wasm_module_sha256: String,
 
     #[clap(long)]
     /// The path to a binary file containing the initialization args of the
@@ -1397,7 +1418,12 @@ impl ProposalTitleAndPayload<AddNnsCanisterProposalPayload> for ProposeToAddNnsC
     }
 
     async fn payload(&self, _: Url) -> AddNnsCanisterProposalPayload {
-        let wasm_module = read_file_fully(&self.wasm_module_path);
+        let wasm_module = read_wasm_module(
+            &self.wasm_module_path,
+            &self.wasm_module_url,
+            &self.wasm_module_sha256,
+        )
+        .await;
         let arg = self
             .arg
             .clone()
@@ -1926,9 +1952,17 @@ struct SubmitRootProposalToUpgradeGovernanceCanisterCmd {
     #[clap(long)]
     pub test_user_proposer: Option<u8>,
 
-    /// The path to the new wasm module to ship.
+    #[clap(long)]
+    /// The file system path to the new wasm module to ship.
+    pub wasm_module_path: Option<PathBuf>,
+
+    #[clap(long)]
+    /// The URL of the new wasm module to ship.
+    wasm_module_url: Option<Url>,
+
     #[clap(long, required = true)]
-    pub wasm_module_path: PathBuf,
+    /// The sha256 of the new wasm module to ship.
+    wasm_module_sha256: String,
 }
 
 /// Sub-command to vote on a root proposal to upgrade the governance canister.
@@ -2810,6 +2844,47 @@ fn parse_proposal_url(url: Option<Url>) -> String {
     }
 }
 
+/// Reads the wasm module into memory and validates it against a sha256 checksum
+async fn read_wasm_module(
+    wasm_module_path: &Option<PathBuf>,
+    wasm_module_url: &Option<Url>,
+    wasm_resource_sha256: &str,
+) -> Vec<u8> {
+    let wasm_file_path = match (wasm_module_path, wasm_module_url) {
+        (None, None) => {
+            panic!("Must provide either --wasm-module-path PATH or --wasm-module-url URL")
+        }
+        (Some(_), Some(_)) => {
+            panic!("Cannot provide both --wasm-module-path PATH and --wasm-module-url URL")
+        }
+        (Some(path), None) => path.clone(),
+        (None, Some(url)) => download_wasm_module(url).await,
+    };
+
+    check_file_hash(&wasm_file_path, wasm_resource_sha256)
+        .expect("Wasm module's sha256 does not match provided sha256");
+
+    read_file_fully(&wasm_file_path)
+}
+
+async fn download_wasm_module(url: &Url) -> PathBuf {
+    if url.scheme() != "https" {
+        panic!("Wasm module urls must use https");
+    }
+
+    let tmp_dir = tempfile::tempdir().unwrap().into_path();
+    let mut tmp_file = tmp_dir.clone();
+    tmp_file.push("wasm_module.tar.gz");
+
+    let file_downloader = FileDownloader::new(None);
+    file_downloader
+        .download_file(url.as_str(), &tmp_file, None)
+        .await
+        .expect("Failed to download wasm module");
+
+    tmp_file
+}
+
 /// Extracts the ids from a `SubnetListRecord`.
 fn extract_subnet_ids(subnet_list_record: &SubnetListRecord) -> Vec<SubnetId> {
     subnet_list_record
@@ -3377,7 +3452,12 @@ impl RootCanisterClient {
         &self,
         cmd: SubmitRootProposalToUpgradeGovernanceCanisterCmd,
     ) -> Result<(), String> {
-        let wasm_module = read_file_fully(&cmd.wasm_module_path);
+        let wasm_module = read_wasm_module(
+            &cmd.wasm_module_path,
+            &cmd.wasm_module_url,
+            &cmd.wasm_module_sha256,
+        )
+        .await;
         let root_proposal = ChangeNnsCanisterProposalPayload::new(
             true,
             CanisterInstallMode::Upgrade,
