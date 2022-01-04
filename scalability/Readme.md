@@ -26,6 +26,7 @@ The code is as follows:
    - `prometheus.py`: Downloads metrics collected during benchmark execution on Prometheus.
 - `ssh.py`: Helpers to execute commands remotely via SSH
 - `experiment.py`: Base class for experiments. Implements common functionality like installing canisters or running the workload generator.
+   - `load_experiment.py`: Base class for workload generator based experiments. In addition to `experiment.py`, those experiments have built-in support for running the workload generator.
    - `run_experiment_{1,2,3}.py`: Implements the given experiments as described in the IC-562
    - `max-capacity-experiment-1.py`: Maximum capacity variants of the experiments - increases loads iteratively until the system starts to fail. Currently only experiment 1 is implemented.
  - `report.py` and `generate_report.py`: Scripts to generate HTML reports out of collected measurements from experiment executions.
@@ -52,24 +53,32 @@ A clean way of managing dependencies for a python project, is via isolated virtu
   ```
 
 # Deploy IC on the testnet
-In order to properly run experiments here, you should book *two* testnets.
 
-One of the testnets will be the one to run the experiments against. It should ideally be close to what we are running in mainnet.
+Experiments that don't require workload generators (directly inheriting from `experiment.py`) require *one* testnet: 
+the testnet on which we install canisters to benchmark.
+It should ideally be close to the hardware we are running in mainnet.
 Currently, testnets `benchmarklarge`, `benchmarksmall01` and `benchmarksmall02` are good candidates.
 
-Experiments typically also need a second testnet. We deploy workload generator instances on the guest OS images in that testnet.
-That means, that we also initially deploy an IC there, even though we turn off replicas there during experimentation so that
+Experiments using workload generators (based on `load_experiment.py`) require *two* testnets in order to 
+guarantee a consistent setup of the workload generator machines.
+In those tests,
+we deploy workload generator instances on the guest OS images in that second testnet.
+That means, that we also initially deploy an IC there, even though we turn off replicas during experimentation so that
 the workload generator can be started there instead.
 
-This has multiple advantages:
+The use of a second testnet has multiple advantages:
 
  1. We can easily run multiple workload generators, as we have enough machines to deploy to and run the workload generator from.
     This is very important for some of the experiments, as otherwise, the client side of the experiment could become the 
-    bottleneck and not issue enough requests.
+    bottleneck and not issue enough requests (or not issue those requests at a consistent rate).
  2. We get a uniform environment to run the workload generator from (in contrast to some people running it in data centers and others
     from their laptop)
  3. Testnet machines are scrape targets for Prometheus, so we can immediately monitor the client side without additional setup.
 
+`--help` on the experiment file will inform you what the required arguments are 
+(both `--testnet` and `--wg_testnet` or only the former).
+
+Depending on your requirements, boot the testnets as usual.
   ```
   $ testnet/tools/icos_deploy.sh $TESTNET --git-revision $(./gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)
   $ testnet/tools/icos_deploy.sh $WG_TESTNET --git-revision $(./gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)

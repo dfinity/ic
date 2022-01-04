@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import subprocess
 import sys
 
 import gflags
@@ -7,17 +8,12 @@ import vmtools
 
 FLAGS = gflags.FLAGS
 
-gflags.DEFINE_string("ic_workload_generator_bin", None, "ic-workload-generator binary")
-gflags.MarkFlagAsRequired("ic_workload_generator_bin")
 gflags.DEFINE_string("disk_image", None, "Path to disk image to use for VMs")
 gflags.MarkFlagAsRequired("disk_image")
+gflags.DEFINE_string("artifacts_path", "", "Path to the artifacts directory")
 
 
 def main(argv):
-    sys.path.insert(1, ".")
-    import experiment
-    import run_experiment_1
-
     argv = FLAGS(argv)
 
     machines = vmtools.pool().request_machines(
@@ -49,25 +45,65 @@ def main(argv):
     ictools.wait_http_up(ic_url)
     ictools.nns_install(ic_config, ic_url)
 
-    FLAGS.workload_generator_machines = str(machines[1].get_ipv6())
-    FLAGS.targets = str(machines[0].get_ipv6())
-    FLAGS.num_workload_generators = 1
-    FLAGS.nns_url = ic_url
-    FLAGS.no_flamegraphs = True
-    FLAGS.no_prometheus = True
-    FLAGS.skip_generate_report = True
-    experiment.parse_command_line_args()
+    base_arguments = [
+        "--nns_url",
+        ic_url,
+        "--no_flamegraphs=True",
+        "--no_prometheus=True",
+        "--skip_generate_report=True",
+        "--testnet",
+        "none",
+        "--wg_testnet",
+        "none",
+        "--workload_generator_machines",
+        str(machines[1].get_ipv6()),
+        "--targets",
+        str(machines[0].get_ipv6()),
+    ]
 
-    exp = run_experiment_1.Experiment1()
-    exp.start_experiment()
-    failure_rate, t_median, _, _, _, _, num_succ, _ = exp.run_experiment(
-        {
-            "load_total": 10,
-            "duration": 10,
-        }
+    subprocess.run(
+        [
+            "python3",
+            "run_experiment_1.py",
+            "--duration",
+            "10",
+            "--load",
+            "50",
+            "--num_workload_generators",
+            "1",
+        ]
+        + base_arguments,
+        check=True,
     )
 
-    exp.end_experiment()
+    subprocess.run(
+        [
+            "python3",
+            "run_experiment_1.py",
+            "--duration",
+            "10",
+            "--load",
+            "50",
+            "--use_updates=True",
+            "--num_workload_generators",
+            "1",
+        ]
+        + base_arguments,
+        check=True,
+    )
+
+    subprocess.run(
+        [
+            "python3",
+            "run_experiment_2.py",
+            "--duration",
+            "10",
+            "--initial_rps",
+            "10",
+        ]
+        + base_arguments,
+        check=True,
+    )
 
     machines[0].stop()
     machines[1].stop()

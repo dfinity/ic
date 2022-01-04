@@ -81,6 +81,7 @@ e2e-scalability-suite-test:
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e-scalability-suite-test
+    - scalability/
   script:
     - |
       # Make sure the host has mounted necessary devices into the docker container.
@@ -141,15 +142,11 @@ e2e-scalability-suite-test:
           --timeout "$E2E_TEST_TIMEOUT" \
           --disk_image "$GUESTOS_IMG" \
           --ic_admin_bin "${CI_PROJECT_DIR}/artifacts/release/ic-admin" \
-          --ic_workload_generator_bin "${CI_PROJECT_DIR}/artifacts/release/ic-workload-generator" \
           --nns_canisters "${CI_PROJECT_DIR}/artifacts/canisters/" \
           --ic_prep_bin "${CI_PROJECT_DIR}/artifacts/release/ic-prep" \
           --install_nns_bin "${CI_PROJECT_DIR}/artifacts/release/ic-nns-init" \
           --artifacts_path "${CI_PROJECT_DIR}/artifacts/release/" \
-          --log_directory "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-scalability-suite-test" \
-          --testnet none \
-          --wg_testnet none
-
+          --log_directory "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-scalability-suite-test"
 
 guest-os-upgrade-to-self:
   extends:

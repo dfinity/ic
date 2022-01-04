@@ -18,15 +18,15 @@ class Prometheus(metrics.Metric):
         if FLAGS.no_prometheus:
             return
         print("Getting Prometheus metrics .. ")
-        r = get_finalization_rate(exp.testnet, [exp.target_nodes[0]], exp.t_iter_start, exp.t_iter_end)
+        r = get_finalization_rate(exp.testnet, [self.get_machine_to_instrument()], exp.t_iter_start, exp.t_iter_end)
         finalization_rate = extract_value(r)[0]
         r = get_http_request_duration(
-            exp.testnet, [exp.target_nodes[0]], exp.t_iter_start, exp.t_iter_end, exp.request_type
+            exp.testnet, [self.get_machine_to_instrument()], exp.t_iter_start, exp.t_iter_end, exp.request_type
         )
         http_request_duration = extract_value(r)
 
         r = get_http_request_rate(
-            exp.testnet, [exp.target_nodes[0]], exp.t_iter_start, exp.t_iter_end, exp.request_type
+            exp.testnet, [self.get_machine_to_instrument()], exp.t_iter_start, exp.t_iter_end, exp.request_type
         )
         http_request_rate = extract_values(r)
 
