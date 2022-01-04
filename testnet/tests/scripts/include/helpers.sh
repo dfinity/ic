@@ -270,14 +270,18 @@ function wait_for_subnet_to_resume() {
 }
 
 small_subnet_size=13
+XL_subnet_size=55
 small_subnet_finalization_threshold=0.9
 large_subnet_finalization_threshold=0.3
+XL_subnet_finalization_threshold=0.24
 #return treshold value depending on size and index of subnet
 function finalization_rate_threshold() {
     local subnet_id=$1
     local nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')
     local num_nodes=$(ic-admin --nns-url "$nns_url" get-topology | jq -r ".topology.subnets | to_entries[$subnet_id].value.records[0].value.membership | length")
-    if ((num_nodes > small_subnet_size)); then
+    if ((num_nodes > XL_subnet_size)); then
+        threshold=$XL_subnet_finalization_threshold
+    elif ((num_nodes > small_subnet_size)); then
         threshold=$large_subnet_finalization_threshold
     elif ((subnet_id == 0)); then
         threshold=$large_subnet_finalization_threshold
