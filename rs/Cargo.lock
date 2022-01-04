@@ -5419,7 +5419,6 @@ dependencies = [
  "ic-config",
  "ic-crypto",
  "ic-crypto-sha",
- "ic-crypto-tls-interfaces",
  "ic-execution-environment",
  "ic-interfaces",
  "ic-metrics",
