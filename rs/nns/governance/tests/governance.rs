@@ -19,8 +19,8 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 #[cfg(test)]
 use ic_nns_governance::pb::v1::{
     governance::GovernanceCachedMetricsChange, proposal::ActionDesc, BallotChange,
-    BallotInfoChange, GovernanceChange, KnownNeuron, NeuronChange, ProposalChange,
-    ProposalDataChange, TallyChange, WaitForQuietStateDesc,
+    BallotInfoChange, GovernanceChange, NeuronChange, ProposalChange, ProposalDataChange,
+    TallyChange, WaitForQuietStateDesc,
 };
 use ic_nns_governance::{
     governance::{
@@ -60,7 +60,7 @@ use ic_nns_governance::{
         proposal,
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         AddOrRemoveNodeProvider, Ballot, BallotInfo, Empty, ExecuteNnsFunction,
-        Governance as GovernanceProto, GovernanceError, KnownNeuronData, ListNeurons,
+        Governance as GovernanceProto, GovernanceError, KnownNeuron, KnownNeuronData, ListNeurons,
         ListNeuronsResponse, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron,
         NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData, ProposalStatus,
         RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
