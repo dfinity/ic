@@ -39,7 +39,7 @@ fn charge_for_system_api_call<S: SystemApi>(
     canister_id: CanisterId,
     mut caller: &mut Caller<'_, StoreData<S>>,
     system_api_charge: NumInstructions,
-    num_bytes: u64,
+    num_bytes: u32,
 ) -> Result<(), Trap> {
     let num_instructions_global = match caller.data().num_instructions_global {
         None => {
@@ -61,7 +61,7 @@ fn charge_for_system_api_call<S: SystemApi>(
                 .as_context_mut()
                 .data_mut()
                 .system_api
-                .get_num_instructions_from_bytes(NumBytes::from(num_bytes))
+                .get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64))
                 .get() as i64
                 + system_api_charge.get() as i64;
             if current_instructions < fee {
@@ -207,7 +207,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::MSG_ARG_DATA_COPY,
-                    size as u64,
+                    size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, mem| {
                     system_api.ic0_msg_arg_data_copy(dst as u32, offset as u32, size as u32, mem)
@@ -239,7 +239,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::MSG_METHOD_NAME_COPY,
-                    size as u64,
+                    size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_msg_method_name_copy(
@@ -271,7 +271,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::MSG_REPLY_DATA_APPEND,
-                    size as u64,
+                    size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_msg_reply_data_append(src as u32, size as u32, memory)
@@ -307,7 +307,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::MSG_REJECT,
-                    size as u64,
+                    size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_msg_reject(src as u32, size as u32, memory)
@@ -339,7 +339,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::MSG_REJECT_MSG_COPY,
-                    size as u64,
+                    size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_msg_reject_msg_copy(
@@ -415,7 +415,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::DEBUG_PRINT,
-                    length as u64,
+                    length as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_debug_print(offset as u32, length as u32, memory);
@@ -434,7 +434,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::TRAP,
-                    length as u64,
+                    length as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     Err(system_api.ic0_trap(offset as u32, length as u32, memory))
@@ -462,7 +462,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::CALL_SIMPLE,
-                    len as u64,
+                    len as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_call_simple(
@@ -520,7 +520,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::CALL_DATA_APPEND,
-                    size as u64,
+                    size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_call_data_append(src as u32, size as u32, memory)
@@ -604,7 +604,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::STABLE_READ,
-                    size as u64,
+                    size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_stable_read(dst as u32, offset as u32, size as u32, memory)
@@ -622,7 +622,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::STABLE_WRITE,
-                    size as u64,
+                    size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_stable_write(offset as u32, src as u32, size as u32, memory)
@@ -665,7 +665,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::STABLE64_READ,
-                    size as u64,
+                    size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_stable64_read(dst as u64, offset as u64, size as u64, memory)
@@ -682,7 +682,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api_charges::STABLE64_WRITE,
-                    size as u64,
+                    size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_stable64_write(offset as u64, src as u64, size as u64, memory)
