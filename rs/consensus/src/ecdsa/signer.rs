@@ -14,12 +14,12 @@ use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
-    EcdsaBlockReader, EcdsaBlockReaderImpl, EcdsaMessage, EcdsaSigShare, RequestId,
+    EcdsaBlockReader, EcdsaBlockReaderImpl, EcdsaMessage, EcdsaSigShare, EcdsaSignature, RequestId,
 };
-use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
+use ic_types::crypto::canister_threshold_sig::{ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare};
 use ic_types::{Height, NodeId};
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 
@@ -256,6 +256,99 @@ impl EcdsaSigner for EcdsaSignerImpl {
     }
 }
 
+pub(crate) trait EcdsaSignatureBuilder: Send {
+    /// Returns the signatures that can be successfully built from
+    /// the current entries in the ECDSA pool
+    fn get_completed_signatures(
+        &self,
+        ecdsa_pool: &dyn EcdsaPool,
+    ) -> Vec<(RequestId, EcdsaSignature)>;
+}
+
+pub(crate) struct EcdsaSignatureBuilderImpl<'a> {
+    consensus_cache: &'a dyn ConsensusPoolCache,
+    crypto: &'a dyn ConsensusCrypto,
+    metrics: EcdsaSignerMetrics,
+    log: ReplicaLogger,
+}
+
+impl<'a> EcdsaSignatureBuilderImpl<'a> {
+    pub(crate) fn new(
+        consensus_cache: &'a dyn ConsensusPoolCache,
+        crypto: &'a dyn ConsensusCrypto,
+        metrics_registry: MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            consensus_cache,
+            crypto,
+            metrics: EcdsaSignerMetrics::new(metrics_registry),
+            log,
+        }
+    }
+
+    fn crypto_combine_signature_shares(
+        &self,
+        request_id: &RequestId,
+        inputs: &ThresholdEcdsaSigInputs,
+        shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
+    ) -> Option<EcdsaSignature> {
+        ThresholdEcdsaSigVerifier::combine_sig_shares(&*self.crypto, inputs, shares).map_or_else(
+            |error| {
+                warn!(
+                    self.log,
+                    "Failed to combine signature shares: request_id = {:?}, {:?}",
+                    request_id,
+                    error
+                );
+                self.metrics.sign_errors_inc("combine_sig_share");
+                Default::default()
+            },
+            |combined_signature| {
+                self.metrics.sign_metrics_inc("signatures_completed");
+                Some(combined_signature)
+            },
+        )
+    }
+}
+
+impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
+    fn get_completed_signatures(
+        &self,
+        ecdsa_pool: &dyn EcdsaPool,
+    ) -> Vec<(RequestId, EcdsaSignature)> {
+        // RequestId -> signature inputs
+        let block_reader = EcdsaBlockReaderImpl::new(self.consensus_cache.finalized_block());
+        let mut sig_input_map = BTreeMap::new();
+        for (request_id, sig_inputs) in block_reader.requested_signatures() {
+            sig_input_map.insert(request_id.clone(), SignatureState::new(sig_inputs));
+        }
+
+        // Step 1: collect per request signature shares
+        for (_, share) in ecdsa_pool.validated().signature_shares() {
+            let signature_state = match sig_input_map.get_mut(&share.request_id) {
+                Some(state) => state,
+                None => continue,
+            };
+            signature_state.add_signature_share(&share.signer_id, &share.share);
+        }
+
+        // Step 2: combine the per request signature shares
+        let mut completed_signatures = Vec::new();
+        for (request_id, state) in sig_input_map.iter() {
+            if let Some(signature) = self.crypto_combine_signature_shares(
+                request_id,
+                state.signature_inputs,
+                &state.signature_shares,
+            ) {
+                completed_signatures.push((request_id.clone(), signature));
+            }
+        }
+
+        completed_signatures
+    }
+}
+
 /// Specifies how to handle a received share
 #[derive(Eq, PartialEq)]
 enum Action<'a> {
@@ -311,6 +404,31 @@ impl<'a> Debug for Action<'a> {
             Self::Defer => write!(f, "Action::Defer"),
             Self::Drop => write!(f, "Action::Drop"),
         }
+    }
+}
+
+/// Helper to hold the per-signature request state during the signature
+/// building process
+struct SignatureState<'a> {
+    signature_inputs: &'a ThresholdEcdsaSigInputs,
+    signature_shares: BTreeMap<NodeId, ThresholdEcdsaSigShare>,
+}
+
+impl<'a> SignatureState<'a> {
+    fn new(signature_inputs: &'a ThresholdEcdsaSigInputs) -> Self {
+        Self {
+            signature_inputs,
+            signature_shares: BTreeMap::new(),
+        }
+    }
+
+    fn add_signature_share(
+        &mut self,
+        signer_id: &NodeId,
+        signature_share: &ThresholdEcdsaSigShare,
+    ) {
+        self.signature_shares
+            .insert(*signer_id, signature_share.clone());
     }
 }
 
