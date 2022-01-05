@@ -131,7 +131,7 @@ pub fn get_resource_request(
 }
 
 pub fn allocate_resources(ctx: &DriverContext, req: &ResourceRequest) -> FarmResult<ResourceGroup> {
-    let group_name = req.clone().group_name;
+    let group_name = &req.group_name;
     let mut res_group = ResourceGroup::new(group_name.clone());
     for vm_config in req.vm_configs.iter() {
         let name = vm_config.name.clone();
@@ -150,7 +150,7 @@ pub fn allocate_resources(ctx: &DriverContext, req: &ResourceRequest) -> FarmRes
             },
         );
 
-        let ip_addr = ctx.farm.create_vm(&group_name, create_vm_request)?;
+        let ip_addr = ctx.farm.create_vm(group_name, create_vm_request)?;
         info!(ctx.logger, "VM({}) IP-Addr: {}", name, ip_addr);
         res_group.add_vm(AllocatedVm {
             name,

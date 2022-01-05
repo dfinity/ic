@@ -64,6 +64,20 @@ When writing your test, please keep in mind a few important things:
 
 ## A note on the CLI
 
+Note: System Test are being upgraded to run every node as a Virtual Machine using DFINITY farm. In the long-run, instead of the `setup-and-cargo-test.sh` script, the `run-farm-based-system-tests.sh` script should be used.
+
+The Upgraded System Tests are defined in `rs/tests/bin/prod-test-driver.rs`. The API of the tests themselves remains unchanged.
+
+For example, to run all the `pre-master` Upgraded System Tests use:
+
+```bash
+./run-farm-based-system-tests.sh --suite pre_master --git-use-current-commit --log-base-dir $(date +"%Y%m%d") 2>&1 | tee farm.log
+```
+
+Note: This requires the commit to be built by CI/CD, i.e. it must be pushed to the remote and an MR has to be created. If the script can't find artifacts for the current commit, it will fail.
+
+Below is the usage of the "legacy" System Tests.
+
 To run all tests, but still log debug-level messages to `my-log` we run:
 
 ```
