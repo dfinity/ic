@@ -242,7 +242,7 @@ after_script:
   # - Build results are stored in non-persisted /cargo_target
   # - The container is destroyed and all non-persisted data is dropped, including /cargo_target
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:2021-12-23-449e8912-37c6edfe0b1479447ef5ea23897efb0972618007"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:2022-01-04-1f341c0e-618b776c3326db1b9b4005153dd0915225e2f425"
   tags:
     # Build on runners that have following tags
     - dfinity

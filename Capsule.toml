@@ -4,7 +4,7 @@ input_files = [
   "gitlab-ci/src/canisters/wasm-build-functions.sh",
   "gitlab-ci/src/artifacts/collect_core_dumps.sh",
   "hs/analyzer/**/*",
-  "gitlab-ci/src/test_spans/exporter.py",
+  "gitlab-ci/src/test_results/*",
 ]
 
 [system-tests-pre-master]
@@ -14,4 +14,5 @@ input_files = [
   "gitlab-ci/src/test_spans/exporter.py",
   "gitlab-ci/src/artifacts/rclone_download.py",
   "gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh",
+  "gitlab-ci/src/test_results/*",
 ]

@@ -21,7 +21,11 @@ impl ExecutionResult {
                     name: test.test_name,
                     started_at: test.started_at,
                     duration: test.duration,
-                    succeeded: test.test_result.is_success(),
+                    result: if test.test_result.is_success() {
+                        TestResult::Success
+                    } else {
+                        TestResult::Failure
+                    },
                     children: vec![],
                 })
                 .collect()
@@ -31,23 +35,31 @@ impl ExecutionResult {
             .clone()
             .into_iter()
             .map(|pot| {
-                let succeeded = pot.is_success();
+                let result = if pot.is_success() {
+                    TestResult::Success
+                } else {
+                    TestResult::Failure
+                };
                 TestResultNode {
                     name: pot.pot_name,
                     started_at: pot.started_at,
                     duration: pot.duration,
-                    succeeded,
+                    result,
                     children: pot.result.map_or(vec![], to_test_result),
                 }
             })
             .collect();
-        let succeeded = children.iter().all(|p| p.succeeded);
+        let result = if children.iter().all(|p| p.result.is_success()) {
+            TestResult::Success
+        } else {
+            TestResult::Failure
+        };
         TestResultNode {
             name,
             started_at,
             duration: Instant::now() - started_at,
             children,
-            succeeded,
+            result,
         }
     }
 }
@@ -60,7 +72,7 @@ pub struct TestResultNode {
     #[serde(with = "serde_millis")]
     started_at: Instant,
     duration: Duration,
-    succeeded: bool,
+    result: TestResult,
     children: Vec<TestResultNode>,
 }
 

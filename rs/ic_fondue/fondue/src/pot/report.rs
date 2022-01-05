@@ -4,7 +4,7 @@ use mio::unix::pipe;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, Serialize, Deserialize, PartialEq)]
 pub enum TestResult {
     Success,
     Failure,

@@ -123,11 +123,15 @@ DEV_IMG_SHA256=$(curl "${DEV_IMG_SHA256_URL}" | sed -E 's/^([0-9a-fA-F]+)\s.*/\1
 
 # Export spans to Honeycomb if the script is run by a CI pipeline.
 if [[ -n "${CI_JOB_ID:-}" ]] && [[ -n "${ROOT_PIPELINE_ID:-}" ]]; then
-    python3 "${CI_PROJECT_DIR}/gitlab-ci/src/test_spans/exporter.py" \
-        --runtime_stats "${RESULT_FILE}" \
+    python3 "${CI_PROJECT_DIR}/gitlab-ci/src/test_results/honeycomb.py" \
+        --test_results "${RESULT_FILE}" \
         --trace_id "${ROOT_PIPELINE_ID}" \
         --parent_id "${CI_JOB_ID}" \
         --type "farm-based-tests"
 fi
+
+# Print a summary of the executed test suite.
+python3 "${CI_PROJECT_DIR}/gitlab-ci/src/test_results/summary.py" \
+    --test_results "${RESULT_FILE}"
 
 exit $RES

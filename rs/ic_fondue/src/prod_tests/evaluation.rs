@@ -32,6 +32,8 @@ pub enum TestResult {
 /// complete a node and all its children, i.e. threads spawned from the node.
 pub struct TestResultNode {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_name: Option<String>,
     #[serde(with = "serde_millis")]
     pub started_at: Instant,
     pub duration: Duration,
@@ -43,6 +45,7 @@ impl Default for TestResultNode {
     fn default() -> Self {
         Self {
             name: String::default(),
+            group_name: None,
             started_at: Instant::now(),
             duration: Duration::default(),
             result: TestResult::Skipped,
@@ -98,6 +101,7 @@ pub fn evaluate(ctx: &DriverContext, ts: Suite) -> TestResultNode {
     let children = collect_n_children(receiver, pots_num);
     TestResultNode {
         name: ts.name,
+        group_name: None,
         started_at,
         duration: started_at.elapsed(),
         result: infer_result(children.as_slice()),
@@ -213,6 +217,7 @@ fn evaluate_pot_with_group(
 
     Ok(TestResultNode {
         name: pot.name.clone(),
+        group_name: Some(group_name.to_string()),
         started_at,
         duration: started_at.elapsed(),
         result: infer_result(children.as_slice()),
