@@ -37,8 +37,8 @@ export_wasm_canister_paths "${CI_PROJECT_DIR}/artifacts/canisters"
 echo "System tests finished with exit code $RES"
 
 # Export runtime statistics of system tests to Honeycomb.
-python3 "${CI_PROJECT_DIR}"/gitlab-ci/src/test_spans/exporter.py \
-    --runtime_stats "${CI_PROJECT_DIR}"/runtime-stats.json \
+python3 "${CI_PROJECT_DIR}"/gitlab-ci/src/test_results/honeycomb.py \
+    --test_results "${CI_PROJECT_DIR}"/runtime-stats.json \
     --trace_id "$ROOT_PIPELINE_ID" \
     --parent_id "$CI_JOB_ID" \
     --type "system-tests"
