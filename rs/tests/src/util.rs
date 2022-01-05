@@ -727,3 +727,18 @@ pub(crate) async fn assert_all_ready(endpoints: &[&IcEndpoint], ctx: &fondue::po
         e.assert_ready(ctx).await;
     }
 }
+
+/// Converts Canister id into an escaped byte string
+pub(crate) fn escape_for_wat(id: &Principal) -> String {
+    // Quoting from
+    // https://webassembly.github.io/spec/core/text/values.html#text-string:
+    //
+    // "Strings [...] can represent both textual and binary data" and
+    //
+    // "hexadecimal escape sequences ‘∖ℎℎ’, [...] represent raw bytes of the
+    // respective value".
+    id.as_slice().iter().fold(String::new(), |mut res, b| {
+        res.push_str(&format!("\\{:02x}", b));
+        res
+    })
+}

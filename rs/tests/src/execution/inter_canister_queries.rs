@@ -3,11 +3,11 @@ end::catalog[] */
 use crate::{
     types::RejectCode,
     util::{
-        assert_create_agent, assert_reject, create_and_install, get_random_nns_node_endpoint,
-        get_random_node_endpoint, get_random_verified_app_node_endpoint, UniversalCanister,
+        assert_create_agent, assert_reject, create_and_install, escape_for_wat,
+        get_random_nns_node_endpoint, get_random_node_endpoint,
+        get_random_verified_app_node_endpoint, UniversalCanister,
     },
 };
-use ic_agent::export::Principal;
 use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::CanisterId;
@@ -342,19 +342,4 @@ endpoint.assert_ready(ctx).await;
             assert_eq!(result, vec![5]);
         }
     });
-}
-
-/// Converts Canister id into an escaped byte string
-pub(crate) fn escape_for_wat(id: &Principal) -> String {
-    // Quoting from
-    // https://webassembly.github.io/spec/core/text/values.html#text-string:
-    //
-    // "Strings [...] can represent both textual and binary data" and
-    //
-    // "hexadecimal escape sequences ‘∖ℎℎ’, [...] represent raw bytes of the
-    // respective value".
-    id.as_slice().iter().fold(String::new(), |mut res, b| {
-        res.push_str(&format!("\\{:02x}", b));
-        res
-    })
 }

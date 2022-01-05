@@ -4,7 +4,7 @@ set -eExou pipefail
 function usage() {
     cat <<EOF
 Usage:
-  run-farm-based-system-tests.sh [--git-use-current-branch] {test-driver-arguments}
+  run-farm-based-system-tests.sh [--git-use-current-commit] {test-driver-arguments}
 
   Run upgraded system tests [farm-based].
 

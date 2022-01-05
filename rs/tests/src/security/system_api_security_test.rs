@@ -571,20 +571,6 @@ pub fn malicious_intercanister_calls(handle: IcHandle, ctx: &fondue::pot::Contex
     });
 }
 
-fn escape_for_wat(id: &Principal) -> String {
-    // Quoting from
-    // https://webassembly.github.io/spec/core/text/values.html#text-string:
-    //
-    // "Strings [...] can represent both textual and binary data" and
-    //
-    // "hexadecimal escape sequences ‘∖ℎℎ’, [...] represent raw bytes of the
-    // respective value".
-    id.as_slice().iter().fold(String::new(), |mut res, b| {
-        res.push_str(&format!("\\{:02x}", b));
-        res
-    })
-}
-
 #[allow(dead_code)]
 fn get_request_id_hex(request_id: &RequestId) -> String {
     let request_id_bytes = request_id.as_slice();

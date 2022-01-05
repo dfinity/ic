@@ -864,7 +864,7 @@ icos-continuous-upgrade-nightly:
       # Unstructured logs, i.e. those which bypassed the logger and were outputed directly to stdout/stderr,
       # are forwarded to a separate file.
       # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
-      # Hence, the fourth column can be used to distinguish structured from unstructerd logs.
+      # Hence, the fourth column can be used to distinguish structured from unstructured logs.
       $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh" \
         --git-use-current-commit \
         --suite "${SUITE_NAME}" \
