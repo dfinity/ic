@@ -346,6 +346,64 @@ mod tests {
     }
 
     #[test]
+    fn test_charge_instruction_for_data_copy() {
+        with_test_replica_logger(|log| {
+            // This test is to ensure that the callers of `charge_for_system_api_call`
+            // properly convert `size: i32` to u64 and this process does not charge
+            // more than the equivalent of `size` for values >= 2^31.
+            let num_bytes = 2147483648; // equivalent to 2^31
+            let payload = vec![0u8; num_bytes];
+            let wasm = wat2wasm(
+                r#"
+              (module
+                (import "ic0" "trap" (func $trap (param i32) (param i32)))
+
+                (func $func_trap
+                    (call $trap (i32.const 0) (i32.const 2147483648)) ;; equivalent to 2 ^ 31
+                )
+                (memory $memory 65536)
+                (export "memory" (memory $memory))
+                (export "canister_update func_trap" (func $func_trap))
+              )
+            "#,
+            )
+            .unwrap();
+
+            let max_num_instructions = NumInstructions::from(5_000_000_000);
+
+            let embedder = WasmtimeEmbedder::new(Config::default(), log.clone());
+            let output_instrumentation = instrument(&wasm, &InstructionCostTable::new()).unwrap();
+            let api = test_api_for_update(log, None, payload, SubnetType::Application);
+            let mut inst = embedder
+                .new_instance(
+                    canister_test_id(1),
+                    &embedder
+                        .compile(PersistenceType::Sigsegv, &output_instrumentation.binary)
+                        .unwrap(),
+                    &[],
+                    NumWasmPages::from(0),
+                    None,
+                    Some(PageMap::default()),
+                    ModificationTracking::Ignore,
+                    api,
+                )
+                .map_err(|r| r.0)
+                .expect("Failed to create instance");
+            inst.set_num_instructions(max_num_instructions);
+
+            let _result = inst.run(FuncRef::Method(WasmMethod::Update("func_trap".into())));
+
+            // The amount of instructions consumed: 2 constants, trap()
+            // plus equivalent of `num_bytes` in instructions.
+            let instructions_consumed = max_num_instructions - inst.get_num_instructions();
+            assert_eq!(
+                instructions_consumed.get(),
+                3 + (num_bytes / BYTES_PER_INSTRUCTION) as u64
+            )
+        });
+    }
+
+    #[test]
     fn test_running_out_of_instructions() {
         with_test_replica_logger(|log| {
             let subnet_type = SubnetType::Application;
