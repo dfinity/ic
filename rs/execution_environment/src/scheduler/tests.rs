@@ -20,7 +20,9 @@ use ic_replicated_state::{
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
-    metrics::{fetch_histogram_stats, fetch_int_counter, fetch_int_gauge_vec, metric_vec},
+    metrics::{
+        fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
+    },
     mock_time,
     state::{
         arb_replicated_state, get_initial_state, get_running_canister, get_stopped_canister,
@@ -2582,7 +2584,7 @@ fn replicated_state_metrics_nothing_exported() {
     let registry = MetricsRegistry::new();
     let scheduler_metrics = SchedulerMetrics::new(&registry);
 
-    observe_replicated_state_metrics(&state, &scheduler_metrics);
+    observe_replicated_state_metrics(subnet_test_id(1), &state, &scheduler_metrics);
 
     // No canisters in the state. There should be nothing exported.
     assert_eq!(
@@ -3134,7 +3136,7 @@ fn replicated_state_metrics_running_canister() {
     let registry = MetricsRegistry::new();
     let scheduler_metrics = SchedulerMetrics::new(&registry);
 
-    observe_replicated_state_metrics(&state, &scheduler_metrics);
+    observe_replicated_state_metrics(subnet_test_id(1), &state, &scheduler_metrics);
 
     assert_eq!(
         fetch_int_gauge_vec(&registry, "replicated_state_registered_canisters"),
@@ -3182,7 +3184,7 @@ fn replicated_state_metrics_different_canister_statuses() {
     let registry = MetricsRegistry::new();
     let scheduler_metrics = SchedulerMetrics::new(&registry);
 
-    observe_replicated_state_metrics(&state, &scheduler_metrics);
+    observe_replicated_state_metrics(subnet_test_id(1), &state, &scheduler_metrics);
 
     assert_eq!(
         fetch_int_gauge_vec(&registry, "replicated_state_registered_canisters"),
@@ -3191,6 +3193,68 @@ fn replicated_state_metrics_different_canister_statuses() {
             (&[("status", "stopping")], 1),
             (&[("status", "stopped")], 2),
         ]),
+    );
+}
+
+#[test]
+fn replicated_state_metrics_all_canisters_in_routing_table() {
+    let mut state = ReplicatedState::new_rooted_at(
+        subnet_test_id(1),
+        SubnetType::Application,
+        "NOT_USED".into(),
+    );
+
+    state.put_canister_state(get_running_canister(canister_test_id(1)));
+    state.put_canister_state(get_running_canister(canister_test_id(2)));
+
+    let routing_table = Arc::make_mut(&mut state.metadata.network_topology.routing_table);
+    let _ = routing_table.insert(
+        CanisterIdRange {
+            start: canister_test_id(0),
+            end: canister_test_id(3),
+        },
+        subnet_test_id(1),
+    );
+
+    let registry = MetricsRegistry::new();
+    let scheduler_metrics = SchedulerMetrics::new(&registry);
+
+    observe_replicated_state_metrics(subnet_test_id(1), &state, &scheduler_metrics);
+
+    assert_eq!(
+        fetch_int_gauge(&registry, "replicated_state_canisters_not_in_routing_table"),
+        Some(0)
+    );
+}
+
+#[test]
+fn replicated_state_metrics_some_canisters_not_in_routing_table() {
+    let mut state = ReplicatedState::new_rooted_at(
+        subnet_test_id(1),
+        SubnetType::Application,
+        "NOT_USED".into(),
+    );
+
+    state.put_canister_state(get_running_canister(canister_test_id(2)));
+    state.put_canister_state(get_running_canister(canister_test_id(100)));
+
+    let routing_table = Arc::make_mut(&mut state.metadata.network_topology.routing_table);
+    let _ = routing_table.insert(
+        CanisterIdRange {
+            start: canister_test_id(0),
+            end: canister_test_id(5),
+        },
+        subnet_test_id(1),
+    );
+
+    let registry = MetricsRegistry::new();
+    let scheduler_metrics = SchedulerMetrics::new(&registry);
+
+    observe_replicated_state_metrics(subnet_test_id(1), &state, &scheduler_metrics);
+
+    assert_eq!(
+        fetch_int_gauge(&registry, "replicated_state_canisters_not_in_routing_table"),
+        Some(1)
     );
 }
 

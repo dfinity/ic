@@ -824,7 +824,7 @@ impl Scheduler for SchedulerImpl {
             subnet_available_memory =
                 SubnetAvailableMemory::new(self.exec_env.subnet_available_memory(&state));
             self.metrics.execute_round_called.inc();
-            observe_replicated_state_metrics(&state, &self.metrics);
+            observe_replicated_state_metrics(self.own_subnet_id, &state, &self.metrics);
             debug!(
                 round_log,
                 "Executing Round {} @ time {}.  Current heap delta size {}.",
@@ -1233,7 +1233,11 @@ fn execute_canisters_on_thread(
     }
 }
 
-fn observe_replicated_state_metrics(state: &ReplicatedState, metrics: &SchedulerMetrics) {
+fn observe_replicated_state_metrics(
+    own_subnet_id: SubnetId,
+    state: &ReplicatedState,
+    metrics: &SchedulerMetrics,
+) {
     // Observe the number of registered canisters keyed by their status.
     let mut num_running_canisters = 0;
     let mut num_stopping_canisters = 0;
@@ -1248,6 +1252,7 @@ fn observe_replicated_state_metrics(state: &ReplicatedState, metrics: &Scheduler
     let mut queues_response_bytes = 0;
     let mut queues_reservations = 0;
     let mut queues_oversized_requests_extra_bytes = 0;
+    let mut canisters_not_in_routing_table = 0;
 
     state.canisters_iter().for_each(|canister| {
         match canister.status() {
@@ -1267,6 +1272,9 @@ fn observe_replicated_state_metrics(state: &ReplicatedState, metrics: &Scheduler
         queues_response_bytes += queues.responses_size_bytes();
         queues_reservations += queues.reserved_slots();
         queues_oversized_requests_extra_bytes += queues.oversized_requests_extra_bytes();
+        if state.routing_table().route(canister.canister_id().into()) != Some(own_subnet_id) {
+            canisters_not_in_routing_table += 1;
+        }
     });
     let streams_response_bytes = state
         .metadata
@@ -1303,6 +1311,9 @@ fn observe_replicated_state_metrics(state: &ReplicatedState, metrics: &Scheduler
     metrics
         .ingress_history_length
         .set(state.metadata.ingress_history.len() as i64);
+    metrics
+        .canisters_not_in_routing_table
+        .set(canisters_not_in_routing_table);
 }
 
 /// Based on the type of the subnet message to execute, figure out its
