@@ -43,6 +43,15 @@ pub mod v2 {
                 }
             }
         }
+
+        /// Given a hierarchy of regions (e.g. "North America,US,San Francisco"), returns the
+        /// reward rates for the most specific region in this hierarchy that has an entry in the
+        /// rewards table.
+        pub fn get(&self, region: &str) -> Option<NodeRewardRates> {
+            region
+                .split(',')
+                .rfold(None, |acc, sub_region| acc.or_else(|| self.table.get(sub_region).cloned()))
+        }
     }
 
     impl fmt::Display for NodeRewardsTable {
@@ -148,6 +157,35 @@ pub mod v2 {
             assert_eq!(fr.get("default").unwrap().xdr_permyriad_per_node_per_month, 200);
             assert!(fr.get("small").is_none());
             assert!(fr.get("storage_upgrade").is_none());
+        }
+
+        #[test]
+        fn test_get() {
+            let existing_entries = btreemap! {
+                "US".to_string() =>  NodeRewardRates {
+                    rates: btreemap!{
+                        "default".to_string() => NodeRewardRate {
+                            xdr_permyriad_per_node_per_month: 240,
+                        },
+                    }
+                },
+                "NY".to_string() => NodeRewardRates {
+                    rates: btreemap!{
+                        "default".to_string() => NodeRewardRate {
+                            xdr_permyriad_per_node_per_month: 677,
+                        },
+                    }
+                }
+            };
+
+            let table = NodeRewardsTable {
+                table: existing_entries
+            };
+
+            assert_eq!(table.get("US,OR").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 240);
+            assert_eq!(table.get("US").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 240);
+            assert_eq!(table.get("US,NY").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 677);
+            assert_eq!(table.get("NY").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 677);
         }
     }
 }

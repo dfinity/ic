@@ -55,7 +55,7 @@ impl Registry {
                     .clone();
                 let dc = decode_or_panic::<DataCenterRecord>(dc_record_bytes);
                 let region = &dc.region;
-                let reward_rates = rewards_table.table.get(region).ok_or_else(|| {
+                let reward_rates = rewards_table.get(region).ok_or_else(|| {
                     format!(
                         "The Node Rewards Table does not have an entry for region '{}'",
                         region

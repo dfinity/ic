@@ -215,19 +215,19 @@ async fn add_data_centers(nns_canisters: &NnsCanisters<'_>) {
     let data_centers = vec![
         DataCenterRecord {
             id: "AN1".into(),
-            region: "BEL".into(),
+            region: "EU,Belgium,Antwerp".into(),
             owner: "Alice".into(),
             gps: None,
         },
         DataCenterRecord {
             id: "BC1".into(),
-            region: "CAN".into(),
+            region: "Canada".into(),
             owner: "Bob".into(),
             gps: None,
         },
         DataCenterRecord {
             id: "FM1".into(),
-            region: "Fremont".into(),
+            region: "US,Fremont".into(),
             owner: "Carol".into(),
             gps: None,
         },
@@ -265,7 +265,7 @@ async fn add_data_centers(nns_canisters: &NnsCanisters<'_>) {
 /// Add a test rewards table to the Registry
 async fn add_node_rewards_table(nns_canisters: &NnsCanisters<'_>) {
     let new_entries = btreemap! {
-        "BEL".to_string() =>  NodeRewardRates {
+        "Antwerp".to_string() =>  NodeRewardRates {
             rates: btreemap!{
                 "default".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 24_000,
@@ -275,7 +275,7 @@ async fn add_node_rewards_table(nns_canisters: &NnsCanisters<'_>) {
                 },
             }
         },
-        "CAN".to_string() =>  NodeRewardRates {
+        "Canada".to_string() =>  NodeRewardRates {
             rates: btreemap!{
                 "default".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 68_000,
