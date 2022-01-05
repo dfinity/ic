@@ -174,7 +174,9 @@ use crate::consensus::{
 use crate::ecdsa::pre_signer::{
     EcdsaPreSigner, EcdsaPreSignerImpl, EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl,
 };
-use crate::ecdsa::signer::{EcdsaSigner, EcdsaSignerImpl};
+use crate::ecdsa::signer::{
+    EcdsaSignatureBuilder, EcdsaSignatureBuilderImpl, EcdsaSigner, EcdsaSignerImpl,
+};
 
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces::ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaGossip, EcdsaPool};
@@ -182,7 +184,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
-    consensus::ecdsa::{EcdsaBlockReader, EcdsaBlockReaderImpl},
+    consensus::ecdsa::{EcdsaBlockReader, EcdsaBlockReaderImpl, EcdsaSignature, RequestId},
     crypto::canister_threshold_sig::idkg::IDkgTranscript,
     Height, NodeId,
 };
@@ -338,6 +340,18 @@ pub(crate) fn get_completed_transcripts(
     let metrics = EcdsaPayloadMetrics::new(metrics_registry);
     let builder = EcdsaTranscriptBuilderImpl::new(consensus_cache, crypto, &metrics, logger);
     builder.get_completed_transcripts(ecdsa_pool)
+}
+
+/// Payload builder interface to collect the completed signatures.
+pub(crate) fn get_completed_signatures(
+    consensus_cache: &dyn ConsensusPoolCache,
+    ecdsa_pool: &dyn EcdsaPool,
+    crypto: &dyn ConsensusCrypto,
+    metrics_registry: MetricsRegistry,
+    logger: ReplicaLogger,
+) -> Vec<(RequestId, EcdsaSignature)> {
+    let builder = EcdsaSignatureBuilderImpl::new(consensus_cache, crypto, metrics_registry, logger);
+    builder.get_completed_signatures(ecdsa_pool)
 }
 
 #[cfg(test)]

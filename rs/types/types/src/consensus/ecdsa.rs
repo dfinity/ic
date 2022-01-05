@@ -15,14 +15,15 @@ use crate::crypto::{
         IDkgDealing, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptParams, IDkgTranscriptType,
     },
     canister_threshold_sig::{
-        PreSignatureQuadruple, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+        PreSignatureQuadruple, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+        ThresholdEcdsaSigShare,
     },
-    CombinedMultiSigOf, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
+    CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
 };
 use crate::{Height, NodeId};
 use phantom_newtype::Id;
 
-pub type EcdsaSignature = CombinedMultiSigOf<IDkgDealing>;
+pub type EcdsaSignature = ThresholdEcdsaCombinedSignature;
 
 /// The payload information necessary for ECDSA threshold signatures, that is
 /// published on every consensus round. It represents the current state of
