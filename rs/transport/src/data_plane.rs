@@ -185,6 +185,16 @@ impl TransportImpl {
                 state.on_disconnect(flow_id).await;
                 return;
             }
+            // Flush the write
+            if let Err(e) = writer.flush().await {
+                warn!(
+                    state.log,
+                    "DataPlane::flow_write_task(): failed to flush: flow: {:?}, {:?}", flow_id, e,
+                );
+                state.on_disconnect(flow_id).await;
+                return;
+            }
+
             state
                 .data_plane_metrics
                 .socket_write_time_msec

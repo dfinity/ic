@@ -15,6 +15,7 @@ use std::sync::Arc;
 use tokio::net::TcpStream;
 
 // TODO (CRP-772): Simplify handshake code by moving cert equality check to CSP
+#[allow(unused)]
 pub async fn perform_tls_server_handshake<C: CspTlsServerHandshake>(
     csp: &C,
     self_node_id: NodeId,
@@ -76,6 +77,7 @@ pub async fn perform_tls_server_handshake_temp_with_optional_client_auth<
     }
 }
 
+#[allow(unused)]
 pub async fn perform_tls_server_handshake_without_client_auth<C: CspTlsServerHandshake>(
     csp: &C,
     self_node_id: NodeId,
