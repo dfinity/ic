@@ -55,6 +55,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) execution_round_failed_heartbeat_executions: IntCounter,
     pub(super) canister_heap_delta_debits: Histogram,
     pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
+    pub(super) canisters_not_in_routing_table: IntGauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -412,6 +413,10 @@ impl SchedulerMetrics {
                 "Number of canisters that were heap delta rate limited in a given round.",
                 // 0, 1, 2, 5, …, 1000, 2000, 5000
                 decimal_buckets_with_zero(0, 3),
+            ),
+            canisters_not_in_routing_table: metrics_registry.int_gauge(
+                "replicated_state_canisters_not_in_routing_table",
+                "Number of canisters in the state not assigned to the subnet range in the routing table."
             ),
         }
     }
