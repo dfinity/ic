@@ -1,11 +1,16 @@
-use ic_embedders::wasm_utils::instrumentation::{instrument, InstructionCostTable, Segments};
+use ic_embedders::wasm_utils::{
+    instrumentation::{
+        export_additional_symbols, instrument, ExportModuleData, InstructionCostTable, Segments,
+    },
+    validation::RESERVED_SYMBOLS,
+};
 use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_wasm_types::BinaryEncodedWasm;
 use insta::assert_snapshot;
 use parity_wasm::elements::{self, Module};
 use pretty_assertions::assert_eq;
 use std::fs;
-use wabt::Features;
+use wabt::{wat2wasm, Features};
 
 /// Assert what the output of wasm instrumentation should be using the [`insta`]
 /// crate.
@@ -185,4 +190,27 @@ fn test_chunks_to_pages() {
     assert_eq!(pages[2].0, PageIndex::new(2));
     assert_eq!(&pages[2].1[0..100], &[3; 100]);
     assert_eq!(&pages[2].1[100..PAGE_SIZE], &[0; PAGE_SIZE - 100]);
+}
+
+#[test]
+fn test_exports_only_reserved_symbols() {
+    let wasm = wat2wasm(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+                (func $test
+                    (call $msg_reply)
+                )
+        )"#,
+    )
+    .map(BinaryEncodedWasm::new)
+    .unwrap();
+
+    let module = parity_wasm::deserialize_buffer::<Module>(wasm.as_slice()).unwrap();
+    let module = export_additional_symbols(module, &ExportModuleData::default()).unwrap();
+
+    let exports = module.export_section().unwrap().entries();
+    for export in exports {
+        assert!(RESERVED_SYMBOLS.contains(&export.field()))
+    }
 }

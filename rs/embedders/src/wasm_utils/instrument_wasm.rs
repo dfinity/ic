@@ -1,6 +1,7 @@
 pub mod errors;
 pub mod instrumentation;
 pub mod validation;
+pub mod wasm_module_builder;
 
 use ic_wasm_types::BinaryEncodedWasm;
 use instrumentation::{instrument, InstructionCostTable, InstrumentationOutput};

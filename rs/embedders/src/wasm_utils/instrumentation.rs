@@ -106,7 +106,7 @@
 //! bound by the length of the longest execution path consisting of
 //! non-reentrant basic blocks.
 
-use super::errors::into_parity_wasm_error;
+use super::{errors::into_parity_wasm_error, wasm_module_builder::WasmModuleBuilder};
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
@@ -383,6 +383,16 @@ pub struct InstrumentationOutput {
     pub binary: BinaryEncodedWasm,
 }
 
+#[derive(Default)]
+pub struct ExportModuleData {
+    pub out_of_instructions_fn: u32,
+    pub instructions_counter_ix: u32,
+    pub set_counter_fn: u32,
+    pub get_counter_fn: u32,
+    pub decr_instruction_counter_fn: u32,
+    pub start_fn_ix: Option<u32>,
+}
+
 /// Takes a Wasm binary and inserts the instructions metering and memory grow
 /// instrumentation.
 ///
@@ -402,13 +412,16 @@ pub fn instrument(
     let num_functions = module.functions_space() as u32;
     let num_globals = module.globals_space() as u32;
 
-    let out_of_instructions_fn = 0; // because it's the first import
-    let instructions_counter_ix = num_globals;
-    let set_counter_fn = num_functions;
-    let get_counter_fn = num_functions + 1;
-    let decr_instruction_counter_fn = num_functions + 2;
-    let start_fn_ix = module.start_section();
-    if start_fn_ix.is_some() {
+    let export_module_data = ExportModuleData {
+        out_of_instructions_fn: 0, // because it's the first import
+        instructions_counter_ix: num_globals,
+        set_counter_fn: num_functions,
+        get_counter_fn: num_functions + 1,
+        decr_instruction_counter_fn: num_functions + 2,
+        start_fn_ix: module.start_section(),
+    };
+
+    if export_module_data.start_fn_ix.is_some() {
         module.clear_start_section();
     }
 
@@ -417,13 +430,7 @@ pub fn instrument(
         if let Some(code_section) = module.code_section_mut() {
             for func_body in code_section.bodies_mut().iter_mut() {
                 let code = func_body.code_mut();
-                inject_metering(
-                    code,
-                    instruction_cost_table,
-                    instructions_counter_ix,
-                    out_of_instructions_fn,
-                    decr_instruction_counter_fn,
-                );
+                inject_metering(code, instruction_cost_table, &export_module_data);
             }
         }
     }
@@ -454,101 +461,7 @@ pub fn instrument(
         }
     }
 
-    // pull out the data from the data section
-    let data = Segments::from(get_data(module.sections_mut()));
-
-    let mut mbuilder = builder::from_module(module);
-
-    // push canister counter_set
-    mbuilder.push_function(
-        builder::function()
-            .with_signature(builder::signature().with_param(ValueType::I64).build_sig())
-            .body()
-            .with_instructions(Instructions::new(vec![
-                Instruction::GetLocal(0),
-                Instruction::SetGlobal(instructions_counter_ix),
-                Instruction::End,
-            ]))
-            .build()
-            .build(),
-    );
-    mbuilder.push_export(ExportEntry::new(
-        "canister counter_set".to_string(),
-        Internal::Function(set_counter_fn),
-    ));
-
-    // push canister counter_get
-    mbuilder.push_function(
-        builder::function()
-            .with_signature(builder::signature().with_result(ValueType::I64).build_sig())
-            .body()
-            .with_instructions(Instructions::new(vec![
-                Instruction::GetGlobal(instructions_counter_ix),
-                Instruction::End,
-            ]))
-            .build()
-            .build(),
-    );
-    mbuilder.push_export(ExportEntry::new(
-        "canister counter_get".to_string(),
-        Internal::Function(get_counter_fn),
-    ));
-
-    // push function to decrement the instruction counter
-    mbuilder.push_function(
-        builder::function()
-            .with_signature(
-                builder::signature()
-                    .with_param(ValueType::I32) // amount to decrement by
-                    .with_result(ValueType::I32) // argument is returned so stack remains unchanged
-                    .build_sig(),
-            )
-            .body()
-            .with_instructions(Instructions::new(vec![
-                // Call out_of_instructions if count is already negative.
-                Instruction::GetGlobal(instructions_counter_ix),
-                Instruction::GetLocal(0),
-                Instruction::I64ExtendUI32,
-                Instruction::I64LtS,
-                Instruction::If(BlockType::NoResult),
-                Instruction::Call(out_of_instructions_fn),
-                Instruction::End,
-                // Subtract the parameter amount from the instruction counter
-                Instruction::GetGlobal(instructions_counter_ix),
-                Instruction::GetLocal(0),
-                Instruction::I64ExtendUI32,
-                Instruction::I64Sub,
-                Instruction::SetGlobal(instructions_counter_ix),
-                // Return the original param so this function doesn't alter the stack
-                Instruction::GetLocal(0),
-                Instruction::End,
-            ]))
-            .build()
-            .build(),
-    );
-
-    // globals must be exported to be accessible to hypervisor or persisted
-    mbuilder.push_export(ExportEntry::new(
-        "canister counter_instructions".to_string(),
-        Internal::Global(instructions_counter_ix),
-    ));
-
-    if let Some(ix) = start_fn_ix {
-        // push canister_start
-        mbuilder.push_export(ExportEntry::new(
-            "canister_start".to_string(),
-            Internal::Function(ix),
-        ));
-    }
-
-    // push the instructions counter
-    let module = mbuilder
-        .with_global(GlobalEntry::new(
-            GlobalType::new(ValueType::I64, true),
-            InitExpr::new(vec![Instruction::I64Const(0), Instruction::End]),
-        ))
-        .build();
-
+    let mut module = export_additional_symbols(module, &export_module_data)?;
     let exported_functions = module
         .export_section()
         .unwrap() // because we definitely push exports above
@@ -573,6 +486,8 @@ pub fn instrument(
         }
     };
 
+    // pull out the data from the data section
+    let data = Segments::from(get_data(module.sections_mut()));
     data.validate(NumWasmPages::from(limits.0 as usize))?;
 
     let result = parity_wasm::serialize(module).map_err(|err| {
@@ -584,6 +499,106 @@ pub fn instrument(
         data,
         binary: BinaryEncodedWasm::new(result),
     })
+}
+
+// Helper function used by instrumentation to export additional symbols.
+//
+// Returns the new module or an error if a symbol is not reserved.
+#[doc(hidden)] // pub for usage in tests
+pub fn export_additional_symbols(
+    module: Module,
+    export_module_data: &ExportModuleData,
+) -> Result<Module, WasmInstrumentationError> {
+    let mut mbuilder = WasmModuleBuilder::new(builder::from_module(module));
+
+    // push canister counter_set
+    mbuilder.push_function(
+        builder::function()
+            .with_signature(builder::signature().with_param(ValueType::I64).build_sig())
+            .body()
+            .with_instructions(Instructions::new(vec![
+                Instruction::GetLocal(0),
+                Instruction::SetGlobal(export_module_data.instructions_counter_ix),
+                Instruction::End,
+            ]))
+            .build()
+            .build(),
+    );
+    mbuilder.push_export(
+        "canister counter_set",
+        Internal::Function(export_module_data.set_counter_fn),
+    )?;
+
+    // push canister counter_get
+    mbuilder.push_function(
+        builder::function()
+            .with_signature(builder::signature().with_result(ValueType::I64).build_sig())
+            .body()
+            .with_instructions(Instructions::new(vec![
+                Instruction::GetGlobal(export_module_data.instructions_counter_ix),
+                Instruction::End,
+            ]))
+            .build()
+            .build(),
+    );
+    mbuilder.push_export(
+        "canister counter_get",
+        Internal::Function(export_module_data.get_counter_fn),
+    )?;
+
+    // push function to decrement the instruction counter
+    mbuilder.push_function(
+        builder::function()
+            .with_signature(
+                builder::signature()
+                    .with_param(ValueType::I32) // amount to decrement by
+                    .with_result(ValueType::I32) // argument is returned so stack remains unchanged
+                    .build_sig(),
+            )
+            .body()
+            .with_instructions(Instructions::new(vec![
+                // Call out_of_instructions if count is already negative.
+                Instruction::GetGlobal(export_module_data.instructions_counter_ix),
+                Instruction::GetLocal(0),
+                Instruction::I64ExtendUI32,
+                Instruction::I64LtS,
+                Instruction::If(BlockType::NoResult),
+                Instruction::Call(export_module_data.out_of_instructions_fn),
+                Instruction::End,
+                // Subtract the parameter amount from the instruction counter
+                Instruction::GetGlobal(export_module_data.instructions_counter_ix),
+                Instruction::GetLocal(0),
+                Instruction::I64ExtendUI32,
+                Instruction::I64Sub,
+                Instruction::SetGlobal(export_module_data.instructions_counter_ix),
+                // Return the original param so this function doesn't alter the stack
+                Instruction::GetLocal(0),
+                Instruction::End,
+            ]))
+            .build()
+            .build(),
+    );
+
+    // globals must be exported to be accessible to hypervisor or persisted
+    mbuilder.push_export(
+        "canister counter_instructions",
+        Internal::Global(export_module_data.instructions_counter_ix),
+    )?;
+
+    if let Some(ix) = export_module_data.start_fn_ix {
+        // push canister_start
+        mbuilder.push_export("canister_start", Internal::Function(ix))?;
+    }
+
+    // push the instructions counter
+    let module = mbuilder
+        .with_global(GlobalEntry::new(
+            GlobalType::new(ValueType::I64, true),
+            InitExpr::new(vec![Instruction::I64Const(0), Instruction::End]),
+        ))
+        .build();
+
+    Ok(module)
 }
 
 // Represents a hint about the context of each static cost injection point in
@@ -651,9 +666,7 @@ impl InjectionPoint {
 fn inject_metering(
     code: &mut Instructions,
     instruction_cost_table: &InstructionCostTable,
-    instructions_counter_ix: u32,
-    out_of_instructions_fn: u32,
-    decr_instruction_counter_fn: u32,
+    export_data_module: &ExportModuleData,
 ) {
     let points = injections(code.elements(), instruction_cost_table);
     let points = points.iter().filter(|point| match point.cost_detail {
@@ -672,24 +685,26 @@ fn inject_metering(
         match point.cost_detail {
             InjectionPointCostDetail::StaticCost { scope, cost } => {
                 elems.extend_from_slice(&[
-                    Instruction::GetGlobal(instructions_counter_ix),
+                    Instruction::GetGlobal(export_data_module.instructions_counter_ix),
                     Instruction::I64Const(cost as i64),
                     Instruction::I64Sub,
-                    Instruction::SetGlobal(instructions_counter_ix),
+                    Instruction::SetGlobal(export_data_module.instructions_counter_ix),
                 ]);
                 if scope == Scope::ReentrantBlockStart {
                     elems.extend_from_slice(&[
-                        Instruction::GetGlobal(instructions_counter_ix),
+                        Instruction::GetGlobal(export_data_module.instructions_counter_ix),
                         Instruction::I64Const(0),
                         Instruction::I64LtS,
                         Instruction::If(BlockType::NoResult),
-                        Instruction::Call(out_of_instructions_fn),
+                        Instruction::Call(export_data_module.out_of_instructions_fn),
                         Instruction::End,
                     ]);
                 }
             }
             InjectionPointCostDetail::DynamicCost => {
-                elems.extend_from_slice(&[Instruction::Call(decr_instruction_counter_fn)]);
+                elems.extend_from_slice(&[Instruction::Call(
+                    export_data_module.decr_instruction_counter_fn,
+                )]);
             }
         }
         last_injection_position = point.position;
