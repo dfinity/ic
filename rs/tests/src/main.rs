@@ -39,7 +39,6 @@ use ic_tests::registry_authentication_test;
 use ic_tests::replica_determinism_test;
 use ic_tests::request_auth_malicious_replica_test;
 use ic_tests::request_signature_test;
-use ic_tests::rosetta_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::security::system_api_security_test;
 use ic_tests::subnet_creation;
@@ -66,7 +65,6 @@ fn all_pots() -> Vec<fondue::pot::Pot<IcManager>> {
         consensus_liveness_with_equivocation_pot(),
         consensus_safety_pot(),
         cow_safety_pot(),
-        rosetta_pot(),
         execution_config_is_none_pot(),
         nns_uninstall_pot(),
         nns_subnet_creation_pot(),
@@ -208,16 +206,6 @@ fn nns_subnet_creation_pot() -> pot::Pot<IcManager> {
         "nns_subnet_creation_pot",
         subnet_creation::config(),
         steps! {subnet_creation::create_subnet_with_assigned_nodes_fails}
-    )
-}
-
-fn rosetta_pot() -> pot::Pot<IcManager> {
-    composable!(
-        "rosetta_pot",
-        rosetta_test::config(),
-        steps! {
-            rosetta_test::test_everything
-        }
     )
 }
 
