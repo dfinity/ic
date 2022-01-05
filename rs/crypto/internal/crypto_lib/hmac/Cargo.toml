@@ -1,0 +1,11 @@
+[package]
+name = "ic-crypto-internal-hmac"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+ic-crypto-internal-sha2 = { path = "../sha2" }
+
+[dev-dependencies]
+wycheproof = "0.4"
+hex = "0.4"

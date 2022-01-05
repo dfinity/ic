@@ -3827,6 +3827,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-internal-hmac"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "ic-crypto-internal-sha2",
+ "wycheproof",
+]
+
+[[package]]
 name = "ic-crypto-internal-logmon"
 version = "0.8.0"
 dependencies = [
