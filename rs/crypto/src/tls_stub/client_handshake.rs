@@ -11,6 +11,7 @@ use ic_types::{NodeId, RegistryVersion};
 use std::sync::Arc;
 use tokio::net::TcpStream;
 
+#[allow(unused)]
 pub async fn perform_tls_client_handshake<C: CspTlsClientHandshake>(
     csp: &C,
     self_node_id: NodeId,

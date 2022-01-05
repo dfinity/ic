@@ -122,11 +122,7 @@ impl Server {
 
         let (tls_stream, authenticated_node) = self
             .crypto
-            .perform_tls_server_handshake_with_rustls(
-                tcp_stream,
-                self.allowed_clients.clone(),
-                REG_V1,
-            )
+            .perform_tls_server_handshake(tcp_stream, self.allowed_clients.clone(), REG_V1)
             .await?;
         let (mut rh, mut wh) = tls_stream.split();
 
@@ -142,7 +138,7 @@ impl Server {
 
         let tls_stream = self
             .crypto
-            .perform_tls_server_handshake_without_client_auth_with_rustls(tcp_stream, REG_V1)
+            .perform_tls_server_handshake_without_client_auth(tcp_stream, REG_V1)
             .await?;
         let (mut rh, mut wh) = tls_stream.split();
 

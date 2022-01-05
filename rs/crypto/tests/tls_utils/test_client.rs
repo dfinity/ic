@@ -77,7 +77,7 @@ impl Client {
 
         let tls_stream = self
             .crypto
-            .perform_tls_client_handshake_with_rustls(tcp_stream, self.server_node_id, REG_V1)
+            .perform_tls_client_handshake(tcp_stream, self.server_node_id, REG_V1)
             .await?;
         let (mut rh, mut wh) = tls_stream.split();
 
