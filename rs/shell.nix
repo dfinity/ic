@@ -61,6 +61,12 @@ in
         pkgs.cargo-tarpaulin
       ];
 
+      buildInputs = [
+        # Needed by gitlab-ci/src/test_results/summary.py
+        pkgs.python3Packages.termcolor
+        pkgs.python3Packages.requests
+      ];
+
       RUST_SRC_PATH = pkgs.rustPlatform.rustcSrc;
 
       # Only applicable to nix-shell users, remember to update the production value in:
