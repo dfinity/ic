@@ -155,7 +155,7 @@ class Collector:
 
         job_id = os.environ.get("CI_JOB_ID")
         job_name = os.environ.get("CI_JOB_NAME")
-        if job_id and job_name and job_name != "docker-build-ic":
+        if job_id and job_name and not job_name.startswith("docker-build-ic"):
             sh(
                 "buildevents",
                 "cmd",

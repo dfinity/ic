@@ -1,13 +1,33 @@
-docker-build-ic:
+docker-build-ic-bin:
   extends:
     - .ubuntu-nix-docker
     - .rules-parent-pipeline
   needs: []
-  stage: test
+  stage: cargo-build
   artifacts:
     paths:
       - artifacts
   script:
     - |
       set -euo pipefail
-      gitlab-ci/tools/docker-build-ic
+      gitlab-ci/tools/docker-build-ic -a=b,c
+
+docker-build-ic-img:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline
+  needs:
+    - cargo-build-canisters
+    - cargo-build-release-linux-native
+  dependencies: []
+  stage: guest-os-build
+  artifacts:
+    paths:
+      - artifacts
+  script:
+    - |
+      set -euo pipefail
+      gitlab-ci/tools/docker-build-ic -a=i
+      # we only collect artifacts/docker-build-ic/icos
+      rm -rf artifacts/docker-build-ic/{canisters,release}
+      rm -rf artifacts/{canisters,release}

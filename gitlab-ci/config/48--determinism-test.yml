@@ -5,7 +5,7 @@ build-determinism-binaries:
   stage: build-determinism-test
   needs:
     - cargo-build-release-linux-native
-    - docker-build-ic
+    - docker-build-ic-bin
   script:
     - |
       set -eux
@@ -45,7 +45,7 @@ build-determinism-canisters:
   stage: build-determinism-test
   needs:
     - cargo-build-canisters
-    - docker-build-ic
+    - docker-build-ic-bin
   script:
     - |
       set -eux
@@ -78,7 +78,7 @@ build-determinism-update-img:
   stage: build-determinism-test
   needs:
     - guest-os-updateimg-build
-    - docker-build-ic
+    - docker-build-ic-img
   script:
     - |
       set -eux
