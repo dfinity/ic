@@ -265,6 +265,7 @@ pub trait ConsensusCrypto:
     + SignVerify<NotarizationContent, MultiSignatureShare<NotarizationContent>, RegistryVersion>
     + SignVerify<FinalizationContent, MultiSignatureShare<FinalizationContent>, RegistryVersion>
     + SignVerify<EcdsaDealing, MultiSignatureShare<EcdsaDealing>, RegistryVersion>
+    + SignVerify<EcdsaDealing, BasicSignature<EcdsaDealing>, RegistryVersion>
     + SignVerify<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>, NiDkgId>
     + SignVerify<RandomTapeContent, ThresholdSignatureShare<RandomTapeContent>, NiDkgId>
     + SignVerify<CatchUpContent, ThresholdSignatureShare<CatchUpContent>, NiDkgId>

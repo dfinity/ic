@@ -19,7 +19,7 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
-    EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash, EcdsaSigShare,
+    EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash, EcdsaSigShare, EcdsaSignedDealing,
 };
 use ic_types::crypto::CryptoHashOf;
 
@@ -73,7 +73,7 @@ impl<T: EcdsaObject> EcdsaObjectPool<T> {
 /// object pools. The main role is to route the operations
 /// to the appropriate object pool.
 struct EcdsaPoolSectionImpl {
-    dealings: EcdsaObjectPool<EcdsaDealing>,
+    signed_dealings: EcdsaObjectPool<EcdsaSignedDealing>,
     dealing_support: EcdsaObjectPool<EcdsaDealingSupport>,
     sig_shares: EcdsaObjectPool<EcdsaSigShare>,
 }
@@ -82,7 +82,7 @@ impl EcdsaPoolSectionImpl {
     fn new(metrics_registry: MetricsRegistry, pool: &str, pool_type: &str) -> Self {
         let metrics = PoolMetrics::new(metrics_registry, pool, pool_type);
         Self {
-            dealings: EcdsaObjectPool::new(metrics.clone()),
+            signed_dealings: EcdsaObjectPool::new(metrics.clone()),
             dealing_support: EcdsaObjectPool::new(metrics.clone()),
             sig_shares: EcdsaObjectPool::new(metrics),
         }
@@ -90,7 +90,7 @@ impl EcdsaPoolSectionImpl {
 
     fn insert_object(&mut self, message: EcdsaMessage) {
         match message {
-            EcdsaMessage::EcdsaDealing(object) => self.dealings.insert_object(object),
+            EcdsaMessage::EcdsaSignedDealing(object) => self.signed_dealings.insert_object(object),
             EcdsaMessage::EcdsaDealingSupport(object) => self.dealing_support.insert_object(object),
             EcdsaMessage::EcdsaSigShare(object) => self.sig_shares.insert_object(object),
         }
@@ -98,9 +98,9 @@ impl EcdsaPoolSectionImpl {
 
     fn get_object(&self, id: &EcdsaMessageHash) -> Option<EcdsaMessage> {
         match id {
-            EcdsaMessageHash::EcdsaDealing(_) => self
-                .dealings
-                .get_object(&EcdsaDealing::key_from_outer_hash(id))
+            EcdsaMessageHash::EcdsaSignedDealing(_) => self
+                .signed_dealings
+                .get_object(&EcdsaSignedDealing::key_from_outer_hash(id))
                 .map(|object| object.into_outer()),
             EcdsaMessageHash::EcdsaDealingSupport(_) => self
                 .dealing_support
@@ -115,9 +115,9 @@ impl EcdsaPoolSectionImpl {
 
     fn remove_object(&mut self, id: &EcdsaMessageHash) -> Option<EcdsaMessage> {
         match id {
-            EcdsaMessageHash::EcdsaDealing(_) => self
-                .dealings
-                .remove_object(&EcdsaDealing::key_from_outer_hash(id))
+            EcdsaMessageHash::EcdsaSignedDealing(_) => self
+                .signed_dealings
+                .remove_object(&EcdsaSignedDealing::key_from_outer_hash(id))
                 .map(|object| object.into_outer()),
             EcdsaMessageHash::EcdsaDealingSupport(_) => self
                 .dealing_support
@@ -140,12 +140,12 @@ impl EcdsaPoolSection for EcdsaPoolSectionImpl {
         self.get_object(msg_id)
     }
 
-    fn dealings(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaDealing)> + '_> {
-        Box::new(
-            self.dealings
-                .iter()
-                .map(|(inner_hash, object)| (EcdsaDealing::key_to_outer_hash(inner_hash), object)),
-        )
+    fn signed_dealings(
+        &self,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaSignedDealing)> + '_> {
+        Box::new(self.signed_dealings.iter().map(|(inner_hash, object)| {
+            (EcdsaSignedDealing::key_to_outer_hash(inner_hash), object)
+        }))
     }
 
     fn dealing_support(
@@ -278,22 +278,28 @@ mod tests {
     use super::*;
     use ic_interfaces::time_source::TimeSource;
     use ic_metrics::MetricsRegistry;
+    use ic_test_utilities::consensus::fake::*;
     use ic_test_utilities::crypto::{
         dummy_idkg_dealing_for_tests, dummy_idkg_transcript_id_for_tests,
     };
     use ic_test_utilities::types::ids::NODE_1;
     use ic_test_utilities::FastForwardTimeSource;
+    use ic_types::consensus::ecdsa::EcdsaDealing;
+    use ic_types::consensus::BasicSignature;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::Height;
     use std::collections::BTreeSet;
 
-    fn create_ecdsa_dealing(transcript_id: IDkgTranscriptId) -> EcdsaDealing {
+    fn create_ecdsa_dealing(transcript_id: IDkgTranscriptId) -> EcdsaSignedDealing {
         let mut idkg_dealing = dummy_idkg_dealing_for_tests();
         idkg_dealing.dealer_id = NODE_1;
         idkg_dealing.transcript_id = transcript_id;
-        EcdsaDealing {
-            requested_height: Height::from(10),
-            idkg_dealing,
+        EcdsaSignedDealing {
+            content: EcdsaDealing {
+                requested_height: Height::from(10),
+                idkg_dealing,
+            },
+            signature: BasicSignature::fake(NODE_1),
         }
     }
 
@@ -320,7 +326,7 @@ mod tests {
         let unvalidated =
             ecdsa_pool
                 .unvalidated()
-                .dealings()
+                .signed_dealings()
                 .fold(BTreeSet::new(), |mut acc, (id, _)| {
                     acc.insert(id);
                     acc
@@ -328,7 +334,7 @@ mod tests {
         let validated =
             ecdsa_pool
                 .validated()
-                .dealings()
+                .signed_dealings()
                 .fold(BTreeSet::new(), |mut acc, (id, _)| {
                     acc.insert(id);
                     acc
@@ -365,7 +371,7 @@ mod tests {
     fn test_ecdsa_object_pool() {
         let metrics_registry = MetricsRegistry::new();
         let metrics = PoolMetrics::new(metrics_registry, POOL_ECDSA, POOL_TYPE_VALIDATED);
-        let mut object_pool: EcdsaObjectPool<EcdsaDealing> = EcdsaObjectPool::new(metrics);
+        let mut object_pool: EcdsaObjectPool<EcdsaSignedDealing> = EcdsaObjectPool::new(metrics);
 
         let key_1 = {
             let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
@@ -384,7 +390,8 @@ mod tests {
         assert!(object_pool.get_object(&key_1).is_some());
         assert!(object_pool.get_object(&key_2).is_some());
 
-        let items: Vec<(&CryptoHashOf<EcdsaDealing>, &EcdsaDealing)> = object_pool.iter().collect();
+        let items: Vec<(&CryptoHashOf<EcdsaSignedDealing>, &EcdsaSignedDealing)> =
+            object_pool.iter().collect();
         assert_eq!(items.len(), 2);
 
         let mut ids = BTreeSet::new();
@@ -416,9 +423,9 @@ mod tests {
         let msg_id_1 = {
             let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
             let key = ecdsa_dealing.key();
-            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let msg_id = EcdsaSignedDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
-                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
                 peer_id: NODE_1,
                 timestamp: time_source.get_relative_time(),
             });
@@ -427,9 +434,9 @@ mod tests {
         let msg_id_2 = {
             let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
-            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let msg_id = EcdsaSignedDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
-                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
                 peer_id: NODE_1,
                 timestamp: time_source.get_relative_time(),
             });
@@ -450,9 +457,9 @@ mod tests {
         let msg_id_1 = {
             let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
             let key = ecdsa_dealing.key();
-            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let msg_id = EcdsaSignedDealing::key_to_outer_hash(&key);
             let change_set = vec![EcdsaChangeAction::AddToValidated(
-                EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
             )];
             ecdsa_pool.apply_changes(change_set);
             msg_id
@@ -460,9 +467,9 @@ mod tests {
         let msg_id_2 = {
             let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
-            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let msg_id = EcdsaSignedDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
-                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
                 peer_id: NODE_1,
                 timestamp: time_source.get_relative_time(),
             });
@@ -483,9 +490,9 @@ mod tests {
         let msg_id_1 = {
             let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
             let key = ecdsa_dealing.key();
-            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let msg_id = EcdsaSignedDealing::key_to_outer_hash(&key);
             let change_set = vec![EcdsaChangeAction::AddToValidated(
-                EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
             )];
             ecdsa_pool.apply_changes(change_set);
             msg_id
@@ -493,9 +500,9 @@ mod tests {
         let msg_id_2 = {
             let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
-            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let msg_id = EcdsaSignedDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
-                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
                 peer_id: NODE_1,
                 timestamp: time_source.get_relative_time(),
             });
@@ -518,9 +525,9 @@ mod tests {
         let msg_id_1 = {
             let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
             let key = ecdsa_dealing.key();
-            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let msg_id = EcdsaSignedDealing::key_to_outer_hash(&key);
             let change_set = vec![EcdsaChangeAction::AddToValidated(
-                EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
             )];
             ecdsa_pool.apply_changes(change_set);
             msg_id
@@ -528,9 +535,9 @@ mod tests {
         let msg_id_2 = {
             let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
-            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let msg_id = EcdsaSignedDealing::key_to_outer_hash(&key);
             let change_set = vec![EcdsaChangeAction::AddToValidated(
-                EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
             )];
             ecdsa_pool.apply_changes(change_set);
             msg_id
@@ -538,9 +545,9 @@ mod tests {
         let msg_id_3 = {
             let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(300));
             let key = ecdsa_dealing.key();
-            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let msg_id = EcdsaSignedDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
-                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
                 peer_id: NODE_1,
                 timestamp: time_source.get_relative_time(),
             });
@@ -570,9 +577,9 @@ mod tests {
         let msg_id = {
             let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
-            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let msg_id = EcdsaSignedDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
-                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
                 peer_id: NODE_1,
                 timestamp: time_source.get_relative_time(),
             });
@@ -595,9 +602,9 @@ mod tests {
         let msg_id = {
             let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
             let key = ecdsa_dealing.key();
-            let msg_id = EcdsaDealing::key_to_outer_hash(&key);
+            let msg_id = EcdsaSignedDealing::key_to_outer_hash(&key);
             ecdsa_pool.insert(UnvalidatedArtifact {
-                message: EcdsaMessage::EcdsaDealing(ecdsa_dealing),
+                message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
                 peer_id: NODE_1,
                 timestamp: time_source.get_relative_time(),
             });

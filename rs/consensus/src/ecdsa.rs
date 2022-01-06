@@ -305,7 +305,7 @@ impl EcdsaGossip for EcdsaGossipImpl {
 // cause extra lock contention for the main processing paths.
 fn compute_priority(attr: &EcdsaMessageAttribute, cached_finalized_height: Height) -> Priority {
     match attr {
-        EcdsaMessageAttribute::EcdsaDealing(height) => {
+        EcdsaMessageAttribute::EcdsaSignedDealing(height) => {
             if *height < cached_finalized_height + Height::from(LOOK_AHEAD) {
                 Priority::Fetch
             } else {
@@ -364,19 +364,19 @@ mod tests {
         let cached_finalized_height = Height::from(100);
         let tests = vec![
             (
-                EcdsaMessageAttribute::EcdsaDealing(Height::from(90)),
+                EcdsaMessageAttribute::EcdsaSignedDealing(Height::from(90)),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaDealing(Height::from(109)),
+                EcdsaMessageAttribute::EcdsaSignedDealing(Height::from(109)),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaDealing(Height::from(110)),
+                EcdsaMessageAttribute::EcdsaSignedDealing(Height::from(110)),
                 Priority::Stash,
             ),
             (
-                EcdsaMessageAttribute::EcdsaDealing(Height::from(120)),
+                EcdsaMessageAttribute::EcdsaSignedDealing(Height::from(120)),
                 Priority::Stash,
             ),
             (
