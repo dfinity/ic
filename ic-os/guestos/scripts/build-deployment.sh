@@ -22,12 +22,6 @@ for argument in "${@}"; do
         -h | --help)
             echo 'Usage:
 
-   ____  _____ ___ _   _ ___ _______   __
-  |  _ \|  ___|_ _| \ | |_ _|_   _\ \ / /
-  | | | | |_   | ||  \| || |  | |  \ V /
-  | |_| |  _|  | || |\  || |  | |   | |
-  |____/|_|   |___|_| \_|___| |_|   |_|
-
     Internet Computer Operating System
          Removable Media Builder
 
@@ -201,7 +195,7 @@ function generate_subnet_config() {
     # Query and list all NNS and APP node addresses in subnet
     for n in $NODES; do
         declare -n NODE=$n
-        if [[ "${NODE["type"]}" -ne "replica" ]]; then
+        if [[ "${NODE["type"]}" != "replica" ]]; then
             continue
         fi
         local ipv6_address=${NODE["ipv6_address"]}
@@ -294,10 +288,10 @@ function generate_node_config() {
         local node_idx=${NODE["node_idx"]}
         local subnet_type=${NODE["subnet_type"]}
 
-        if [[ "${NODE["type"]}" -ne "replica" ]]; then
+        if [[ "${NODE["type"]}" != "replica" ]]; then
             continue
         fi
-        if [[ "$subnet_type" -ne "root_subnet" ]]; then
+        if [[ "$subnet_type" != "root_subnet" ]]; then
             continue
         fi
 
