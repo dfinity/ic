@@ -1,8 +1,7 @@
 #![allow(clippy::ptr_arg)]
-use super::super::report::*;
 use crate::pot::PotResult;
 use nix::unistd::Pid;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
 /// Execution will fork and run one pot per process. Pots themselves
@@ -13,19 +12,16 @@ use std::time::{Duration, Instant};
 pub struct ExecutionResult(pub Vec<CompletedPot>);
 
 impl ExecutionResult {
-    pub fn extract_runtime_summary(&self, name: String, started_at: Instant) -> TestResultNode {
+    pub fn treeify(&self, name: String, started_at: Instant) -> TestResultNode {
         let to_test_result = |r: PotResult| {
             r.test_reports
                 .into_iter()
                 .map(|test| TestResultNode {
-                    name: test.test_name,
+                    name: test.name.clone(),
+                    group_name: None,
                     started_at: test.started_at,
                     duration: test.duration,
-                    result: if test.test_result.is_success() {
-                        TestResult::Success
-                    } else {
-                        TestResult::Failure
-                    },
+                    result: test.result,
                     children: vec![],
                 })
                 .collect()
@@ -36,12 +32,13 @@ impl ExecutionResult {
             .into_iter()
             .map(|pot| {
                 let result = if pot.is_success() {
-                    TestResult::Success
+                    TestResult::Passed
                 } else {
-                    TestResult::Failure
+                    TestResult::Failed
                 };
                 TestResultNode {
                     name: pot.pot_name,
+                    group_name: None,
                     started_at: pot.started_at,
                     duration: pot.duration,
                     result,
@@ -49,31 +46,20 @@ impl ExecutionResult {
                 }
             })
             .collect();
-        let result = if children.iter().all(|p| p.result.is_success()) {
-            TestResult::Success
-        } else {
-            TestResult::Failure
-        };
+        let result = infer_result(children.as_slice());
         TestResultNode {
             name,
+            group_name: None,
             started_at,
             duration: Instant::now() - started_at,
             children,
             result,
         }
     }
-}
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-/// A tree-like structure containing statistics on how much time it took to
-/// complete a node and all its children.
-pub struct TestResultNode {
-    name: String,
-    #[serde(with = "serde_millis")]
-    started_at: Instant,
-    duration: Duration,
-    result: TestResult,
-    children: Vec<TestResultNode>,
+    pub fn was_successful(&self) -> bool {
+        self.0.iter().all(|s| s.is_success())
+    }
 }
 
 /// Contains information about a pot, whether or not
@@ -118,15 +104,6 @@ impl Status {
     pub fn is_success(&self) -> bool {
         matches!(self, Status::Success)
     }
-
-    pub fn count_on(&self, ts: &mut TestStatistics) {
-        match self {
-            Status::Success => ts.inc_passed(),
-            Status::Timeout => ts.inc_timeout(),
-            Status::Signaled(_) => ts.inc_failed(),
-            Status::Failure(_) => ts.inc_failed(),
-        }
-    }
 }
 
 impl CompletedPot {
@@ -137,7 +114,11 @@ impl CompletedPot {
             result: Some(PotResult {
                 test_reports: test_names
                     .iter()
-                    .map(|tn| TestReport::new(tn.clone(), result))
+                    .map(|tn| TestResultNode {
+                        name: tn.clone(),
+                        result,
+                        ..TestResultNode::default()
+                    })
                     .collect(),
             }),
             test_names,
@@ -155,101 +136,46 @@ impl CompletedPot {
     }
 }
 
-impl ExecutionResult {
-    pub fn was_successful(&self) -> bool {
-        self.0.iter().all(|s| s.is_success())
-    }
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+/// A tree-like structure containing statistics on how much time it took to
+/// complete a node and all its children, i.e. threads spawned from the node.
+pub struct TestResultNode {
+    pub name: String,
+    pub group_name: Option<String>,
+    #[serde(with = "serde_millis")]
+    pub started_at: Instant,
+    pub duration: Duration,
+    pub result: TestResult,
+    pub children: Vec<TestResultNode>,
+}
 
-    pub fn print_summary(&self) {
-        let mut ts = TestStatistics::new();
-        let mut pot_stats = TestStatistics::new();
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum TestResult {
+    Passed,
+    Failed,
+    Skipped,
+}
 
-        println!("\nExecution Summary:");
-        for info in self.0.iter() {
-            if let Some((ref pid, ref status)) = info.pid_and_status {
-                println!(
-                    "- Pot '{}' process ({}), took {:.3}s and returned {:?}",
-                    info.pot_name,
-                    pid.as_raw(),
-                    info.duration.as_secs_f64(),
-                    status,
-                );
-                status.count_on(&mut pot_stats);
-            } else {
-                println!("- Pot '{}' did not run", info.pot_name);
-                pot_stats.inc_skipped();
-            }
-
-            let mut res = info.result.clone().unwrap_or_default();
-            // If a pot failed due to timing out or crashing, results of individual tests
-            // are missing. We create dummy TestReports in order to:
-            // - keep the execution statistics sound,
-            // - include in the execution summary all tests which should have been executed.
-            if res.test_reports.is_empty() {
-                let now = std::time::Instant::now();
-                res.test_reports = info
-                    .test_names
-                    .iter()
-                    .map(|t| TestReport {
-                        test_name: t.clone(),
-                        test_result: TestResult::Failure,
-                        started_at: now,
-                        duration: Default::default(),
-                    })
-                    .collect();
-            }
-            summarize_pot_result(&res, &mut ts);
-            println!();
+impl Default for TestResultNode {
+    fn default() -> Self {
+        Self {
+            name: String::default(),
+            group_name: None,
+            started_at: Instant::now(),
+            duration: Duration::default(),
+            result: TestResult::Skipped,
+            children: vec![],
         }
-
-        explain_semantics();
-        print_assessment(self.was_successful(), ts, pot_stats);
     }
 }
 
-fn print_assessment(was_success: bool, tests: TestStatistics, pots: TestStatistics) {
-    println!(
-        "Tests: {} passed, {} skipped and {} failed",
-        tests.passed, tests.skipped, tests.failed
-    );
-    println!(
-        "Pots:  {} passed, {} skipped, {} failed and {} timed-out",
-        pots.passed, pots.skipped, pots.failed, pots.timeout
-    );
-
-    println!("Assessment: {}", if was_success { "PASS" } else { "FAIL" });
-    if tests.is_success() && !was_success {
-        println!("(there were soft failures)");
+pub fn infer_result(tests: &[TestResultNode]) -> TestResult {
+    if tests.iter().all(|t| t.result == TestResult::Skipped) {
+        return TestResult::Skipped;
     }
-}
-
-fn summarize_pot_result(res: &PotResult, ts: &mut TestStatistics) {
-    for t in res.test_reports.iter() {
-        ts.register(t);
-        let lbl = match t.test_result {
-            TestResult::Success => "  OK ",
-            TestResult::Skipped => "SKIP ",
-            TestResult::Failure => "FAIL ",
-        };
-        println!(
-            "    {} {} (in {:.3}s)",
-            lbl,
-            t.test_name,
-            t.duration.as_secs_f64()
-        );
+    if tests.iter().any(|t| t.result == TestResult::Failed) {
+        TestResult::Failed
+    } else {
+        TestResult::Passed
     }
-}
-
-fn explain_semantics() {
-    println!(
-        r#"
-Above you will see an execution summary. A pot can contain multiple tests and
-a passive pipeline:
-  * A TEST passes when it doesn't panic
-  * A POT passes when all its tests pass and the pipeline detects no passive failures.
-
-Recall that this is a SUMMARY. Refer to the logs for details about each pot.
-Search the name of the pot in question to get to where you should start looking easily."#
-    );
-    println!();
 }

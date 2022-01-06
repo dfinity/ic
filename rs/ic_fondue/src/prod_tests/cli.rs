@@ -69,7 +69,7 @@ The sha256 hash sum of the base image."#
     #[structopt(
         long = "result-file",
         parse(from_os_str),
-        help = "If set, specifies where to write results of all executed tests."
+        help = "If set, specifies where to write results of executed tests."
     )]
     pub result_file: Option<PathBuf>,
     #[structopt(

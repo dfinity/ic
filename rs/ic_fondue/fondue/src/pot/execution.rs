@@ -60,7 +60,6 @@ use crate::pot::inner as pot;
 
 pub mod result;
 pub mod stream_decoder;
-use crate::pot::report::TestResult;
 pub use result::*;
 use stream_decoder::*;
 
@@ -356,7 +355,7 @@ impl Executor {
         let result = if pot::should_skip(&p.test) {
             Some(TestResult::Skipped)
         } else if self.signaled() {
-            Some(TestResult::Failure)
+            Some(TestResult::Failed)
         } else {
             None
         };

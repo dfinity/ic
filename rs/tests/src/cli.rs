@@ -166,11 +166,11 @@ Verbosity control. Using -v makes the tests a little chatty while
     pub filters: Option<String>,
 
     #[structopt(
-        long = "runtime-stats",
+        long = "result-file",
         parse(from_os_str),
-        help = "If set, specifies where to write runtime statistics collected during tests execution"
+        help = "If set, specifies where to write results of executed tests"
     )]
-    pub runtime_stats_file: Option<PathBuf>,
+    pub result_file: Option<PathBuf>,
 
     #[structopt(
         long = "experimental",

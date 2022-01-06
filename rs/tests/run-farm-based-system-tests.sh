@@ -36,7 +36,7 @@ fi
 
 SHELL_WRAPPER=${SHELL_WRAPPER:-/usr/bin/time}
 CI_PROJECT_DIR=${CI_PROJECT_DIR:-"$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../"}
-RESULT_FILE="${CI_PROJECT_DIR}/test-results.json"
+RESULT_FILE="$(mktemp -d)/test-results.json"
 JOB_ID="${CI_JOB_ID:-}"
 
 if [[ -z "${JOB_ID}" ]]; then
@@ -121,6 +121,7 @@ DEV_IMG_SHA256=$(curl "${DEV_IMG_SHA256_URL}" | sed -E 's/^([0-9a-fA-F]+)\s.*/\1
         "${JOURNALBEAT_HOSTS[@]}" 2>&1
 } && RES=0 || RES=$?
 
+SUMMARY_ARGS=(--test_results "${RESULT_FILE}")
 # Export spans to Honeycomb if the script is run by a CI pipeline.
 if [[ -n "${CI_JOB_ID:-}" ]] && [[ -n "${ROOT_PIPELINE_ID:-}" ]]; then
     python3 "${CI_PROJECT_DIR}/gitlab-ci/src/test_results/honeycomb.py" \
@@ -128,10 +129,11 @@ if [[ -n "${CI_JOB_ID:-}" ]] && [[ -n "${ROOT_PIPELINE_ID:-}" ]]; then
         --trace_id "${ROOT_PIPELINE_ID}" \
         --parent_id "${CI_JOB_ID}" \
         --type "farm-based-tests"
+else
+    SUMMARY_ARGS+=(--verbose)
 fi
 
 # Print a summary of the executed test suite.
-python3 "${CI_PROJECT_DIR}/gitlab-ci/src/test_results/summary.py" \
-    --test_results "${RESULT_FILE}"
+python3 "${CI_PROJECT_DIR}/gitlab-ci/src/test_results/summary.py" "${SUMMARY_ARGS[@]}"
 
 exit $RES

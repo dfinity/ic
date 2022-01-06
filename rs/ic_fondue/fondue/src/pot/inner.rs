@@ -31,7 +31,7 @@ use std::{path::PathBuf, thread};
 
 use crate::log::{info, mk_logger, warn, Logger};
 use crate::manager::*;
-use crate::pot::report::*;
+use crate::pot::execution::result::*;
 
 /// A [Context] carries auxiliary data to a test. Using the provided PRNG is
 /// very important if we care about test reproducibility. The
@@ -113,12 +113,12 @@ pub type ComposableTest<M> = FondueTest<<M as HasHandle>::Handle>;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct PotResult {
-    pub test_reports: Vec<TestReport>,
+    pub test_reports: Vec<TestResultNode>,
 }
 
 impl PotResult {
     pub fn is_success(&self) -> bool {
-        self.test_reports.iter().all(|tr| tr.is_success())
+        infer_result(self.test_reports.as_slice()) == TestResult::Passed
     }
 }
 
@@ -382,9 +382,9 @@ impl<M: RefUnwindSafe + UnwindSafe> FondueTest<M> {
 
         let didnt_panic = catch_unwind(|| (self.test)(man, ctx)).is_ok();
         let res = if should_panic != didnt_panic {
-            TestResult::Success
+            TestResult::Passed
         } else {
-            TestResult::Failure
+            TestResult::Failed
         };
 
         info!(ctx.logger, "<<< POT::TEST DONE {}: {:?} >>>", name, res);
@@ -404,7 +404,7 @@ pub fn should_skip<M: Manager>(test: &Test<M>) -> bool {
 
 /// Runs a test and returns its result. In case of composable tests,
 /// returns whether or not all of them were successful
-pub fn run_test<M>(man: &M, ctx: &Context, test: Test<M>) -> Vec<TestReport>
+pub fn run_test<M>(man: &M, ctx: &Context, test: Test<M>) -> Vec<TestResultNode>
 where
     M: Manager + 'static,
 {
@@ -423,7 +423,11 @@ where
                     // failed.
                     let mut igns = Vec::new();
                     for t in ts.iter() {
-                        igns.push(TestReport::new(t.name.clone(), TestResult::Failure));
+                        igns.push(TestResultNode {
+                            name: t.name.clone(),
+                            result: TestResult::Failed,
+                            ..TestResultNode::default()
+                        });
                     }
                     warn!(ctx.logger, "Test setup failed, aborting.");
                     return igns;
@@ -445,17 +449,19 @@ pub fn run_isolated_test<M: Manager + 'static>(
     man: &M,
     ctx: &Context,
     test: IsolatedTest<M>,
-) -> TestReport {
-    let test_name = test.name.clone();
+) -> TestResultNode {
+    let name = test.name.clone();
+    let result = test.run(man.clone(), ctx);
     let started_at = std::time::Instant::now();
-    let test_result = test.run(man.clone(), ctx);
     let duration = std::time::Instant::now().duration_since(started_at);
 
-    TestReport {
-        test_name,
-        test_result,
+    TestResultNode {
+        name,
+        group_name: None,
         started_at,
         duration,
+        result,
+        children: vec![],
     }
 }
 
@@ -469,23 +475,25 @@ pub fn run_composable_tests<M>(
     handle: M::Handle,
     ctx: &Context,
     tests: &mut Vec<ComposableTest<M>>,
-) -> Vec<TestReport>
+) -> Vec<TestResultNode>
 where
     M: Manager + 'static,
 {
     let mut results = Vec::new();
     let mut rng = ctx.rng.clone();
     while let Some(test) = pop_random(tests, &mut rng) {
-        let test_name = test.name.clone();
+        let name = test.name.clone();
         let started_at = std::time::Instant::now();
-        let test_result = test.run(handle.clone(), ctx);
+        let result = test.run(handle.clone(), ctx);
         let duration = std::time::Instant::now().duration_since(started_at);
 
-        results.push(TestReport {
-            test_name,
-            test_result,
+        results.push(TestResultNode {
+            name,
+            group_name: None,
             started_at,
             duration,
+            result,
+            children: vec![],
         });
     }
     results
