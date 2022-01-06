@@ -61,9 +61,9 @@ const MSG: &[u8] = b"this beautiful prose should be persisted for future generat
 /// adding or dropping nodes -- hence, it receives a [IcHandle] instead of a
 /// `IcManager`. This distinction makes it easier to safely run tests against
 /// the same setup. In addition to a handle, the test also receives a
-/// [fondue::pot::Context] which contains a number of auxiliary tools such as
+/// [ic_fondue::pot::Context] which contains a number of auxiliary tools such as
 /// a logger, and a PRNG.
-pub fn basic_health_test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn basic_health_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Choose a random node URL from each subnet.
     let mut rng = ctx.rng.clone();
     let nodes: Vec<&IcEndpoint> = handle

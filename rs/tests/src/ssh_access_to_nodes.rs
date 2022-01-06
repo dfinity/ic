@@ -43,7 +43,7 @@ pub fn config() -> InternetComputer {
         .with_unassigned_nodes(1)
 }
 
-pub fn root_cannot_authenticate(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn root_cannot_authenticate(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
 
     // Choose a random nodes
@@ -64,7 +64,7 @@ pub fn root_cannot_authenticate(handle: IcHandle, ctx: &fondue::pot::Context) {
     assert_authentication_fails(&unassigned_node_ip, "root", &mean);
 }
 
-pub fn readonly_cannot_authenticate_without_a_key(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn readonly_cannot_authenticate_without_a_key(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
 
     // Choose a random nodes
@@ -82,7 +82,10 @@ pub fn readonly_cannot_authenticate_without_a_key(handle: IcHandle, ctx: &fondue
     assert_authentication_fails(&unassigned_node_ip, "readonly", &mean);
 }
 
-pub fn readonly_cannot_authenticate_with_random_key(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn readonly_cannot_authenticate_with_random_key(
+    handle: IcHandle,
+    ctx: &ic_fondue::pot::Context,
+) {
     let mut rng = ctx.rng.clone();
 
     // Choose a random nodes
@@ -101,7 +104,7 @@ pub fn readonly_cannot_authenticate_with_random_key(handle: IcHandle, ctx: &fond
     assert_authentication_fails(&unassigned_node_ip, "readonly", &mean);
 }
 
-pub fn keys_in_the_subnet_record_can_be_updated(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn keys_in_the_subnet_record_can_be_updated(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
 
     // Install NNS canisters
@@ -143,7 +146,7 @@ pub fn keys_in_the_subnet_record_can_be_updated(handle: IcHandle, ctx: &fondue::
     assert_authentication_fails(&node_ip, "readonly", &readonly_mean);
 }
 
-pub fn keys_for_unassigned_nodes_can_be_updated(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn keys_for_unassigned_nodes_can_be_updated(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
 
     // Choose a random node from the nns subnet
@@ -175,7 +178,7 @@ pub fn keys_for_unassigned_nodes_can_be_updated(handle: IcHandle, ctx: &fondue::
     wait_until_authentication_fails(&node_ip, "readonly", &readonly_mean);
 }
 
-pub fn multiple_keys_can_access_one_account(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn multiple_keys_can_access_one_account(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
 
     // Choose a random node from the nns subnet
@@ -228,7 +231,7 @@ pub fn multiple_keys_can_access_one_account(handle: IcHandle, ctx: &fondue::pot:
 
 pub fn multiple_keys_can_access_one_account_on_unassigned_nodes(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let mut rng = ctx.rng.clone();
 
@@ -265,7 +268,10 @@ pub fn multiple_keys_can_access_one_account_on_unassigned_nodes(
     assert_authentication_works(&node_ip, "readonly", &readonly_mean3);
 }
 
-pub fn updating_readonly_does_not_remove_backup_keys(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn updating_readonly_does_not_remove_backup_keys(
+    handle: IcHandle,
+    ctx: &ic_fondue::pot::Context,
+) {
     let mut rng = ctx.rng.clone();
 
     // Choose a random node from the nns subnet
@@ -306,7 +312,7 @@ pub fn updating_readonly_does_not_remove_backup_keys(handle: IcHandle, ctx: &fon
     assert_authentication_works(&node_ip, "backup", &backup_mean);
 }
 
-pub fn can_add_100_readonly_and_backup_keys(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn can_add_100_readonly_and_backup_keys(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
 
     // Choose a random node from the nns subnet
@@ -334,7 +340,7 @@ pub fn can_add_100_readonly_and_backup_keys(handle: IcHandle, ctx: &fondue::pot:
     ));
 }
 
-pub fn cannot_add_101_readonly_or_backup_keys(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn cannot_add_101_readonly_or_backup_keys(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
 
     // Choose a random node from the nns subnet

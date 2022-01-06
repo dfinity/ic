@@ -44,8 +44,8 @@ use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_I
 
 use assert_matches::assert_matches;
 use ed25519_dalek::Keypair;
-use fondue::log::info;
 use ic_canister_client::Sender;
+use ic_fondue::log::info;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{
     ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_3_OWNER_KEYPAIR},
@@ -59,7 +59,7 @@ pub fn config() -> InternetComputer {
     InternetComputer::new().add_fast_single_node_subnet(SubnetType::System)
 }
 
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     ctx.install_nns_canisters(&handle, true);
 
     let mut rng = ctx.rng.clone();

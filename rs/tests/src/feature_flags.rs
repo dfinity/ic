@@ -16,7 +16,7 @@ use secp256k1::{Message, PublicKey, Secp256k1, Signature};
 
 /// Tests whether a call to `sign_with_ecdsa` is rejected when called on a
 /// subnet where the corresponding feature flag is not explicitly enabled.
-pub fn ecdsa_signatures_disabled_by_default(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn ecdsa_signatures_disabled_by_default(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let mut rng = ctx.rng.clone();
 
@@ -51,7 +51,7 @@ pub fn basic_config_with_all_features_enabled() -> InternetComputer {
 
 /// Tests whether a call to `sign_with_mock_ecdsa` is responded with a signature
 /// that is valid under the mock public key.
-pub fn mock_ecdsa_signatures_are_supported(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn mock_ecdsa_signatures_are_supported(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let mut rng = ctx.rng.clone();
 

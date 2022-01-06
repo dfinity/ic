@@ -213,7 +213,7 @@ pub struct Executor {
     sigint_ctr: usize,
 }
 
-/// After a [fondue::pot::Pot] is [launch]ed, it "becomes" a [RunningPot].
+/// After a [ic_fondue::pot::Pot] is [launch]ed, it "becomes" a [RunningPot].
 /// The `result_pipe` doesn't need to be buffered as we only read from it
 /// at the end of execution. The `test_names` carries the names of the tests
 /// that we are expecting to run with this pot. This is important to be able to

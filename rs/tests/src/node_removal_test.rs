@@ -22,7 +22,7 @@ Remark::
 
 
 end::catalog[] */
-use fondue::{self, log::info, manager::HasHandle};
+use ic_fondue::{self, log::info, manager::HasHandle};
 use ic_fondue::{
     ic_manager::IcManager,
     internet_computer::{InternetComputer, Subnet},
@@ -44,7 +44,7 @@ pub fn config() -> InternetComputer {
     )
 }
 
-pub fn test(man: IcManager, ctx: &fondue::pot::Context) {
+pub fn test(man: IcManager, ctx: &ic_fondue::pot::Context) {
     let handle = man.handle();
     let api_endpoints: Vec<Url> = handle
         .public_api_endpoints

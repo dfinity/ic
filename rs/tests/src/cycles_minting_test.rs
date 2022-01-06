@@ -14,12 +14,12 @@ use cycles_minting_canister::{
 };
 use dfn_candid::{candid_one, CandidOne};
 use dfn_protobuf::ProtoBuf;
-use fondue::log::info;
 use ic_canister_client::{Agent, HttpClient, Sender};
 use ic_certified_vars::verify_certificate;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_crypto::threshold_sig_public_key_from_der;
 use ic_crypto_tree_hash::MixedHashTree;
+use ic_fondue::log::info;
 use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
 use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
@@ -51,7 +51,7 @@ pub fn config() -> InternetComputer {
         .add_fast_single_node_subnet(SubnetType::Application)
 }
 
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Install NNS canisters
     ctx.install_nns_canisters(&handle, true);
 

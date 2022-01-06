@@ -27,12 +27,12 @@ use crate::nns::{
 };
 use crate::util;
 use canister_test;
-use fondue;
 use ic_base_types::NodeId;
 use ic_fondue::{
     ic_manager::{IcControl, IcHandle},
     internet_computer::InternetComputer,
     internet_computer::Subnet,
+    util::PermOf,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
@@ -62,7 +62,7 @@ pub fn config() -> InternetComputer {
         .with_unassigned_nodes(UNASSIGNED_NODES_COUNT)
 }
 
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Install all necessary NNS canisters.
     ctx.install_nns_canisters(&handle, true);
     // Create a runtime, necessary to run async tasks.
@@ -142,7 +142,7 @@ pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
     );
 
     // Kill random floor(X/3) nodes.
-    let mut perm = fondue::util::PermOf::new(&newly_assigned_nodes, &mut rng);
+    let mut perm = PermOf::new(&newly_assigned_nodes, &mut rng);
     let kill_nodes_count = UNASSIGNED_NODES_COUNT / 3;
     for _ in 0..kill_nodes_count {
         perm.next().unwrap().kill_node(ctx.logger.clone());

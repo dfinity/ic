@@ -16,7 +16,7 @@ Coverage::
 
 end::catalog[] */
 
-use fondue::{self};
+use ic_fondue::{self};
 use ic_fondue::{
     ic_manager::{IcControl, IcHandle},
     internet_computer::{InternetComputer, Subnet},
@@ -31,7 +31,7 @@ pub fn config() -> InternetComputer {
         .with_unassigned_nodes(1)
 }
 
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Choose the only available NNS node.
     let mut rng = ctx.rng.clone();
     let node = util::get_random_nns_node_endpoint(&handle, &mut rng);

@@ -2313,33 +2313,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
-name = "fondue"
-version = "0.8.0"
-dependencies = [
- "bincode",
- "crossbeam-channel 0.5.1",
- "either",
- "libc",
- "log_analyzer",
- "mio 0.7.6",
- "nix 0.23.0",
- "nonblock",
- "pico-args",
- "rand 0.8.3",
- "rand_chacha 0.3.0",
- "rand_core 0.6.2",
- "retain_mut",
- "serde",
- "serde_millis",
- "signal-hook 0.3.6",
- "signal-hook-mio",
- "slog",
- "slog-async",
- "slog-term",
- "structopt",
-]
-
-[[package]]
 name = "foreign-types"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4379,7 +4352,6 @@ dependencies = [
  "chrono",
  "crossbeam-channel 0.5.1",
  "either",
- "fondue",
  "fs_extra",
  "futures",
  "hex",
@@ -4401,17 +4373,24 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "lazy_static",
+ "libc",
  "mio 0.7.6",
  "nix 0.23.0",
+ "nonblock",
  "phantom_newtype",
+ "pico-args",
  "rand 0.8.3",
  "rand_chacha 0.3.0",
+ "rand_core 0.6.2",
  "regex",
  "reqwest",
+ "retain_mut",
  "serde",
  "serde_cbor",
  "serde_json",
  "serde_millis",
+ "signal-hook 0.3.6",
+ "signal-hook-mio",
  "slog",
  "slog-async",
  "slog-term",
@@ -10260,7 +10239,6 @@ dependencies = [
  "dfn_core",
  "dfn_protobuf",
  "ed25519-dalek",
- "fondue",
  "futures",
  "garcon",
  "hex",

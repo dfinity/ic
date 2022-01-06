@@ -28,10 +28,10 @@ use std::{
 };
 
 use crate::internet_computer::InternetComputer;
+use crate::log::{debug, info, warn, Logger};
+use crate::manager::process_pool::{self, ManagedProcessCfg};
 use crate::node_software_version::NodeSoftwareVersion;
 use crate::port_allocator::{AddrType, EphemeralPortAllocator, TcpAddrAllocator, VmAddrAllocator};
-use fondue::log::{debug, info, warn, Logger};
-use fondue::manager::process_pool::{self, ManagedProcessCfg};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use nix::unistd::Pid;
 use std::collections::{BTreeMap, BTreeSet};

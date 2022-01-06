@@ -1,5 +1,5 @@
+use crate::manager::Summarize;
 use crate::node_software_version::NodeSoftwareVersion;
-use fondue::manager::Summarize;
 use ic_config::{consensus::ConsensusConfig, ConfigOptional as ReplicaConfig};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;

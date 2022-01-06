@@ -1,4 +1,3 @@
-use fondue;
 use ic_fondue::{
     ic_manager::IcHandle,
     internet_computer::{InternetComputer, Subnet},
@@ -21,7 +20,7 @@ pub fn config() -> InternetComputer {
         .add_subnet(Subnet::fast_single_node(SubnetType::Application))
 }
 
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Install NNS canisters
     ctx.install_nns_canisters(&handle, true);
 
@@ -94,7 +93,7 @@ pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
 /// Crashes if the update request doesn't succeed or the balance is not as
 /// expected afterwards.
 fn transfer(
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
     rt: &tokio::runtime::Runtime,
     ledger: &Canister,
     from: &util::UniversalCanister,

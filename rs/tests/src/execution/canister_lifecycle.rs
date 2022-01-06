@@ -46,7 +46,7 @@ use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::{management_canister::builders::InstallMode, ManagementCanister};
 use reqwest::StatusCode;
 
-pub fn create_canister_via_ingress_fails(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn create_canister_via_ingress_fails(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -60,7 +60,7 @@ pub fn create_canister_via_ingress_fails(handle: IcHandle, ctx: &fondue::pot::Co
     });
 }
 
-pub fn create_canister_via_canister_succeeds(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn create_canister_via_canister_succeeds(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -99,7 +99,7 @@ pub fn create_canister_via_canister_succeeds(handle: IcHandle, ctx: &fondue::pot
 
 pub fn create_canister_with_controller_and_controllers_fails(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -135,7 +135,7 @@ pub fn create_canister_with_controller_and_controllers_fails(
 
 pub fn update_settings_with_controller_and_controllers_fails(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -174,7 +174,7 @@ pub fn update_settings_with_controller_and_controllers_fails(
     });
 }
 
-pub fn create_canister_with_one_controller(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn create_canister_with_one_controller(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -217,7 +217,7 @@ pub fn create_canister_with_one_controller(handle: IcHandle, ctx: &fondue::pot::
     });
 }
 
-pub fn update_settings_multiple_controllers(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn update_settings_multiple_controllers(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -345,7 +345,7 @@ pub fn update_settings_multiple_controllers(handle: IcHandle, ctx: &fondue::pot:
     });
 }
 
-pub fn create_canister_with_no_controllers(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn create_canister_with_no_controllers(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -381,7 +381,7 @@ pub fn create_canister_with_no_controllers(handle: IcHandle, ctx: &fondue::pot::
     });
 }
 
-pub fn create_canister_with_multiple_controllers(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn create_canister_with_multiple_controllers(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -459,7 +459,7 @@ pub fn create_canister_with_multiple_controllers(handle: IcHandle, ctx: &fondue:
 
 pub fn create_canister_with_too_many_controllers_fails(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -489,7 +489,7 @@ pub fn create_canister_with_too_many_controllers_fails(
 
 pub fn managing_a_canister_with_wrong_controller_fails(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -557,7 +557,7 @@ pub fn managing_a_canister_with_wrong_controller_fails(
     });
 }
 
-pub fn delete_stopped_canister_succeeds(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn delete_stopped_canister_succeeds(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -593,7 +593,7 @@ pub fn delete_stopped_canister_succeeds(handle: IcHandle, ctx: &fondue::pot::Con
     })
 }
 
-pub fn delete_running_canister_fails(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn delete_running_canister_fails(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -622,7 +622,7 @@ pub fn delete_running_canister_fails(handle: IcHandle, ctx: &fondue::pot::Contex
 /// limits the memory capacity of the subnet to 20MiB.
 pub fn exceeding_memory_capacity_fails_when_memory_allocation_changes(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -671,7 +671,7 @@ pub fn config_canister_memory_size() -> InternetComputer {
 }
 
 /// This test assumes it's being executed with `config_canister_memory_size`.
-pub fn memory_allocation_not_set(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn memory_allocation_not_set(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -744,7 +744,10 @@ pub fn memory_allocation_not_set(handle: IcHandle, ctx: &fondue::pot::Context) {
 
 /// Try to install a canister with a large wasm but a small memory allocation.
 /// It should be rejected.
-pub fn canister_large_wasm_small_memory_allocation(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn canister_large_wasm_small_memory_allocation(
+    handle: IcHandle,
+    ctx: &ic_fondue::pot::Context,
+) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -776,7 +779,7 @@ pub fn canister_large_wasm_small_memory_allocation(handle: IcHandle, ctx: &fondu
 /// small memory allocation. It should be rejected.
 pub fn canister_large_initial_memory_small_memory_allocation(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     // A wasm module that asks for 2GiB of initial memory.
     let wasm = wabt::wat2wasm(
@@ -836,7 +839,7 @@ pub fn canister_large_initial_memory_small_memory_allocation(
 /// Canister A creates canister B; installs wasm on it; and then executes some
 /// code on it; Each of the above operations are done in distinct steps i.e. the
 /// "user" initiates each step separately.
-pub fn canister_can_manage_other_canister(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn canister_can_manage_other_canister(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -883,7 +886,7 @@ pub fn canister_can_manage_other_canister(handle: IcHandle, ctx: &fondue::pot::C
 /// Canister A creates canister B; installs wasm on it; and then executes some
 /// code on it; The creation is done in one step and the other two in a single
 /// step.
-pub fn canister_can_manage_other_canister_batched(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn canister_can_manage_other_canister_batched(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -932,7 +935,10 @@ pub fn config_compute_allocation() -> InternetComputer {
 /// Tests whether the compute allocation limits are enforced on an app subnet
 /// both when creating canisters via the provisional API and via another
 /// canister (which acts as the wallet canister).
-pub fn total_compute_allocation_cannot_be_exceeded(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn total_compute_allocation_cannot_be_exceeded(
+    handle: IcHandle,
+    ctx: &ic_fondue::pot::Context,
+) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let app_sched_cores =
@@ -1031,7 +1037,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(handle: IcHandle, ctx: &fondu
 }
 
 // TODO(EXC-186): Enable this test.
-pub fn canisters_with_low_balance_are_deallocated(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn canisters_with_low_balance_are_deallocated(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -1074,7 +1080,7 @@ pub fn canisters_with_low_balance_are_deallocated(handle: IcHandle, ctx: &fondue
 // TODO(EXC-186): Enable this test.
 pub fn canisters_are_deallocated_when_their_balance_falls(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     #[derive(candid::CandidType)]
     struct Argument {
@@ -1138,7 +1144,7 @@ pub fn canisters_are_deallocated_when_their_balance_falls(
     });
 }
 
-fn create_canister_test(handle: IcHandle, ctx: &fondue::pot::Context, payload: Vec<u8>) {
+fn create_canister_test(handle: IcHandle, ctx: &ic_fondue::pot::Context, payload: Vec<u8>) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -1168,20 +1174,20 @@ fn create_canister_test(handle: IcHandle, ctx: &fondue::pot::Context, payload: V
 }
 
 /// Sending no field
-pub fn create_canister_with_no_settings_field(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn create_canister_with_no_settings_field(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let payload = EmptyBlob::encode();
     create_canister_test(handle, ctx, payload);
 }
 
 /// Sending a field with value None
-pub fn create_canister_with_none_settings_field(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn create_canister_with_none_settings_field(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let records = CreateCanisterArgs::default();
     let payload = records.encode();
     create_canister_test(handle, ctx, payload);
 }
 
 /// Sending a field with settings empty (None)
-pub fn create_canister_with_empty_settings(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn create_canister_with_empty_settings(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let settings = CanisterSettingsArgs::default();
     let records = CreateCanisterArgs {
         settings: Some(settings),
@@ -1191,7 +1197,7 @@ pub fn create_canister_with_empty_settings(handle: IcHandle, ctx: &fondue::pot::
 }
 
 /// Sending a field with some settings
-pub fn create_canister_with_settings(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn create_canister_with_settings(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let settings = CanisterSettingsArgs {
         compute_allocation: Some(candid::Nat::from(50)),
         ..Default::default()
@@ -1204,7 +1210,10 @@ pub fn create_canister_with_settings(handle: IcHandle, ctx: &fondue::pot::Contex
 }
 
 /// Sending no `settings` field
-pub fn provisional_create_canister_with_no_settings(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn provisional_create_canister_with_no_settings(
+    handle: IcHandle,
+    ctx: &ic_fondue::pot::Context,
+) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -1226,7 +1235,7 @@ pub fn provisional_create_canister_with_no_settings(handle: IcHandle, ctx: &fond
     })
 }
 
-pub fn create_canister_with_freezing_threshold(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn create_canister_with_freezing_threshold(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -1287,7 +1296,7 @@ pub fn create_canister_with_freezing_threshold(handle: IcHandle, ctx: &fondue::p
 
 pub fn create_canister_with_invalid_freezing_threshold_fails(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -1326,7 +1335,7 @@ pub fn create_canister_with_invalid_freezing_threshold_fails(
 /// different subnets and they can still control each other.
 pub fn controller_and_controllee_on_different_subnets(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -1399,7 +1408,7 @@ pub fn controller_and_controllee_on_different_subnets(
     })
 }
 
-pub fn refunds_after_uninstall_are_refunded(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn refunds_after_uninstall_are_refunded(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -1476,7 +1485,7 @@ pub fn config_max_number_of_canisters() -> InternetComputer {
 /// subnet to be 3.
 pub fn creating_canisters_fails_if_limit_of_allowed_canisters_is_reached(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");

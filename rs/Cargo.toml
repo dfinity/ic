@@ -65,7 +65,6 @@ members = [
   "http_handler",
   "http_utils",
   "ic_fondue",
-  "ic_fondue/fondue",
   "ic_p8s_service_discovery",
   "ic_p8s_service_discovery/log",
   "identity",

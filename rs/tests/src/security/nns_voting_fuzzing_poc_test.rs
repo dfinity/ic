@@ -1,4 +1,4 @@
-use fondue::log::info;
+use ic_fondue::log::info;
 
 use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
 
@@ -32,7 +32,7 @@ pub fn config() -> InternetComputer {
 /// Note that `TestRunner::run` cannot be used since that does not work for
 /// `async` methods. Also, the `proptest!` macro cannot be used in this context
 /// because it is intended for unit tests (i.e. with `#[test]` annotation)
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     ctx.install_nns_canisters(&handle, true);
     let mut rng = ctx.rng.clone();
     let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
@@ -60,7 +60,7 @@ pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
 
 async fn get_neuron_returns_not_found_error(
     governance: &Canister<'_>,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
     neuron_id: u64,
 ) -> bool {
     info!(

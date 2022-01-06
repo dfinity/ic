@@ -27,9 +27,9 @@ end::catalog[] */
 
 use crate::request_signature_test::{expiry_time, random_ecdsa_identity, sign_update};
 use crate::util::*;
-use fondue::log::info;
 use ic_agent::export::Principal;
 use ic_agent::{agent::status::Value, Identity};
+use ic_fondue::log::info;
 use ic_fondue::{
     ic_manager::{IcEndpoint, IcHandle},
     internet_computer::{InternetComputer, Subnet},
@@ -56,7 +56,7 @@ pub fn config() -> InternetComputer {
     )
 }
 
-pub fn test(mut handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(mut handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({

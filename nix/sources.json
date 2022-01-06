@@ -110,12 +110,6 @@
         "url_template": "https://download.dfinity.systems/sdk/dfx/<version>/x86_64-linux/<name>-<version>.tar.gz",
         "version": "0.7.0-beta.3"
     },
-    "fondue": {
-        "branch": "master",
-        "repo": "ssh://git@github.com/dfinity/fondue",
-        "rev": "4da2684cc89b6ac413ed9da13e790a480bc25b88",
-        "type": "git"
-    },
     "haskell-candid": {
         "branch": "master",
         "builtin": false,

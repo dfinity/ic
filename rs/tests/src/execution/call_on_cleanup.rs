@@ -5,7 +5,7 @@ use ic_agent::AgentError;
 use ic_fondue::ic_manager::IcHandle;
 use ic_universal_canister::{call_args, wasm};
 
-pub fn is_called_if_reply_traps(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn is_called_if_reply_traps(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -49,7 +49,7 @@ pub fn is_called_if_reply_traps(handle: IcHandle, ctx: &fondue::pot::Context) {
     });
 }
 
-pub fn is_called_if_reject_traps(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn is_called_if_reject_traps(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -88,7 +88,7 @@ pub fn is_called_if_reject_traps(handle: IcHandle, ctx: &fondue::pot::Context) {
     });
 }
 
-pub fn changes_are_discarded_if_trapped(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn changes_are_discarded_if_trapped(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -136,7 +136,7 @@ pub fn changes_are_discarded_if_trapped(handle: IcHandle, ctx: &fondue::pot::Con
     });
 }
 
-pub fn changes_are_discarded_in_query(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn changes_are_discarded_in_query(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -199,7 +199,7 @@ pub fn changes_are_discarded_in_query(handle: IcHandle, ctx: &fondue::pot::Conte
     });
 }
 
-pub fn is_called_in_query(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn is_called_in_query(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
