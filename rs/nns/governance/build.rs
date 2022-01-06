@@ -238,6 +238,14 @@ fn main() {
         .join(" "),
     );
     config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuron.Merge",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.ManageNeuron.Follow",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",
@@ -375,6 +383,14 @@ fn main() {
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.ManageNeuronResponse.SplitResponse",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuronResponse.MergeResponse",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",
             "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",

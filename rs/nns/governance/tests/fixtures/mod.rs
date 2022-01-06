@@ -37,6 +37,7 @@ use ic_nns_governance::{
         manage_neuron::Disburse,
         manage_neuron::DisburseToNeuron,
         manage_neuron::IncreaseDissolveDelay,
+        manage_neuron::Merge,
         manage_neuron::NeuronIdOrSubaccount,
         manage_neuron::SetDissolveTimestamp,
         manage_neuron::Spawn,
@@ -186,11 +187,15 @@ pub struct NeuronBuilder {
     owner: Option<PrincipalId>,
     hot_keys: Vec<PrincipalId>,
     age_seconds: Option<u64>,
+    created_seconds: Option<u64>,
     maturity: u64,
     neuron_fees: u64,
     dissolve_state: Option<neuron::DissolveState>,
     followees: HashMap<i32, neuron::Followees>,
     kyc_verified: bool,
+    not_for_profit: bool,
+    joined_community_fund: Option<u64>,
+    do_not_create_subaccount: bool,
 }
 
 impl From<Neuron> for NeuronBuilder {
@@ -205,11 +210,15 @@ impl From<Neuron> for NeuronBuilder {
             } else {
                 Some(neuron.aging_since_timestamp_seconds)
             },
+            created_seconds: Some(neuron.created_timestamp_seconds),
             maturity: neuron.maturity_e8s_equivalent,
             neuron_fees: neuron.neuron_fees_e8s,
             dissolve_state: neuron.dissolve_state,
             followees: neuron.followees,
             kyc_verified: neuron.kyc_verified,
+            not_for_profit: neuron.not_for_profit,
+            joined_community_fund: neuron.joined_community_fund_timestamp_seconds,
+            do_not_create_subaccount: false,
         }
     }
 }
@@ -222,11 +231,15 @@ impl NeuronBuilder {
             owner: None,
             hot_keys: Vec::new(),
             age_seconds: None,
+            created_seconds: None,
             maturity: 0,
             neuron_fees: 0,
             dissolve_state: None,
             followees: HashMap::new(),
             kyc_verified: true,
+            not_for_profit: false,
+            joined_community_fund: None,
+            do_not_create_subaccount: false,
         }
     }
 
@@ -237,11 +250,15 @@ impl NeuronBuilder {
             owner: Some(owner),
             hot_keys: Vec::new(),
             age_seconds: None,
+            created_seconds: None,
             maturity: 0,
             neuron_fees: 0,
             dissolve_state: None,
             followees: HashMap::new(),
             kyc_verified: true,
+            not_for_profit: false,
+            joined_community_fund: None,
+            do_not_create_subaccount: false,
         }
     }
 
@@ -270,6 +287,16 @@ impl NeuronBuilder {
         self
     }
 
+    pub fn set_creation_timestamp(mut self, secs: u64) -> Self {
+        self.created_seconds = Some(secs);
+        self
+    }
+
+    pub fn set_aging_since_timestamp(mut self, secs: u64) -> Self {
+        self.age_seconds = Some(secs);
+        self
+    }
+
     #[allow(dead_code)]
     pub fn start_dissolving(mut self, now: u64) -> Self {
         if let Some(DissolveState::DissolveDelaySeconds(secs)) = self.dissolve_state {
@@ -288,9 +315,26 @@ impl NeuronBuilder {
         self
     }
 
+    pub fn set_not_for_profit(mut self, nfp: bool) -> Self {
+        self.not_for_profit = nfp;
+        self
+    }
+
+    pub fn set_joined_community_fund(mut self, secs: u64) -> Self {
+        self.joined_community_fund = Some(secs);
+        self
+    }
+
+    pub fn do_not_create_subaccount(mut self) -> Self {
+        self.do_not_create_subaccount = true;
+        self
+    }
+
     pub fn create(self, now: u64, ledger: &mut LedgerBuilder) -> Neuron {
         let subaccount = Self::subaccount(self.owner, self.ident);
-        ledger.add_account(neuron_subaccount(subaccount), self.stake);
+        if !self.do_not_create_subaccount {
+            ledger.add_account(neuron_subaccount(subaccount), self.stake);
+        }
         Neuron {
             id: Some(NeuronId { id: self.ident }),
             account: subaccount.to_vec(),
@@ -298,7 +342,7 @@ impl NeuronBuilder {
             hot_keys: self.hot_keys,
             cached_neuron_stake_e8s: self.stake,
             neuron_fees_e8s: self.neuron_fees,
-            created_timestamp_seconds: now,
+            created_timestamp_seconds: self.created_seconds.unwrap_or(now),
             aging_since_timestamp_seconds: match self.dissolve_state {
                 Some(DissolveState::WhenDissolvedTimestampSeconds(_)) => u64::MAX,
                 _ => match self.age_seconds {
@@ -309,7 +353,9 @@ impl NeuronBuilder {
             maturity_e8s_equivalent: self.maturity,
             dissolve_state: self.dissolve_state,
             kyc_verified: self.kyc_verified,
+            not_for_profit: self.not_for_profit,
             followees: self.followees,
+            joined_community_fund_timestamp_seconds: self.joined_community_fund,
             ..Neuron::default()
         }
     }
@@ -369,6 +415,9 @@ impl Ledger for NNSFixture {
         );
         let accounts = &mut self.nns_state.try_lock().unwrap().ledger.accounts;
 
+        let _to_e8s = accounts.get(&to_account).ok_or_else(|| {
+            GovernanceError::new_with_message(ErrorType::External, "Target account doesn't exist")
+        })?;
         let from_e8s = accounts.get_mut(&from_account).ok_or_else(|| {
             GovernanceError::new_with_message(ErrorType::External, "Source account doesn't exist")
         })?;
@@ -587,27 +636,39 @@ impl NNS {
     ///
     /// This function assumes that:
     /// - neuron of id `i` has for controller `principal(i)`
-    pub fn propose_and_vote(
+    pub fn propose_with_action(
         &mut self,
-        behavior: impl Into<ProposalNeuronBehavior>,
+        prop: &ProposalNeuronBehavior,
         summary: String,
+        action: proposal::Action,
     ) -> ProposalId {
         // Submit proposal
-        let prop: ProposalNeuronBehavior = behavior.into();
-        let pid = self
-            .governance
+        self.governance
             .make_proposal(
                 &NeuronId { id: prop.proposer },
                 &principal(prop.proposer),
                 &Proposal {
                     summary,
-                    action: Some(proposal::Action::Motion(Motion {
-                        motion_text: "me like proposals".to_string(),
-                    })),
+                    action: Some(action),
                     ..Default::default()
                 },
             )
-            .unwrap();
+            .unwrap()
+    }
+
+    pub fn propose_and_vote(
+        &mut self,
+        behavior: impl Into<ProposalNeuronBehavior>,
+        summary: String,
+    ) -> ProposalId {
+        let prop: ProposalNeuronBehavior = behavior.into();
+        let pid = self.propose_with_action(
+            &prop,
+            summary,
+            proposal::Action::Motion(Motion {
+                motion_text: "me like proposals".to_string(),
+            }),
+        );
         // Vote
         for (voter, vote) in &prop.votes {
             self.register_vote_assert_success(
@@ -648,6 +709,24 @@ impl NNS {
             manage_neuron_response::Command::MergeMaturity(response) => Ok(response),
             _ => panic!("Merge maturity command returned unexpected response"),
         }
+    }
+
+    pub fn merge_neurons(
+        &mut self,
+        target: &NeuronId,
+        controller: &PrincipalId,
+        source: &NeuronId,
+    ) -> Result<(), GovernanceError> {
+        self.governance
+            .merge_neurons(
+                target,
+                controller,
+                &Merge {
+                    source_neuron_id: Some(source.clone()),
+                },
+            )
+            .now_or_never()
+            .unwrap()
     }
 
     pub fn get_neuron(&self, ident: &NeuronId) -> &Neuron {
@@ -742,6 +821,7 @@ impl Default for NNSBuilder {
             ledger_builder: LedgerBuilder::default(),
             governance: GovernanceProto {
                 wait_for_quiet_threshold_seconds: 1,
+                short_voting_period_seconds: 30,
                 ..Default::default()
             },
             ledger_transforms: Vec::default(),
@@ -800,7 +880,7 @@ impl NNSBuilder {
         self
     }
 
-    pub fn add_account(mut self, ident: PrincipalId, amount: u64) -> Self {
+    pub fn add_account_for(mut self, ident: PrincipalId, amount: u64) -> Self {
         self.ledger_builder
             .add_account(AccountIdentifier::new(ident, None), amount);
         self

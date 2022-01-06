@@ -377,6 +377,14 @@ impl ManageNeuronResponse {
         }
     }
 
+    pub fn merge_response() -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::Merge(
+                manage_neuron_response::MergeResponse {},
+            )),
+        }
+    }
+
     pub fn disburse_to_neuron_response(created_neuron_id: NeuronId) -> Self {
         let created_neuron_id = Some(created_neuron_id);
         ManageNeuronResponse {
@@ -450,6 +458,27 @@ impl NnsFunction {
     }
 }
 
+/// Given two quantities of stake with possible associated age, return the
+/// combined stake and the combined age.
+pub fn combine_aged_stakes(
+    x_stake_e8s: u64,
+    x_age_seconds: u64,
+    y_stake_e8s: u64,
+    y_age_seconds: u64,
+) -> (u64, u64) {
+    let total_age_seconds: u128 = (x_stake_e8s as u128 * x_age_seconds as u128
+        + y_stake_e8s as u128 * y_age_seconds as u128)
+        / (x_stake_e8s as u128 + y_stake_e8s as u128);
+
+    // Note that age is adjusted in proportion to the stake, but due to the
+    // discrete nature of u64 numbers, some resolution is lost due to the
+    // division above. Only if x_age * x_stake is a multiple of y_stake does
+    // the age remain constant after this operation. However, in the end, the
+    // most that can be lost due to rounding from the actual age, is always
+    // less 1 second, so this is not a problem.
+    (x_stake_e8s + y_stake_e8s, total_age_seconds as u64)
+}
+
 impl Neuron {
     // --- Utility methods on neurons: mostly not for public consumption.
 
@@ -487,6 +516,11 @@ impl Neuron {
     /// controller or one of the authorized hot keys.
     fn is_authorized_to_vote(&self, principal: &PrincipalId) -> bool {
         self.is_controlled_by(principal) || self.hot_keys.contains(principal)
+    }
+
+    /// Returns true if this is a community fund neuron.
+    fn is_community_fund_neuron(&self) -> bool {
+        self.joined_community_fund_timestamp_seconds.is_some()
     }
 
     /// Return the voting power of this neuron.
@@ -930,39 +964,41 @@ impl Neuron {
             .saturating_sub(self.neuron_fees_e8s)
     }
 
-    /// Update the stake of this neuron to `new_stake` and adjust this neuron's
-    /// age accordingly
-    pub fn update_stake(&mut self, new_stake_e8s: u64, now: u64) {
-        // If this neuron has an age and its stake is being increased, adjust this
-        // neuron's age
-        if self.aging_since_timestamp_seconds < now && self.cached_neuron_stake_e8s <= new_stake_e8s
-        {
-            let old_stake = self.cached_neuron_stake_e8s as u128;
-            let old_age = now.saturating_sub(self.aging_since_timestamp_seconds) as u128;
-            let new_age = (old_age * old_stake) / (new_stake_e8s as u128);
-
-            // new_age * new_stake = old_age * old_stake -
-            // (old_stake * old_age) % new_stake. That is, age is
-            // adjusted in proportion to the stake, but due to the
-            // discrete nature of u64 numbers, some resolution is
-            // lost due to the division above. This means the age
-            // bonus is derived from a constant times age times
-            // stake, minus up to new_stake - 1 each time the
-            // neuron is refreshed. Only if old_age * old_stake is
-            // a multiple of new_stake does the age remain
-            // constant after the refresh operation. However, in
-            // the end, the most that can be lost due to rounding
-            // from the actual age, is always less 1 second, so
-            // this is not a problem.
-            self.aging_since_timestamp_seconds = now.saturating_sub(new_age as u64);
-            // Note that if new_stake == old_stake, then
-            // new_age == old_age, and
-            // now - new_age =
-            // now-(now-neuron.aging_since_timestamp_seconds)
-            // = neuron.aging_since_timestamp_seconds.
+    /// Set the cached stake of this neuron to `updated_stake_e8s` and adjust
+    /// this neuron's age accordingly.
+    pub fn update_stake(&mut self, updated_stake_e8s: u64, now: u64) {
+        // If the updated stake is less than the original stake, preserve the
+        // age and distribute it over the new amount. This should not happen
+        // in practice, so this code exists merely as a defensive fallback.
+        //
+        // TODO(NNS1-954) Consider whether update_stake (and other similar
+        // methods) should use a neurons effective stake rather than the
+        // cached stake.
+        if updated_stake_e8s < self.cached_neuron_stake_e8s {
+            println!(
+                "{}Reducing neuron {:?} stake via update_stake: {} -> {}",
+                LOG_PREFIX, self.id, self.cached_neuron_stake_e8s, updated_stake_e8s
+            );
+            self.cached_neuron_stake_e8s = updated_stake_e8s;
+        } else {
+            // If one looks at "stake * age" as describing an area, the goal
+            // at this point is to increase the stake while keeping the area
+            // constant. This means decreasing the age in proportion to the
+            // additional stake, which is the purpose of combine_aged_stakes.
+            let (new_stake_e8s, new_age_seconds) = combine_aged_stakes(
+                self.cached_neuron_stake_e8s,
+                self.age_seconds(now),
+                updated_stake_e8s.saturating_sub(self.cached_neuron_stake_e8s),
+                0,
+            );
+            // A consequence of the math above is that the 'new_stake_e8s' is
+            // always the same as the 'updated_stake_e8s'. We use
+            // 'combine_aged_stakes' here to make sure the age is
+            // appropriately pro-rated to accommodate the new stake.
+            assert!(new_stake_e8s == updated_stake_e8s);
+            self.cached_neuron_stake_e8s = new_stake_e8s;
+            self.aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
         }
-
-        self.cached_neuron_stake_e8s = new_stake_e8s as u64;
     }
 }
 
@@ -2721,6 +2757,286 @@ impl Governance {
 
         child_neuron.cached_neuron_stake_e8s = staked_amount;
         Ok(child_nid)
+    }
+
+    /// Merge one neuron (the "source" provided by the Merge argument) into
+    /// another (the "target" specified by the 'id').
+    ///
+    /// The source neuron's stake, maturity and age are moved into the target.
+    /// Any fees the source neuron are burned before the transfer occurs.
+    ///
+    /// On success the target neuron contains all the stake, maturity and age
+    /// of both neurons. The source neuron has 0 stake, 0 maturity and 0 age.
+    /// Current fees are not affected in either neuron. The dissolve delay of
+    /// the target neuron is the greater of the dissolve delay of the two,
+    /// while the source remains unchanged.
+    ///
+    /// Preconditions:
+    /// - Source id and target id cannot be the same
+    /// - Target neuron must be owned by the caller
+    /// - Source neuron must be owned by the caller
+    /// - Source neuron of merge must be created after target neuron
+    /// - Source neuron's kyc_verified field must match target
+    /// - Source neuron's not_for_profit field must match target
+    /// - Cannot merge neurons that have been dedicated to the community fund
+    /// - Subaccount of source neuron to be merged must be present
+    /// - Subaccount of target neuron to be merged must be present
+    /// - Neither neuron can be the proposer of an open proposal
+    /// - Neither neuron can be the subject of a MergeNeuron proposal
+    /// - Source neuron must exist
+    /// - Target neuron must exist
+    /// - Stake of the source neuron of a merge must be greater than the fee
+    pub async fn merge_neurons(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        merge: &manage_neuron::Merge,
+    ) -> Result<(), GovernanceError> {
+        let source_id = merge.source_neuron_id.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "There was no source neuron id",
+            )
+        })?;
+
+        if id.id == source_id.id {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Cannot merge a neuron into itself",
+            ));
+        }
+
+        // Get the neuron and clone to appease the borrow checker.
+        let target_neuron = self.get_neuron(id)?.clone();
+        if !target_neuron.is_controlled_by(caller) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                "Target neuron must be owned by the caller",
+            ));
+        }
+
+        let source_neuron = self.get_neuron(source_id)?.clone();
+        if !source_neuron.is_controlled_by(caller) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                "Source neuron must be owned by the caller",
+            ));
+        }
+
+        // To avoid the situation where a GTC neuron might be merged into
+        // a post-genesis neuron, avoid this by always requiring that the
+        // target be the older neuron.
+        if source_neuron.created_timestamp_seconds < target_neuron.created_timestamp_seconds {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Source neuron of a merge must have been created after the target neuron",
+            ));
+        }
+        if source_neuron.kyc_verified != target_neuron.kyc_verified {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Source neuron's kyc_verified field does not match target",
+            ));
+        }
+        if source_neuron.not_for_profit != target_neuron.not_for_profit {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Source neuron's not_for_profit field does not match target",
+            ));
+        }
+        if source_neuron.is_community_fund_neuron() || target_neuron.is_community_fund_neuron() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Cannot merge neurons that have been dedicated to the community fund",
+            ));
+        }
+
+        let from_subaccount = subaccount_from_slice(&source_neuron.account)?.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Subaccount of source neuron is not valid",
+            )
+        })?;
+        let to_subaccount = subaccount_from_slice(&target_neuron.account)?.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Subaccount of target neuron is not valid",
+            )
+        })?;
+
+        let now = self.env.now();
+
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: now,
+            command: Some(InFlightCommand::Merge(merge.clone())),
+        };
+
+        // Make sure the source and target neurons are not already
+        // undergoing a ledger update.
+        let _target_lock = self.lock_neuron_for_command(id.id, in_flight_command.clone())?;
+        let _source_lock = self.lock_neuron_for_command(source_id.id, in_flight_command.clone())?;
+
+        // Do not allow this command to be called for any neuron that is the
+        // involved in an open proposal.
+        fn involved_with_proposal(proto: &GovernanceProto, id: &NeuronId) -> bool {
+            proto.proposals.values().any(|p| {
+                p.status() == ProposalStatus::Open
+                    && (p.proposer.as_ref() == Some(id)
+                        || (p.is_manage_neuron()
+                            && p.proposal.as_ref().map_or(false, |pr| {
+                                pr.managed_neuron()
+                                    == Some(NeuronIdOrSubaccount::NeuronId(id.clone()))
+                            })))
+            })
+        }
+        if involved_with_proposal(&self.proto, id) || involved_with_proposal(&self.proto, source_id)
+        {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Cannot merge neurons that are involved in open proposals",
+            ));
+        }
+
+        let transaction_fee_e8s = self.transaction_fee();
+
+        let source_neuron_fees_e8s = self.get_neuron(source_id)?.neuron_fees_e8s;
+
+        // Before transfering stake from the source to the target, burn any
+        // fees present in the source neuron.
+        if source_neuron_fees_e8s > transaction_fee_e8s {
+            let _result = self
+                .ledger
+                .transfer_funds(
+                    source_neuron_fees_e8s,
+                    0, // Burning transfers don't pay a fee.
+                    Some(from_subaccount),
+                    governance_minting_account(),
+                    now,
+                )
+                .await?;
+        }
+
+        let source_neuron_mut = self
+            .get_neuron_mut(source_id)
+            .expect("Expected the source neuron to exist");
+
+        source_neuron_mut.cached_neuron_stake_e8s = source_neuron_mut
+            .cached_neuron_stake_e8s
+            .saturating_sub(source_neuron_fees_e8s);
+        source_neuron_mut.neuron_fees_e8s = source_neuron_mut
+            .neuron_fees_e8s
+            .saturating_sub(source_neuron_fees_e8s);
+
+        let source_age_timestamp_seconds = source_neuron_mut.aging_since_timestamp_seconds;
+        let source_stake_e8s = source_neuron_mut.stake_e8s();
+        let source_stake_less_transaction_fee_e8s =
+            source_stake_e8s.saturating_sub(transaction_fee_e8s);
+
+        if source_stake_less_transaction_fee_e8s == 0 {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Stake of the source neuron of a merge must be greater than the fee",
+            ));
+        }
+
+        // We must zero out the source neuron's cached stake before submitting
+        // the call to transfer_funds. If we do not do this, there would be a
+        // window of opportunity -- from the moment the stake is transferred
+        // but before the cached stake is updated -- when a proposal could be
+        // submitted and rejected on behalf of the source neuron (since cached
+        // stake is high enough), but that would be impossible to charge
+        // because the account had been emptied. To guard against this, we
+        // pre-emptively set the stake to zero, and set it back in case of
+        // transfer failure.
+        //
+        // Another important reason to set the cached stake to zero (net fees)
+        // is so that the source neuron cannot use the stake that is getting
+        // merged to vote or propose. Also, the source neuron should not be
+        // able to increase stake while locked because we do not allow the
+        // source to have pending proposals.
+        source_neuron_mut.cached_neuron_stake_e8s = source_neuron_mut
+            .cached_neuron_stake_e8s
+            .saturating_sub(source_stake_e8s);
+
+        // Reset source aging. In other words, if it was aging before, it is
+        // still aging now, although the timer is reset to the time of the
+        // merge. Since all fees were burned and this neuron is not currently
+        // participating in any proposal, it means that the stake is 0 and
+        // increasing stake will not take advantage of this age. However, it
+        // is consistent with the use of aging_since_timestamp_seconds that we
+        // simply reset the age here, since we do not change the dissolve
+        // state in any other way.
+        if source_neuron_mut.aging_since_timestamp_seconds != u64::MAX {
+            source_neuron_mut.aging_since_timestamp_seconds = now;
+        }
+
+        let _block_height: u64 = self
+            .ledger
+            .transfer_funds(
+                source_stake_less_transaction_fee_e8s,
+                transaction_fee_e8s,
+                Some(from_subaccount),
+                neuron_subaccount(to_subaccount),
+                now,
+            )
+            .await
+            .map_err(|err| {
+                let source_neuron_mut = self
+                    .proto
+                    .neurons
+                    .get_mut(&source_id.id)
+                    .expect("Expected the source neuron to exist");
+                source_neuron_mut.cached_neuron_stake_e8s += source_stake_e8s;
+                source_neuron_mut.aging_since_timestamp_seconds = source_age_timestamp_seconds;
+                err
+            })?;
+
+        let source_neuron_mut = self
+            .get_neuron_mut(source_id)
+            .expect("Expected the source neuron to exist");
+
+        // Set source maturity to zero
+        let source_age_seconds = source_neuron_mut.age_seconds(now);
+        let source_maturity = source_neuron_mut.maturity_e8s_equivalent;
+        source_neuron_mut.maturity_e8s_equivalent = 0;
+
+        let mut target_neuron_mut = self
+            .get_neuron_mut(id)
+            .expect("Expected the target neuron to exist");
+
+        // Move the source's stake (net fees) and any accumulated
+        // neuron age from the source neuron into target.
+        let (new_stake_e8s, new_age_seconds) = combine_aged_stakes(
+            target_neuron_mut.cached_neuron_stake_e8s,
+            target_neuron_mut.age_seconds(now),
+            source_stake_less_transaction_fee_e8s,
+            source_age_seconds,
+        );
+        target_neuron_mut.cached_neuron_stake_e8s = new_stake_e8s;
+        target_neuron_mut.aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
+
+        // Move maturity from source neuron to target
+        target_neuron_mut.maturity_e8s_equivalent += source_maturity;
+
+        let target_dissolve_delay = target_neuron_mut.dissolve_delay_seconds(now);
+        let highest_dissolve_delay = std::cmp::max(
+            target_dissolve_delay,
+            source_neuron.dissolve_delay_seconds(now),
+        );
+        let target_delta = highest_dissolve_delay.saturating_sub(target_dissolve_delay);
+
+        // Set dissolve delay or when dissolved timestamp of the target to
+        // whichever is the greater between the source and target neurons.
+        if target_delta > 0 {
+            target_neuron_mut.increase_dissolve_delay(now, target_delta.try_into().unwrap())?;
+        }
+
+        println!(
+            "{}Merged neuron {} into {} at {:?}",
+            LOG_PREFIX, source_id.id, id.id, now
+        );
+
+        Ok(())
     }
 
     /// Spawn an neuron from an existing neuron's maturity.
@@ -5413,6 +5729,10 @@ impl Governance {
                 .disburse_to_neuron(&id, caller, d)
                 .await
                 .map(ManageNeuronResponse::disburse_to_neuron_response),
+            Some(manage_neuron::Command::Merge(s)) => self
+                .merge_neurons(&id, caller, s)
+                .await
+                .map(|_| ManageNeuronResponse::merge_response()),
             Some(manage_neuron::Command::Follow(f)) => self
                 .follow(&id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
