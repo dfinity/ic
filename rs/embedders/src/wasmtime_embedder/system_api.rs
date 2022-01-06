@@ -418,14 +418,15 @@ pub(crate) fn syscalls<S: SystemApi>(
                     system_api_charges::DEBUG_PRINT,
                     length as u32,
                 )?;
-                // Debug print is a no-op on non-system subnets
-                if caller.data().system_api.subnet_type() != SubnetType::System {
-                    Ok(())
-                } else {
-                    with_memory_and_system_api(caller, |system_api, memory| {
-                        system_api.ic0_debug_print(offset as u32, length as u32, memory);
-                        Ok(())
-                    })
+                match caller.data().system_api.subnet_type() {
+                    // Debug print is a no-op on non-system subnets
+                    SubnetType::Application | SubnetType::VerifiedApplication => Ok(()),
+                    SubnetType::System => {
+                        with_memory_and_system_api(caller, |system_api, memory| {
+                            system_api.ic0_debug_print(offset as u32, length as u32, memory);
+                            Ok(())
+                        })
+                    }
                 }
             }
         })
