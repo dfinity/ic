@@ -1083,6 +1083,10 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         self.stable_memory.stable_memory_size.get()
     }
 
+    fn subnet_type(&self) -> SubnetType {
+        self.execution_parameters.subnet_type
+    }
+
     fn ic0_msg_caller_size(&self) -> HypervisorResult<u32> {
         match &self.api_type {
             ApiType::Start { .. }

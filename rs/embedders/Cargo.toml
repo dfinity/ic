@@ -12,6 +12,7 @@ ic-cow-state = { path = "../cow_state" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
 ic-system-api = { path = "../system_api" }
@@ -40,7 +41,6 @@ wasmtime-runtime = "0.29.0"
 [dev-dependencies]
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-system-api = { path = "../system_api" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-test-utilities = { path = "../test_utilities" }
 maplit = "1.0.2"
 proptest = "0.9.4"

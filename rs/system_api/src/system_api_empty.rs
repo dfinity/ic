@@ -2,6 +2,7 @@ use ic_interfaces::execution_environment::{
     HypervisorError::{self},
     HypervisorResult, SystemApi,
 };
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::PageIndex;
 use ic_sys::PageBytes;
 use ic_types::{Cycles, NumBytes, NumInstructions, Time};
@@ -27,6 +28,9 @@ impl SystemApi for SystemApiEmpty {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn stable_memory_size(&self) -> usize {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn subnet_type(&self) -> SubnetType {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_msg_caller_copy(&self, _: u32, _: u32, _: u32, _: &mut [u8]) -> HypervisorResult<()> {

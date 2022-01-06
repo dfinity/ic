@@ -2,6 +2,7 @@ use crate::wasmtime_embedder::{system_api_charges, StoreData};
 
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, SystemApi};
 use ic_logger::{error, info, ReplicaLogger};
+use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions};
 
 use wasmtime::{AsContextMut, Caller, Linker, Store, Trap, Val};
@@ -417,10 +418,15 @@ pub(crate) fn syscalls<S: SystemApi>(
                     system_api_charges::DEBUG_PRINT,
                     length as u32,
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
-                    system_api.ic0_debug_print(offset as u32, length as u32, memory);
+                // Debug print is a no-op on non-system subnets
+                if caller.data().system_api.subnet_type() != SubnetType::System {
                     Ok(())
-                })
+                } else {
+                    with_memory_and_system_api(caller, |system_api, memory| {
+                        system_api.ic0_debug_print(offset as u32, length as u32, memory);
+                        Ok(())
+                    })
+                }
             }
         })
         .unwrap();
