@@ -151,11 +151,16 @@ ln -fs "${target}/ic-rosetta-api" local-bin/
 ## Update path; because we must run this script from the tests directory,
 ## we know local bin is in here.
 PATH="$PWD/../../ic-os/guestos/scripts:$PWD/local-bin:$PATH"
+SUMMARY_SCRIPT="$PWD/../../gitlab-ci/src/test_results/summary.py"
+TEST_RESULTS="$(mktemp -d)/test-results.json"
 
 ## Run tests
 st_test=$(date)
-cargo run --bin system-tests -- "$@"
+cargo run --bin system-tests -- --result-file "${TEST_RESULTS}" "$@"
 e_test=$(date)
+
+## Print summary
+python3 "${SUMMARY_SCRIPT}" --test_results "${TEST_RESULTS}" --verbose
 
 ## Summary
 echo "Testing times:"

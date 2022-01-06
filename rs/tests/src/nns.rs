@@ -331,7 +331,7 @@ pub fn install_nns_canisters(
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     info!(
         logger,
-        "Compiling/installing NNS canisters (might take a while). See README.md of ic-fondue."
+        "Compiling/installing NNS canisters (might take a while)."
     );
     rt.block_on(async move {
         let mut init_payloads = NnsInitPayloadsBuilder::new();

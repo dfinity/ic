@@ -38,10 +38,14 @@ echo "System tests finished with exit code $RES"
 
 # Export runtime statistics of system tests to Honeycomb.
 python3 "${CI_PROJECT_DIR}"/gitlab-ci/src/test_results/honeycomb.py \
-    --test_results "${CI_PROJECT_DIR}"/runtime-stats.json \
+    --test_results "${CI_PROJECT_DIR}"/test-results.json \
     --trace_id "$ROOT_PIPELINE_ID" \
     --parent_id "$CI_JOB_ID" \
     --type "system-tests"
+
+# Print a summary of system tests execution.
+python3 "${CI_PROJECT_DIR}"/gitlab-ci/src/test_results/summary.py \
+    --test_results "${CI_PROJECT_DIR}"/test-results.json
 
 /usr/bin/time "${CI_PROJECT_DIR}/gitlab-ci/src/artifacts/collect_core_dumps.sh"
 if [[ "$?" == 0 ]] && [[ $RES == 0 ]]; then

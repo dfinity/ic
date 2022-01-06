@@ -1,7 +1,6 @@
-use std::{panic::catch_unwind, time::Duration, time::Instant};
+use std::{panic::catch_unwind, time::Instant};
 
 use crossbeam_channel::{bounded, Receiver, Sender};
-use serde::Serialize;
 use slog::{error, info, warn};
 
 use super::bootstrap::{
@@ -14,56 +13,11 @@ use super::test_setup::create_ic_handle;
 use crate::ic_manager::IcHandle;
 use crate::prod_tests::driver_setup::tee_logger;
 use crate::prod_tests::farm::{FarmResult, GroupSpec};
+use fondue::pot::execution::result::*;
 use fondue::pot::Context;
 
 pub const N_THREADS_PER_SUITE: usize = 6;
 pub const N_THREADS_PER_POT: usize = 8;
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TestResult {
-    Passed,
-    Failed,
-    Skipped,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-/// A tree-like structure containing statistics on how much time it took to
-/// complete a node and all its children, i.e. threads spawned from the node.
-pub struct TestResultNode {
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub group_name: Option<String>,
-    #[serde(with = "serde_millis")]
-    pub started_at: Instant,
-    pub duration: Duration,
-    pub result: TestResult,
-    pub children: Vec<TestResultNode>,
-}
-
-impl Default for TestResultNode {
-    fn default() -> Self {
-        Self {
-            name: String::default(),
-            group_name: None,
-            started_at: Instant::now(),
-            duration: Duration::default(),
-            result: TestResult::Skipped,
-            children: vec![],
-        }
-    }
-}
-
-pub fn infer_result(tests: &[TestResultNode]) -> TestResult {
-    if tests.iter().all(|t| t.result == TestResult::Skipped) {
-        return TestResult::Skipped;
-    }
-    if tests.iter().any(|t| t.result == TestResult::Failed) {
-        TestResult::Failed
-    } else {
-        TestResult::Passed
-    }
-}
 
 pub fn evaluate(ctx: &DriverContext, ts: Suite) -> TestResultNode {
     let started_at = Instant::now();

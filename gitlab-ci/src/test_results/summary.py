@@ -18,12 +18,12 @@ def summarize(root, verbose):
     print_statistics(root)
     pots = root.children
     for p in pots:
-        if verbose or p.result == "failed":
+        if verbose or p.result == "Failed":
             pot_summary(p)
 
 
 def pot_summary(p):
-    result_to_color = {"failed": "red", "passed": "green", "skipped": "white"}
+    result_to_color = {"Failed": "red", "Passed": "green", "Skipped": "white"}
     print(
         colored(
             "Pot '{}' (duration: {}s) contains {} test(s):".format(p.name, p.duration.secs, len(p.children)),
@@ -32,7 +32,8 @@ def pot_summary(p):
     )
     for t in p.children:
         print(colored("* {} (duration: {}s)".format(t.name, t.duration.secs), result_to_color[t.result]))
-    print(colored("Node logs: {}\n".format(create_link(p.group_name)), result_to_color[p.result]))
+    if p.group_name:
+        print(colored("Node logs: {}\n".format(create_link(p.group_name)), result_to_color[p.result]))
 
 
 def create_link(group_name):
@@ -44,7 +45,7 @@ def create_link(group_name):
 
 def print_statistics(root):
     pots = root.children
-    tests = reduce(add, map(lambda p: p.children, pots))
+    tests = reduce(add, map(lambda p: p.children, pots), [])
     print(
         "Suite '{}' contains {} pots ".format(root.name, len(pots))
         + summarize_results(pots)
@@ -56,7 +57,7 @@ def print_statistics(root):
 
 def summarize_results(results):
     d = defaultdict(int, Counter(map(lambda r: r.result, results)))
-    return Formatter().vformat("({passed} passed, {skipped} skipped, {failed} failed)", (), d)
+    return Formatter().vformat("({Passed} passed, {Skipped} skipped, {Failed} failed)", (), d)
 
 
 def main():

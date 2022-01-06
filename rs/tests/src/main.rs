@@ -283,33 +283,30 @@ fn main() {
         .filter(|p| opt.experimental || !p.experimental)
         .collect();
 
-    let runtime_stats_writer = opt.runtime_stats_file.map(|p| {
+    let results_writer = opt.result_file.map(|p| {
         std::io::BufWriter::new(Box::new(
             std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(&p)
-                .expect("couldn't open runtime_stats file"),
+                .expect("couldn't open result-file"),
         ))
     });
 
+    print_rng_seed(&fondue_config);
     if let Some(res) = fondue::pot::execution::execute(&fondue_config, scheduled_pots) {
-        res.print_summary();
-        print_rng_seed(&fondue_config);
-
-        if let Some(mut w) = runtime_stats_writer {
+        if let Some(mut w) = results_writer {
             serde_json::to_writer_pretty(
                 &mut w,
-                &res.extract_runtime_summary("system_tests".to_string(), started_at),
+                &res.treeify("system_tests".to_string(), started_at),
             )
-            .expect("failed to write runtime statistics to file");
+            .expect("failed to write results to file");
         }
         if !res.was_successful() {
             // propagate error in case of any failures
             std::process::exit(1);
         }
     } else {
-        print_rng_seed(&fondue_config);
         std::process::exit(1);
     }
 }

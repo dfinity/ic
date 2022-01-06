@@ -13,14 +13,14 @@ legacy-system-tests:
       - replica-logs/
       - junit_data/
       - coredumps/
-      - runtime-stats.json
+      - test-results.json
     when: always
     expire_in: 1 week
     reports:
       junit: test_report.xml
   variables:
       BLOCKING: "blocking"
-      TEST_RUNNER_ARGS: "--experimental --jobs 6 --timeout 720s --ready-timeout 90s --runtime-stats ${CI_PROJECT_DIR}/runtime-stats.json --tee-replica-logs-base-dir ${CI_PROJECT_DIR}/replica-logs --skip staging -v"
+      TEST_RUNNER_ARGS: "--experimental --jobs 6 --timeout 720s --ready-timeout 90s --result-file ${CI_PROJECT_DIR}/test-results.json --tee-replica-logs-base-dir ${CI_PROJECT_DIR}/replica-logs --skip staging -v"
       RUST_BACKTRACE: 1
   script:
     - |

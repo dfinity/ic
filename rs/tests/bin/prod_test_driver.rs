@@ -1,6 +1,7 @@
+use fondue::pot::execution::TestResult;
 use ic_fondue::prod_tests::cli::CliArgs;
 use ic_fondue::prod_tests::driver_setup::create_driver_context_from_cli;
-use ic_fondue::prod_tests::evaluation::{evaluate, TestResult};
+use ic_fondue::prod_tests::evaluation::evaluate;
 use ic_fondue::prod_tests::pot_dsl::*;
 use ic_tests::create_subnet::{self, create_subnet_test};
 use ic_tests::nns_fault_tolerance_test;
