@@ -24,7 +24,6 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::{collections::BTreeSet, sync::Arc};
 
 pub trait CheckpointManager: Send + Sync {
@@ -953,18 +952,6 @@ impl<Permissions> From<PathBuf> for WasmFile<Permissions> {
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
         Self {
-            // Field `controller` is now deprecated. Once all subnets in production contain the
-            // new version of this field, we can remove it.
-            controller: Some(
-                // To maintain compatibility in case we need to downgrade in an emergency,
-                // we still assign the controller field. If there are multiple controllers,
-                // we assign one of them as the controller, and if there are none, we assign
-                // the "no controller" marker.
-                match item.controllers.iter().next() {
-                    None => no_controllers_marker().into(),
-                    Some(controller) => controller.to_owned().into(),
-                },
-            ),
             controllers: item
                 .controllers
                 .into_iter()
@@ -1025,11 +1012,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         let mut controllers = BTreeSet::new();
         for controller in value.controllers.into_iter() {
             controllers.insert(PrincipalId::try_from(controller)?);
-        }
-        if let Some(controller) = value.controller {
-            if controller != no_controllers_marker().into() {
-                controllers.insert(PrincipalId::try_from(controller)?);
-            }
         }
 
         // Once all subnets in production contain the
@@ -1129,12 +1111,6 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
     }
 }
 
-// A principal used to indicate that there are no controllers present.
-// Note the "no controller" substring in the principal.
-fn no_controllers_marker() -> PrincipalId {
-    PrincipalId::from_str("zrl4w-cqaaa-nocon-troll-eraaa-d5qc").unwrap()
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -1167,10 +1143,6 @@ mod test {
         };
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-
-        // No controllers is encoded with the "no controller" marker.
-        assert_eq!(pb_bits.controller, Some(no_controllers_marker().into()));
-
         let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
 
         // Controllers are still empty, as expected.
@@ -1206,50 +1178,11 @@ mod test {
         };
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-
-        assert_eq!(pb_bits.controller, Some(IC_00.get().into()));
-
         let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
 
         let mut expected_controllers = BTreeSet::new();
         expected_controllers.insert(canister_test_id(0).get());
         expected_controllers.insert(IC_00.into());
         assert_eq!(canister_state_bits.controllers, expected_controllers);
-    }
-
-    #[test]
-    fn test_encode_decode_no_controller_marker_as_controllers() {
-        // If the controller is set explicitly to the no_controllers_marker, then
-        // it should still be preserved.
-        let mut controllers = BTreeSet::new();
-        controllers.insert(no_controllers_marker());
-
-        // A canister state with empty controllers.
-        let canister_state_bits = CanisterStateBits {
-            controllers: controllers.clone(),
-            last_full_execution_round: ExecutionRound::from(0),
-            call_context_manager: None,
-            compute_allocation: ComputeAllocation::try_from(0).unwrap(),
-            accumulated_priority: AccumulatedPriority::from(0),
-            execution_state_bits: None,
-            memory_allocation: MemoryAllocation::default(),
-            freeze_threshold: NumSeconds::from(0),
-            cycles_balance: Cycles::from(0),
-            status: CanisterStatus::Stopped,
-            scheduled_as_first: 0,
-            skipped_round_due_to_no_messages: 0,
-            executed: 0,
-            interruped_during_execution: 0,
-            certified_data: vec![],
-            consumed_cycles_since_replica_started: NominalCycles::from(0),
-            stable_memory_size: NumWasmPages::from(0),
-            heap_delta_debit: NumBytes::from(0),
-        };
-
-        let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-
-        let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
-
-        assert_eq!(canister_state_bits.controllers, controllers)
     }
 }
