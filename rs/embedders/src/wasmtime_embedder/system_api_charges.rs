@@ -14,7 +14,7 @@ pub const MSG_REJECT: NumInstructions = NumInstructions::new(0);
 // Not part of the update API
 pub const MSG_REJECT_MSG_COPY: NumInstructions = NumInstructions::new(0);
 // Not tested
-pub const DEBUG_PRINT: NumInstructions = NumInstructions::new(0);
+pub const DEBUG_PRINT: NumInstructions = NumInstructions::new(100);
 // Not tested
 pub const TRAP: NumInstructions = NumInstructions::new(0);
 // call_* API was not tested
