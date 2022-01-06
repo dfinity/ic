@@ -1,4 +1,28 @@
 //! Common utils for the ECDSA implementation.
+use crate::consensus::ConsensusCrypto;
+use ic_interfaces::crypto::IDkgProtocol;
+use ic_logger::{warn, ReplicaLogger};
+use ic_types::crypto::canister_threshold_sig::{
+    error::IDkgLoadTranscriptError,
+    idkg::{IDkgComplaint, IDkgTranscript},
+};
+
+// Load idkg transcript and log errors.
+pub fn crypto_load_idkg_transcript(
+    crypto: &dyn ConsensusCrypto,
+    transcript: &IDkgTranscript,
+    log: &ReplicaLogger,
+) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
+    IDkgProtocol::load_transcript(crypto, transcript).map_err(|error| {
+        warn!(
+            log,
+            "Failed to load transcript: transcript_id = {:?}, error = {:?}",
+            transcript.transcript_id,
+            error
+        );
+        error
+    })
+}
 
 #[cfg(test)]
 pub(crate) mod test_utils {
