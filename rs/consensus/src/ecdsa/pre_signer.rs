@@ -5,7 +5,7 @@ use crate::consensus::{
     utils::RoundRobin,
     ConsensusCrypto,
 };
-
+use crate::ecdsa::utils::crypto_load_idkg_transcript;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces::crypto::{ErrorReplication, IDkgProtocol};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
@@ -620,13 +620,7 @@ impl EcdsaPreSignerImpl {
     /// Helper to load the given transcript.
     /// Returns true if the transcript was loaded successfully.
     fn crypto_load_transcript(&self, transcript: &IDkgTranscript) -> bool {
-        if let Err(error) = IDkgProtocol::load_transcript(&*self.crypto, transcript) {
-            warn!(
-                self.log,
-                "Failed to load transcript: transcript_id = {:?}, error = {:?}",
-                transcript.transcript_id,
-                error
-            );
+        if crypto_load_idkg_transcript(&*self.crypto, transcript, &self.log).is_err() {
             self.metrics.pre_sign_errors_inc("load_transcript");
             false
         } else {

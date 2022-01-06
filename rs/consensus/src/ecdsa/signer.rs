@@ -5,10 +5,9 @@ use crate::consensus::{
     utils::RoundRobin,
     ConsensusCrypto,
 };
-
+use crate::ecdsa::utils::crypto_load_idkg_transcript;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
-use ic_interfaces::crypto::ErrorReplication;
-use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
+use ic_interfaces::crypto::{ErrorReplication, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -16,7 +15,9 @@ use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
     EcdsaBlockReader, EcdsaBlockReaderImpl, EcdsaMessage, EcdsaSigShare, EcdsaSignature, RequestId,
 };
-use ic_types::crypto::canister_threshold_sig::{ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare};
+use ic_types::crypto::canister_threshold_sig::{
+    error::IDkgLoadTranscriptError, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+};
 use ic_types::{Height, NodeId};
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -137,6 +138,35 @@ impl EcdsaSignerImpl {
         ret
     }
 
+    /// Load necessary transcripts for the inputs
+    fn crypto_load_transcript(
+        &self,
+        inputs: &ThresholdEcdsaSigInputs,
+    ) -> Result<(), IDkgLoadTranscriptError> {
+        crypto_load_idkg_transcript(
+            &*self.crypto,
+            inputs.presig_quadruple().kappa_unmasked(),
+            &self.log,
+        )?;
+        crypto_load_idkg_transcript(
+            &*self.crypto,
+            inputs.presig_quadruple().lambda_masked(),
+            &self.log,
+        )?;
+        crypto_load_idkg_transcript(
+            &*self.crypto,
+            inputs.presig_quadruple().kappa_times_lambda(),
+            &self.log,
+        )?;
+        crypto_load_idkg_transcript(
+            &*self.crypto,
+            inputs.presig_quadruple().key_times_lambda(),
+            &self.log,
+        )?;
+        crypto_load_idkg_transcript(&*self.crypto, inputs.key_transcript(), &self.log)?;
+        Ok(())
+    }
+
     /// Helper to create the signature share
     fn crypto_create_signature_share(
         &self,
@@ -144,6 +174,12 @@ impl EcdsaSignerImpl {
         request_id: &RequestId,
         sig_inputs: &ThresholdEcdsaSigInputs,
     ) -> EcdsaChangeSet {
+        if self.crypto_load_transcript(sig_inputs).is_err() {
+            self.metrics.sign_errors_inc("load_transcript");
+            return Default::default();
+        } else {
+            self.metrics.sign_metrics_inc("transcript_loaded");
+        }
         ThresholdEcdsaSigner::sign_share(&*self.crypto, sig_inputs).map_or_else(
             |error| {
                 warn!(
