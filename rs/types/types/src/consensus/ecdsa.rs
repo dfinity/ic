@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
+    convert::TryFrom,
     ops::{Deref, DerefMut},
 };
 
@@ -175,35 +176,40 @@ impl From<&EcdsaMessage> for EcdsaMessageAttribute {
     }
 }
 
-/// This is a helper trait that indicates, that somethings has a transcript
-/// type. This type can of course be queried.
-pub trait HasTranscriptType {
-    fn get_type(&self) -> &IDkgTranscriptType;
-}
-
-impl HasTranscriptType for IDkgTranscript {
-    fn get_type(&self) -> &IDkgTranscriptType {
-        &self.transcript_type
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct Unmasked<T>(T);
 pub type UnmaskedTranscript = Unmasked<IDkgTranscript>;
 
-impl<T> Unmasked<T>
-where
-    T: HasTranscriptType,
-{
-    pub fn try_convert(value: T) -> Option<Self> {
-        match value.get_type() {
-            IDkgTranscriptType::Unmasked(_) => Some(Unmasked(value)),
-            _ => None,
+impl UnmaskedTranscript {
+    pub fn transcript_id(&self) -> IDkgTranscriptId {
+        self.0.transcript_id
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct TranscriptCastError {
+    pub transcript_id: IDkgTranscriptId,
+    pub from_type: IDkgTranscriptType,
+    pub expected_type: &'static str,
+}
+
+impl TryFrom<IDkgTranscript> for UnmaskedTranscript {
+    type Error = TranscriptCastError;
+    fn try_from(transcript: IDkgTranscript) -> Result<Self, Self::Error> {
+        match transcript.transcript_type {
+            IDkgTranscriptType::Unmasked(_) => Ok(Unmasked(transcript)),
+            _ => Err(TranscriptCastError {
+                transcript_id: transcript.transcript_id,
+                from_type: transcript.transcript_type,
+                expected_type: "Unmasked",
+            }),
         }
     }
+}
 
-    pub fn into_base_type(self) -> T {
-        self.0
+impl From<UnmaskedTranscript> for IDkgTranscript {
+    fn from(unmasked: UnmaskedTranscript) -> Self {
+        unmasked.0
     }
 }
 
@@ -225,19 +231,29 @@ impl<T> DerefMut for Unmasked<T> {
 pub struct Masked<T>(T);
 pub type MaskedTranscript = Masked<IDkgTranscript>;
 
-impl<T> Masked<T>
-where
-    T: HasTranscriptType,
-{
-    pub fn try_convert(value: T) -> Option<Self> {
-        match value.get_type() {
-            IDkgTranscriptType::Masked(_) => Some(Masked(value)),
-            _ => None,
+impl MaskedTranscript {
+    pub fn transcript_id(&self) -> IDkgTranscriptId {
+        self.0.transcript_id
+    }
+}
+
+impl TryFrom<IDkgTranscript> for MaskedTranscript {
+    type Error = TranscriptCastError;
+    fn try_from(transcript: IDkgTranscript) -> Result<Self, Self::Error> {
+        match transcript.transcript_type {
+            IDkgTranscriptType::Masked(_) => Ok(Masked(transcript)),
+            _ => Err(TranscriptCastError {
+                transcript_id: transcript.transcript_id,
+                from_type: transcript.transcript_type,
+                expected_type: "Unmasked",
+            }),
         }
     }
+}
 
-    pub fn into_base_type(self) -> T {
-        self.0
+impl From<MaskedTranscript> for IDkgTranscript {
+    fn from(masked: MaskedTranscript) -> IDkgTranscript {
+        masked.0
     }
 }
 
