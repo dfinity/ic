@@ -28,7 +28,7 @@ rand = "0.7.3"
 reqwest = { version = "0.11.1", features = [ "native-tls" ] }
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.11.1"
-tokio = "1.9.0"
+tokio = "1.15.0"
 tree-deserializer = { path = "../../tree_deserializer" }
 lazy_static = "1.4.0"
 url = { version = "2.1.1", features = ["serde"] }

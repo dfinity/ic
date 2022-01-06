@@ -30,7 +30,7 @@ ic-registry-client = { path = "../registry/client" }
 ic-registry-common = { path = "../registry/common" }
 ic-test-utilities = { path = "../test_utilities" }
 rand = "0.7.3"
-tokio = { version = "1.9.0", features = ["full"] }
+tokio = { version = "1.15.0", features = ["full"] }
 
 [[bench]]
 name = "build_payload"

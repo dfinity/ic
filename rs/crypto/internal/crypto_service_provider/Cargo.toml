@@ -51,7 +51,7 @@ strum = "0.18.0"
 strum_macros = "0.18.0"
 tecdsa = { path = "../crypto_lib/threshold_sig/tecdsa" }
 tarpc = { version = "0.27", features = ["full"] }
-tokio = { version = "1.9.0", features = ["full"] }
+tokio = { version = "1.15.0", features = ["full"] }
 tokio-openssl = "0.6.0"
 tokio-serde = { version = "0.8", features = ["json", "bincode"] }
 tokio-util = "0.6.8"

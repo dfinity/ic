@@ -57,7 +57,7 @@ static_assertions = "0.3.4"
 structopt = "0.3"
 tempfile = "3.1.0"
 thread_profiler = { version = "0.3", optional = true }
-tokio = { version = "1.9.0", features = ["full"] }
+tokio = { version = "1.15.0", features = ["full"] }
 tracing = "0.1.13"
 tower = { version = "0.4.8", features = ["util"] }
 

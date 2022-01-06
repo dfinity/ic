@@ -57,7 +57,7 @@ strum = "0.18.0"
 strum_macros = "0.18.0"
 tecdsa = { path = "internal/crypto_lib/threshold_sig/tecdsa" }
 tempfile = "3.1.0"
-tokio = { version = "1.9.0", features = ["full"] }
+tokio = { version = "1.15.0", features = ["full"] }
 tokio-openssl = "0.6.0"
 # We use the `dangerous_configuration` flag for rustls to be able to set custom `ClientCertVerifier` and
 # `ServerCertVerifier` in order to verify node certificates.
