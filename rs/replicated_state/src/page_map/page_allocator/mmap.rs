@@ -323,18 +323,18 @@ impl Drop for MmapBasedPageAllocatorCore {
         for chunk in self.chunks.iter() {
             let ptr = chunk.ptr as *mut c_void;
             // SAFETY: The chunk was created using `mmap`, so `munmap` should work.
-            unsafe { munmap(ptr, chunk.size) }.unwrap_or_else(|_| {
+            unsafe { munmap(ptr, chunk.size) }.unwrap_or_else(|err| {
                 panic!(
-                    "MmapPageAllocator failed to munmap {} bytes at address {:?} for memory file #{}",
-                    chunk.size, chunk.ptr, self.file_descriptor
+                    "MmapPageAllocator failed to munmap {} bytes at address {:?} for memory file #{}: {}",
+                    chunk.size, chunk.ptr, self.file_descriptor, err
                 )
             });
         }
         // SAFETY: the file descriptor is valid. We need `cvt_r` to handle `EINTR`.
-        cvt_r(|| unsafe { close(self.file_descriptor) }).unwrap_or_else(|_| {
+        cvt_r(|| unsafe { close(self.file_descriptor) }).unwrap_or_else(|err| {
             panic!(
-                "MmapPageAllocator failed to close the memory file #{}",
-                self.file_descriptor
+                "MmapPageAllocator failed to close the memory file #{}: {}",
+                self.file_descriptor, err
             )
         });
         ALLOCATED_PAGES.dec_by(self.allocated_pages);
@@ -394,10 +394,10 @@ impl MmapBasedPageAllocatorCore {
         self.file_len += mmap_size as i64;
         // SAFETY: The file descriptor is valid.  We need `cvt_r` to handle `EINTR`.
         cvt_r(|| unsafe { ftruncate64(self.file_descriptor, self.file_len) }).unwrap_or_else(
-            |_| {
+            |err| {
                 panic!(
-                    "MmapPageAllocator failed to grow the memory file #{} to {} bytes",
-                    self.file_descriptor, self.file_len
+                    "MmapPageAllocator failed to grow the memory file #{} to {} bytes: {}",
+                    self.file_descriptor, self.file_len, err
                 )
             },
         );
@@ -413,11 +413,11 @@ impl MmapBasedPageAllocatorCore {
                 mmap_file_offset,
             )
         }
-        .unwrap_or_else(|_| {
+        .unwrap_or_else(|err| {
             panic!(
                 "MmapPageAllocator failed to mmap {} bytes to memory file #{} \
-                 at offset {} while allocating a new memory block",
-                mmap_size, self.file_descriptor, mmap_file_offset,
+                 at offset {} while allocating a new memory block: {}",
+                mmap_size, self.file_descriptor, mmap_file_offset, err,
             )
         }) as *mut u8;
         self.chunks.push(Chunk {
@@ -461,11 +461,11 @@ impl MmapBasedPageAllocatorCore {
                 mmap_file_offset,
             )
         }
-        .unwrap_or_else(|_| {
+        .unwrap_or_else(|err| {
             panic!(
                 "MmapPageAllocator failed to mmap {} bytes to memory file #{} \
-                         at offset {} for deserialization",
-                mmap_size, self.file_descriptor, mmap_file_offset,
+                         at offset {} for deserialization: {}",
+                mmap_size, self.file_descriptor, mmap_file_offset, err,
             )
         }) as *mut u8;
 
