@@ -64,6 +64,9 @@ pub trait Crypto:
     // EcdsaDealing
     + MultiSigner<EcdsaDealing>
     + MultiSigVerifier<EcdsaDealing>
+    // EcdsaSignedDealing
+    + BasicSigner<EcdsaDealing>
+    + BasicSigVerifier<EcdsaDealing>
     + IDkgProtocol
     + ThresholdEcdsaSigner
     + ThresholdEcdsaSigVerifier
@@ -114,6 +117,8 @@ impl<T> Crypto for T where
         + MultiSigVerifier<NotarizationContent>
         + MultiSigner<EcdsaDealing>
         + MultiSigVerifier<EcdsaDealing>
+        + BasicSigner<EcdsaDealing>
+        + BasicSigVerifier<EcdsaDealing>
         + IDkgProtocol
         + ThresholdEcdsaSigner
         + ThresholdEcdsaSigVerifier

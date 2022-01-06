@@ -42,9 +42,10 @@ pub(crate) mod test_utils {
     use ic_test_utilities::types::ids::NODE_1;
     use ic_types::artifact::EcdsaMessageId;
     use ic_types::consensus::ecdsa::{
-        EcdsaBlockReader, EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaSigShare, RequestId,
+        EcdsaBlockReader, EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaSigShare,
+        EcdsaSignedDealing, RequestId,
     };
-    use ic_types::consensus::MultiSignatureShare;
+    use ic_types::consensus::{BasicSignature, MultiSignatureShare};
     use ic_types::crypto::canister_threshold_sig::idkg::{
         IDkgDealers, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
     };
@@ -198,16 +199,24 @@ pub(crate) mod test_utils {
     }
 
     // Creates a test dealing
-    pub(crate) fn create_dealing(
-        transcript_id: IDkgTranscriptId,
-        dealer_id: NodeId,
-    ) -> EcdsaDealing {
+    fn create_dealing_content(transcript_id: IDkgTranscriptId, dealer_id: NodeId) -> EcdsaDealing {
         let mut idkg_dealing = dummy_idkg_dealing_for_tests();
         idkg_dealing.dealer_id = dealer_id;
         idkg_dealing.transcript_id = transcript_id;
         EcdsaDealing {
             requested_height: Height::from(10),
             idkg_dealing,
+        }
+    }
+
+    // Creates a test signed dealing
+    pub(crate) fn create_dealing(
+        transcript_id: IDkgTranscriptId,
+        dealer_id: NodeId,
+    ) -> EcdsaSignedDealing {
+        EcdsaSignedDealing {
+            content: create_dealing_content(transcript_id, dealer_id),
+            signature: BasicSignature::fake(dealer_id),
         }
     }
 
@@ -218,7 +227,7 @@ pub(crate) mod test_utils {
         signer: NodeId,
     ) -> EcdsaDealingSupport {
         EcdsaDealingSupport {
-            content: create_dealing(transcript_id, dealer_id),
+            content: create_dealing_content(transcript_id, dealer_id),
             signature: MultiSignatureShare::fake(signer),
         }
     }
@@ -251,7 +260,11 @@ pub(crate) mod test_utils {
         requested_height: Height,
     ) -> bool {
         for action in change_set {
-            if let EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealing(dealing)) = action {
+            if let EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(
+                signed_dealing,
+            )) = action
+            {
+                let dealing = signed_dealing.get();
                 if dealing.requested_height == requested_height
                     && dealing.idkg_dealing.transcript_id == *transcript_id
                     && dealing.idkg_dealing.dealer_id == NODE_1

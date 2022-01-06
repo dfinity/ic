@@ -64,6 +64,7 @@ const DOMAIN_CONSENSUS_MESSAGE: &str = "consensus_message_domain";
 const DOMAIN_CERTIFICATION_MESSAGE: &str = "certification_message_domain";
 const DOMAIN_ECDSA_MESSAGE: &str = "ic-threshold-ecdsa-message-domain";
 pub(crate) const DOMAIN_ECDSA_DEALING: &str = "ic-threshold-ecdsa-dealing-domain";
+pub const DOMAIN_ECDSA_SIGNED_DEALING: &str = "ic-threshold-ecdsa-signed-dealing-domain";
 const DOMAIN_ECDSA_DEALING_SUPPORT: &str = "ic-threshold-ecdsa-dealing-support-domain";
 const DOMAIN_ECDSA_VERIFIED_DEALING: &str = "ic-threshold-ecdsa-verified-dealing-domain";
 const DOMAIN_ECDSA_TRANSCRIPT: &str = "ic-idkg-transcript-domain";
@@ -148,6 +149,7 @@ mod private {
 
     impl CryptoHashDomainSeal for EcdsaMessage {}
     impl CryptoHashDomainSeal for EcdsaDealing {}
+    impl CryptoHashDomainSeal for Signed<EcdsaDealing, BasicSignature<EcdsaDealing>> {}
     impl CryptoHashDomainSeal for Signed<EcdsaDealing, MultiSignatureShare<EcdsaDealing>> {}
     impl CryptoHashDomainSeal for Signed<EcdsaDealing, MultiSignature<EcdsaDealing>> {}
     impl CryptoHashDomainSeal for EcdsaTranscript {}
@@ -353,6 +355,12 @@ impl CryptoHashDomain for EcdsaMessage {
 impl CryptoHashDomain for EcdsaDealing {
     fn domain(&self) -> String {
         DOMAIN_ECDSA_DEALING.to_string()
+    }
+}
+
+impl CryptoHashDomain for Signed<EcdsaDealing, BasicSignature<EcdsaDealing>> {
+    fn domain(&self) -> String {
+        DOMAIN_ECDSA_SIGNED_DEALING.to_string()
     }
 }
 

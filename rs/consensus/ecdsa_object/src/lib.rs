@@ -4,13 +4,13 @@
 use ic_crypto::crypto_hash;
 use ic_interfaces::crypto::CryptoHashable;
 use ic_types::consensus::ecdsa::{
-    EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash, EcdsaSigShare,
+    EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash, EcdsaSigShare, EcdsaSignedDealing,
 };
 use ic_types::crypto::CryptoHashOf;
 
 /// EcdsaObject should be implemented by types that go into the artifact pool.
 /// EcdsaObject represents the objects that go into the EcdsaObjectPool
-/// (i.e) the inner message variants in EdsaMessage like EcdsaDealing,
+/// (i.e) the inner message variants in EdsaMessage like EcdsaSignedDealing,
 /// EcdsaDealingSupport, etc.
 pub trait EcdsaObject: CryptoHashable + Clone + Sized {
     /// Returns crypto hash of the object used as key.
@@ -31,28 +31,28 @@ pub trait EcdsaObject: CryptoHashable + Clone + Sized {
     fn key_to_outer_hash(inner_hash: &CryptoHashOf<Self>) -> EcdsaMessageHash;
 }
 
-impl EcdsaObject for EcdsaDealing {
+impl EcdsaObject for EcdsaSignedDealing {
     fn into_outer(self) -> EcdsaMessage {
-        EcdsaMessage::EcdsaDealing(self)
+        EcdsaMessage::EcdsaSignedDealing(self)
     }
 
     fn outer_hash(&self) -> EcdsaMessageHash {
-        EcdsaMessageHash::EcdsaDealing(self.key())
+        EcdsaMessageHash::EcdsaSignedDealing(self.key())
     }
 
     fn key_from_outer_hash(hash: &EcdsaMessageHash) -> CryptoHashOf<Self> {
-        if let EcdsaMessageHash::EcdsaDealing(hash) = hash {
+        if let EcdsaMessageHash::EcdsaSignedDealing(hash) = hash {
             hash.clone()
         } else {
             panic!(
-                "EcdsaDealing::key_from_outer_hash(): unexpected type: {:?}",
+                "EcdsaSignedDealing::key_from_outer_hash(): unexpected type: {:?}",
                 hash
             );
         }
     }
 
     fn key_to_outer_hash(inner_hash: &CryptoHashOf<Self>) -> EcdsaMessageHash {
-        EcdsaMessageHash::EcdsaDealing(inner_hash.clone())
+        EcdsaMessageHash::EcdsaSignedDealing(inner_hash.clone())
     }
 }
 
@@ -108,7 +108,7 @@ impl EcdsaObject for EcdsaSigShare {
 
 pub fn ecdsa_msg_hash(msg: &EcdsaMessage) -> EcdsaMessageHash {
     match msg {
-        EcdsaMessage::EcdsaDealing(object) => object.outer_hash(),
+        EcdsaMessage::EcdsaSignedDealing(object) => object.outer_hash(),
         EcdsaMessage::EcdsaDealingSupport(object) => object.outer_hash(),
         EcdsaMessage::EcdsaSigShare(object) => object.outer_hash(),
     }
