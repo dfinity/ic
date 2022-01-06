@@ -37,7 +37,7 @@ slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "rel
 slog-scope = "4.1.2"
 socket2 = { version = "0.3.19", features = ["reuseport"] }
 tempfile = "3.1.0"
-tokio = { version = "1.9.0", features = ["full"] }
+tokio = { version = "1.15.0", features = ["full"] }
 tokio-openssl = "0.6.1"
 toml = "0.5.6"
 

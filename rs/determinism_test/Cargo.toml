@@ -28,5 +28,5 @@ ic-types = { path = "../types/types" }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 slog-async = "2.5.0"
 slog-term = "2.6.0"
-tokio = "1.9.0"
+tokio = "1.15.0"
 wabt = "0.10.0"

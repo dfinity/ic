@@ -36,7 +36,7 @@ serde_cbor = "0.11.1"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 tar = "0.4.30"
 tempfile = "3.1.0"
-tokio = { version = "1.9.0", features = [ "full" ] }
+tokio = { version = "1.15.0", features = [ "full" ] }
 tower =  { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
 url = "2.1.1"
 

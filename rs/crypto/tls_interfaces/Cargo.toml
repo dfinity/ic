@@ -9,7 +9,7 @@ ic-types = { path = "../../types/types" }
 ic-protobuf = { path = "../../protobuf" }
 openssl = "0.10.29"
 serde = { version = "1.0.99", features = ["derive"] }
-tokio = { version = "1.9.0", features = ["net", "io-util"] }
+tokio = { version = "1.15.0", features = ["net", "io-util"] }
 tokio-openssl = "0.6.0"
 tokio-rustls = "0.22.0"
 
